@@ -343,7 +343,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           email: data.user.email || email,
           name: data.user.user_metadata?.name || email,
           department: 'Executive',
-          role: 'manager',
+          role: 'rep',
           created_at: new Date().toISOString(),
           is_active: true,
         };

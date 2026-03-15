@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { CheckCircle2, FileText } from "lucide-react";
 import { apiFetch } from '../../utils/api';
-import { toast } from "../ui/toast-utils";
+import { toast } from "sonner@2.0.3";
 import { AddRequestForPaymentPanel } from "../accounting/AddRequestForPaymentPanel";
 import { PostToLedgerPanel } from "../accounting/PostToLedgerPanel";
 import type { EVoucher } from "../../types/evoucher";

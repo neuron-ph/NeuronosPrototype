@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { X, FileText, User, Calendar, Building2, CheckCircle, XCircle, Clock, ArrowRight, ExternalLink } from "lucide-react";
 import { PhilippinePeso } from "../icons/PhilippinePeso";
 import { EVoucherStatusBadge } from "./evouchers/EVoucherStatusBadge";
 import { EVoucherWorkflowPanel } from "./evouchers/EVoucherWorkflowPanel";
 import { EVoucherHistoryTimeline } from "./evouchers/EVoucherHistoryTimeline";
+import { apiFetch } from "../../utils/api";
+import { toast } from "sonner@2.0.3";
 import type { EVoucher } from "../../types/evoucher";
 
 interface EVoucherDetailViewProps {
@@ -13,6 +16,8 @@ interface EVoucherDetailViewProps {
 }
 
 export function EVoucherDetailView({ evoucher, onClose, currentUser, onStatusChange }: EVoucherDetailViewProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "Approved":
@@ -49,6 +54,143 @@ export function EVoucherDetailView({ evoucher, onClose, currentUser, onStatusCha
   const canDisburse = evoucher.status === 'Approved'     && (isAcctMgr || isExec);
   const canRecord   = evoucher.status === 'Disbursed'    && (isAcctRep || isAcctMgr || isExec);
   const canAudit    = evoucher.status === 'Recorded'     && (isAcctDir || isExec);
+
+  const getUserPayload = () => {
+    const userData = localStorage.getItem("neuron_user");
+    const user = userData ? JSON.parse(userData) : currentUser;
+    return {
+      user_id: user?.id || currentUser?.id,
+      user_name: user?.name || currentUser?.name,
+      user_role: user?.department || currentUser?.department,
+    };
+  };
+
+  const handleApprove = async () => {
+    if (!confirm("Are you sure you want to approve this E-Voucher?")) return;
+    setIsSubmitting(true);
+    try {
+      const response = await apiFetch(`/evouchers/${evoucher.id}/approve`, {
+        method: 'POST',
+        body: JSON.stringify({ ...getUserPayload(), notes: '' }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        toast.success("E-Voucher approved successfully");
+        onStatusChange?.();
+        onClose();
+      } else {
+        toast.error(`Failed to approve: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error approving E-Voucher:", error);
+      toast.error("Failed to approve E-Voucher");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDisapprove = async () => {
+    const reason = prompt("Please provide a reason for disapproval:");
+    if (!reason) return;
+    setIsSubmitting(true);
+    try {
+      const response = await apiFetch(`/evouchers/${evoucher.id}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ ...getUserPayload(), rejection_reason: reason }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        toast.success("E-Voucher disapproved");
+        onStatusChange?.();
+        onClose();
+      } else {
+        toast.error(`Failed to disapprove: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error disapproving E-Voucher:", error);
+      toast.error("Failed to disapprove E-Voucher");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDisburse = async () => {
+    if (!confirm("Mark this E-Voucher as disbursed?")) return;
+    setIsSubmitting(true);
+    try {
+      // TODO: Server endpoint POST /evouchers/:id/disburse does not exist yet.
+      // When added, it should transition status Approved → Disbursed and record
+      // disbursement_officer, disbursement_date, payment_method in the evoucher.
+      const response = await apiFetch(`/evouchers/${evoucher.id}/disburse`, {
+        method: 'POST',
+        body: JSON.stringify(getUserPayload()),
+      });
+      const result = await response.json();
+      if (result.success) {
+        toast.success("E-Voucher marked as disbursed");
+        onStatusChange?.();
+        onClose();
+      } else {
+        toast.error(`Failed to disburse: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error disbursing E-Voucher:", error);
+      toast.error("Disburse endpoint not available yet — server update required");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRecord = async () => {
+    if (!confirm("Record the transaction for this E-Voucher? This will post to the accounting ledger.")) return;
+    setIsSubmitting(true);
+    try {
+      const response = await apiFetch(`/evouchers/${evoucher.id}/post-to-ledger`, {
+        method: 'POST',
+        body: JSON.stringify(getUserPayload()),
+      });
+      const result = await response.json();
+      if (result.success) {
+        toast.success("Transaction recorded and posted to ledger");
+        onStatusChange?.();
+        onClose();
+      } else {
+        toast.error(`Failed to record: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error recording transaction:", error);
+      toast.error("Failed to record transaction");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleAudit = async () => {
+    if (!confirm("Mark this E-Voucher as audited? This completes the workflow.")) return;
+    setIsSubmitting(true);
+    try {
+      // TODO: Server endpoint POST /evouchers/:id/audit does not exist yet.
+      // When added, it should transition status Recorded → Audited and record
+      // audited_by, audited_at in the evoucher + add workflow history.
+      const response = await apiFetch(`/evouchers/${evoucher.id}/audit`, {
+        method: 'POST',
+        body: JSON.stringify(getUserPayload()),
+      });
+      const result = await response.json();
+      if (result.success) {
+        toast.success("E-Voucher audit completed");
+        onStatusChange?.();
+        onClose();
+      } else {
+        toast.error(`Failed to complete audit: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error auditing E-Voucher:", error);
+      toast.error("Audit endpoint not available yet — server update required");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div
@@ -467,6 +609,8 @@ export function EVoucherDetailView({ evoucher, onClose, currentUser, onStatusCha
                         onMouseLeave={(e) => {
                           e.currentTarget.style.backgroundColor = "#0F766E";
                         }}
+                        onClick={handleApprove}
+                        disabled={isSubmitting}
                       >
                         <CheckCircle size={16} />
                         Approve Voucher
@@ -493,6 +637,8 @@ export function EVoucherDetailView({ evoucher, onClose, currentUser, onStatusCha
                         onMouseLeave={(e) => {
                           e.currentTarget.style.backgroundColor = "#FFFFFF";
                         }}
+                        onClick={handleDisapprove}
+                        disabled={isSubmitting}
                       >
                         <XCircle size={16} />
                         Disapprove
@@ -522,6 +668,8 @@ export function EVoucherDetailView({ evoucher, onClose, currentUser, onStatusCha
                       onMouseLeave={(e) => {
                         e.currentTarget.style.backgroundColor = "#0F766E";
                       }}
+                      onClick={handleDisburse}
+                      disabled={isSubmitting}
                     >
                       <ArrowRight size={16} />
                       Process Disbursement
@@ -550,6 +698,8 @@ export function EVoucherDetailView({ evoucher, onClose, currentUser, onStatusCha
                       onMouseLeave={(e) => {
                         e.currentTarget.style.backgroundColor = "#0F766E";
                       }}
+                      onClick={handleRecord}
+                      disabled={isSubmitting}
                     >
                       <FileText size={16} />
                       Record Transaction
@@ -578,6 +728,8 @@ export function EVoucherDetailView({ evoucher, onClose, currentUser, onStatusCha
                       onMouseLeave={(e) => {
                         e.currentTarget.style.backgroundColor = "#0F766E";
                       }}
+                      onClick={handleAudit}
+                      disabled={isSubmitting}
                     >
                       <CheckCircle size={16} />
                       Complete Audit

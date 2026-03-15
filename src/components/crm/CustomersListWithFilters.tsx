@@ -76,8 +76,8 @@ export function CustomersListWithFilters({ userDepartment, onViewCustomer }: Cus
       if (statusFilter && statusFilter !== "All") {
         params.append("status", statusFilter);
       }
-      // Pass role to backend for data filtering
-      params.append("role", userDepartment);
+      // Pass department to backend for data filtering
+      params.append("department", userDepartment);
       
       const url = `/customers?${params.toString()}`;
       console.log(`[CustomersListWithFilters] Fetching from: ${url}`);
