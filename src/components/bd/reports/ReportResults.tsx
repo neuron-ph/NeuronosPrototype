@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, Download, Save, TrendingUp, TrendingDown } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { projectId, publicAnonKey } from '../../../utils/supabase/info';
+import { apiFetch } from '../../../utils/api';
 import { useUser } from '../../../hooks/useUser';
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 const COLORS = ['#0F766E', '#14B8A6', '#5EEAD4', '#99F6E4', '#CCFBF1'];
 
@@ -29,12 +27,8 @@ export function ReportResults({ config, savedReport, onBack }: ReportResultsProp
   const generateReport = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_URL}/reports/generate`, {
+      const response = await apiFetch(`/reports/generate`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
         body: JSON.stringify(config),
       });
 
@@ -53,12 +47,8 @@ export function ReportResults({ config, savedReport, onBack }: ReportResultsProp
     if (!reportData || !reportData.tableData) return;
 
     try {
-      const response = await fetch(`${API_URL}/reports/export`, {
+      const response = await apiFetch(`/reports/export`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
         body: JSON.stringify({
           format,
           data: reportData.tableData,
@@ -88,12 +78,8 @@ export function ReportResults({ config, savedReport, onBack }: ReportResultsProp
     if (!user || !saveName) return;
 
     try {
-      const response = await fetch(`${API_URL}/reports/save`, {
+      const response = await apiFetch(`/reports/save`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
         body: JSON.stringify({
           userId: user.id,
           name: saveName,

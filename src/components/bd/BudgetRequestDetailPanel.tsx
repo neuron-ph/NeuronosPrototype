@@ -1,12 +1,10 @@
 import { useState } from "react";
 import { CheckCircle2, FileText } from "lucide-react";
-import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { apiFetch } from '../../utils/api';
 import { toast } from "../ui/toast-utils";
 import { AddRequestForPaymentPanel } from "../accounting/AddRequestForPaymentPanel";
 import { PostToLedgerPanel } from "../accounting/PostToLedgerPanel";
 import type { EVoucher } from "../../types/evoucher";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 interface BudgetRequestDetailPanelProps {
   request: EVoucher | null;
@@ -37,8 +35,7 @@ export function BudgetRequestDetailPanel({
   const isAccountingStaff = 
     currentUser?.department === "Accounting" || 
     currentUser?.department === "Executive" ||
-    currentUser?.role === "Finance Manager" || 
-    currentUser?.role === "Accountant";
+    (currentUser?.department === "Accounting" && (currentUser?.role === "manager" || currentUser?.role === "director"));
     
   const canApprove = showAccountingControls && isAccountingStaff && (
     request.status === "Submitted" || 
@@ -65,12 +62,8 @@ export function BudgetRequestDetailPanel({
     }
 
     try {
-      const response = await fetch(`${API_URL}/evouchers/${request.id}/approve`, {
+      const response = await apiFetch(`/evouchers/${request.id}/approve`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           user_id: currentUser?.id,
           user_name: currentUser?.name,

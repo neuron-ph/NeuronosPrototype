@@ -1,10 +1,8 @@
+import { apiFetch } from '../../utils/api';
 import { ArrowLeft, User, Building2, Calendar, MessageSquare, Upload, Paperclip, Send, Trash2, FileText, Download } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { Activity, Contact, Customer } from "../../types/bd";
-import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { toast } from "../ui/toast-utils";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 interface ActivityDetailInlineProps {
   activity: Activity;
@@ -84,12 +82,8 @@ export function ActivityDetailInline({
     }
 
     try {
-      const response = await fetch(`${API_URL}/activities/${activity.id}`, {
+      const response = await apiFetch(`/activities/${activity.id}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
       });
 
       if (!response.ok) {

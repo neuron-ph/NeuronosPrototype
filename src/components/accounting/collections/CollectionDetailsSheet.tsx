@@ -1,8 +1,8 @@
 import { X, Calendar, CreditCard, Building, User, FileText, CheckCircle2, Clock, AlertCircle, Hash, DollarSign } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
 import logoImage from "figma:asset/28c84ed117b026fbf800de0882eb478561f37f4f.png";
-import { projectId, publicAnonKey } from "../../../utils/supabase/info";
+import { apiFetch } from "../../../utils/api";
 import type { Collection } from "../../types/accounting";
 
 interface CollectionDetailsSheetProps {
@@ -25,18 +25,8 @@ export function CollectionDetailsSheet({ isOpen, onClose, collectionId }: Collec
         setError(null);
         
         console.log(`Fetching collection details for ID: ${collectionId}`);
-        const url = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/accounting/collections/${collectionId}`;
+        const response = await apiFetch(`/accounting/collections/${collectionId}`);
         
-        const response = await fetch(
-          url,
-          {
-            headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
-
         if (!response.ok) {
            const text = await response.text();
            console.error(`Collection fetch failed: ${response.status} ${response.statusText}`, text);

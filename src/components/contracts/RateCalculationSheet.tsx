@@ -22,12 +22,10 @@ import { generateRateCardBillingItems } from "../../utils/rateCardToBilling";
 import type { ContractRateMatrix, AppliedRate, TruckingLineItem } from "../../types/pricing";
 import type { BillingItem } from "../shared/billings/UnifiedBillingsTab";
 import { toast } from "../ui/toast-utils";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { RateBreakdownTable, formatCurrency } from "../pricing/shared/RateBreakdownTable";
 import { QuantityDisplaySection } from "../pricing/shared/QuantityDisplaySection";
 import { normalizeTruckingLineItems, extractMultiLineSelectionsAndQuantities } from "../../utils/contractQuantityExtractor";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 // ============================================
 // TYPES
@@ -148,12 +146,8 @@ export function RateCalculationSheet({
         return;
       }
 
-      const response = await fetch(`${API_URL}/accounting/billings/batch`, {
+      const response = await apiFetch(`/accounting/billings/batch`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
         body: JSON.stringify({
           items: result.items.map((item) => ({
             ...item,

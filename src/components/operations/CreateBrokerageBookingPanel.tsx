@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { FileCheck, Package, FileText, Users } from "lucide-react";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { toast } from "../ui/toast-utils";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { SearchableDropdown } from "../shared/SearchableDropdown";
@@ -207,17 +207,10 @@ export function CreateBrokerageBookingPanel({
         submissionData.assigned_handler_name = teamAssignment.handler?.name;
       }
 
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/brokerage-bookings`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
-          body: JSON.stringify(submissionData),
-        }
-      );
+      const response = await apiFetch(`/brokerage-bookings`, {
+        method: "POST",
+        body: JSON.stringify(submissionData),
+      });
 
       if (!response.ok) {
         throw new Error("Failed to create brokerage booking");
@@ -230,22 +223,15 @@ export function CreateBrokerageBookingPanel({
         // Save team preference if requested and from Pricing
         if (source === "pricing" && teamAssignment?.saveAsDefault && customerId) {
           try {
-            await fetch(
-              `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/client-handler-preferences`,
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${publicAnonKey}`,
-                },
-                body: JSON.stringify({
+            await apiFetch(`/client-handler-preferences`, {
+              method: "POST",
+              body: JSON.stringify({
                   client_id: customerId,
                   service_type: serviceType,
                   preferred_supervisor_id: teamAssignment.supervisor?.id,
                   preferred_handler_id: teamAssignment.handler?.id,
                 }),
-              }
-            );
+            });
           } catch (error) {
             console.error("Error saving team preference:", error);
           }

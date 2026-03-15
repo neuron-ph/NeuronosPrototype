@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { X, Save, ArrowRightLeft, Calendar } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { motion, AnimatePresence } from "motion/react";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { saveTransaction } from "../../utils/accounting-api";
 import type { Account } from "../../types/accounting-core";
 import type { EVoucher } from "../../types/evoucher";
@@ -36,15 +36,7 @@ export function PostToLedgerPanel({ evoucher, isOpen, onClose, onSuccess, curren
   const fetchAccounts = async () => {
     try {
       setLoadingAccounts(true);
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/accounts`,
-        {
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      const response = await apiFetch(`/accounts`);
       const result = await response.json();
       if (result.success) {
         setAccounts(result.data || []);
@@ -67,14 +59,8 @@ export function PostToLedgerPanel({ evoucher, isOpen, onClose, onSuccess, curren
 
     try {
       setLoading(true);
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/evouchers/${evoucher.id}/post-to-ledger`,
-        {
+      const response = await apiFetch(`/evouchers/${evoucher.id}/post-to-ledger`, {
           method: "POST",
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`,
-            'Content-Type': 'application/json',
-          },
           body: JSON.stringify({
             user_id: currentUser?.id,
             user_name: currentUser?.name,
@@ -82,8 +68,7 @@ export function PostToLedgerPanel({ evoucher, isOpen, onClose, onSuccess, curren
             credit_account_id: creditAccountId,
             posting_date: postingDate
           })
-        }
-      );
+        });
 
       const result = await response.json();
       if (!result.success) {

@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, Play, Trash2, Clock } from 'lucide-react';
-import { projectId, publicAnonKey } from '../../../utils/supabase/info';
+import { apiFetch } from '../../../utils/api';
 import { useUser } from '../../../hooks/useUser';
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 interface SavedReport {
   id: string;
@@ -35,9 +33,7 @@ export function SavedReports({ onBack, onRunReport }: SavedReportsProps) {
     if (!user) return;
 
     try {
-      const response = await fetch(`${API_URL}/reports/saved?user_id=${user.id}`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
-      });
+      const response = await apiFetch(`/reports/saved?user_id=${user.id}`);
 
       const result = await response.json();
       if (result.success) {
@@ -55,9 +51,8 @@ export function SavedReports({ onBack, onRunReport }: SavedReportsProps) {
     if (!confirm('Are you sure you want to delete this saved report?')) return;
 
     try {
-      const response = await fetch(`${API_URL}/reports/saved/${reportId}?user_id=${user.id}`, {
+      const response = await apiFetch(`/reports/saved/${reportId}?user_id=${user.id}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
       });
 
       const result = await response.json();

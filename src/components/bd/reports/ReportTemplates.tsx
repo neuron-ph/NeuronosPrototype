@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, Play } from 'lucide-react';
-import { projectId, publicAnonKey } from '../../../utils/supabase/info';
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
+import { apiFetch } from '../../../utils/api';
 
 interface Template {
   id: string;
@@ -27,9 +25,7 @@ export function ReportTemplates({ onBack, onRunReport }: ReportTemplatesProps) {
 
   const fetchTemplates = async () => {
     try {
-      const response = await fetch(`${API_URL}/reports/templates`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
-      });
+      const response = await apiFetch('/reports/templates');
 
       const result = await response.json();
       if (result.success) {

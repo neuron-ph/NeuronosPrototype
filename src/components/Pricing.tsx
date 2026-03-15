@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/api';
 import { useState, useEffect } from "react";
 import { QuotationDetail } from "./pricing/QuotationDetail";
 import { QuotationsListWithFilters } from "./pricing/QuotationsListWithFilters";
@@ -15,7 +16,7 @@ import type { Contact, Customer } from "../types/bd";
 import type { NetworkPartner } from "../data/networkPartners";
 // Removed static import: import { NETWORK_PARTNERS } from "../data/networkPartners";
 import { ContactsModuleWithBackend } from "./crm/ContactsModuleWithBackend";
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+// projectId/publicAnonKey removed — using apiFetch() (Phase 3)
 import { useNetworkPartners } from "../hooks/useNetworkPartners";
 
 export type PricingView = "contacts" | "customers" | "quotations" | "vendors" | "reports";
@@ -29,7 +30,7 @@ interface PricingProps {
   onCreateTicket?: (quotation: QuotationNew) => void;
 }
 
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
+// API_URL removed — using apiFetch() wrapper (Phase 3)
 
 export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUser, onCreateTicket }: PricingProps) {
   const [subView, setSubView] = useState<SubView>("list");
@@ -45,20 +46,15 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
   const { partners, isLoading: isPartnersLoading, savePartner } = useNetworkPartners();
 
   // Map department name to userDepartment format
-  const userDepartment: "BD" | "PD" = currentUser?.department === "Pricing" ? "PD" : "BD";
+  const userDepartment: "Business Development" | "Pricing" = currentUser?.department === "Pricing" ? "Pricing" : "Business Development";
 
   // Fetch quotations from backend
   const fetchQuotations = async () => {
     setIsLoading(true);
     try {
-      console.log('Fetching quotations from:', `${API_URL}/quotations?department=pricing`);
+      console.log('Fetching quotations from: /quotations?department=pricing');
       
-      const response = await fetch(`${API_URL}/quotations?department=pricing`, {
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await apiFetch(`/quotations?department=pricing`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -163,12 +159,8 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
       
       if (isUpdate) {
         // Update existing quotation
-        const response = await fetch(`${API_URL}/quotations/${data.id}`, {
+        const response = await apiFetch(`/quotations/${data.id}`, {
           method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`,
-            'Content-Type': 'application/json'
-          },
           body: JSON.stringify(data)
         });
         
@@ -184,12 +176,8 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
         }
       } else {
         // Create new quotation
-        const response = await fetch(`${API_URL}/quotations`, {
+        const response = await apiFetch(`/quotations`, {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`,
-            'Content-Type': 'application/json'
-          },
           body: JSON.stringify(data)
         });
         
@@ -215,12 +203,8 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
     setSelectedQuotation(updatedQuotation);
     
     try {
-      const response = await fetch(`${API_URL}/quotations/${updatedQuotation.id}`, {
+      const response = await apiFetch(`/quotations/${updatedQuotation.id}`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify(updatedQuotation)
       });
       
@@ -241,11 +225,8 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
     if (!selectedQuotation) return;
     
     try {
-      const response = await fetch(`${API_URL}/quotations/${selectedQuotation.id}`, {
+      const response = await apiFetch(`/quotations/${selectedQuotation.id}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-        }
       });
       
       const result = await response.json();
@@ -323,7 +304,7 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
           <>
             {subView === "list" && (
               <ContactsListWithFilters 
-                userDepartment="PD"
+                userDepartment="Pricing"
                 onViewContact={handleViewContact} 
               />
             )}
@@ -337,7 +318,7 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
           <>
             {subView === "list" && (
               <CustomersListWithFilters 
-                userDepartment="PD"
+                userDepartment="Pricing"
                 onViewCustomer={handleViewCustomer} 
               />
             )}
@@ -360,14 +341,10 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
                     // Determine if this is create or update
                     const isUpdate = !!data.id && data.id.startsWith('QUO-');
                     const method = isUpdate ? 'PUT' : 'POST';
-                    const url = isUpdate ? `${API_URL}/quotations/${data.id}` : `${API_URL}/quotations`;
+                    const url = isUpdate ? `/quotations/${data.id}` : `/quotations`;
 
-                    const response = await fetch(url, {
+                    const response = await apiFetch(url, {
                       method: method,
-                      headers: {
-                        'Authorization': `Bearer ${publicAnonKey}`,
-                        'Content-Type': 'application/json'
-                      },
                       body: JSON.stringify(data)
                     });
                     
@@ -402,7 +379,7 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
                 onCreateQuotation={handleCreateQuotation}
                 quotations={quotations}
                 isLoading={isLoading}
-                userDepartment="PD"
+                userDepartment="Pricing"
                 onRefresh={fetchQuotations}
               />
             )}

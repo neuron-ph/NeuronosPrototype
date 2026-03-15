@@ -2,7 +2,7 @@ import { X, Calendar, CreditCard, Building, User, FileText, CheckCircle2, Clock,
 import { motion, AnimatePresence } from "motion/react";
 import { useEffect, useState } from "react";
 import logoImage from "figma:asset/28c84ed117b026fbf800de0882eb478561f37f4f.png";
-import { projectId, publicAnonKey } from "../../../utils/supabase/info";
+import { apiFetch } from "../../../utils/api";
 import type { Expense } from "../../types/accounting";
 
 interface ExpenseDetailsSheetProps {
@@ -28,18 +28,8 @@ export function ExpenseDetailsSheet({ isOpen, onClose, expenseId }: ExpenseDetai
         console.log(`[ExpenseDetailsSheet] Fetching details for ID: ${expenseId}`);
         
         // Use /evouchers endpoint to support Draft/Pending items as well as Posted ones
-        const url = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/evouchers/${expenseId}`;
+        const response = await apiFetch(`/evouchers/${expenseId}`);
         
-        const response = await fetch(
-          url,
-          {
-            headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
-
         if (!response.ok) {
            const text = await response.text();
            console.error(`[ExpenseDetailsSheet] API Error: ${response.status} ${response.statusText}`, text);

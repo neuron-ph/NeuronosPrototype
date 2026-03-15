@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Activity, RefreshCw, Download, Filter, ExternalLink } from "lucide-react";
 import { useUser } from "../hooks/useUser";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { apiFetch } from "../utils/api";
 import { useNavigate } from "react-router";
 import { CustomDropdown } from "./bd/CustomDropdown";
 
@@ -29,7 +29,7 @@ export function ActivityLogPage() {
   const [hasNewActivities, setHasNewActivities] = useState(false);
   const [newActivityCount, setNewActivityCount] = useState(0);
   
-  const baseUrl = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
+  // baseUrl removed — using apiFetch() wrapper instead
   
   // Executive Department exception: Everyone in Executive gets director access
   const actualRole = effectiveDepartment === "Executive" ? "director" : effectiveRole;
@@ -73,9 +73,7 @@ export function ActivityLogPage() {
   
   const fetchUsersInDepartment = async (department: string) => {
     try {
-      const response = await fetch(`${baseUrl}/users?department=${department}`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
-      });
+      const response = await apiFetch(`/users?department=${department}`);
       
       const result = await response.json();
       
@@ -139,9 +137,7 @@ export function ActivityLogPage() {
         params.append("date_to", dateTo);
       }
       
-      const response = await fetch(`${baseUrl}/activity-log?${params}`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
-      });
+      const response = await apiFetch(`/activity-log?${params}`);
       
       const result = await response.json();
       
@@ -181,9 +177,7 @@ export function ActivityLogPage() {
         params.append("entity_type", entityTypeFilter);
       }
       
-      const response = await fetch(`${baseUrl}/activity-log?${params}`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
-      });
+      const response = await apiFetch(`/activity-log?${params}`);
       
       const result = await response.json();
       

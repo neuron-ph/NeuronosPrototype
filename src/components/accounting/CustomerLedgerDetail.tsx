@@ -8,7 +8,7 @@ import type { Customer, Industry, CustomerStatus } from "../../types/bd";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { UnifiedExpensesTab } from "./UnifiedExpensesTab";
 import type { Expense as OperationsExpense } from "../../types/operations";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { 
   ResponsiveContainer, 
   BarChart, 
@@ -19,8 +19,6 @@ import {
   Tooltip,
   Cell
 } from "recharts";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 interface CustomerLedgerDetailProps {
   customer: Customer;
@@ -59,25 +57,17 @@ export function CustomerLedgerDetail({ customer, onClose }: CustomerLedgerDetail
       setIsLoading(true);
       
       // Fetch Revenue (Billings)
-      const billingsResponse = await fetch(`${API_URL}/billings?customerId=${customer.id}`, {
-        headers: { "Authorization": `Bearer ${publicAnonKey}` }
-      });
+      const billingsResponse = await apiFetch(`/billings?customerId=${customer.id}`);
       
       // Fetch Collections
-      const collectionsResponse = await fetch(`${API_URL}/collections?customer_id=${customer.id}`, {
-        headers: { "Authorization": `Bearer ${publicAnonKey}` }
-      });
+      const collectionsResponse = await apiFetch(`/collections?customer_id=${customer.id}`);
 
       // Fetch Projects
-      const projectsResponse = await fetch(`${API_URL}/projects?customer_id=${customer.id}`, {
-        headers: { "Authorization": `Bearer ${publicAnonKey}` }
-      });
+      const projectsResponse = await apiFetch(`/projects?customer_id=${customer.id}`);
 
       // Fetch Expenses
       // Trying a standard filter pattern, fallback to empty if not supported
-      const expensesResponse = await fetch(`${API_URL}/accounting/expenses?customer_id=${customer.id}`, {
-        headers: { "Authorization": `Bearer ${publicAnonKey}` }
-      });
+      const expensesResponse = await apiFetch(`/accounting/expenses?customer_id=${customer.id}`);
       
       if (billingsResponse.ok) {
         const data = await billingsResponse.json();

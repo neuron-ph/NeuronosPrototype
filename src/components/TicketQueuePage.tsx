@@ -5,7 +5,7 @@ import { TicketDetailModal } from "./ticketing/TicketDetailModal";
 import { NewTicketPanel } from "./ticketing/NewTicketPanel";
 import { CustomDropdown } from "./bd/CustomDropdown";
 import { useUser } from "../hooks/useUser";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { apiFetch } from "../utils/api";
 import type { Ticket, TicketStatus } from "./InboxPage";
 
 type TabType = "all" | "my-tickets";
@@ -35,13 +35,8 @@ export function TicketQueuePage() {
     
     setIsLoading(true);
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/tickets?user_id=${user.id}&role=${actualRole}&department=${effectiveDepartment}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`,
-          },
-        }
+      const response = await apiFetch(
+        `/tickets?user_id=${user.id}&role=${actualRole}&department=${effectiveDepartment}`
       );
       
       if (response.ok) {

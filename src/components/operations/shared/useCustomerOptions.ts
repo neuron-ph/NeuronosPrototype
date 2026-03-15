@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { projectId, publicAnonKey } from "../../../utils/supabase/info";
+import { apiFetch } from "../../../utils/api";
 
 interface CustomerOption {
   value: string;
@@ -21,12 +21,7 @@ export function useCustomerOptions(isOpen: boolean): CustomerOption[] {
   useEffect(() => {
     const fetchCustomers = async () => {
       try {
-        const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/customers`,
-          {
-            headers: { Authorization: `Bearer ${publicAnonKey}` },
-          }
-        );
+        const response = await apiFetch(`/customers`);
         if (response.ok) {
           const result = await response.json();
           const customers = result.data || result || [];

@@ -9,10 +9,8 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { apiFetch } from "../utils/api";
 import type { ContractRateMatrix } from "../types/pricing";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 export interface BookingRateCardData {
   /** Rate matrices from the parent contract (empty if not a contract booking) */
@@ -53,9 +51,7 @@ export function useBookingRateCard(contractId?: string): BookingRateCardData {
       setIsLoading(true);
 
       // Fetch all quotations and find the parent contract by ID
-      const response = await fetch(`${API_URL}/quotations`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
-      });
+      const response = await apiFetch(`/quotations/${contractId}`);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);

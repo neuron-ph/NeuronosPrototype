@@ -9,14 +9,12 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { toast } from "../ui/toast-utils";
 import { useCachedFetch, useInvalidateCache } from "../../hooks/useNeuronCache";
 import type { QuotationNew } from "../../types/pricing";
 import { ContractsList } from "./ContractsList";
 import { ContractDetailView } from "../pricing/ContractDetailView";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 export type ContractsView = "list" | "detail";
 
@@ -50,16 +48,9 @@ export function ContractsModule({ currentUser, onCreateTicket, initialContract, 
 
   // ── Cached contracts fetch ────────────────────────────────
   const contractsFetcher = async (): Promise<QuotationNew[]> => {
-    if (!projectId || !publicAnonKey) {
-      console.error("Missing Supabase credentials:", { projectId, hasKey: !!publicAnonKey });
-      return [];
-    }
-
     // Fetch all quotations and filter for contracts client-side
     // This reuses the existing /quotations endpoint — no new backend needed
-    const response = await fetch(`${API_URL}/quotations?department=pricing`, {
-      headers: { Authorization: `Bearer ${publicAnonKey}` },
-    });
+    const response = await apiFetch(`/quotations?department=pricing`);
 
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
@@ -130,11 +121,7 @@ export function ContractsModule({ currentUser, onCreateTicket, initialContract, 
     // If viewing a specific contract, fetch fresh detail
     if (selectedContract) {
       try {
-        const response = await fetch(`${API_URL}/quotations/${selectedContract.id}`, {
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`,
-          },
-        });
+        const response = await apiFetch(`/quotations/${selectedContract.id}`);
 
         if (response.ok) {
           const result = await response.json();

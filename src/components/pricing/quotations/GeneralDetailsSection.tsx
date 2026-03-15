@@ -1,15 +1,12 @@
 import { useState } from "react";
-import { Edit3, FileText, Handshake, Link2, AlertTriangle } from "lucide-react";
 import { motion } from "motion/react";
+import { Edit3, FileText, Handshake, Link2, AlertTriangle } from "lucide-react";
 import { FormSelect } from "./FormSelect";
 import { CompanyAutocomplete } from "../../crm/CompanyAutocomplete";
 import { ContactPersonAutocomplete } from "../../crm/ContactPersonAutocomplete";
 import { CustomDropdown } from "../../bd/CustomDropdown";
 import { CustomDatePicker } from "../../common/CustomDatePicker";
-import { projectId, publicAnonKey } from "../../../utils/supabase/info";
 import type { QuotationType } from "../../../types/pricing";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 // Helper component for read-only field display
 function DisplayField({ label, value }: { label: string; value: string }) {

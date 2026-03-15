@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
+import { apiFetch } from "../../../utils/api";
 import { Clock, User, CheckCircle, XCircle, FileText, Send, Ban } from "lucide-react";
-import { projectId, publicAnonKey } from "../../../utils/supabase/info";
 
 interface HistoryEntry {
   id: string;
@@ -30,15 +30,7 @@ export function EVoucherHistoryTimeline({ evoucherId }: EVoucherHistoryTimelineP
   const fetchHistory = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/evouchers/${evoucherId}/history`,
-        {
-          headers: {
-            Authorization: `Bearer ${publicAnonKey}`
-          }
-        }
-      );
-
+      const response = await apiFetch(`/evouchers/${evoucherId}/history`);
       const result = await response.json();
 
       if (result.success) {

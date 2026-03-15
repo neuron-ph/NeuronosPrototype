@@ -10,7 +10,7 @@
 
 import { useState, useEffect } from "react";
 import { Upload, File, Download, Trash2, FileText, Image as ImageIcon, Loader2 } from "lucide-react";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { toast } from "../ui/toast-utils";
 
 interface EntityAttachmentsTabProps {
@@ -36,8 +36,6 @@ interface Attachment {
   isUploading?: boolean;
 }
 
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
-
 export function EntityAttachmentsTab({ entityId, entityType, currentUser }: EntityAttachmentsTabProps) {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -52,21 +50,12 @@ export function EntityAttachmentsTab({ entityId, entityType, currentUser }: Enti
   const fetchAttachments = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(
-        `${API_URL}/${entityType}/${entityId}/attachments`,
-        {
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`,
-            'Content-Type': 'application/json'
-          }
-        }
+      const response = await apiFetch(
+        `/${entityType}/${entityId}/attachments`
       );
 
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success) {
-          setAttachments(result.data || []);
-        }
+      if (response.success) {
+        setAttachments(response.data || []);
       }
     } catch (error) {
       console.error(`Error fetching ${entityType} attachments:`, error);
@@ -111,13 +100,10 @@ export function EntityAttachmentsTab({ entityId, entityType, currentUser }: Enti
           formData.append('file', file);
           formData.append('uploaded_by', currentUser.name);
 
-          const response = await fetch(
-            `${API_URL}/${entityType}/${entityId}/attachments`,
+          const response = await apiFetch(
+            `/${entityType}/${entityId}/attachments`,
             {
               method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${publicAnonKey}`,
-              },
               body: formData
             }
           );
@@ -149,14 +135,10 @@ export function EntityAttachmentsTab({ entityId, entityType, currentUser }: Enti
     if (!confirm("Are you sure you want to delete this file?")) return;
 
     try {
-      const response = await fetch(
-        `${API_URL}/${entityType}/${entityId}/attachments/${attachmentId}`,
+      const response = await apiFetch(
+        `/${entityType}/${entityId}/attachments/${attachmentId}`,
         {
           method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`,
-            'Content-Type': 'application/json'
-          }
         }
       );
 

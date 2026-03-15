@@ -1,10 +1,6 @@
 import { useState, useEffect } from "react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { apiFetch } from "../utils/api";
 import { toast } from "../components/ui/toast-utils";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
-
-import { calculateFinancialTotals, FinancialTotals, mergeBillableExpenses, convertQuotationToVirtualItems, mergeVirtualItemsWithRealItems } from "../utils/financialCalculations";
 
 export interface FinancialData {
   invoices: any[];
@@ -33,9 +29,7 @@ export function useProjectFinancials(
       // to fetch billing items (filtered by booking_id client-side).
       try {
         setIsLoading(true);
-        const billingItemsResponse = await fetch(`${API_URL}/accounting/billing-items`, {
-          headers: { "Authorization": `Bearer ${publicAnonKey}` }
-        });
+        const billingItemsResponse = await apiFetch("/accounting/billing-items");
         if (billingItemsResponse.ok) {
           const billingItemsData = await billingItemsResponse.json();
           if (billingItemsData.success) {
@@ -55,31 +49,21 @@ export function useProjectFinancials(
       setIsLoading(true);
       
       // 1. Fetch Invoices (Documents)
-      const invoicesResponse = await fetch(`${API_URL}/accounting/invoices?projectNumber=${projectNumber}`, {
-        headers: { "Authorization": `Bearer ${publicAnonKey}` }
-      });
+      const invoicesResponse = await apiFetch(`/accounting/invoices?projectNumber=${projectNumber}`);
       
       // 2. Fetch Billing Items (Atoms) - FETCH ALL to allow client-side filtering by Booking ID
-      const billingItemsResponse = await fetch(`${API_URL}/accounting/billing-items`, {
-        headers: { "Authorization": `Bearer ${publicAnonKey}` }
-      });
+      const billingItemsResponse = await apiFetch("/accounting/billing-items");
       
       // 3. Fetch Expenses (Broad fetch via /evouchers to capture linked bookings)
-      const expensesResponse = await fetch(`${API_URL}/evouchers`, {
-        headers: { "Authorization": `Bearer ${publicAnonKey}` }
-      });
+      const expensesResponse = await apiFetch("/evouchers");
 
       // 4. Fetch Collections
-      const collectionsResponse = await fetch(`${API_URL}/accounting/collections?project_number=${projectNumber}`, {
-        headers: { "Authorization": `Bearer ${publicAnonKey}` }
-      });
+      const collectionsResponse = await apiFetch(`/accounting/collections?project_number=${projectNumber}`);
 
       // 5. Fetch Quotation (Optional)
       let quotationData = null;
       if (quotationId) {
-        const quotationResponse = await fetch(`${API_URL}/quotations/${quotationId}`, {
-          headers: { "Authorization": `Bearer ${publicAnonKey}` }
-        });
+        const quotationResponse = await apiFetch(`/quotations/${quotationId}`);
         if (quotationResponse.ok) {
            const result = await quotationResponse.json();
            quotationData = result.success ? result.data : null;

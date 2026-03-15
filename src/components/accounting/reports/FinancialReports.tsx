@@ -1,3 +1,4 @@
+import { apiFetch } from "../../../utils/api";
 import { useState, useEffect, useMemo } from "react";
 import { TrendingUp, TrendingDown, DollarSign, PieChart, Activity, Download, Calendar } from "lucide-react";
 import { 
@@ -10,10 +11,7 @@ import {
   Tooltip,
   Cell
 } from "recharts";
-import { projectId, publicAnonKey } from "../../../utils/supabase/info";
 import type { Account } from "../../../types/accounting-core";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 export function FinancialReports() {
   const [activeReport, setActiveReport] = useState<"income_statement" | "balance_sheet">("income_statement");
@@ -27,9 +25,7 @@ export function FinancialReports() {
   const fetchAccounts = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`${API_URL}/accounts`, {
-        headers: { "Authorization": `Bearer ${publicAnonKey}` }
-      });
+      const response = await apiFetch(`/accounts`);
       
       if (response.ok) {
         const result = await response.json();

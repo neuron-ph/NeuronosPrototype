@@ -2,7 +2,7 @@ import "./styles/globals.css";
 // App entrypoint — Neuron OS
 // Force recompilation: cache-bust 2026-03-12b
 import { useState, useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation, useParams, useSearchParams } from "react-router";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation, useParams, useSearchParams, Outlet } from "react-router";
 import { Layout } from "./components/Layout";
 import { ExecutiveDashboard } from "./components/ExecutiveDashboard";
 import { BusinessDevelopment } from "./components/BusinessDevelopment";
@@ -30,6 +30,7 @@ import { DiagnosticsPage } from "./components/DiagnosticsPage";
 import { SupabaseDebug } from "./components/SupabaseDebug";
 import { UserProvider, useUser } from "./hooks/useUser";
 import { NeuronCacheProvider } from "./hooks/useNeuronCache";
+import { RouteGuard } from "./components/RouteGuard";
 import { AppModeProvider, useAppMode } from "./config/appMode";
 import { toast, Toaster } from "sonner@2.0.3";
 import type { Customer } from "./types/bd";
@@ -1138,9 +1139,10 @@ function DashboardPage() {
 }
 
 function HRPage() {
+  const { effectiveRole } = useUser();
   return (
     <RouteWrapper page="hr">
-      <HR />
+      <HR userRole={(effectiveRole as 'rep' | 'manager' | 'director') || 'rep'} />
     </RouteWrapper>
   );
 }
@@ -1242,6 +1244,15 @@ function DesignSystemPage() {
   );
 }
 
+// Layout route that enforces department/role guards on child routes
+function GuardedLayout({ allowedDepartments, requireMinRole }: { allowedDepartments?: string[]; requireMinRole?: "rep" | "manager" | "director" }) {
+  return (
+    <RouteGuard allowedDepartments={allowedDepartments} requireMinRole={requireMinRole}>
+      <Outlet />
+    </RouteGuard>
+  );
+}
+
 function AppContent() {
   const { isAuthenticated, isLoading } = useUser();
 
@@ -1279,18 +1290,20 @@ function AppContent() {
         {/* Dashboard */}
         <Route path="/dashboard" element={<DashboardPage />} />
         
-        {/* Business Development */}
-        <Route path="/bd/contacts" element={<BDContactsPage />} />
-        <Route path="/bd/contacts/:contactId" element={<BDContactsPage />} />
-        <Route path="/bd/customers" element={<BDCustomersPage />} />
-        <Route path="/bd/inquiries" element={<BDInquiriesPage />} />
-        <Route path="/bd/inquiries/:inquiryId" element={<BDInquiriesPage />} />
-        <Route path="/bd/tasks" element={<BDTasksPage />} />
-        <Route path="/bd/projects" element={<BDProjectsPage />} />
-        <Route path="/bd/contracts" element={<BDContractsPage />} />
-        <Route path="/bd/activities" element={<BDActivitiesPage />} />
-        <Route path="/bd/budget-requests" element={<BDBudgetRequestsPage />} />
-        <Route path="/bd/reports" element={<BDReportsPage />} />
+        {/* Business Development — guarded */}
+        <Route element={<GuardedLayout allowedDepartments={['Business Development']} />}>
+          <Route path="/bd/contacts" element={<BDContactsPage />} />
+          <Route path="/bd/contacts/:contactId" element={<BDContactsPage />} />
+          <Route path="/bd/customers" element={<BDCustomersPage />} />
+          <Route path="/bd/inquiries" element={<BDInquiriesPage />} />
+          <Route path="/bd/inquiries/:inquiryId" element={<BDInquiriesPage />} />
+          <Route path="/bd/tasks" element={<BDTasksPage />} />
+          <Route path="/bd/projects" element={<BDProjectsPage />} />
+          <Route path="/bd/contracts" element={<BDContractsPage />} />
+          <Route path="/bd/activities" element={<BDActivitiesPage />} />
+          <Route path="/bd/budget-requests" element={<BDBudgetRequestsPage />} />
+          <Route path="/bd/reports" element={<BDReportsPage />} />
+        </Route>
         
         {/* Unified Projects Page */}
         <Route path="/projects" element={<ProjectsPage />} />
@@ -1298,54 +1311,70 @@ function AppContent() {
         {/* Unified Contracts Page */}
         <Route path="/contracts" element={<ContractsPage />} />
         
-        {/* Pricing */}
-        <Route path="/pricing/contacts" element={<PricingContactsPage />} />
-        <Route path="/pricing/customers" element={<PricingCustomersPage />} />
-        <Route path="/pricing/quotations" element={<PricingQuotationsPage />} />
-        <Route path="/pricing/quotations/:inquiryId" element={<PricingQuotationsPage />} />
-        <Route path="/pricing/projects" element={<PricingProjectsPage />} />
-        <Route path="/pricing/contracts" element={<PricingContractsPage />} />
-        <Route path="/pricing/vendors" element={<PricingVendorsPage />} />
-        <Route path="/pricing/reports" element={<PricingReportsPage />} />
+        {/* Pricing — guarded */}
+        <Route element={<GuardedLayout allowedDepartments={['Pricing']} />}>
+          <Route path="/pricing/contacts" element={<PricingContactsPage />} />
+          <Route path="/pricing/customers" element={<PricingCustomersPage />} />
+          <Route path="/pricing/quotations" element={<PricingQuotationsPage />} />
+          <Route path="/pricing/quotations/:inquiryId" element={<PricingQuotationsPage />} />
+          <Route path="/pricing/projects" element={<PricingProjectsPage />} />
+          <Route path="/pricing/contracts" element={<PricingContractsPage />} />
+          <Route path="/pricing/vendors" element={<PricingVendorsPage />} />
+          <Route path="/pricing/reports" element={<PricingReportsPage />} />
+        </Route>
         
-        {/* Operations */}
-        <Route path="/operations" element={<OperationsPage />} />
-        <Route path="/operations/create" element={<CreateBookingPage />} />
-        <Route path="/operations/:bookingId" element={<BookingDetailPage />} />
-        <Route path="/operations/forwarding" element={<ForwardingBookingsPage />} />
-        <Route path="/operations/trucking" element={<RouteWrapper page="ops-trucking"><TruckingBookings /></RouteWrapper>} />
-        <Route path="/operations/brokerage" element={<RouteWrapper page="ops-brokerage"><BrokerageBookings /></RouteWrapper>} />
-        <Route path="/operations/marine-insurance" element={<RouteWrapper page="ops-marine-insurance"><MarineInsuranceBookings /></RouteWrapper>} />
-        <Route path="/operations/others" element={<RouteWrapper page="ops-others"><OthersBookings /></RouteWrapper>} />
-        <Route path="/operations/reports" element={<RouteWrapper page="ops-reports"><OperationsReports /></RouteWrapper>} />
+        {/* Operations — guarded */}
+        <Route element={<GuardedLayout allowedDepartments={['Operations']} />}>
+          <Route path="/operations" element={<OperationsPage />} />
+          <Route path="/operations/create" element={<CreateBookingPage />} />
+          <Route path="/operations/:bookingId" element={<BookingDetailPage />} />
+          <Route path="/operations/forwarding" element={<ForwardingBookingsPage />} />
+          <Route path="/operations/trucking" element={<RouteWrapper page="ops-trucking"><TruckingBookings /></RouteWrapper>} />
+          <Route path="/operations/brokerage" element={<RouteWrapper page="ops-brokerage"><BrokerageBookings /></RouteWrapper>} />
+          <Route path="/operations/marine-insurance" element={<RouteWrapper page="ops-marine-insurance"><MarineInsuranceBookings /></RouteWrapper>} />
+          <Route path="/operations/others" element={<RouteWrapper page="ops-others"><OthersBookings /></RouteWrapper>} />
+          <Route path="/operations/reports" element={<RouteWrapper page="ops-reports"><OperationsReports /></RouteWrapper>} />
+        </Route>
         
-        {/* Accounting Transactions */}
-        <Route path="/accounting/transactions" element={<AccountingTransactionsPage />} />
+        {/* Accounting — guarded */}
+        <Route element={<GuardedLayout allowedDepartments={['Accounting']} />}>
+          <Route path="/accounting/transactions" element={<AccountingTransactionsPage />} />
+          <Route path="/accounting/evouchers" element={<AccountingEVouchersPage />} />
+          <Route path="/accounting/invoices" element={<AccountingInvoicesPage />} />
+          <Route path="/accounting/billings" element={<AccountingBillingsPage />} />
+          <Route path="/accounting/collections" element={<AccountingCollectionsPage />} />
+          <Route path="/accounting/expenses" element={<AccountingExpensesPage />} />
+          <Route path="/accounting/coa" element={<AccountingCoaPage />} />
+          <Route path="/accounting/ledger" element={<AccountingLedgerPage />} />
+          <Route path="/accounting/projects" element={<AccountingProjectsPage />} />
+          <Route path="/accounting/contracts" element={<AccountingContractsPage />} />
+          <Route path="/accounting/customers" element={<AccountingCustomersPage />} />
+          <Route path="/accounting/bookings" element={<AccountingBookingsPage />} />
+          <Route path="/accounting/reports" element={<AccountingReportsPage />} />
+          <Route path="/accounting/catalog" element={<AccountingCatalogPage />} />
+          <Route path="/accounting/financials" element={<AccountingFinancialsPage />} />
+        </Route>
+        
+        {/* HR — guarded */}
+        <Route element={<GuardedLayout allowedDepartments={['HR']} />}>
+          <Route path="/hr" element={<HRPage />} />
+        </Route>
 
-        {/* Accounting */}
-        <Route path="/accounting/evouchers" element={<AccountingEVouchersPage />} />
-        <Route path="/accounting/invoices" element={<AccountingInvoicesPage />} />
-        <Route path="/accounting/billings" element={<AccountingBillingsPage />} />
-        <Route path="/accounting/collections" element={<AccountingCollectionsPage />} />
-        <Route path="/accounting/expenses" element={<AccountingExpensesPage />} />
-        <Route path="/accounting/coa" element={<AccountingCoaPage />} />
-        <Route path="/accounting/ledger" element={<AccountingLedgerPage />} />
-        <Route path="/accounting/projects" element={<AccountingProjectsPage />} />
-        <Route path="/accounting/contracts" element={<AccountingContractsPage />} />
-        <Route path="/accounting/customers" element={<AccountingCustomersPage />} />
-        <Route path="/accounting/bookings" element={<AccountingBookingsPage />} />
-        <Route path="/accounting/reports" element={<AccountingReportsPage />} />
-        <Route path="/accounting/catalog" element={<AccountingCatalogPage />} />
-        <Route path="/accounting/financials" element={<AccountingFinancialsPage />} />
-        
-        {/* Other */}
-        <Route path="/hr" element={<HRPage />} />
+        {/* Manager+ only routes */}
+        <Route element={<GuardedLayout requireMinRole="manager" />}>
+          <Route path="/ticket-queue" element={<TicketQueuePageWrapper />} />
+          <Route path="/activity-log" element={<ActivityLogPageWrapper />} />
+        </Route>
+
+        {/* Director only routes */}
+        <Route element={<GuardedLayout requireMinRole="director" />}>
+          <Route path="/admin" element={<AdminPage />} />
+        </Route>
+
+        {/* Open to all authenticated users */}
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/inbox" element={<InboxPageWrapper />} />
-        <Route path="/ticket-queue" element={<TicketQueuePageWrapper />} />
-        <Route path="/activity-log" element={<ActivityLogPageWrapper />} />
         <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/admin" element={<AdminPage />} />
         <Route path="/tickets" element={<TicketsPage />} />
         <Route path="/design-system" element={<DesignSystemPage />} />
         

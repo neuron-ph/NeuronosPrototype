@@ -10,19 +10,10 @@ import type { BillingChargeCategory, ExpenseChargeCategory } from "../types/oper
 
 export async function fetchProjectByNumber(
   projectNumber: string,
-  projectId: string,
-  publicAnonKey: string
 ): Promise<{ success: boolean; data?: Project; error?: string }> {
   try {
-    const response = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/projects/by-number/${projectNumber}`,
-      {
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
+    const { apiFetch } = await import("./api");
+    const response = await apiFetch(`/projects/by-number/${projectNumber}`);
 
     const result = await response.json();
     return result;
@@ -339,26 +330,18 @@ export async function linkBookingToProject(
   bookingNumber: string,
   serviceType: string,
   status: string,
-  supabaseProjectId: string,
-  publicAnonKey: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const response = await fetch(
-      `https://${supabaseProjectId}.supabase.co/functions/v1/make-server-c142e950/projects/${projectId}/link-booking`,
-      {
-        method: "POST",
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
+    const { apiFetch } = await import("./api");
+    const response = await apiFetch(`/projects/${projectId}/link-booking`, {
+      method: "POST",
+      body: JSON.stringify({
           bookingId,
           bookingNumber,
           serviceType,
           status,
         })
-      }
-    );
+    });
 
     const result = await response.json();
     return result;
@@ -372,21 +355,13 @@ export async function linkBookingToProject(
 export async function unlinkBookingFromProject(
   projectId: string,
   bookingId: string,
-  supabaseProjectId: string,
-  publicAnonKey: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const response = await fetch(
-      `https://${supabaseProjectId}.supabase.co/functions/v1/make-server-c142e950/projects/${projectId}/unlink-booking`,
-      {
-        method: "POST",
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ bookingId })
-      }
-    );
+    const { apiFetch } = await import("./api");
+    const response = await apiFetch(`/projects/${projectId}/unlink-booking`, {
+      method: "POST",
+      body: JSON.stringify({ bookingId })
+    });
 
     const result = await response.json();
     return result;

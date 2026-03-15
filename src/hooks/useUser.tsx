@@ -370,7 +370,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         session,
-        isAuthenticated: !!user,
+        isAuthenticated: !!user && !!session,
         login,
         signup,
         logout,

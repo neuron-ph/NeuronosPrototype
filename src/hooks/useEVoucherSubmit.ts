@@ -1,8 +1,6 @@
 import { useState } from 'react';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { apiFetch } from '../utils/api';
 import { toast } from '../components/ui/toast-utils';
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 type EVoucherContext = "bd" | "accounting" | "operations" | "collection" | "billing";
 
@@ -101,12 +99,8 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd") {
 
       console.log('Creating E-Voucher draft:', payload);
 
-      const response = await fetch(`${API_URL}/evouchers`, {
+      const response = await apiFetch(`/evouchers`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`,
-        },
         body: JSON.stringify(payload),
       });
 
@@ -192,12 +186,8 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd") {
 
       console.log('📤 Creating E-Voucher for submission:', JSON.stringify(payload, null, 2));
 
-      const createResponse = await fetch(`${API_URL}/evouchers`, {
+      const createResponse = await apiFetch(`/evouchers`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`,
-        },
         body: JSON.stringify(payload),
       });
 
@@ -229,12 +219,8 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd") {
       // Step 2: Submit for approval
       console.log('Submitting E-Voucher for approval...');
 
-      const submitResponse = await fetch(`${API_URL}/evouchers/${evoucherId}/submit`, {
+      const submitResponse = await apiFetch(`/evouchers/${evoucherId}/submit`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`,
-        },
         body: JSON.stringify({
           user_id: data.requestor,
           user_name: data.requestor,
@@ -326,12 +312,8 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd") {
 
       console.log('⚡ Auto-approving E-Voucher:', payload);
 
-      const response = await fetch(`${API_URL}/evouchers/auto-approve`, {
+      const response = await apiFetch(`/evouchers/auto-approve`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`,
-        },
         body: JSON.stringify(payload),
       });
 
@@ -376,12 +358,8 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd") {
     try {
       console.log('🗑️ Deleting E-Voucher:', id);
 
-      const response = await fetch(`${API_URL}/evouchers/${id}`, {
+      const response = await apiFetch(`/evouchers/${id}`, {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`,
-        },
       });
 
       if (!response.ok) {

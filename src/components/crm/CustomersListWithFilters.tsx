@@ -4,12 +4,11 @@ import type { Customer, Industry, CustomerStatus } from "../../types/bd";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { AddCustomerPanel } from "../bd/AddCustomerPanel";
 import { NeuronKPICard } from "../ui/NeuronKPICard";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
+import { apiFetch } from "../../utils/api";
+import { useUsers } from "../../hooks/useUsers";
 
 interface CustomersListWithFiltersProps {
-  userDepartment: "BD" | "PD";
+  userDepartment: "Business Development" | "Pricing";
   onViewCustomer: (customer: Customer) => void;
 }
 
@@ -22,51 +21,25 @@ export function CustomersListWithFilters({ userDepartment, onViewCustomer }: Cus
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [allContacts, setAllContacts] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Permissions based on department
   const permissions = {
-    canCreate: userDepartment === "BD",
-    canEdit: userDepartment === "BD",
+    canCreate: userDepartment === "Business Development",
+    canEdit: userDepartment === "Business Development",
     showKPIs: true, // Both BD and PD see KPIs
-    showOwnerFilter: userDepartment === "BD",
+    showOwnerFilter: userDepartment === "Business Development",
   };
 
-  // Fetch users from backend
-  const fetchUsers = async () => {
-    try {
-      const response = await fetch(`${API_URL}/users?department=Business%20Development`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
-      });
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success) {
-          setUsers(result.data);
-          console.log('[CustomersListWithFilters] Fetched users:', result.data.length);
-        } else {
-          console.warn("Failed to fetch users:", result.error);
-          setUsers([]);
-        }
-      } else {
-        console.warn(`Error fetching users: ${response.status}`);
-        setUsers([]);
-      }
-    } catch (error) {
-      console.error("Error fetching users:", error);
-      setUsers([]);
-    }
-  };
+  // Direct Supabase query for BD users (replaces Edge Function fetch)
+  const { users } = useUsers({ department: 'Business Development' });
 
   // Fetch activities from backend
   const fetchActivities = async () => {
     try {
-      const response = await fetch(`${API_URL}/activities`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
-        cache: 'no-store',
-      });
+      const response = await apiFetch('/activities');
       
       if (!response.ok) {
         console.error(`HTTP error fetching activities! status: ${response.status}`);
@@ -106,14 +79,10 @@ export function CustomersListWithFilters({ userDepartment, onViewCustomer }: Cus
       // Pass role to backend for data filtering
       params.append("role", userDepartment);
       
-      const url = `${API_URL}/customers?${params.toString()}`;
+      const url = `/customers?${params.toString()}`;
       console.log(`[CustomersListWithFilters] Fetching from: ${url}`);
       
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
-      });
+      const response = await apiFetch(url);
 
       console.log(`[CustomersListWithFilters] Response status: ${response.status}`);
       
@@ -142,11 +111,7 @@ export function CustomersListWithFilters({ userDepartment, onViewCustomer }: Cus
   // Fetch all contacts for counting
   const fetchContacts = async () => {
     try {
-      const response = await fetch(`${API_URL}/contacts`, {
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
-      });
+      const response = await apiFetch('/contacts');
 
       const result = await response.json();
       if (result.success) {
@@ -167,7 +132,6 @@ export function CustomersListWithFilters({ userDepartment, onViewCustomer }: Cus
   useEffect(() => {
     fetchCustomers();
     fetchContacts();
-    fetchUsers();
     fetchActivities();
   }, []);
 
@@ -198,11 +162,8 @@ export function CustomersListWithFilters({ userDepartment, onViewCustomer }: Cus
     }
 
     try {
-      const response = await fetch(`${API_URL}/customers/${customerId}`, {
+      const response = await apiFetch(`/customers/${customerId}`, {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
       });
 
       const result = await response.json();
@@ -222,11 +183,10 @@ export function CustomersListWithFilters({ userDepartment, onViewCustomer }: Cus
   // Handle save customer
   const handleSaveCustomer = async (customerData: Partial<Customer>) => {
     try {
-      const response = await fetch(`${API_URL}/customers`, {
+      const response = await apiFetch('/customers', {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${publicAnonKey}`,
         },
         body: JSON.stringify(customerData),
       });
@@ -392,7 +352,7 @@ export function CustomersListWithFilters({ userDepartment, onViewCustomer }: Cus
               Customers
             </h1>
             <p style={{ fontSize: "14px", color: "#667085" }}>
-              {userDepartment === "BD" 
+              {userDepartment === "Business Development" 
                 ? "Manage customer companies and prospects" 
                 : "View customer companies and check inquiries"}
             </p>
@@ -490,7 +450,7 @@ export function CustomersListWithFilters({ userDepartment, onViewCustomer }: Cus
           </div>
 
           {/* BD sees Industry and Status filters, PD does not */}
-          {userDepartment === "BD" && (
+          {userDepartment === "Business Development" && (
             <>
               <div style={{ minWidth: "150px" }}>
                 <CustomDropdown

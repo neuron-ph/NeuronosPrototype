@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { Search, Filter, ChevronDown, ChevronUp, User, Clock, AlertCircle, CheckCircle2, MoreVertical, X, RefreshCw, Flag, Trash2 } from "lucide-react";
 import type { Ticket, TicketStatus, TicketPriority } from "../InboxPage";
 import { useUser } from "../../hooks/useUser";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { toast } from "sonner@2.0.3";
 import { CustomDropdown } from "../bd/CustomDropdown";
 
@@ -149,14 +149,10 @@ export function TicketManagementTable({
   const handleAssignTicket = async (ticketId: string, assignToUserId: string | null) => {
     setAssigningTicketId(ticketId);
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/tickets/${ticketId}/assign`,
+      const response = await apiFetch(
+        `/tickets/${ticketId}/assign`,
         {
           method: "PATCH",
-          headers: {
-            "Authorization": `Bearer ${publicAnonKey}`,
-            "Content-Type": "application/json"
-          },
           body: JSON.stringify({
             assigned_to: assignToUserId,
             assigned_by: user?.id
@@ -195,14 +191,10 @@ export function TicketManagementTable({
 
       for (const ticketId of ticketIds) {
         try {
-          const response = await fetch(
-            `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/tickets/${ticketId}`,
+          const response = await apiFetch(
+            `/tickets/${ticketId}`,
             {
               method: "DELETE",
-              headers: {
-                "Authorization": `Bearer ${publicAnonKey}`,
-                "Content-Type": "application/json"
-              }
             }
           );
 
@@ -240,14 +232,10 @@ export function TicketManagementTable({
 
       for (const ticketId of ticketIds) {
         try {
-          const response = await fetch(
-            `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/tickets/${ticketId}/status`,
+          const response = await apiFetch(
+            `/tickets/${ticketId}/status`,
             {
               method: "PATCH",
-              headers: {
-                "Authorization": `Bearer ${publicAnonKey}`,
-                "Content-Type": "application/json"
-              },
               body: JSON.stringify({
                 status: newStatus,
                 user_id: user?.id,
@@ -290,14 +278,10 @@ export function TicketManagementTable({
 
       for (const ticketId of ticketIds) {
         try {
-          const response = await fetch(
-            `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/tickets/${ticketId}/priority`,
+          const response = await apiFetch(
+            `/tickets/${ticketId}/priority`,
             {
               method: "PATCH",
-              headers: {
-                "Authorization": `Bearer ${publicAnonKey}`,
-                "Content-Type": "application/json"
-              },
               body: JSON.stringify({
                 priority: newPriority
               })

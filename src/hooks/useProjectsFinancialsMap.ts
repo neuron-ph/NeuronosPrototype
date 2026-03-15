@@ -1,10 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { apiFetch } from "../utils/api";
 import type { Project, QuotationNew, SellingPriceLineItem } from "../types/pricing";
 import { calculateFinancialTotals, mergeBillableExpenses, FinancialTotals, convertQuotationToVirtualItems, mergeVirtualItemsWithRealItems } from "../utils/financialCalculations";
 import { useCachedFetch } from "./useNeuronCache";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 export interface ProjectFinancials extends FinancialTotals {
   // Alias for backward compatibility if needed, or we just use FinancialTotals properties directly
@@ -33,9 +31,7 @@ export function useProjectsFinancialsMap(projects: Project[]) {
 
   // ── Cached data sources (shared across modules) ───────────
   const apiFetcher = useCallback((endpoint: string) => async () => {
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      headers: { "Authorization": `Bearer ${publicAnonKey}` }
-    });
+    const response = await apiFetch(endpoint);
     if (!response.ok) throw new Error(`Failed to fetch ${endpoint}: ${response.status}`);
     const json = await response.json();
     return json.success ? (json.data || []) : [];

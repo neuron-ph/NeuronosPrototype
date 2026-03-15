@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { Plus, Search, Calendar } from "lucide-react";
 import type { Billing } from "../../types/accounting";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { AddRequestForPaymentPanel } from "./AddRequestForPaymentPanel";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { BillingsListTable } from "./BillingsListTable";
@@ -42,16 +42,8 @@ export function BillingsContentNew() {
       setError(null);
       
       // PHASE 1 FIX: Fetch from Universal E-Vouchers table
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/evouchers`,
-        {
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
+      const response = await apiFetch(`/evouchers`);
+      
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);

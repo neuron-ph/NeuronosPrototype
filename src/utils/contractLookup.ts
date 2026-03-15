@@ -14,9 +14,7 @@
  */
 
 import type { ContractSummary, QuotationNew } from "../types/pricing";
-import { projectId, publicAnonKey } from "./supabase/info";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
+import { apiFetch } from "./api";
 
 // ============================================
 // ACTIVE CONTRACT DETECTION
@@ -37,9 +35,8 @@ export async function fetchActiveContractsForCustomer(
   }
 
   try {
-    const response = await fetch(
-      `${API_URL}/contracts/active?customer_name=${encodeURIComponent(customerName.trim())}`,
-      { headers: { Authorization: `Bearer ${publicAnonKey}` } }
+    const response = await apiFetch(
+      `/contracts/active?customer_name=${encodeURIComponent(customerName.trim())}`
     );
 
     if (!response.ok) {
@@ -102,9 +99,8 @@ export async function fetchFullContract(
   if (!contractId) return null;
 
   try {
-    const response = await fetch(
-      `${API_URL}/quotations/${contractId}`,
-      { headers: { Authorization: `Bearer ${publicAnonKey}` } }
+    const response = await apiFetch(
+      `/quotations/${contractId}`
     );
 
     if (!response.ok) {

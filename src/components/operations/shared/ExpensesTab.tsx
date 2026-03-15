@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { projectId, publicAnonKey } from "../../../utils/supabase/info";
+import { apiFetch } from "../../../utils/api";
 import { UnifiedExpensesTab } from "../../accounting/UnifiedExpensesTab";
 import type { Expense as OperationsExpense } from "../../../types/operations";
 
@@ -13,8 +13,6 @@ interface ExpensesTabProps {
   readOnly?: boolean;
   highlightId?: string | null;
 }
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 export function ExpensesTab({ 
   bookingId, 
@@ -35,13 +33,8 @@ export function ExpensesTab({
     try {
       setIsLoading(true);
       
-      const response = await fetch(`${API_URL}/evouchers`, {
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
+      const response = await apiFetch(`/evouchers`);
+      
       if (response.ok) {
         const result = await response.json();
         

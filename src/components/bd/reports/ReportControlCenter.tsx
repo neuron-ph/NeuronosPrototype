@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, X, Download, Search, ChevronDown, ChevronRight } from 'lucide-react';
-import { projectId, publicAnonKey } from '../../../utils/supabase/info';
+import { apiFetch } from '../../../utils/api';
 import { toast } from 'sonner@2.0.3';
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 interface ReportControlCenterProps {
   onBack: () => void;
@@ -163,12 +161,8 @@ export function ReportControlCenter({ onBack }: ReportControlCenterProps) {
         aggregations,
       };
 
-      const response = await fetch(`${API_URL}/reports/control-center`, {
+      const response = await apiFetch(`/reports/control-center`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(config),
       });
 
@@ -283,12 +277,8 @@ export function ReportControlCenter({ onBack }: ReportControlCenterProps) {
 
   const handleExport = async (format: 'csv' | 'excel') => {
     try {
-      const response = await fetch(`${API_URL}/reports/export`, {
+      const response = await apiFetch(`/reports/export`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           format,
           data: reportResults,

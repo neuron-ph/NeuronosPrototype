@@ -2,7 +2,7 @@ import { Package, Ship, Box, Warehouse, Link as LinkIcon, Users } from "lucide-r
 import { useState, useEffect } from "react";
 import type { ForwardingBooking, ExecutionStatus } from "../../../types/operations";
 import type { Project } from "../../../types/pricing";
-import { projectId, publicAnonKey } from "../../../utils/supabase/info";
+import { apiFetch } from "../../../utils/api";
 import { toast } from "../../ui/toast-utils";
 import { ProjectAutofillSection } from "../shared/ProjectAutofillSection";
 import { ServicesMultiSelect } from "../shared/ServicesMultiSelect";
@@ -29,7 +29,6 @@ interface CreateForwardingBookingPanelProps {
   serviceType?: string; // NEW: For team assignment
 }
 
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 export function CreateForwardingBookingPanel({
   isOpen,
@@ -290,12 +289,8 @@ export function CreateForwardingBookingPanel({
         bookingData.assigned_handler_name = teamAssignment.handler?.name;
       }
 
-      const response = await fetch(`${API_URL}/forwarding-bookings`, {
+      const response = await apiFetch(`/forwarding-bookings`, {
         method: "POST",
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify(bookingData)
       });
 
@@ -313,8 +308,6 @@ export function CreateForwardingBookingPanel({
               createdBooking.bookingId, // Use bookingId as the booking number
               "Forwarding",
               createdBooking.status,
-              projectId,
-              publicAnonKey
             );
             console.log(`Linked booking ${createdBooking.bookingId} to project ${projectNumber}`);
           } catch (linkError) {
@@ -326,22 +319,15 @@ export function CreateForwardingBookingPanel({
         // Save team preference if requested and from Pricing
         if (source === "pricing" && teamAssignment?.saveAsDefault && customerId) {
           try {
-            await fetch(
-              `${API_URL}/client-handler-preferences`,
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${publicAnonKey}`,
-                },
-                body: JSON.stringify({
-                  client_id: customerId,
-                  service_type: serviceType,
-                  preferred_supervisor_id: teamAssignment.supervisor?.id,
-                  preferred_handler_id: teamAssignment.handler?.id,
-                }),
-              }
-            );
+            await apiFetch(`/client-handler-preferences`, {
+              method: "POST",
+              body: JSON.stringify({
+                client_id: customerId,
+                service_type: serviceType,
+                preferred_supervisor_id: teamAssignment.supervisor?.id,
+                preferred_handler_id: teamAssignment.handler?.id,
+              }),
+            });
           } catch (error) {
             console.error("Error saving team preference:", error);
           }

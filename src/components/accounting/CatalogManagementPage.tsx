@@ -3,10 +3,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Search, Plus, Pencil, X, Check, RotateCcw, ChevronDown, Database } from "lucide-react";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { toast } from "../ui/toast-utils";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 // ==================== TYPES ====================
 
@@ -65,9 +63,7 @@ export function CatalogManagementPage() {
     try {
       const params = new URLSearchParams();
       if (filterStatus === "all") params.set("include_inactive", "true");
-      const res = await fetch(`${API_URL}/catalog/items?${params}`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
-      });
+      const res = await apiFetch(`/catalog/items?${params}`);
       const json = await res.json();
       if (json.success) setItems(json.data || []);
     } catch (err) {
@@ -77,9 +73,7 @@ export function CatalogManagementPage() {
 
   const fetchCategories = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/catalog/categories`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
-      });
+      const res = await apiFetch(`/catalog/categories`);
       const json = await res.json();
       if (json.success) setCategories(json.data || []);
     } catch (err) {
@@ -97,9 +91,8 @@ export function CatalogManagementPage() {
   const handleSeed = async () => {
     setIsSeeding(true);
     try {
-      const res = await fetch(`${API_URL}/catalog/seed`, {
+      const res = await apiFetch(`/catalog/seed`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
       });
       const json = await res.json();
       if (json.success) {
@@ -117,13 +110,10 @@ export function CatalogManagementPage() {
 
   const handleSave = async (id: string) => {
     try {
-      const res = await fetch(`${API_URL}/catalog/items/${id}`, {
+      const updates = { ...editForm };
+      const res = await apiFetch(`/catalog/items/${id}`, {
         method: "PUT",
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(editForm),
+        body: JSON.stringify(updates),
       });
       const json = await res.json();
       if (json.success) {
@@ -142,9 +132,8 @@ export function CatalogManagementPage() {
 
   const handleDeactivate = async (id: string) => {
     try {
-      const res = await fetch(`${API_URL}/catalog/items/${id}`, {
+      const res = await apiFetch(`/catalog/items/${id}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
       });
       const json = await res.json();
       if (json.success) {
@@ -159,13 +148,10 @@ export function CatalogManagementPage() {
 
   const handleReactivate = async (id: string) => {
     try {
-      const res = await fetch(`${API_URL}/catalog/items/${id}`, {
+      const item = { is_active: true };
+      const res = await apiFetch(`/catalog/items/${id}`, {
         method: "PUT",
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ is_active: true }),
+        body: JSON.stringify(item),
       });
       const json = await res.json();
       if (json.success) {
@@ -184,13 +170,10 @@ export function CatalogManagementPage() {
       return;
     }
     try {
-      const res = await fetch(`${API_URL}/catalog/items`, {
+      const newItem = { ...addForm };
+      const res = await apiFetch(`/catalog/items`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(addForm),
+        body: JSON.stringify(newItem),
       });
       const json = await res.json();
       if (json.success) {

@@ -5,10 +5,8 @@ import { CustomReportBuilder } from './reports/CustomReportBuilder';
 import { ReportControlCenter } from './reports/ReportControlCenter';
 import { SavedReports } from './reports/SavedReports';
 import { ReportResults } from './reports/ReportResults';
-import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { apiFetch } from '../../utils/api';
 import { toast } from 'sonner@2.0.3';
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 type ViewMode = 'list' | 'templates' | 'custom' | 'saved' | 'results' | 'control-center';
 type MainTab = 'all' | 'templates' | 'saved';
@@ -54,14 +52,7 @@ export function BDReports() {
   const fetchSavedReports = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_URL}/bd-reports`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json',
-        }
-      });
-
+      const response = await apiFetch(`/bd-reports`);
       if (!response.ok) {
         throw new Error('Failed to fetch reports');
       }

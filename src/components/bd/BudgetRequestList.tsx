@@ -5,10 +5,8 @@ import { BudgetRequestDetailPanel } from "./BudgetRequestDetailPanel";
 import { MultiSelectDropdown } from "./MultiSelectDropdown";
 import { CustomDropdown } from "./CustomDropdown";
 import type { EVoucher } from "../../types/evoucher";
-import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { apiFetch } from '../../utils/api';
 import { toast } from "../ui/toast-utils";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 type QuickFilterTab = "all" | "my-requests";
 type DateRangeFilter = "all" | "today" | "this-week" | "this-month" | "this-quarter" | "last-30-days";
@@ -251,16 +249,10 @@ export function BudgetRequestList() {
   const fetchBudgetRequests = useCallback(async () => {
     try {
       // Fetch E-Vouchers with transaction_type = "budget_request"
-      console.log('🔍 [Budget Requests] Fetching from:', `${API_URL}/evouchers?source_module=bd&transaction_type=budget_request`);
+      console.log('🔍 [Budget Requests] Fetching from:', `/evouchers?source_module=bd&transaction_type=budget_request`);
       
-      const response = await fetch(`${API_URL}/evouchers?source_module=bd&transaction_type=budget_request`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json',
-        }
-      });
-
+      const response = await apiFetch(`/evouchers?source_module=bd&transaction_type=budget_request`);
+      
       if (!response.ok) {
         console.error('❌ [Budget Requests] Failed to fetch. Status:', response.status);
         const errorText = await response.text();

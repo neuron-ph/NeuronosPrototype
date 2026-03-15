@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { X, CheckCircle, FileText, Info } from "lucide-react";
 import type { Project } from "../../types/pricing";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { 
   autofillForwardingFromProject,
   autofillBrokerageFromProject,
@@ -11,8 +11,6 @@ import {
   linkBookingToProject
 } from "../../utils/projectAutofill";
 import { toast } from "../ui/toast-utils";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 interface CreateBookingFromProjectModalProps {
   isOpen: boolean;
@@ -82,7 +80,7 @@ export function CreateBookingFromProjectModal({
       switch (serviceType) {
         case "Forwarding":
           bookingData = autofillForwardingFromProject(project);
-          endpoint = `${API_URL}/forwarding-bookings`;
+          endpoint = `/forwarding-bookings`;
           bookingIdPrefix = "FWD";
           
           // Add required fields for forwarding (only if not already autofilled)
@@ -107,7 +105,7 @@ export function CreateBookingFromProjectModal({
 
         case "Brokerage":
           bookingData = autofillBrokerageFromProject(project);
-          endpoint = `${API_URL}/brokerage-bookings`;
+          endpoint = `/brokerage-bookings`;
           bookingIdPrefix = "BRK";
           
           bookingData = {
@@ -132,7 +130,7 @@ export function CreateBookingFromProjectModal({
 
         case "Trucking":
           bookingData = autofillTruckingFromProject(project);
-          endpoint = `${API_URL}/trucking-bookings`;
+          endpoint = `/trucking-bookings`;
           bookingIdPrefix = "TRK";
           
           bookingData = {
@@ -152,7 +150,7 @@ export function CreateBookingFromProjectModal({
 
         case "Marine Insurance":
           bookingData = autofillMarineInsuranceFromProject(project);
-          endpoint = `${API_URL}/marine-insurance-bookings`;
+          endpoint = `/marine-insurance-bookings`;
           bookingIdPrefix = "INS";
           
           bookingData = {
@@ -173,7 +171,7 @@ export function CreateBookingFromProjectModal({
 
         case "Others":
           bookingData = autofillOthersFromProject(project);
-          endpoint = `${API_URL}/others-bookings`;
+          endpoint = `/others-bookings`;
           bookingIdPrefix = "OTH";
           
           bookingData = {
@@ -194,12 +192,8 @@ export function CreateBookingFromProjectModal({
 
       // Create the booking
       console.log(`Creating ${serviceType} booking from project ${project.project_number}...`);
-      const response = await fetch(endpoint, {
+      const response = await apiFetch(endpoint, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${publicAnonKey}`,
-        },
         body: JSON.stringify(bookingData),
       });
 
@@ -220,12 +214,10 @@ export function CreateBookingFromProjectModal({
       console.log(`Linking booking to project...`);
       const linkResult = await linkBookingToProject(
         project.id,
-        createdBooking.bookingId, // Use bookingId as the ID (all bookings use bookingId as primary key)
+        createdBooking.bookingId,
         createdBooking.bookingId,
         serviceType,
         createdBooking.status,
-        projectId,
-        publicAnonKey
       );
 
       if (!linkResult.success) {

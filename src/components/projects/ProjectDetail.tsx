@@ -1,21 +1,5 @@
-import { useState, useEffect } from "react";
-import { createPortal } from "react-dom";
-import { ArrowLeft, MoreVertical, Edit3, Copy, Archive, Trash2, FileText, Layout, Briefcase, DollarSign, Receipt, FileStack, Paperclip, MessageSquare, Layers, Users, TrendingUp } from "lucide-react";
-import { CommentsTab } from "../shared/CommentsTab";
-import { ProjectOverviewTab } from "./ProjectOverviewTab";
-import { ProjectBookingsTab } from "./ProjectBookingsTab";
-import { ProjectAttachmentsTab } from "./ProjectAttachmentsTab";
-import { ProjectCollectionsTab } from "./ProjectCollectionsTab";
-import { ProjectFinancialOverview } from "./tabs/ProjectFinancialOverview";
-import { ProjectInvoices } from "./tabs/ProjectInvoices";
-import { ProjectBillings } from "./tabs/ProjectBillings";
-import { createClient } from "@supabase/supabase-js";
-import { ProjectExpensesTab } from "./ProjectExpensesTab";
-import { QuotationPrintView } from "./quotation/QuotationPrintView";
-import { QuotationPreviewPanel } from "./quotation/QuotationPreviewPanel";
-import { ProjectStatusSelector } from "./ProjectStatusSelector";
 import type { Project, ProjectStatus } from "../../types/pricing";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { toast } from "../ui/toast-utils";
 import { useProjectFinancials } from "../../hooks/useProjectFinancials";
 
@@ -82,20 +66,11 @@ export function ProjectDetail({
   const currentUserDepartment = currentUser?.department || "BD";
 
   const handleSaveQuotation = async (updates: any) => {
-    if (!projectId || !publicAnonKey) {
-      toast.error("Configuration Error", "Missing Supabase credentials");
-      return;
-    }
-
     try {
       // Use the server API instead of direct table access
       // FIX: Prioritize project.quotation_id (FK) over project.quotation.id (embedded) to ensure we update the linked record
-      const response = await fetch(`${API_URL}/quotations/${project.quotation_id || project.quotation?.id}`, {
+      const response = await apiFetch(`/quotations/${project.quotation_id || project.quotation?.id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`
-        },
         body: JSON.stringify(updates)
       });
 
@@ -160,8 +135,6 @@ export function ProjectDetail({
       setActiveTab(firstTab);
   };
 
-  const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
-
   // Handle viewing a booking from the Overview tab
   const handleViewBooking = (bookingId: string, serviceType: string) => {
     setSelectedBookingId(bookingId);
@@ -175,12 +148,8 @@ export function ProjectDetail({
     setOptimisticStatus(newStatus);
     
     try {
-      const response = await fetch(`${API_URL}/projects/${project.id}`, {
+      const response = await apiFetch(`/projects/${project.id}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`
-        },
         body: JSON.stringify({ status: newStatus })
       });
 

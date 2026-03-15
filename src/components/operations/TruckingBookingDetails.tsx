@@ -7,7 +7,7 @@ import { ExpensesTab } from "./shared/ExpensesTab";
 import { BookingCommentsTab } from "../shared/BookingCommentsTab";
 import { useProjectFinancials } from "../../hooks/useProjectFinancials";
 import { StatusSelector } from "../StatusSelector";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { toast } from "../ui/toast-utils";
 import { EditableMultiInputField } from "../shared/EditableMultiInputField";
 import { EditableSectionCard, useSectionEdit } from "../shared/EditableSectionCard";
@@ -158,8 +158,8 @@ export function TruckingBookingDetails({ booking, onBack, onUpdate, currentUser,
     setEditedBooking(prev => ({ ...prev, status: newStatus }));
     setActivityLog(prev => [{ id: `activity-${Date.now()}`, timestamp: new Date(), user: currentUser?.name || "Current User", action: "status_changed", statusFrom: oldStatus, statusTo: newStatus }, ...prev]);
     try {
-      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-c142e950/trucking-bookings/${booking.bookingId}`, {
-        method: 'PUT', headers: { 'Authorization': `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' },
+      const response = await apiFetch(`/trucking-bookings/${booking.bookingId}`, {
+        method: 'PUT',
         body: JSON.stringify({ status: newStatus })
       });
       if (!response.ok) throw new Error('Failed to update status');

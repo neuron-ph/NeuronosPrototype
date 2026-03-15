@@ -2,9 +2,7 @@ import { X, Upload, CheckSquare, Phone, Mail, Users, Send, MessageCircle, Linked
 import { useState, useEffect } from "react";
 import type { Task, TaskType, TaskPriority } from "../../types/bd";
 import { CustomDropdown } from "./CustomDropdown";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
+import { apiFetch } from "../../utils/api";
 
 interface AddTaskPanelProps {
   isOpen: boolean;
@@ -59,30 +57,21 @@ export function AddTaskPanel({ isOpen, onClose, onSave }: AddTaskPanelProps) {
     const fetchData = async () => {
       try {
         // Fetch contacts
-        const contactsResponse = await fetch(`${API_URL}/contacts`, {
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
-          cache: 'no-store',
-        });
+        const contactsResponse = await apiFetch(`/contacts`);
         if (contactsResponse.ok) {
           const result = await contactsResponse.json();
           if (result.success) setContacts(result.data);
         }
 
         // Fetch customers
-        const customersResponse = await fetch(`${API_URL}/customers`, {
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
-          cache: 'no-store',
-        });
+        const customersResponse = await apiFetch(`/customers`);
         if (customersResponse.ok) {
           const result = await customersResponse.json();
           if (result.success) setCustomers(result.data);
         }
 
         // Fetch BD users
-        const usersResponse = await fetch(`${API_URL}/users`, {
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
-          cache: 'no-store',
-        });
+        const usersResponse = await apiFetch(`/users`);
         if (usersResponse.ok) {
           const result = await usersResponse.json();
           if (result.success) {

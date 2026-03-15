@@ -2,7 +2,7 @@ import { useState } from "react";
 import { cleanupDuplicates } from "../utils/cleanupDuplicates";
 import { toast } from "sonner@2.0.3";
 import { useNavigate } from "react-router";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { apiFetch } from "../utils/api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
@@ -16,8 +16,11 @@ interface User {
   id: string;
   name: string;
   email: string;
-  role: "Employee" | "President";
+  department: "Business Development" | "Pricing" | "Operations" | "Accounting" | "Executive" | "HR";
+  role: "rep" | "manager" | "director";
   status: "Active" | "Inactive";
+  service_type?: "Forwarding" | "Brokerage" | "Trucking" | "Marine Insurance" | "Others" | null;
+  operations_role?: "Manager" | "Supervisor" | "Handler" | null;
 }
 
 interface AdminProps {
@@ -29,7 +32,7 @@ interface AdminProps {
 export function Admin({ users = [], onAddUser, onDeleteUser }: AdminProps) {
   const navigate = useNavigate();
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false);
-  const [newUser, setNewUser] = useState({ name: "", email: "", role: "Employee" as const, status: "Active" as const });
+  const [newUser, setNewUser] = useState({ name: "", email: "", department: "Business Development" as User["department"], role: "rep" as User["role"], status: "Active" as const, service_type: null as User["service_type"], operations_role: null as User["operations_role"] });
   const [expenseTypes, setExpenseTypes] = useState(["Fuel", "Toll", "Maintenance", "Other"]);
   const [documentTypes, setDocumentTypes] = useState(["Booking Details", "Expense Entries", "Invoice", "Receipt"]);
   const [trackingFormat, setTrackingFormat] = useState("ND-{YYYY}-{####}");
@@ -48,17 +51,17 @@ export function Admin({ users = [], onAddUser, onDeleteUser }: AdminProps) {
 
   // Mock users data
   const mockUsers: User[] = [
-    { id: "1", name: "Maria Santos", email: "maria.santos@jjbos.ph", role: "President", status: "Active" },
-    { id: "2", name: "Juan Dela Cruz", email: "juan.delacruz@jjbos.ph", role: "Employee", status: "Active" },
-    { id: "3", name: "Pedro Reyes", email: "pedro.reyes@jjbos.ph", role: "Employee", status: "Active" },
-    { id: "4", name: "Anna Garcia", email: "anna.garcia@jjbos.ph", role: "Employee", status: "Inactive" },
+    { id: "1", name: "Maria Santos", email: "maria.santos@jjbos.ph", department: "Executive", role: "director", status: "Active" },
+    { id: "2", name: "Juan Dela Cruz", email: "juan.delacruz@jjbos.ph", department: "Business Development", role: "rep", status: "Active" },
+    { id: "3", name: "Pedro Reyes", email: "pedro.reyes@jjbos.ph", department: "Operations", role: "rep", status: "Active", service_type: "Forwarding", operations_role: "Handler" },
+    { id: "4", name: "Anna Garcia", email: "anna.garcia@jjbos.ph", department: "Accounting", role: "manager", status: "Inactive" },
   ];
 
   const displayUsers = users.length > 0 ? users : mockUsers;
 
   const handleAddUser = () => {
     onAddUser?.(newUser);
-    setNewUser({ name: "", email: "", role: "Employee", status: "Active" });
+    setNewUser({ name: "", email: "", department: "Business Development" as User["department"], role: "rep" as User["role"], status: "Active" as const, service_type: null as User["service_type"], operations_role: null as User["operations_role"] });
     setIsUserDialogOpen(false);
   };
 
@@ -98,13 +101,8 @@ export function Admin({ users = [], onAddUser, onDeleteUser }: AdminProps) {
   const handleMigrateQuotationStatuses = async () => {
     setIsMigratingStatuses(true);
     try {
-      const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
-      const response = await fetch(`${API_URL}/quotations/migrate-statuses`, {
+      const response = await apiFetch(`/quotations/migrate-statuses`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
       });
 
       const result = await response.json();
@@ -125,13 +123,8 @@ export function Admin({ users = [], onAddUser, onDeleteUser }: AdminProps) {
   const handleMigrateServicesMetadata = async () => {
     setIsMigratingServices(true);
     try {
-      const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
-      const response = await fetch(`${API_URL}/migrate-services-metadata`, {
+      const response = await apiFetch(`/migrate-services-metadata`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
       });
 
       const result = await response.json();
@@ -156,36 +149,16 @@ export function Admin({ users = [], onAddUser, onDeleteUser }: AdminProps) {
   const handleSeedComprehensiveData = async () => {
     setIsSeeding(true);
     try {
-      const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
-      
       // First, seed customers and contacts with correct IDs
       console.log('[SEED] Seeding customers...');
-      await fetch(`${API_URL}/customers/seed`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      await apiFetch(`/customers/seed`, { method: 'POST' });
       
       console.log('[SEED] Seeding contacts...');
-      await fetch(`${API_URL}/contacts/seed`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      await apiFetch(`/contacts/seed`, { method: 'POST' });
       
       // Then seed comprehensive data (quotations, projects, etc.)
       console.log('[SEED] Seeding comprehensive data...');
-      const response = await fetch(`${API_URL}/seed/comprehensive`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await apiFetch(`/seed/comprehensive`, { method: 'POST' });
 
       const result = await response.json();
 
@@ -205,41 +178,21 @@ export function Admin({ users = [], onAddUser, onDeleteUser }: AdminProps) {
   const handleClearSeedData = async () => {
     setIsClearingSeed(true);
     try {
-      const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
-      
       // Clear contacts first
       console.log('[CLEAR] Clearing contacts...');
-      const contactsResponse = await fetch(`${API_URL}/contacts/clear`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const contactsResponse = await apiFetch(`/contacts/clear`, { method: 'DELETE' });
       const contactsResult = await contactsResponse.json();
       console.log('[CLEAR] Contacts cleared:', contactsResult);
       
       // Clear customers
       console.log('[CLEAR] Clearing customers...');
-      const customersResponse = await fetch(`${API_URL}/customers/clear`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const customersResponse = await apiFetch(`/customers/clear`, { method: 'DELETE' });
       const customersResult = await customersResponse.json();
       console.log('[CLEAR] Customers cleared:', customersResult);
       
       // Clear quotations and projects
       console.log('[CLEAR] Clearing quotations and projects...');
-      const response = await fetch(`${API_URL}/seed/clear`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await apiFetch(`/seed/clear`, { method: 'DELETE' });
 
       const result = await response.json();
 
@@ -259,14 +212,7 @@ export function Admin({ users = [], onAddUser, onDeleteUser }: AdminProps) {
   const handleMigrateContactNames = async () => {
     setIsMigratingContactNames(true);
     try {
-      const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
-      const response = await fetch(`${API_URL}/contacts/migrate-names`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await apiFetch(`/contacts/migrate-names`, { method: 'POST' });
 
       const result = await response.json();
 
@@ -286,14 +232,7 @@ export function Admin({ users = [], onAddUser, onDeleteUser }: AdminProps) {
   const handleSeedUsers = async () => {
     setIsSeedingUsers(true);
     try {
-      const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
-      const response = await fetch(`${API_URL}/users/seed`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await apiFetch(`/users/seed`, { method: 'POST' });
 
       const result = await response.json();
 
@@ -313,14 +252,7 @@ export function Admin({ users = [], onAddUser, onDeleteUser }: AdminProps) {
   const handleSeedBalanceSheet = async () => {
     setIsSeedingBalanceSheet(true);
     try {
-      const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
-      const response = await fetch(`${API_URL}/seed/coa-balance-sheet`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await apiFetch(`/seed/coa-balance-sheet`, { method: 'POST' });
 
       const result = await response.json();
 
@@ -340,14 +272,7 @@ export function Admin({ users = [], onAddUser, onDeleteUser }: AdminProps) {
   const handleSeedIncomeStatement = async () => {
     setIsSeedingIncomeStatement(true);
     try {
-      const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
-      const response = await fetch(`${API_URL}/seed/coa-income-statement`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await apiFetch(`/seed/coa-income-statement`, { method: 'POST' });
 
       const result = await response.json();
 
@@ -489,10 +414,31 @@ export function Admin({ users = [], onAddUser, onDeleteUser }: AdminProps) {
                           />
                         </div>
                         <div>
+                          <Label>Department</Label>
+                          <Select
+                            value={newUser.department}
+                            onValueChange={(value: "Business Development" | "Pricing" | "Operations" | "Accounting" | "Executive" | "HR") =>
+                              setNewUser({ ...newUser, department: value })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Business Development">Business Development</SelectItem>
+                              <SelectItem value="Pricing">Pricing</SelectItem>
+                              <SelectItem value="Operations">Operations</SelectItem>
+                              <SelectItem value="Accounting">Accounting</SelectItem>
+                              <SelectItem value="Executive">Executive</SelectItem>
+                              <SelectItem value="HR">HR</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
                           <Label>Role</Label>
                           <Select
                             value={newUser.role}
-                            onValueChange={(value: "Employee" | "President") =>
+                            onValueChange={(value: "rep" | "manager" | "director") =>
                               setNewUser({ ...newUser, role: value })
                             }
                           >
@@ -500,11 +446,71 @@ export function Admin({ users = [], onAddUser, onDeleteUser }: AdminProps) {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="Employee">Employee</SelectItem>
-                              <SelectItem value="President">President</SelectItem>
+                              <SelectItem value="rep">Rep</SelectItem>
+                              <SelectItem value="manager">Manager</SelectItem>
+                              <SelectItem value="director">Director</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
+                        <div>
+                          <Label>Status</Label>
+                          <Select
+                            value={newUser.status}
+                            onValueChange={(value: "Active" | "Inactive") =>
+                              setNewUser({ ...newUser, status: value })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Active">Active</SelectItem>
+                              <SelectItem value="Inactive">Inactive</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {newUser.department === "Operations" && (
+                          <>
+                            <div>
+                              <Label>Service Type</Label>
+                              <Select
+                                value={newUser.service_type || ""}
+                                onValueChange={(value: string) =>
+                                  setNewUser({ ...newUser, service_type: value as User["service_type"] })
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select service type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Forwarding">Forwarding</SelectItem>
+                                  <SelectItem value="Brokerage">Brokerage</SelectItem>
+                                  <SelectItem value="Trucking">Trucking</SelectItem>
+                                  <SelectItem value="Marine Insurance">Marine Insurance</SelectItem>
+                                  <SelectItem value="Others">Others</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label>Operations Role</Label>
+                              <Select
+                                value={newUser.operations_role || ""}
+                                onValueChange={(value: string) =>
+                                  setNewUser({ ...newUser, operations_role: value as User["operations_role"] })
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select operations role" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Manager">Manager</SelectItem>
+                                  <SelectItem value="Supervisor">Supervisor</SelectItem>
+                                  <SelectItem value="Handler">Handler</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </>
+                        )}
                         <Button
                           onClick={handleAddUser}
                           className="w-full bg-[#0F766E] hover:bg-[#0D6560]"
@@ -522,6 +528,7 @@ export function Admin({ users = [], onAddUser, onDeleteUser }: AdminProps) {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
+                    <TableHead>Department</TableHead>
                     <TableHead>Role</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -541,8 +548,24 @@ export function Admin({ users = [], onAddUser, onDeleteUser }: AdminProps) {
                             borderRadius: "999px",
                             fontSize: "12px",
                             fontWeight: 500,
-                            backgroundColor: user.role === "President" ? "#F3E8FF" : "#DBEAFE",
-                            color: user.role === "President" ? "#7E22CE" : "#1D4ED8"
+                            backgroundColor: user.department === "Executive" ? "#F3E8FF" : "#DBEAFE",
+                            color: user.department === "Executive" ? "#7E22CE" : "#1D4ED8"
+                          }}
+                        >
+                          {user.department}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "4px 12px",
+                            borderRadius: "999px",
+                            fontSize: "12px",
+                            fontWeight: 500,
+                            backgroundColor: user.role === "director" ? "#F3E8FF" : "#DBEAFE",
+                            color: user.role === "director" ? "#7E22CE" : "#1D4ED8"
                           }}
                         >
                           {user.role}

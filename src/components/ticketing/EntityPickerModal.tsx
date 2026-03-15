@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Search, Filter, ChevronDown, Calendar, User, ArrowUpDown, FileText, Package, Building, Users, DollarSign } from 'lucide-react';
-import { projectId, publicAnonKey } from '../../utils/supabase/info';
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
+import { apiFetch } from '../../utils/api';
 
 interface Entity {
   id: string;
@@ -180,13 +178,8 @@ export function EntityPickerModal({
       params.append('sort_by', filters.sortBy);
       params.append('sort_order', filters.sortOrder);
       
-      const endpoint = `${API_URL}/${entityType}s?${params.toString()}`;
-      const response = await fetch(endpoint, {
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const endpoint = `/${entityType}s?${params.toString()}`;
+      const response = await apiFetch(endpoint);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch ${entityType}s`);

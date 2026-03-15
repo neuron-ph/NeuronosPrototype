@@ -1,6 +1,6 @@
 import { Shield, Package, FileText } from "lucide-react";
 import { useState } from "react";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { toast } from "../ui/toast-utils";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { SearchableDropdown } from "../shared/SearchableDropdown";
@@ -69,20 +69,13 @@ export function CreateMarineInsuranceBookingPanel({
     setLoading(true);
 
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/marine-insurance-bookings`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
-          body: JSON.stringify({
+      const response = await apiFetch(`/marine-insurance-bookings`, {
+        method: "POST",
+        body: JSON.stringify({
             ...formData,
             ...(detectedContractId && { contract_id: detectedContractId }),
           }),
-        }
-      );
+      });
 
       if (!response.ok) {
         throw new Error("Failed to create marine insurance booking");

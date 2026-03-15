@@ -1,11 +1,6 @@
-import { useState, useEffect } from "react";
-import { FileText, Plus, Search, Filter, CheckSquare, Square, Printer, Mail, Ban, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
-import type { Project } from "../../types/pricing";
 import type { EVoucher, EVoucherStatus } from "../../types/evoucher";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { toast } from "../ui/toast-utils";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 interface ProjectBillingsTabProps {
   project: Project;
@@ -30,11 +25,7 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
     try {
       setIsLoading(true);
       // Fetch all billings (we filter by project client-side)
-      const response = await fetch(`${API_URL}/evouchers?transaction_type=billing`, {
-        headers: {
-          "Authorization": `Bearer ${publicAnonKey}`
-        }
-      });
+      const response = await apiFetch(`/evouchers?transaction_type=billing`);
       
       if (response.ok) {
         const result = await response.json();
@@ -62,12 +53,11 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
     toast.loading("Generating invoice from quotation charges...", { id: "import-billing" });
     
     try {
-      const response = await fetch(
-        `${API_URL}/projects/${project.id}/generate-invoice`,
+      const response = await apiFetch(
+        `/projects/${project.id}/generate-invoice`,
         {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${publicAnonKey}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -148,11 +138,10 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
       
       // 2. Update each selected voucher
       const updatePromises = Array.from(selectedIds).map(id => 
-        fetch(`${API_URL}/evouchers/${id}`, {
+        apiFetch(`/evouchers/${id}`, {
           method: "PUT",
           headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${publicAnonKey}`
+            "Content-Type": "application/json"
           },
           body: JSON.stringify({
             statement_reference: statementRef,
@@ -203,11 +192,10 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
     const toastId = toast.loading("Finalizing statement...", { id: "finalize-stmt" });
 
     try {
-      const response = await fetch(`${API_URL}/statements/${statementRef}/finalize`, {
+      const response = await apiFetch(`/statements/${statementRef}/finalize`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${publicAnonKey}`
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
           user_id: currentUser?.id

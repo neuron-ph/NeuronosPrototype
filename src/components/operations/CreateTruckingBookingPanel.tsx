@@ -1,7 +1,7 @@
 import { Truck, Package, MapPin } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Plus, X } from "lucide-react";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { toast } from "../ui/toast-utils";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { SearchableDropdown } from "../shared/SearchableDropdown";
@@ -109,15 +109,9 @@ export function CreateTruckingBookingPanel({
     setLoading(true);
 
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/trucking-bookings`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
-          body: JSON.stringify({
+      const response = await apiFetch(`/trucking-bookings`, {
+        method: "POST",
+        body: JSON.stringify({
             ...formData,
             // ✨ Multi-line trucking: persist line items + sync legacy fields from first item
             // Filter out completely empty line items before saving
@@ -126,8 +120,7 @@ export function CreateTruckingBookingPanel({
             deliveryAddress: truckingLineItems[0]?.destination || formData.deliveryAddress,
             ...(detectedContractId && { contract_id: detectedContractId }),
           }),
-        }
-      );
+      });
 
       if (!response.ok) {
         throw new Error("Failed to create trucking booking");

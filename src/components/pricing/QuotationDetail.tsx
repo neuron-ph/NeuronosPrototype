@@ -6,7 +6,7 @@ interface QuotationDetailProps {
   quotation: QuotationNew;
   onBack: () => void;
   onEdit: () => void;
-  userDepartment?: "BD" | "PD";
+  userDepartment?: "Business Development" | "Pricing";
   onAcceptQuotation?: (quotation: QuotationNew) => void;
   onUpdate?: (quotation: QuotationNew) => void;
   onDuplicate?: (quotation: QuotationNew) => void;

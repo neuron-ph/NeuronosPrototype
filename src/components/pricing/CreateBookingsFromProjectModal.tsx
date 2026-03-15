@@ -1,13 +1,4 @@
-import { useState } from "react";
-import { X, Check, Loader2, Package } from "lucide-react";
-import { TeamAssignmentForm, type TeamAssignment } from "./TeamAssignmentForm";
-import type { Project } from "../../types/pricing";
-import type { User } from "../../hooks/useUser";
-import type { ServiceType } from "../../types/operations";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
 import { toast } from "sonner@2.0.3";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 interface CreateBookingsFromProjectModalProps {
   isOpen: boolean;
@@ -217,12 +208,8 @@ export function CreateBookingsFromProjectModal({
       const endpoint = getBookingEndpoint(serviceState.serviceType);
       
       // Create booking
-      const response = await fetch(`${API_URL}/${endpoint}`, {
+      const response = await apiFetch(`/${endpoint}`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${publicAnonKey}`,
-        },
         body: JSON.stringify(payload),
       });
 
@@ -235,12 +222,8 @@ export function CreateBookingsFromProjectModal({
       // Save handler preference if checkbox was checked
       if (serviceState.assignment.saveAsDefault) {
         try {
-          await fetch(`${API_URL}/client-handler-preferences`, {
+          await apiFetch(`/client-handler-preferences`, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${publicAnonKey}`,
-            },
             body: JSON.stringify({
               customer_id: project.customer_id,
               service_type: serviceState.serviceType,

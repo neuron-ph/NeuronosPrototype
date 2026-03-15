@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { NetworkPartner, NETWORK_PARTNERS } from "../data/networkPartners";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
-
-const SERVER_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
+import { apiFetch } from "../utils/api";
 
 export function useNetworkPartners() {
   const [partners, setPartners] = useState<NetworkPartner[]>([]);
@@ -16,7 +14,6 @@ export function useNetworkPartners() {
 
     try {
       console.log(`Starting seed with ${seedData.length} partners...`);
-      console.log(`Target Server: ${SERVER_URL}`);
       
       // Chunk the data to avoid payload size limits
       // Reduced chunk size to 5 to be very safe with Edge Function limits
@@ -33,12 +30,8 @@ export function useNetworkPartners() {
         const chunk = chunks[i];
         try {
           console.log(`Seeding chunk ${i + 1}/${chunks.length}...`);
-          const response = await fetch(`${SERVER_URL}/partners/seed`, {
+          const response = await apiFetch(`/partners/seed`, {
             method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
-              'Content-Type': 'application/json'
-            },
             body: JSON.stringify(chunk)
           });
           
@@ -67,12 +60,7 @@ export function useNetworkPartners() {
       setError(null);
       
       // Add a timestamp to prevent caching issues
-      const response = await fetch(`${SERVER_URL}/partners?t=${Date.now()}`, {
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await apiFetch(`/partners?t=${Date.now()}`);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch partners: ${response.status} ${response.statusText}`);
@@ -122,9 +110,9 @@ export function useNetworkPartners() {
     try {
       const isNew = !partnerData.id || partnerData.id.startsWith("new-");
       const method = isNew ? 'POST' : 'PUT';
-      const url = isNew 
-        ? `${SERVER_URL}/partners` 
-        : `${SERVER_URL}/partners/${partnerData.id}`;
+      const path = isNew 
+        ? `/partners` 
+        : `/partners/${partnerData.id}`;
 
       // Optimistic update
       const tempId = partnerData.id || `temp-${Date.now()}`;
@@ -135,12 +123,8 @@ export function useNetworkPartners() {
         return prev.map(p => p.id === partnerData.id ? { ...p, ...partnerData } : p);
       });
 
-      const response = await fetch(url, {
+      const response = await apiFetch(path, {
         method,
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify(partnerData)
       });
 
@@ -165,8 +149,6 @@ export function useNetworkPartners() {
       }
     } catch (err) {
       console.error("Error saving partner:", err);
-      // Ideally we would refetch or revert, but for now just logging
-      // fetchPartners(); 
       throw err;
     }
   };
@@ -176,12 +158,8 @@ export function useNetworkPartners() {
       // Optimistic update
       setPartners(prev => prev.filter(p => p.id !== id));
 
-      const response = await fetch(`${SERVER_URL}/partners/${id}`, {
+      const response = await apiFetch(`/partners/${id}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
       });
 
       if (!response.ok) {

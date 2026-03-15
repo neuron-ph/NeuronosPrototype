@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Search, Plus, Building2, ChevronDown } from "lucide-react";
 import type { Customer } from "../../types/bd";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
+import { apiFetch } from "../../utils/api";
 
 interface CompanyAutocompleteProps {
   value: string; // company_name
@@ -37,12 +35,7 @@ export function CompanyAutocomplete({
         params.append("search", search);
       }
 
-      const response = await fetch(`${API_URL}/customers?${params.toString()}`, {
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
-      });
-
+      const response = await apiFetch(`/customers?${params.toString()}`);
       const result = await response.json();
       if (result.success) {
         setCustomers(result.data);

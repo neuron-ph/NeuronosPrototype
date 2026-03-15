@@ -1,10 +1,8 @@
 import { Search, Plus, Globe, Building2, MapPin } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { Vendor, VendorType } from "../../types/pricing";
-import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { apiFetch } from "../../utils/api";
 import { toast } from "../ui/toast-utils";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 export function VendorsList() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -16,12 +14,7 @@ export function VendorsList() {
   const fetchVendors = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_URL}/vendors`, {
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await apiFetch(`/vendors`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, FileCheck, Briefcase, UserCheck, FileEdit, Clock, CheckCircle, Trash2 } from "lucide-react";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { CreateBrokerageBookingPanel } from "./CreateBrokerageBookingPanel";
 import { BrokerageBookingDetails } from "./BrokerageBookingDetails";
 import { NeuronStatusPill } from "../NeuronStatusPill";
@@ -33,8 +33,6 @@ interface BrokerageBookingsProps {
   highlightId?: string | null;
 }
 
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
-
 export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, highlightId }: BrokerageBookingsProps = {}) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -49,12 +47,7 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
 
   // ── Cached bookings fetch ─────────────────────────────────
   const bookingsFetcher = async (): Promise<BrokerageBooking[]> => {
-    const response = await fetch(`${API_URL}/brokerage-bookings`, {
-      headers: {
-        'Authorization': `Bearer ${publicAnonKey}`,
-        'Content-Type': 'application/json'
-      }
-    });
+    const response = await apiFetch(`/brokerage-bookings`);
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const result = await response.json();
     if (result.success) return result.data;
@@ -99,11 +92,8 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
     }
 
     try {
-      const response = await fetch(`${API_URL}/brokerage-bookings/${bookingId}`, {
+      const response = await apiFetch(`/brokerage-bookings/${bookingId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-        }
       });
 
       const result = await response.json();

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { BarChart3, Download, Calendar, Filter } from "lucide-react";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 
 interface ReportFilters {
   startDate: string;
@@ -45,10 +45,7 @@ export function OperationsReports() {
       const allBookings: any[] = [];
       
       for (const service of services) {
-        const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/${service.endpoint}`,
-          { headers: { Authorization: `Bearer ${publicAnonKey}` } }
-        );
+        const response = await apiFetch(`/${service.endpoint}`);
         if (response.ok) {
           const result = await response.json();
           if (result.success) {

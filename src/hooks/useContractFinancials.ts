@@ -22,7 +22,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { apiFetch } from "../utils/api";
 import { toast } from "../components/ui/toast-utils";
 import {
   calculateFinancialTotals,
@@ -30,8 +30,6 @@ import {
   type FinancialTotals,
 } from "../utils/financialCalculations";
 import type { FinancialData } from "./useProjectFinancials";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 /**
  * @param contractQuoteNumber  The contract's quote_number (e.g., "CQ25060001").
@@ -70,22 +68,16 @@ export function useContractFinancials(
       const [invoicesRes, billingItemsRes, expensesRes, collectionsRes] =
         await Promise.all([
           // 1. Invoices — keyed by projectNumber (we use contractQuoteNumber)
-          fetch(
-            `${API_URL}/accounting/invoices?projectNumber=${contractQuoteNumber}`,
-            { headers: { Authorization: `Bearer ${publicAnonKey}` } }
+          apiFetch(
+            `/accounting/invoices?projectNumber=${contractQuoteNumber}`
           ),
           // 2. Billing Items — fetch all, filter client-side
-          fetch(`${API_URL}/accounting/billing-items`, {
-            headers: { Authorization: `Bearer ${publicAnonKey}` },
-          }),
+          apiFetch(`/accounting/billing-items`),
           // 3. Expenses — fetch all e-vouchers, filter client-side
-          fetch(`${API_URL}/evouchers`, {
-            headers: { Authorization: `Bearer ${publicAnonKey}` },
-          }),
+          apiFetch(`/evouchers`),
           // 4. Collections — keyed by project_number
-          fetch(
-            `${API_URL}/accounting/collections?project_number=${contractQuoteNumber}`,
-            { headers: { Authorization: `Bearer ${publicAnonKey}` } }
+          apiFetch(
+            `/accounting/collections?project_number=${contractQuoteNumber}`
           ),
         ]);
 

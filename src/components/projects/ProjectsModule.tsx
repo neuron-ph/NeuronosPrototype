@@ -1,13 +1,11 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { toast } from "../ui/toast-utils";
 import { useCachedFetch, useInvalidateCache } from "../../hooks/useNeuronCache";
 import type { Project } from "../../types/pricing";
 import { ProjectsList } from "./ProjectsList";
 import { ProjectDetail } from "./ProjectDetail";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 export type ProjectsView = "list" | "detail";
 
@@ -41,13 +39,7 @@ export function ProjectsModule({ currentUser, onCreateTicket, initialProject, de
 
   // ── Cached projects fetch ────────────────────────────────
   const projectsFetcher = async (): Promise<Project[]> => {
-    if (!projectId || !publicAnonKey) {
-      console.error("Missing Supabase credentials:", { projectId, hasKey: !!publicAnonKey });
-      return [];
-    }
-    const response = await fetch(`${API_URL}/projects`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` },
-    });
+    const response = await apiFetch(`/projects`);
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const result = await response.json();
     if (result.success) return result.data;
@@ -98,11 +90,7 @@ export function ProjectsModule({ currentUser, onCreateTicket, initialProject, de
     // If viewing a specific project, fetch fresh detail (includes linkedBookings)
     if (selectedProject) {
       try {
-        const response = await fetch(`${API_URL}/projects/${selectedProject.id}`, {
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`,
-          },
-        });
+        const response = await apiFetch(`/projects/${selectedProject.id}`);
         
         if (response.ok) {
           const result = await response.json();

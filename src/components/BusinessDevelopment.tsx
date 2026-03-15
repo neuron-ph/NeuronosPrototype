@@ -18,7 +18,7 @@ import type { Customer } from "../types/bd";
 import type { Task } from "../types/bd";
 import type { Activity } from "../types/bd";
 import type { QuotationNew, Project, QuotationType } from "../types/pricing";
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { apiFetch } from '../utils/api';
 import { toast } from "./ui/toast-utils";
 import { useCachedFetch, useInvalidateCache } from "../hooks/useNeuronCache";
 
@@ -36,7 +36,7 @@ interface BusinessDevelopmentProps {
   onCreateTicket?: (quotation: QuotationNew) => void;
 }
 
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
+// API_URL removed — using apiFetch() wrapper (Phase 3)
 
 export function BusinessDevelopment({ view: initialView = "contacts", onCreateInquiry, onViewInquiry, customerData, inquiryId, contactId, currentUser, onCreateTicket }: BusinessDevelopmentProps) {
   const [view, setView] = useState<BDView>(initialView);
@@ -58,15 +58,13 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
   const [taskCustomers, setTaskCustomers] = useState<any[]>([]);
 
   // Map department name to userDepartment format
-  const userDepartment: "BD" | "PD" = "BD"; // Always BD since this is the Business Development module
+  const userDepartment: "Business Development" | "Pricing" = "Business Development"; // Always BD since this is the Business Development module
 
   // ── Cached data fetching ──────────────────────────────────
   const invalidateCache = useInvalidateCache();
 
   const quotationsFetcher = useCallback(async (): Promise<QuotationNew[]> => {
-    const response = await fetch(`${API_URL}/quotations?department=bd`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' }
-    });
+    const response = await apiFetch(`/quotations?department=bd`);
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const result = await response.json();
     if (result.success) return result.data;
@@ -80,9 +78,7 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
   );
 
   const projectsFetcher = useCallback(async (): Promise<Project[]> => {
-    const response = await fetch(`${API_URL}/projects`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' }
-    });
+    const response = await apiFetch(`/projects`);
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const result = await response.json();
     if (result.success) return result.data;
@@ -138,12 +134,7 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
     const fetchContactById = async () => {
       if (contactId && view === "contacts") {
         try {
-          const response = await fetch(`${API_URL}/contacts/${contactId}`, {
-            headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
-              'Content-Type': 'application/json'
-            }
-          });
+          const response = await apiFetch(`/contacts/${contactId}`);
           
           const result = await response.json();
           
@@ -201,12 +192,7 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
       // Fetch contact info if contact_id exists
       if (selectedActivity.contact_id) {
         try {
-          const response = await fetch(`${API_URL}/contacts/${selectedActivity.contact_id}`, {
-            headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
-              'Content-Type': 'application/json'
-            }
-          });
+          const response = await apiFetch(`/contacts/${selectedActivity.contact_id}`);
           const result = await response.json();
           if (result.success && result.data) {
             const backendContact = result.data;
@@ -242,12 +228,7 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
       // Fetch customer info if customer_id exists
       if (selectedActivity.customer_id) {
         try {
-          const response = await fetch(`${API_URL}/customers/${selectedActivity.customer_id}`, {
-            headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
-              'Content-Type': 'application/json'
-            }
-          });
+          const response = await apiFetch(`/customers/${selectedActivity.customer_id}`);
           const result = await response.json();
           if (result.success && result.data) {
             setActivityCustomerInfo(result.data);
@@ -278,12 +259,7 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
       // Fetch contact if contact_id exists
       if (selectedTask.contact_id) {
         try {
-          const response = await fetch(`${API_URL}/contacts/${selectedTask.contact_id}`, {
-            headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
-              'Content-Type': 'application/json'
-            }
-          });
+          const response = await apiFetch(`/contacts/${selectedTask.contact_id}`);
           const result = await response.json();
           if (result.success && result.data) {
             setTaskContacts([result.data]);
@@ -296,12 +272,7 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
       // Fetch customer if customer_id exists
       if (selectedTask.customer_id) {
         try {
-          const response = await fetch(`${API_URL}/customers/${selectedTask.customer_id}`, {
-            headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
-              'Content-Type': 'application/json'
-            }
-          });
+          const response = await apiFetch(`/customers/${selectedTask.customer_id}`);
           const result = await response.json();
           if (result.success && result.data) {
             setTaskCustomers([result.data]);
@@ -390,12 +361,8 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
       
       if (isUpdate) {
         // Update existing quotation
-        const response = await fetch(`${API_URL}/quotations/${data.id}`, {
+        const response = await apiFetch(`/quotations/${data.id}`, {
           method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`,
-            'Content-Type': 'application/json'
-          },
           body: JSON.stringify(data)
         });
         
@@ -411,12 +378,8 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
         }
       } else {
         // Create new quotation
-        const response = await fetch(`${API_URL}/quotations`, {
+        const response = await apiFetch(`/quotations`, {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`,
-            'Content-Type': 'application/json'
-          },
           body: JSON.stringify(data)
         });
         
@@ -442,12 +405,8 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
     setSelectedQuotation(updatedQuotation);
     
     try {
-      const response = await fetch(`${API_URL}/quotations/${updatedQuotation.id}`, {
+      const response = await apiFetch(`/quotations/${updatedQuotation.id}`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify(updatedQuotation)
       });
       
@@ -468,11 +427,8 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
     if (!selectedQuotation) return;
     
     try {
-      const response = await fetch(`${API_URL}/quotations/${selectedQuotation.id}`, {
+      const response = await apiFetch(`/quotations/${selectedQuotation.id}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-        }
       });
       
       const result = await response.json();
@@ -541,12 +497,7 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
                   
                   if (!customerToUse && contact.customer_id) {
                     try {
-                      const response = await fetch(`${API_URL}/customers/${contact.customer_id}`, {
-                        headers: {
-                          'Authorization': `Bearer ${publicAnonKey}`,
-                          'Content-Type': 'application/json'
-                        }
-                      });
+                      const response = await apiFetch(`/customers/${contact.customer_id}`);
                       
                       const result = await response.json();
                       
@@ -573,7 +524,7 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
           <>
             {subView === "list" && (
               <CustomersListWithFilters 
-                userDepartment="BD"
+                userDepartment="Business Development"
                 onViewCustomer={handleViewCustomer} 
               />
             )}
@@ -595,12 +546,8 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
                 customerData={selectedCustomer}
                 onSave={async (data: QuotationNew) => {
                   try {
-                    const response = await fetch(`${API_URL}/quotations`, {
+                    const response = await apiFetch(`/quotations`, {
                       method: 'POST',
-                      headers: {
-                        'Authorization': `Bearer ${publicAnonKey}`,
-                        'Content-Type': 'application/json'
-                      },
                       body: JSON.stringify(data)
                     });
                     
@@ -696,7 +643,7 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
                 onCreateQuotation={handleCreateInquiry}
                 quotations={quotations}
                 isLoading={isLoading}
-                userDepartment="BD"
+                userDepartment="Business Development"
                 onRefresh={fetchQuotations}
               />
             )}
@@ -704,7 +651,7 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
               <QuotationDetail 
                 quotation={selectedQuotation} 
                 onBack={handleBackFromInquiry}
-                userDepartment="BD"
+                userDepartment="Business Development"
                 onUpdate={handleUpdateQuotation}
                 onEdit={handleEditInquiry}
                 onDuplicate={handleDuplicateInquiry}
@@ -712,12 +659,7 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
                 onConvertToProject={async (projectId) => {
                   try {
                     // Fetch the created project by ID
-                    const response = await fetch(`${API_URL}/projects/${projectId}`, {
-                      headers: {
-                        'Authorization': `Bearer ${publicAnonKey}`,
-                        'Content-Type': 'application/json'
-                      }
-                    });
+                    const response = await apiFetch(`/projects/${projectId}`);
 
                     const result = await response.json();
 

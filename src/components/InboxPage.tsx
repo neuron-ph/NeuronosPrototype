@@ -5,7 +5,7 @@ import { TicketManagementTable } from "./ticketing/TicketManagementTable";
 import { TicketDetailModal } from "./ticketing/TicketDetailModal";
 import { NewTicketPanel } from "./ticketing/NewTicketPanel";
 import { useUser } from "../hooks/useUser";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { apiFetch } from "../utils/api";
 
 export type TicketStatus = "Open" | "Assigned" | "In Progress" | "Waiting on Requester" | "Resolved" | "Closed";
 export type TicketPriority = "Normal" | "High" | "Urgent";
@@ -57,13 +57,8 @@ export function InboxPage() {
     
     setIsLoading(true);
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/tickets?user_id=${user.id}&role=${effectiveRole}&department=${effectiveDepartment}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`,
-          },
-        }
+      const response = await apiFetch(
+        `/tickets?user_id=${user.id}&role=${effectiveRole}&department=${effectiveDepartment}`
       );
       
       if (response.ok) {

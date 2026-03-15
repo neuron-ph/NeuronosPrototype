@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { TrendingUp, TrendingDown, DollarSign, Activity, PieChart, BarChart } from "lucide-react";
 import type { Project } from "../../types/pricing";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { 
   ResponsiveContainer, 
   BarChart as RechartsBarChart, 
@@ -13,8 +13,6 @@ import {
   Legend,
   Cell
 } from "recharts";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 interface ProjectFinancialsTabProps {
   project: Project;
@@ -35,14 +33,10 @@ export function ProjectFinancialsTab({ project, currentUser }: ProjectFinancials
       setIsLoading(true);
       
       // Fetch Revenue (Billings)
-      const billingsResponse = await fetch(`${API_URL}/evouchers?transaction_type=billing&project_number=${project.project_number}`, {
-        headers: { "Authorization": `Bearer ${publicAnonKey}` }
-      });
+      const billingsResponse = await apiFetch(`/evouchers?transaction_type=billing&project_number=${project.project_number}`);
       
       // Fetch Expenses
-      const expensesResponse = await fetch(`${API_URL}/evouchers?transaction_type=expense&project_number=${project.project_number}`, {
-        headers: { "Authorization": `Bearer ${publicAnonKey}` }
-      });
+      const expensesResponse = await apiFetch(`/evouchers?transaction_type=expense&project_number=${project.project_number}`);
       
       if (billingsResponse.ok && expensesResponse.ok) {
         const billingsData = await billingsResponse.json();

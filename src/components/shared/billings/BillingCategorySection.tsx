@@ -1,12 +1,10 @@
 import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { SharedPricingRow, PricingRowData } from "../pricing/SharedPricingRow";
-import { publicAnonKey } from "../../../utils/supabase/info";
+import { apiFetch } from "../../../utils/api";
 import { toast } from "../../ui/toast-utils";
 import { PricingTableHeader } from "../pricing/PricingTableHeader";
 import { UniversalPricingRow, PricingItemData } from "../pricing/UniversalPricingRow";
-
-const API_URL = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID || "c142e950"}.supabase.co/functions/v1/make-server-c142e950`;
 
 // Define locally to avoid circular dependencies
 export interface BillingCategoryItem {
@@ -112,12 +110,8 @@ export function BillingCategorySection({
         remarks: data.remarks
       };
 
-      const response = await fetch(`${API_URL}/accounting/billing-items`, {
+      const response = await apiFetch(`/accounting/billing-items`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${publicAnonKey}`
-        },
         body: JSON.stringify(payload)
       });
 

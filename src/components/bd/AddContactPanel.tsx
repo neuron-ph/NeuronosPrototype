@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react";
 import { X, User, Building2, Target, UserPlus } from "lucide-react";
 import type { LifecycleStage, LeadStatus } from "../../types/bd";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { CustomSelect } from "./CustomSelect";
 import { CustomDropdown } from "./CustomDropdown";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
+import { useUsers } from "../../hooks/useUsers";
 
 interface AddContactPanelProps {
   isOpen: boolean;
@@ -53,44 +52,20 @@ export function AddContactPanel({ isOpen, onClose, onSave, prefilledCustomerId, 
   });
 
   const [customers, setCustomers] = useState<BackendCustomer[]>([]);
-  const [users, setUsers] = useState<BackendUser[]>([]);
+
+  // Direct Supabase query for BD users (replaces Edge Function fetch)
+  const { users: bdUsers } = useUsers({ department: 'Business Development', enabled: isOpen });
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         // Fetch customers
-        const customersResponse = await fetch(
-          `${API_URL}/customers`,
-          {
-            headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
-            },
-          }
-        );
+        const customersResponse = await apiFetch(`/customers`);
         
         if (customersResponse.ok) {
           const customersResult = await customersResponse.json();
           if (customersResult.success) {
             setCustomers(customersResult.data);
-          }
-        }
-        
-        // Fetch users (BD department only)
-        const usersResponse = await fetch(
-          `${API_URL}/users`,
-          {
-            headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
-            },
-          }
-        );
-        
-        if (usersResponse.ok) {
-          const usersResult = await usersResponse.json();
-          if (usersResult.success) {
-            // Filter only Business Development users
-            const bdUsers = usersResult.data.filter((u: BackendUser) => u.department === "Business Development");
-            setUsers(bdUsers);
           }
         }
       } catch (error) {
@@ -472,7 +447,7 @@ export function AddContactPanel({ isOpen, onClose, onSave, prefilledCustomerId, 
                     onChange={(value) => handleChange("owner_id", value)}
                     options={[
                       { value: "", label: "Assign to..." },
-                      ...users.map(user => ({ value: user.id, label: user.name }))
+                      ...bdUsers.map(user => ({ value: user.id, label: user.name }))
                     ]}
                     placeholder="Assign to..."
                     required

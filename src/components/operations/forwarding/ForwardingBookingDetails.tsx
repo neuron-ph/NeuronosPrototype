@@ -7,7 +7,7 @@ import { ExpensesTab } from "../shared/ExpensesTab";
 import { BookingCommentsTab } from "../../shared/BookingCommentsTab";
 import { useProjectFinancials } from "../../../hooks/useProjectFinancials";
 import { StatusSelector } from "../../StatusSelector";
-import { projectId, publicAnonKey } from "../../../utils/supabase/info";
+import { apiFetch } from "../../../utils/api";
 import { toast } from "../../ui/toast-utils";
 import { EditableMultiInputField } from "../../shared/EditableMultiInputField";
 import { EditableSectionCard, useSectionEdit } from "../../shared/EditableSectionCard";
@@ -125,12 +125,8 @@ export function ForwardingBookingDetails({
 
     // Persist to backend
     try {
-      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-c142e950/forwarding-bookings/${booking.bookingId}`, {
+      const response = await apiFetch(`/forwarding-bookings/${booking.bookingId}`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({ status: newStatus })
       });
 
@@ -665,8 +661,6 @@ function LockedField({ label, value, tooltip = "This field is locked because it'
     </div>
   );
 }
-
-// EditableField is now imported from shared/EditableField.tsx
 
 // ── Field label mapping for activity log ──
 const FIELD_LABELS: Record<string, string> = {

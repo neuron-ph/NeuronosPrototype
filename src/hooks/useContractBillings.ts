@@ -14,11 +14,9 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { apiFetch } from "../utils/api";
 import { toast } from "../components/ui/toast-utils";
 import type { BillingItem } from "../components/shared/billings/UnifiedBillingsTab";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 export interface BookingBillingSummary {
   bookingId: string;
@@ -69,9 +67,7 @@ export function useContractBillings(linkedBookingIds: string[]): ContractBilling
     try {
       setIsLoading(true);
 
-      const response = await fetch(`${API_URL}/accounting/billing-items`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
-      });
+      const response = await apiFetch(`/accounting/billing-items`);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);

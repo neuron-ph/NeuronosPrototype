@@ -1,6 +1,4 @@
-import { projectId, publicAnonKey } from "./supabase/info";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
+import { apiFetch } from "./api";
 
 interface Contact {
   id: string;
@@ -28,11 +26,8 @@ export async function cleanupDuplicates() {
 
     // ==================== CLEANUP CONTACTS ====================
     console.log("\n📞 Fetching all contacts...");
-    const contactsResponse = await fetch(`${API_URL}/contacts`, {
+    const contactsResponse = await apiFetch('/contacts', {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${publicAnonKey}`,
-      },
     });
 
     const contactsResult = await contactsResponse.json();
@@ -63,11 +58,8 @@ export async function cleanupDuplicates() {
           for (const contact of toDelete) {
             console.log(`   ❌ Deleting duplicate: ${contact.name} (ID: ${contact.id})`);
             
-            const deleteResponse = await fetch(`${API_URL}/contacts/${contact.id}`, {
+            const deleteResponse = await apiFetch(`/contacts/${contact.id}`, {
               method: "DELETE",
-              headers: {
-                Authorization: `Bearer ${publicAnonKey}`,
-              },
             });
 
             const deleteResult = await deleteResponse.json();
@@ -84,11 +76,8 @@ export async function cleanupDuplicates() {
 
     // ==================== CLEANUP CUSTOMERS ====================
     console.log("\n\n🏢 Fetching all customers...");
-    const customersResponse = await fetch(`${API_URL}/customers`, {
+    const customersResponse = await apiFetch('/customers', {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${publicAnonKey}`,
-      },
     });
 
     const customersResult = await customersResponse.json();
@@ -119,11 +108,8 @@ export async function cleanupDuplicates() {
           for (const customer of toDelete) {
             console.log(`   ❌ Deleting duplicate: ${customer.company_name} (ID: ${customer.id})`);
             
-            const deleteResponse = await fetch(`${API_URL}/customers/${customer.id}`, {
+            const deleteResponse = await apiFetch(`/customers/${customer.id}`, {
               method: "DELETE",
-              headers: {
-                Authorization: `Bearer ${publicAnonKey}`,
-              },
             });
 
             const deleteResult = await deleteResponse.json();

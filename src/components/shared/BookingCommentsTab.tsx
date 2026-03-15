@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Send, Paperclip, X, Download, FileText } from "lucide-react";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { toast } from "sonner@2.0.3";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 interface FileAttachment {
   file_name: string;
@@ -61,11 +59,7 @@ export function BookingCommentsTab({
   const fetchComments = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_URL}/bookings/${bookingId}/comments`, {
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
-      });
+      const response = await apiFetch(`/bookings/${bookingId}/comments`);
 
       // If endpoint doesn't exist yet (404), just show empty state
       if (response.status === 404) {
@@ -112,11 +106,8 @@ export function BookingCommentsTab({
           formData.append("file", file);
           formData.append("booking_id", bookingId);
 
-          const uploadResponse = await fetch(`${API_URL}/bookings/comments/upload`, {
+          const uploadResponse = await apiFetch(`/bookings/comments/upload`, {
             method: "POST",
-            headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
-            },
             body: formData,
           });
 
@@ -134,12 +125,8 @@ export function BookingCommentsTab({
       }
 
       // Create comment with attachments
-      const response = await fetch(`${API_URL}/bookings/${bookingId}/comments`, {
+      const response = await apiFetch(`/bookings/${bookingId}/comments`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
           booking_id: bookingId,
           user_id: currentUserId,

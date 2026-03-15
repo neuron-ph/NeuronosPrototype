@@ -33,7 +33,7 @@ import {
   FolderOpen,
   Layers,
 } from "lucide-react";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { calculateFinancialTotals } from "../../utils/financialCalculations";
 import type { FinancialData } from "../../hooks/useProjectFinancials";
 import type { BillingItem } from "../shared/billings/UnifiedBillingsTab";
@@ -64,8 +64,6 @@ import { toast } from "../ui/toast-utils";
 
 // Dashboard (6-zone company-wide view)
 import { FinancialDashboard } from "./dashboard/FinancialDashboard";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 // ── Types ──
 
@@ -150,13 +148,12 @@ export function FinancialsModule() {
   const fetchAll = useCallback(async (retryCount = 0) => {
     try {
       setIsLoading(true);
-      const headers = { Authorization: `Bearer ${publicAnonKey}` };
 
       const [billingRes, invoicesRes, collectionsRes, expensesRes] = await Promise.all([
-        fetch(`${API_URL}/accounting/billing-items`, { headers }),
-        fetch(`${API_URL}/accounting/invoices`, { headers }),
-        fetch(`${API_URL}/accounting/collections`, { headers }),
-        fetch(`${API_URL}/accounting/expenses`, { headers }),
+        apiFetch(`/accounting/billing-items`),
+        apiFetch(`/accounting/invoices`),
+        apiFetch(`/accounting/collections`),
+        apiFetch(`/accounting/expenses`),
       ]);
 
       // Billing items
@@ -237,10 +234,8 @@ export function FinancialsModule() {
       return;
     }
     
-    const headers = { Authorization: `Bearer ${publicAnonKey}` };
-    fetch(`${API_URL}/maintenance/cleanup-orphaned-billings`, {
+    apiFetch(`/maintenance/cleanup-orphaned-billings`, {
       method: "POST",
-      headers,
     })
       .then(r => r.json())
       .then(result => {

@@ -1,12 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { apiFetch } from "../utils/api";
 import { toast } from "../components/ui/toast-utils";
 import type { EVoucher, EVoucherStatus, EVoucherTransactionType, EVoucherSourceModule } from "../types/evoucher";
 import { useCachedFetch, useInvalidateCache } from "./useNeuronCache";
 
 type EVoucherView = "pending" | "my-evouchers" | "all";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 export function useEVouchers(view: EVoucherView, userId?: string) {
   const invalidateCache = useInvalidateCache();
@@ -21,19 +19,17 @@ export function useEVouchers(view: EVoucherView, userId?: string) {
     : `evouchers-${view}`;
 
   const fetcher = useCallback(async (): Promise<EVoucher[]> => {
-    let url = `${API_URL}/evouchers`;
+    let path = `/evouchers`;
     
     if (view === "pending") {
-      url = `${API_URL}/evouchers/pending`;
+      path = `/evouchers/pending`;
     } else if (view === "my-evouchers" && userId) {
-      url = `${API_URL}/evouchers/my-evouchers?requestor_id=${userId}`;
+      path = `/evouchers/my-evouchers?requestor_id=${userId}`;
     } else if (view === "my-evouchers" && !userId) {
       return [];
     }
 
-    const response = await fetch(url, {
-      headers: { "Authorization": `Bearer ${publicAnonKey}` }
-    });
+    const response = await apiFetch(path);
 
     if (!response.ok) throw new Error(`Failed to fetch ${view} e-vouchers`);
 

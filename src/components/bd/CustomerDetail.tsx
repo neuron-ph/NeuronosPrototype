@@ -11,10 +11,8 @@ import { AddContactPanel } from "./AddContactPanel";
 import { CustomerProjectsTab } from "./CustomerProjectsTab";
 import { CustomerInquiriesTab } from "./CustomerInquiriesTab";
 import { ConsigneeInlineSection } from "./ConsigneeInlineSection";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { toast } from "../ui/toast-utils";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 interface CustomerDetailProps {
   customer: Customer;
@@ -173,12 +171,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
     try {
       console.log(`Fetching customer details for: ${customer.id} (${customer.name || customer.company_name})`);
       
-      const response = await fetch(`${API_URL}/customers/${customer.id}`, {
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await apiFetch(`/customers/${customer.id}`);
       
       const result = await response.json();
       console.log('Customer details response:', result);
@@ -218,10 +211,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
   const fetchActivities = async () => {
     setIsLoadingActivities(true);
     try {
-      const response = await fetch(`${API_URL}/activities?customer_id=${customer.id}`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
-        cache: 'no-store',
-      });
+      const response = await apiFetch(`/activities?customer_id=${customer.id}`);
       
       if (!response.ok) {
         console.error(`HTTP error fetching activities! status: ${response.status}`);
@@ -250,10 +240,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
   const fetchTasks = async () => {
     setIsLoadingTasks(true);
     try {
-      const response = await fetch(`${API_URL}/tasks?customer_id=${customer.id}`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
-        cache: 'no-store',
-      });
+      const response = await apiFetch(`/tasks?customer_id=${customer.id}`);
       const result = await response.json();
       if (result.success) {
         setTasks(result.data);
@@ -283,13 +270,9 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
         status: 'Pending'
       };
 
-      const response = await fetch(`${API_URL}/tasks`, {
+      const response = await apiFetch(`/tasks`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(taskToCreate)
+        body: JSON.stringify(taskToCreate),
       });
 
       const result = await response.json();
@@ -317,10 +300,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
   const fetchProjects = async () => {
     setIsLoadingProjects(true);
     try {
-      const response = await fetch(`${API_URL}/projects`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
-        cache: 'no-store',
-      });
+      const response = await apiFetch(`/projects`);
       const result = await response.json();
       if (result.success) {
         // Client-side filtering because API might not support query params fully yet
@@ -344,10 +324,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
   // Fetch users for lookups
   const fetchUsers = async () => {
     try {
-      const response = await fetch(`${API_URL}/users`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
-        cache: 'no-store',
-      });
+      const response = await apiFetch(`/users`);
       const result = await response.json();
       if (result.success) {
         setUsers(result.data);
@@ -361,9 +338,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
   const fetchCustomerContracts = async () => {
     setIsLoadingContracts(true);
     try {
-      const response = await fetch(`${API_URL}/contracts/by-customer/${encodeURIComponent(customer.company_name || customer.name || "")}`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
-      });
+      const response = await apiFetch(`/contracts/by-customer/${encodeURIComponent(customer.company_name || customer.name || "")}`);
       if (response.ok) {
         const data = await response.json();
         setCustomerContracts(data.contracts || []);
@@ -482,12 +457,8 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
   const handleSave = async () => {
     setIsSavingCustomer(true);
     try {
-      const response = await fetch(`${API_URL}/customers/${customer.id}`, {
+      const response = await apiFetch(`/customers/${customer.id}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
         body: JSON.stringify({
           name: editedCustomer.name || editedCustomer.company_name,
           company_name: editedCustomer.name || editedCustomer.company_name,
@@ -2196,12 +2167,8 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
               customer_id: customer.id, // Set the current customer as the company
             };
             
-            const response = await fetch(`${API_URL}/contacts`, {
+            const response = await apiFetch(`/contacts`, {
               method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${publicAnonKey}`,
-                'Content-Type': 'application/json',
-              },
               body: JSON.stringify(newContactData),
             });
             

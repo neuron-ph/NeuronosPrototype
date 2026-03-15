@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { apiFetch } from '../utils/api';
 import { useUser } from '../hooks/useUser';
 import { AlertCircle, CheckCircle2, Send, User, Calendar, Clock, MessageSquare, CircleDot, Flag } from 'lucide-react';
 import { EntityPickerModal } from './ticketing/EntityPickerModal';
@@ -56,15 +56,13 @@ export function TicketTestingDashboard({ prefilledEntity }: TicketTestingDashboa
   // Users State
   const [users, setUsers] = useState<any[]>([]);
   
-  const baseUrl = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
+  // baseUrl removed — using apiFetch() wrapper
   
   // Fetch ticket types
   const fetchTicketTypes = async () => {
     setLoadingTypes(true);
     try {
-      const response = await fetch(`${baseUrl}/ticket-types`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
-      });
+      const response = await apiFetch(`/ticket-types`);
       const result = await response.json();
       if (result.success) {
         setTicketTypes(result.data);
@@ -78,9 +76,7 @@ export function TicketTestingDashboard({ prefilledEntity }: TicketTestingDashboa
   // Fetch users
   const fetchUsers = async () => {
     try {
-      const response = await fetch(`${baseUrl}/users`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
-      });
+      const response = await apiFetch(`/users`);
       const result = await response.json();
       if (result.success) {
         setUsers(result.data);
@@ -103,9 +99,7 @@ export function TicketTestingDashboard({ prefilledEntity }: TicketTestingDashboa
       if (filterStatus) params.append('status', filterStatus);
       if (filterPriority) params.append('priority', filterPriority);
       
-      const response = await fetch(`${baseUrl}/tickets?${params}`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
-      });
+      const response = await apiFetch(`/tickets?${params}`);
       const result = await response.json();
       if (result.success) {
         setTickets(result.data);
@@ -120,9 +114,7 @@ export function TicketTestingDashboard({ prefilledEntity }: TicketTestingDashboa
   const fetchTicketDetail = async (ticketId: string) => {
     setLoadingDetail(true);
     try {
-      const response = await fetch(`${baseUrl}/tickets/${ticketId}`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
-      });
+      const response = await apiFetch(`/tickets/${ticketId}`);
       const result = await response.json();
       if (result.success) {
         setSelectedTicket(result.data);
@@ -142,12 +134,8 @@ export function TicketTestingDashboard({ prefilledEntity }: TicketTestingDashboa
     
     setCreating(true);
     try {
-      const response = await fetch(`${baseUrl}/tickets`, {
+      const response = await apiFetch(`/tickets`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`
-        },
         body: JSON.stringify({
           ticket_type: ticketType,
           subject,
@@ -189,12 +177,8 @@ export function TicketTestingDashboard({ prefilledEntity }: TicketTestingDashboa
     
     setAddingComment(true);
     try {
-      const response = await fetch(`${baseUrl}/tickets/${selectedTicket.id}/comments`, {
+      const response = await apiFetch(`/tickets/${selectedTicket.id}/comments`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`
-        },
         body: JSON.stringify({
           user_id: user?.id,
           user_name: user?.name,
@@ -220,12 +204,8 @@ export function TicketTestingDashboard({ prefilledEntity }: TicketTestingDashboa
     if (!selectedTicket) return;
     
     try {
-      const response = await fetch(`${baseUrl}/tickets/${selectedTicket.id}/status`, {
+      const response = await apiFetch(`/tickets/${selectedTicket.id}/status`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`
-        },
         body: JSON.stringify({ status: newStatus })
       });
       
@@ -245,12 +225,8 @@ export function TicketTestingDashboard({ prefilledEntity }: TicketTestingDashboa
     if (!selectedTicket) return;
     
     try {
-      const response = await fetch(`${baseUrl}/tickets/${selectedTicket.id}/assign`, {
+      const response = await apiFetch(`/tickets/${selectedTicket.id}/assign`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`
-        },
         body: JSON.stringify({ assigned_to: userId, assigned_to_name: userName })
       });
       

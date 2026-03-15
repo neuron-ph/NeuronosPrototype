@@ -5,10 +5,8 @@ import { CustomDatePicker } from "../../common/CustomDatePicker";
 import { BillingsTable } from "./BillingsTable";
 import { CategoryPresetDropdown } from "../../pricing/quotations/CategoryPresetDropdown";
 import { toast } from "../../ui/toast-utils";
-import { projectId, publicAnonKey } from "../../../utils/supabase/info";
+import { apiFetch } from "../../../utils/api";
 import type { QuotationNew } from "../../../types/pricing";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 // Interface matching the backend response for billing items
 export interface BillingItem {
@@ -448,12 +446,8 @@ export function UnifiedBillingsTab({
 
           toast.info("Saving changes...");
           
-          const response = await fetch(`${API_URL}/accounting/billings/batch`, {
+          const response = await apiFetch(`/accounting/billings/batch`, {
               method: 'POST',
-              headers: {
-                  "Content-Type": "application/json",
-                  "Authorization": `Bearer ${publicAnonKey}`
-              },
               body: JSON.stringify({ 
                   items: itemsToSave,
                   project_id: projectId

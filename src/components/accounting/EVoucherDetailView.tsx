@@ -39,10 +39,16 @@ export function EVoucherDetailView({ evoucher, onClose, currentUser, onStatusCha
   const StatusIcon = statusStyle.icon;
 
   // Check if current user can approve
-  const canApprove = evoucher.status === "Under Review" && currentUser?.role === "Manager";
-  const canDisburse = evoucher.status === "Approved" && currentUser?.role === "Treasury";
-  const canRecord = evoucher.status === "Disbursed" && currentUser?.role === "Accountant";
-  const canAudit = evoucher.status === "Recorded" && currentUser?.role === "Auditor";
+  const dept = currentUser?.department;
+  const role = currentUser?.role;
+  const isAcctMgr = dept === 'Accounting' && (role === 'manager' || role === 'director');
+  const isAcctRep = dept === 'Accounting' && role === 'rep';
+  const isAcctDir = dept === 'Accounting' && role === 'director';
+  const isExec = dept === 'Executive';
+  const canApprove  = evoucher.status === 'Under Review' && (isAcctMgr || isExec);
+  const canDisburse = evoucher.status === 'Approved'     && (isAcctMgr || isExec);
+  const canRecord   = evoucher.status === 'Disbursed'    && (isAcctRep || isAcctMgr || isExec);
+  const canAudit    = evoucher.status === 'Recorded'     && (isAcctDir || isExec);
 
   return (
     <div

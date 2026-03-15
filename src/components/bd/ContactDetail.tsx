@@ -4,9 +4,7 @@ import type { Contact, LifecycleStage, LeadStatus, Task, Activity, Customer } fr
 import type { QuotationNew } from "../../types/pricing";
 import { CustomDropdown } from "./CustomDropdown";
 import { ActivityTimelineTable } from "./ActivityTimelineTable";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
+import { apiFetch } from "../../utils/api";
 
 interface ContactDetailProps {
   contact: Contact;
@@ -186,10 +184,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
 
   const fetchCustomer = async (customerId: string) => {
     try {
-      const response = await fetch(`${API_URL}/customers?id=${customerId}`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
-        cache: 'no-store',
-      });
+      const response = await apiFetch(`/customers?id=${customerId}`);
       const result = await response.json();
       if (result.success && result.data.length > 0) {
         setCustomer(result.data[0]);
@@ -201,10 +196,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
 
   const fetchActivities = async () => {
     try {
-      const response = await fetch(`${API_URL}/activities?contact_id=${contact.id}`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
-        cache: 'no-store',
-      });
+      const response = await apiFetch(`/activities?contact_id=${contact.id}`);
       
       if (!response.ok) {
         console.error(`HTTP error fetching activities! status: ${response.status}`);
@@ -228,10 +220,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
 
   const fetchTasks = async () => {
     try {
-      const response = await fetch(`${API_URL}/tasks?contact_id=${contact.id}`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
-        cache: 'no-store',
-      });
+      const response = await apiFetch(`/tasks?contact_id=${contact.id}`);
       const result = await response.json();
       if (result.success) {
         setTasks(result.data);
@@ -252,10 +241,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
       }
       params.append("contact_id", contact.id);
       
-      const response = await fetch(`${API_URL}/quotations?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
-        cache: 'no-store',
-      });
+      const response = await apiFetch(`/quotations?${params.toString()}`);
       const result = await response.json();
       if (result.success) {
         setQuotations(result.data);
@@ -267,10 +253,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
 
   const fetchUsers = async () => {
     try {
-      const response = await fetch(`${API_URL}/users`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
-        cache: 'no-store',
-      });
+      const response = await apiFetch(`/users`);
       const result = await response.json();
       if (result.success) {
         setUsers(result.data);
@@ -402,12 +385,8 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
         notes: editedContact.notes,
       };
 
-      const response = await fetch(`${API_URL}/contacts/${contact.id}`, {
+      const response = await apiFetch(`/contacts/${contact.id}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
         body: JSON.stringify(updatePayload),
       });
 
@@ -1257,13 +1236,9 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                                       user_id: contact.owner_id || 'user-1' // Fallback to current user or owner
                                     };
 
-                                    const response = await fetch(`${API_URL}/activities`, {
+                                    const response = await apiFetch(`/activities`, {
                                       method: 'POST',
-                                      headers: {
-                                        'Authorization': `Bearer ${publicAnonKey}`,
-                                        'Content-Type': 'application/json'
-                                      },
-                                      body: JSON.stringify(activityToSave)
+                                      body: JSON.stringify(activityToSave),
                                     });
 
                                     const result = await response.json();
@@ -1879,13 +1854,9 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                                       status: newTask.status || "Pending"
                                     };
 
-                                    const response = await fetch(`${API_URL}/tasks`, {
+                                    const response = await apiFetch(`/tasks`, {
                                       method: 'POST',
-                                      headers: {
-                                        'Authorization': `Bearer ${publicAnonKey}`,
-                                        'Content-Type': 'application/json'
-                                      },
-                                      body: JSON.stringify(taskToSave)
+                                      body: JSON.stringify(taskToSave),
                                     });
 
                                     const result = await response.json();

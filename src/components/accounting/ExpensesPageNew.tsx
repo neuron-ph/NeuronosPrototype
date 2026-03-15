@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { Plus, Search, Calendar } from "lucide-react";
 import type { Expense } from "../../types/accounting";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { AddRequestForPaymentPanel } from "./AddRequestForPaymentPanel";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { ExpensesListTable } from "./ExpensesListTable";
@@ -42,15 +42,7 @@ export function ExpensesPageNew() {
       if (dateRange.from) params.append("date_from", dateRange.from);
       if (dateRange.to) params.append("date_to", dateRange.to);
       
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/accounting/expenses?${params}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      const response = await apiFetch(`/accounting/expenses?${params}`);
 
       if (!response.ok) {
         const errorText = await response.text();

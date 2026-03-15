@@ -7,7 +7,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
-import type { UserRole } from "../Login";
 import { toast } from "../ui/toast-utils";
 
 interface EmployeeRowData {
@@ -43,7 +42,7 @@ interface CompanyGroup {
 
 interface EmployeesListProps {
   filterCompany: string;
-  userRole: UserRole;
+  userRole: 'rep' | 'manager' | 'director';
   onEmployeeClick: (employee: EmployeeRowData) => void;
 }
 
@@ -387,7 +386,7 @@ export function EmployeesList({ filterCompany, userRole, onEmployeeClick }: Empl
     ? EMPLOYEE_DATA
     : EMPLOYEE_DATA.filter((group) => group.companyName === filterCompany);
 
-  const isAdmin = userRole === "Admin";
+  const isAdmin = userRole === "director";
 
   const handleSuspendEmployee = (employee: EmployeeRowData, e: React.MouseEvent) => {
     e.stopPropagation();

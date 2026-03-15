@@ -1,22 +1,19 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Settings, ChevronDown, Globe, Wallet } from "lucide-react";
-import type { UI_Transaction, BankAccountSummary, ReviewStatus } from "./types";
-import type { Account, Transaction, Currency } from "../../types/accounting";
-import { SkeletonTransactionsPage } from "../shared/NeuronSkeleton";
 import { useCachedFetch, useInvalidateCache } from "../../hooks/useNeuronCache";
-import { getAccounts, getTransactions, saveAccount, deleteAccount, saveTransaction, saveTransactionViewSettings, getTransactionViewSettings } from "../../utils/accounting-api";
-import { formatCurrency } from "../../utils/accounting-math";
-import { BankCardsCarousel } from "./BankCardsCarousel";
-import { TransactionsTable } from "./TransactionsTable";
+import { getAccounts, saveAccount, deleteAccount, getTransactions, getTransactionViewSettings, saveTransactionViewSettings } from "../../utils/accounting-api";
+import type { Account, Transaction, Currency } from "../../types/accounting";
+import { BankCardsCarousel, type BankAccountSummary } from "./BankCardsCarousel";
+import { TransactionsTable, type UI_Transaction, type ReviewStatus } from "./TransactionsTable";
 import { TransactionsControlBar } from "./TransactionsControlBar";
+import { SkeletonTransactionsPage } from "./SkeletonTransactionsPage";
 import { ManageAccountsModal } from "./ManageAccountsModal";
 import { AddAccountForm } from "./AddAccountForm";
+import { formatCurrency } from "../../utils/format";
 import { SidePanel } from "../common/SidePanel";
 import { toast } from "../ui/toast-utils";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 export function TransactionsModule() {
   const [currency, setCurrency] = useState<Currency>("USD");
@@ -227,14 +224,10 @@ export function TransactionsModule() {
       try {
         if (txn.source_document_id) {
           // 3. Post to Ledger via Backend
-          const response = await fetch(`${API_URL}/evouchers/${txn.source_document_id}/post-to-ledger`, {
+          const response = await apiFetch(`/evouchers/${txn.source_document_id}/post-to-ledger`, {
             method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
-              'Content-Type': 'application/json',
-            },
             body: JSON.stringify({
-              user_id: "user-system", // TODO: Get actual user
+              user_id: "user-system",
               user_name: "System User",
               user_role: "Accountant",
               debit_account_id: txn.category_account_id,

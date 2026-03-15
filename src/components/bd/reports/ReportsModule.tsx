@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Search, FileText, Plus, BarChart, Download, ChevronDown, ChevronUp, X, Filter } from 'lucide-react';
-import { projectId, publicAnonKey } from '../../../utils/supabase/info';
+import { apiFetch } from '../../../utils/api';
 import { toast } from 'sonner@2.0.3';
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 type DataSource = 'quotations' | 'customers' | 'contacts' | 'activities' | 'budget_requests';
 
@@ -128,12 +126,8 @@ export function ReportsModule() {
   const fetchResults = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_URL}/reports/generate`, {
+      const response = await apiFetch(`/reports/generate`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           dataSource,
           filters: filters.map(f => ({
@@ -200,12 +194,8 @@ export function ReportsModule() {
 
   const exportData = async (format: 'csv' | 'excel' | 'pdf') => {
     try {
-      const response = await fetch(`${API_URL}/reports/export`, {
+      const response = await apiFetch(`/reports/export`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           format,
           dataSource,
@@ -235,12 +225,8 @@ export function ReportsModule() {
       const reportName = prompt('Enter a name for this report configuration:');
       if (!reportName) return;
 
-      const response = await fetch(`${API_URL}/reports/save`, {
+      const response = await apiFetch(`/reports/save`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           userId: 'user-executive-001',
           name: reportName,

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { TrendingUp, CreditCard, DollarSign, Activity, FileText } from "lucide-react";
 import type { Customer } from "../../types/bd";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { 
   ResponsiveContainer, 
   BarChart, 
@@ -13,8 +13,6 @@ import {
   Legend,
   Cell
 } from "recharts";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 interface CustomerFinancialsTabProps {
   customer: Customer;
@@ -34,14 +32,10 @@ export function CustomerFinancialsTab({ customer }: CustomerFinancialsTabProps) 
       setIsLoading(true);
       
       // Fetch Revenue (Billings)
-      const billingsResponse = await fetch(`${API_URL}/billings?customerId=${customer.id}`, {
-        headers: { "Authorization": `Bearer ${publicAnonKey}` }
-      });
+      const billingsResponse = await apiFetch(`/billings?customerId=${customer.id}`);
       
       // Fetch Collections
-      const collectionsResponse = await fetch(`${API_URL}/collections?customer_id=${customer.id}`, {
-        headers: { "Authorization": `Bearer ${publicAnonKey}` }
-      });
+      const collectionsResponse = await apiFetch(`/collections?customer_id=${customer.id}`);
       
       if (billingsResponse.ok) {
         const billingsData = await billingsResponse.json();

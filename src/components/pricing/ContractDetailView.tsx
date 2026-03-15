@@ -16,7 +16,7 @@ import { useState, useEffect, useMemo } from "react";
 import { ArrowLeft, Edit3, RefreshCw, FileText, Calendar, Building2, Briefcase, Ship, Shield, Truck, Clock, Zap, Plus, ChevronDown, Layout, Layers, Users, Receipt, FileStack, DollarSign, TrendingUp, Paperclip, MessageSquare, Eye, MoreVertical } from "lucide-react";
 import type { QuotationNew, ContractRateMatrix } from "../../types/pricing";
 import { ContractRateCardV2 as ContractRateMatrixEditor } from "./quotations/ContractRateCardV2";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { toast } from "../ui/toast-utils";
 import { CreateBookingFromContractPanel } from "../contracts/CreateBookingFromContractPanel";
 import type { InquiryService } from "../../types/pricing";
@@ -143,14 +143,10 @@ export function ContractDetailView({
         updated_at: new Date().toISOString(),
       };
 
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/quotations/${quotation.id}`,
+      const response = await apiFetch(
+        `/quotations/${quotation.id}`,
         {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
           body: JSON.stringify(updatedQuotation),
         }
       );
@@ -194,9 +190,8 @@ export function ContractDetailView({
     setIsLoadingBookings(true);
     try {
       // Primary: try fetching from bookings API with contract_id filter
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/bookings?contract_id=${quotation.id}`,
-        { headers: { Authorization: `Bearer ${publicAnonKey}` } }
+      const response = await apiFetch(
+        `/bookings?contract_id=${quotation.id}`
       );
       if (response.ok) {
         const data = await response.json();
@@ -224,9 +219,8 @@ export function ContractDetailView({
   const fetchActivityLog = async () => {
     setIsLoadingActivity(true);
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/contracts/${quotation.id}/activity`,
-        { headers: { Authorization: `Bearer ${publicAnonKey}` } }
+      const response = await apiFetch(
+        `/contracts/${quotation.id}/activity`
       );
       if (response.ok) {
         const data = await response.json();
@@ -251,14 +245,10 @@ export function ContractDetailView({
     }
     setIsRenewing(true);
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/contracts/${quotation.id}/renew`,
+      const response = await apiFetch(
+        `/contracts/${quotation.id}/renew`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
           body: JSON.stringify({
             new_validity_start: renewStart,
             new_validity_end: renewEnd,
@@ -292,14 +282,10 @@ export function ContractDetailView({
       setGeneratingBillingId(bookingId);
       toast.loading(`Generating billing for ${serviceType}...`, { id: "gen-billing" });
 
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/contracts/${quotation.id}/generate-billing`,
+      const response = await apiFetch(
+        `/contracts/${quotation.id}/generate-billing`,
         {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-            "Content-Type": "application/json",
-          },
           body: JSON.stringify({
             booking_id: bookingId,
             service_type: serviceType,
@@ -753,14 +739,10 @@ export function ContractDetailView({
               status={contractStatus as any}
               onUpdateStatus={async (newStatus) => {
                 try {
-                  const response = await fetch(
-                    `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/contracts/${quotation.id}/status`,
+                  const response = await apiFetch(
+                    `/contracts/${quotation.id}/status`,
                     {
                       method: "PATCH",
-                      headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${publicAnonKey}`,
-                      },
                       body: JSON.stringify({
                         status: newStatus,
                         user: currentUser?.name || "Unknown",

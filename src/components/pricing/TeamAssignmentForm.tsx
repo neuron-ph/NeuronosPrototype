@@ -1,10 +1,8 @@
 import { useState, useEffect } from "react";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import type { ServiceType } from "../../types/operations";
 import type { User } from "../../hooks/useUser";
 import { CustomDropdown } from "../bd/CustomDropdown";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 export interface TeamAssignment {
   manager: { id: string; name: string };
@@ -46,13 +44,8 @@ export function TeamAssignmentForm({
     const fetchManager = async () => {
       setIsLoadingManager(true);
       try {
-        const response = await fetch(
-          `${API_URL}/users?department=Operations&service_type=${serviceType}&operations_role=Manager`,
-          {
-            headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
-            },
-          }
+        const response = await apiFetch(
+          `/users?department=Operations&service_type=${serviceType}&operations_role=Manager`
         );
         const result = await response.json();
         if (result.success && result.data.length > 0) {
@@ -74,13 +67,8 @@ export function TeamAssignmentForm({
     const fetchSupervisors = async () => {
       setIsLoadingSupervisors(true);
       try {
-        const response = await fetch(
-          `${API_URL}/users?department=Operations&service_type=${serviceType}&operations_role=Supervisor`,
-          {
-            headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
-            },
-          }
+        const response = await apiFetch(
+          `/users?department=Operations&service_type=${serviceType}&operations_role=Supervisor`
         );
         const result = await response.json();
         if (result.success) {
@@ -101,13 +89,8 @@ export function TeamAssignmentForm({
     const fetchHandlers = async () => {
       setIsLoadingHandlers(true);
       try {
-        const response = await fetch(
-          `${API_URL}/users?department=Operations&service_type=${serviceType}&operations_role=Handler`,
-          {
-            headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
-            },
-          }
+        const response = await apiFetch(
+          `/users?department=Operations&service_type=${serviceType}&operations_role=Handler`
         );
         const result = await response.json();
         if (result.success) {
@@ -128,13 +111,8 @@ export function TeamAssignmentForm({
     const loadPreference = async () => {
       setIsLoadingPreference(true);
       try {
-        const response = await fetch(
-          `${API_URL}/client-handler-preferences/${customerId}/${serviceType}`,
-          {
-            headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
-            },
-          }
+        const response = await apiFetch(
+          `/client-handler-preferences/${customerId}/${serviceType}`
         );
         
         // Check if response is ok and is JSON before parsing

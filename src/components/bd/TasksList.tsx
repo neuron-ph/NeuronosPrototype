@@ -3,10 +3,8 @@ import { Search, Plus, Calendar, Flag, CheckCircle2, Phone, Mail, Send, Users, M
 import type { Task, TaskType, TaskPriority, TaskStatus } from "../../types/bd";
 import { AddTaskPanel } from "./AddTaskPanel";
 import { CustomDropdown } from "./CustomDropdown";
-import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { apiFetch } from '../../utils/api';
 import { toast } from "../ui/toast-utils";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 interface TasksListProps {
   onViewTask: (task: Task) => void;
@@ -29,12 +27,7 @@ export function TasksList({ onViewTask }: TasksListProps) {
   const fetchTasks = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_URL}/tasks`, {
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await apiFetch(`/tasks`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -61,12 +54,7 @@ export function TasksList({ onViewTask }: TasksListProps) {
   // Fetch customers from backend
   const fetchCustomers = async () => {
     try {
-      const response = await fetch(`${API_URL}/customers`, {
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await apiFetch(`/customers`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -85,12 +73,7 @@ export function TasksList({ onViewTask }: TasksListProps) {
   // Fetch contacts from backend
   const fetchContacts = async () => {
     try {
-      const response = await fetch(`${API_URL}/contacts`, {
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await apiFetch(`/contacts`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -115,12 +98,8 @@ export function TasksList({ onViewTask }: TasksListProps) {
 
   const handleSaveTask = async (taskData: Partial<Task>) => {
     try {
-      const response = await fetch(`${API_URL}/tasks`, {
+      const response = await apiFetch(`/tasks`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify(taskData)
       });
 

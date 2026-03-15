@@ -2,10 +2,8 @@ import { ArrowLeft, Calendar, Flag, User, Building2, Mail, Phone, Edit, Upload, 
 import { useState } from "react";
 import type { Task, TaskType, TaskPriority, TaskStatus } from "../../types/bd";
 import { CustomDropdown } from "./CustomDropdown";
-import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { apiFetch } from '../../utils/api';
 import { toast } from "../ui/toast-utils";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 interface TaskDetailInlineProps {
   task: Task;
@@ -97,12 +95,8 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
 
   const handleSave = async () => {
     try {
-      const response = await fetch(`${API_URL}/tasks/${task.id}`, {
+      const response = await apiFetch(`/tasks/${task.id}`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify(editedTask)
       });
 
@@ -143,12 +137,8 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
     }
 
     try {
-      const response = await fetch(`${API_URL}/tasks/${task.id}`, {
+      const response = await apiFetch(`/tasks/${task.id}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
       });
 
       if (!response.ok) {
@@ -178,12 +168,8 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
       // Update task status to Completed
       const updatedTask = { ...editedTask, status: 'Completed' as TaskStatus };
       
-      const updateResponse = await fetch(`${API_URL}/tasks/${task.id}`, {
+      const updateResponse = await apiFetch(`/tasks/${task.id}`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify(updatedTask)
       });
 
@@ -208,12 +194,8 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
         user_id: task.owner_id,
       };
 
-      const activityResponse = await fetch(`${API_URL}/activities`, {
+      const activityResponse = await apiFetch(`/activities`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify(activityData)
       });
 

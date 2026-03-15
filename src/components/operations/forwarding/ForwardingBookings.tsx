@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Plus, Search, Package, Briefcase, UserCheck, FileEdit, Clock, CheckCircle, Trash2 } from "lucide-react";
 import { CreateForwardingBookingPanel } from "./CreateForwardingBookingPanel";
 import type { ForwardingBooking, ExecutionStatus } from "../../../types/operations";
-import { projectId, publicAnonKey } from "../../../utils/supabase/info";
+import { apiFetch } from "../../../utils/api";
 import { toast } from "../../ui/toast-utils";
 import { NeuronStatusPill } from "../../NeuronStatusPill";
 import { SkeletonTable } from "../../shared/NeuronSkeleton";
@@ -15,8 +15,6 @@ interface ForwardingBookingsProps {
   /** Deep-link: auto-select this booking when loaded */
   pendingBookingId?: string | null;
 }
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookingId }: ForwardingBookingsProps) {
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -31,12 +29,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
 
   // ── Cached bookings fetch ─────────────────────────────────
   const bookingsFetcher = async (): Promise<ForwardingBooking[]> => {
-    const response = await fetch(`${API_URL}/forwarding-bookings`, {
-      headers: {
-        'Authorization': `Bearer ${publicAnonKey}`,
-        'Content-Type': 'application/json'
-      }
-    });
+    const response = await apiFetch(`/forwarding-bookings`);
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const result = await response.json();
     if (result.success) return result.data;
@@ -71,11 +64,8 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
     }
 
     try {
-      const response = await fetch(`${API_URL}/forwarding-bookings/${bookingId}`, {
+      const response = await apiFetch(`/forwarding-bookings/${bookingId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-        }
       });
 
       const result = await response.json();

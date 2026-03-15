@@ -1,24 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import type { Consignee } from "../types/bd";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
-
-const headers = {
-  "Content-Type": "application/json",
-  Authorization: `Bearer ${publicAnonKey}`,
-};
-
-/** Safely parse JSON — returns null if the body isn't valid JSON */
-async function safeJson(res: Response) {
-  const text = await res.text();
-  try {
-    return JSON.parse(text);
-  } catch {
-    console.error(`Non-JSON response (${res.status}):`, text.slice(0, 200));
-    throw new Error(`Server returned ${res.status}: ${text.slice(0, 120)}`);
-  }
-}
+import { apiFetch } from "../utils/api";
 
 export function useConsignees(customerId?: string) {
   const [consignees, setConsignees] = useState<Consignee[]>([]);
@@ -35,8 +17,7 @@ export function useConsignees(customerId?: string) {
     setError(null);
 
     try {
-      const url = `${API_URL}/consignees?customer_id=${encodeURIComponent(customerId)}`;
-      const res = await fetch(url, { headers });
+      const res = await apiFetch(`/consignees?customer_id=${encodeURIComponent(customerId)}`);
 
       // Gracefully handle non-200 (e.g. 404/403 from un-deployed edge function)
       if (!res.ok) {
@@ -69,9 +50,8 @@ export function useConsignees(customerId?: string) {
     async (data: Partial<Consignee>) => {
       if (!customerId) throw new Error("No customer_id");
 
-      const res = await fetch(`${API_URL}/consignees`, {
+      const res = await apiFetch(`/consignees`, {
         method: "POST",
-        headers,
         body: JSON.stringify({ ...data, customer_id: customerId }),
       });
 
@@ -94,9 +74,8 @@ export function useConsignees(customerId?: string) {
 
   const updateConsignee = useCallback(
     async (id: string, data: Partial<Consignee>) => {
-      const res = await fetch(`${API_URL}/consignees/${id}`, {
+      const res = await apiFetch(`/consignees/${id}`, {
         method: "PATCH",
-        headers,
         body: JSON.stringify(data),
       });
 
@@ -118,9 +97,8 @@ export function useConsignees(customerId?: string) {
 
   const deleteConsignee = useCallback(
     async (id: string) => {
-      const res = await fetch(`${API_URL}/consignees/${id}`, {
+      const res = await apiFetch(`/consignees/${id}`, {
         method: "DELETE",
-        headers,
       });
 
       if (!res.ok) {

@@ -6,7 +6,7 @@ import { ForwardingFormV2 } from "../pricing/quotations/ForwardingFormV2";
 import { TruckingFormV2 } from "../pricing/quotations/TruckingFormV2";
 import { MarineInsuranceFormV2 } from "../pricing/quotations/MarineInsuranceFormV2";
 import { OthersFormV2 } from "../pricing/quotations/OthersFormV2";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import type { Customer } from "../../types/bd";
 import type { 
   ServiceType, 
@@ -113,14 +113,7 @@ export function AddInquiryPanel({ onClose, onSave }: AddInquiryPanelProps) {
         setIsLoadingData(true);
         
         // Fetch customers
-        const customersResponse = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/customers`,
-          {
-            headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
-            },
-          }
-        );
+        const customersResponse = await apiFetch(`/customers`);
         
         if (customersResponse.ok) {
           const customersResult = await customersResponse.json();
@@ -130,14 +123,7 @@ export function AddInquiryPanel({ onClose, onSave }: AddInquiryPanelProps) {
         }
         
         // Fetch all contacts
-        const contactsResponse = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/contacts`,
-          {
-            headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
-            },
-          }
-        );
+        const contactsResponse = await apiFetch(`/contacts`);
         
         if (contactsResponse.ok) {
           const contactsResult = await contactsResponse.json();

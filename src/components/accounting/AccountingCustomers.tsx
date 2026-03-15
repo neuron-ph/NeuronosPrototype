@@ -1,14 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { Search, Plus, Building2, TrendingUp, Briefcase, Target, MoreHorizontal, Trash2, Users as UsersIcon } from "lucide-react";
-import type { Customer, Industry, CustomerStatus } from "../../types/bd";
-import { CustomDropdown } from "../bd/CustomDropdown";
-import { AddCustomerPanel } from "../bd/AddCustomerPanel";
-import { CustomerLedgerDetail } from "./CustomerLedgerDetail";
 import { NeuronKPICard } from "../ui/NeuronKPICard";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
 import { toast } from "../ui/toast-utils";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 export function AccountingCustomers() {
   const [view, setView] = useState<"list" | "detail">("list");
@@ -29,19 +20,11 @@ export function AccountingCustomers() {
   // Fetch users from backend
   const fetchUsers = async () => {
     try {
-      const response = await fetch(`${API_URL}/users?department=Business%20Development`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
-      });
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success) {
-          setUsers(result.data);
-        } else {
-          console.warn("Failed to fetch users:", result.error);
-          setUsers([]);
-        }
+      const response = await apiFetch(`/users?department=Business%20Development`);
+      if (response.success) {
+        setUsers(response.data);
       } else {
-        console.warn(`Error fetching users: ${response.status} ${response.statusText}`);
+        console.warn("Failed to fetch users:", response.error);
         setUsers([]);
       }
     } catch (error) {
@@ -53,19 +36,15 @@ export function AccountingCustomers() {
   // Fetch activities from backend
   const fetchActivities = async () => {
     try {
-      const response = await fetch(`${API_URL}/activities`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
-        cache: 'no-store',
-      });
+      const response = await apiFetch(`/activities`);
       
       if (!response.ok) {
         setActivities([]);
         return;
       }
       
-      const result = await response.json();
-      if (result.success) {
-        setActivities(result.data);
+      if (response.success) {
+        setActivities(response.data);
       } else {
         setActivities([]);
       }
@@ -92,22 +71,12 @@ export function AccountingCustomers() {
       // Use 'Accounting' role or just fetch all
       params.append("role", "Accounting");
       
-      const url = `${API_URL}/customers?${params.toString()}`;
+      const url = `/customers?${params.toString()}`;
       
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const result = await response.json();
+      const response = await apiFetch(url);
       
-      if (result.success) {
-        setCustomers(result.data);
+      if (response.success) {
+        setCustomers(response.data);
       }
     } catch (error) {
       console.error("Error fetching customers:", error);
@@ -119,15 +88,9 @@ export function AccountingCustomers() {
   // Fetch all contacts for counting
   const fetchContacts = async () => {
     try {
-      const response = await fetch(`${API_URL}/contacts`, {
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
-      });
-
-      const result = await response.json();
-      if (result.success) {
-        setAllContacts(result.data);
+      const response = await apiFetch(`/contacts`);
+      if (response.success) {
+        setAllContacts(response.data);
       }
     } catch (error) {
       console.error('Error fetching contacts:', error);
@@ -169,21 +132,17 @@ export function AccountingCustomers() {
     }
 
     try {
-      const response = await fetch(`${API_URL}/customers/${customerId}`, {
+      const response = await apiFetch(`/customers/${customerId}`, {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
       });
 
-      const result = await response.json();
-      if (result.success) {
+      if (response.success) {
         await fetchCustomers(); // Refresh list
         await fetchContacts(); // Refresh contacts
         setOpenDropdownId(null); // Close dropdown
         toast.success("Customer deleted successfully");
       } else {
-        toast.error(`Failed to delete customer: ${result.error}`);
+        toast.error(`Failed to delete customer: ${response.error}`);
       }
     } catch (error) {
       console.error("Error deleting customer:", error);
@@ -193,24 +152,23 @@ export function AccountingCustomers() {
 
   // Handle save customer
   const handleSaveCustomer = async (customerData: Partial<Customer>) => {
+    const transformedData = {
+      ...customerData,
+      created_at: new Date().toISOString(),
+    };
     try {
-      const response = await fetch(`${API_URL}/customers`, {
+      const response = await apiFetch(`/customers`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
-        body: JSON.stringify(customerData),
+        body: JSON.stringify(transformedData),
       });
 
-      const result = await response.json();
-      if (result.success) {
+      if (response.success) {
         await fetchCustomers(); // Refresh list
         await fetchContacts(); // Refresh contacts for accurate counts
         setIsAddCustomerOpen(false);
         toast.success("Customer added successfully");
       } else {
-        throw new Error(result.error);
+        throw new Error(response.error);
       }
     } catch (error) {
       console.error("Error creating customer:", error);

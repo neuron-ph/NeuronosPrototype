@@ -1,7 +1,7 @@
 import { X, FileText, AlertCircle, Building2, User, Calendar, Plus, Link2, Package, Ship, Plane, Truck, FileCheck, FileQuestion, Ticket } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { TicketType } from "../../types/ticketing";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { EntityPickerModal } from "./EntityPickerModal";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { toast } from "sonner@2.0.3";
@@ -34,8 +34,6 @@ export function NewTicketPanel({ isOpen, onClose, onSuccess, prefilledEntity }: 
   const [showEntityPicker, setShowEntityPicker] = useState(false);
   const [selectedEntityType, setSelectedEntityType] = useState("quotation");
   
-  const baseUrl = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
-  
   // Load ticket types
   useEffect(() => {
     if (isOpen) {
@@ -58,9 +56,7 @@ export function NewTicketPanel({ isOpen, onClose, onSuccess, prefilledEntity }: 
   const loadTicketTypes = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${baseUrl}/ticket-types`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
-      });
+      const response = await apiFetch(`/ticket-types`);
       const result = await response.json();
       if (result.success) {
         setTicketTypes(result.data);
@@ -91,12 +87,8 @@ export function NewTicketPanel({ isOpen, onClose, onSuccess, prefilledEntity }: 
     
     setIsCreating(true);
     try {
-      const response = await fetch(`${baseUrl}/tickets`, {
+      const response = await apiFetch(`/tickets`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${publicAnonKey}`
-        },
         body: JSON.stringify({
           ticket_type: ticketType,
           subject,

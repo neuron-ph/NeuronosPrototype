@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
 import { RefreshCw, Database, Package, FileText, AlertCircle } from "lucide-react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
+import { apiFetch } from "../utils/api";
 
 export function DiagnosticsPage() {
   const [projects, setProjects] = useState<any[]>([]);
@@ -12,11 +10,7 @@ export function DiagnosticsPage() {
   const fetchProjects = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_URL}/projects`, {
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-        },
-      });
+      const response = await apiFetch(`/projects`);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);

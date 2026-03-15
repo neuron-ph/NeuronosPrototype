@@ -3,11 +3,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Loader2, AlertCircle, BarChart3, ChevronLeft, ChevronRight } from "lucide-react";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
-import { fetchWithRetry } from "../../utils/fetchWithRetry";
+import { apiFetch } from "../../utils/api";
 import { toast } from "../ui/toast-utils";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 // ==================== TYPES ====================
 
@@ -98,9 +95,7 @@ export function AuditingSummary() {
       const params = new URLSearchParams({ period, view });
       if (serviceType !== "All") params.set("service_type", serviceType);
 
-      const res = await fetchWithRetry(`${API_URL}/catalog/audit/summary?${params}`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
-      });
+      const res = await apiFetch(`/catalog/audit/summary?${params}`);
       const json = await res.json();
       if (!json.success) throw new Error(json.error || "Unknown error");
       setData(json.data);

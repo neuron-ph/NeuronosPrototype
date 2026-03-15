@@ -1,15 +1,9 @@
-import { useState, useEffect } from "react";
-import { X } from "lucide-react";
-import { BookingCommentsTab } from "../shared/BookingCommentsTab";
-import { UnifiedBillingsTab } from "../shared/billings/UnifiedBillingsTab";
 import { ExpensesTab } from "../operations/shared/ExpensesTab";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { useProjectFinancials } from "../../hooks/useProjectFinancials";
 import { StatusSelector } from "../StatusSelector";
 import { ExecutionStatus } from "../../types/operations";
 import { toast } from "../ui/toast-utils";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 interface ProjectBookingReadOnlyViewProps {
   bookingId: string;
@@ -89,13 +83,8 @@ export function ProjectBookingReadOnlyView({
 
       console.log("[ProjectBookingReadOnlyView] Using endpoint:", endpoint);
 
-      const response = await fetch(
-        `${API_URL}/${endpoint}/${bookingId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
-        }
+      const response = await apiFetch(
+        `/${endpoint}/${bookingId}`
       );
 
       if (response.ok) {
@@ -111,13 +100,8 @@ export function ProjectBookingReadOnlyView({
         // Fallback: try the generic /bookings/:id endpoint
         // (bookings may be stored under the generic `booking:` KV prefix)
         console.log("[ProjectBookingReadOnlyView] Type-specific endpoint failed, trying generic /bookings/:id");
-        const fallbackResponse = await fetch(
-          `${API_URL}/bookings/${bookingId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
-            },
-          }
+        const fallbackResponse = await apiFetch(
+          `/bookings/${bookingId}`
         );
 
         if (!fallbackResponse.ok) {

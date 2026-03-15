@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Search, Loader2, CheckCircle, AlertCircle } from "lucide-react";
 import type { Project } from "../../../types/pricing";
 import { fetchProjectByNumber } from "../../../utils/projectAutofill";
-import { projectId, publicAnonKey } from "../../../utils/supabase/info";
 
 interface ProjectAutofillSectionProps {
   projectNumber: string;
@@ -35,8 +34,6 @@ export function ProjectAutofillSection({
     try {
       const result = await fetchProjectByNumber(
         projectNumber.trim(),
-        projectId,
-        publicAnonKey
       );
 
       if (result.success && result.data) {

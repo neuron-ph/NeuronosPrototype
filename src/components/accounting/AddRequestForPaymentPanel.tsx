@@ -7,11 +7,9 @@ import { GroupedDropdown } from "../bd/GroupedDropdown";
 import type { EVoucher, EVoucherTransactionType, LinkedBilling } from "../../types/evoucher";
 import { useEVoucherSubmit } from "../../hooks/useEVoucherSubmit";
 import { useUser } from "../../hooks/useUser";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { getAccounts } from "../../utils/accounting-api";
 import type { Account } from "../../types/accounting";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 interface LineItem {
   id: string;
@@ -479,9 +477,7 @@ export function AddRequestForPaymentPanel({
   const fetchOpenStatements = async () => {
     try {
       setIsLoadingStatements(true);
-      const response = await fetch(`${API_URL}/evouchers?transaction_type=billing`, {
-        headers: { "Authorization": `Bearer ${publicAnonKey}` }
-      });
+      const response = await apiFetch(`/evouchers?transaction_type=billing`);
       
       if (response.ok) {
         const result = await response.json();

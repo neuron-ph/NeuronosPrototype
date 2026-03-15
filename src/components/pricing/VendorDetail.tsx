@@ -1,13 +1,5 @@
-import { ArrowLeft, Building2, Phone, Mail, MapPin, MessageSquare, FileText, User, Plus, Award, Ship, Plane, Edit, Trash2, CheckSquare, Lock, ShieldCheck } from "lucide-react";
-import { useState, useEffect } from "react";
-import { NetworkPartner, COUNTRIES } from "../../data/networkPartners";
-import type { QuotationChargeCategory } from "../../types/pricing";
-import { isExpired, expiresSoon, formatExpiryDate } from "../../data/networkPartners";
-import { ChargeCategoriesManager } from "../pricing/shared/ChargeCategoriesManager";
-import { CustomDropdown } from "../bd/CustomDropdown";
-import { CustomDatePicker } from "../common/CustomDatePicker";
 import { PartnerSheet } from "./partners/PartnerSheet";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { useNetworkPartners } from "../../hooks/useNetworkPartners";
 
 // --- UNIFIED COMPONENT SYSTEM ---
@@ -240,14 +232,8 @@ export function VendorDetail({ vendor: initialVendor, onBack, onSave }: VendorDe
   const loadChargeCategories = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/vendors/${currentVendor.id}/charge-categories`,
-        {
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`,
-            'Content-Type': 'application/json'
-          }
-        }
+      const response = await apiFetch(
+        `/vendors/${currentVendor.id}/charge-categories`
       );
 
       if (!response.ok) {
@@ -272,14 +258,10 @@ export function VendorDetail({ vendor: initialVendor, onBack, onSave }: VendorDe
   const saveChargeCategories = async () => {
     try {
       setIsSaving(true);
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/vendors/${currentVendor.id}/charge-categories`,
+      const response = await apiFetch(
+        `/vendors/${currentVendor.id}/charge-categories`,
         {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`,
-            'Content-Type': 'application/json'
-          },
           body: JSON.stringify({ charge_categories: chargeCategories })
         }
       );

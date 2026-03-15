@@ -2,9 +2,7 @@ import { X, Building2, MapPin, Target, Briefcase } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { CustomerStatus } from "../../types/bd";
 import { CustomSelect } from "./CustomSelect";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
+import { useUsers } from "../../hooks/useUsers";
 
 interface AddCustomerPanelProps {
   isOpen: boolean;
@@ -48,37 +46,8 @@ export function AddCustomerPanel({ isOpen, onClose, onSave }: AddCustomerPanelPr
     notes: "",
   });
 
-  const [users, setUsers] = useState<BackendUser[]>([]);
-
-  // Fetch users when panel opens
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const response = await fetch(`${API_URL}/users`, {
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
-        });
-        
-        if (response.ok) {
-          const result = await response.json();
-          if (result.success) {
-            // Filter only Business Development users
-            const bdUsers = result.data.filter((u: BackendUser) => u.department === "Business Development");
-            setUsers(bdUsers);
-            console.log('[AddCustomerPanel] Fetched BD users:', bdUsers.length);
-          }
-        } else {
-          console.warn(`Error fetching users: ${response.status}`);
-        }
-      } catch (error) {
-        console.error('Error fetching users for AddCustomerPanel:', error);
-        setUsers([]);
-      }
-    };
-
-    if (isOpen) {
-      fetchUsers();
-    }
-  }, [isOpen]);
+  // Direct Supabase query for BD users (replaces Edge Function fetch)
+  const { users } = useUsers({ department: 'Business Development', enabled: isOpen });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

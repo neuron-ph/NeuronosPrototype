@@ -12,9 +12,7 @@
 import { useState, useEffect } from "react";
 import { Building2 } from "lucide-react";
 import type { Consignee } from "../../types/bd";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
+import { apiFetch } from "../../utils/api";
 
 interface ConsigneeInfoBadgeProps {
   consigneeId?: string;
@@ -32,9 +30,7 @@ export function ConsigneeInfoBadge({ consigneeId }: ConsigneeInfoBadgeProps) {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${API_URL}/consignees/${consigneeId}`, {
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
-        });
+        const res = await apiFetch(`/consignees/${consigneeId}`);
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled) setConsignee(data);

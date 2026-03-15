@@ -1,6 +1,6 @@
+import { apiFetch } from "../../../utils/api";
 import { useState } from "react";
 import { CheckCircle, XCircle, Send, Ban, Loader2 } from "lucide-react";
-import { projectId, publicAnonKey } from "../../../utils/supabase/info";
 
 interface EVoucherWorkflowPanelProps {
   evoucherId: string;
@@ -38,21 +38,14 @@ export function EVoucherWorkflowPanel({
         return;
       }
 
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/evouchers/${evoucherId}/submit`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`
-          },
-          body: JSON.stringify({
-            user_id: user.id,
-            user_name: user.name,
-            user_role: user.department
-          })
-        }
-      );
+      const response = await apiFetch(`/evouchers/${evoucherId}/submit`, {
+        method: 'POST',
+        body: JSON.stringify({
+          user_id: user.id,
+          user_name: user.name,
+          user_role: user.department
+        })
+      });
 
       const result = await response.json();
 
@@ -85,21 +78,14 @@ export function EVoucherWorkflowPanel({
         return;
       }
 
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/evouchers/${evoucherId}/approve`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`
-          },
-          body: JSON.stringify({
-            user_id: user.id,
-            user_name: user.name,
-            user_role: user.department
-          })
-        }
-      );
+      const response = await apiFetch(`/evouchers/${evoucherId}/approve`, {
+        method: 'POST',
+        body: JSON.stringify({
+          user_id: user.id,
+          user_name: user.name,
+          user_role: user.department
+        })
+      });
 
       const result = await response.json();
 
@@ -132,21 +118,14 @@ export function EVoucherWorkflowPanel({
         return;
       }
 
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/evouchers/${evoucherId}/post-to-ledger`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`
-          },
-          body: JSON.stringify({
-            user_id: user.id,
-            user_name: user.name,
-            user_role: user.department
-          })
-        }
-      );
+      const response = await apiFetch(`/evouchers/${evoucherId}/post-to-ledger`, {
+        method: 'POST',
+        body: JSON.stringify({
+          user_id: user.id,
+          user_name: user.name,
+          user_role: user.department
+        })
+      });
 
       const result = await response.json();
 
@@ -180,22 +159,15 @@ export function EVoucherWorkflowPanel({
         return;
       }
 
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/evouchers/${evoucherId}/reject`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`
-          },
-          body: JSON.stringify({
-            user_id: user.id,
-            user_name: user.name,
-            user_role: user.department,
-            rejection_reason: rejectionReason
-          })
-        }
-      );
+      const response = await apiFetch(`/evouchers/${evoucherId}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({
+          user_id: user.id,
+          user_name: user.name,
+          user_role: user.department,
+          rejection_reason: rejectionReason
+        })
+      });
 
       const result = await response.json();
 
@@ -230,21 +202,14 @@ export function EVoucherWorkflowPanel({
         return;
       }
 
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/evouchers/${evoucherId}/cancel`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`
-          },
-          body: JSON.stringify({
-            user_id: user.id,
-            user_name: user.name,
-            user_role: user.department
-          })
-        }
-      );
+      const response = await apiFetch(`/evouchers/${evoucherId}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({
+          user_id: user.id,
+          user_name: user.name,
+          user_role: user.department
+        })
+      });
 
       const result = await response.json();
 

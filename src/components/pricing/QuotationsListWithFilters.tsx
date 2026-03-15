@@ -34,7 +34,7 @@ interface QuotationsListWithFiltersProps {
   onCreateQuotation: (quotationType: QuotationType) => void;
   quotations?: QuotationNew[];
   isLoading?: boolean;
-  userDepartment?: "BD" | "PD";
+  userDepartment?: "Business Development" | "Pricing";
   onRefresh?: () => void;
 }
 
@@ -302,7 +302,7 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
   }, [isResizing, resizingColumn, columnWidths]);
 
   // Build grid template columns string
-  const showStatus = userDepartment === "BD";
+  const showStatus = userDepartment === "Business Development";
   const gridTemplateColumns = showStatus 
     ? `${columnWidths.icon}px ${columnWidths.name}px ${columnWidths.customer}px ${columnWidths.services}px ${columnWidths.total}px ${columnWidths.date}px ${columnWidths.status}px`
     : `${columnWidths.icon}px ${columnWidths.name}px ${columnWidths.customer}px ${columnWidths.services}px ${columnWidths.total}px ${columnWidths.date}px`;

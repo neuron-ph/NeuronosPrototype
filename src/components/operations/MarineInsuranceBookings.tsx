@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, Shield, Briefcase, UserCheck, FileEdit, Clock, CheckCircle, Trash2 } from "lucide-react";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { CreateMarineInsuranceBookingPanel } from "./CreateMarineInsuranceBookingPanel";
 import { MarineInsuranceBookingDetails } from "./MarineInsuranceBookingDetails";
 import { NeuronStatusPill } from "../NeuronStatusPill";
@@ -31,8 +31,6 @@ interface MarineInsuranceBookingsProps {
   highlightId?: string | null;
 }
 
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
-
 export function MarineInsuranceBookings({ currentUser, pendingBookingId, initialTab, highlightId }: MarineInsuranceBookingsProps = {}) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -47,12 +45,7 @@ export function MarineInsuranceBookings({ currentUser, pendingBookingId, initial
 
   // ── Cached bookings fetch ─────────────────────────────────
   const bookingsFetcher = async (): Promise<MarineInsuranceBooking[]> => {
-    const response = await fetch(`${API_URL}/marine-insurance-bookings`, {
-      headers: {
-        'Authorization': `Bearer ${publicAnonKey}`,
-        'Content-Type': 'application/json'
-      }
-    });
+    const response = await apiFetch(`/marine-insurance-bookings`);
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const result = await response.json();
     if (result.success) return result.data;
@@ -87,11 +80,8 @@ export function MarineInsuranceBookings({ currentUser, pendingBookingId, initial
     }
 
     try {
-      const response = await fetch(`${API_URL}/marine-insurance-bookings/${bookingId}`, {
+      const response = await apiFetch(`/marine-insurance-bookings/${bookingId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-        }
       });
 
       const result = await response.json();

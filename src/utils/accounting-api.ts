@@ -1,22 +1,15 @@
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { apiFetch } from './api';
 import { Account, AccountType } from '../types/accounting-core';
 import { Transaction } from '../types/accounting'; // Keep Transaction from old types for now if not present in core
 
 console.log("Loading accounting-api.ts (Client Side - Robust)");
-
-// Constants for API endpoints
-const SERVER_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 /**
  * Fetches all accounts from the Server.
  */
 export const getAccounts = async (): Promise<Account[]> => {
   try {
-    const response = await fetch(`${SERVER_URL}/accounts`, {
-      headers: {
-        'Authorization': `Bearer ${publicAnonKey}`
-      }
-    });
+    const response = await apiFetch('/accounts');
     if (!response.ok) throw new Error('Failed to fetch accounts');
     const result = await response.json();
     if (!result.success) throw new Error(result.error);
@@ -37,12 +30,8 @@ export const getAccounts = async (): Promise<Account[]> => {
  * Saves or updates an account.
  */
 export const saveAccount = async (account: Account): Promise<void> => {
-  const response = await fetch(`${SERVER_URL}/accounts`, {
+  const response = await apiFetch('/accounts', {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${publicAnonKey}`,
-      'Content-Type': 'application/json'
-    },
     body: JSON.stringify(account)
   });
   if (!response.ok) throw new Error('Failed to save account');
@@ -52,11 +41,8 @@ export const saveAccount = async (account: Account): Promise<void> => {
  * Deletes an account.
  */
 export const deleteAccount = async (id: string): Promise<void> => {
-  const response = await fetch(`${SERVER_URL}/accounts/${id}`, {
+  const response = await apiFetch(`/accounts/${id}`, {
     method: 'DELETE',
-    headers: {
-      'Authorization': `Bearer ${publicAnonKey}`
-    }
   });
   if (!response.ok) throw new Error('Failed to delete account');
 };
@@ -66,11 +52,7 @@ export const deleteAccount = async (id: string): Promise<void> => {
  */
 export const getTransactions = async (): Promise<Transaction[]> => {
   try {
-    const response = await fetch(`${SERVER_URL}/transactions`, {
-      headers: {
-        'Authorization': `Bearer ${publicAnonKey}`
-      }
-    });
+    const response = await apiFetch('/transactions');
     if (!response.ok) throw new Error('Failed to fetch transactions');
     const result = await response.json();
     if (!result.success) throw new Error(result.error);
@@ -88,12 +70,8 @@ export const getTransactions = async (): Promise<Transaction[]> => {
  */
 export const saveTransaction = async (txn: Transaction): Promise<void> => {
   // 1. Save the transaction
-  const response = await fetch(`${SERVER_URL}/transactions`, {
+  const response = await apiFetch('/transactions', {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${publicAnonKey}`,
-      'Content-Type': 'application/json'
-    },
     body: JSON.stringify(txn)
   });
   if (!response.ok) throw new Error('Failed to save transaction');
@@ -126,11 +104,7 @@ export interface TransactionViewSettings {
 
 export const getTransactionViewSettings = async (): Promise<TransactionViewSettings> => {
   try {
-    const response = await fetch(`${SERVER_URL}/settings/transaction-view`, {
-      headers: {
-        'Authorization': `Bearer ${publicAnonKey}`
-      }
-    });
+    const response = await apiFetch('/settings/transaction-view');
     if (!response.ok) throw new Error('Failed to fetch settings');
     const result = await response.json();
     if (!result.success) throw new Error(result.error);
@@ -142,12 +116,8 @@ export const getTransactionViewSettings = async (): Promise<TransactionViewSetti
 };
 
 export const saveTransactionViewSettings = async (settings: TransactionViewSettings): Promise<void> => {
-  const response = await fetch(`${SERVER_URL}/settings/transaction-view`, {
+  const response = await apiFetch('/settings/transaction-view', {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${publicAnonKey}`,
-      'Content-Type': 'application/json'
-    },
     body: JSON.stringify(settings)
   });
   if (!response.ok) throw new Error('Failed to save settings');

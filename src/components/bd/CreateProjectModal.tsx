@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { QuotationNew } from "../../types/pricing";
 import { X } from "lucide-react";
-import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { apiFetch } from '../../utils/api';
 import { toast } from "../ui/toast-utils";
 
 interface CreateProjectModalProps {
@@ -10,8 +10,6 @@ interface CreateProjectModalProps {
   onSuccess: (projectId: string) => void;
   currentUser?: { id: string; name: string; email: string; department: string } | null;
 }
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 export function CreateProjectModal({ quotation, onClose, onSuccess, currentUser }: CreateProjectModalProps) {
   const [isCreating, setIsCreating] = useState(false);
@@ -40,12 +38,8 @@ export function CreateProjectModal({ quotation, onClose, onSuccess, currentUser 
 
     setIsCreating(true);
     try {
-      const response = await fetch(`${API_URL}/projects`, {
+      const response = await apiFetch(`/projects`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({
           quotation_id: quotation.id,
           ...formData,

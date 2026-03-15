@@ -4,7 +4,7 @@ import { toast } from "../../ui/toast-utils";
 import type { Project } from "../../../types/pricing";
 import { Invoice, BillingLineItem, Billing, Account } from "../../../types/accounting";
 import { getAccounts } from "../../../utils/accounting-api";
-import { projectId, publicAnonKey } from "../../../utils/supabase/info";
+import { apiFetch } from "../../../utils/api";
 import { InvoiceDocument, InvoicePrintOptions } from "./InvoiceDocument";
 import { SignatoryControl } from "../quotation/screen/controls/SignatoryControl";
 import { DisplayOptionsControl } from "../quotation/screen/controls/DisplayOptionsControl";
@@ -14,7 +14,6 @@ import { getServiceIcon } from "../../../utils/quotation-helpers";
 import { useConsignees } from "../../../hooks/useConsignees";
 import type { Consignee } from "../../../types/bd";
 
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 // A4 Dimensions in pixels at 96 DPI
 const A4_WIDTH_PX = 794; // 210mm
@@ -194,9 +193,7 @@ export function InvoiceBuilder({
         const fetchCustomer = async () => {
             setIsFetchingAddress(true);
             try {
-                const response = await fetch(`${API_URL}/customers/${project.customer_id}`, {
-                    headers: { 'Authorization': `Bearer ${publicAnonKey}` }
-                });
+                const response = await apiFetch(`/customers/${project.customer_id}`);
                 if (response.ok) {
                     const result = await response.json();
                     if (result.success && result.data) {
@@ -454,12 +451,8 @@ export function InvoiceBuilder({
              };
           });
 
-          const saveResponse = await fetch(`${API_URL}/accounting/billings/batch`, {
+          const saveResponse = await apiFetch(`/accounting/billings/batch`, {
               method: 'POST',
-              headers: {
-                  "Content-Type": "application/json",
-                  "Authorization": `Bearer ${publicAnonKey}`
-              },
               body: JSON.stringify({ 
                   items: itemsToSave,
                   project_id: project.id 
@@ -551,12 +544,8 @@ export function InvoiceBuilder({
         }
       };
 
-      const response = await fetch(`${API_URL}/accounting/invoices`, {
+      const response = await apiFetch(`/accounting/invoices`, {
         method: 'POST',
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${publicAnonKey}`
-        },
         body: JSON.stringify(payload)
       });
 

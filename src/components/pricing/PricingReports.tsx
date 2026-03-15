@@ -1,9 +1,7 @@
 import { BarChart3, Download, FileText } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { QuotationNew } from "../../types/pricing";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
+import { apiFetch } from "../../utils/api";
 
 export function PricingReports() {
   const [quotations, setQuotations] = useState<QuotationNew[]>([]);
@@ -14,9 +12,7 @@ export function PricingReports() {
     const fetchQuotations = async () => {
       setIsLoading(true);
       try {
-        const response = await fetch(`${API_URL}/quotations`, {
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
-        });
+        const response = await apiFetch(`/quotations`);
         const result = await response.json();
         if (result.success) {
           setQuotations(result.data);

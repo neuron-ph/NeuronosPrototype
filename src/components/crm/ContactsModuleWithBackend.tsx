@@ -4,12 +4,10 @@ import type { Contact } from "../../types/contact";
 import { ContactCreationModal } from "./ContactCreationModal";
 import { ContactDetailView } from "./ContactDetailView";
 import { QuotationBuilderV3 } from "../pricing/quotations/QuotationBuilderV3";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { toast } from "../ui/toast-utils";
 import type { QuotationNew } from "../../types/pricing";
 import { CustomDropdown } from "../bd/CustomDropdown";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 type View = "list" | "detail" | "builder";
 
@@ -40,12 +38,7 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
         params.append("search", searchQuery);
       }
 
-      const response = await fetch(`${API_URL}/contacts?${params.toString()}`, {
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
-      });
-
+      const response = await apiFetch(`/contacts?${params.toString()}`);
       const result = await response.json();
       if (result.success) {
         setContacts(result.data);
@@ -79,12 +72,7 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
     const fetchContactById = async () => {
       if (contactId) {
         try {
-          const response = await fetch(`${API_URL}/contacts/${contactId}`, {
-            headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
-            },
-          });
-
+          const response = await apiFetch(`/contacts/${contactId}`);
           const result = await response.json();
           if (result.success && result.data) {
             setSelectedContact(result.data);
@@ -106,11 +94,10 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
   // Create new contact
   const handleCreateContact = async (contactData: Partial<Contact>) => {
     try {
-      const response = await fetch(`${API_URL}/contacts`, {
+      const response = await apiFetch(`/contacts`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${publicAnonKey}`,
         },
         body: JSON.stringify(contactData),
       });
@@ -131,11 +118,10 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
   // Update contact
   const handleUpdateContact = async (id: string, updates: Partial<Contact>) => {
     try {
-      const response = await fetch(`${API_URL}/contacts/${id}`, {
+      const response = await apiFetch(`/contacts/${id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${publicAnonKey}`,
         },
         body: JSON.stringify(updates),
       });
@@ -160,12 +146,7 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
   const handleViewContact = async (contact: Contact) => {
     try {
       // Fetch full contact details including quotations
-      const response = await fetch(`${API_URL}/contacts/${contact.id}`, {
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
-      });
-
+      const response = await apiFetch(`/contacts/${contact.id}`);
       const result = await response.json();
       if (result.success) {
         setSelectedContact(result.data);
@@ -227,11 +208,10 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
         }}
         onSave={async (newQuotation) => {
           try {
-            const response = await fetch(`${API_URL}/quotations`, {
+            const response = await apiFetch(`/quotations`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${publicAnonKey}`,
               },
               body: JSON.stringify(newQuotation),
             });
@@ -240,11 +220,7 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
             if (result.success) {
               toast.success("Inquiry created successfully!");
               // Refresh contact details to show new inquiry
-              const contactResponse = await fetch(`${API_URL}/contacts/${selectedContact.id}`, {
-                headers: {
-                  Authorization: `Bearer ${publicAnonKey}`,
-                },
-              });
+              const contactResponse = await apiFetch(`/contacts/${selectedContact.id}`);
               const contactResult = await contactResponse.json();
               if (contactResult.success) {
                 setSelectedContact(contactResult.data);

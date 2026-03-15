@@ -14,7 +14,6 @@
  */
 
 import type { QuotationNew, InquiryService } from "../types/pricing";
-import { projectId, publicAnonKey } from "./supabase/info";
 
 // ==================== Extract Service Details ====================
 
@@ -255,22 +254,16 @@ export async function linkBookingToContract(
   status: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const response = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/contracts/${contractId}/link-booking`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+    const { apiFetch } = await import("./api");
+    const response = await apiFetch(`/contracts/${contractId}/link-booking`, {
+      method: "POST",
+      body: JSON.stringify({
           bookingId,
           bookingNumber,
           serviceType,
           status,
         }),
-      }
-    );
+    });
 
     const result = await response.json();
 

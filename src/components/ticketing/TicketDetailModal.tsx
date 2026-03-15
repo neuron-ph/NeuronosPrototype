@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { X, Send, ExternalLink, FileText, Building2, AlertCircle, MessageCircle, Clock, User, Activity } from "lucide-react";
 import { useNavigate } from "react-router";
 import { useUser } from "../../hooks/useUser";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { toast } from "sonner@2.0.3";
 import type { Ticket } from "../InboxPage";
 import { CustomDropdown } from "../bd/CustomDropdown";
@@ -39,7 +39,6 @@ interface TicketActivity {
 
 export function TicketDetailModal({ ticket, isOpen, onClose, onUpdate }: TicketDetailModalProps) {
   const { user, effectiveRole, effectiveDepartment } = useUser();
-  const navigate = useNavigate();
   const [comments, setComments] = useState<Comment[]>([]);
   const [activities, setActivities] = useState<TicketActivity[]>([]);
   const [newComment, setNewComment] = useState("");
@@ -48,8 +47,6 @@ export function TicketDetailModal({ ticket, isOpen, onClose, onUpdate }: TicketD
   const [isAddingComment, setIsAddingComment] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState(ticket.status);
-  
-  const baseUrl = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
   
   // Check if user can view activity log
   const canViewActivity = effectiveRole === "director" || effectiveRole === "manager";
@@ -69,9 +66,7 @@ export function TicketDetailModal({ ticket, isOpen, onClose, onUpdate }: TicketD
   const loadComments = async () => {
     setIsLoadingComments(true);
     try {
-      const response = await fetch(`${baseUrl}/tickets/${ticket.id}`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
-      });
+      const response = await apiFetch(`/tickets/${ticket.id}`);
       const result = await response.json();
       if (result.success && result.data.comments) {
         setComments(result.data.comments);
@@ -86,9 +81,8 @@ export function TicketDetailModal({ ticket, isOpen, onClose, onUpdate }: TicketD
   const loadActivities = async () => {
     setIsLoadingActivities(true);
     try {
-      const response = await fetch(
-        `${baseUrl}/tickets/${ticket.id}/activity?role=${effectiveRole}&department=${effectiveDepartment}`,
-        { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
+      const response = await apiFetch(
+        `/tickets/${ticket.id}/activity?role=${effectiveRole}&department=${effectiveDepartment}`
       );
       const result = await response.json();
       if (result.success) {
@@ -106,12 +100,8 @@ export function TicketDetailModal({ ticket, isOpen, onClose, onUpdate }: TicketD
     
     setIsAddingComment(true);
     try {
-      const response = await fetch(`${baseUrl}/tickets/${ticket.id}/comments`, {
+      const response = await apiFetch(`/tickets/${ticket.id}/comments`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${publicAnonKey}`
-        },
         body: JSON.stringify({
           user_id: user?.id || "",
           user_name: user?.name || "",
@@ -141,12 +131,8 @@ export function TicketDetailModal({ ticket, isOpen, onClose, onUpdate }: TicketD
   const handleUpdateStatus = async (newStatus: string) => {
     setIsUpdatingStatus(true);
     try {
-      const response = await fetch(`${baseUrl}/tickets/${ticket.id}/status`, {
+      const response = await apiFetch(`/tickets/${ticket.id}/status`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${publicAnonKey}`
-        },
         body: JSON.stringify({ 
           status: newStatus,
           user_id: user?.id || "",

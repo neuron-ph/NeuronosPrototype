@@ -1132,16 +1132,8 @@
     height: 38px;
   }
 
-  .h-\[42px\] {
-    height: 42px;
-  }
-
   .h-\[60px\] {
     height: 60px;
-  }
-
-  .h-\[400px\] {
-    height: 400px;
   }
 
   .h-\[800px\] {
@@ -1366,10 +1358,6 @@
 
   .w-\[19px\] {
     width: 19px;
-  }
-
-  .w-\[35\%\] {
-    width: 35%;
   }
 
   .w-\[36px\] {
@@ -1826,10 +1814,6 @@
 
   .gap-8 {
     gap: calc(var(--spacing) * 8);
-  }
-
-  .gap-12 {
-    gap: calc(var(--spacing) * 12);
   }
 
   :where(.space-y-0\.5 > :not(:last-child)) {
@@ -2459,10 +2443,6 @@
 
   .bg-\[\#F0F9FF\] {
     background-color: #f0f9ff;
-  }
-
-  .bg-\[\#F0FDF4\] {
-    background-color: #f0fdf4;
   }
 
   .bg-\[\#F0FDF9\] {
@@ -3488,10 +3468,6 @@
 
   .text-\[\#12332B\]\/60 {
     color: oklab(29.366% -.0414051 .00360477 / .6);
-  }
-
-  .text-\[\#15803D\] {
-    color: #15803d;
   }
 
   .text-\[\#059669\] {

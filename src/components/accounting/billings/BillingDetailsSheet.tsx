@@ -1,7 +1,7 @@
 import { X, Calendar, CreditCard, Building, User, FileText, CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import logoImage from "figma:asset/28c84ed117b026fbf800de0882eb478561f37f4f.png";
-import { projectId, publicAnonKey } from "../../../utils/supabase/info";
+import { apiFetch } from "../../../utils/api";
 import type { Billing } from "../../types/accounting";
 import { SidePanel } from "../../common/SidePanel";
 
@@ -25,18 +25,8 @@ export function BillingDetailsSheet({ isOpen, onClose, billingId }: BillingDetai
         setError(null);
         
         console.log(`Fetching billing details for ID: ${billingId}`);
-        const url = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/accounting/billings/${billingId}`;
+        const response = await apiFetch(`/accounting/billings/${billingId}`);
         
-        const response = await fetch(
-          url,
-          {
-            headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
-
         if (!response.ok) {
            const text = await response.text();
            console.error(`Billing fetch failed: ${response.status} ${response.statusText}`, text);

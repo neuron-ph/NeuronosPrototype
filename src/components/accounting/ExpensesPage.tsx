@@ -1,19 +1,16 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { 
-  Plus, 
-  Search, 
-  ChevronDown, 
+import { useState, useEffect, useMemo } from "react";
+import {
+  Plus,
+  Search,
+  ChevronDown,
   ChevronRight,
-  Filter,
-  SlidersHorizontal,
-  ArrowUpDown,
-  Calendar,
   PhilippinePeso,
   AlertCircle
 } from "lucide-react";
 import type { Expense } from "../../types/accounting";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { useNavigate } from "react-router";
+import { AddRequestForPaymentPanel } from "./AddRequestForPaymentPanel";
 
 type QuickFilterTab = "all" | "this-month" | "last-month" | "this-quarter" | "recorded" | "pending-audit";
 type SortOption = "date-newest" | "date-oldest" | "amount-high" | "amount-low" | "category";
@@ -56,15 +53,8 @@ export function ExpensesPage() {
       setError(null);
       
       // Fetch from NEW accounting endpoint (read-only expenses from E-Vouchers)
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/accounting/expenses`,
-        {
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`,
-          },
-        }
-      );
-
+      const response = await apiFetch(`/accounting/expenses`);
+      
       if (!response.ok) {
         throw new Error(`Failed to fetch expenses: ${response.statusText}`);
       }
@@ -104,17 +94,10 @@ export function ExpensesPage() {
 
       console.log('Creating expense with data:', mappedData); // Debug log
       
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/expenses`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(mappedData),
-        }
-      );
+      const response = await apiFetch(`/expenses`, {
+        method: 'POST',
+        body: JSON.stringify(mappedData),
+      });
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -157,17 +140,10 @@ export function ExpensesPage() {
 
       console.log('Saving draft with data:', mappedData); // Debug log
       
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/expenses`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(mappedData),
-        }
-      );
+      const response = await apiFetch(`/expenses`, {
+        method: 'POST',
+        body: JSON.stringify(mappedData),
+      });
 
       if (!response.ok) {
         const errorData = await response.json();

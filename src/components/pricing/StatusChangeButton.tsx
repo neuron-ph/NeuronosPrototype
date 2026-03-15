@@ -7,7 +7,7 @@ import { getDisplayStatus, getStatusStyle } from "../../utils/statusMapping";
 interface StatusChangeButtonProps {
   quotation: QuotationNew;
   onStatusChange: (newStatus: string, reason?: string) => void;
-  userDepartment?: "BD" | "PD";
+  userDepartment?: "Business Development" | "Pricing";
 }
 
 export function StatusChangeButton({ quotation, onStatusChange, userDepartment }: StatusChangeButtonProps) {
@@ -69,7 +69,7 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment }
     const actions = [];
 
     // PD WORKFLOW: Mark as Priced - PD ONLY (when quotation is awaiting pricing)
-    if (quotation.status === "Pending Pricing" && userDepartment === "PD") {
+    if (quotation.status === "Pending Pricing" && userDepartment === "Pricing") {
       actions.push({
         label: "Mark as Priced",
         sublabel: "Pricing complete, ready for BD",
@@ -83,7 +83,7 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment }
     }
 
     // PD WORKFLOW: Send back for revision - PD ONLY (if quotation needs more info)
-    if (quotation.status === "Pending Pricing" && userDepartment === "PD") {
+    if (quotation.status === "Pending Pricing" && userDepartment === "Pricing") {
       actions.push({
         label: "Request Revision",
         sublabel: "Need more information from BD",
@@ -97,7 +97,7 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment }
     }
 
     // Mark as Ongoing (for revisions/negotiations) - BD ONLY
-    if ((quotation.status === "Sent to Client" || quotation.status === "Priced") && userDepartment === "BD") {
+    if ((quotation.status === "Sent to Client" || quotation.status === "Priced") && userDepartment === "Business Development") {
       actions.push({
         label: "Mark as Ongoing",
         sublabel: "Send back for revisions",
@@ -111,7 +111,7 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment }
     }
 
     // Send to Client - BD ONLY (after PD finishes pricing)
-    if ((quotation.status === "Priced" || quotation.status === "Needs Revision") && userDepartment === "BD") {
+    if ((quotation.status === "Priced" || quotation.status === "Needs Revision") && userDepartment === "Business Development") {
       actions.push({
         label: "Send to Client",
         sublabel: "Mark as Waiting Approval",
@@ -125,7 +125,7 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment }
     }
 
     // Mark as Approved - BD ONLY (client accepted)
-    if (quotation.status === "Sent to Client" && userDepartment === "BD") {
+    if (quotation.status === "Sent to Client" && userDepartment === "Business Development") {
       actions.push({
         label: "Mark as Approved",
         sublabel: "Client accepted quotation",

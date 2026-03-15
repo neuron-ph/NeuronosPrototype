@@ -6,9 +6,7 @@ import { Input } from "../../ui/input";
 import { Button } from "../../ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/select";
 import { toast } from "../../ui/toast-utils";
-import { projectId, publicAnonKey } from "../../../utils/supabase/info";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
+import { apiFetch } from "../../../utils/api";
 
 interface AddChargeModalProps {
   isOpen: boolean;
@@ -66,12 +64,8 @@ export function AddChargeModal({ isOpen, onClose, onSuccess, projectId, bookingI
         quotation_category: formData.category
       };
 
-      const response = await fetch(`${API_URL}/accounting/billing-items`, {
+      const response = await apiFetch(`/accounting/billing-items`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${publicAnonKey}`
-        },
         body: JSON.stringify(payload)
       });
 

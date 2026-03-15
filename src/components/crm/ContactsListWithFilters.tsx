@@ -5,12 +5,11 @@ import type { Contact as BackendContact } from "../../types/contact";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { AddContactPanel } from "../bd/AddContactPanel";
 import { NeuronKPICard } from "../ui/NeuronKPICard";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
+import { apiFetch } from "../../utils/api";
+import { useUsers } from "../../hooks/useUsers";
 
 interface ContactsListWithFiltersProps {
-  userDepartment: "BD" | "PD";
+  userDepartment: "Business Development" | "Pricing";
   onViewContact: (contact: Contact) => void;
 }
 
@@ -22,50 +21,24 @@ export function ContactsListWithFilters({ userDepartment, onViewContact }: Conta
   const [isAddContactOpen, setIsAddContactOpen] = useState(false);
   const [contacts, setContacts] = useState<BackendContact[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [users, setUsers] = useState<any[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
 
+  // Direct Supabase query for BD users (replaces Edge Function fetch)
+  const { users: bdUsers } = useUsers({ department: 'Business Development' });
+
   // Permissions based on department
   const permissions = {
-    canCreate: userDepartment === "BD",
-    canEdit: userDepartment === "BD",
+    canCreate: userDepartment === "Business Development",
+    canEdit: userDepartment === "Business Development",
     showKPIs: true, // Both BD and PD see KPIs
-    showOwnerFilter: userDepartment === "BD",
-  };
-
-  // Fetch users from backend
-  const fetchUsers = async () => {
-    try {
-      const response = await fetch(`${API_URL}/users?department=Business%20Development`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
-      });
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success) {
-          setUsers(result.data);
-          console.log('[ContactsListWithFilters] Fetched users:', result.data.length);
-        } else {
-          console.warn("Failed to fetch users:", result.error);
-          setUsers([]);
-        }
-      } else {
-        console.warn(`Error fetching users: ${response.status}`);
-        setUsers([]);
-      }
-    } catch (error) {
-      console.error("Error fetching users:", error);
-      setUsers([]);
-    }
+    showOwnerFilter: userDepartment === "Business Development",
   };
 
   // Fetch activities from backend
   const fetchActivities = async () => {
     try {
-      const response = await fetch(`${API_URL}/activities`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
-        cache: 'no-store',
-      });
+      const response = await apiFetch('/activities');
       
       if (!response.ok) {
         console.error(`HTTP error fetching activities! status: ${response.status}`);
@@ -91,10 +64,7 @@ export function ContactsListWithFilters({ userDepartment, onViewContact }: Conta
   // Fetch customers from backend
   const fetchCustomers = async () => {
     try {
-      const response = await fetch(`${API_URL}/customers`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
-        cache: 'no-store',
-      });
+      const response = await apiFetch('/customers');
       const result = await response.json();
       if (result.success) {
         setCustomers(result.data);
@@ -122,13 +92,10 @@ export function ContactsListWithFilters({ userDepartment, onViewContact }: Conta
       // Add cache-busting parameter to prevent browser caching
       params.append("_t", Date.now().toString());
       
-      const url = `${API_URL}/contacts?${params.toString()}`;
+      const url = `/contacts?${params.toString()}`;
       console.log('[ContactsListWithFilters] Fetching contacts from:', url);
       
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
+      const response = await apiFetch(url, {
         cache: 'no-store', // Disable browser caching
       });
 
@@ -154,7 +121,6 @@ export function ContactsListWithFilters({ userDepartment, onViewContact }: Conta
   // Fetch on mount
   useEffect(() => {
     fetchContacts();
-    fetchUsers();
     fetchActivities();
     fetchCustomers();
   }, []);
@@ -191,12 +157,8 @@ export function ContactsListWithFilters({ userDepartment, onViewContact }: Conta
         notes: contactData.notes || null,
       };
       
-      const response = await fetch(`${API_URL}/contacts`, {
+      const response = await apiFetch(`/contacts`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
         body: JSON.stringify(transformedData),
       });
 
@@ -328,7 +290,7 @@ export function ContactsListWithFilters({ userDepartment, onViewContact }: Conta
               Contacts
             </h1>
             <p style={{ fontSize: "14px", color: "#667085" }}>
-              {userDepartment === "BD" 
+              {userDepartment === "Business Development" 
                 ? "Manage all customer and lead contacts" 
                 : "View contacts and check inquiries"}
             </p>
@@ -426,7 +388,7 @@ export function ContactsListWithFilters({ userDepartment, onViewContact }: Conta
           </div>
 
           {/* BD sees filters, PD does not */}
-          {userDepartment === "BD" && (
+          {userDepartment === "Business Development" && (
             <>
               <div style={{ minWidth: "140px" }}>
                 <CustomDropdown
@@ -468,7 +430,7 @@ export function ContactsListWithFilters({ userDepartment, onViewContact }: Conta
                 onChange={(value) => setOwnerFilter(value)}
                 options={[
                   { value: "All", label: "All Owners" },
-                  ...users.map(user => ({ value: user.id, label: user.name }))
+                  ...bdUsers.map(user => ({ value: user.id, label: user.name }))
                 ]}
               />
             </div>

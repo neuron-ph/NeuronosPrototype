@@ -5,7 +5,7 @@ import { QuotationActionMenu } from "./QuotationActionMenu";
 import { StatusChangeButton } from "./StatusChangeButton";
 import { CreateProjectModal } from "../bd/CreateProjectModal";
 import { CreateBookingsFromProjectModal } from "./CreateBookingsFromProjectModal";
-import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { apiFetch } from "../../utils/api";
 import { toast } from "../ui/toast-utils";
 import { CommentsTab } from "../shared/CommentsTab";
 import { SegmentedToggle } from "../ui/SegmentedToggle";
@@ -16,7 +16,7 @@ interface QuotationFileViewProps {
   quotation: QuotationNew;
   onBack: () => void;
   onEdit: () => void;
-  userDepartment?: "BD" | "PD";
+  userDepartment?: "Business Development" | "Pricing";
   onAcceptQuotation?: (quotation: QuotationNew) => void;
   onDelete?: () => void;
   onUpdate: (quotation: QuotationNew) => void;
@@ -26,8 +26,6 @@ interface QuotationFileViewProps {
   onConvertToContract?: (quotationId: string) => void;
   currentUser?: { id: string; name: string; email: string; department: string } | null;
 }
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 type TabType = "details" | "comments";
 
@@ -104,7 +102,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
 
   // Check if pricing information should be visible
   // Visible if: user is PD, OR status indicates quotation has been priced
-  const showPricing = userDepartment === "PD" || 
+  const showPricing = userDepartment === "Pricing" || 
     quotation.status === "Priced" || 
     quotation.status === "Sent to Client" ||
     quotation.status === "Accepted by Client" ||
@@ -221,12 +219,8 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
     setIsCreatingProject(true);
 
     try {
-      const response = await fetch(`${API_URL}/quotations/${quotation.id}/accept-and-create-project`, {
+      const response = await apiFetch(`/quotations/${quotation.id}/accept-and-create-project`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({
           bd_owner_user_id: currentUser.id,
           bd_owner_user_name: currentUser.name,
@@ -254,7 +248,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
       setCreatedProject(project);
 
       // Different behavior for PD vs BD users
-      if (userDepartment === "PD") {
+      if (userDepartment === "Pricing") {
         // PD users: Open booking creation modal
         setShowCreateBookingsModal(true);
       } else {
@@ -282,12 +276,8 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
     setIsActivatingContract(true);
 
     try {
-      const response = await fetch(`${API_URL}/quotations/${quotation.id}/activate-contract`, {
+      const response = await apiFetch(`/quotations/${quotation.id}/activate-contract`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
       });
 
       const result = await response.json();
@@ -487,7 +477,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
           />
           
           {/* Edit Pricing - PD Only, Pending Pricing Status */}
-          {userDepartment === "PD" && quotation.status === "Pending Pricing" && (
+          {userDepartment === "Pricing" && quotation.status === "Pending Pricing" && (
             <button
               onClick={onEdit}
               style={{
@@ -517,7 +507,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
           )}
 
           {/* Create Project - BD and PD, Accepted by Client Status (Project quotations only) */}
-          {(userDepartment === "BD" || userDepartment === "PD") && quotation.status === "Accepted by Client" && !quotation.project_id && quotation.quotation_type !== "contract" && (
+          {(userDepartment === "Business Development" || userDepartment === "Pricing") && quotation.status === "Accepted by Client" && !quotation.project_id && quotation.quotation_type !== "contract" && (
             <button
               onClick={handleAcceptAndCreateProject}
               disabled={isCreatingProject}
@@ -553,7 +543,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
           )}
 
           {/* Activate Contract - BD and PD, Accepted by Client Status (Contract quotations only) */}
-          {(userDepartment === "BD" || userDepartment === "PD") && quotation.status === "Accepted by Client" && quotation.quotation_type === "contract" && quotation.contract_status !== "Active" && (
+          {(userDepartment === "Business Development" || userDepartment === "Pricing") && quotation.status === "Accepted by Client" && quotation.quotation_type === "contract" && quotation.contract_status !== "Active" && (
             <button
               onClick={handleActivateContract}
               disabled={isActivatingContract}

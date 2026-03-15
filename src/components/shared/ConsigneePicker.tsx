@@ -12,13 +12,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ChevronDown, Building2, Plus, X } from "lucide-react";
 import type { Consignee } from "../../types/bd";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
-const headers = {
-  "Content-Type": "application/json",
-  Authorization: `Bearer ${publicAnonKey}`,
-};
+import { apiFetch } from "../../utils/api";
 
 interface ConsigneePickerProps {
   /** Current free-text value of the consignee field */
@@ -71,7 +65,7 @@ export function ConsigneePicker({
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${API_URL}/customers`, { headers });
+        const res = await apiFetch(`/customers`);
         const json = await res.json();
         if (cancelled) return;
         const customers = json.data || [];
@@ -97,9 +91,8 @@ export function ConsigneePicker({
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(
-          `${API_URL}/consignees?customer_id=${encodeURIComponent(resolvedCustomerId)}`,
-          { headers }
+        const res = await apiFetch(
+          `/consignees?customer_id=${encodeURIComponent(resolvedCustomerId)}`
         );
         const json = await res.json();
         if (!cancelled && json.success) {

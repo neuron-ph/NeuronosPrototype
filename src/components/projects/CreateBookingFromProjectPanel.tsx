@@ -13,7 +13,6 @@ import {
   autofillOthersFromProject,
   linkBookingToProject
 } from "../../utils/projectAutofill";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
 import { toast } from "../ui/toast-utils";
 
 interface CreateBookingFromProjectPanelProps {
@@ -114,8 +113,6 @@ export function CreateBookingFromProjectPanel({
         bookingData.bookingId, // Using bookingId as bookingNumber (e.g., "FWD-2026-825")
         serviceType,
         bookingData.status || "Draft",
-        projectId,
-        publicAnonKey
       );
 
       if (!linkResult.success) {

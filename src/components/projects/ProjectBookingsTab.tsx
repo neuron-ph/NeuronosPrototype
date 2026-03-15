@@ -1,9 +1,5 @@
-import { useState, useEffect } from "react";
-import { ChevronDown, FileText, Plus } from "lucide-react";
-import type { Project } from "../../types/pricing";
-import { ProjectBookingReadOnlyView } from "./ProjectBookingReadOnlyView";
 import { CreateBookingFromProjectPanel } from "./CreateBookingFromProjectPanel";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { toast } from "../ui/toast-utils";
 import { BookingsTable } from "../shared/BookingsTable";
 import { getServiceIcon } from "../../utils/quotation-helpers";
@@ -83,14 +79,8 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
           }
           
           // Fetch the booking to verify it exists
-          const response = await fetch(
-            `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/${endpoint}/${booking.bookingId}`,
-            {
-              headers: {
-                'Authorization': `Bearer ${publicAnonKey}`,
-                'Content-Type': 'application/json'
-              }
-            }
+          const response = await apiFetch(
+            `/${endpoint}/${booking.bookingId}`
           );
           
           if (response.ok) {
@@ -128,14 +118,10 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
         // Automatically clean up orphaned bookings
         try {
           console.log(`🧹 Automatically cleaning up orphaned bookings from project ${project.project_number}...`);
-          const cleanupResponse = await fetch(
-            `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/projects/${project.id}/cleanup-orphaned-bookings`,
+          const cleanupResponse = await apiFetch(
+            `/projects/${project.id}/cleanup-orphaned-bookings`,
             {
               method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${publicAnonKey}`,
-                'Content-Type': 'application/json'
-              }
             }
           );
           

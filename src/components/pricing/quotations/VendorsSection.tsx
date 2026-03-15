@@ -4,7 +4,7 @@ import type { Vendor, VendorType, ServiceType, QuotationChargeCategory } from ".
 import type { VendorLineItem } from "../../../data/networkPartners"; // ⚠️ DEPRECATED - kept for backward compatibility
 import { NETWORK_PARTNERS, COUNTRIES } from "../../../data/networkPartners";
 import { FormSelect } from "./FormSelect";
-import { projectId, publicAnonKey } from "../../../utils/supabase/info";
+import { apiFetch } from "../../../utils/api";
 import { ChargeCategoriesManager } from "../shared/ChargeCategoriesManager";
 import { toast } from "sonner";
 
@@ -157,14 +157,8 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
     if (vendorBackendId) {
       try {
         console.log(`🌐 Fetching rates from backend for ${vendor.name}...`);
-        const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/vendors/${vendorBackendId}/charge-categories`,
-          {
-            headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
-              'Content-Type': 'application/json'
-            }
-          }
+        const response = await apiFetch(
+          `/vendors/${vendorBackendId}/charge-categories`
         );
         
         if (response.ok) {
@@ -282,14 +276,8 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
       // Try to fetch live vendor data from backend
       if (vendor.vendor_id) {
         try {
-          const response = await fetch(
-            `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/vendors/${vendor.vendor_id}/charge-categories`,
-            {
-              headers: {
-                'Authorization': `Bearer ${publicAnonKey}`,
-                'Content-Type': 'application/json'
-              }
-            }
+          const response = await apiFetch(
+            `/vendors/${vendor.vendor_id}/charge-categories`
           );
           
           if (response.ok) {
@@ -339,14 +327,10 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
     
     try {
       // Step 1: Save to backend
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c142e950/vendors/${vendor.vendor_id}/charge-categories`,
+      const response = await apiFetch(
+        `/vendors/${vendor.vendor_id}/charge-categories`,
         {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`,
-            'Content-Type': 'application/json'
-          },
           body: JSON.stringify({
             charge_categories: cachedRates
           })

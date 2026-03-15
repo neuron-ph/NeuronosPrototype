@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, Truck, Briefcase, UserCheck, FileEdit, Clock, CheckCircle, Trash2 } from "lucide-react";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import { CreateTruckingBookingPanel } from "./CreateTruckingBookingPanel";
 import { TruckingBookingDetails } from "./TruckingBookingDetails";
 import { NeuronStatusPill } from "../NeuronStatusPill";
@@ -31,8 +31,6 @@ interface TruckingBookingsProps {
   highlightId?: string | null;
 }
 
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
-
 export function TruckingBookings({ currentUser, pendingBookingId, initialTab, highlightId }: TruckingBookingsProps = {}) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -47,12 +45,7 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
 
   // ── Cached bookings fetch ─────────────────────────────────
   const bookingsFetcher = async (): Promise<TruckingBooking[]> => {
-    const response = await fetch(`${API_URL}/trucking-bookings`, {
-      headers: {
-        'Authorization': `Bearer ${publicAnonKey}`,
-        'Content-Type': 'application/json'
-      }
-    });
+    const response = await apiFetch(`/trucking-bookings`);
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const result = await response.json();
     if (result.success) return result.data;
@@ -87,11 +80,8 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
     }
 
     try {
-      const response = await fetch(`${API_URL}/trucking-bookings/${bookingId}`, {
+      const response = await apiFetch(`/trucking-bookings/${bookingId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-        }
       });
 
       const result = await response.json();

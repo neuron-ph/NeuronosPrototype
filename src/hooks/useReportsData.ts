@@ -7,9 +7,7 @@
 // pre-computed project rows.
 
 import { useState, useEffect, useCallback } from "react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
+import { apiFetch } from "../utils/api";
 
 export interface ReportsData {
   projects: any[];
@@ -36,14 +34,12 @@ export function useReportsData(): ReportsData {
       setIsLoading(true);
       setError(null);
 
-      const headers = { Authorization: `Bearer ${publicAnonKey}` };
-
       const [projRes, billRes, expRes, invRes, colRes] = await Promise.all([
-        fetch(`${API_URL}/projects`, { headers }),
-        fetch(`${API_URL}/accounting/billing-items`, { headers }),
-        fetch(`${API_URL}/accounting/expenses`, { headers }),
-        fetch(`${API_URL}/accounting/invoices`, { headers }),
-        fetch(`${API_URL}/accounting/collections`, { headers }),
+        apiFetch(`/projects`),
+        apiFetch(`/accounting/billing-items`),
+        apiFetch(`/accounting/expenses`),
+        apiFetch(`/accounting/invoices`),
+        apiFetch(`/accounting/collections`),
       ]);
 
       // Parse each response, extracting the data array

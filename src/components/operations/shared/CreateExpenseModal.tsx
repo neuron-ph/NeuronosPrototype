@@ -1,7 +1,7 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { X } from "lucide-react";
 import type { Expense } from "../../../types/operations";
-import { projectId, publicAnonKey } from "../../../utils/supabase/info";
+import { apiFetch } from "../../../utils/api";
 import { toast } from "../../ui/toast-utils";
 
 interface CreateExpenseModalProps {
@@ -10,8 +10,6 @@ interface CreateExpenseModalProps {
   onClose: () => void;
   onExpenseCreated: () => void;
 }
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 const EXPENSE_CATEGORIES = [
   "Trucking Fee",
@@ -65,12 +63,8 @@ export function CreateExpenseModal({
         notes: notes || undefined,
       };
 
-      const response = await fetch(`${API_URL}/expenses`, {
+      const response = await apiFetch(`/expenses`, {
         method: "POST",
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify(expenseData)
       });
 

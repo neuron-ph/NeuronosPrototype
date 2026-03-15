@@ -4,9 +4,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Plus } from "lucide-react";
-import { projectId, publicAnonKey } from "../../../utils/supabase/info";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
+import { apiFetch } from "../../../utils/api";
 
 // ==================== TYPES ====================
 
@@ -49,9 +47,7 @@ async function fetchCatalogItems(forceRefresh = false): Promise<CatalogItem[]> {
     return cachedItems;
   }
   try {
-    const res = await fetch(`${API_URL}/catalog/items`, {
-      headers: { Authorization: `Bearer ${publicAnonKey}` },
-    });
+    const res = await apiFetch(`/catalog/items`);
     const json = await res.json();
     if (json.success && Array.isArray(json.data)) {
       cachedItems = json.data;
@@ -217,16 +213,12 @@ export function CatalogItemCombobox({
     setIsCreating(true);
 
     try {
-      const res = await fetch(`${API_URL}/catalog/items`, {
+      const res = await apiFetch(`/catalog/items`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
           name,
           type: itemType,
-          category: name, // category = name itself
+          category: name,
           service_types: serviceType ? [serviceType] : [],
           default_currency: "PHP",
           is_taxable: itemType === "charge" || itemType === "both",

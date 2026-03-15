@@ -1,10 +1,8 @@
 import { useState, useEffect } from "react";
 import type { Project } from "../../types/pricing";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
+import { apiFetch } from "../../utils/api";
 import type { Expense as OperationsExpense } from "../../types/operations";
 import { UnifiedExpensesTab } from "../accounting/UnifiedExpensesTab";
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c142e950`;
 
 interface ProjectExpensesTabProps {
   project: Project;
@@ -31,13 +29,7 @@ export function ProjectExpensesTab({ project, currentUser, title, subtitle }: Pr
   const fetchAllExpenses = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`${API_URL}/evouchers`, {
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
+      const response = await apiFetch(`/evouchers`);
       if (response.ok) {
         const result = await response.json();
         if (result.success && result.data) {

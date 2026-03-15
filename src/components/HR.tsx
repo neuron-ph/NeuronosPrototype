@@ -27,7 +27,6 @@ import { EmployeeFileModal } from "./hr/EmployeeFileModal";
 import { EditableTimekeepingCell } from "./hr/EditableTimekeepingCell";
 import type { EmployeeRowData } from "./hr/EmployeesList";
 import { toast } from "./ui/toast-utils";
-import type { UserRole } from "./Login";
 
 type HRSection = "Profile" | "Timekeeping" | "Payroll";
 
@@ -113,7 +112,7 @@ const MOCK_EMPLOYEES: Employee[] = [
 ];
 
 interface HRProps {
-  userRole: UserRole;
+  userRole: 'rep' | 'manager' | 'director';
 }
 
 export function HR({ userRole }: HRProps) {
