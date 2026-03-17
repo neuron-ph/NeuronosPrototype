@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import type { LifecycleStage, LeadStatus } from "../../types/bd";
 import { supabase } from "../../utils/supabase/client";
 import { CustomSelect } from "./CustomSelect";

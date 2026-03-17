@@ -1,6 +1,11 @@
+import { useState, useEffect, useRef } from "react";
+import { Plus, Search, Users as UsersIcon, MoreHorizontal, Building2, Target, Briefcase, TrendingUp, Trash2 } from "lucide-react";
 import { NeuronKPICard } from "../ui/NeuronKPICard";
 import { supabase } from "../../utils/supabase/client";
 import { useUsers } from "../../hooks/useUsers";
+import type { Customer, Industry, CustomerStatus } from "../../types/bd";
+import { CustomDropdown } from "../bd/CustomDropdown";
+import { AddCustomerPanel } from "../bd/AddCustomerPanel";
 
 interface CustomersListWithFiltersProps {
   userDepartment: "Business Development" | "Pricing";

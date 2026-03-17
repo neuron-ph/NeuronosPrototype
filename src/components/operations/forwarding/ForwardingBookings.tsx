@@ -16,6 +16,28 @@ interface ForwardingBookingsProps {
   pendingBookingId?: string | null;
 }
 
+/** Maps a unified bookings row to the ForwardingBooking shape */
+function mapToForwardingBooking(row: Record<string, any>): ForwardingBooking {
+  const d = row.details || {};
+  return {
+    ...row,
+    bookingId: row.id,
+    booking_number: row.booking_number,
+    customerName: row.customer_name,
+    projectNumber: row.project_id,
+    accountOwner: row.manager_name,
+    accountHandler: row.handler_name,
+    assigned_handler_name: row.handler_name,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at || row.created_at,
+    movement: d.movement_type,
+    mode: d.mode,
+    portOfLoading: d.origin,
+    portOfDischarge: d.destination,
+  } as ForwardingBooking;
+}
+
 export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookingId }: ForwardingBookingsProps) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -29,9 +51,13 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
 
   // ── Cached bookings fetch ─────────────────────────────────
   const bookingsFetcher = async (): Promise<ForwardingBooking[]> => {
-    const { data, error } = await supabase.from('forwarding_bookings').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('service_type', 'Forwarding')
+      .order('created_at', { ascending: false });
     if (error) throw error;
-    return data || [];
+    return (data || []).map(mapToForwardingBooking);
   };
 
   const { data: bookings, isLoading, refresh: fetchBookings } = useCachedFetch<ForwardingBooking[]>(
@@ -62,7 +88,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
     }
 
     try {
-      const { error } = await supabase.from('forwarding_bookings').delete().eq('bookingId', bookingId);
+      const { error } = await supabase.from('bookings').delete().eq('id', bookingId);
       if (error) throw error;
 
       toast.success('Booking deleted successfully');
@@ -100,8 +126,8 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
   // Apply all filters
   const filteredBookings = getFilteredByTab().filter(booking => {
     // Search filter
-    const matchesSearch = 
-      booking.bookingId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch =
+      ((booking as any).booking_number || booking.bookingId).toLowerCase().includes(searchTerm.toLowerCase()) ||
       booking.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (booking.projectNumber && booking.projectNumber.toLowerCase().includes(searchTerm.toLowerCase()));
     
@@ -473,7 +499,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
                               color: "#12332B",
                               marginBottom: "2px"
                             }}>
-                              {booking.bookingId}
+                              {(booking as any).booking_number || booking.bookingId}
                             </div>
                             {booking.projectNumber && (
                               <div style={{ 

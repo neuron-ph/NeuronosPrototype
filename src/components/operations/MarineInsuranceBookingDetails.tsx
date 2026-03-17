@@ -1,12 +1,16 @@
+import { useState } from "react";
+import { ArrowLeft, MoreVertical, Lock, Clock, ChevronRight } from "lucide-react";
 import { ExpensesTab } from "./shared/ExpensesTab";
 import { useProjectFinancials } from "../../hooks/useProjectFinancials";
 import { StatusSelector } from "../StatusSelector";
 import { EditableSectionCard, useSectionEdit } from "../shared/EditableSectionCard";
 import { EditableField } from "../shared/EditableField";
-import { ArrowLeft, MoreVertical, Lock, Clock, ChevronRight } from "lucide-react";
 import type { MarineInsuranceBooking, ExecutionStatus } from "../../types/operations";
 import { UnifiedBillingsTab } from "../shared/billings/UnifiedBillingsTab";
 import { BookingRateCardButton } from "../contracts/BookingRateCardButton";
+import { supabase } from "../../utils/supabase/client";
+import { toast } from "sonner@2.0.3";
+import { BookingCommentsTab } from "../shared/BookingCommentsTab";
 
 
 interface MarineInsuranceBookingDetailsProps {

@@ -1,9 +1,13 @@
+import { useState, useEffect } from "react";
+import { X } from "lucide-react";
 import { ExpensesTab } from "../operations/shared/ExpensesTab";
 import { supabase } from "../../utils/supabase/client";
 import { useProjectFinancials } from "../../hooks/useProjectFinancials";
 import { StatusSelector } from "../StatusSelector";
 import { ExecutionStatus } from "../../types/operations";
 import { toast } from "../ui/toast-utils";
+import { UnifiedBillingsTab } from "../shared/billings/UnifiedBillingsTab";
+import { BookingCommentsTab } from "../shared/BookingCommentsTab";
 
 interface ProjectBookingReadOnlyViewProps {
   bookingId: string;

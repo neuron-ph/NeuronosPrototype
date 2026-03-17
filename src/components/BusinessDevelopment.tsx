@@ -67,7 +67,6 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
     const { data, error } = await supabase
       .from('quotations')
       .select('*')
-      .eq('department', 'bd')
       .order('created_at', { ascending: false });
     if (error) throw new Error(error.message);
     return data || [];

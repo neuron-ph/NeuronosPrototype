@@ -1,6 +1,31 @@
+import { useState, useEffect } from "react";
+import { Search, Plus, Mail, Phone, Building2, Users, UserCheck, UserCircle, MoreHorizontal } from "lucide-react";
 import { NeuronKPICard } from "../ui/NeuronKPICard";
 import { supabase } from "../../utils/supabase/client";
 import { useUsers } from "../../hooks/useUsers";
+import { AddContactPanel } from "../bd/AddContactPanel";
+import { CustomDropdown } from "../bd/CustomDropdown";
+import { toast } from "sonner@2.0.3";
+import type { Contact, LifecycleStage, LeadStatus } from "../../types/bd";
+
+interface BackendContact {
+  id: string;
+  name: string;
+  title: string | null;
+  customer_id: string | null;
+  email: string | null;
+  phone: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  lifecycle_stage?: LifecycleStage;
+  lead_status?: LeadStatus;
+  owner_id?: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  customers?: { name: string } | null;
+}
 
 interface ContactsListWithFiltersProps {
   userDepartment: "Business Development" | "Pricing";
@@ -65,7 +90,7 @@ export function ContactsListWithFilters({ userDepartment, onViewContact }: Conta
     try {
       let query = supabase.from('contacts').select('*');
       if (searchQuery) {
-        query = query.or(`first_name.ilike.%${searchQuery}%,last_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
+        query = query.or(`name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
       }
       const { data, error } = await query.order('created_at', { ascending: false });
       if (!error && data) {
@@ -448,7 +473,7 @@ export function ContactsListWithFilters({ userDepartment, onViewContact }: Conta
                             <UserCircle size={16} />
                           </div>
                           <span className="text-[13px]" style={{ color: "var(--neuron-ink-primary)" }}>
-                            {`${contact.first_name || ''} ${contact.last_name || ''}`.trim()}
+                            {(contact as any).name || `${contact.first_name || ''} ${contact.last_name || ''}`.trim()}
                           </span>
                         </div>
                       </td>

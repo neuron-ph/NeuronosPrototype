@@ -1,6 +1,12 @@
+import { useState, useEffect, useRef } from "react";
+import { Search, Plus, Building2, Target, Briefcase, TrendingUp, Trash2, MoreHorizontal, Users as UsersIcon } from "lucide-react";
 import { NeuronKPICard } from "../ui/NeuronKPICard";
 import { toast } from "../ui/toast-utils";
 import { supabase } from "../../utils/supabase/client";
+import type { Customer, Industry, CustomerStatus } from "../../types/bd";
+import { CustomDropdown } from "../bd/CustomDropdown";
+import { AddCustomerPanel } from "../bd/AddCustomerPanel";
+import { CustomerLedgerDetail } from "./CustomerLedgerDetail";
 
 export function AccountingCustomers() {
   const [view, setView] = useState<"list" | "detail">("list");

@@ -1,5 +1,10 @@
+import { useState, useEffect } from "react";
+import { Search, Plus, Calendar, Flag, Phone, Mail, Send, Users, MessageSquare, MessageCircle, Linkedin, ListTodo, CheckCircle2 } from "lucide-react";
 import { supabase } from '../../utils/supabase/client';
 import { toast } from "../ui/toast-utils";
+import type { Task, TaskPriority, TaskStatus, TaskType } from "../../types/bd";
+import { CustomDropdown } from "./CustomDropdown";
+import { AddTaskPanel } from "./AddTaskPanel";
 
 interface TasksListProps {
   onViewTask: (task: Task) => void;

@@ -1,5 +1,9 @@
+import { useState, useEffect } from "react";
+import { FileText, Plus, Loader2, Filter, CheckSquare, Square, ChevronRight, Printer, Mail } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
+import type { Project } from "../../types/pricing";
+import type { EVoucher } from "../../types/evoucher";
 
 interface ProjectBillingsTabProps {
   project: Project;

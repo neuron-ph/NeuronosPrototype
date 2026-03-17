@@ -437,7 +437,6 @@ export function UnifiedBillingsTab({
 
           // Recalculate booking_id for each item based on its service_type
           const itemsToSave = localItems.map(item => {
-            // Only reroute if we're at project level (no explicit bookingId prop)
             if (!bookingId && item.service_type && saveServiceToBookingMap.has(item.service_type)) {
               return { ...item, booking_id: saveServiceToBookingMap.get(item.service_type) };
             }
@@ -445,26 +444,57 @@ export function UnifiedBillingsTab({
           });
 
           toast.info("Saving changes...");
-          
-          const billingRows = itemsToSave.map((item: any) => ({
-              ...item,
-              project_id: projectId,
-              transaction_type: 'billing',
-              status: item.status || 'unbilled',
-              created_at: item.created_at || new Date().toISOString(),
-          }));
 
-          // Upsert: items with existing IDs get updated, new items get inserted
-          const { error: upsertError } = await supabase.from('evouchers').upsert(billingRows);
-          
-          if (!upsertError) {
+          const isNew = (item: any) =>
+            item.is_virtual ||
+            (item.id && (item.id.startsWith('temp-') || item.id.startsWith('virtual-')));
+
+          const mapRow = (item: any) => ({
+            booking_id: item.booking_id || null,
+            project_number: projectId,
+            description: item.description || "",
+            service_type: item.service_type || "",
+            category: item.quotation_category || "Uncategorized",
+            amount: item.amount || 0,
+            quantity: item.quantity || 1,
+            currency: item.currency || "PHP",
+            status: item.status || "unbilled",
+            is_taxed: item.is_taxed || false,
+            catalog_item_id: item.catalog_item_id || null,
+            created_at: item.created_at || new Date().toISOString(),
+          });
+
+          const realItems = itemsToSave.filter(i => !isNew(i));
+          const newItems = itemsToSave.filter(i => isNew(i));
+
+          const ops: Promise<any>[] = [];
+
+          if (realItems.length > 0) {
+            ops.push(
+              supabase.from('billing_line_items').upsert(
+                realItems.map(i => ({ id: i.id, ...mapRow(i) }))
+              )
+            );
+          }
+          if (newItems.length > 0) {
+            ops.push(
+              supabase.from('billing_line_items').insert(
+                newItems.map(i => mapRow(i))
+              )
+            );
+          }
+
+          const results = await Promise.all(ops);
+          const saveError = results.find(r => r.error)?.error;
+
+          if (!saveError) {
               toast.success("Changes saved successfully");
               setPendingChanges(false);
               onRefresh();
           } else {
-              toast.error(upsertError.message || "Failed to save changes");
+              toast.error(saveError.message || "Failed to save changes");
           }
-          
+
       } catch (error) {
           console.error("Error saving billings:", error);
           toast.error("Failed to save changes");

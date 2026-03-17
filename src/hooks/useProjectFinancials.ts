@@ -50,11 +50,13 @@ export function useProjectFinancials(
         { data: billingItemRows, error: billingErr },
         { data: evoucherRows, error: evoucherErr },
         { data: collectionRows, error: collectionErr },
+        { data: expenseRows, error: expenseErr },
       ] = await Promise.all([
         supabase.from('invoices').select('*').eq('project_number', projectNumber),
         supabase.from('billing_line_items').select('*'),
         supabase.from('evouchers').select('*'),
         supabase.from('collections').select('*').eq('project_number', projectNumber),
+        supabase.from('expenses').select('*').eq('project_number', projectNumber),
       ]);
 
       // 5. Fetch Quotation (Optional)
@@ -78,43 +80,31 @@ export function useProjectFinancials(
         }));
       }
 
-      // Process Expenses
+      // Process Expenses — from the dedicated expenses table
       let relevantExpenses: any[] = [];
-      if (!evoucherErr && evoucherRows) {
-         const allEVouchers = evoucherRows;
-         
-         // Create a Set of valid IDs (Project Number + All Linked Booking IDs)
-         const validIds = new Set([
-           projectNumber,
-           ...(linkedBookings.map(b => b.bookingId))
-         ]);
-
-         // Filter for relevant expenses
-         relevantExpenses = allEVouchers.filter((ev: any) => {
-           const isRelevant = validIds.has(ev.project_number) || validIds.has(ev.booking_id);
-           if (!isRelevant) return false;
-           const type = (ev.transaction_type || "").toLowerCase();
-           return type === "expense" || type === "budget_request";
-         }).map((ev: any) => ({
-           id: ev.id,
-           evoucher_id: ev.id,
-           created_at: ev.created_at || ev.request_date,
-           description: ev.purpose || ev.description,
-           amount: ev.total_amount || ev.amount || 0,
-           total_amount: ev.total_amount || ev.amount || 0,
-           currency: ev.currency || "PHP",
-           status: ev.status,
-           expense_category: ev.expense_category,
-           is_billable: ev.is_billable,
-           project_number: ev.project_number,
-           booking_id: ev.booking_id,
-           vendor_name: ev.vendor_name,
-           payment_status: (ev.status || "").toLowerCase() === 'paid' ? 'paid' : 'unpaid'
-         }));
-
-         setExpenses(relevantExpenses.filter((e: any) => 
-           ["approved", "posted", "paid", "partial"].includes((e.status || "").toLowerCase())
-         ));
+      if (!expenseErr && expenseRows) {
+        relevantExpenses = expenseRows;
+        const mapped = expenseRows
+          .filter((exp: any) =>
+            ["approved", "posted", "paid", "partial"].includes((exp.status || "").toLowerCase())
+          )
+          .map((exp: any) => ({
+            id: exp.id,
+            expenseName: exp.receipt_number || exp.id,
+            expenseCategory: exp.category || "General",
+            vendorName: exp.vendor_name || "—",
+            description: exp.description || "",
+            bookingId: exp.booking_id || exp.project_number || "",
+            expenseDate: exp.created_at,
+            createdAt: exp.created_at,
+            status: exp.status || "draft",
+            amount: exp.amount || 0,
+            currency: exp.currency || "PHP",
+            isBillable: exp.is_billable || false,
+            serviceType: exp.service_type,
+            projectNumber: exp.project_number,
+          }));
+        setExpenses(mapped);
       }
       
       // Process Billing Items (Client-side filtering for robustness)

@@ -1,5 +1,12 @@
+import { useState, useEffect } from "react";
+import { Plus, Inbox } from "lucide-react";
 import { useUser } from "../hooks/useUser";
+import { supabase } from "../utils/supabase/client";
 import type { Ticket, TicketStatus } from "./InboxPage";
+import { CustomDropdown } from "./bd/CustomDropdown";
+import { TicketManagementTable } from "./ticketing/TicketManagementTable";
+import { TicketDetailModal } from "./ticketing/TicketDetailModal";
+import { NewTicketPanel } from "./ticketing/NewTicketPanel";
 
 type TabType = "all" | "my-tickets";
 

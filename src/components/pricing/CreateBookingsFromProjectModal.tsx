@@ -1,5 +1,9 @@
+import { useState } from "react";
+import { X, Package, Check, Loader2 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { supabase } from "../../utils/supabase/client";
+import type { Project, ServiceType } from "../../types/pricing";
+import { TeamAssignmentForm, type TeamAssignment } from "./TeamAssignmentForm";
 
 interface CreateBookingsFromProjectModalProps {
   isOpen: boolean;

@@ -1,5 +1,14 @@
+import { useState, useEffect } from "react";
+import { ArrowLeft, Building2, Award, MapPin, User, Mail, Phone, Ship, MessageSquare, Trash2, Plus, Edit, ShieldCheck, Plane, FileText } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { useNetworkPartners } from "../../hooks/useNetworkPartners";
+import type { NetworkPartner } from "../../data/networkPartners";
+import { isExpired, formatExpiryDate, COUNTRIES } from "../../data/networkPartners";
+import type { QuotationChargeCategory } from "../../types/pricing";
+import { CustomDropdown } from "../bd/CustomDropdown";
+import { CustomDatePicker } from "../common/CustomDatePicker";
+import { ChargeCategoriesManager } from "./shared/ChargeCategoriesManager";
+import { PartnerSheet } from "./partners/PartnerSheet";
 
 // --- UNIFIED COMPONENT SYSTEM ---
 

@@ -1,3 +1,4 @@
+import { CheckSquare, Phone, Mail, Users, Send, MessageSquare, Linkedin } from "lucide-react";
 import { CustomDropdown } from "./CustomDropdown";
 import { supabase } from "../../utils/supabase/client";
 import { useState, useEffect } from "react";

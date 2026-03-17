@@ -1,3 +1,5 @@
+import { useState, useEffect } from "react";
+import { Search, Plus, BarChart, FileText } from "lucide-react";
 import { supabase } from '../../utils/supabase/client';
 import { toast } from 'sonner@2.0.3';
 

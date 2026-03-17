@@ -125,8 +125,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let isMounted = true;
 
-    // Get initial session
-    supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
+    // Get initial session (with 5s timeout in case token refresh hangs)
+    const sessionTimeout = new Promise<{ data: { session: null } }>((resolve) =>
+      setTimeout(() => resolve({ data: { session: null } }), 5000)
+    );
+    Promise.race([supabase.auth.getSession(), sessionTimeout])
+    .then(async ({ data: { session: initialSession } }) => {
       if (!isMounted) return;
 
       if (initialSession) {
@@ -163,6 +167,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
         }
       }
 
+      if (isMounted) setIsLoading(false);
+    }).catch(() => {
       if (isMounted) setIsLoading(false);
     });
 

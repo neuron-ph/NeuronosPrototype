@@ -13,12 +13,14 @@ import {
   Banknote,
   AlertTriangle,
   RefreshCw,
+  Printer,
   type LucideIcon,
 } from "lucide-react";
 import { useReportsData } from "../../../hooks/useReportsData";
 import { SalesReport } from "./SalesReport";
 import { ScopeBar } from "../aggregate/ScopeBar";
-import { createDateScope, type DateScope } from "../aggregate/types";
+import { createDateScope } from "../aggregate/types";
+import type { DateScope } from "../aggregate/types";
 
 // ── Report registry ──
 
@@ -72,7 +74,7 @@ const REPORTS: ReportEntry[] = [
 
 export function ReportsModule() {
   const [activeReport, setActiveReport] = useState("sales");
-  const [scope, setScope] = useState<DateScope>(createDateScope("all"));
+  const [scope, setScope] = useState<DateScope>(() => createDateScope("this-month"));
   const data = useReportsData();
 
   const activeEntry = REPORTS.find((r) => r.id === activeReport) || REPORTS[0];
@@ -80,13 +82,7 @@ export function ReportsModule() {
   const renderReport = () => {
     switch (activeReport) {
       case "sales":
-        return (
-          <SalesReport
-            data={data}
-            scope={scope}
-            onScopeChange={setScope}
-          />
-        );
+        return <SalesReport data={data} scope={scope} />;
       // Phase 2-5 reports will go here
       default:
         return (
@@ -140,6 +136,16 @@ export function ReportsModule() {
           </div>
 
           <div className="flex items-center gap-3">
+            <ScopeBar scope={scope} onScopeChange={setScope} standalone />
+            <div style={{ width: "1px", height: 24, backgroundColor: "var(--neuron-ui-border)" }} />
+            <button
+              onClick={() => window.print()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors hover:bg-[var(--neuron-state-hover)]"
+              style={{ color: "var(--neuron-ink-muted)", border: "1px solid var(--neuron-ui-border)" }}
+            >
+              <Printer size={14} />
+              Print
+            </button>
             <button
               onClick={() => data.refresh()}
               className="p-2 rounded-lg transition-colors hover:bg-[var(--neuron-state-hover)]"

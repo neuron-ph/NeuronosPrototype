@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { X } from "lucide-react";
 import { supabase } from '../../utils/supabase/client';
 import { toast } from "../ui/toast-utils";
+import type { QuotationNew } from "../../types/pricing";
 
 interface CreateProjectModalProps {
   quotation: QuotationNew;

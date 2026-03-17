@@ -1,8 +1,12 @@
+import { useState, useEffect } from "react";
+import { Plus, ChevronDown, FileText } from "lucide-react";
 import { CreateBookingFromProjectPanel } from "./CreateBookingFromProjectPanel";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
 import { BookingsTable } from "../shared/BookingsTable";
 import { getServiceIcon } from "../../utils/quotation-helpers";
+import type { Project } from "../../types/pricing";
+import { ProjectBookingReadOnlyView } from "./ProjectBookingReadOnlyView";
 
 interface ProjectBookingsTabProps {
   project: Project;

@@ -1,5 +1,10 @@
+import { useState, useEffect } from "react";
+import { Phone, Mail, Send, Users, MessageSquare, MessageCircle, Linkedin, FileText, RefreshCw, Plus, Search, Calendar } from "lucide-react";
 import { supabase } from '../../utils/supabase/client';
 import { toast } from "../ui/toast-utils";
+import type { Activity, ActivityType } from "../../types/bd";
+import { CustomDropdown } from "./CustomDropdown";
+import { AddActivityPanel } from "./AddActivityPanel";
 
 interface ActivitiesListProps {
   onViewActivity?: (activity: Activity) => void;

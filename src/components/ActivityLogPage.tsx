@@ -1,3 +1,5 @@
+import { useState, useEffect, useRef } from "react";
+import { Activity, Filter, RefreshCw, Download, ExternalLink } from "lucide-react";
 import { useUser } from "../hooks/useUser";
 import { supabase } from "../utils/supabase/client";
 import { useNavigate } from "react-router";

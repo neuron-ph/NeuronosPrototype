@@ -41,7 +41,7 @@ export function useReportsData(): ReportsData {
         { data: i, error: e4 },
         { data: c, error: e5 },
       ] = await Promise.all([
-        supabase.from("projects").select("*"),
+        supabase.from("projects").select("*, customers(id, name)"),
         supabase.from("billing_line_items").select("*"),
         supabase.from("expenses").select("*"),
         supabase.from("invoices").select("*"),

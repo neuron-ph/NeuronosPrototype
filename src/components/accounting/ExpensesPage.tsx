@@ -1,3 +1,6 @@
+import { useState, useEffect, useMemo } from "react";
+import { Search, Plus, ChevronRight, ChevronDown } from "lucide-react";
+import { PhilippinePeso } from "../icons/PhilippinePeso";
 import type { Expense } from "../../types/accounting";
 import { supabase } from "../../utils/supabase/client";
 import { useNavigate } from "react-router";

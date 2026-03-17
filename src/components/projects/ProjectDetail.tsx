@@ -1,7 +1,19 @@
+import { useState, useEffect } from "react";
+import { ArrowLeft, MoreVertical, Edit3, Copy, Archive, Trash2, Layout, FileText, Briefcase, Receipt, FileStack, DollarSign, TrendingUp, Paperclip, MessageSquare, Layers, Users } from "lucide-react";
 import type { Project, ProjectStatus } from "../../types/pricing";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
 import { useProjectFinancials } from "../../hooks/useProjectFinancials";
+import { ProjectStatusSelector } from "./ProjectStatusSelector";
+import { ProjectBookingsTab } from "./ProjectBookingsTab";
+import { ProjectFinancialOverview } from "./tabs/ProjectFinancialOverview";
+import { ProjectOverviewTab } from "./ProjectOverviewTab";
+import { ProjectExpensesTab } from "./ProjectExpensesTab";
+import { ProjectBillings } from "./tabs/ProjectBillings";
+import { ProjectInvoices } from "./tabs/ProjectInvoices";
+import { ProjectCollectionsTab } from "./ProjectCollectionsTab";
+import { ProjectAttachmentsTab } from "./ProjectAttachmentsTab";
+import { CommentsTab } from "../shared/CommentsTab";
 
 const PhilippinePeso = ({ size = 24, ...props }: any) => (
   <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>

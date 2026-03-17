@@ -1,6 +1,9 @@
+import { useState } from "react";
+import { ArrowLeft, CheckCircle, CheckSquare, CircleCheckBig, Flag, User, Building2, Phone, Mail, Users, Send, MessageCircle, MessageSquare, Linkedin, Upload, Paperclip, Trash2 } from "lucide-react";
 import { CustomDropdown } from "./CustomDropdown";
 import { supabase } from '../../utils/supabase/client';
 import { toast } from "../ui/toast-utils";
+import type { Task, TaskPriority, TaskStatus, TaskType } from "../../types/bd";
 
 interface TaskDetailInlineProps {
   task: Task;

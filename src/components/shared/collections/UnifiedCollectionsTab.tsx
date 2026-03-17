@@ -81,10 +81,10 @@ export function UnifiedCollectionsTab({
       // 1. Search Query
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
-        const matchRef = item.voucher_number?.toLowerCase().includes(query);
-        const matchCustomer = (item.vendor_name || item.customer_name)?.toLowerCase().includes(query);
+        const matchRef = item.collection_number?.toLowerCase().includes(query);
+        const matchCustomer = item.customer_name?.toLowerCase().includes(query);
         const matchMethod = item.payment_method?.toLowerCase().includes(query);
-        
+
         if (!matchRef && !matchCustomer && !matchMethod) return false;
       }
 
@@ -94,14 +94,14 @@ export function UnifiedCollectionsTab({
         if (filterStatus !== status) return false;
       }
 
-      // 3. Date Range (Based on Payment Date/Request Date)
+      // 3. Date Range (Based on Collection Date)
       if (dateFrom) {
-        const itemDate = new Date(item.request_date || item.created_at);
+        const itemDate = new Date(item.collection_date || item.created_at);
         const fromDate = new Date(dateFrom);
         if (itemDate < fromDate) return false;
       }
       if (dateTo) {
-        const itemDate = new Date(item.request_date || item.created_at);
+        const itemDate = new Date(item.collection_date || item.created_at);
         const toDate = new Date(dateTo);
         // Set to end of day
         toDate.setHours(23, 59, 59, 999);
@@ -124,7 +124,7 @@ export function UnifiedCollectionsTab({
       width: "140px",
       cell: (item) => (
         <span className="text-[12px] text-[#0A1D4D] font-medium">
-          {formatDate(item.request_date || item.created_at)}
+          {formatDate(item.collection_date || item.created_at)}
         </span>
       )
     },
@@ -133,7 +133,7 @@ export function UnifiedCollectionsTab({
       width: "140px",
       cell: (item) => (
         <span className="text-[12px] font-mono text-[#0F766E] font-medium">
-          {item.voucher_number}
+          {item.collection_number}
         </span>
       )
     },
@@ -141,7 +141,7 @@ export function UnifiedCollectionsTab({
       header: "Received From",
       cell: (item) => (
         <span className="text-[12px] text-[#344054] font-medium max-w-[200px] truncate block">
-          {item.vendor_name || item.customer_name || "—"}
+          {item.customer_name || "—"}
         </span>
       )
     },
@@ -159,7 +159,7 @@ export function UnifiedCollectionsTab({
       width: "140px",
       cell: (item) => (
         <span className="text-[12px] text-[#667085]">
-          {item.linked_billings?.length ? `${item.linked_billings.length} Invoices` : "Unallocated"}
+          {item.invoice_id ? "1 Invoice" : "Unallocated"}
         </span>
       )
     },
