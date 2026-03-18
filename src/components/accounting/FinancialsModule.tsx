@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { calculateFinancialTotals } from "../../utils/financialCalculations";
+import { calculateInvoiceBalance } from "../../utils/accounting-math";
 import type { FinancialData } from "../../hooks/useProjectFinancials";
 import type { BillingItem } from "../shared/billings/UnifiedBillingsTab";
 import type { Expense as OperationsExpense } from "../../types/operations";
@@ -78,6 +79,75 @@ const TABS: { id: FinancialsTab; label: string; icon: typeof Layout }[] = [
 ];
 
 // ── Component ──
+
+type RecordLineage = {
+  bookingRefs: string[];
+  projectRefs: string[];
+  contractRefs: string[];
+};
+
+const normalizeRef = (value: unknown): string => {
+  if (typeof value !== "string") return "";
+  return value.trim();
+};
+
+const collectUniqueRefs = (...lists: Array<unknown[] | undefined>): string[] => {
+  const refs = lists
+    .flatMap((list) => list ?? [])
+    .map(normalizeRef)
+    .filter(Boolean);
+
+  return [...new Set(refs)];
+};
+
+const readRefList = (value: unknown): string[] => (
+  Array.isArray(value) ? collectUniqueRefs(value) : []
+);
+
+const getDirectLineage = (item: any): RecordLineage => ({
+  bookingRefs: collectUniqueRefs(
+    [item.booking_id, item.bookingId],
+    Array.isArray(item.booking_ids) ? item.booking_ids : [],
+    Array.isArray(item.bookingIds) ? item.bookingIds : [],
+  ),
+  projectRefs: collectUniqueRefs(
+    [item.project_number, item.projectNumber],
+    readRefList(item.project_refs),
+    readRefList(item.projectRefs),
+  ),
+  contractRefs: collectUniqueRefs(
+    [item.quotation_number, item.quotationNumber, item.contract_number, item.contractNumber],
+    readRefList(item.contract_refs),
+    readRefList(item.contractRefs),
+  ),
+});
+
+const mergeLineages = (...lineages: RecordLineage[]): RecordLineage => ({
+  bookingRefs: collectUniqueRefs(...lineages.map((lineage) => lineage.bookingRefs)),
+  projectRefs: collectUniqueRefs(...lineages.map((lineage) => lineage.projectRefs)),
+  contractRefs: collectUniqueRefs(...lineages.map((lineage) => lineage.contractRefs)),
+});
+
+const getCollectionLinkedInvoiceIds = (item: any): string[] => {
+  const linkedBillings = Array.isArray(item.linked_billings)
+    ? item.linked_billings
+    : Array.isArray(item.linkedBillings)
+      ? item.linkedBillings
+      : [];
+
+  return collectUniqueRefs(
+    [item.invoice_id, item.invoiceId],
+    linkedBillings.flatMap((entry: any) => [entry?.id, entry?.invoice_id, entry?.invoiceId]),
+  );
+};
+
+const getPrimaryRefDisplay = (refs: string[], fallback = "—"): string => {
+  if (refs.length === 0) return fallback;
+  if (refs.length === 1) return refs[0];
+  return `${refs[0]} +${refs.length - 1}`;
+};
+
+const pickUniqueRef = (refs: string[]): string => (refs.length === 1 ? refs[0] : "");
 
 export function FinancialsModule() {
   const [activeTab, setActiveTab] = useState<FinancialsTab>("dashboard");
@@ -216,6 +286,87 @@ export function FinancialsModule() {
     fetchAll();
   }, [fetchAll]);
 
+  const invoiceById = useMemo(() => {
+    const map = new Map<string, any>();
+    invoices.forEach((invoice) => {
+      if (invoice?.id) {
+        map.set(invoice.id, invoice);
+      }
+    });
+    return map;
+  }, [invoices]);
+
+  const resolveLineage = useCallback((item: any): RecordLineage => {
+    const directLineage = getDirectLineage(item);
+
+    if (detectTargetTab(item) !== "collections") {
+      return directLineage;
+    }
+
+    const linkedInvoiceLineages = getCollectionLinkedInvoiceIds(item)
+      .map((invoiceId) => invoiceById.get(invoiceId))
+      .filter(Boolean)
+      .map((invoice) => getDirectLineage(invoice));
+
+    return mergeLineages(directLineage, ...linkedInvoiceLineages);
+  }, [detectTargetTab, invoiceById]);
+
+  const getResolvedRefDisplay = useCallback((item: any): string => {
+    const lineage = resolveLineage(item);
+    return (
+      getPrimaryRefDisplay(lineage.bookingRefs, "") ||
+      getPrimaryRefDisplay(lineage.projectRefs, "") ||
+      getPrimaryRefDisplay(lineage.contractRefs, "") ||
+      "â€”"
+    );
+  }, [resolveLineage]);
+
+  const handleResolvedRowClick = useCallback((item: any) => {
+    const directLineage = getDirectLineage(item);
+    const lineage = resolveLineage(item);
+    const bookingId = pickUniqueRef(directLineage.bookingRefs) || pickUniqueRef(lineage.bookingRefs);
+    const projectRef = pickUniqueRef(directLineage.projectRefs) || pickUniqueRef(lineage.projectRefs);
+    const contractRef = pickUniqueRef(directLineage.contractRefs) || pickUniqueRef(lineage.contractRefs);
+    const tab = detectTargetTab(item);
+    const recordId = item.id || "";
+    const hl = recordId ? `&highlight=${encodeURIComponent(recordId)}` : "";
+
+    if (tab === "expenses") {
+      if (bookingId) {
+        navigate(`/accounting/bookings?booking=${encodeURIComponent(bookingId)}&tab=expenses${hl}`);
+      } else {
+        toast.info("No linked booking for this expense.");
+      }
+      return;
+    }
+
+    if (bookingId) {
+      navigate(`/accounting/bookings?booking=${encodeURIComponent(bookingId)}&tab=${tab}${hl}`);
+      return;
+    }
+
+    if (projectRef) {
+      navigate(`/accounting/projects?project=${encodeURIComponent(projectRef)}&tab=${tab}${hl}`);
+      return;
+    }
+
+    if (contractRef) {
+      navigate(`/accounting/contracts?contract=${encodeURIComponent(contractRef)}&tab=${tab}${hl}`);
+      return;
+    }
+
+    if (
+      lineage.bookingRefs.length > 1 ||
+      lineage.projectRefs.length > 1 ||
+      lineage.contractRefs.length > 1
+    ) {
+      toast.info("This record spans multiple bookings or containers. Open it from a specific source file.");
+      return;
+    }
+
+    toast.info("No linked project, contract, or booking for this record.");
+  }, [detectTargetTab, navigate, resolveLineage]);
+
   // ── Derived data ──
 
   // Scope-filtered financials for Dashboard (Phase 5)
@@ -247,9 +398,13 @@ export function FinancialsModule() {
     );
   }, [typedBillingItems, scope]);
 
+  const activeScopedBillingItems = useMemo(() => (
+    scopedBillingItems.filter((item) => !["voided", "cancelled", "void"].includes((item.status || "").toLowerCase()))
+  ), [scopedBillingItems]);
+
   // Billings KPI cards
   const billingsKPIs: KPICard[] = useMemo(() => {
-    const items = scopedBillingItems;
+    const items = activeScopedBillingItems;
     const total = items.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
     const unbilledItems = items.filter((i) => (i.status || "").toLowerCase() === "unbilled");
     const unbilledTotal = unbilledItems.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
@@ -287,7 +442,7 @@ export function FinancialsModule() {
         severity: "normal" as const,
       },
     ];
-  }, [scopedBillingItems]);
+  }, [activeScopedBillingItems]);
 
   // ── Billings Aggregate (Phase 2) — Grouping + Table ──
 
@@ -305,6 +460,7 @@ export function FinancialsModule() {
     { value: "unbilled", label: "Unbilled", color: "#D97706" },
     { value: "billed", label: "Billed", color: "#0F766E" },
     { value: "paid", label: "Paid", color: "#16A34A" },
+    { value: "voided", label: "Voided", color: "#DC2626" },
   ];
 
   const BILLINGS_COLUMNS: AggColumnDef<BillingItem>[] = useMemo(() => [
@@ -321,7 +477,7 @@ export function FinancialsModule() {
       width: "110px",
       cell: (item: BillingItem) => (
         <span className="font-medium" style={{ color: "var(--neuron-brand-green)" }}>
-          {getRefDisplay(item)}
+          {getResolvedRefDisplay(item)}
         </span>
       ),
     },
@@ -353,7 +509,11 @@ export function FinancialsModule() {
       align: "center" as const,
       cell: (item: BillingItem) => {
         const s = (item.status || "").toLowerCase();
-        const color = s === "paid" ? "#16A34A" : s === "billed" ? "#0F766E" : "#D97706";
+        const color =
+          s === "paid" ? "#16A34A" :
+          s === "billed" ? "#0F766E" :
+          s === "voided" ? "#DC2626" :
+          "#D97706";
         return (
           <span
             className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase"
@@ -399,7 +559,7 @@ export function FinancialsModule() {
       let key: string;
       switch (billingsGroupBy) {
         case "booking":
-          key = item.booking_id || (item as any).project_number || "No Booking";
+          key = item.booking_id || "Unlinked Billing";
           break;
         case "customer":
           key = (item as any).customer_name || "Unknown Customer";
@@ -592,7 +752,7 @@ export function FinancialsModule() {
     {
       header: "Ref #",
       width: "100px",
-      cell: (inv: any) => getRefDisplay(inv),
+      cell: (inv: any) => getResolvedRefDisplay(inv),
     },
     {
       header: "Due Date",
@@ -673,12 +833,13 @@ export function FinancialsModule() {
       items = items.filter((inv: any) =>
         (inv.invoice_number || "").toLowerCase().includes(q) ||
         (inv.customer_name || "").toLowerCase().includes(q) ||
-        (inv.project_number || "").toLowerCase().includes(q) ||
+        resolveLineage(inv).projectRefs.concat(resolveLineage(inv).contractRefs, resolveLineage(inv).bookingRefs)
+          .some((ref) => ref.toLowerCase().includes(q)) ||
         (inv.id || "").toLowerCase().includes(q)
       );
     }
     return items;
-  }, [scopedInvoices, invoicesStatusFilter, invoicesAgingBucket, invoicesSearch]);
+  }, [scopedInvoices, invoicesStatusFilter, invoicesAgingBucket, invoicesSearch, resolveLineage]);
 
   // Grouped invoices
   const invoicesGroups: GroupedItems<any>[] = useMemo(() => {
@@ -691,13 +852,13 @@ export function FinancialsModule() {
           key = inv.customer_name || "Unknown Customer";
           break;
         case "project":
-          key = inv.project_number || "No Project";
+          key = getPrimaryRefDisplay(resolveLineage(inv).projectRefs, "No Project Ref");
           break;
         case "contract":
-          key = inv.quotation_number || inv.contract_number || "No Contract";
+          key = getPrimaryRefDisplay(resolveLineage(inv).contractRefs, "No Contract Ref");
           break;
         case "booking":
-          key = inv.booking_id || inv.project_number || "No Booking";
+          key = getPrimaryRefDisplay(resolveLineage(inv).bookingRefs, "Unlinked Invoice");
           break;
         default:
           key = "Other";
@@ -715,7 +876,7 @@ export function FinancialsModule() {
         count: items.length,
       }))
       .sort((a, b) => b.subtotal - a.subtotal);
-  }, [filteredInvoices, invoicesGroupBy]);
+  }, [filteredInvoices, invoicesGroupBy, resolveLineage]);
 
   // ══════════════════════════════════════════════
   // ── Collections Aggregate (Phase 4) ──
@@ -805,6 +966,8 @@ export function FinancialsModule() {
   const COLLECTIONS_STATUS_OPTIONS: StatusOption[] = [
     { value: "pending", label: "Pending", color: "#D97706" },
     { value: "posted", label: "Posted", color: "#16A34A" },
+    { value: "credited", label: "Customer Credit", color: "#1D4ED8" },
+    { value: "refunded", label: "Refunded", color: "#475467" },
     { value: "voided", label: "Voided", color: "#EF4444" },
   ];
 
@@ -835,7 +998,7 @@ export function FinancialsModule() {
     {
       header: "Ref #",
       width: "100px",
-      cell: (c: any) => getRefDisplay(c),
+      cell: (c: any) => getResolvedRefDisplay(c),
     },
     {
       header: "Method",
@@ -863,7 +1026,13 @@ export function FinancialsModule() {
       align: "center" as const,
       cell: (c: any) => {
         const s = (c.status || "posted").toLowerCase();
-        const colorMap: Record<string, string> = { posted: "#16A34A", pending: "#D97706", voided: "#EF4444" };
+        const colorMap: Record<string, string> = {
+          posted: "#16A34A",
+          pending: "#D97706",
+          credited: "#1D4ED8",
+          refunded: "#475467",
+          voided: "#EF4444",
+        };
         const color = colorMap[s] || "#16A34A";
         return (
           <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase"
@@ -886,13 +1055,14 @@ export function FinancialsModule() {
       items = items.filter((c: any) =>
         (c.customer_name || "").toLowerCase().includes(q) ||
         (c.invoice_number || "").toLowerCase().includes(q) ||
-        (c.project_number || "").toLowerCase().includes(q) ||
+        resolveLineage(c).projectRefs.concat(resolveLineage(c).contractRefs, resolveLineage(c).bookingRefs)
+          .some((ref) => ref.toLowerCase().includes(q)) ||
         (c.reference_number || c.or_number || "").toLowerCase().includes(q) ||
         (c.payment_method || c.mode_of_payment || "").toLowerCase().includes(q)
       );
     }
     return items;
-  }, [scopedCollections, collectionsStatusFilter, collectionsSearch]);
+  }, [scopedCollections, collectionsStatusFilter, collectionsSearch, resolveLineage]);
 
   // Grouped collections
   const collectionsGroups: GroupedItems<any>[] = useMemo(() => {
@@ -904,13 +1074,13 @@ export function FinancialsModule() {
           key = c.customer_name || "Unknown Customer";
           break;
         case "project":
-          key = c.project_number || "No Project";
+          key = getPrimaryRefDisplay(resolveLineage(c).projectRefs, "No Project Ref");
           break;
         case "contract":
-          key = c.quotation_number || c.contract_number || "No Contract";
+          key = getPrimaryRefDisplay(resolveLineage(c).contractRefs, "No Contract Ref");
           break;
         case "booking":
-          key = c.booking_id || c.project_number || "No Booking";
+          key = getPrimaryRefDisplay(resolveLineage(c).bookingRefs, "Unlinked Collection");
           break;
         default:
           key = "Other";
@@ -927,7 +1097,7 @@ export function FinancialsModule() {
         count: items.length,
       }))
       .sort((a, b) => b.subtotal - a.subtotal);
-  }, [filteredCollections, collectionsGroupBy]);
+  }, [filteredCollections, collectionsGroupBy, resolveLineage]);
 
   // ── Expenses Aggregate (Phase 4) ──
 
@@ -1028,7 +1198,7 @@ export function FinancialsModule() {
       width: "100px",
       cell: (e: any) => (
         <span className="font-medium" style={{ color: "var(--neuron-brand-green)" }}>
-          {getRefDisplay(e)}
+          {getResolvedRefDisplay(e)}
         </span>
       ),
     },
@@ -1090,7 +1260,8 @@ export function FinancialsModule() {
         (e.description || "").toLowerCase().includes(q) ||
         (e.expenseName || "").toLowerCase().includes(q) ||
         (e.vendorName || e.vendor || "").toLowerCase().includes(q) ||
-        (e.projectNumber || e.bookingId || "").toLowerCase().includes(q) ||
+        (e.bookingId || "").toLowerCase().includes(q) ||
+        (e.projectNumber || "").toLowerCase().includes(q) ||
         (e.expenseCategory || e.category || "").toLowerCase().includes(q)
       );
     }
@@ -1107,7 +1278,7 @@ export function FinancialsModule() {
           key = e.customerName || e.customer_name || "Unknown Customer";
           break;
         case "booking":
-          key = e.bookingId || e.projectNumber || "No Booking";
+          key = e.bookingId || "Unlinked Expense";
           break;
         default:
           key = "Other";
@@ -1239,7 +1410,7 @@ export function FinancialsModule() {
               groups={billingsGroups}
               columns={BILLINGS_COLUMNS}
               isLoading={isLoading}
-              onRowClick={handleRowClick}
+              onRowClick={handleResolvedRowClick}
               exportFileName="billings"
             />
           </AggregateFinancialShell>
@@ -1274,7 +1445,7 @@ export function FinancialsModule() {
               groups={invoicesGroups}
               columns={INVOICES_COLUMNS}
               isLoading={isLoading}
-              onRowClick={handleRowClick}
+              onRowClick={handleResolvedRowClick}
               exportFileName="invoices"
             />
           </AggregateFinancialShell>
@@ -1306,7 +1477,7 @@ export function FinancialsModule() {
               groups={collectionsGroups}
               columns={COLLECTIONS_COLUMNS}
               isLoading={isLoading}
-              onRowClick={handleRowClick}
+              onRowClick={handleResolvedRowClick}
               exportFileName="collections"
             />
           </AggregateFinancialShell>
@@ -1341,7 +1512,7 @@ export function FinancialsModule() {
               groups={expensesGroups}
               columns={EXPENSES_COLUMNS}
               isLoading={isLoading}
-              onRowClick={handleRowClick}
+              onRowClick={handleResolvedRowClick}
               exportFileName="expenses"
             />
           </AggregateFinancialShell>

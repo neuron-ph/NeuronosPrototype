@@ -1,16 +1,8 @@
-export interface FinancialTotals {
-  revenue: number;         // Invoiced Revenue
-  unbilledRevenue: number; // Potential Revenue (Unbilled items)
-  productionValue: number; // Invoiced + Unbilled
-  cost: number;            // Total Expenses (Accrual)
-  collected: number;       // Cash In
-  paidExpenses: number;    // Cash Out
-  netCashFlow: number;     // Cash In - Cash Out
-  grossProfit: number;     // Production Value - Cost
-  profitMargin: number;    // Margin based on Production Value
-  openInvoicesAmount: number;
-  overdueInvoicesAmount: number;
-}
+import type { FinancialTotalsV2 } from "../types/financials";
+import { isCollectionAppliedToInvoice } from "./collectionResolution";
+import { isInvoiceFinanciallyActive } from "./invoiceReversal";
+
+export type FinancialTotals = FinancialTotalsV2;
 
 export const calculateFinancialTotals = (
   invoices: any[],
@@ -18,34 +10,30 @@ export const calculateFinancialTotals = (
   expenses: any[],
   collections: any[]
 ): FinancialTotals => {
+  const activeInvoices = invoices.filter((invoice) => isInvoiceFinanciallyActive(invoice));
   
-  // 1. Revenue
-  // Invoiced Revenue: Sum of all valid invoices passed in
-  const invoicedRevenue = invoices.reduce((sum, item) => sum + (Number(item.amount) || Number(item.total_amount) || 0), 0);
+  const invoicedAmount = activeInvoices.reduce((sum, item) => sum + (Number(item.amount) || Number(item.total_amount) || 0), 0);
   
-  // Unbilled Revenue: Only items explicitly marked as 'unbilled'
-  const unbilledRevenue = billingItems
+  const unbilledCharges = billingItems
     .filter(item => (item.status || "").toLowerCase() === 'unbilled')
     .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
     
-  const productionValue = invoicedRevenue + unbilledRevenue; // Total Value Generated
+  const bookedCharges = invoicedAmount + unbilledCharges;
 
-  // 2. Costs (Accrual)
-  // Total Cost: Sum of all valid expenses passed in
-  const totalCost = expenses.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  const directCost = expenses.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
-  // 3. Cash Flow
-  const totalCollected = collections.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  const collectedAmount = collections
+    .filter((item) => isCollectionAppliedToInvoice(item))
+    .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   
-  const paidExpenses = expenses
+  const paidDirectCost = expenses
     .filter(item => ["paid", "cleared"].includes((item.status || "").toLowerCase()) || ["paid", "cleared"].includes((item.payment_status || "").toLowerCase()))
     .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
-  const netCashFlow = totalCollected - paidExpenses;
+  const netCashFlow = collectedAmount - paidDirectCost;
 
-  // 4. Profitability (Based on Production Value)
-  const grossProfit = productionValue - totalCost;
-  const profitMargin = productionValue > 0 ? (grossProfit / productionValue) * 100 : 0;
+  const grossProfit = bookedCharges - directCost;
+  const grossMargin = bookedCharges > 0 ? (grossProfit / bookedCharges) * 100 : 0;
 
   // Helper to check overdue
   const checkOverdue = (item: any) => {
@@ -63,7 +51,7 @@ export const calculateFinancialTotals = (
     return new Date() > dueDate;
   };
 
-  const openInvoicesAmount = invoices
+  const outstandingAmount = activeInvoices
     .reduce((sum, item) => {
       const isPaid = ["paid", "cleared"].includes((item.payment_status || "").toLowerCase());
       if (isPaid) return sum;
@@ -72,7 +60,7 @@ export const calculateFinancialTotals = (
       return sum + balance;
     }, 0);
   
-  const overdueInvoicesAmount = invoices
+  const overdueAmount = activeInvoices
     .filter(b => checkOverdue(b))
     .reduce((sum, item) => {
       const balance = item.remaining_balance !== undefined ? Number(item.remaining_balance) : (Number(item.amount) || Number(item.total_amount) || 0);
@@ -80,17 +68,17 @@ export const calculateFinancialTotals = (
     }, 0);
 
   return {
-    revenue: invoicedRevenue,
-    unbilledRevenue,
-    productionValue,
-    cost: totalCost,
-    collected: totalCollected,
-    paidExpenses,
+    bookedCharges,
+    unbilledCharges,
+    invoicedAmount,
+    collectedAmount,
+    directCost,
+    paidDirectCost,
     netCashFlow,
     grossProfit,
-    profitMargin,
-    openInvoicesAmount,
-    overdueInvoicesAmount
+    grossMargin,
+    outstandingAmount,
+    overdueAmount,
   };
 };
 
@@ -121,7 +109,7 @@ export const mergeBillableExpenses = (
       currency: e.currency || "PHP",
       status: 'unbilled', // Default for virtual items
       quotation_category: e.expense_category || "Billable Expenses",
-      booking_id: e.booking_id || e.project_number,
+      booking_id: e.booking_id || null,
       source_id: e.evoucher_id || e.id,
       source_type: 'billable_expense',
       vendor: e.vendor_name,
@@ -156,7 +144,7 @@ export const convertQuotationToVirtualItems = (quotation: any, projectNumber: st
         currency: item.currency,
         status: 'unbilled', // Virtual items are always unbilled
         quotation_category: cat.category_name,
-        booking_id: projectNumber,
+        booking_id: null,
         project_number: projectNumber,
         // Extended fields
         quantity: item.quantity,

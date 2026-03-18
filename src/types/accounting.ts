@@ -1,3 +1,10 @@
+/**
+ * Ledger, bank, and general accounting types.
+ *
+ * Booking-first Essentials finance domain types now live in `./financials.ts`
+ * so operational finance can evolve independently from the GL/account catalog
+ * layer defined here.
+ */
 export type Currency = 'USD' | 'PHP';
 
 export type AccountType = 

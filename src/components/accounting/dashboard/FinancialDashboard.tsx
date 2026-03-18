@@ -28,6 +28,8 @@ import type { AttentionItem } from "./AttentionPanel";
 import { ReceivablesAgingBar } from "./ReceivablesAgingBar";
 import { PLTrendCard } from "./PLTrendCard";
 import { toast } from "sonner@2.0.3";
+import { calculateInvoiceBalance } from "../../../utils/accounting-math";
+import { isCollectionAppliedToInvoice } from "../../../utils/collectionResolution";
 
 interface FinancialDashboardProps {
   billingItems: any[];
@@ -60,6 +62,38 @@ function getAgingDays(inv: any): number {
 
 const fmt = (amount: number) =>
   new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", maximumFractionDigits: 0 }).format(amount);
+
+function normalizeRef(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function collectContainerRefs(row: any): string[] {
+  const projectRefs = [
+    normalizeRef(row.project_number),
+    normalizeRef(row.projectNumber),
+    ...(Array.isArray(row.project_refs) ? row.project_refs.map(normalizeRef) : []),
+    ...(Array.isArray(row.project_numbers) ? row.project_numbers.map(normalizeRef) : []),
+  ].filter((entry): entry is string => Boolean(entry));
+
+  if (projectRefs.length > 0) return [...new Set(projectRefs)];
+
+  const contractRefs = [
+    normalizeRef(row.contract_number),
+    normalizeRef(row.contractNumber),
+    normalizeRef(row.quotation_number),
+    normalizeRef(row.quote_number),
+    ...(Array.isArray(row.contract_refs) ? row.contract_refs.map(normalizeRef) : []),
+    ...(Array.isArray(row.contract_ids) ? row.contract_ids.map(normalizeRef) : []),
+  ].filter((entry): entry is string => Boolean(entry));
+
+  if (contractRefs.length > 0) {
+    return [...new Set(contractRefs.map((ref) => `Contract: ${ref}`))];
+  }
+
+  return [];
+}
 
 export function FinancialDashboard({
   billingItems,
@@ -155,11 +189,11 @@ export function FinancialDashboard({
 
   // Cash Collected
   const totalCollected = useMemo(
-    () => scopedCollections.reduce((s, c: any) => s + (Number(c.amount) || 0), 0),
+    () => scopedCollections.filter((c: any) => isCollectionAppliedToInvoice(c)).reduce((s, c: any) => s + (Number(c.amount) || 0), 0),
     [scopedCollections]
   );
   const prevTotalCollected = useMemo(
-    () => prevCollections.reduce((s, c: any) => s + (Number(c.amount) || 0), 0),
+    () => prevCollections.filter((c: any) => isCollectionAppliedToInvoice(c)).reduce((s, c: any) => s + (Number(c.amount) || 0), 0),
     [prevCollections]
   );
   const collectionRate = invoicedRevenue > 0 ? (totalCollected / invoicedRevenue) * 100 : 0;
@@ -167,17 +201,13 @@ export function FinancialDashboard({
   // Outstanding AR (across ALL invoices, not scope-filtered — it's a balance sheet metric)
   const outstandingAR = useMemo(() => {
     return invoices
-      .filter((inv: any) => {
-        const s = (inv.status || "").toLowerCase();
-        const ps = (inv.payment_status || "").toLowerCase();
-        return s !== "paid" && ps !== "paid";
-      })
+      .map((inv: any) => calculateInvoiceBalance(inv, collections).balance)
+      .filter((balance: number) => balance > 0.01)
       .reduce(
-        (s, inv: any) =>
-          s + (Number(inv.remaining_balance ?? inv.total_amount ?? inv.amount ?? 0)),
+        (s, balance: number) => s + balance,
         0
       );
-  }, [invoices]);
+  }, [invoices, collections]);
 
   // DSO = (Outstanding AR / Net Revenue) * Days in period
   const daysInPeriod = useMemo(() => {
@@ -264,12 +294,10 @@ export function FinancialDashboard({
 
     // 1. Overdue invoices (30+ days)
     const overdueInvoices = invoices.filter((inv: any) => {
-      const s = (inv.status || "").toLowerCase();
-      if (s === "paid") return false;
-      return getAgingDays(inv) > 30;
+      return calculateInvoiceBalance(inv, collections).balance > 0.01 && getAgingDays(inv) > 30;
     });
     const overdueAmount = overdueInvoices.reduce(
-      (s, inv: any) => s + (Number(inv.remaining_balance ?? inv.total_amount ?? inv.amount ?? 0)),
+      (s, inv: any) => s + calculateInvoiceBalance(inv, collections).balance,
       0
     );
     if (overdueInvoices.length > 0) {
@@ -343,9 +371,7 @@ export function FinancialDashboard({
     } else {
       const uncollected = invoicedRevenue - totalCollected;
       const unpaidCount = invoices.filter((inv: any) => {
-        const s = (inv.status || "").toLowerCase();
-        const ps = (inv.payment_status || "").toLowerCase();
-        return s !== "paid" && ps !== "paid";
+        return calculateInvoiceBalance(inv, collections).balance > 0.01;
       }).length;
 
       items.push({
@@ -362,30 +388,29 @@ export function FinancialDashboard({
 
     return items;
   }, [
-    invoices, billingItems,
+    invoices, billingItems, collections,
     invoicedRevenue, totalCollected, onNavigateTab,
   ]);
 
   // ── Contextual Summary ──
   const summaryLine = useMemo(() => {
-    // Unique projects from scoped billing items
-    const projectSet = new Set<string>();
+    const containerSet = new Set<string>();
     const customerSet = new Set<string>();
 
     for (const b of scopedBillings) {
-      const pn = b.project_number || b.projectNumber;
-      if (pn) projectSet.add(pn);
+      collectContainerRefs(b).forEach((ref) => containerSet.add(ref));
       const cn = (b.customer_name || b.customerName || "").trim();
       if (cn && cn !== "Unknown Customer") customerSet.add(cn);
     }
     for (const inv of scopedInvoices) {
+      collectContainerRefs(inv).forEach((ref) => containerSet.add(ref));
       const cn = (inv.customer_name || inv.customerName || "").trim();
       if (cn && cn !== "Unknown Customer") customerSet.add(cn);
     }
 
     const parts: string[] = [];
     parts.push(formatCurrencyCompact(netRevenue) + " revenue");
-    if (projectSet.size > 0) parts.push(`${projectSet.size} project${projectSet.size !== 1 ? "s" : ""}`);
+    if (containerSet.size > 0) parts.push(`${containerSet.size} container${containerSet.size !== 1 ? "s" : ""}`);
     if (customerSet.size > 0) parts.push(`${customerSet.size} customer${customerSet.size !== 1 ? "s" : ""}`);
     if (collectionRate > 0) parts.push(`${collectionRate.toFixed(0)}% collection rate`);
 
@@ -425,10 +450,12 @@ export function FinancialDashboard({
       {/* Zone 4: Receivables Aging */}
       <ReceivablesAgingBar
         invoices={invoices}
+        collections={collections}
         dso={dso}
         onBucketClick={() => onNavigateTab("invoices")}
         onNavigate={() => onNavigateTab("invoices")}
         previousInvoices={prevInvoices}
+        previousCollections={prevCollections}
         unbilledItems={billingItems.filter(
           (b: any) => (b.status || "").toLowerCase() === "unbilled"
         )}
@@ -437,7 +464,7 @@ export function FinancialDashboard({
         onSendReminder={(inv: any) => {
           const invNumber = inv.invoice_number || inv.id || "Invoice";
           const customer = (inv.customer_name || inv.customerName || "").trim() || "Customer";
-          const balance = Number(inv.remaining_balance ?? inv.total_amount ?? inv.amount ?? 0);
+          const balance = calculateInvoiceBalance(inv, collections).balance;
           const dueDate = inv.due_date ? new Date(inv.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "N/A";
           const message = `Hi, this is a friendly reminder regarding ${invNumber} for ${fmt(balance)} due ${dueDate}. Please arrange payment at your earliest convenience. Thank you! — ${customer}`;
           navigator.clipboard.writeText(message).then(

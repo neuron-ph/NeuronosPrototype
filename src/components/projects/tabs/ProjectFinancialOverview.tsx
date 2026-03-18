@@ -9,15 +9,15 @@ interface ProjectFinancialOverviewProps {
 export function ProjectFinancialOverview({ financials }: ProjectFinancialOverviewProps) {
   const { invoices, expenses, collections, billingItems, totals } = financials;
   const { 
-    revenue, 
-    unbilledRevenue, 
-    productionValue, 
-    cost, 
-    collected, 
+    invoicedAmount,
+    unbilledCharges,
+    bookedCharges,
+    directCost,
+    collectedAmount,
     grossProfit, 
-    profitMargin, 
-    openInvoicesAmount, 
-    overdueInvoicesAmount 
+    grossMargin,
+    outstandingAmount,
+    overdueAmount,
   } = totals;
 
   // Formatter helper
@@ -29,11 +29,11 @@ export function ProjectFinancialOverview({ financials }: ProjectFinancialOvervie
   // SHARED SCALE LOGIC:
   // We determine the maximum value among Income, Cost, and Collected to create a relative scale.
   // This ensures the longest bar represents the largest value.
-  const maxValue = Math.max(productionValue, cost, collected, 1);
+  const maxValue = Math.max(bookedCharges, directCost, collectedAmount, 1);
 
-  const incomeWidth = (productionValue / maxValue) * 100;
-  const costWidth = (cost / maxValue) * 100;
-  const collectedWidth = (collected / maxValue) * 100;
+  const incomeWidth = (bookedCharges / maxValue) * 100;
+  const costWidth = (directCost / maxValue) * 100;
+  const collectedWidth = (collectedAmount / maxValue) * 100;
 
   // Grouping Logic for Income (Invoiced + Unbilled)
   const unbilledItems = billingItems.filter(b => (b.status || "").toLowerCase() === 'unbilled');
@@ -61,8 +61,8 @@ export function ProjectFinancialOverview({ financials }: ProjectFinancialOvervie
           {/* 1. Profit Margin (Left) */}
           <div className="w-[200px] flex flex-col justify-center pr-8 border-r border-[#E5E9F0]">
                 <div className="text-[11px] font-semibold text-[#667085] uppercase tracking-wider mb-1">Profit Margin</div>
-                <div className={`text-[32px] font-bold ${profitMargin >= 0 ? 'text-[#12332B]' : 'text-[#DC2626]'}`}>
-                  {profitMargin.toFixed(1)}%
+                <div className={`text-[32px] font-bold ${grossMargin >= 0 ? 'text-[#12332B]' : 'text-[#DC2626]'}`}>
+                  {grossMargin.toFixed(1)}%
                 </div>
                 <div className="text-[13px] text-[#667085] mt-1">
                   {grossProfit >= 0 ? "Net Profit" : "Net Loss"}: <span className="font-medium text-[#12332B]">{fmt(grossProfit)}</span>
@@ -87,11 +87,11 @@ export function ProjectFinancialOverview({ financials }: ProjectFinancialOvervie
                       ></div>
                       {/* Tooltip for unbilled */}
                       <div className="absolute top-[-25px] left-0 hidden group-hover:block bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap z-10">
-                        Invoiced: {fmt(revenue)} | Unbilled: {fmt(unbilledRevenue)}
+                        Invoiced: {fmt(invoicedAmount)} | Unbilled: {fmt(unbilledCharges)}
                       </div>
                   </div>
-                  <div className="w-24 text-right text-[14px] font-bold text-[#12332B]" title={`Invoiced: ${fmt(revenue)} + Unbilled: ${fmt(unbilledRevenue)}`}>
-                    {fmt(productionValue)}
+                  <div className="w-24 text-right text-[14px] font-bold text-[#12332B]" title={`Invoiced: ${fmt(invoicedAmount)} + Unbilled: ${fmt(unbilledCharges)}`}>
+                    {fmt(bookedCharges)}
                   </div>
               </div>
               
@@ -104,20 +104,20 @@ export function ProjectFinancialOverview({ financials }: ProjectFinancialOvervie
                           style={{ width: `${costWidth}%` }}
                       ></div>
                   </div>
-                  <div className="w-24 text-right text-[14px] font-bold text-[#12332B]">{fmt(cost)}</div>
+                  <div className="w-24 text-right text-[14px] font-bold text-[#12332B]">{fmt(directCost)}</div>
               </div>
 
               {/* Collections Row */}
               <div className="flex items-center gap-4 pt-6 mt-2 border-t border-[#E5E9F0] border-dashed">
                   <div className="w-16 text-[13px] font-medium text-[#667085]">Collected</div>
-                  <div className="flex-1 h-3 bg-[#F3F4F6] rounded-full overflow-hidden relative" title={`Invoiced: ${fmt(revenue)}`}>
+                  <div className="flex-1 h-3 bg-[#F3F4F6] rounded-full overflow-hidden relative" title={`Invoiced: ${fmt(invoicedAmount)}`}>
                       <div 
                           className="h-full bg-[#10B981] rounded-full transition-all duration-500 ease-out" 
                           style={{ width: `${collectedWidth}%` }}
-                          title={`Collected: ${fmt(collected)}`}
+                          title={`Collected: ${fmt(collectedAmount)}`}
                       ></div>
                   </div>
-                  <div className="w-24 text-right text-[14px] font-bold text-[#059669]">{fmt(collected)}</div>
+                  <div className="w-24 text-right text-[14px] font-bold text-[#059669]">{fmt(collectedAmount)}</div>
               </div>
           </div>
 
@@ -125,15 +125,15 @@ export function ProjectFinancialOverview({ financials }: ProjectFinancialOvervie
           <div className="w-[240px] pl-8 border-l border-[#E5E9F0] flex flex-col justify-center gap-4">
                 <div className="flex justify-between items-center">
                     <div className="text-[13px] font-medium text-[#667085]">Open Invoices</div>
-                    <div className="text-[14px] font-bold text-[#12332B]">{fmt(openInvoicesAmount)}</div>
+                    <div className="text-[14px] font-bold text-[#12332B]">{fmt(outstandingAmount)}</div>
                 </div>
                 <div className="flex justify-between items-center">
                     <div className="text-[13px] font-medium text-[#667085]">Overdue</div>
-                    <div className="text-[14px] font-bold text-[#DC2626]">{fmt(overdueInvoicesAmount)}</div>
+                    <div className="text-[14px] font-bold text-[#DC2626]">{fmt(overdueAmount)}</div>
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t border-[#E5E9F0]">
                     <div className="text-[13px] font-medium text-[#667085]">Paid</div>
-                    <div className="text-[14px] font-bold text-[#059669]">{fmt(collected)}</div>
+                    <div className="text-[14px] font-bold text-[#059669]">{fmt(collectedAmount)}</div>
                 </div>
           </div>
 
@@ -146,9 +146,9 @@ export function ProjectFinancialOverview({ financials }: ProjectFinancialOvervie
           <div className="bg-white rounded-xl border border-[#E5E9F0] overflow-hidden">
               <div className="px-6 py-4 border-b border-[#E5E9F0] bg-[#F0FDF9] flex justify-between items-center">
                   <h3 className="text-[13px] font-bold text-[#0F766E] uppercase tracking-wide">Income Breakdown</h3>
-                  {unbilledRevenue > 0 && (
+                  {unbilledCharges > 0 && (
                      <span className="text-[11px] font-medium text-[#0F766E] bg-white px-2 py-0.5 rounded border border-[#CCFBEF]">
-                       Includes {fmt(unbilledRevenue)} Unbilled
+                       Includes {fmt(unbilledCharges)} Unbilled
                      </span>
                   )}
               </div>
@@ -176,7 +176,7 @@ export function ProjectFinancialOverview({ financials }: ProjectFinancialOvervie
                       <tfoot className="bg-[#F8F9FB] border-t border-[#E5E9F0]">
                           <tr>
                               <td className="px-6 py-3 text-[13px] font-bold text-[#12332B]">Total Income</td>
-                              <td className="px-6 py-3 text-[13px] font-bold text-right text-[#0F766E]">{fmt(productionValue)}</td>
+                              <td className="px-6 py-3 text-[13px] font-bold text-right text-[#0F766E]">{fmt(bookedCharges)}</td>
                           </tr>
                       </tfoot>
                   </table>
@@ -212,7 +212,7 @@ export function ProjectFinancialOverview({ financials }: ProjectFinancialOvervie
                       <tfoot className="bg-[#F8F9FB] border-t border-[#E5E9F0]">
                           <tr>
                               <td className="px-6 py-3 text-[13px] font-bold text-[#12332B]">Total Costs</td>
-                              <td className="px-6 py-3 text-[13px] font-bold text-right text-[#C05621]">{fmt(cost)}</td>
+                              <td className="px-6 py-3 text-[13px] font-bold text-right text-[#C05621]">{fmt(directCost)}</td>
                           </tr>
                       </tfoot>
                   </table>

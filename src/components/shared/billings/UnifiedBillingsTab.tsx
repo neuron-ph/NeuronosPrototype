@@ -7,6 +7,7 @@ import { CategoryPresetDropdown } from "../../pricing/quotations/CategoryPresetD
 import { toast } from "../../ui/toast-utils";
 import { supabase } from "../../../utils/supabase/client";
 import type { QuotationNew } from "../../../types/pricing";
+import { buildServiceToBookingMap, resolveBookingIdForService } from "../../../utils/financialSelectors";
 
 // Interface matching the backend response for billing items
 export interface BillingItem {
@@ -16,7 +17,7 @@ export interface BillingItem {
   description: string;
   amount: number;
   currency: string;
-  status: 'unbilled' | 'billed' | 'paid';
+  status: 'unbilled' | 'billed' | 'paid' | 'voided';
   quotation_category?: string;
   booking_id?: string;
   // Linking fields
@@ -59,6 +60,8 @@ const formatCurrency = (amount: number, currency: string = "PHP") => {
 };
 
 const EMPTY_LINKED_BOOKINGS: any[] = [];
+const IMMUTABLE_BILLING_STATUSES = new Set(["billed", "paid", "invoiced", "voided", "cancelled", "void"]);
+const VOIDED_BILLING_STATUSES = new Set(["voided", "cancelled", "void"]);
 
 export function UnifiedBillingsTab({ 
   items, 
@@ -104,23 +107,17 @@ export function UnifiedBillingsTab({
   const mergedItems = useMemo(() => {
     // Build service-to-booking map from linkedBookings for auto-routing
     // Maps e.g. "Brokerage" → "BRK-20260301-1234"
-    const serviceToBookingMap = new Map<string, string>();
-    stableLinkedBookings.forEach((b: any) => {
-      const svc = b.serviceType || b.service_type || "";
-      const bid = b.bookingId || b.id;
-      if (svc && bid) serviceToBookingMap.set(svc, bid);
-    });
+    const serviceToBookingMap = buildServiceToBookingMap(stableLinkedBookings);
 
     // Helper: resolve booking_id from a service type
     const resolveBookingId = (serviceType: string | undefined) => {
       // If we're already at booking-level (bookingId prop set), use that
       if (bookingId) return bookingId;
       // Try to match service → booking
-      if (serviceType && serviceToBookingMap.has(serviceType)) {
-        return serviceToBookingMap.get(serviceType)!;
+      if (serviceType && serviceToBookingMap.has(serviceType.toLowerCase())) {
+        return serviceToBookingMap.get(serviceType.toLowerCase())!;
       }
-      // Fallback to project ID
-      return projectId;
+      return null;
     };
 
     // 1. Deep copy existing real items to avoid mutating props
@@ -235,6 +232,7 @@ export function UnifiedBillingsTab({
 
   const totalGrossAmount = useMemo(() => {
     return localItems
+      .filter(i => !VOIDED_BILLING_STATUSES.has((i.status || "").toLowerCase()))
       .reduce((sum, i) => sum + (i.amount || 0), 0);
   }, [localItems]);
 
@@ -298,6 +296,11 @@ export function UnifiedBillingsTab({
 
   const hasActiveFilters = dateFrom || dateTo || selectedCategory || selectedStatus || searchQuery;
 
+  const isImmutableBillingItem = (item?: BillingItem | null) => {
+    const status = (item?.status || "").toLowerCase();
+    return IMMUTABLE_BILLING_STATUSES.has(status);
+  };
+
   const handleClearFilters = () => {
     setDateFrom("");
     setDateTo("");
@@ -319,6 +322,11 @@ export function UnifiedBillingsTab({
 
   const handleRenameCategory = (oldName: string, newName: string) => {
     if (!newName.trim() || oldName === newName) return;
+    const hasImmutableItems = localItems.some((item) => (item.quotation_category || "General") === oldName && isImmutableBillingItem(item));
+    if (hasImmutableItems) {
+      toast.error("Categories with invoiced or paid billing lines cannot be renamed.");
+      return;
+    }
     
     // 1. Update Category State
     setActiveCategories(prev => {
@@ -340,6 +348,11 @@ export function UnifiedBillingsTab({
   };
 
   const handleDeleteCategory = (name: string) => {
+      const hasImmutableItems = localItems.some((item) => (item.quotation_category || "General") === name && isImmutableBillingItem(item));
+      if (hasImmutableItems) {
+          toast.error("Categories with invoiced or paid billing lines cannot be deleted.");
+          return;
+      }
       if (confirm(`Are you sure you want to delete category "${name}" and all its items?`)) {
           setActiveCategories(prev => {
               const next = new Set(prev);
@@ -361,7 +374,7 @@ export function UnifiedBillingsTab({
       currency: "PHP",
       status: "unbilled",
       quotation_category: categoryName,
-      booking_id: bookingId || projectId,
+      booking_id: bookingId || null,
       // Default Extended Fields
       quantity: 1,
       forex_rate: 1,
@@ -375,6 +388,12 @@ export function UnifiedBillingsTab({
   };
 
   const handleItemChange = (id: string, field: string, value: any) => {
+    const targetItem = localItems.find((item) => item.id === id);
+    if (targetItem && isImmutableBillingItem(targetItem)) {
+      toast.info("Invoiced billing lines are immutable. Use a reversal or credit flow instead.");
+      return;
+    }
+
     // Phase 3: Handle deletion
     if (field === 'delete') {
         if (confirm("Remove this billing item?")) {
@@ -417,7 +436,7 @@ export function UnifiedBillingsTab({
       currency: "PHP",
       status: "unbilled",
       quotation_category: "Uncategorized",
-      booking_id: bookingId || projectId // fallback
+      booking_id: bookingId || null
     };
     
     setLocalItems(prev => [newItem, ...prev]);
@@ -427,21 +446,37 @@ export function UnifiedBillingsTab({
 
   const handleSaveChanges = async () => {
       try {
-          // Build service-to-booking map for routing on save
-          const saveServiceToBookingMap = new Map<string, string>();
-          stableLinkedBookings.forEach((b: any) => {
-            const svc = b.serviceType || b.service_type || "";
-            const bid = b.bookingId || b.id;
-            if (svc && bid) saveServiceToBookingMap.set(svc, bid);
-          });
-
           // Recalculate booking_id for each item based on its service_type
           const itemsToSave = localItems.map(item => {
-            if (!bookingId && item.service_type && saveServiceToBookingMap.has(item.service_type)) {
-              return { ...item, booking_id: saveServiceToBookingMap.get(item.service_type) };
-            }
-            return item;
+            const resolvedBookingId = resolveBookingIdForService({
+              serviceType: item.service_type,
+              bookingId: item.booking_id || bookingId,
+              linkedBookings: stableLinkedBookings,
+            });
+
+            return { ...item, booking_id: resolvedBookingId };
           });
+
+          const immutableItems = itemsToSave.filter((item) => isImmutableBillingItem(item));
+          if (immutableItems.length > 0) {
+            const currentItems = new Map(mergedItems.map((item) => [item.id, item]));
+            const hasImmutableMutation = immutableItems.some((item) => {
+              const original = currentItems.get(item.id);
+              if (!original) return false;
+              return JSON.stringify(item) !== JSON.stringify(original);
+            });
+
+            if (hasImmutableMutation) {
+              toast.error("Invoiced billing lines cannot be edited or removed. Refresh and use a reversal flow instead.");
+              return;
+            }
+          }
+
+          const unresolvedItems = itemsToSave.filter(item => !item.booking_id);
+          if (unresolvedItems.length > 0) {
+            toast.error("Every billing row must be assigned to a real booking before saving.");
+            return;
+          }
 
           toast.info("Saving changes...");
 
@@ -594,7 +629,8 @@ export function UnifiedBillingsTab({
               { value: "", label: "Status" },
               { value: "unbilled", label: "Unbilled" },
               { value: "billed", label: "Billed" },
-              { value: "paid", label: "Paid" }
+              { value: "paid", label: "Paid" },
+              { value: "voided", label: "Voided" }
             ]}
             placeholder="Status"
           />

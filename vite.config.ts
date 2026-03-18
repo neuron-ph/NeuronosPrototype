@@ -54,6 +54,52 @@
     build: {
       target: 'esnext',
       outDir: 'build',
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            const normalizedId = id.replace(/\\/g, "/");
+
+            if (!normalizedId.includes("/node_modules/")) return undefined;
+
+            if (normalizedId.includes("/@radix-ui/")) {
+              return "radix-vendor";
+            }
+
+            if (
+              normalizedId.includes("/recharts/") ||
+              normalizedId.includes("/d3-")
+            ) {
+              return "charts-vendor";
+            }
+
+            if (normalizedId.includes("/@supabase/")) {
+              return "supabase-vendor";
+            }
+
+            if (
+              normalizedId.includes("/react-day-picker/") ||
+              normalizedId.includes("/date-fns/")
+            ) {
+              return "date-vendor";
+            }
+
+            if (normalizedId.includes("/lucide-react/")) {
+              return "icons-vendor";
+            }
+
+            if (
+              normalizedId.includes("/sonner/") ||
+              normalizedId.includes("/vaul/") ||
+              normalizedId.includes("/embla-carousel-react/") ||
+              normalizedId.includes("/cmdk/")
+            ) {
+              return "ui-vendor";
+            }
+
+            return "vendor";
+          },
+        },
+      },
     },
     server: {
       port: 3000,

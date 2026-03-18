@@ -16,6 +16,7 @@ interface EVoucherData {
   expenseCategory: string;
   subCategory: string;
   projectNumber?: string;
+  invoiceId?: string;
   lineItems: LineItem[];
   totalAmount: number;
   preferredPayment: string;
@@ -63,6 +64,17 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd") {
     return context; // Already matches the backend enum
   };
 
+  const assertBookingLinkedWhenRequired = (data: EVoucherData) => {
+    const transactionType = getTransactionType(data);
+    const requiresBookingLink =
+      context === "operations" &&
+      (transactionType === "expense" || transactionType === "budget_request");
+
+    if (requiresBookingLink && !data.bookingId?.trim()) {
+      throw new Error("A real booking is required for Operations expenses.");
+    }
+  };
+
   /**
    * Creates an E-Voucher in DRAFT status
    * Saves to database but doesn't submit for approval
@@ -72,6 +84,8 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd") {
     setError(null);
 
     try {
+      assertBookingLinkedWhenRequired(data);
+
       const descriptionPrefix = data.isBillable ? "[BILLABLE] " : "";
 
       const payload = {
@@ -82,6 +96,7 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd") {
         expense_category: data.expenseCategory,
         sub_category: data.subCategory,
         project_number: data.projectNumber || null,
+        invoice_id: data.invoiceId || null,
         booking_id: data.bookingId || null,
         line_items: data.lineItems,
         linked_billings: data.transactionType === "collection" ? (data as any).linkedBillings : undefined,
@@ -142,6 +157,8 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd") {
     setError(null);
 
     try {
+      assertBookingLinkedWhenRequired(data);
+
       // Validate required fields
       if (!data.requestName || data.requestName.trim() === '') {
         throw new Error('Request name is required');
@@ -170,6 +187,7 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd") {
         expense_category: data.expenseCategory,
         sub_category: data.subCategory || '',
         project_number: data.projectNumber || null,
+        invoice_id: data.invoiceId || null,
         booking_id: data.bookingId || null,
         line_items: data.lineItems,
         linked_billings: data.transactionType === "collection" ? (data as any).linkedBillings : undefined,
@@ -271,6 +289,8 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd") {
     setError(null);
 
     try {
+      assertBookingLinkedWhenRequired(data);
+
       const descriptionPrefix = data.isBillable ? "[BILLABLE] " : "";
       
       const payload = {
@@ -281,6 +301,7 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd") {
         expense_category: data.expenseCategory,
         sub_category: data.subCategory || '',
         project_number: data.projectNumber || null,
+        invoice_id: data.invoiceId || null,
         booking_id: data.bookingId || null,
         line_items: data.lineItems,
         linked_billings: data.transactionType === "collection" ? (data as any).linkedBillings : undefined,

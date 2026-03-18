@@ -15,6 +15,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { ArrowLeft, Edit3, RefreshCw, FileText, Calendar, Building2, Briefcase, Ship, Shield, Truck, Clock, Zap, Plus, ChevronDown, Layout, Layers, Users, Receipt, FileStack, DollarSign, TrendingUp, Paperclip, MessageSquare, Eye, MoreVertical } from "lucide-react";
 import type { QuotationNew, ContractRateMatrix } from "../../types/pricing";
+import type { FinancialContainer } from "../../types/financials";
 import { ContractRateCardV2 as ContractRateMatrixEditor } from "./quotations/ContractRateCardV2";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
@@ -26,7 +27,6 @@ import { ProjectFinancialOverview } from "../projects/tabs/ProjectFinancialOverv
 import { UnifiedInvoicesTab } from "../shared/invoices/UnifiedInvoicesTab";
 import { UnifiedCollectionsTab } from "../shared/collections/UnifiedCollectionsTab";
 import { ProjectExpensesTab } from "../projects/ProjectExpensesTab";
-import { contractAsProject } from "../../utils/contractAdapter";
 import { ProjectBookingReadOnlyView } from "../projects/ProjectBookingReadOnlyView";
 import { EntityAttachmentsTab } from "../shared/EntityAttachmentsTab";
 import { CommentsTab } from "../shared/CommentsTab";
@@ -102,7 +102,7 @@ export function ContractDetailView({
   const [linkedBookings, setLinkedBookings] = useState<any[]>([]);
   const [isLoadingBookings, setIsLoadingBookings] = useState(false);
 
-  // ✨ CONTRACT PARITY: Financial data hook (replaces useContractBillings)
+  // Contract financial data is resolved through the shared booking-first container hook.
   const linkedBookingIds = linkedBookings.map((b: any) => b.bookingId || b.id).filter(Boolean);
   const contractFinancials = useContractFinancials(
     quotation.quote_number,
@@ -132,6 +132,20 @@ export function ContractDetailView({
   // ✨ CONTRACT PARITY Phase 5: Activity log state
   const [activityEvents, setActivityEvents] = useState<any[]>([]);
   const [isLoadingActivity, setIsLoadingActivity] = useState(false);
+
+  const financialContainer = useMemo<FinancialContainer>(
+    () => ({
+      id: quotation.id,
+      project_number: quotation.quote_number,
+      customer_id: quotation.customer_id,
+      customer_name: quotation.customer_name,
+      currency: quotation.currency,
+      commodity: quotation.commodity,
+      linkedBookings,
+      quotation,
+    }),
+    [quotation, linkedBookings],
+  );
 
   const handleActivateContract = async () => {
     setIsActivating(true);
@@ -450,13 +464,12 @@ export function ContractDetailView({
   );
 
   const renderInvoicesTab = () => {
-    const adaptedProject = contractAsProject(quotation, linkedBookings);
     const currentUserWithId = currentUser ? { id: "current-user", ...currentUser } : null;
     return (
       <div style={{ padding: "24px 0" }}>
         <UnifiedInvoicesTab
           financials={contractFinancials}
-          project={adaptedProject}
+          project={financialContainer}
           currentUser={currentUserWithId}
           onRefresh={contractFinancials.refresh}
           linkedBookings={linkedBookings}
@@ -469,13 +482,12 @@ export function ContractDetailView({
   };
 
   const renderCollectionsTab = () => {
-    const adaptedProject = contractAsProject(quotation, linkedBookings);
     const currentUserWithId = currentUser ? { id: "current-user", ...currentUser } : null;
     return (
       <div style={{ padding: "24px 0" }}>
         <UnifiedCollectionsTab
           financials={contractFinancials}
-          project={adaptedProject}
+          project={financialContainer}
           currentUser={currentUserWithId}
           onRefresh={contractFinancials.refresh}
           title="Contract Collections"
@@ -487,12 +499,11 @@ export function ContractDetailView({
   };
 
   const renderExpensesTab = () => {
-    const adaptedProject = contractAsProject(quotation, linkedBookings);
     const currentUserWithId = currentUser ? { id: "current-user", ...currentUser } : null;
     return (
       <div style={{ padding: "24px 0" }}>
         <ProjectExpensesTab
-          project={adaptedProject}
+          project={financialContainer}
           currentUser={currentUserWithId}
           title="Contract Expenses"
           subtitle={`Manage, track, and approve expenses across ${linkedBookingIds.length} linked booking${linkedBookingIds.length !== 1 ? "s" : ""} — ${quotation.quote_number} · ${quotation.customer_name}`}

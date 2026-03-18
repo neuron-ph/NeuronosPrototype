@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Search, Plus, Filter, ArrowLeft, Loader2, X, FileText } from "lucide-react";
 import type { FinancialData } from "../../../hooks/useProjectFinancials";
-import type { Project } from "../../../types/pricing";
+import type { FinancialContainer } from "../../../types/financials";
 import { Invoice } from "../../../types/accounting";
 import { InvoiceBuilder } from "../../../components/projects/invoices/InvoiceBuilder";
 import { CustomDropdown } from "../../bd/CustomDropdown";
@@ -9,11 +9,12 @@ import { CustomDatePicker } from "../../common/CustomDatePicker";
 import { SidePanel } from "../../common/SidePanel";
 import { DataTable, ColumnDef } from "../../common/DataTable";
 import { calculateInvoiceBalance } from "../../../utils/accounting-math";
+import { getInvoiceLifecycleStatus, isInvoiceFinanciallyActive } from "../../../utils/invoiceReversal";
 import { useBillingMerge } from "../../../hooks/useBillingMerge";
 
 interface UnifiedInvoicesTabProps {
   financials: FinancialData;
-  project: Project;
+  project: FinancialContainer;
   currentUser?: { 
     id: string;
     name: string; 
@@ -40,6 +41,33 @@ export function UnifiedInvoicesTab({
   highlightId,
 }: UnifiedInvoicesTabProps) {
   const { invoices, collections, billingItems: rawBillingItems, refresh } = financials;
+
+  const invoiceLineage = useMemo(() => {
+    return invoices.reduce((map, invoice: any) => {
+      const bookingIds = Array.isArray(invoice.booking_ids)
+        ? invoice.booking_ids.filter(Boolean)
+        : invoice.booking_id
+          ? [invoice.booking_id]
+          : [];
+      const projectRefs = Array.isArray(invoice.project_refs)
+        ? invoice.project_refs.filter(Boolean)
+        : invoice.project_number
+          ? [invoice.project_number]
+          : [];
+      const contractRefs = Array.isArray(invoice.contract_refs)
+        ? invoice.contract_refs.filter(Boolean)
+        : (invoice.contract_number || invoice.quotation_number)
+          ? [invoice.contract_number || invoice.quotation_number]
+          : [];
+
+      map.set(invoice.id, {
+        bookingIds,
+        projectRefs,
+        contractRefs,
+      });
+      return map;
+    }, new Map<string, { bookingIds: string[]; projectRefs: string[]; contractRefs: string[] }>());
+  }, [invoices]);
 
   // -- Merge Virtual Items from Quotation --
   const resolvedLinkedBookings = linkedBookings || project.linkedBookings || [];
@@ -89,11 +117,22 @@ export function UnifiedInvoicesTab({
     });
   };
 
+  const summarizeRefs = (refs: string[]) => {
+    if (refs.length === 0) return "—";
+    if (refs.length === 1) return refs[0];
+    return `${refs[0]} +${refs.length - 1}`;
+  };
+
+  const getInvoiceDisplayStatus = (invoice: any) => {
+    const lifecycleStatus = getInvoiceLifecycleStatus(invoice);
+    if (lifecycleStatus) return lifecycleStatus;
+    return calculateInvoiceBalance(invoice, collections).status;
+  };
+
   // -- Filtering Logic --
   const filteredInvoices = useMemo(() => {
     return invoices.filter(item => {
-      // Calculate real-time state
-      const { status } = calculateInvoiceBalance(item, collections);
+      const status = getInvoiceDisplayStatus(item);
 
       // 1. Search Query
       if (searchQuery) {
@@ -126,17 +165,22 @@ export function UnifiedInvoicesTab({
     });
   }, [invoices, collections, searchQuery, filterStatus, dateFrom, dateTo]);
 
+  const activeFilteredInvoices = useMemo(
+    () => filteredInvoices.filter((invoice) => isInvoiceFinanciallyActive(invoice)),
+    [filteredInvoices],
+  );
+
   // -- Totals Calculation --
   const totalInvoiced = useMemo(() => {
-    return filteredInvoices.reduce((sum, item) => sum + (item.total_amount || item.amount || 0), 0);
-  }, [filteredInvoices]);
+    return activeFilteredInvoices.reduce((sum, item) => sum + (item.total_amount || item.amount || 0), 0);
+  }, [activeFilteredInvoices]);
 
   const totalOutstanding = useMemo(() => {
-    return filteredInvoices.reduce((sum, item) => {
+    return activeFilteredInvoices.reduce((sum, item) => {
        const { balance } = calculateInvoiceBalance(item, collections);
        return sum + balance;
     }, 0);
-  }, [filteredInvoices, collections]);
+  }, [activeFilteredInvoices, collections]);
 
   // -- Table Columns --
   const columns: ColumnDef<Invoice>[] = [
@@ -167,6 +211,23 @@ export function UnifiedInvoicesTab({
       )
     },
     {
+      header: "Lineage",
+      width: "180px",
+      cell: (item) => {
+        const lineage = invoiceLineage.get(item.id) || { bookingIds: [], projectRefs: [], contractRefs: [] };
+        return (
+          <div className="text-[11px] leading-4">
+            <div className="text-[#12332B] font-medium">
+              {lineage.bookingIds.length > 0 ? `${lineage.bookingIds.length} booking${lineage.bookingIds.length === 1 ? "" : "s"}` : "No bookings"}
+            </div>
+            <div className="text-[#667085]">
+              {summarizeRefs(lineage.projectRefs.length > 0 ? lineage.projectRefs : lineage.contractRefs)}
+            </div>
+          </div>
+        );
+      }
+    },
+    {
       header: "Due Date",
       width: "120px",
       cell: (item) => {
@@ -184,6 +245,13 @@ export function UnifiedInvoicesTab({
       width: "120px",
       align: "right",
       cell: (item) => {
+        if (!isInvoiceFinanciallyActive(item)) {
+          return (
+            <span className="text-[12px] text-[#98A2B3]">
+              â€”
+            </span>
+          );
+        }
         const { balance } = calculateInvoiceBalance(item, collections);
         return (
           <span className="text-[12px] text-[#667085]">
@@ -206,12 +274,18 @@ export function UnifiedInvoicesTab({
       header: "Status",
       width: "100px",
       cell: (item) => {
-        const { status } = calculateInvoiceBalance(item, collections);
+        const status = getInvoiceDisplayStatus(item);
         
         let styles = "";
         let label = "";
 
-        if (status === 'paid') {
+        if (status === 'reversal_draft') {
+          styles = "bg-[#FEF3C7] text-[#B45309] border-[#FCD34D]";
+          label = "Reversal Draft";
+        } else if (status === 'reversed') {
+          styles = "bg-[#F3F4F6] text-[#475467] border-[#D0D5DD]";
+          label = "Reversed";
+        } else if (status === 'paid') {
           styles = "bg-[#ECFDF5] text-[#059669] border-[#A6F4C5]"; // Green
           label = "Paid";
         } else if (status === 'overdue') {
@@ -328,7 +402,9 @@ export function UnifiedInvoicesTab({
               { value: "open", label: "Open" },
               { value: "partial", label: "Partial" },
               { value: "paid", label: "Paid" },
-              { value: "overdue", label: "Overdue" }
+              { value: "overdue", label: "Overdue" },
+              { value: "reversal_draft", label: "Reversal Draft" },
+              { value: "reversed", label: "Reversed" }
             ]}
             placeholder="Status"
           />

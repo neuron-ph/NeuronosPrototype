@@ -4,6 +4,12 @@ import { useEffect, useState } from "react";
 import logoImage from "figma:asset/28c84ed117b026fbf800de0882eb478561f37f4f.png";
 import { supabase } from "../../../utils/supabase/client";
 import type { Collection } from "../../types/accounting";
+import {
+  getCollectionResolutionLabel,
+  isCollectionResolvedByCreditOrRefund,
+  resolveCollectionDisposition,
+} from "../../../utils/collectionResolution";
+import { toast } from "../../ui/toast-utils";
 
 interface CollectionDetailsSheetProps {
   isOpen: boolean;
@@ -13,8 +19,10 @@ interface CollectionDetailsSheetProps {
 
 export function CollectionDetailsSheet({ isOpen, onClose, collectionId }: CollectionDetailsSheetProps) {
   const [collection, setCollection] = useState<Collection | null>(null);
+  const [collectionSource, setCollectionSource] = useState<"collections" | "evouchers" | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isResolving, setIsResolving] = useState(false);
 
   useEffect(() => {
     async function fetchCollection() {
@@ -33,6 +41,7 @@ export function CollectionDetailsSheet({ isOpen, onClose, collectionId }: Collec
         
         if (collData) {
           setCollection(collData);
+          setCollectionSource("collections");
         } else {
           // Fallback: try evouchers table
           const { data: evData, error: evError } = await supabase
@@ -43,6 +52,7 @@ export function CollectionDetailsSheet({ isOpen, onClose, collectionId }: Collec
           
           if (evError) throw new Error(evError.message);
           setCollection(evData);
+          setCollectionSource("evouchers");
         }
       } catch (err) {
         console.error("Error fetching collection:", err);
@@ -74,6 +84,10 @@ export function CollectionDetailsSheet({ isOpen, onClose, collectionId }: Collec
 
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
+      case "credited":
+        return { bg: "#EFF6FF", color: "#1D4ED8" };
+      case "refunded":
+        return { bg: "#F3F4F6", color: "#475467" };
       case "posted":
       case "cleared":
         return { bg: "#E8F5F3", color: "#0F766E" };
@@ -91,6 +105,39 @@ export function CollectionDetailsSheet({ isOpen, onClose, collectionId }: Collec
   };
 
   const statusStyle = collection ? getStatusColor(collection.status || "pending") : { bg: "#F3F4F6", color: "#6B7A76" };
+  const canResolve = Boolean(
+    collection &&
+    collectionSource &&
+    !isCollectionResolvedByCreditOrRefund(collection) &&
+    (
+      (Array.isArray((collection as any).linked_billings) && (collection as any).linked_billings.length > 0) ||
+      (collection as any).invoice_id
+    )
+  );
+
+  const handleResolveCollection = async (resolution: "credited" | "refunded") => {
+    if (!collection || !collectionSource) return;
+
+    try {
+      setIsResolving(true);
+      const updatedCollection = await resolveCollectionDisposition({
+        collection,
+        sourceTable: collectionSource,
+        resolution,
+      });
+      setCollection(updatedCollection);
+      toast.success(
+        resolution === "credited"
+          ? "Collection moved to customer credit"
+          : "Collection marked as refunded",
+      );
+    } catch (err) {
+      console.error("Error resolving collection disposition:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to update collection resolution");
+    } finally {
+      setIsResolving(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -302,6 +349,72 @@ export function CollectionDetailsSheet({ isOpen, onClose, collectionId }: Collec
                    </div>
                 </div>
               </div>
+
+              {(canResolve || isCollectionResolvedByCreditOrRefund(collection)) && (
+                <div
+                  style={{
+                    border: "1px solid #E5E7EB",
+                    borderRadius: "12px",
+                    padding: "16px 18px",
+                    marginBottom: "24px",
+                    backgroundColor: isCollectionResolvedByCreditOrRefund(collection) ? "#F0FDF9" : "#F9FAFB",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "16px", alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontSize: "12px", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#667085", marginBottom: "6px" }}>
+                        Credit / Refund Control
+                      </div>
+                      {isCollectionResolvedByCreditOrRefund(collection) ? (
+                        <div style={{ fontSize: "13px", color: "#166534", lineHeight: 1.5 }}>
+                          Resolution recorded: <strong>{getCollectionResolutionLabel(collection)}</strong>. This payment stays in history but no longer applies to invoice settlement.
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: "13px", color: "#344054", lineHeight: 1.5 }}>
+                          Use this when collected cash for the linked invoice needs to be preserved as customer credit or marked as refunded before invoice reversal and booking cancellation.
+                        </div>
+                      )}
+                    </div>
+
+                    {canResolve && (
+                      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                        <button
+                          onClick={() => handleResolveCollection("credited")}
+                          disabled={isResolving}
+                          style={{
+                            border: "1px solid #1D4ED8",
+                            backgroundColor: isResolving ? "#E5E7EB" : "#EFF6FF",
+                            color: isResolving ? "#6B7280" : "#1D4ED8",
+                            borderRadius: "10px",
+                            padding: "10px 14px",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                            cursor: isResolving ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          Record Customer Credit
+                        </button>
+                        <button
+                          onClick={() => handleResolveCollection("refunded")}
+                          disabled={isResolving}
+                          style={{
+                            border: "1px solid #475467",
+                            backgroundColor: isResolving ? "#E5E7EB" : "#F9FAFB",
+                            color: isResolving ? "#6B7280" : "#475467",
+                            borderRadius: "10px",
+                            padding: "10px 14px",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                            cursor: isResolving ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          Mark Refunded
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Description & Notes */}
               <div className="mb-8 space-y-6">

@@ -49,6 +49,11 @@ export function AddChargeModal({ isOpen, onClose, onSuccess, projectId, bookingI
       return;
     }
 
+    if (!bookingId) {
+      toast.error("Manual charges must be created from a real booking context.");
+      return;
+    }
+
     try {
       setLoading(true);
 

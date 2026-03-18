@@ -28,6 +28,7 @@ interface AddRequestForPaymentPanelProps {
   existingData?: EVoucher; // Pre-fill data when in view mode
   initialValues?: Partial<EVoucher>; // Pre-fill data for new creation (e.g. converting expense to billing)
   bookingId?: string; // For auto-linking to specific booking (from Operations modules)
+  projectNumber?: string; // Optional container reference shown alongside a real booking link
   bookingType?: "forwarding" | "brokerage" | "trucking" | "marine-insurance" | "others";
   onExpenseCreated?: () => void; // Callback after expense is created (used by Operations)
   footerActions?: React.ReactNode; // Custom footer actions for view mode
@@ -318,6 +319,7 @@ export function AddRequestForPaymentPanel({
   existingData,
   initialValues,
   bookingId,
+  projectNumber: lockedProjectNumber,
   bookingType,
   onExpenseCreated,
   footerActions
@@ -441,11 +443,11 @@ export function AddRequestForPaymentPanel({
     }
   }, [mode, existingData, initialValues, context]);
 
-  // Pre-fill bookingId when in Operations context
+  // Operations flows may lock both booking linkage and the visible project reference.
   useEffect(() => {
-    if (bookingId) {
-      setProjectNumber(bookingId);
-      
+    if (bookingId || lockedProjectNumber) {
+      setProjectNumber(lockedProjectNumber || "");
+
       // Auto-select expense category based on bookingType
       if (transactionType === "expense" || transactionType === "budget_request") {
         if (bookingType === "forwarding") {
@@ -461,11 +463,11 @@ export function AddRequestForPaymentPanel({
         } else if (bookingType === "brokerage") {
           setExpenseCategory("Brokerage Income");
         } else if (bookingType === "trucking") {
-          setExpenseCategory("Trucking Income");
+         setExpenseCategory("Trucking Income");
         }
       }
     }
-  }, [bookingId, bookingType, transactionType]);
+  }, [bookingId, bookingType, lockedProjectNumber, transactionType]);
   
   // Fetch Open Statements when in Collection Mode
   useEffect(() => {

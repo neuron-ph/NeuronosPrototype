@@ -1,17 +1,15 @@
-import { supabase } from "../../utils/supabase/client";
-import { useState, useEffect } from "react";
-import { TrendingUp, TrendingDown, DollarSign, Activity, PieChart, BarChart } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, Activity } from "lucide-react";
 import type { Project } from "../../types/pricing";
-import { 
-  ResponsiveContainer, 
-  BarChart as RechartsBarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
+import { useProjectFinancials } from "../../hooks/useProjectFinancials";
+import {
+  ResponsiveContainer,
+  BarChart as RechartsBarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
   Tooltip,
-  Legend,
-  Cell
+  Cell,
 } from "recharts";
 
 interface ProjectFinancialsTabProps {
@@ -20,41 +18,17 @@ interface ProjectFinancialsTabProps {
 }
 
 export function ProjectFinancialsTab({ project, currentUser }: ProjectFinancialsTabProps) {
-  const [billings, setBillings] = useState<any[]>([]);
-  const [expenses, setExpenses] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  void currentUser;
 
-  useEffect(() => {
-    fetchFinancials();
-  }, [project.project_number]);
+  const financials = useProjectFinancials(
+    project.project_number,
+    project.linkedBookings || [],
+    project.quotation_id,
+  );
 
-  const fetchFinancials = async () => {
-    try {
-      setIsLoading(true);
-      
-      // Fetch Revenue (Billings)
-      const { data: billingsData } = await supabase.from('evouchers').select('*').eq('transaction_type', 'billing').eq('project_number', project.project_number);
-      
-      // Fetch Expenses
-      const { data: expensesData } = await supabase.from('evouchers').select('*').eq('transaction_type', 'expense').eq('project_number', project.project_number);
-      
-      if (billingsData) {
-        setBillings(billingsData.filter((b: any) => 
-          b.status === "posted" || b.status === "Posted" || b.status === "Approved"
-        ));
-      }
-      
-      if (expensesData) {
-        setExpenses(expensesData.filter((e: any) => 
-          e.status === "Approved" || e.status === "posted" || e.status === "Posted"
-        ));
-      }
-    } catch (error) {
-      console.error("Error fetching financials:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const billings = financials.invoices;
+  const expenses = financials.expenses;
+  const isLoading = financials.isLoading;
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-PH", {
@@ -63,32 +37,44 @@ export function ProjectFinancialsTab({ project, currentUser }: ProjectFinancials
     }).format(amount);
   };
 
-  // Calculations
-  const totalRevenue = billings.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-  const totalCost = expenses.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-  const grossProfit = totalRevenue - totalCost;
-  const profitMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
+  const totalRevenue = financials.totals.invoicedAmount;
+  const totalCost = financials.totals.directCost;
+  const grossProfit = financials.totals.grossProfit;
+  const profitMargin = financials.totals.grossMargin;
 
-  // Chart Data
   const chartData = [
     { name: "Revenue", amount: totalRevenue, fill: "#0F766E" },
-    { name: "Cost", amount: totalCost, fill: "#C05621" }, // Orange for cost
-    { name: "Profit", amount: grossProfit, fill: "#059669" }
+    { name: "Cost", amount: totalCost, fill: "#C05621" },
+    { name: "Profit", amount: grossProfit, fill: "#059669" },
   ];
 
+  const timelineItems = [
+    ...billings.map((billing) => ({ ...billing, type: "Revenue" as const })),
+    ...expenses.map((expense) => ({ ...expense, type: "Cost" as const })),
+  ].sort(
+    (a, b) =>
+      new Date(b.request_date || b.invoice_date || b.created_at).getTime() -
+      new Date(a.request_date || a.invoice_date || a.created_at).getTime(),
+  );
+
   return (
-    <div style={{
-      flex: 1,
-      overflow: "auto",
-      backgroundColor: "#FAFBFC",
-      padding: "32px 48px",
-      maxWidth: "1400px",
-      margin: "0 auto"
-    }}>
-      {/* Header */}
+    <div
+      style={{
+        flex: 1,
+        overflow: "auto",
+        backgroundColor: "#FAFBFC",
+        padding: "32px 48px",
+        maxWidth: "1400px",
+        margin: "0 auto",
+      }}
+    >
       <div style={{ marginBottom: "32px" }}>
-        <h2 style={{ fontSize: "24px", fontWeight: 600, color: "#12332B", margin: 0 }}>Project Financials</h2>
-        <p style={{ color: "#6B7280", marginTop: "4px" }}>Profit & Loss analysis for Project {project.project_number}</p>
+        <h2 style={{ fontSize: "24px", fontWeight: 600, color: "#12332B", margin: 0 }}>
+          Project Financials
+        </h2>
+        <p style={{ color: "#6B7280", marginTop: "4px" }}>
+          Profit & Loss analysis for Project {project.project_number}
+        </p>
       </div>
 
       {isLoading ? (
@@ -97,20 +83,23 @@ export function ProjectFinancialsTab({ project, currentUser }: ProjectFinancials
         </div>
       ) : (
         <>
-          {/* KPI Cards */}
-          <div style={{ 
-            display: "grid", 
-            gridTemplateColumns: "repeat(4, 1fr)", 
-            gap: "24px", 
-            marginBottom: "32px" 
-          }}>
-            <div style={{ 
-              backgroundColor: "white", 
-              padding: "24px", 
-              borderRadius: "12px", 
-              border: "1px solid #E5E7EB",
-              boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
-            }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(4, 1fr)",
+              gap: "24px",
+              marginBottom: "32px",
+            }}
+          >
+            <div
+              style={{
+                backgroundColor: "white",
+                padding: "24px",
+                borderRadius: "12px",
+                border: "1px solid #E5E7EB",
+                boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+              }}
+            >
               <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
                 <div style={{ padding: "8px", borderRadius: "8px", backgroundColor: "#F0FDF9", color: "#0F766E" }}>
                   <TrendingUp size={20} />
@@ -118,16 +107,20 @@ export function ProjectFinancialsTab({ project, currentUser }: ProjectFinancials
                 <span style={{ fontSize: "14px", fontWeight: 500, color: "#6B7280" }}>Total Revenue</span>
               </div>
               <div style={{ fontSize: "28px", fontWeight: 700, color: "#12332B" }}>{formatCurrency(totalRevenue)}</div>
-              <div style={{ fontSize: "13px", color: "#6B7280", marginTop: "4px" }}>From {billings.length} invoices</div>
+              <div style={{ fontSize: "13px", color: "#6B7280", marginTop: "4px" }}>
+                From {billings.length} invoices
+              </div>
             </div>
 
-            <div style={{ 
-              backgroundColor: "white", 
-              padding: "24px", 
-              borderRadius: "12px", 
-              border: "1px solid #E5E7EB",
-              boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
-            }}>
+            <div
+              style={{
+                backgroundColor: "white",
+                padding: "24px",
+                borderRadius: "12px",
+                border: "1px solid #E5E7EB",
+                boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+              }}
+            >
               <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
                 <div style={{ padding: "8px", borderRadius: "8px", backgroundColor: "#FFF7ED", color: "#C05621" }}>
                   <TrendingDown size={20} />
@@ -135,16 +128,20 @@ export function ProjectFinancialsTab({ project, currentUser }: ProjectFinancials
                 <span style={{ fontSize: "14px", fontWeight: 500, color: "#6B7280" }}>Total Cost</span>
               </div>
               <div style={{ fontSize: "28px", fontWeight: 700, color: "#C05621" }}>{formatCurrency(totalCost)}</div>
-              <div style={{ fontSize: "13px", color: "#6B7280", marginTop: "4px" }}>From {expenses.length} expenses</div>
+              <div style={{ fontSize: "13px", color: "#6B7280", marginTop: "4px" }}>
+                From {expenses.length} expenses
+              </div>
             </div>
 
-            <div style={{ 
-              backgroundColor: "white", 
-              padding: "24px", 
-              borderRadius: "12px", 
-              border: "1px solid #E5E7EB",
-              boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
-            }}>
+            <div
+              style={{
+                backgroundColor: "white",
+                padding: "24px",
+                borderRadius: "12px",
+                border: "1px solid #E5E7EB",
+                boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+              }}
+            >
               <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
                 <div style={{ padding: "8px", borderRadius: "8px", backgroundColor: "#F0FDF4", color: "#15803D" }}>
                   <DollarSign size={20} />
@@ -157,13 +154,15 @@ export function ProjectFinancialsTab({ project, currentUser }: ProjectFinancials
               <div style={{ fontSize: "13px", color: "#6B7280", marginTop: "4px" }}>Net Income</div>
             </div>
 
-            <div style={{ 
-              backgroundColor: "white", 
-              padding: "24px", 
-              borderRadius: "12px", 
-              border: "1px solid #E5E7EB",
-              boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
-            }}>
+            <div
+              style={{
+                backgroundColor: "white",
+                padding: "24px",
+                borderRadius: "12px",
+                border: "1px solid #E5E7EB",
+                boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+              }}
+            >
               <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
                 <div style={{ padding: "8px", borderRadius: "8px", backgroundColor: "#EFF6FF", color: "#1D4ED8" }}>
                   <Activity size={20} />
@@ -176,16 +175,19 @@ export function ProjectFinancialsTab({ project, currentUser }: ProjectFinancials
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "24px" }}>
-            {/* Recent Transactions List */}
-            <div style={{ 
-              backgroundColor: "white", 
-              borderRadius: "12px", 
-              border: "1px solid #E5E7EB",
-              padding: "24px",
-              boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
-            }}>
-              <h3 style={{ fontSize: "16px", fontWeight: 600, color: "#12332B", marginBottom: "16px" }}>Financial Breakdown</h3>
-              
+            <div
+              style={{
+                backgroundColor: "white",
+                borderRadius: "12px",
+                border: "1px solid #E5E7EB",
+                padding: "24px",
+                boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+              }}
+            >
+              <h3 style={{ fontSize: "16px", fontWeight: 600, color: "#12332B", marginBottom: "16px" }}>
+                Financial Breakdown
+              </h3>
+
               <div style={{ maxHeight: "400px", overflowY: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead style={{ position: "sticky", top: 0, backgroundColor: "white", zIndex: 1 }}>
@@ -196,65 +198,84 @@ export function ProjectFinancialsTab({ project, currentUser }: ProjectFinancials
                     </tr>
                   </thead>
                   <tbody>
-                    {/* Combine and sort items */}
-                    {[
-                      ...billings.map(b => ({ ...b, type: "Revenue" })),
-                      ...expenses.map(e => ({ ...e, type: "Cost" }))
-                    ].sort((a, b) => new Date(b.request_date || b.created_at).getTime() - new Date(a.request_date || a.created_at).getTime())
-                     .map((item, idx) => (
-                      <tr key={idx} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                    {timelineItems.map((item, idx) => (
+                      <tr key={`${item.type}-${item.id || idx}`} style={{ borderBottom: "1px solid #F3F4F6" }}>
                         <td style={{ padding: "16px 8px" }}>
-                          <div style={{ fontSize: "14px", fontWeight: 500, color: "#374151" }}>{item.purpose || item.description}</div>
-                          <div style={{ fontSize: "12px", color: "#9CA3AF" }}>{item.voucher_number} • {new Date(item.request_date || item.created_at).toLocaleDateString()}</div>
+                          <div style={{ fontSize: "14px", fontWeight: 500, color: "#374151" }}>
+                            {item.purpose || item.description || item.invoice_number || "Financial Entry"}
+                          </div>
+                          <div style={{ fontSize: "12px", color: "#9CA3AF" }}>
+                            {item.voucher_number || item.invoice_number || item.id} •{" "}
+                            {new Date(item.request_date || item.invoice_date || item.created_at).toLocaleDateString()}
+                          </div>
                         </td>
                         <td style={{ padding: "16px 8px" }}>
-                          <span style={{ 
-                            fontSize: "12px", 
-                            fontWeight: 600, 
-                            padding: "4px 8px", 
-                            borderRadius: "4px",
-                            backgroundColor: item.type === "Revenue" ? "#E0F2F1" : "#FFF7ED",
-                            color: item.type === "Revenue" ? "#0F766E" : "#C05621"
-                          }}>
+                          <span
+                            style={{
+                              fontSize: "12px",
+                              fontWeight: 600,
+                              padding: "4px 8px",
+                              borderRadius: "4px",
+                              backgroundColor: item.type === "Revenue" ? "#E0F2F1" : "#FFF7ED",
+                              color: item.type === "Revenue" ? "#0F766E" : "#C05621",
+                            }}
+                          >
                             {item.type}
                           </span>
                         </td>
-                        <td style={{ padding: "16px 8px", textAlign: "right", fontWeight: 600, color: item.type === "Revenue" ? "#059669" : "#DC2626" }}>
-                          {item.type === "Revenue" ? "+" : "-"}{formatCurrency(item.amount)}
+                        <td
+                          style={{
+                            padding: "16px 8px",
+                            textAlign: "right",
+                            fontWeight: 600,
+                            color: item.type === "Revenue" ? "#059669" : "#DC2626",
+                          }}
+                        >
+                          {item.type === "Revenue" ? "+" : "-"}
+                          {formatCurrency(Number(item.amount || item.total_amount || 0))}
                         </td>
                       </tr>
                     ))}
-                    {[...billings, ...expenses].length === 0 && (
-                       <tr>
-                         <td colSpan={3} style={{ textAlign: "center", padding: "32px", color: "#9CA3AF" }}>No financial data available</td>
-                       </tr>
+                    {timelineItems.length === 0 && (
+                      <tr>
+                        <td colSpan={3} style={{ textAlign: "center", padding: "32px", color: "#9CA3AF" }}>
+                          No financial data available
+                        </td>
+                      </tr>
                     )}
                   </tbody>
                 </table>
               </div>
             </div>
 
-            {/* Chart */}
-            <div style={{ 
-              backgroundColor: "white", 
-              borderRadius: "12px", 
-              border: "1px solid #E5E7EB",
-              padding: "24px",
-              boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
-              display: "flex",
-              flexDirection: "column"
-            }}>
-              <h3 style={{ fontSize: "16px", fontWeight: 600, color: "#12332B", marginBottom: "16px" }}>Summary Chart</h3>
+            <div
+              style={{
+                backgroundColor: "white",
+                borderRadius: "12px",
+                border: "1px solid #E5E7EB",
+                padding: "24px",
+                boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <h3 style={{ fontSize: "16px", fontWeight: 600, color: "#12332B", marginBottom: "16px" }}>
+                Summary Chart
+              </h3>
               <div style={{ width: "100%", height: "300px" }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <RechartsBarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="name" axisLine={false} tickLine={false} />
-                    <YAxis axisLine={false} tickLine={false} tickFormatter={(val) => `₱${val/1000}k`} />
-                    <Tooltip 
+                    <YAxis axisLine={false} tickLine={false} tickFormatter={(val) => `₱${val / 1000}k`} />
+                    <Tooltip
                       formatter={(value: number) => formatCurrency(value)}
-                      cursor={{ fill: 'transparent' }}
-                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
+                      cursor={{ fill: "transparent" }}
+                      contentStyle={{
+                        borderRadius: "8px",
+                        border: "none",
+                        boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
+                      }}
                     />
                     <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
                       {chartData.map((entry, index) => (

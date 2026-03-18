@@ -25,6 +25,7 @@ import {
 import type { ReportsData } from "../../../hooks/useReportsData";
 import { isInScope } from "../aggregate/types";
 import type { DateScope } from "../aggregate/types";
+import { calculateInvoiceBalance } from "../../../utils/accounting-math";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -76,6 +77,18 @@ const phpCompact = (n: number) => {
 
 const pct = (num: number, denom: number) =>
   denom === 0 ? "—" : `${((num / denom) * 100).toFixed(1)}%`;
+
+const summarizeRefs = (refs: unknown): string => {
+  if (!Array.isArray(refs)) return "â€”";
+
+  const normalized = refs.filter(
+    (value): value is string => typeof value === "string" && value.trim().length > 0
+  );
+
+  if (normalized.length === 0) return "â€”";
+  if (normalized.length === 1) return normalized[0];
+  return `${normalized[0]} +${normalized.length - 1}`;
+};
 
 function formatScopeLabel(scope: DateScope): string {
   const PRESETS: Record<string, string> = {
@@ -445,11 +458,7 @@ export function SalesReport({ data, scope }: SalesReportProps) {
       const grossProfit = billedAmount - costOfSales;
 
       // COLLECTED — payments received against this invoice
-      const collectedAmount = collections
-        .filter((c: any) => c.invoice_id === inv.id)
-        .reduce((s: number, c: any) => s + (Number(c.amount) || 0), 0);
-
-      const outstanding = billedAmount - collectedAmount;
+      const { paidAmount: collectedAmount, balance: outstanding } = calculateInvoiceBalance(inv, collections);
 
       // PARTICULARS — service types array is most descriptive; fall back to notes
       const particulars =
@@ -459,11 +468,19 @@ export function SalesReport({ data, scope }: SalesReportProps) {
         inv.notes ||
         "—";
 
+      const projectNumber = summarizeRefs(
+        Array.isArray(inv.project_refs) && inv.project_refs.length > 0
+          ? inv.project_refs
+          : inv.project_number
+            ? [inv.project_number]
+            : []
+      );
+
       return {
         invoiceId:       inv.id,
         invoiceNumber:   inv.invoice_number || "—",
         invoiceDate:     inv.invoice_date || inv.created_at || "",
-        projectNumber:   inv.project_number || "—",
+        projectNumber,
         companyName:     inv.customer_name || "—",
         particulars,
         billedAmount,

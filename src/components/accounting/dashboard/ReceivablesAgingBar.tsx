@@ -16,6 +16,7 @@
 import { useState, useMemo } from "react";
 import { ChevronRight, Calendar } from "lucide-react";
 import { formatCurrencyCompact } from "../aggregate/types";
+import { calculateInvoiceBalance } from "../../../utils/accounting-math";
 
 interface AgingSegment {
   label: string;
@@ -29,12 +30,14 @@ interface AgingSegment {
 
 interface ReceivablesAgingBarProps {
   invoices: any[];
+  collections?: any[];
   dso: number;
   onBucketClick: (bucketLabel: string | null) => void;
   /** Optional "View →" navigation */
   onNavigate?: () => void;
   /** Previous-period invoices for trend indicators */
   previousInvoices?: any[];
+  previousCollections?: any[];
   /** Unbilled billing items (services rendered but not yet invoiced) */
   unbilledItems?: any[];
   /** Navigate to billings tab when unbilled row is clicked */
@@ -61,8 +64,8 @@ function getAgingDaysForInvoice(inv: any): number {
   return Math.floor((Date.now() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-function getBalance(inv: any): number {
-  return Number(inv.remaining_balance ?? inv.total_amount ?? inv.amount ?? 0);
+function getBalance(inv: any, collections: any[] = []): number {
+  return calculateInvoiceBalance(inv, collections).balance;
 }
 
 /** DSO severity: teal ≤30, amber 31–60, red 61+ */
@@ -377,18 +380,16 @@ function UnbilledDrillDown({
 
 // ── Main Component ──
 
-export function ReceivablesAgingBar({ invoices, dso, onBucketClick, onNavigate, previousInvoices, unbilledItems, onUnbilledClick, onRecordPayment, onSendReminder, onCreateInvoice }: ReceivablesAgingBarProps) {
+export function ReceivablesAgingBar({ invoices, collections = [], dso, onBucketClick, onNavigate, previousInvoices, previousCollections = [], unbilledItems, onUnbilledClick, onRecordPayment, onSendReminder, onCreateInvoice }: ReceivablesAgingBarProps) {
   const [expandedBucket, setExpandedBucket] = useState<string | null>(null);
 
   // Filter to unpaid invoices only
   const openInvoices = useMemo(
     () =>
       invoices.filter((inv) => {
-        const s = (inv.status || "").toLowerCase();
-        const ps = (inv.payment_status || "").toLowerCase();
-        return s !== "paid" && ps !== "paid" && getBalance(inv) > 0.01;
+        return getBalance(inv, collections) > 0.01;
       }),
-    [invoices]
+    [invoices, collections]
   );
 
   // Unbilled totals
@@ -415,14 +416,14 @@ export function ReceivablesAgingBar({ invoices, dso, onBucketClick, onNavigate, 
       return {
         label: cfg.label,
         days: cfg.days,
-        amount: matched.reduce((s, inv) => s + getBalance(inv), 0),
+        amount: matched.reduce((s, inv) => s + getBalance(inv, collections), 0),
         count: matched.length,
         color: cfg.color,
         bgLight: cfg.bgLight,
         invoices: matched,
       };
     });
-  }, [openInvoices]);
+  }, [openInvoices, collections]);
 
   const totalAmount = segments.reduce((s, seg) => s + seg.amount, 0);
   const totalCount = segments.reduce((s, seg) => s + seg.count, 0);
@@ -436,21 +437,17 @@ export function ReceivablesAgingBar({ invoices, dso, onBucketClick, onNavigate, 
   // Previous-period aging for trend indicators
   const prevSegmentAmounts: Record<string, number> = useMemo(() => {
     if (!previousInvoices || previousInvoices.length === 0) return {};
-    const prevOpen = previousInvoices.filter((inv: any) => {
-      const s = (inv.status || "").toLowerCase();
-      const ps = (inv.payment_status || "").toLowerCase();
-      return s !== "paid" && ps !== "paid" && getBalance(inv) > 0.01;
-    });
+    const prevOpen = previousInvoices.filter((inv: any) => getBalance(inv, previousCollections) > 0.01);
     const result: Record<string, number> = {};
     for (const cfg of AGING_CONFIG) {
       const matched = prevOpen.filter((inv: any) => {
         const days = getAgingDaysForInvoice(inv);
         return days >= cfg.min && days <= cfg.max;
       });
-      result[cfg.label] = matched.reduce((s: number, inv: any) => s + getBalance(inv), 0);
+      result[cfg.label] = matched.reduce((s: number, inv: any) => s + getBalance(inv, previousCollections), 0);
     }
     return result;
-  }, [previousInvoices]);
+  }, [previousInvoices, previousCollections]);
 
   // DSO styling
   const dsoStyle = getDsoStyle(dso);

@@ -1,4 +1,5 @@
 import { Invoice, Collection } from "../types/accounting";
+import { isCollectionAppliedToInvoice } from "./collectionResolution";
 
 export interface InvoiceFinancialState {
   totalAmount: number;
@@ -19,8 +20,7 @@ export function calculateInvoiceBalance(
 
   // 1. Calculate total paid from linked collections
   const paidAmount = allCollections.reduce((sum, collection) => {
-    // Check if collection is posted/cleared (ignore void/draft if necessary, though usually we show posted)
-    if (collection.status === 'void' || collection.status === 'draft') return sum;
+    if (!isCollectionAppliedToInvoice(collection)) return sum;
 
     // Find if this collection pays off this specific invoice
     const link = collection.linked_billings?.find(
@@ -30,6 +30,16 @@ export function calculateInvoiceBalance(
     if (link) {
       return sum + (link.amount || 0);
     }
+
+    const directInvoiceId =
+      (collection as any).invoice_id ||
+      (collection as any).invoiceId ||
+      null;
+
+    if (directInvoiceId === invoice.id) {
+      return sum + (collection.amount || 0);
+    }
+
     return sum;
   }, 0);
 

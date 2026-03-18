@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { Loader2, ZoomIn, ZoomOut, Maximize, ChevronDown, User, Layout, Check, FileText, Calendar, Box, Truck, CreditCard, ArrowLeft, Download, Printer, RefreshCw, Coins } from "lucide-react";
 import { toast } from "../../ui/toast-utils";
-import type { Project } from "../../../types/pricing";
+import type { FinancialContainer } from "../../../types/financials";
 import { Invoice, BillingLineItem, Billing, Account } from "../../../types/accounting";
 import { getAccounts } from "../../../utils/accounting-api";
 import { supabase } from "../../../utils/supabase/client";
@@ -21,7 +21,7 @@ const A4_HEIGHT_PX = 1123; // 297mm
 
 interface InvoiceBuilderProps {
   mode: "create" | "view";
-  project: Project;
+  project: FinancialContainer;
   
   // Create Mode
   billingItems?: Billing[];
@@ -38,6 +38,12 @@ interface ItemOverride {
     remarks: string;
     tax_type: "VAT" | "NON-VAT";
 }
+
+const normalizeRef = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
 
 export function InvoiceBuilder({ 
   mode, 
@@ -272,6 +278,30 @@ export function InvoiceBuilder({
     return unbilledItems.filter(item => selectedIds.has(item.id));
   }, [unbilledItems, selectedIds, mode]);
 
+  const selectedLineage = useMemo(() => {
+    const bookingIds = new Set<string>();
+    const projectRefs = new Set<string>();
+    const contractRefs = new Set<string>();
+
+    selectedItems.forEach((item: any) => {
+      const bookingId = normalizeRef(item.booking_id) || normalizeRef(item.source_booking_id);
+      const projectRef = normalizeRef(item.project_number);
+      const contractRef = normalizeRef(item.contract_number) || normalizeRef(item.quotation_number);
+
+      if (bookingId) bookingIds.add(bookingId);
+      if (projectRef) projectRefs.add(projectRef);
+      if (contractRef) contractRefs.add(contractRef);
+    });
+
+    const resolvedProjectRefs = projectRefs.size > 0 ? Array.from(projectRefs) : [project.project_number];
+
+    return {
+      bookingIds: Array.from(bookingIds),
+      projectRefs: resolvedProjectRefs,
+      contractRefs: Array.from(contractRefs),
+    };
+  }, [project.project_number, selectedItems]);
+
   // Currency (Shared)
   const currency = useMemo(() => {
     if (mode === 'view') return viewInvoice?.currency || "PHP";
@@ -344,7 +374,9 @@ export function InvoiceBuilder({
       customer_address: customerAddress || project.customer_address,
       billed_to_type: billedToType,
       billed_to_consignee_id: billedToConsigneeId,
-      project_number: project.project_number,
+      project_number: selectedLineage.projectRefs.length === 1 ? selectedLineage.projectRefs[0] : project.project_number,
+      booking_id: selectedLineage.bookingIds.length === 1 ? selectedLineage.bookingIds[0] : undefined,
+      booking_ids: selectedLineage.bookingIds,
       line_items: finalLineItems,
       subtotal: subtotal,
       tax_amount: taxAmount,
@@ -363,9 +395,10 @@ export function InvoiceBuilder({
       bl_number: blNumber,
       consignee: consignee,
       commodity_description: commodityDescription,
-      credit_terms: creditTerms
+      credit_terms: creditTerms,
+      contract_number: selectedLineage.contractRefs.length === 1 ? selectedLineage.contractRefs[0] : undefined,
     } as Invoice;
-  }, [mode, viewInvoice, selectedItems, invoiceDate, dueDate, notes, project, currency, signatories, customerTin, blNumber, consignee, commodityDescription, creditTerms, itemOverrides, customerAddress, targetCurrency, exchangeRate, billedToType, selectedConsignee]);
+  }, [mode, viewInvoice, selectedItems, selectedLineage, invoiceDate, dueDate, notes, project, currency, signatories, customerTin, blNumber, consignee, commodityDescription, creditTerms, itemOverrides, customerAddress, targetCurrency, exchangeRate, billedToType, selectedConsignee]);
 
   // Print Options Object
   const printOptions: InvoicePrintOptions = useMemo(() => ({
@@ -484,6 +517,16 @@ export function InvoiceBuilder({
       console.log(`[InvoiceBuilder] Submitting invoice — revenue_account_id: "${revenueAccountId}", total: ${draftInvoice.total_amount}`);
 
       // Generate invoice number (prefix + timestamp-based suffix)
+      const invalidSelections = selectedItems.filter((item: any) => {
+        const status = (item.status || "").toLowerCase();
+        return status !== "unbilled" || item.invoice_id;
+      });
+
+      if (invalidSelections.length > 0) {
+        toast.error("Only unbilled charge lines can be packaged into a new invoice. Refresh and try again.");
+        return;
+      }
+
       const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}`;
 
       // Compute effective due date for persistence
@@ -496,12 +539,17 @@ export function InvoiceBuilder({
 
       const invoiceRow = {
         invoice_number: invoiceNumber,
-        project_number: project.project_number,
+        project_number: selectedLineage.projectRefs.length === 1 ? selectedLineage.projectRefs[0] : project.project_number,
+        project_refs: selectedLineage.projectRefs,
         customer_id: project.customer_id,
         customer_name: billedToType === "consignee" && selectedConsignee ? selectedConsignee.name : project.customer_name,
         customer_address: customerAddress,
         billed_to_type: billedToType,
         billed_to_consignee_id: billedToConsigneeId || null,
+        booking_id: selectedLineage.bookingIds.length === 1 ? selectedLineage.bookingIds[0] : null,
+        booking_ids: selectedLineage.bookingIds,
+        contract_number: selectedLineage.contractRefs.length === 1 ? selectedLineage.contractRefs[0] : null,
+        contract_refs: selectedLineage.contractRefs,
         billing_item_ids: finalBillingItemIds,
         invoice_date: invoiceDate,
         due_date: effectiveDueDate,

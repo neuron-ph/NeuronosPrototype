@@ -700,6 +700,7 @@ export function CustomerLedgerDetail({ customer, onClose }: CustomerLedgerDetail
                 description: exp.description || exp.notes || "",
                 status: (exp.status || "posted").toLowerCase(),
                 bookingId: exp.booking_id || "—",
+                projectNumber: exp.project_number || undefined,
                 bookingType: "Customer",
                 createdBy: exp.created_by || "System",
                 createdAt: exp.created_at,

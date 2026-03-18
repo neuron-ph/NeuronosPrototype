@@ -39,12 +39,7 @@ export function ExpensesTab({
           
           // Filter for this specific booking
           const relevantEVouchers = allEVouchers.filter((ev: any) => {
-            // 1. Must match the booking ID (either in project_number or booking_id fields)
-            const matchesBooking = 
-                ev.project_number === bookingId || 
-                ev.booking_id === bookingId;
-            
-            if (!matchesBooking) return false;
+            if (ev.booking_id !== bookingId) return false;
 
             // 2. Must be an Expense or Budget Request
             const type = (ev.transaction_type || "").toLowerCase();
@@ -64,6 +59,7 @@ export function ExpensesTab({
               expenseId: ev.id,
               id: ev.id,
               bookingId: bookingId,
+              projectNumber: ev.project_number,
               bookingType: bookingType || "Other", // Default to Other if unknown
               expenseName: ev.voucher_number || ev.id,
               expenseCategory: ev.expense_category || "Uncategorized",
@@ -109,7 +105,7 @@ export function ExpensesTab({
         linkedBookings={[]}
         context="booking"
         onRefresh={fetchExpenses}
-        projectNumber={bookingId}
+        bookingId={bookingId}
         bookingType={bookingType}
         highlightId={highlightId}
       />

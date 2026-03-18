@@ -1,33 +1,8 @@
-import "./styles/globals.css";
 // App entrypoint — Neuron OS
 // Force recompilation: cache-bust 2026-03-12b
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense, lazy } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation, useParams, useSearchParams, Outlet } from "react-router";
 import { Layout } from "./components/Layout";
-import { ExecutiveDashboard } from "./components/ExecutiveDashboard";
-import { BusinessDevelopment } from "./components/BusinessDevelopment";
-import { Pricing } from "./components/Pricing";
-import { Operations } from "./components/Operations";
-import { ProjectsModule } from "./components/projects/ProjectsModule";
-import { ContractsModule } from "./components/contracts/ContractsModule";
-import { Accounting } from "./components/accounting/Accounting";
-import { HR } from "./components/HR";
-import { InboxPage } from "./components/InboxPage";
-import { TicketQueuePage } from "./components/TicketQueuePage";
-import { ActivityLogPage } from "./components/ActivityLogPage";
-import { EmployeeProfile } from "./components/EmployeeProfile";
-import { Admin } from "./components/Admin";
-import { TicketTestingDashboard } from "./components/TicketTestingDashboard";
-import { ReportControlCenter } from "./components/bd/reports/ReportControlCenter";
-import { CreateBooking } from "./components/operations/CreateBooking";
-import { BookingFullView } from "./components/operations/BookingFullView";
-import { TruckingBookings } from "./components/operations/TruckingBookings";
-import { BrokerageBookings } from "./components/operations/BrokerageBookings";
-import { MarineInsuranceBookings } from "./components/operations/MarineInsuranceBookings";
-import { OthersBookings } from "./components/operations/OthersBookings";
-import { OperationsReports } from "./components/operations/OperationsReports";
-import { DiagnosticsPage } from "./components/DiagnosticsPage";
-import { SupabaseDebug } from "./components/SupabaseDebug";
 import { UserProvider, useUser } from "./hooks/useUser";
 import { NeuronCacheProvider } from "./hooks/useNeuronCache";
 import { RouteGuard } from "./components/RouteGuard";
@@ -35,8 +10,43 @@ import { AppModeProvider, useAppMode } from "./config/appMode";
 import { toast, Toaster } from "sonner@2.0.3";
 import type { Customer } from "./types/bd";
 import logoImage from "figma:asset/28c84ed117b026fbf800de0882eb478561f37f4f.png";
-import { DesignSystemGuide } from "./components/DesignSystemGuide";
 import { projectId } from "./utils/supabase/info";
+
+const ExecutiveDashboard = lazy(() => import("./components/ExecutiveDashboard").then((module) => ({ default: module.ExecutiveDashboard })));
+const BusinessDevelopment = lazy(() => import("./components/BusinessDevelopment").then((module) => ({ default: module.BusinessDevelopment })));
+const Pricing = lazy(() => import("./components/Pricing").then((module) => ({ default: module.Pricing })));
+const Operations = lazy(() => import("./components/Operations").then((module) => ({ default: module.Operations })));
+const ProjectsModule = lazy(() => import("./components/projects/ProjectsModule").then((module) => ({ default: module.ProjectsModule })));
+const ContractsModule = lazy(() => import("./components/contracts/ContractsModule").then((module) => ({ default: module.ContractsModule })));
+const Accounting = lazy(() => import("./components/accounting/Accounting").then((module) => ({ default: module.Accounting })));
+const HR = lazy(() => import("./components/HR").then((module) => ({ default: module.HR })));
+const InboxPage = lazy(() => import("./components/InboxPage").then((module) => ({ default: module.InboxPage })));
+const TicketQueuePage = lazy(() => import("./components/TicketQueuePage").then((module) => ({ default: module.TicketQueuePage })));
+const ActivityLogPage = lazy(() => import("./components/ActivityLogPage").then((module) => ({ default: module.ActivityLogPage })));
+const EmployeeProfile = lazy(() => import("./components/EmployeeProfile").then((module) => ({ default: module.EmployeeProfile })));
+const Admin = lazy(() => import("./components/Admin").then((module) => ({ default: module.Admin })));
+const TicketTestingDashboard = lazy(() => import("./components/TicketTestingDashboard").then((module) => ({ default: module.TicketTestingDashboard })));
+const ReportControlCenter = lazy(() => import("./components/bd/reports/ReportControlCenter").then((module) => ({ default: module.ReportControlCenter })));
+const CreateBooking = lazy(() => import("./components/operations/CreateBooking").then((module) => ({ default: module.CreateBooking })));
+const BookingFullView = lazy(() => import("./components/operations/BookingFullView").then((module) => ({ default: module.BookingFullView })));
+const TruckingBookings = lazy(() => import("./components/operations/TruckingBookings").then((module) => ({ default: module.TruckingBookings })));
+const BrokerageBookings = lazy(() => import("./components/operations/BrokerageBookings").then((module) => ({ default: module.BrokerageBookings })));
+const MarineInsuranceBookings = lazy(() => import("./components/operations/MarineInsuranceBookings").then((module) => ({ default: module.MarineInsuranceBookings })));
+const OthersBookings = lazy(() => import("./components/operations/OthersBookings").then((module) => ({ default: module.OthersBookings })));
+const OperationsReports = lazy(() => import("./components/operations/OperationsReports").then((module) => ({ default: module.OperationsReports })));
+const DiagnosticsPage = lazy(() => import("./components/DiagnosticsPage").then((module) => ({ default: module.DiagnosticsPage })));
+const SupabaseDebug = lazy(() => import("./components/SupabaseDebug").then((module) => ({ default: module.SupabaseDebug })));
+const DesignSystemGuide = lazy(() => import("./components/DesignSystemGuide").then((module) => ({ default: module.DesignSystemGuide })));
+
+function RouteLoadingState() {
+  return (
+    <div className="min-h-screen w-full bg-[rgb(255,255,255)] flex items-center justify-center">
+      <div className="text-center">
+        <p style={{ color: "var(--neuron-ink-muted)" }}>Loading...</p>
+      </div>
+    </div>
+  );
+}
 
 function LoginPage() {
   const { setUser, login, signup } = useUser();
@@ -1258,13 +1268,7 @@ function AppContent() {
 
   // Show loading state while checking auth
   if (isLoading) {
-    return (
-      <div className="min-h-screen w-full bg-[rgb(255,255,255)] flex items-center justify-center">
-        <div className="text-center">
-          <p style={{ color: "var(--neuron-ink-muted)" }}>Loading...</p>
-        </div>
-      </div>
-    );
+    return <RouteLoadingState />;
   }
 
   // Show login page if not authenticated
@@ -1272,10 +1276,12 @@ function AppContent() {
     return (
       <>
         <Toaster position="bottom-right" richColors />
-        <Routes>
-          <Route path="/supabase-debug" element={<SupabaseDebug />} />
-          <Route path="*" element={<LoginPage />} />
-        </Routes>
+        <Suspense fallback={<RouteLoadingState />}>
+          <Routes>
+            <Route path="/supabase-debug" element={<SupabaseDebug />} />
+            <Route path="*" element={<LoginPage />} />
+          </Routes>
+        </Suspense>
       </>
     );
   }
@@ -1283,6 +1289,7 @@ function AppContent() {
   return (
     <>
       <Toaster position="bottom-right" richColors />
+      <Suspense fallback={<RouteLoadingState />}>
       <Routes>
         {/* Default route */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -1385,6 +1392,7 @@ function AppContent() {
         {/* 404 fallback */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
+      </Suspense>
     </>
   );
 }

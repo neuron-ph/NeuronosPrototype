@@ -1,9 +1,20 @@
-import { X, Calendar, CreditCard, Building, User, FileText, CheckCircle2, Clock, AlertCircle } from "lucide-react";
+import { X, Calendar, CreditCard, Building, User, FileText, CheckCircle2, Clock, AlertCircle, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import logoImage from "figma:asset/28c84ed117b026fbf800de0882eb478561f37f4f.png";
 import { supabase } from "../../../utils/supabase/client";
 import type { Billing } from "../../types/accounting";
 import { SidePanel } from "../../common/SidePanel";
+import {
+  completeInvoiceReversalDraft,
+  createInvoiceReversalDraft,
+  findInvoiceReversalDocument,
+  getInvoiceCollectionSummary,
+  getInvoiceLifecycleStatus,
+  isInvoiceReversalDraft,
+  isInvoiceReversalPosted,
+  isInvoiceReversedOriginal,
+} from "../../../utils/invoiceReversal";
+import { toast } from "../../ui/toast-utils";
 
 interface BillingDetailsSheetProps {
   isOpen: boolean;
@@ -15,6 +26,10 @@ export function BillingDetailsSheet({ isOpen, onClose, billingId }: BillingDetai
   const [billing, setBilling] = useState<Billing | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [linkedCollectionCount, setLinkedCollectionCount] = useState(0);
+  const [reversalDocument, setReversalDocument] = useState<any | null>(null);
+  const [isCreatingReversal, setIsCreatingReversal] = useState(false);
+  const [isCompletingReversal, setIsCompletingReversal] = useState(false);
 
   useEffect(() => {
     async function fetchBilling() {
@@ -34,6 +49,19 @@ export function BillingDetailsSheet({ isOpen, onClose, billingId }: BillingDetai
         
         if (invoiceData) {
           setBilling(invoiceData);
+          if (invoiceData?.metadata?.reversal_of_invoice_id) {
+            const sourceInvoiceId = invoiceData.metadata.reversal_of_invoice_id;
+            const collectionSummary = await getInvoiceCollectionSummary(sourceInvoiceId);
+            setLinkedCollectionCount(collectionSummary.collectionCount);
+            setReversalDocument(invoiceData);
+          } else {
+            const [collectionSummary, existingReversal] = await Promise.all([
+              getInvoiceCollectionSummary(invoiceData.id),
+              findInvoiceReversalDocument(invoiceData.id),
+            ]);
+            setLinkedCollectionCount(collectionSummary.collectionCount);
+            setReversalDocument(existingReversal);
+          }
         } else {
           // Fallback: try evouchers table
           const { data: evData, error: evError } = await supabase
@@ -44,6 +72,8 @@ export function BillingDetailsSheet({ isOpen, onClose, billingId }: BillingDetai
           
           if (evError) throw new Error(evError.message);
           setBilling(evData);
+          setLinkedCollectionCount(0);
+          setReversalDocument(null);
         }
       } catch (err) {
         console.error("Error fetching billing:", err);
@@ -75,6 +105,11 @@ export function BillingDetailsSheet({ isOpen, onClose, billingId }: BillingDetai
 
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
+      case "reversal_draft":
+        return { bg: "#FEF3C7", color: "#B45309" };
+      case "reversal_posted":
+      case "reversed":
+        return { bg: "#F3F4F6", color: "#475467" };
       case "paid":
         return { bg: "#D1FAE5", color: "#059669" };
       case "partial":
@@ -92,7 +127,52 @@ export function BillingDetailsSheet({ isOpen, onClose, billingId }: BillingDetai
     }
   };
 
-  const statusStyle = billing ? getStatusColor(billing.payment_status || "pending") : { bg: "#F3F4F6", color: "#6B7A76" };
+  const displayStatus = billing
+    ? getInvoiceLifecycleStatus(billing) || billing.payment_status || billing.status || "pending"
+    : "pending";
+  const statusStyle = getStatusColor(displayStatus);
+
+  const handleCreateReversalDraft = async () => {
+    if (!billing?.id || !billing.invoice_number) return;
+
+    try {
+      setIsCreatingReversal(true);
+      const draft = await createInvoiceReversalDraft(billing);
+      setReversalDocument(draft);
+      toast.success(`Reversal draft ${draft.invoice_number} created`);
+    } catch (err) {
+      console.error("Error creating reversal draft:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to create reversal draft");
+    } finally {
+      setIsCreatingReversal(false);
+    }
+  };
+
+  const handleCompleteReversal = async () => {
+    const targetReversal =
+      isInvoiceReversalDraft(billing) ? billing : reversalDocument;
+
+    if (!targetReversal || !isInvoiceReversalDraft(targetReversal)) return;
+
+    try {
+      setIsCompletingReversal(true);
+      const { originalInvoice, reversalInvoice } = await completeInvoiceReversalDraft(targetReversal);
+
+      if (billing?.id === reversalInvoice.id) {
+        setBilling(reversalInvoice);
+      } else if (billing?.id === originalInvoice.id) {
+        setBilling(originalInvoice);
+      }
+
+      setReversalDocument(reversalInvoice);
+      toast.success(`Reversal ${reversalInvoice.invoice_number || reversalInvoice.id} completed`);
+    } catch (err) {
+      console.error("Error completing reversal:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to complete reversal");
+    } finally {
+      setIsCompletingReversal(false);
+    }
+  };
 
   // Custom Header Component for SidePanel
   const CustomHeader = (
@@ -113,7 +193,7 @@ export function BillingDetailsSheet({ isOpen, onClose, billingId }: BillingDetai
                 textTransform: "uppercase",
                 letterSpacing: "0.5px"
                 }}>
-                {billing.payment_status || "Pending"}
+                {String(displayStatus).replace(/_/g, " ") || "Pending"}
                 </span>
             )}
             </div>
@@ -348,6 +428,99 @@ export function BillingDetailsSheet({ isOpen, onClose, billingId }: BillingDetai
                     </div>
                  </div>
               </div>
+
+              {billing.invoice_number && (
+                <div
+                  style={{
+                    border: "1px solid #E5E7EB",
+                    borderRadius: "12px",
+                    padding: "16px 18px",
+                    marginBottom: "24px",
+                    backgroundColor: linkedCollectionCount > 0 ? "#FEF2F2" : reversalDocument ? "#F0FDF9" : "#F9FAFB",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "16px", alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontSize: "12px", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#667085", marginBottom: "6px" }}>
+                        Reversal Control
+                      </div>
+                      {linkedCollectionCount > 0 ? (
+                        <div style={{ fontSize: "13px", color: "#991B1B", lineHeight: 1.5 }}>
+                          {linkedCollectionCount} collection record(s) are linked to this invoice. Resolve customer credit or refund handling before creating a reversal draft.
+                        </div>
+                      ) : isInvoiceReversalPosted(billing) || isInvoiceReversedOriginal(billing) ? (
+                        <div style={{ fontSize: "13px", color: "#166534", lineHeight: 1.5 }}>
+                          This invoice has already been reversed. The original document is preserved and no longer counts as active AR.
+                        </div>
+                      ) : reversalDocument ? (
+                        <div style={{ fontSize: "13px", color: "#166534", lineHeight: 1.5 }}>
+                          {isInvoiceReversalDraft(reversalDocument)
+                            ? <>Reversal draft created: <strong>{reversalDocument.invoice_number || reversalDocument.id}</strong>. Keep the original invoice intact and complete the cancellation from this reversal workflow.</>
+                            : <>Reversal posted: <strong>{reversalDocument.invoice_number || reversalDocument.id}</strong>. The original invoice is preserved for audit history and excluded from active AR.</>}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: "13px", color: "#344054", lineHeight: 1.5 }}>
+                          This invoice can be mirrored into a reversal draft without mutating the original document or reusing its billing-line ownership.
+                        </div>
+                      )}
+                    </div>
+
+                    {linkedCollectionCount === 0 && (
+                      <>
+                        {!reversalDocument && !isInvoiceReversalPosted(billing) && !isInvoiceReversedOriginal(billing) && (
+                          <button
+                            onClick={handleCreateReversalDraft}
+                            disabled={isCreatingReversal}
+                            style={{
+                              border: "1px solid #12332B",
+                              backgroundColor: isCreatingReversal ? "#E5E7EB" : "#12332B",
+                              color: isCreatingReversal ? "#6B7280" : "#FFFFFF",
+                              borderRadius: "10px",
+                              padding: "10px 14px",
+                              fontSize: "12px",
+                              fontWeight: 600,
+                              cursor: isCreatingReversal ? "not-allowed" : "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              minWidth: "168px",
+                              justifyContent: "center",
+                            }}
+                          >
+                            {isCreatingReversal ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
+                            {isCreatingReversal ? "Creating..." : "Create Reversal Draft"}
+                          </button>
+                        )}
+
+                        {(isInvoiceReversalDraft(billing) || isInvoiceReversalDraft(reversalDocument)) && (
+                          <button
+                            onClick={handleCompleteReversal}
+                            disabled={isCompletingReversal}
+                            style={{
+                              border: "1px solid #0F766E",
+                              backgroundColor: isCompletingReversal ? "#E5E7EB" : "#ECFDF5",
+                              color: isCompletingReversal ? "#6B7280" : "#0F766E",
+                              borderRadius: "10px",
+                              padding: "10px 14px",
+                              fontSize: "12px",
+                              fontWeight: 600,
+                              cursor: isCompletingReversal ? "not-allowed" : "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              minWidth: "168px",
+                              justifyContent: "center",
+                            }}
+                          >
+                            {isCompletingReversal ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                            {isCompletingReversal ? "Completing..." : "Complete Reversal"}
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Footer Meta */}
               <div className="grid grid-cols-2 gap-8 pt-8 border-t border-gray-200 text-sm">

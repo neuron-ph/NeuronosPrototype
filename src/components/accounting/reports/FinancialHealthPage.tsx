@@ -74,7 +74,7 @@ export function FinancialHealthPage() {
   // -- Table Columns --
   const columns: ColumnDef<ProjectFinancialRow>[] = [
     {
-      header: "Job No.",
+      header: "File Ref.",
       accessorKey: "projectNumber",
       width: "130px",
       cell: (row) => (
@@ -210,7 +210,7 @@ export function FinancialHealthPage() {
   // Export to CSV
   const handleExport = () => {
     const headers = [
-      "Job No.", "Date", "Company", "Invoice(s)", "Billing Total",
+      "File Ref.", "Date", "Company", "Invoice(s)", "Billing Total",
       "Expenses", "Admin 3%", "Total Expenses", "Collected", "Gross Profit",
     ];
     const csvRows = filteredRows.map((r) => [
@@ -249,7 +249,7 @@ export function FinancialHealthPage() {
   // Totals footer using DataTable's footerSummary format
   const footerSummary = filteredRows.length > 0
     ? [
-        { label: `${filteredRows.length} Projects`, value: "" as React.ReactNode },
+        { label: `${filteredRows.length} Containers`, value: "" as React.ReactNode },
         { label: "Billings", value: formatCurrency(filteredTotals.billingTotal) as React.ReactNode },
         { label: "Expenses", value: formatCurrency(filteredTotals.totalExpenses) as React.ReactNode },
         { label: "Collected", value: formatCurrency(filteredTotals.collectedAmount) as React.ReactNode },
@@ -341,7 +341,7 @@ export function FinancialHealthPage() {
               {card.value}
             </div>
             <div className="text-[11px] text-[#98A2B3] mt-1">
-              {monthFilter ? getMonthLabel(monthFilter) : "All Time"} &middot; {summary.projectCount} projects
+              {monthFilter ? getMonthLabel(monthFilter) : "All Time"} &middot; {summary.projectCount} containers
             </div>
           </div>
         ))}
@@ -353,7 +353,7 @@ export function FinancialHealthPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#98A2B3]" />
           <input
             type="text"
-            placeholder="Search by Job No., Company, or Invoice #..."
+            placeholder="Search by file ref, company, or invoice #..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F766E] text-[13px] border border-[#E5E9F0] bg-white text-[#101828] placeholder-[#98A2B3]"
@@ -373,11 +373,11 @@ export function FinancialHealthPage() {
               <div className="w-12 h-12 bg-[#F3F4F6] rounded-full flex items-center justify-center mb-3">
                 <DollarSign className="text-[#98A2B3]" size={20} />
               </div>
-              <p className="text-[14px] font-medium text-[#101828]">No projects found</p>
+              <p className="text-[14px] font-medium text-[#101828]">No financial containers found</p>
               <p className="text-[13px] text-[#667085] mt-1">
                 {monthFilter
-                  ? `No projects for ${getMonthLabel(monthFilter)}. Try another month or view All Time.`
-                  : "Create a project with billings to see financial data here."}
+                  ? `No containers for ${getMonthLabel(monthFilter)}. Try another month or view All Time.`
+                  : "Create project or contract work with billings to see financial data here."}
               </p>
             </div>
           }

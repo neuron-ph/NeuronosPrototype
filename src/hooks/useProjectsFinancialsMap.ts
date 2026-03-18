@@ -1,37 +1,32 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../utils/supabase/client";
-import type { Project, QuotationNew, SellingPriceLineItem } from "../types/pricing";
-import { calculateFinancialTotals, mergeBillableExpenses, FinancialTotals, convertQuotationToVirtualItems, mergeVirtualItemsWithRealItems } from "../utils/financialCalculations";
+import type { Project, QuotationNew } from "../types/pricing";
+import {
+  calculateFinancialTotals,
+  mergeBillableExpenses,
+  FinancialTotals,
+  convertQuotationToVirtualItems,
+  mergeVirtualItemsWithRealItems,
+} from "../utils/financialCalculations";
+import {
+  collectLinkedBookingIds,
+  filterBillingItemsForScope,
+  filterCollectionsForScope,
+  filterInvoicesForScope,
+  mapEvoucherExpensesForScope,
+} from "../utils/financialSelectors";
 import { useCachedFetch } from "./useNeuronCache";
 
 export interface ProjectFinancials extends FinancialTotals {
-  // Alias for backward compatibility if needed, or we just use FinancialTotals properties directly
-  income: number; // productionValue
-  costs: number; // cost
-  // grossProfit and margin are already in FinancialTotals (as profitMargin)
+  income: number;
+  costs: number;
 }
 
 export function useProjectsFinancialsMap(projects: Project[]) {
   const [financialsMap, setFinancialsMap] = useState<Record<string, ProjectFinancials>>({});
 
-  // Create a mapping of Booking ID -> Project Number for efficient lookup
-  const bookingToProjectMap = useMemo(() => {
-    const map = new Map<string, string>();
-    projects.forEach(p => {
-      if (p.linkedBookings && Array.isArray(p.linkedBookings)) {
-        p.linkedBookings.forEach((b: any) => {
-          if (b.bookingId) {
-            map.set(b.bookingId, p.project_number);
-          }
-        });
-      }
-    });
-    return map;
-  }, [projects]);
-
-  // ── Cached data sources (shared across modules) ───────────
   const supabaseFetcher = useCallback((table: string) => async () => {
-    const { data, error } = await supabase.from(table).select('*');
+    const { data, error } = await supabase.from(table).select("*");
     if (error) throw new Error(`Failed to fetch ${table}: ${error.message}`);
     return data || [];
   }, []);
@@ -39,98 +34,103 @@ export function useProjectsFinancialsMap(projects: Project[]) {
   const skip = projects.length === 0;
 
   const { data: invoicesData, isLoading: l1 } = useCachedFetch<any[]>(
-    "accounting-invoices", supabaseFetcher("invoices"), [], { skip }
+    "accounting-invoices",
+    supabaseFetcher("invoices"),
+    [],
+    { skip },
   );
   const { data: expensesData, isLoading: l2 } = useCachedFetch<any[]>(
-    "accounting-expenses", supabaseFetcher("expenses"), [], { skip }
+    "accounting-evouchers",
+    supabaseFetcher("evouchers"),
+    [],
+    { skip },
   );
   const { data: billingItemsData, isLoading: l3 } = useCachedFetch<any[]>(
-    "accounting-billing-items", supabaseFetcher("billing_line_items"), [], { skip }
+    "accounting-billing-items",
+    supabaseFetcher("billing_line_items"),
+    [],
+    { skip },
   );
-  const { data: quotationsData, isLoading: l4 } = useCachedFetch<any[]>(
-    "quotations", supabaseFetcher("quotations"), [], { skip }
+  const { data: collectionsData, isLoading: l4 } = useCachedFetch<any[]>(
+    "accounting-collections",
+    supabaseFetcher("collections"),
+    [],
+    { skip },
+  );
+  const { data: quotationsData, isLoading: l5 } = useCachedFetch<any[]>(
+    "quotations",
+    supabaseFetcher("quotations"),
+    [],
+    { skip },
   );
 
-  const isLoading = l1 || l2 || l3 || l4;
+  const isLoading = l1 || l2 || l3 || l4 || l5;
 
-  // ── Compute financial map from cached data ────────────────
   useEffect(() => {
     if (isLoading || projects.length === 0) return;
 
-    // Create Quotation Map for fast lookup
     const quotationsMap = new Map<string, QuotationNew>();
     if (Array.isArray(quotationsData)) {
-      quotationsData.forEach((q: QuotationNew) => quotationsMap.set(q.id, q));
+      quotationsData.forEach((quotation: QuotationNew) => {
+        quotationsMap.set(quotation.id, quotation);
+      });
     }
 
-    const finalMap: Record<string, ProjectFinancials> = {};
+    const nextMap: Record<string, ProjectFinancials> = {};
 
-    // Process per project to ensure strictly isolated financials
-    projects.forEach(p => {
-       // 1. Identify Linked IDs
-       const linkedIds = new Set<string>([p.project_number]);
-       if (p.linkedBookings && Array.isArray(p.linkedBookings)) {
-         p.linkedBookings.forEach((b: any) => linkedIds.add(b.bookingId));
-       }
+    projects.forEach((project) => {
+      const linkedBookingIds = collectLinkedBookingIds(project.linkedBookings || []);
+      const containerReference = project.project_number;
 
-       // 2. Filter Invoices
-       const projectInvoices = invoicesData.filter((b: any) => {
-          // Must match project
-          if (b.project_number !== p.project_number) return false;
+      const projectInvoices = filterInvoicesForScope(
+        invoicesData,
+        linkedBookingIds,
+        containerReference,
+      );
 
-          // Must have valid status
-          const status = (b.status || "").toLowerCase();
-          const paymentStatus = (b.payment_status || "").toLowerCase();
-          return ["posted", "approved", "paid", "open", "partial"].includes(status) || 
-                 ["paid", "partial"].includes(paymentStatus);
-       });
+      const projectExpenses = mapEvoucherExpensesForScope(
+        expensesData,
+        linkedBookingIds,
+        containerReference,
+      );
 
-       // 3. Filter Expenses
-       const projectExpenses = expensesData.filter((e: any) => {
-          // Must match project or linked booking
-          const isRelevant = linkedIds.has(e.project_number) || linkedIds.has(e.booking_id);
-          if (!isRelevant) return false;
+      let projectBillingItems = filterBillingItemsForScope(
+        billingItemsData,
+        linkedBookingIds,
+        containerReference,
+      );
 
-          // Must have valid status
-          const status = (e.status || "").toLowerCase();
-          return ["approved", "posted", "paid", "partial"].includes(status);
-       });
+      const linkedQuotation = quotationsMap.get(project.quotation_id);
+      if (linkedQuotation) {
+        const virtualItems = convertQuotationToVirtualItems(linkedQuotation, containerReference);
+        projectBillingItems = mergeVirtualItemsWithRealItems(projectBillingItems, virtualItems);
+      }
 
-       // 4. Filter Real Billing Items (Saved in DB)
-       let projectBillingItems = billingItemsData.filter((item: any) => {
-           let pNum = item.project_number;
-           if (!pNum && item.booking_id) {
-              pNum = bookingToProjectMap.get(item.booking_id);
-           }
-           return pNum === p.project_number;
-       });
+      projectBillingItems = mergeBillableExpenses(projectBillingItems, projectExpenses);
 
-       // 5. MERGE: Add Virtual Items from Quotation (Potential Revenue)
-       const linkedQuotation = quotationsMap.get(p.quotation_id);
-       if (linkedQuotation) {
-           // Use Shared Logic
-           const virtualItems = convertQuotationToVirtualItems(linkedQuotation, p.project_number);
-           projectBillingItems = mergeVirtualItemsWithRealItems(projectBillingItems, virtualItems);
-       }
+      const projectCollections = filterCollectionsForScope(
+        collectionsData,
+        projectInvoices.map((invoice: any) => invoice.id).filter(Boolean),
+        containerReference,
+      );
 
-       // MERGE: Add billable expenses as Unbilled Revenue (Critical for Income consistency)
-       projectBillingItems = mergeBillableExpenses(projectBillingItems, projectExpenses);
+      const totals = calculateFinancialTotals(
+        projectInvoices,
+        projectBillingItems,
+        projectExpenses,
+        projectCollections,
+      );
 
-       // 6. Calculate Totals
-       const totals = calculateFinancialTotals(projectInvoices, projectBillingItems, projectExpenses, []);
-       
-       finalMap[p.project_number] = {
-         ...totals,
-         income: totals.productionValue, // Map productionValue to income for compatibility
-         costs: totals.cost,
-         // grossProfit and margin are already in totals (as grossProfit and profitMargin)
-         // We need to ensure 'margin' property exists if consumers look for it
-         margin: totals.profitMargin
-       };
+      nextMap[project.project_number] = {
+        ...totals,
+        income: totals.bookedCharges,
+        costs: totals.directCost,
+        margin: totals.grossMargin,
+      };
     });
 
-    setFinancialsMap(finalMap);
-  }, [projects, bookingToProjectMap, invoicesData, expensesData, billingItemsData, quotationsData, isLoading]);
+    setFinancialsMap(nextMap);
+  }, [projects, invoicesData, expensesData, billingItemsData, collectionsData, quotationsData, isLoading]);
 
   return { financialsMap, isLoading };
 }

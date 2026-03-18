@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, Briefcase, UserCheck, FileEdit, Clock, CheckCircle, Trash2, FileCheck } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
+import { assessBookingFinancialState, canHardDeleteBooking, getBookingCancellationMessage } from "../../utils/bookingCancellation";
 import { CreateBrokerageBookingPanel } from "./CreateBrokerageBookingPanel";
 import { BrokerageBookingDetails } from "./BrokerageBookingDetails";
 import { NeuronStatusPill } from "../NeuronStatusPill";
@@ -105,12 +106,18 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
 
   const handleDeleteBooking = async (bookingId: string, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent row click
-    
-    if (!window.confirm(`Are you sure you want to delete booking ${bookingId}? This will also delete all associated billings and expenses. This action cannot be undone.`)) {
-      return;
-    }
 
     try {
+      const financialState = await assessBookingFinancialState(bookingId);
+      if (!canHardDeleteBooking(financialState)) {
+        toast.error(getBookingCancellationMessage(financialState));
+        return;
+      }
+
+      if (!window.confirm(`Delete booking ${bookingId}? No linked charges, costs, invoices, or collections were found.`)) {
+        return;
+      }
+
       const { error } = await supabase.from('bookings').delete().eq('id', bookingId);
       if (error) throw error;
 

@@ -6,6 +6,7 @@ interface CreateEVoucherFormProps {
   context?: "bd" | "accounting" | "operations" | "collection" | "billing";
   defaultRequestor?: string;
   bookingId?: string;
+  projectNumber?: string;
   bookingType?: "forwarding" | "brokerage" | "trucking" | "marine-insurance" | "others";
   onSuccess?: () => void;
 }
@@ -16,6 +17,7 @@ export function CreateEVoucherForm({
   context = "accounting",
   defaultRequestor,
   bookingId,
+  projectNumber,
   bookingType,
   onSuccess
 }: CreateEVoucherFormProps) {
@@ -27,6 +29,7 @@ export function CreateEVoucherForm({
       context={context}
       defaultRequestor={defaultRequestor}
       bookingId={bookingId}
+      projectNumber={projectNumber}
       bookingType={bookingType}
       mode="create"
     />

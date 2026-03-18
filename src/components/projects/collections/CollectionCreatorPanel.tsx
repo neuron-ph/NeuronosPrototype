@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, ArrowRight, Check } from "lucide-react";
 import { toast } from "../../ui/toast-utils";
-import type { Project } from "../../../types/pricing";
+import type { FinancialContainer } from "../../../types/financials";
 import type { LinkedBilling } from "../../../types/evoucher";
 import { Invoice, Collection } from "../../../types/accounting";
 import { useEVoucherSubmit } from "../../../hooks/useEVoucherSubmit";
@@ -14,10 +14,11 @@ import { calculateInvoiceBalance } from "../../../utils/accounting-math";
 interface CollectionCreatorPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  project: Project;
+  project: FinancialContainer;
   onSuccess: () => void;
   // New props for Viewing & Data Injection
-  existingInvoices: Invoice[]; 
+  existingInvoices: Invoice[];
+  existingCollections: Collection[];
   initialData?: Collection | null;
   mode?: 'create' | 'view';
 }
@@ -40,6 +41,7 @@ export function CollectionCreatorPanel({
   project, 
   onSuccess,
   existingInvoices,
+  existingCollections,
   initialData,
   mode = 'create' 
 }: CollectionCreatorPanelProps) {
@@ -102,51 +104,25 @@ export function CollectionCreatorPanel({
         setNotes("");
         setAmountReceived(0);
 
-        // Filter for open invoices using the math utility
         const openItems = existingInvoices
-          .filter(inv => {
-             // We can't pass 'collections' here easily to calculate balance because we are in the panel.
-             // Ideally we should pass the calculated balance down, but for now let's rely on the fact 
-             // that 'existingInvoices' from the parent might not have the real-time balance if we don't recalc it.
-             // However, for the CREATE flow, we usually fetch fresh data. 
-             // To keep it DRY and fast, we will calculate balance if we had the collections list.
-             // BUT, since we removed the API call, we are relying on 'existingInvoices' prop.
-             // Let's assume the parent passes ALL invoices, and we filter here.
-             
-             // Simple fallback: If the parent passed invoices, they are the source of truth.
-             // We really need to know the 'remaining balance'.
-             // Since we are refactoring to remove the API call, we need to be careful.
-             // The API call returned 'remaining_balance'. The 'existingInvoices' prop is the raw Invoice object.
-             // We need to calculate the balance.
-             
-             // IMPORTANT: For this specific refactor to work 100% without the API call, 
-             // the parent should ideally pass 'invoices with balance'.
-             // But to avoid changing the parent's data structure too much, let's just use what we have.
-             // In the previous step, we made `calculateInvoiceBalance`.
-             // But we don't have access to ALL collections here to run that function.
-             
-             // COMPROMISE: For now, we will assume 'existingInvoices' passed in Create Mode 
-             // are processed by the parent to only include Open ones, OR we accept that we might show paid ones if not filtered.
-             // Actually, the best way is to trust the `UnifiedCollectionsTab` to pass the correct list? 
-             // No, `UnifiedCollectionsTab` has `financials.invoices`.
-             
-             // We will assume the invoice is open if it doesn't have payment_status === 'Paid'.
-             // This matches the old logic roughly, but without the precision of the backend calculation 
-             // unless we pass the collections list too. 
-             // For the sake of this task (View Screen), let's focus on getting the mechanism working.
-             // In a future refactor, we should pass 'openInvoices' specifically for Create mode.
-             
-             const isPaid = inv.payment_status === 'Paid' || inv.payment_status === 'paid';
-             return !isPaid; 
+          .map(inv => {
+            const { balance, status } = calculateInvoiceBalance(inv, existingCollections);
+
+            return {
+              invoice: inv,
+              balance,
+              status,
+            };
           })
-          .map(inv => ({
+          .filter(({ balance, status }) => balance > 0.01 && status !== 'paid')
+          .map(({ invoice: inv, balance }) => ({
             id: inv.id,
             voucher_number: inv.invoice_number,
             statement_reference: inv.invoice_number,
             description: inv.description,
             due_date: inv.due_date || inv.created_at,
             amount: inv.total_amount || inv.amount,
-            remaining_balance: inv.amount_due || inv.total_amount || inv.amount, // Approximate without full recalc
+            remaining_balance: balance,
             payment_amount: 0,
             isSelected: false
           }))
@@ -155,7 +131,7 @@ export function CollectionCreatorPanel({
         setInvoices(openItems);
       }
     }
-  }, [isOpen, mode, initialData, existingInvoices]);
+  }, [isOpen, mode, initialData, existingInvoices, existingCollections]);
 
 
   // -- Bidirectional Logic --
@@ -247,6 +223,7 @@ export function CollectionCreatorPanel({
     }
 
     const selectedInvoices = invoices.filter(inv => inv.payment_amount > 0);
+    const primaryInvoiceId = selectedInvoices.length === 1 ? selectedInvoices[0].id : undefined;
     
     // Calculate total applied to invoices
     const totalApplied = selectedInvoices.reduce((sum, inv) => sum + inv.payment_amount, 0);
@@ -278,18 +255,23 @@ export function CollectionCreatorPanel({
         });
       }
 
+      const submissionNotes = amountToCredit > 0.01
+        ? [notes, `Customer credit pending: ${formatCurrency(amountToCredit)} remains unapplied.`].filter(Boolean).join("\n\n")
+        : notes;
+
       await submitForApproval({
         requestName: `Collection - ${project.customer_name}`,
         expenseCategory: "Collection",
         subCategory: "",
         projectNumber: project.project_number,
+        invoiceId: primaryInvoiceId,
         lineItems: lineItems,
         totalAmount: amountReceived,
         preferredPayment: paymentMethod,
         vendor: project.customer_name,
         creditTerms: "None",
         paymentSchedule: paymentDate,
-        notes: notes,
+        notes: submissionNotes,
         requestor: user?.name || "Current User",
         transactionType: "collection",
         linkedBillings: linkedBillings as any

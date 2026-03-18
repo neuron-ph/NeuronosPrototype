@@ -14,6 +14,7 @@ import { EditableMultiInputField } from "../../shared/EditableMultiInputField";
 import { EditableSectionCard, useSectionEdit } from "../../shared/EditableSectionCard";
 import { EditableField } from "../../shared/EditableField";
 import { ConsigneeInfoBadge } from "../../shared/ConsigneeInfoBadge";
+import { assessBookingFinancialState, canTransitionBookingToCancelled, getBookingCancellationStatusMessage, voidBookingUnbilledCharges } from "../../../utils/bookingCancellation";
 
 interface ForwardingBookingDetailsProps {
   booking: ForwardingBooking;
@@ -106,6 +107,27 @@ export function ForwardingBookingDetails({
   const handleStatusUpdate = async (newStatus: ExecutionStatus) => {
     const oldStatus = editedBooking.status;
     if (oldStatus === newStatus) return;
+
+    if (newStatus === "Cancelled") {
+      let financialState = await assessBookingFinancialState(booking.bookingId);
+      if (financialState.recommendedAction === "cancel-and-void-unbilled") {
+        const shouldProceed = window.confirm(
+          `Cancel booking ${booking.bookingId} and void ${financialState.unbilledChargeCount} unbilled charge line(s)?`
+        );
+        if (!shouldProceed) return;
+
+        await voidBookingUnbilledCharges(booking.bookingId);
+        toast.info("Unbilled booking charges were voided before cancellation.");
+        financialState = await assessBookingFinancialState(booking.bookingId);
+      }
+      if (!canTransitionBookingToCancelled(financialState)) {
+        toast.error(getBookingCancellationStatusMessage(financialState));
+        return;
+      }
+      if (financialState.recommendedAction === "cancel-preserve-costs") {
+        toast.info(getBookingCancellationStatusMessage(financialState));
+      }
+    }
 
     // Optimistic Update
     setEditedBooking(prev => ({

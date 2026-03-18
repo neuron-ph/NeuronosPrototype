@@ -15,6 +15,7 @@ import { ConsigneeInfoBadge } from "../shared/ConsigneeInfoBadge";
 import { normalizeTruckingLineItems } from "../../utils/contractQuantityExtractor";
 import { Truck as TruckIcon } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
+import { assessBookingFinancialState, canTransitionBookingToCancelled, getBookingCancellationStatusMessage, voidBookingUnbilledCharges } from "../../utils/bookingCancellation";
 
 interface TruckingBookingDetailsProps {
   booking: TruckingBooking;
@@ -155,6 +156,28 @@ export function TruckingBookingDetails({ booking, onBack, onUpdate, currentUser,
   const handleStatusUpdate = async (newStatus: ExecutionStatus) => {
     const oldStatus = editedBooking.status;
     if (oldStatus === newStatus) return;
+
+    if (newStatus === "Cancelled") {
+      let financialState = await assessBookingFinancialState(booking.bookingId);
+      if (financialState.recommendedAction === "cancel-and-void-unbilled") {
+        const shouldProceed = window.confirm(
+          `Cancel booking ${booking.bookingId} and void ${financialState.unbilledChargeCount} unbilled charge line(s)?`
+        );
+        if (!shouldProceed) return;
+
+        await voidBookingUnbilledCharges(booking.bookingId);
+        toast.info("Unbilled booking charges were voided before cancellation.");
+        financialState = await assessBookingFinancialState(booking.bookingId);
+      }
+      if (!canTransitionBookingToCancelled(financialState)) {
+        toast.error(getBookingCancellationStatusMessage(financialState));
+        return;
+      }
+      if (financialState.recommendedAction === "cancel-preserve-costs") {
+        toast.info(getBookingCancellationStatusMessage(financialState));
+      }
+    }
+
     setEditedBooking(prev => ({ ...prev, status: newStatus }));
     setActivityLog(prev => [{ id: `activity-${Date.now()}`, timestamp: new Date(), user: currentUser?.name || "Current User", action: "status_changed", statusFrom: oldStatus, statusTo: newStatus }, ...prev]);
     try {

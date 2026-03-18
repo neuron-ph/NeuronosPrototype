@@ -5,6 +5,7 @@ import { CustomDatePicker } from "../common/CustomDatePicker";
 import { ExpensesTable } from "./ExpensesTable";
 import { CreateEVoucherForm } from "./evouchers/CreateEVoucherForm";
 import { AddRequestForPaymentPanel } from "./AddRequestForPaymentPanel";
+import { toast } from "../ui/toast-utils";
 import type { Expense as OperationsExpense } from "../../types/operations";
 
 interface UnifiedExpensesTabProps {
@@ -14,7 +15,8 @@ interface UnifiedExpensesTabProps {
   linkedBookings?: { bookingId: string; serviceType?: string }[];
   context?: "project" | "customer" | "booking";
   onRefresh?: () => void;
-  projectNumber?: string; // In booking context, this is the bookingId
+  projectNumber?: string;
+  bookingId?: string;
   bookingType?: "forwarding" | "brokerage" | "trucking" | "marine-insurance" | "others";
   title?: string;
   subtitle?: string;
@@ -48,6 +50,7 @@ export function UnifiedExpensesTab({
   context = "project",
   onRefresh,
   projectNumber,
+  bookingId,
   bookingType,
   title,
   subtitle,
@@ -84,6 +87,13 @@ export function UnifiedExpensesTab({
       .filter(e => !deletedIds.includes(e.id) && e.status !== "rejected" && e.status !== "cancelled")
       .reduce((sum, e) => sum + e.amount, 0);
   }, [expenses, deletedIds]);
+
+  const resolvedCreateBookingId = useMemo(() => {
+    if (context === "booking") return bookingId || "";
+    if (context !== "project") return "";
+    if (linkedBookings.length === 1) return linkedBookings[0]?.bookingId || "";
+    return selectedBooking || "";
+  }, [bookingId, context, linkedBookings, selectedBooking]);
 
   // -- Filter Logic --
   const filteredExpenses = useMemo(() => {
@@ -142,6 +152,24 @@ export function UnifiedExpensesTab({
     setSearchQuery("");
   };
 
+  const handleOpenAddExpense = () => {
+    if (context !== "project" && context !== "booking") {
+      setIsAddExpenseModalOpen(true);
+      return;
+    }
+
+    if (!resolvedCreateBookingId) {
+      toast.error(
+        context === "project"
+          ? "Select a booking before adding a project expense."
+          : "A booking-linked expense requires a real booking."
+      );
+      return;
+    }
+
+    setIsAddExpenseModalOpen(true);
+  };
+
   return (
     <div className="flex flex-col bg-white">
       {/* Header Section (Conditional) */}
@@ -161,7 +189,7 @@ export function UnifiedExpensesTab({
           <div className="flex flex-col items-end">
             {!readOnly && (
               <button
-                onClick={() => setIsAddExpenseModalOpen(true)}
+                onClick={handleOpenAddExpense}
                 className="flex items-center gap-2 px-4 py-2 bg-[#0F766E] text-white rounded-lg hover:bg-[#0D6559] transition-colors shadow-sm font-medium text-[14px]"
               >
                 <Plus size={16} />
@@ -295,7 +323,7 @@ export function UnifiedExpensesTab({
           vendor_name: selectedExpense.vendorName,
           request_date: selectedExpense.expenseDate || selectedExpense.createdAt,
           expense_category: selectedExpense.expenseCategory,
-          project_number: selectedExpense.bookingId,
+          project_number: selectedExpense.projectNumber || projectNumber || "",
           // Defaults for view mode
           transaction_type: "expense",
           is_billable: selectedExpense.isBillable,
@@ -315,7 +343,8 @@ export function UnifiedExpensesTab({
           isOpen={isAddExpenseModalOpen}
           onClose={() => setIsAddExpenseModalOpen(false)}
           context="operations" // Assuming operations context for projects
-          bookingId={projectNumber} // Pass project number/booking ID to link it
+          bookingId={resolvedCreateBookingId || undefined}
+          projectNumber={projectNumber}
           bookingType={bookingType} // Pass service type
           onSuccess={() => {
             onRefresh?.();

@@ -60,8 +60,10 @@ const formatCurrency = (amount: number, currency: string = "PHP") => {
 };
 
 // Helper: Compute aggregate billing status from a list of items
-const getBookingBillingStatus = (items: BillingTableItem[]): "Unbilled" | "Partially Billed" | "Fully Billed" => {
+const getBookingBillingStatus = (items: BillingTableItem[]): "Unbilled" | "Partially Billed" | "Fully Billed" | "Voided" => {
   if (items.length === 0) return "Unbilled";
+  const voidedCount = items.filter(i => ["voided", "cancelled", "void"].includes((i.status || "").toLowerCase())).length;
+  if (voidedCount === items.length) return "Voided";
   const billedCount = items.filter(i => i.status === "billed" || i.status === "paid" || i.status === "invoiced").length;
   if (billedCount === 0) return "Unbilled";
   if (billedCount === items.length) return "Fully Billed";
@@ -72,6 +74,7 @@ const billingStatusStyles: Record<string, { bg: string; text: string; border: st
   "Unbilled": { bg: "#F3F4F6", text: "#6B7280", border: "#E5E7EB" },
   "Partially Billed": { bg: "#FFFBEB", text: "#D97706", border: "#FDE68A" },
   "Fully Billed": { bg: "#ECFDF5", text: "#059669", border: "#A7F3D0" },
+  "Voided": { bg: "#FEF2F2", text: "#DC2626", border: "#FECACA" },
 };
 
 export function BillingsTable({
@@ -425,7 +428,7 @@ export function BillingsTable({
                             {/* Billing item rows — directly rendered, sharing the unified column grid */}
                             <div className="divide-y divide-[#F0F0F0]">
                               {catItems.map(item => {
-                                const isBilled = item.status === "billed" || item.status === "paid" || item.status === "invoiced";
+                                const isBilled = ["billed", "paid", "invoiced", "voided", "cancelled", "void"].includes((item.status || "").toLowerCase());
                                 const isHighlighted = highlightId === item.id;
                                 return (
                                   <div
@@ -447,9 +450,9 @@ export function BillingsTable({
                                       priceEditable: true,
                                     }}
                                     handlers={{
-                                      onFieldChange: (field, value) => onItemChange?.(item.id, field, value),
-                                      onPriceChange: (value) => onItemChange?.(item.id, "amount", value),
-                                      onRemove: () => onItemChange?.(item.id, "delete", true),
+                                      onFieldChange: isBilled ? undefined : (field, value) => onItemChange?.(item.id, field, value),
+                                      onPriceChange: isBilled ? undefined : (value) => onItemChange?.(item.id, "amount", value),
+                                      onRemove: isBilled ? undefined : () => onItemChange?.(item.id, "delete", true),
                                     }}
                                   />
                                   </div>
@@ -572,7 +575,7 @@ export function BillingsTable({
                                 <div className="divide-y divide-[#E5E9E8]">
                                 {items.map(item => {
                                     // Protect billed/paid items from editing
-                                    const isBilled = item.status === "billed" || item.status === "paid" || item.status === "invoiced";
+                                    const isBilled = ["billed", "paid", "invoiced", "voided", "cancelled", "void"].includes((item.status || "").toLowerCase());
                                     return (
                                     <UniversalPricingRow
                                     key={item.id}
@@ -589,9 +592,9 @@ export function BillingsTable({
                                         priceEditable: true 
                                     }}
                                     handlers={{
-                                        onFieldChange: (field, value) => onItemChange?.(item.id, field, value),
-                                        onPriceChange: (value) => onItemChange?.(item.id, 'amount', value),
-                                        onRemove: () => onDeleteCategory ? onItemChange?.(item.id, 'delete', true) : undefined
+                                        onFieldChange: isBilled ? undefined : (field, value) => onItemChange?.(item.id, field, value),
+                                        onPriceChange: isBilled ? undefined : (value) => onItemChange?.(item.id, 'amount', value),
+                                        onRemove: isBilled ? undefined : () => onDeleteCategory ? onItemChange?.(item.id, 'delete', true) : undefined
                                     }}
                                     />
                                     );

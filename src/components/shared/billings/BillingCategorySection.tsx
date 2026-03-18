@@ -14,7 +14,7 @@ export interface BillingCategoryItem {
   description: string;
   amount: number;
   currency: string;
-  status: 'unbilled' | 'billed' | 'paid';
+  status: 'unbilled' | 'billed' | 'paid' | 'voided';
   quotation_category?: string;
   [key: string]: any;
 }
@@ -93,6 +93,10 @@ export function BillingCategorySection({
 
   const handleSaveItem = async (data: PricingRowData) => {
     if (!projectId) return;
+    if (!bookingId) {
+      toast.error("Manual billing items must be created from a real booking context.");
+      return;
+    }
 
     try {
       const payload = {

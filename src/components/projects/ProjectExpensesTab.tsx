@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
-import type { Project } from "../../types/pricing";
+import type { FinancialContainer } from "../../types/financials";
 import { supabase } from "../../utils/supabase/client";
 import type { Expense as OperationsExpense } from "../../types/operations";
 import { UnifiedExpensesTab } from "../accounting/UnifiedExpensesTab";
 
 interface ProjectExpensesTabProps {
-  project: Project;
+  project: FinancialContainer;
   currentUser?: {
     id: string;
     name: string;
@@ -31,25 +31,23 @@ export function ProjectExpensesTab({ project, currentUser, title, subtitle }: Pr
       setIsLoading(true);
       const { data: allEVouchers, error } = await supabase.from('evouchers').select('*');
       if (!error && allEVouchers) {
-          
-          const validIds = new Set([
-            project.id,
-            project.project_number,
-            ...(linkedBookings.map(b => b.bookingId))
-          ]);
+          const validBookingIds = new Set(
+            linkedBookings
+              .map((booking) => booking.bookingId)
+              .filter(Boolean)
+          );
 
           const relevantEVouchers = allEVouchers.filter((ev: any) => {
-            const isRelevant = validIds.has(ev.project_number) || validIds.has(ev.booking_id);
-            if (!isRelevant) return false;
+            if (!ev.booking_id || !validBookingIds.has(ev.booking_id)) return false;
 
             const type = (ev.transaction_type || "").toLowerCase();
             return type === "expense" || type === "budget_request";
           });
 
           const mappedExpenses: OperationsExpense[] = relevantEVouchers.map((ev: any) => {
-            const targetId = ev.project_number || ev.booking_id;
-            const linkedBooking = linkedBookings.find(b => b.bookingId === targetId);
-            const bookingType = linkedBooking ? linkedBooking.serviceType : (targetId === project.id ? "Project" : "Other");
+            const targetBookingId = ev.booking_id;
+            const linkedBooking = linkedBookings.find((booking) => booking.bookingId === targetBookingId);
+            const bookingType = linkedBooking?.serviceType || "Other";
 
             let status = "pending";
             const rawStatus = (ev.status || "").toLowerCase();
@@ -61,7 +59,8 @@ export function ProjectExpensesTab({ project, currentUser, title, subtitle }: Pr
             return {
               expenseId: ev.id,
               id: ev.id,
-              bookingId: targetId,
+              bookingId: targetBookingId,
+              projectNumber: ev.project_number || project.project_number,
               bookingType: bookingType,
               expenseName: ev.voucher_number || ev.id,
               expenseCategory: ev.expense_category || "Uncategorized",

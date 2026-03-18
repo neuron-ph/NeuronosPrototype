@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import { UnifiedInvoicesTab } from "../shared/invoices/UnifiedInvoicesTab";
 import type { FinancialData } from "../../hooks/useProjectFinancials";
 import { calculateFinancialTotals } from "../../utils/financialCalculations";
+import { isInvoiceVisibleDocument } from "../../utils/invoiceReversal";
 import { supabase } from "../../utils/supabase/client";
 
 export function AggregateInvoicesPage() {
@@ -27,17 +28,7 @@ export function AggregateInvoicesPage() {
       ]);
 
       if (!invoiceErr && invoiceRows) {
-        // Filter to valid statuses
-        setInvoices(
-          invoiceRows.filter((b: any) => {
-            const status = (b.status || "").toLowerCase();
-            const paymentStatus = (b.payment_status || "").toLowerCase();
-            return (
-              ["draft", "posted", "approved", "paid", "open", "partial"].includes(status) ||
-              ["paid", "partial"].includes(paymentStatus)
-            );
-          })
-        );
+        setInvoices(invoiceRows.filter((invoice: any) => isInvoiceVisibleDocument(invoice)));
       }
 
       if (!billingErr && billingRows) {
