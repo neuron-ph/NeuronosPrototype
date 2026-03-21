@@ -49,7 +49,7 @@ body{
 
 /* WRAP / CANVAS */
 #wrap{padding:28px 32px 80px;overflow-x:auto;}
-#canvas{position:relative;width:2200px;height:1480px;}
+#canvas{position:relative;width:2240px;height:1520px;}
 svg#arw{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;}
 
 /* ZONES */
@@ -66,6 +66,7 @@ svg#arw{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;ove
 .z-auth{background:rgba(44,44,68,0.05);border-color:rgba(72,72,100,0.09);}
 .z-bd  {background:rgba(38,82,58,0.04);border-color:rgba(59,122,90,0.09);}
 .z-pr  {background:rgba(38,60,130,0.04);border-color:rgba(58,94,158,0.09);}
+.z-ct  {background:rgba(22,50,36,0.06);border-color:rgba(44,100,66,0.14);}
 .z-op  {background:rgba(110,86,20,0.04);border-color:rgba(150,118,42,0.09);}
 .z-fi  {background:rgba(115,40,62,0.04);border-color:rgba(150,58,82,0.09);}
 .z-ac  {background:rgba(78,38,126,0.04);border-color:rgba(118,74,154,0.09);}
@@ -87,7 +88,7 @@ svg#arw{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;ove
 }
 .node:hover{transform:translateY(-1px);border-color:var(--brd-h);z-index:99;}
 .node .sub{display:block;font-size:9.5px;font-weight:400;opacity:0.48;margin-top:4px;line-height:1.4;letter-spacing:0;}
-.node.hub{border-radius:7px;padding:16px 22px;font-size:13px;font-weight:600;}
+.node.hub{border-radius:7px;padding:15px 20px;font-size:12.5px;font-weight:600;}
 .node.db {border-radius:4px;padding:5px 10px;font-size:10px;font-weight:400;font-family:'Cascadia Code','Courier New',monospace;letter-spacing:0;}
 
 .bd{background:var(--bd-bg);border-color:var(--bd-b);border-left-color:var(--bd-l);color:var(--bd-t);}
@@ -101,7 +102,26 @@ svg#arw{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;ove
 .ex{background:var(--ex-bg);border-color:var(--ex-b);border-left-color:var(--ex-l);color:var(--ex-t);}
 .dn{background:rgba(26,26,40,0.72);border-color:rgba(48,48,68,0.30);border-left-color:rgba(66,66,90,0.28);color:var(--t3);}
 
-.hub.co{background:rgba(22,78,52,0.22);border-color:rgba(44,120,80,0.26);border-left-color:var(--co-l);}
+.hub.co{background:rgba(22,78,52,0.22);border-color:rgba(44,120,80,0.28);border-left-color:var(--co-l);}
+.hub.pr{background:rgba(32,50,110,0.22);border-color:rgba(58,94,158,0.28);border-left-color:var(--pr-l);}
+
+/* callout annotation */
+.callout{
+  position:absolute;
+  background:rgba(30,30,48,0.85);
+  border:1px solid rgba(72,72,100,0.22);
+  border-left:2px solid rgba(90,90,130,0.45);
+  border-radius:5px;
+  padding:8px 12px;
+  font-size:10px;font-weight:400;
+  color:var(--t3);line-height:1.55;
+  letter-spacing:0;
+  max-width:290px;
+}
+.callout strong{color:var(--t2);font-weight:500;}
+
+/* zone divider */
+.zdiv{position:absolute;left:16px;right:16px;height:1px;background:rgba(72,72,100,0.14);}
 
 /* TOOLTIP */
 #tip{
@@ -155,7 +175,7 @@ svg#arw{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;ove
 </svg>
 
 <!-- ═══ AUTH ═══ -->
-<div class="zone z-auth" style="left:40px;top:22px;width:1820px;height:68px;"></div>
+<div class="zone z-auth" style="left:40px;top:22px;width:1860px;height:68px;"></div>
 <div class="zlbl" style="left:48px;top:25px;color:var(--sh-t);">Auth Layer</div>
 
 <div class="node sh" id="n-login" style="left:106px;top:37px;"
@@ -179,7 +199,7 @@ svg#arw{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;ove
   data-t="Neuron Cache" data-d="useNeuronCache — client-side React context caching layer. Reduces redundant Supabase round-trips across navigations." data-a="Performance across all data-fetching hooks">Neuron Cache</div>
 
 <!-- ═══ BD ═══ -->
-<div class="zone z-bd" style="left:40px;top:122px;width:330px;height:568px;"></div>
+<div class="zone z-bd" style="left:40px;top:122px;width:330px;height:588px;"></div>
 <div class="zlbl" style="left:48px;top:126px;color:var(--bd-t);">Business Development</div>
 
 <div class="node bd" id="n-customer" style="left:74px;top:168px;"
@@ -189,210 +209,237 @@ svg#arw{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;ove
   data-t="Contacts" data-d="Individual people at a customer company. Linked across BD, Pricing, and Operations as points of contact." data-a="Inquiries, Quotations, Bookings (point of contact field)">Contacts</div>
 
 <div class="node bd" id="n-inquiry" style="left:74px;top:368px;"
-  data-t="Inquiries" data-d="A sales lead or freight request. The starting point of the main business pipeline — handed off to Pricing for a quote." data-a="Spawns Quotations → triggers the entire downstream pipeline">Inquiries</div>
+  data-t="Inquiries" data-d="A sales lead or freight request. Starting point of the main pipeline. Handed off to Pricing, who creates a Quotation that becomes either a Project or a Contract (1:1)." data-a="Spawns Quotations → entire downstream pipeline">Inquiries</div>
 
 <div class="node bd" id="n-task" style="left:74px;top:468px;"
   data-t="Tasks / Activities" data-d="Internal sales tasks and CRM activity log. BD reps track follow-ups, calls, and site visits here." data-a="BD performance reporting, activity timeline views">Tasks / Activities</div>
 
-<div class="node bd" id="n-budget" style="left:74px;top:558px;"
+<div class="node bd" id="n-budget" style="left:74px;top:568px;"
   data-t="Budget Requests" data-d="BD reps submit budget requests for client events or marketing spend. Requires manager approval before funds are released." data-a="Expense records if approved, BD reports">Budget Requests</div>
 
 <!-- ═══ PRICING ═══ -->
-<div class="zone z-pr" style="left:424px;top:122px;width:330px;height:568px;"></div>
-<div class="zlbl" style="left:432px;top:126px;color:var(--pr-t);">Pricing</div>
+<div class="zone z-pr" style="left:420px;top:122px;width:310px;height:588px;"></div>
+<div class="zlbl" style="left:428px;top:126px;color:var(--pr-t);">Pricing</div>
 
-<div class="node pr" id="n-quotation" style="left:458px;top:178px;"
-  data-t="Quotation (spot)" data-d="One-time rate quote for a specific shipment. quotation_type='spot'. Built with QuotationBuilderV3. Rates auto-fill into matching Bookings." data-a="Project creation, Booking rate autofill, Billing line items">
-  Quotation <span class="sub">quotation_type = 'spot'</span></div>
+<div class="node pr" id="n-q-spot" style="left:454px;top:175px;"
+  data-t="Quotation — Spot" data-d="One-time rate quote for a specific shipment. quotation_type='spot'. Built with QuotationBuilderV3. Prices are set per booking during the Pricing phase and become billing line items. Becomes a Project (1:1)." data-a="Project creation (1:1), booking billing line items, rate autofill">
+  Quotation — Spot <span class="sub">quotation_type = 'spot'</span></div>
 
-<div class="node pr" id="n-contract" style="left:458px;top:292px;"
-  data-t="Contract" data-d="Long-term rate agreement. Same quotations table as spots, distinguished by quotation_type='contract'. Has validity period, port pairs, and a rate matrix." data-a="Contract Detection Banner in Bookings, rate autofill for all bookings under this contract">
-  Contract <span class="sub">quotation_type = 'contract'</span></div>
+<div class="node pr" id="n-q-contract" style="left:454px;top:295px;"
+  data-t="Quotation — Contract" data-d="Long-term rate agreement quote. quotation_type='contract'. Contains a rate matrix per service/port pair. Becomes a Contract (1:1). Ops can also create contract bookings directly without going through this pipeline." data-a="Contract creation (1:1), rate matrix, long-term booking rates">
+  Quotation — Contract <span class="sub">quotation_type = 'contract'</span></div>
 
-<div class="node pr" id="n-ratematrix" style="left:458px;top:402px;"
-  data-t="Rate Matrix" data-d="Table of charges per origin/destination port pair, container type, and commodity. Embedded inside each contract." data-a="useBookingRateCard hook, Rate Card Generator, Billing line item pre-fill">Rate Matrix</div>
+<div class="node pr" id="n-ratematrix" style="left:454px;top:420px;"
+  data-t="Rate Matrix" data-d="Table of charges per origin/destination port pair, container type, and commodity. Embedded in a Contract quotation. Also runs during Spot Quotation pricing when a service in the project is contract-linked." data-a="useBookingRateCard hook, rate card generator, billing line item pre-fill">Rate Matrix</div>
 
-<div class="node pr" id="n-vendor" style="left:458px;top:498px;"
-  data-t="Vendors / Partners" data-d="Subcontractors — shipping lines, truckers, customs brokers — used to fulfil bookings." data-a="Expense records (vendor costs), E-Vouchers">Vendors / Partners</div>
+<div class="node pr" id="n-vendor" style="left:454px;top:520px;"
+  data-t="Vendors / Partners" data-d="Subcontractors — shipping lines, truckers, customs brokers — used to fulfil bookings. Their costs become Expense records." data-a="Expense records (vendor costs), E-Vouchers">Vendors / Partners</div>
 
-<!-- ═══ PROJECT HUB ═══ -->
-<div class="node hub co" id="n-project" style="left:836px;top:282px;"
-  data-t="PROJECT — Central Hub" data-d="The master entity that everything links to. Created from a Quotation or manually. Every booking, billing, invoice, collection, and expense belongs to a project." data-a="All financial tabs (Billings, Invoices, Collections, Expenses), all bookings, financial reports, Executive dashboard KPIs">
-  PROJECT
-  <span class="sub" style="margin-top:7px;font-size:10px;opacity:0.52;">Central linking entity<br/>All financials roll up here</span>
+<!-- ═══ BOOKING CONTAINERS (centre) ═══ -->
+<div class="zone z-ct" style="left:782px;top:122px;width:330px;height:588px;"></div>
+<div class="zlbl" style="left:790px;top:126px;color:var(--co-t);">Booking Containers</div>
+
+<!-- Project -->
+<div class="node hub co" id="n-project" style="left:814px;top:172px;"
+  data-t="Project" data-d="One-time shipment container. Created from a Spot Quotation (1:1). Holds bookings for a single shipment — multiple bookings of the same service type are allowed (e.g. two Forwarding legs for a split shipment). Owns all revenue, including for contract-linked bookings within it." data-a="All bookings for this shipment, all financial records (billings, invoices, collections, expenses) — Project owns the P&L">
+  Project
+  <span class="sub">Spot shipment · owns revenue<br/>Created from Spot Quotation (1:1)</span>
+</div>
+
+<!-- divider -->
+<div class="zdiv" style="top:330px;left:782px;right:0;width:330px;position:absolute;"></div>
+
+<!-- Contract -->
+<div class="node hub pr" id="n-contract" style="left:814px;top:365px;"
+  data-t="Contract" data-d="Long-term rate agreement container. Created from a Contract Quotation (1:1). Holds many bookings over the contract period. Ops can also create contract bookings directly without the inquiry → quotation pipeline. Tracks utilization — revenue for project-linked bookings belongs to the Project, not the Contract." data-a="All bookings under this contract (including project-linked ones), rate matrix, utilization tracking">
+  Contract
+  <span class="sub">Long-term · tracks utilization<br/>Created from Contract Quotation (1:1)</span>
+</div>
+
+<!-- Dual membership callout -->
+<div class="callout" style="left:782px;top:522px;width:330px;">
+  <strong>Dual membership:</strong> A booking within a Project that uses contract rates appears in <strong>both</strong> the Project and the Contract. The Project owns revenue; the Contract tracks utilization only.
 </div>
 
 <!-- ═══ OPERATIONS ═══ -->
-<div class="zone z-op" style="left:1182px;top:122px;width:316px;height:568px;"></div>
-<div class="zlbl" style="left:1190px;top:126px;color:var(--op-t);">Operations</div>
+<div class="zone z-op" style="left:1166px;top:122px;width:316px;height:588px;"></div>
+<div class="zlbl" style="left:1174px;top:126px;color:var(--op-t);">Operations</div>
 
-<div class="node op" id="n-bk-fwd" style="left:1218px;top:168px;"
-  data-t="Forwarding Bookings" data-d="Sea/air freight bookings. Tracks BL number, vessel, ETD/ETA, container types, packing list." data-a="Billing line items, Consignees, Expenses, forwarding_bookings table">Forwarding</div>
+<div class="node op" id="n-bk-fwd" style="left:1200px;top:172px;"
+  data-t="Forwarding Bookings" data-d="Sea/air freight bookings. Tracks BL number, vessel, ETD/ETA, container types, packing list. Supports a name field for labelling (e.g. split shipments). Stores a rate_snapshot at creation for audit purposes." data-a="billing_line_items, consignees, expenses, forwarding_bookings table">Forwarding</div>
 
-<div class="node op" id="n-bk-bro" style="left:1218px;top:268px;"
-  data-t="Brokerage Bookings" data-d="Customs brokerage jobs. Tracks entry number, customs value, duties paid." data-a="brokerage_bookings table, Billing items (customs fees)">Brokerage</div>
+<div class="node op" id="n-bk-bro" style="left:1200px;top:272px;"
+  data-t="Brokerage Bookings" data-d="Customs brokerage jobs. Tracks entry number, customs value, duties paid. Has a name field and rate_snapshot." data-a="brokerage_bookings table, billing items (customs fees)">Brokerage</div>
 
-<div class="node op" id="n-bk-trk" style="left:1218px;top:368px;"
-  data-t="Trucking Bookings" data-d="Trucking delivery jobs. Supports multi-destination with separate rate blocks per stop." data-a="trucking_bookings table, multi-line billing">Trucking</div>
+<div class="node op" id="n-bk-trk" style="left:1200px;top:372px;"
+  data-t="Trucking Bookings" data-d="Trucking delivery jobs. Supports multiple destinations as sub-records within one booking. Has a name field and rate_snapshot." data-a="trucking_bookings table, multi-line billing">Trucking</div>
 
-<div class="node op" id="n-bk-mar" style="left:1218px;top:468px;"
-  data-t="Marine Insurance Bookings" data-d="Cargo insurance coverage records. Tracks insured value, policy number, and premium." data-a="marine_insurance_bookings table, Billing items (premium charges)">Marine Insurance</div>
+<div class="node op" id="n-bk-mar" style="left:1200px;top:468px;"
+  data-t="Marine Insurance Bookings" data-d="Cargo insurance coverage records. Tracks insured value, policy number, premium. Has a name field and rate_snapshot." data-a="marine_insurance_bookings table, billing items (premium charges)">Marine Insurance</div>
 
-<div class="node op" id="n-bk-oth" style="left:1218px;top:558px;"
-  data-t="Others Bookings" data-d="Catch-all for miscellaneous services not covered by the other four types." data-a="others_bookings table, Billing items">Others</div>
+<div class="node op" id="n-bk-oth" style="left:1200px;top:564px;"
+  data-t="Others Bookings" data-d="Catch-all for miscellaneous services not covered by the other four types. Has a name field and rate_snapshot." data-a="others_bookings table, billing items">Others</div>
 
 <!-- ═══ FINANCIAL RECORDS ═══ -->
-<div class="zone z-fi" style="left:1562px;top:122px;width:330px;height:650px;"></div>
-<div class="zlbl" style="left:1570px;top:126px;color:var(--fi-t);">Financial Records</div>
+<div class="zone z-fi" style="left:1540px;top:122px;width:320px;height:660px;"></div>
+<div class="zlbl" style="left:1548px;top:126px;color:var(--fi-t);">Financial Records</div>
 
-<div class="node fi" id="n-billing" style="left:1598px;top:178px;"
-  data-t="Billing Line Items" data-d="Individual charge atoms — freight, handling, docs, customs, etc. Can be pre-filled from rate matrix or catalog. Belong to a Booking + Project." data-a="Invoice grouping, revenue recognition, Project financial rollup">
-  Billing Line Items <span class="sub">billing_line_items table</span></div>
+<div class="node fi" id="n-billing" style="left:1574px;top:175px;"
+  data-t="Billing Line Items" data-d="Individual charge atoms (freight, handling, docs, customs, etc). Created during the Pricing/Quotation phase. For contract bookings with no prior quotation, created when billing is initiated. Mutable until locked into an Invoice. Can be pre-filled from the charge catalog." data-a="Invoice grouping, revenue recognition, Project financial rollup">
+  Billing Line Items <span class="sub">billing_line_items table · mutable until invoiced</span></div>
 
-<div class="node fi" id="n-invoice" style="left:1598px;top:298px;"
-  data-t="Invoices" data-d="Grouped billing line items with an invoice_number. Sent to the customer. Linked to Project and Booking." data-a="Collections (tracks payment), customer ledger, Receivables report">
-  Invoices <span class="sub">invoices table</span></div>
+<div class="node fi" id="n-invoice" style="left:1574px;top:295px;"
+  data-t="Invoices" data-d="Grouped billing line items with an invoice_number. Once created, billing items are locked. Sent to the customer. Linked to Project and Booking." data-a="Collections (tracks payment), customer ledger, receivables report">
+  Invoices <span class="sub">invoices table · locks billing items</span></div>
 
-<div class="node fi" id="n-collection" style="left:1598px;top:414px;"
+<div class="node fi" id="n-collection" style="left:1574px;top:412px;"
   data-t="Collections" data-d="Payment received from a customer against an invoice. Records OR number, amount, and payment mode." data-a="Outstanding receivables, Project financial health, Collections report">
   Collections <span class="sub">collections table</span></div>
 
-<div class="node fi" id="n-expense" style="left:1598px;top:528px;"
-  data-t="Expenses" data-d="Vendor costs charged to a booking — e.g. shipping line fees, trucking subcon costs. Linked to Booking + Project." data-a="Gross profit calculation, Expense breakdown report, E-Vouchers">
+<div class="node fi" id="n-expense" style="left:1574px;top:522px;"
+  data-t="Expenses" data-d="Vendor costs charged to a booking. Rates at the time of expense creation are used. If a contract booking has no expense yet and contract rates change, the new rates apply at expense creation time." data-a="Gross profit calculation, expense breakdown report, E-Vouchers">
   Expenses <span class="sub">expenses table</span></div>
 
-<div class="node fi" id="n-evoucher" style="left:1598px;top:638px;"
-  data-t="E-Vouchers" data-d="Formal voucher document for an expense or collection. Multi-step approval: Draft → Submitted → Approved → Released. Full audit trail in evoucher_history." data-a="AP/AR workflow, evouchers + evoucher_history tables">
+<div class="node fi" id="n-evoucher" style="left:1574px;top:628px;"
+  data-t="E-Vouchers" data-d="Formal voucher for an expense or collection. Multi-step approval workflow: Draft → Submitted → Approved → Released. Full audit trail in evoucher_history." data-a="AP/AR workflow, evouchers + evoucher_history tables">
   E-Vouchers <span class="sub">+ approval workflow</span></div>
 
 <!-- ═══ HR / SUPPORT ═══ -->
-<div class="zone z-hr" style="left:1954px;top:122px;width:210px;height:448px;"></div>
-<div class="zlbl" style="left:1962px;top:126px;color:var(--hr-t);">HR / Support</div>
+<div class="zone z-hr" style="left:1920px;top:122px;width:280px;height:450px;"></div>
+<div class="zlbl" style="left:1928px;top:126px;color:var(--hr-t);">HR / Support</div>
 
-<div class="node hr" id="n-hr" style="left:1986px;top:168px;"
-  data-t="HR Module" data-d="Employee records, payroll tracking, timekeeping. Runs independently from the freight pipeline." data-a="users table, HR reports">HR</div>
+<div class="node hr" id="n-hr" style="left:1952px;top:172px;"
+  data-t="HR Module" data-d="Employee records, payroll tracking, timekeeping. Separate from the freight pipeline." data-a="users table, HR reports">HR</div>
 
-<div class="node hr" id="n-tickets" style="left:1986px;top:280px;"
-  data-t="Ticketing" data-d="Internal issue/request tracking. Manager+ can see the ticket queue. Comments and activity are logged." data-a="ticket_comments, ticket_activity tables">Ticketing</div>
+<div class="node hr" id="n-tickets" style="left:1952px;top:280px;"
+  data-t="Ticketing" data-d="Internal issue/request tracking. Manager+ can see the full ticket queue. Comments and activity are fully logged." data-a="ticket_comments, ticket_activity tables">Ticketing</div>
 
-<div class="node hr" id="n-inbox" style="left:1986px;top:390px;"
-  data-t="Inbox" data-d="Internal notification and messaging centre. All authenticated users receive module alerts here." data-a="Notifications across all modules">Inbox</div>
+<div class="node hr" id="n-inbox" style="left:1952px;top:388px;"
+  data-t="Inbox" data-d="Internal notification and messaging centre. All authenticated users receive alerts here." data-a="Notifications across all modules">Inbox</div>
 
 <!-- ═══ ACCOUNTING MODULE ═══ -->
-<div class="zone z-ac" style="left:1182px;top:766px;width:804px;height:118px;"></div>
-<div class="zlbl" style="left:1190px;top:770px;color:var(--ac-t);">Accounting Module</div>
+<div class="zone z-ac" style="left:1166px;top:800px;width:810px;height:118px;"></div>
+<div class="zlbl" style="left:1174px;top:804px;color:var(--ac-t);">Accounting Module</div>
 
-<div class="node ac" id="n-coa" style="left:1218px;top:808px;"
-  data-t="Chart of Accounts / Ledger" data-d="Account hierarchy for double-entry bookkeeping. Linked to journal entries for a full ledger view." data-a="journal_entries table, ledger report">CoA / Ledger</div>
+<div class="node ac" id="n-coa" style="left:1200px;top:844px;"
+  data-t="Chart of Accounts / Ledger" data-d="Account hierarchy for double-entry bookkeeping. Linked to journal entries for full ledger view." data-a="journal_entries table, ledger report">CoA / Ledger</div>
 
-<div class="node ac" id="n-txn" style="left:1418px;top:808px;"
-  data-t="Bank Transactions" data-d="Bank statement imports and reconciliation. Matched to collections and expense payments." data-a="transactions table, reconciliation status flags">Transactions</div>
+<div class="node ac" id="n-txn" style="left:1408px;top:844px;"
+  data-t="Bank Transactions" data-d="Bank statement imports and reconciliation. Matched against collections and expense payments." data-a="transactions table, reconciliation status flags">Transactions</div>
 
-<div class="node ac" id="n-catalog" style="left:1618px;top:808px;"
-  data-t="Charge Catalog" data-d="Pre-defined charge and expense items with codes, default amounts, and category mappings. One-click add to billing or expense rows." data-a="Billing line item creation, Expense creation, catalog_items table">Catalog</div>
+<div class="node ac" id="n-catalog" style="left:1612px;top:844px;"
+  data-t="Charge Catalog" data-d="Pre-defined charge and expense items with codes, default amounts, and category mappings. One-click add to billing or expense rows." data-a="Billing line item creation, expense creation, catalog_items table">Catalog</div>
 
-<div class="node ac" id="n-agg" style="left:1818px;top:808px;"
-  data-t="Aggregate Views" data-d="System-wide aggregate pages: AggregateBillingsPage, AggregateInvoicesPage, AggregateCollectionsPage, AggregateExpensesPage. Shows all records across all projects." data-a="Executive reporting, financial health dashboard">Aggregates</div>
+<div class="node ac" id="n-agg" style="left:1820px;top:844px;"
+  data-t="Aggregate Views" data-d="System-wide financial aggregates: AggregateBillingsPage, AggregateInvoicesPage, AggregateCollectionsPage, AggregateExpensesPage. Shows all records across all Projects and Contracts." data-a="Executive reporting, financial health dashboard">Aggregates</div>
 
 <!-- ═══ SHARED COMPONENTS ═══ -->
-<div class="zone z-sh" style="left:40px;top:976px;width:1106px;height:112px;"></div>
-<div class="zlbl" style="left:48px;top:980px;color:var(--sh-t);">Shared Components</div>
+<div class="zone z-sh" style="left:40px;top:1000px;width:1090px;height:110px;"></div>
+<div class="zlbl" style="left:48px;top:1004px;color:var(--sh-t);">Shared Components</div>
 
-<div class="node sh" id="n-ubill" style="left:74px;top:1018px;"
+<div class="node sh" id="n-ubill" style="left:74px;top:1040px;"
   data-t="UnifiedBillingsTab" data-d="Reusable billing line items table. Rendered inside Project, Contract, Booking, or Aggregate views via props. Never duplicated." data-a="Billing data display across all 4 contexts">UnifiedBillingsTab</div>
 
-<div class="node sh" id="n-uinv" style="left:290px;top:1018px;"
-  data-t="UnifiedInvoicesTab" data-d="Reusable invoices table used across Project, Contract, Booking, and Aggregate." data-a="Invoice data display across all 4 contexts">UnifiedInvoicesTab</div>
+<div class="node sh" id="n-uinv" style="left:282px;top:1040px;"
+  data-t="UnifiedInvoicesTab" data-d="Reusable invoices table used across Project, Contract, Booking, and Aggregate contexts." data-a="Invoice data display across all 4 contexts">UnifiedInvoicesTab</div>
 
-<div class="node sh" id="n-ucol" style="left:500px;top:1018px;"
-  data-t="UnifiedCollectionsTab" data-d="Reusable collections table showing payments received against invoices." data-a="Collections display across all 4 contexts">UnifiedCollectionsTab</div>
+<div class="node sh" id="n-ucol" style="left:484px;top:1040px;"
+  data-t="UnifiedCollectionsTab" data-d="Reusable collections table. Shows payments received against invoices." data-a="Collections display across all 4 contexts">UnifiedCollectionsTab</div>
 
-<div class="node sh" id="n-uexp" style="left:720px;top:1018px;"
-  data-t="UnifiedExpensesTab" data-d="Reusable expenses table. Read-only in Essentials mode, fully editable in Full Suite." data-a="Expenses display, App Mode sensitive">UnifiedExpensesTab</div>
+<div class="node sh" id="n-uexp" style="left:696px;top:1040px;"
+  data-t="UnifiedExpensesTab" data-d="Reusable expenses table. Read-only in Essentials mode, editable in Full Suite." data-a="Expenses display, App Mode sensitivity">UnifiedExpensesTab</div>
 
-<div class="node sh" id="n-dt" style="left:930px;top:1018px;"
-  data-t="DataTable" data-d="Standard table component used by ALL list views. Handles sorting, pagination, row click, and empty states. Never build custom tables." data-a="Every list/table view in the app">DataTable</div>
+<div class="node sh" id="n-dt" style="left:904px;top:1040px;"
+  data-t="DataTable (common)" data-d="Standard table component used by ALL list views. Handles sorting, pagination, row click, and empty states. Never build custom tables." data-a="Every list/table view in the app">DataTable</div>
 
 <!-- ═══ REPORTS / EXECUTIVE ═══ -->
-<div class="zone z-ex" style="left:1182px;top:976px;width:982px;height:112px;"></div>
-<div class="zlbl" style="left:1190px;top:980px;color:var(--ex-t);">Reports &amp; Executive</div>
+<div class="zone z-ex" style="left:1166px;top:1000px;width:1034px;height:110px;"></div>
+<div class="zlbl" style="left:1174px;top:1004px;color:var(--ex-t);">Reports &amp; Executive</div>
 
-<div class="node ex" id="n-rpt-bd" style="left:1218px;top:1018px;"
+<div class="node ex" id="n-rpt-bd" style="left:1200px;top:1040px;"
   data-t="BD Reports" data-d="Sales pipeline, inquiry conversion rates, rep performance, budget utilisation." data-a="BD managers &amp; directors">BD Reports</div>
 
-<div class="node ex" id="n-rpt-ops" style="left:1424px;top:1018px;"
+<div class="node ex" id="n-rpt-ops" style="left:1408px;top:1040px;"
   data-t="Ops Reports" data-d="Booking volume by service type, port pair analysis, handler productivity." data-a="Operations managers">Ops Reports</div>
 
-<div class="node ex" id="n-rpt-fin" style="left:1628px;top:1018px;"
-  data-t="Financial Reports" data-d="Income statement, P&amp;L, client profitability, booking profitability, receivables aging, expense breakdown." data-a="Accounting team, Executive dashboard">Financial Reports</div>
+<div class="node ex" id="n-rpt-fin" style="left:1616px;top:1040px;"
+  data-t="Financial Reports" data-d="Income statement, company P&amp;L, client profitability, booking profitability, receivables aging, expense breakdown." data-a="Accounting team, Executive dashboard">Financial Reports</div>
 
-<div class="node ex" id="n-exec" style="left:1872px;top:1018px;"
-  data-t="Executive Dashboard" data-d="KPIs across all departments. Auto-promoted to director. Views all reports, admin panel, and system-wide aggregates." data-a="Strategic decisions — reads from every module">Executive Dash</div>
+<div class="node ex" id="n-exec" style="left:1870px;top:1040px;"
+  data-t="Executive Dashboard" data-d="KPIs across all departments. Executive users are auto-promoted to director. Views all reports, admin panel, and system-wide aggregates." data-a="Strategic decisions — reads from every module">Executive Dash</div>
 
 <!-- ═══ DATABASE ═══ -->
-<div class="zone z-db" style="left:40px;top:1148px;width:2120px;height:308px;"></div>
-<div class="zlbl" style="left:48px;top:1152px;color:var(--sh-t);">Supabase Postgres — 43 Tables</div>
+<div class="zone z-db" style="left:40px;top:1172px;width:2160px;height:320px;"></div>
+<div class="zlbl" style="left:48px;top:1176px;color:var(--sh-t);">Supabase Postgres — 43 Tables</div>
 
-<!-- Row 1 y:1190 -->
-<div class="node db dn" style="left:65px;top:1190px;">customers</div>
-<div class="node db dn" style="left:176px;top:1190px;">contacts</div>
-<div class="node db dn" style="left:270px;top:1190px;">projects</div>
-<div class="node db dn" style="left:368px;top:1190px;">quotations</div>
-<div class="node db dn" style="left:472px;top:1190px;">contracts</div>
-<div class="node db dn" style="left:570px;top:1190px;">bookings</div>
-<div class="node db dn" style="left:666px;top:1190px;">forwarding_bookings</div>
-<div class="node db dn" style="left:856px;top:1190px;">trucking_bookings</div>
-<div class="node db dn" style="left:1030px;top:1190px;">brokerage_bookings</div>
-<div class="node db dn" style="left:1204px;top:1190px;">marine_insurance_bookings</div>
-<div class="node db dn" style="left:1454px;top:1190px;">others_bookings</div>
-<div class="node db dn" style="left:1588px;top:1190px;">consignees</div>
-<div class="node db dn" style="left:1688px;top:1190px;">network_partners</div>
-<div class="node db dn" style="left:1848px;top:1190px;">service_providers</div>
+<!-- Row 1: core entities -->
+<div class="node db dn" style="left:65px;top:1210px;">customers</div>
+<div class="node db dn" style="left:175px;top:1210px;">contacts</div>
+<div class="node db dn" style="left:270px;top:1210px;">projects</div>
+<div class="node db dn" style="left:370px;top:1210px;">quotations</div>
+<div class="node db dn" style="left:475px;top:1210px;">contracts</div>
+<div class="node db dn" style="left:575px;top:1210px;">bookings</div>
+<div class="node db dn" style="left:672px;top:1210px;">forwarding_bookings</div>
+<div class="node db dn" style="left:862px;top:1210px;">trucking_bookings</div>
+<div class="node db dn" style="left:1038px;top:1210px;">brokerage_bookings</div>
+<div class="node db dn" style="left:1220px;top:1210px;">marine_insurance_bookings</div>
+<div class="node db dn" style="left:1472px;top:1210px;">others_bookings</div>
+<div class="node db dn" style="left:1606px;top:1210px;">consignees</div>
+<div class="node db dn" style="left:1706px;top:1210px;">network_partners</div>
+<div class="node db dn" style="left:1868px;top:1210px;">service_providers</div>
 
-<!-- Row 2 y:1254 -->
-<div class="node db dn" style="left:65px;top:1254px;">invoices</div>
-<div class="node db dn" style="left:156px;top:1254px;">billing_line_items</div>
-<div class="node db dn" style="left:314px;top:1254px;">collections</div>
-<div class="node db dn" style="left:414px;top:1254px;">expenses</div>
-<div class="node db dn" style="left:504px;top:1254px;">evouchers</div>
-<div class="node db dn" style="left:602px;top:1254px;">evoucher_history</div>
-<div class="node db dn" style="left:750px;top:1254px;">accounts</div>
-<div class="node db dn" style="left:834px;top:1254px;">journal_entries</div>
-<div class="node db dn" style="left:982px;top:1254px;">transactions</div>
-<div class="node db dn" style="left:1096px;top:1254px;">catalog_items</div>
-<div class="node db dn" style="left:1210px;top:1254px;">catalog_categories</div>
-<div class="node db dn" style="left:1372px;top:1254px;">bd_reports</div>
-<div class="node db dn" style="left:1460px;top:1254px;">report_templates</div>
-<div class="node db dn" style="left:1608px;top:1254px;">saved_reports</div>
-<div class="node db dn" style="left:1728px;top:1254px;">settings</div>
-<div class="node db dn" style="left:1806px;top:1254px;">attachments</div>
-<div class="node db dn" style="left:1906px;top:1254px;">entity_attachments</div>
+<!-- Row 2: financial -->
+<div class="node db dn" style="left:65px;top:1274px;">invoices</div>
+<div class="node db dn" style="left:158px;top:1274px;">billing_line_items</div>
+<div class="node db dn" style="left:318px;top:1274px;">collections</div>
+<div class="node db dn" style="left:420px;top:1274px;">expenses</div>
+<div class="node db dn" style="left:510px;top:1274px;">evouchers</div>
+<div class="node db dn" style="left:608px;top:1274px;">evoucher_history</div>
+<div class="node db dn" style="left:758px;top:1274px;">accounts</div>
+<div class="node db dn" style="left:840px;top:1274px;">journal_entries</div>
+<div class="node db dn" style="left:990px;top:1274px;">transactions</div>
+<div class="node db dn" style="left:1106px;top:1274px;">catalog_items</div>
+<div class="node db dn" style="left:1222px;top:1274px;">catalog_categories</div>
+<div class="node db dn" style="left:1384px;top:1274px;">bd_reports</div>
+<div class="node db dn" style="left:1472px;top:1274px;">report_templates</div>
+<div class="node db dn" style="left:1622px;top:1274px;">saved_reports</div>
+<div class="node db dn" style="left:1742px;top:1274px;">settings</div>
 
-<!-- Row 3 y:1318 -->
-<div class="node db dn" style="left:65px;top:1318px;">users</div>
-<div class="node db dn" style="left:128px;top:1318px;">tasks</div>
-<div class="node db dn" style="left:190px;top:1318px;">crm_activities</div>
-<div class="node db dn" style="left:316px;top:1318px;">booking_comments</div>
-<div class="node db dn" style="left:466px;top:1318px;">ticket_comments</div>
-<div class="node db dn" style="left:586px;top:1318px;">ticket_activity</div>
-<div class="node db dn" style="left:706px;top:1318px;">contract_activity</div>
-<div class="node db dn" style="left:838px;top:1318px;">ticket_types</div>
+<!-- Row 3: activity & meta -->
+<div class="node db dn" style="left:65px;top:1338px;">users</div>
+<div class="node db dn" style="left:130px;top:1338px;">tasks</div>
+<div class="node db dn" style="left:192px;top:1338px;">crm_activities</div>
+<div class="node db dn" style="left:322px;top:1338px;">booking_comments</div>
+<div class="node db dn" style="left:474px;top:1338px;">ticket_comments</div>
+<div class="node db dn" style="left:598px;top:1338px;">ticket_activity</div>
+<div class="node db dn" style="left:722px;top:1338px;">contract_activity</div>
+<div class="node db dn" style="left:856px;top:1338px;">attachments</div>
+<div class="node db dn" style="left:956px;top:1338px;">entity_attachments</div>
+<div class="node db dn" style="left:1108px;top:1338px;">ticket_types</div>
+<div class="node db dn" style="left:1196px;top:1338px;">inquiry_quotation_links</div>
+
 </div><!-- /canvas -->
 </div><!-- /wrap -->
 
-<div id="tip"><div class="tt" id="tip-t"></div><div class="td" id="tip-d"></div><div class="ta" id="tip-a"></div></div>
+<!-- TOOLTIP -->
+<div id="tip">
+  <div class="tt" id="tip-t"></div>
+  <div class="td" id="tip-d"></div>
+  <div class="ta" id="tip-a"></div>
+</div>
 
+<!-- LEGEND -->
 <div id="leg">
   <h4>Legend</h4>
   <div class="lr"><div class="la" style="background:var(--bd-l)"></div>Business Development</div>
-  <div class="lr"><div class="la" style="background:var(--pr-l)"></div>Pricing</div>
+  <div class="lr"><div class="la" style="background:var(--pr-l)"></div>Pricing / Contract</div>
+  <div class="lr"><div class="la" style="background:var(--co-l)"></div>Project Container</div>
   <div class="lr"><div class="la" style="background:var(--op-l)"></div>Operations</div>
   <div class="lr"><div class="la" style="background:var(--fi-l)"></div>Financial Records</div>
   <div class="lr"><div class="la" style="background:var(--ac-l)"></div>Accounting Module</div>
   <div class="lr"><div class="la" style="background:var(--hr-l)"></div>HR / Support</div>
-  <div class="lr"><div class="la" style="background:var(--co-l)"></div>Core (Project hub)</div>
-  <div class="lr"><div class="la" style="background:var(--sh-l)"></div>Shared / Infra</div>
-  <div class="lsep">—— Data flow<br/>- - - Reads / depends on</div>
+  <div class="lr"><div class="la" style="background:var(--sh-l)"></div>Shared / Infrastructure</div>
+  <div class="lsep">—— Data flow / creates<br/>- - - Reads / rate source / depends on</div>
 </div>
 
 <script>
@@ -408,138 +455,146 @@ document.querySelectorAll('.node[data-t]').forEach(n => {
   });
   n.addEventListener('mousemove', e => {
     const x = e.clientX + 18, y = e.clientY + 14;
-    tip.style.left = (x + 295 > innerWidth ? e.clientX - 308 : x) + 'px';
-    tip.style.top  = (y + 172 > innerHeight ? e.clientY - 158 : y) + 'px';
+    tip.style.left = (x + 290 > innerWidth ? e.clientX - 302 : x) + 'px';
+    tip.style.top  = (y + 170 > innerHeight ? e.clientY - 160 : y) + 'px';
   });
   n.addEventListener('mouseleave', () => { tip.style.opacity = '0'; });
 });
 
 /* ARROWS */
 const svg = document.getElementById('arw');
+const CR  = document.getElementById('canvas').getBoundingClientRect();
 
 function rc(id) {
   const el = document.getElementById(id);
   if (!el) return null;
-  const cr = document.getElementById('canvas').getBoundingClientRect();
-  const r  = el.getBoundingClientRect();
+  const r = el.getBoundingClientRect();
   return {
-    l:r.left-cr.left, r:r.right-cr.left,
-    t:r.top-cr.top,   b:r.bottom-cr.top,
-    cx:r.left-cr.left+r.width/2,
-    cy:r.top-cr.top+r.height/2,
+    l:r.left-CR.left, r:r.right-CR.left,
+    t:r.top-CR.top,   b:r.bottom-CR.top,
+    cx:r.left-CR.left+r.width/2, cy:r.top-CR.top+r.height/2,
     w:r.width, h:r.height
   };
 }
 
-function arrow(a, b, {col='rgba(78,78,112,0.44)', dash=false, lbl='', mk='m'}={}) {
-  const f=rc(a), t=rc(b);
+function arrow(fromId, toId, {color='rgba(80,80,112,0.45)',dashed=false,label='',marker='m'}={}) {
+  const f=rc(fromId), t=rc(toId);
   if (!f||!t) return;
   const dx=t.cx-f.cx, dy=t.cy-f.cy;
   let x1,y1,x2,y2;
   if (Math.abs(dx)>=Math.abs(dy)) {
-    x1=dx>0?f.r:f.l; y1=f.cy;
-    x2=dx>0?t.l:t.r; y2=t.cy;
+    x1=dx>0?f.r:f.l; y1=f.cy; x2=dx>0?t.l:t.r; y2=t.cy;
   } else {
-    x1=f.cx; y1=dy>0?f.b:f.t;
-    x2=t.cx; y2=dy>0?t.t:t.b;
+    x1=f.cx; y1=dy>0?f.b:f.t; x2=t.cx; y2=dy>0?t.t:t.b;
   }
   const mx=(x1+x2)/2, my=(y1+y2)/2;
   let cx1,cy1,cx2,cy2;
   if (Math.abs(dx)>=Math.abs(dy)) { cx1=mx;cy1=y1;cx2=mx;cy2=y2; }
-  else                             { cx1=x1;cy1=my;cx2=x2;cy2=my; }
+  else { cx1=x1;cy1=my;cx2=x2;cy2=my; }
 
   const g=document.createElementNS('http://www.w3.org/2000/svg','g');
-  const p=document.createElementNS('http://www.w3.org/2000/svg','path');
-  p.setAttribute('d',`M${x1},${y1} C${cx1},${cy1} ${cx2},${cy2} ${x2},${y2}`);
-  p.setAttribute('fill','none');
-  p.setAttribute('stroke',col);
-  p.setAttribute('stroke-width','1.2');
-  if (dash) p.setAttribute('stroke-dasharray','4,4');
-  p.setAttribute('marker-end',`url(#${mk})`);
-  g.appendChild(p);
+  const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+  path.setAttribute('d',`M${x1},${y1} C${cx1},${cy1} ${cx2},${cy2} ${x2},${y2}`);
+  path.setAttribute('fill','none');
+  path.setAttribute('stroke',color);
+  path.setAttribute('stroke-width','1.2');
+  if (dashed) path.setAttribute('stroke-dasharray','4,4');
+  path.setAttribute('marker-end',`url(#${marker})`);
+  g.appendChild(path);
 
-  if (lbl) {
+  if (label) {
     const lx=(x1+x2)/2, ly=(y1+y2)/2-5;
-    const tw=lbl.length*5.4+10;
+    const tw=label.length*5.4+10;
     const bg=document.createElementNS('http://www.w3.org/2000/svg','rect');
     bg.setAttribute('x',lx-tw/2); bg.setAttribute('y',ly-11);
     bg.setAttribute('width',tw); bg.setAttribute('height',14);
     bg.setAttribute('rx',3); bg.setAttribute('fill','#14141A');
     g.appendChild(bg);
-    const tx=document.createElementNS('http://www.w3.org/2000/svg','text');
-    tx.setAttribute('x',lx); tx.setAttribute('y',ly);
-    tx.setAttribute('text-anchor','middle');
-    tx.setAttribute('fill',col); tx.setAttribute('opacity','0.82');
-    tx.setAttribute('font-size','9');
-    tx.setAttribute('font-family','Inter,system-ui,sans-serif');
-    tx.textContent=lbl;
-    g.appendChild(tx);
+    const txt=document.createElementNS('http://www.w3.org/2000/svg','text');
+    txt.setAttribute('x',lx); txt.setAttribute('y',ly);
+    txt.setAttribute('text-anchor','middle');
+    txt.setAttribute('fill',color); txt.setAttribute('opacity','0.85');
+    txt.setAttribute('font-size','9'); txt.setAttribute('font-family','Inter,system-ui,sans-serif');
+    txt.textContent=label;
+    g.appendChild(txt);
   }
   svg.appendChild(g);
 }
 
 requestAnimationFrame(() => {
-  /* auth */
-  arrow('n-login',  'n-sbauth', {col:'rgba(70,70,100,0.38)'});
-  arrow('n-sbauth', 'n-user',   {col:'rgba(70,70,100,0.38)'});
-  arrow('n-user',   'n-rg',     {col:'rgba(70,70,100,0.38)'});
-  arrow('n-rg',     'n-appmode',{col:'rgba(70,70,100,0.30)',dash:true});
+  /* Auth */
+  arrow('n-login',  'n-sbauth', {color:'rgba(72,72,100,0.40)'});
+  arrow('n-sbauth', 'n-user',   {color:'rgba(72,72,100,0.40)'});
+  arrow('n-user',   'n-rg',     {color:'rgba(72,72,100,0.40)'});
+  arrow('n-rg',     'n-appmode',{color:'rgba(72,72,100,0.32)',dashed:true});
 
   /* BD pipeline */
-  arrow('n-customer','n-contact', {col:'rgba(59,122,90,0.44)',mk:'m-bd',lbl:'has'});
-  arrow('n-customer','n-inquiry', {col:'rgba(59,122,90,0.44)',mk:'m-bd',lbl:'generates'});
-  arrow('n-inquiry', 'n-quotation',{col:'rgba(58,94,158,0.52)',mk:'m-pr',lbl:'spawns'});
+  arrow('n-customer','n-contact', {color:'rgba(59,122,90,0.45)',marker:'m-bd',label:'has'});
+  arrow('n-customer','n-inquiry', {color:'rgba(59,122,90,0.45)',marker:'m-bd',label:'generates'});
 
-  /* pricing → core */
-  arrow('n-quotation','n-project',{col:'rgba(44,120,80,0.64)',mk:'m-co',lbl:'becomes'});
-  arrow('n-contract', 'n-project',{col:'rgba(44,120,80,0.52)',mk:'m-co',lbl:'scopes'});
-  arrow('n-ratematrix','n-contract',{col:'rgba(58,94,158,0.36)',mk:'m-pr',dash:true,lbl:'embedded in'});
+  /* Inquiry → Quotations (two paths) */
+  arrow('n-inquiry','n-q-spot',    {color:'rgba(58,94,158,0.55)',marker:'m-pr',label:'→ spot'});
+  arrow('n-inquiry','n-q-contract',{color:'rgba(58,94,158,0.45)',marker:'m-pr',label:'→ contract',dashed:true});
 
-  /* project → bookings */
-  arrow('n-project','n-bk-fwd',{col:'rgba(150,118,42,0.56)',mk:'m-op',lbl:'parent of'});
-  arrow('n-project','n-bk-bro',{col:'rgba(150,118,42,0.46)',mk:'m-op'});
-  arrow('n-project','n-bk-trk',{col:'rgba(150,118,42,0.46)',mk:'m-op'});
-  arrow('n-project','n-bk-mar',{col:'rgba(150,118,42,0.40)',mk:'m-op'});
-  arrow('n-project','n-bk-oth',{col:'rgba(150,118,42,0.36)',mk:'m-op'});
+  /* Quotation → Container (1:1) */
+  arrow('n-q-spot',    'n-project', {color:'rgba(44,120,80,0.70)',marker:'m-co',label:'becomes (1:1)'});
+  arrow('n-q-contract','n-contract',{color:'rgba(58,94,158,0.60)',marker:'m-pr',label:'becomes (1:1)'});
 
-  /* contract → bookings rate source */
-  arrow('n-contract','n-bk-fwd',{col:'rgba(58,94,158,0.28)',mk:'m-pr',dash:true,lbl:'rate source'});
+  /* Rate matrix → contract */
+  arrow('n-ratematrix','n-contract',{color:'rgba(58,94,158,0.38)',marker:'m-pr',dashed:true,label:'embedded in'});
 
-  /* bookings → billing */
-  arrow('n-bk-fwd','n-billing',{col:'rgba(150,58,82,0.56)',mk:'m-fi',lbl:'generates'});
-  arrow('n-bk-bro','n-billing',{col:'rgba(150,58,82,0.42)',mk:'m-fi'});
-  arrow('n-bk-trk','n-billing',{col:'rgba(150,58,82,0.42)',mk:'m-fi'});
-  arrow('n-bk-mar','n-billing',{col:'rgba(150,58,82,0.36)',mk:'m-fi'});
-  arrow('n-bk-oth','n-billing',{col:'rgba(150,58,82,0.32)',mk:'m-fi'});
+  /* Vendor → expense */
+  arrow('n-vendor','n-expense',{color:'rgba(58,94,158,0.32)',marker:'m-pr',dashed:true,label:'billed as'});
 
-  /* financial flow */
-  arrow('n-billing',   'n-invoice',   {col:'rgba(150,58,82,0.54)',mk:'m-fi',lbl:'grouped into'});
-  arrow('n-invoice',   'n-collection',{col:'rgba(150,58,82,0.54)',mk:'m-fi',lbl:'paid via'});
-  arrow('n-bk-fwd',    'n-expense',   {col:'rgba(150,58,82,0.36)',mk:'m-fi',dash:true,lbl:'has costs'});
-  arrow('n-expense',   'n-evoucher',  {col:'rgba(118,74,154,0.54)',mk:'m-ac',lbl:'documented by'});
-  arrow('n-vendor',    'n-expense',   {col:'rgba(58,94,158,0.32)',mk:'m-pr',dash:true,lbl:'billed as'});
+  /* Project → bookings (primary — solid amber) */
+  arrow('n-project','n-bk-fwd',{color:'rgba(150,118,42,0.58)',marker:'m-op',label:'parent of'});
+  arrow('n-project','n-bk-bro',{color:'rgba(150,118,42,0.50)',marker:'m-op'});
+  arrow('n-project','n-bk-trk',{color:'rgba(150,118,42,0.50)',marker:'m-op'});
+  arrow('n-project','n-bk-mar',{color:'rgba(150,118,42,0.44)',marker:'m-op'});
+  arrow('n-project','n-bk-oth',{color:'rgba(150,118,42,0.38)',marker:'m-op'});
 
-  /* catalog */
-  arrow('n-catalog','n-billing',{col:'rgba(118,74,154,0.36)',mk:'m-ac',dash:true,lbl:'pre-fills'});
+  /* Contract → bookings (secondary — dashed blue, "holds") */
+  arrow('n-contract','n-bk-fwd',{color:'rgba(58,94,158,0.38)',marker:'m-pr',dashed:true,label:'holds'});
+  arrow('n-contract','n-bk-bro',{color:'rgba(58,94,158,0.32)',marker:'m-pr',dashed:true});
+  arrow('n-contract','n-bk-trk',{color:'rgba(58,94,158,0.32)',marker:'m-pr',dashed:true});
+  arrow('n-contract','n-bk-mar',{color:'rgba(58,94,158,0.28)',marker:'m-pr',dashed:true});
+  arrow('n-contract','n-bk-oth',{color:'rgba(58,94,158,0.25)',marker:'m-pr',dashed:true});
 
-  /* project → unified tabs */
-  arrow('n-project','n-ubill',{col:'rgba(70,70,100,0.28)',dash:true,lbl:'uses'});
-  arrow('n-project','n-uinv', {col:'rgba(70,70,100,0.24)',dash:true});
-  arrow('n-project','n-ucol', {col:'rgba(70,70,100,0.22)',dash:true});
-  arrow('n-project','n-uexp', {col:'rgba(70,70,100,0.20)',dash:true});
+  /* Bookings → billing */
+  arrow('n-bk-fwd','n-billing',{color:'rgba(150,58,82,0.58)',marker:'m-fi',label:'generates'});
+  arrow('n-bk-bro','n-billing',{color:'rgba(150,58,82,0.44)',marker:'m-fi'});
+  arrow('n-bk-trk','n-billing',{color:'rgba(150,58,82,0.44)',marker:'m-fi'});
+  arrow('n-bk-mar','n-billing',{color:'rgba(150,58,82,0.38)',marker:'m-fi'});
+  arrow('n-bk-oth','n-billing',{color:'rgba(150,58,82,0.34)',marker:'m-fi'});
 
-  /* app mode */
-  arrow('n-appmode','n-uexp',{col:'rgba(70,70,100,0.26)',dash:true,lbl:'controls'});
+  /* Financial flow */
+  arrow('n-billing',   'n-invoice',   {color:'rgba(150,58,82,0.55)',marker:'m-fi',label:'grouped into'});
+  arrow('n-invoice',   'n-collection',{color:'rgba(150,58,82,0.55)',marker:'m-fi',label:'paid via'});
+  arrow('n-bk-fwd',    'n-expense',   {color:'rgba(150,58,82,0.36)',marker:'m-fi',dashed:true,label:'has costs'});
+  arrow('n-expense',   'n-evoucher',  {color:'rgba(118,74,154,0.55)',marker:'m-ac',label:'documented by'});
 
-  /* aggregates + reports */
-  arrow('n-billing',   'n-agg',    {col:'rgba(118,74,154,0.30)',mk:'m-ac',dash:true,lbl:'aggregated'});
-  arrow('n-invoice',   'n-agg',    {col:'rgba(118,74,154,0.24)',mk:'m-ac',dash:true});
-  arrow('n-collection','n-agg',    {col:'rgba(118,74,154,0.22)',mk:'m-ac',dash:true});
-  arrow('n-agg',       'n-exec',   {col:'rgba(176,112,56,0.52)',mk:'m-ex',lbl:'feeds'});
-  arrow('n-billing',   'n-rpt-fin',{col:'rgba(176,112,56,0.34)',mk:'m-ex',dash:true});
-  arrow('n-rpt-fin',   'n-exec',   {col:'rgba(176,112,56,0.50)',mk:'m-ex'});
-  arrow('n-rpt-bd',    'n-exec',   {col:'rgba(176,112,56,0.38)',mk:'m-ex',dash:true});
-  arrow('n-rpt-ops',   'n-exec',   {col:'rgba(176,112,56,0.38)',mk:'m-ex',dash:true});
+  /* Catalog pre-fills billing */
+  arrow('n-catalog','n-billing',{color:'rgba(118,74,154,0.38)',marker:'m-ac',dashed:true,label:'pre-fills'});
+
+  /* Shared tabs used by both containers */
+  arrow('n-project', 'n-ubill',{color:'rgba(72,72,100,0.26)',dashed:true,label:'uses'});
+  arrow('n-project', 'n-uinv', {color:'rgba(72,72,100,0.22)',dashed:true});
+  arrow('n-project', 'n-ucol', {color:'rgba(72,72,100,0.22)',dashed:true});
+  arrow('n-project', 'n-uexp', {color:'rgba(72,72,100,0.20)',dashed:true});
+  arrow('n-contract','n-ubill', {color:'rgba(58,94,158,0.22)',dashed:true});
+
+  /* App Mode → unified expenses */
+  arrow('n-appmode','n-uexp',{color:'rgba(72,72,100,0.26)',dashed:true,label:'controls'});
+
+  /* Aggregates & reports */
+  arrow('n-billing',   'n-agg',    {color:'rgba(118,74,154,0.30)',marker:'m-ac',dashed:true,label:'aggregated'});
+  arrow('n-invoice',   'n-agg',    {color:'rgba(118,74,154,0.24)',marker:'m-ac',dashed:true});
+  arrow('n-collection','n-agg',    {color:'rgba(118,74,154,0.22)',marker:'m-ac',dashed:true});
+  arrow('n-agg',       'n-exec',   {color:'rgba(176,112,56,0.52)',marker:'m-ex',label:'feeds'});
+  arrow('n-billing',   'n-rpt-fin',{color:'rgba(176,112,56,0.32)',marker:'m-ex',dashed:true});
+  arrow('n-rpt-fin',   'n-exec',   {color:'rgba(176,112,56,0.50)',marker:'m-ex'});
+  arrow('n-rpt-bd',    'n-exec',   {color:'rgba(176,112,56,0.36)',marker:'m-ex',dashed:true});
+  arrow('n-rpt-ops',   'n-exec',   {color:'rgba(176,112,56,0.36)',marker:'m-ex',dashed:true});
 });
 </script>
 </body>
