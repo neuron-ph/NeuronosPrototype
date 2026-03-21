@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Neuron OS — System Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg:      #14141A;
+  --surface: #1C1C26;
+  --sur2:    #222230;
+  --brd:     rgba(255,255,255,0.055);
+  --brd-h:   rgba(255,255,255,0.11);
+  --t1: #EEEEF3;
+  --t2: #8585A0;
+  --t3: #4A4A62;
+
+  --bd-l:#3B7A5A; --bd-bg:rgba(38,82,58,0.12); --bd-b:rgba(59,122,90,0.18); --bd-t:#72B090;
+  --pr-l:#3A5E9E; --pr-bg:rgba(38,60,130,0.10); --pr-b:rgba(58,94,158,0.18); --pr-t:#7298CE;
+  --op-l:#96762A; --op-bg:rgba(110,86,20,0.12); --op-b:rgba(150,118,42,0.20); --op-t:#BEA045;
+  --fi-l:#963A52; --fi-bg:rgba(115,40,62,0.10); --fi-b:rgba(150,58,82,0.18); --fi-t:#BF7085;
+  --ac-l:#764A9A; --ac-bg:rgba(78,38,126,0.10); --ac-b:rgba(118,74,154,0.18); --ac-t:#AA82C8;
+  --hr-l:#58589A; --hr-bg:rgba(58,58,128,0.10); --hr-b:rgba(88,88,154,0.18); --hr-t:#8888C0;
+  --sh-l:#484864; --sh-bg:rgba(48,48,80,0.10);  --sh-b:rgba(72,72,100,0.18); --sh-t:#8484A4;
+  --co-l:#2C7850; --co-bg:rgba(22,78,52,0.18);  --co-b:rgba(44,120,80,0.28); --co-t:#52B082;
+  --ex-l:#B07038; --ex-bg:rgba(130,80,20,0.10); --ex-b:rgba(176,112,56,0.20);--ex-t:#CCA060;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  background:var(--bg);color:var(--t1);
+  font-family:'Inter',system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:auto;
+}
+
+/* HEADER */
+#hdr{
+  display:flex;align-items:center;gap:12px;
+  padding:14px 32px;
+  background:var(--bg);
+  border-bottom:1px solid var(--brd);
+  position:sticky;top:0;z-index:60;
+}
+#hdr-dot{width:6px;height:6px;border-radius:50%;background:var(--co-l);flex-shrink:0;}
+#hdr h1{font-size:13px;font-weight:600;letter-spacing:-0.015em;color:var(--t1);}
+#hdr p{font-size:11px;color:var(--t3);}
+
+/* WRAP / CANVAS */
+#wrap{padding:28px 32px 80px;overflow-x:auto;}
+#canvas{position:relative;width:2200px;height:1480px;}
+svg#arw{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;}
+
+/* ZONES */
+.zone{position:absolute;border-radius:9px;border:1px solid var(--brd);}
+.zlbl{
+  position:absolute;font-size:9.5px;font-weight:600;
+  letter-spacing:0.09em;text-transform:uppercase;
+  display:flex;align-items:center;gap:5px;padding:8px 12px;
+}
+.zlbl::before{
+  content:'';display:inline-block;width:5px;height:5px;
+  border-radius:50%;background:currentColor;opacity:0.65;flex-shrink:0;
+}
+.z-auth{background:rgba(44,44,68,0.05);border-color:rgba(72,72,100,0.09);}
+.z-bd  {background:rgba(38,82,58,0.04);border-color:rgba(59,122,90,0.09);}
+.z-pr  {background:rgba(38,60,130,0.04);border-color:rgba(58,94,158,0.09);}
+.z-op  {background:rgba(110,86,20,0.04);border-color:rgba(150,118,42,0.09);}
+.z-fi  {background:rgba(115,40,62,0.04);border-color:rgba(150,58,82,0.09);}
+.z-ac  {background:rgba(78,38,126,0.04);border-color:rgba(118,74,154,0.09);}
+.z-hr  {background:rgba(58,58,128,0.04);border-color:rgba(88,88,154,0.09);}
+.z-sh  {background:rgba(44,44,72,0.04);border-color:rgba(72,72,100,0.09);}
+.z-db  {background:rgba(20,20,32,0.60);border-color:rgba(46,46,68,0.20);}
+.z-ex  {background:rgba(130,80,20,0.04);border-color:rgba(176,112,56,0.09);}
+
+/* NODES */
+.node{
+  position:absolute;border-radius:5px;
+  padding:9px 12px;
+  font-size:11.5px;font-weight:500;
+  letter-spacing:-0.01em;line-height:1;
+  cursor:default;user-select:none;white-space:nowrap;
+  border:1px solid var(--brd);
+  border-left:2px solid transparent;
+  transition:background 0.13s,border-color 0.13s,transform 0.13s;
+}
+.node:hover{transform:translateY(-1px);border-color:var(--brd-h);z-index:99;}
+.node .sub{display:block;font-size:9.5px;font-weight:400;opacity:0.48;margin-top:4px;line-height:1.4;letter-spacing:0;}
+.node.hub{border-radius:7px;padding:16px 22px;font-size:13px;font-weight:600;}
+.node.db {border-radius:4px;padding:5px 10px;font-size:10px;font-weight:400;font-family:'Cascadia Code','Courier New',monospace;letter-spacing:0;}
+
+.bd{background:var(--bd-bg);border-color:var(--bd-b);border-left-color:var(--bd-l);color:var(--bd-t);}
+.pr{background:var(--pr-bg);border-color:var(--pr-b);border-left-color:var(--pr-l);color:var(--pr-t);}
+.op{background:var(--op-bg);border-color:var(--op-b);border-left-color:var(--op-l);color:var(--op-t);}
+.fi{background:var(--fi-bg);border-color:var(--fi-b);border-left-color:var(--fi-l);color:var(--fi-t);}
+.ac{background:var(--ac-bg);border-color:var(--ac-b);border-left-color:var(--ac-l);color:var(--ac-t);}
+.hr{background:var(--hr-bg);border-color:var(--hr-b);border-left-color:var(--hr-l);color:var(--hr-t);}
+.sh{background:var(--sh-bg);border-color:var(--sh-b);border-left-color:var(--sh-l);color:var(--sh-t);}
+.co{background:var(--co-bg);border-color:var(--co-b);border-left-color:var(--co-l);color:var(--co-t);}
+.ex{background:var(--ex-bg);border-color:var(--ex-b);border-left-color:var(--ex-l);color:var(--ex-t);}
+.dn{background:rgba(26,26,40,0.72);border-color:rgba(48,48,68,0.30);border-left-color:rgba(66,66,90,0.28);color:var(--t3);}
+
+.hub.co{background:rgba(22,78,52,0.22);border-color:rgba(44,120,80,0.26);border-left-color:var(--co-l);}
+
+/* TOOLTIP */
+#tip{
+  position:fixed;
+  background:#1E1E2C;border:1px solid rgba(255,255,255,0.08);
+  border-radius:8px;padding:12px 14px;
+  font-size:11.5px;max-width:285px;line-height:1;
+  pointer-events:none;opacity:0;transition:opacity 0.12s;
+  z-index:9999;box-shadow:0 8px 30px rgba(0,0,0,0.48);
+}
+#tip .tt{font-weight:600;font-size:12px;margin-bottom:6px;color:var(--t1);letter-spacing:-0.01em;}
+#tip .td{color:var(--t2);font-size:11px;line-height:1.55;}
+#tip .ta{color:var(--t3);font-size:10.5px;margin-top:9px;padding-top:9px;border-top:1px solid var(--brd);line-height:1.5;}
+#tip .ta strong{color:var(--co-t);font-weight:500;}
+
+/* LEGEND */
+#leg{
+  position:fixed;bottom:22px;right:22px;
+  background:#1C1C28;border:1px solid var(--brd);
+  border-radius:9px;padding:14px 16px;
+  font-size:11px;z-index:200;min-width:192px;
+  box-shadow:0 4px 22px rgba(0,0,0,0.36);
+}
+#leg h4{font-size:9.5px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:0.09em;margin-bottom:10px;}
+.lr{display:flex;align-items:center;gap:9px;margin-bottom:6px;color:var(--t2);font-size:10.5px;}
+.la{width:14px;height:2px;border-radius:2px;flex-shrink:0;}
+.lsep{margin-top:10px;padding-top:9px;border-top:1px solid var(--brd);font-size:10px;color:var(--t3);line-height:1.6;}
+</style>
+</head>
+<body>
+
+<div id="hdr">
+  <div id="hdr-dot"></div>
+  <h1>Neuron OS — System Architecture</h1>
+  <p>Hover any node to inspect &nbsp;·&nbsp; Arrows show data flow &amp; dependencies</p>
+</div>
+
+<div id="wrap">
+<div id="canvas">
+<svg id="arw">
+  <defs>
+    <marker id="m"    markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0,0.5 L6,3 L0,5.5 Z" fill="rgba(80,80,112,0.55)"/></marker>
+    <marker id="m-bd" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0,0.5 L6,3 L0,5.5 Z" fill="rgba(59,122,90,0.72)"/></marker>
+    <marker id="m-pr" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0,0.5 L6,3 L0,5.5 Z" fill="rgba(58,94,158,0.68)"/></marker>
+    <marker id="m-co" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0,0.5 L6,3 L0,5.5 Z" fill="rgba(44,120,80,0.78)"/></marker>
+    <marker id="m-op" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0,0.5 L6,3 L0,5.5 Z" fill="rgba(150,118,42,0.72)"/></marker>
+    <marker id="m-fi" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0,0.5 L6,3 L0,5.5 Z" fill="rgba(150,58,82,0.68)"/></marker>
+    <marker id="m-ac" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0,0.5 L6,3 L0,5.5 Z" fill="rgba(118,74,154,0.68)"/></marker>
+    <marker id="m-ex" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0,0.5 L6,3 L0,5.5 Z" fill="rgba(176,112,56,0.68)"/></marker>
+  </defs>
+</svg>
+
+<!-- ═══ AUTH ═══ -->
+<div class="zone z-auth" style="left:40px;top:22px;width:1820px;height:68px;"></div>
+<div class="zlbl" style="left:48px;top:25px;color:var(--sh-t);">Auth Layer</div>
+
+<div class="node sh" id="n-login" style="left:106px;top:37px;"
+  data-t="Login" data-d="Email/password entry point. Routes to Supabase Auth for JWT token generation." data-a="Supabase Auth session, user record lookup">Login</div>
+
+<div class="node sh" id="n-sbauth" style="left:290px;top:37px;"
+  data-t="Supabase Auth" data-d="Manages user sessions and JWT tokens. Enforces Row Level Security on every database query — no query can bypass it." data-a="All 43 tables via RLS, user session context">Supabase Auth</div>
+
+<div class="node sh" id="n-user" style="left:535px;top:37px;"
+  data-t="User + dept / role" data-d="User record stores department and role (rep / manager / director). This single field drives all access control across the app." data-a="RouteGuard, all department views, Executive auto-promotes to director">
+  User <span class="sub">department · role (rep / mgr / dir)</span></div>
+
+<div class="node sh" id="n-rg" style="left:808px;top:37px;"
+  data-t="RouteGuard" data-d="Wraps every protected route. Checks allowedDepartments[] and requireMinRole before rendering any module." data-a="All 6 department module routes">RouteGuard</div>
+
+<div class="node sh" id="n-appmode" style="left:1038px;top:37px;"
+  data-t="App Mode" data-d="useAppMode() toggles between Essentials (simplified) and Full Suite (complete). Affects visible features and component behaviour across every module." data-a="All department views, Unified Tab components, Aggregate pages">
+  App Mode <span class="sub">Essentials / Full Suite</span></div>
+
+<div class="node sh" id="n-cache" style="left:1320px;top:37px;"
+  data-t="Neuron Cache" data-d="useNeuronCache — client-side React context caching layer. Reduces redundant Supabase round-trips across navigations." data-a="Performance across all data-fetching hooks">Neuron Cache</div>
+
+<!-- ═══ BD ═══ -->
+<div class="zone z-bd" style="left:40px;top:122px;width:330px;height:568px;"></div>
+<div class="zlbl" style="left:48px;top:126px;color:var(--bd-t);">Business Development</div>
+
+<div class="node bd" id="n-customer" style="left:74px;top:168px;"
+  data-t="Customers" data-d="Company / client records. The root CRM entity — everything traces back to a customer." data-a="Contacts, Inquiries, Projects, Quotations, all financial records via project linkage">Customers</div>
+
+<div class="node bd" id="n-contact" style="left:74px;top:268px;"
+  data-t="Contacts" data-d="Individual people at a customer company. Linked across BD, Pricing, and Operations as points of contact." data-a="Inquiries, Quotations, Bookings (point of contact field)">Contacts</div>
+
+<div class="node bd" id="n-inquiry" style="left:74px;top:368px;"
+  data-t="Inquiries" data-d="A sales lead or freight request. The starting point of the main business pipeline — handed off to Pricing for a quote." data-a="Spawns Quotations → triggers the entire downstream pipeline">Inquiries</div>
+
+<div class="node bd" id="n-task" style="left:74px;top:468px;"
+  data-t="Tasks / Activities" data-d="Internal sales tasks and CRM activity log. BD reps track follow-ups, calls, and site visits here." data-a="BD performance reporting, activity timeline views">Tasks / Activities</div>
+
+<div class="node bd" id="n-budget" style="left:74px;top:558px;"
+  data-t="Budget Requests" data-d="BD reps submit budget requests for client events or marketing spend. Requires manager approval before funds are released." data-a="Expense records if approved, BD reports">Budget Requests</div>
+
+<!-- ═══ PRICING ═══ -->
+<div class="zone z-pr" style="left:424px;top:122px;width:330px;height:568px;"></div>
+<div class="zlbl" style="left:432px;top:126px;color:var(--pr-t);">Pricing</div>
+
+<div class="node pr" id="n-quotation" style="left:458px;top:178px;"
+  data-t="Quotation (spot)" data-d="One-time rate quote for a specific shipment. quotation_type='spot'. Built with QuotationBuilderV3. Rates auto-fill into matching Bookings." data-a="Project creation, Booking rate autofill, Billing line items">
+  Quotation <span class="sub">quotation_type = 'spot'</span></div>
+
+<div class="node pr" id="n-contract" style="left:458px;top:292px;"
+  data-t="Contract" data-d="Long-term rate agreement. Same quotations table as spots, distinguished by quotation_type='contract'. Has validity period, port pairs, and a rate matrix." data-a="Contract Detection Banner in Bookings, rate autofill for all bookings under this contract">
+  Contract <span class="sub">quotation_type = 'contract'</span></div>
+
+<div class="node pr" id="n-ratematrix" style="left:458px;top:402px;"
+  data-t="Rate Matrix" data-d="Table of charges per origin/destination port pair, container type, and commodity. Embedded inside each contract." data-a="useBookingRateCard hook, Rate Card Generator, Billing line item pre-fill">Rate Matrix</div>
+
+<div class="node pr" id="n-vendor" style="left:458px;top:498px;"
+  data-t="Vendors / Partners" data-d="Subcontractors — shipping lines, truckers, customs brokers — used to fulfil bookings." data-a="Expense records (vendor costs), E-Vouchers">Vendors / Partners</div>
+
+<!-- ═══ PROJECT HUB ═══ -->
+<div class="node hub co" id="n-project" style="left:836px;top:282px;"
+  data-t="PROJECT — Central Hub" data-d="The master entity that everything links to. Created from a Quotation or manually. Every booking, billing, invoice, collection, and expense belongs to a project." data-a="All financial tabs (Billings, Invoices, Collections, Expenses), all bookings, financial reports, Executive dashboard KPIs">
+  PROJECT
+  <span class="sub" style="margin-top:7px;font-size:10px;opacity:0.52;">Central linking entity<br/>All financials roll up here</span>
+</div>
+
+<!-- ═══ OPERATIONS ═══ -->
+<div class="zone z-op" style="left:1182px;top:122px;width:316px;height:568px;"></div>
+<div class="zlbl" style="left:1190px;top:126px;color:var(--op-t);">Operations</div>
+
+<div class="node op" id="n-bk-fwd" style="left:1218px;top:168px;"
+  data-t="Forwarding Bookings" data-d="Sea/air freight bookings. Tracks BL number, vessel, ETD/ETA, container types, packing list." data-a="Billing line items, Consignees, Expenses, forwarding_bookings table">Forwarding</div>
+
+<div class="node op" id="n-bk-bro" style="left:1218px;top:268px;"
+  data-t="Brokerage Bookings" data-d="Customs brokerage jobs. Tracks entry number, customs value, duties paid." data-a="brokerage_bookings table, Billing items (customs fees)">Brokerage</div>
+
+<div class="node op" id="n-bk-trk" style="left:1218px;top:368px;"
+  data-t="Trucking Bookings" data-d="Trucking delivery jobs. Supports multi-destination with separate rate blocks per stop." data-a="trucking_bookings table, multi-line billing">Trucking</div>
+
+<div class="node op" id="n-bk-mar" style="left:1218px;top:468px;"
+  data-t="Marine Insurance Bookings" data-d="Cargo insurance coverage records. Tracks insured value, policy number, and premium." data-a="marine_insurance_bookings table, Billing items (premium charges)">Marine Insurance</div>
+
+<div class="node op" id="n-bk-oth" style="left:1218px;top:558px;"
+  data-t="Others Bookings" data-d="Catch-all for miscellaneous services not covered by the other four types." data-a="others_bookings table, Billing items">Others</div>
+
+<!-- ═══ FINANCIAL RECORDS ═══ -->
+<div class="zone z-fi" style="left:1562px;top:122px;width:330px;height:650px;"></div>
+<div class="zlbl" style="left:1570px;top:126px;color:var(--fi-t);">Financial Records</div>
+
+<div class="node fi" id="n-billing" style="left:1598px;top:178px;"
+  data-t="Billing Line Items" data-d="Individual charge atoms — freight, handling, docs, customs, etc. Can be pre-filled from rate matrix or catalog. Belong to a Booking + Project." data-a="Invoice grouping, revenue recognition, Project financial rollup">
+  Billing Line Items <span class="sub">billing_line_items table</span></div>
+
+<div class="node fi" id="n-invoice" style="left:1598px;top:298px;"
+  data-t="Invoices" data-d="Grouped billing line items with an invoice_number. Sent to the customer. Linked to Project and Booking." data-a="Collections (tracks payment), customer ledger, Receivables report">
+  Invoices <span class="sub">invoices table</span></div>
+
+<div class="node fi" id="n-collection" style="left:1598px;top:414px;"
+  data-t="Collections" data-d="Payment received from a customer against an invoice. Records OR number, amount, and payment mode." data-a="Outstanding receivables, Project financial health, Collections report">
+  Collections <span class="sub">collections table</span></div>
+
+<div class="node fi" id="n-expense" style="left:1598px;top:528px;"
+  data-t="Expenses" data-d="Vendor costs charged to a booking — e.g. shipping line fees, trucking subcon costs. Linked to Booking + Project." data-a="Gross profit calculation, Expense breakdown report, E-Vouchers">
+  Expenses <span class="sub">expenses table</span></div>
+
+<div class="node fi" id="n-evoucher" style="left:1598px;top:638px;"
+  data-t="E-Vouchers" data-d="Formal voucher document for an expense or collection. Multi-step approval: Draft → Submitted → Approved → Released. Full audit trail in evoucher_history." data-a="AP/AR workflow, evouchers + evoucher_history tables">
+  E-Vouchers <span class="sub">+ approval workflow</span></div>
+
+<!-- ═══ HR / SUPPORT ═══ -->
+<div class="zone z-hr" style="left:1954px;top:122px;width:210px;height:448px;"></div>
+<div class="zlbl" style="left:1962px;top:126px;color:var(--hr-t);">HR / Support</div>
+
+<div class="node hr" id="n-hr" style="left:1986px;top:168px;"
+  data-t="HR Module" data-d="Employee records, payroll tracking, timekeeping. Runs independently from the freight pipeline." data-a="users table, HR reports">HR</div>
+
+<div class="node hr" id="n-tickets" style="left:1986px;top:280px;"
+  data-t="Ticketing" data-d="Internal issue/request tracking. Manager+ can see the ticket queue. Comments and activity are logged." data-a="ticket_comments, ticket_activity tables">Ticketing</div>
+
+<div class="node hr" id="n-inbox" style="left:1986px;top:390px;"
+  data-t="Inbox" data-d="Internal notification and messaging centre. All authenticated users receive module alerts here." data-a="Notifications across all modules">Inbox</div>
+
+<!-- ═══ ACCOUNTING MODULE ═══ -->
+<div class="zone z-ac" style="left:1182px;top:766px;width:804px;height:118px;"></div>
+<div class="zlbl" style="left:1190px;top:770px;color:var(--ac-t);">Accounting Module</div>
+
+<div class="node ac" id="n-coa" style="left:1218px;top:808px;"
+  data-t="Chart of Accounts / Ledger" data-d="Account hierarchy for double-entry bookkeeping. Linked to journal entries for a full ledger view." data-a="journal_entries table, ledger report">CoA / Ledger</div>
+
+<div class="node ac" id="n-txn" style="left:1418px;top:808px;"
+  data-t="Bank Transactions" data-d="Bank statement imports and reconciliation. Matched to collections and expense payments." data-a="transactions table, reconciliation status flags">Transactions</div>
+
+<div class="node ac" id="n-catalog" style="left:1618px;top:808px;"
+  data-t="Charge Catalog" data-d="Pre-defined charge and expense items with codes, default amounts, and category mappings. One-click add to billing or expense rows." data-a="Billing line item creation, Expense creation, catalog_items table">Catalog</div>
+
+<div class="node ac" id="n-agg" style="left:1818px;top:808px;"
+  data-t="Aggregate Views" data-d="System-wide aggregate pages: AggregateBillingsPage, AggregateInvoicesPage, AggregateCollectionsPage, AggregateExpensesPage. Shows all records across all projects." data-a="Executive reporting, financial health dashboard">Aggregates</div>
+
+<!-- ═══ SHARED COMPONENTS ═══ -->
+<div class="zone z-sh" style="left:40px;top:976px;width:1106px;height:112px;"></div>
+<div class="zlbl" style="left:48px;top:980px;color:var(--sh-t);">Shared Components</div>
+
+<div class="node sh" id="n-ubill" style="left:74px;top:1018px;"
+  data-t="UnifiedBillingsTab" data-d="Reusable billing line items table. Rendered inside Project, Contract, Booking, or Aggregate views via props. Never duplicated." data-a="Billing data display across all 4 contexts">UnifiedBillingsTab</div>
+
+<div class="node sh" id="n-uinv" style="left:290px;top:1018px;"
+  data-t="UnifiedInvoicesTab" data-d="Reusable invoices table used across Project, Contract, Booking, and Aggregate." data-a="Invoice data display across all 4 contexts">UnifiedInvoicesTab</div>
+
+<div class="node sh" id="n-ucol" style="left:500px;top:1018px;"
+  data-t="UnifiedCollectionsTab" data-d="Reusable collections table showing payments received against invoices." data-a="Collections display across all 4 contexts">UnifiedCollectionsTab</div>
+
+<div class="node sh" id="n-uexp" style="left:720px;top:1018px;"
+  data-t="UnifiedExpensesTab" data-d="Reusable expenses table. Read-only in Essentials mode, fully editable in Full Suite." data-a="Expenses display, App Mode sensitive">UnifiedExpensesTab</div>
+
+<div class="node sh" id="n-dt" style="left:930px;top:1018px;"
+  data-t="DataTable" data-d="Standard table component used by ALL list views. Handles sorting, pagination, row click, and empty states. Never build custom tables." data-a="Every list/table view in the app">DataTable</div>
+
+<!-- ═══ REPORTS / EXECUTIVE ═══ -->
+<div class="zone z-ex" style="left:1182px;top:976px;width:982px;height:112px;"></div>
+<div class="zlbl" style="left:1190px;top:980px;color:var(--ex-t);">Reports &amp; Executive</div>
+
+<div class="node ex" id="n-rpt-bd" style="left:1218px;top:1018px;"
+  data-t="BD Reports" data-d="Sales pipeline, inquiry conversion rates, rep performance, budget utilisation." data-a="BD managers &amp; directors">BD Reports</div>
+
+<div class="node ex" id="n-rpt-ops" style="left:1424px;top:1018px;"
+  data-t="Ops Reports" data-d="Booking volume by service type, port pair analysis, handler productivity." data-a="Operations managers">Ops Reports</div>
+
+<div class="node ex" id="n-rpt-fin" style="left:1628px;top:1018px;"
+  data-t="Financial Reports" data-d="Income statement, P&amp;L, client profitability, booking profitability, receivables aging, expense breakdown." data-a="Accounting team, Executive dashboard">Financial Reports</div>
+
+<div class="node ex" id="n-exec" style="left:1872px;top:1018px;"
+  data-t="Executive Dashboard" data-d="KPIs across all departments. Auto-promoted to director. Views all reports, admin panel, and system-wide aggregates." data-a="Strategic decisions — reads from every module">Executive Dash</div>
+
+<!-- ═══ DATABASE ═══ -->
+<div class="zone z-db" style="left:40px;top:1148px;width:2120px;height:308px;"></div>
+<div class="zlbl" style="left:48px;top:1152px;color:var(--sh-t);">Supabase Postgres — 43 Tables</div>
+
+<!-- Row 1 y:1190 -->
+<div class="node db dn" style="left:65px;top:1190px;">customers</div>
+<div class="node db dn" style="left:176px;top:1190px;">contacts</div>
+<div class="node db dn" style="left:270px;top:1190px;">projects</div>
+<div class="node db dn" style="left:368px;top:1190px;">quotations</div>
+<div class="node db dn" style="left:472px;top:1190px;">contracts</div>
+<div class="node db dn" style="left:570px;top:1190px;">bookings</div>
+<div class="node db dn" style="left:666px;top:1190px;">forwarding_bookings</div>
+<div class="node db dn" style="left:856px;top:1190px;">trucking_bookings</div>
+<div class="node db dn" style="left:1030px;top:1190px;">brokerage_bookings</div>
+<div class="node db dn" style="left:1204px;top:1190px;">marine_insurance_bookings</div>
+<div class="node db dn" style="left:1454px;top:1190px;">others_bookings</div>
+<div class="node db dn" style="left:1588px;top:1190px;">consignees</div>
+<div class="node db dn" style="left:1688px;top:1190px;">network_partners</div>
+<div class="node db dn" style="left:1848px;top:1190px;">service_providers</div>
+
+<!-- Row 2 y:1254 -->
+<div class="node db dn" style="left:65px;top:1254px;">invoices</div>
+<div class="node db dn" style="left:156px;top:1254px;">billing_line_items</div>
+<div class="node db dn" style="left:314px;top:1254px;">collections</div>
+<div class="node db dn" style="left:414px;top:1254px;">expenses</div>
+<div class="node db dn" style="left:504px;top:1254px;">evouchers</div>
+<div class="node db dn" style="left:602px;top:1254px;">evoucher_history</div>
+<div class="node db dn" style="left:750px;top:1254px;">accounts</div>
+<div class="node db dn" style="left:834px;top:1254px;">journal_entries</div>
+<div class="node db dn" style="left:982px;top:1254px;">transactions</div>
+<div class="node db dn" style="left:1096px;top:1254px;">catalog_items</div>
+<div class="node db dn" style="left:1210px;top:1254px;">catalog_categories</div>
+<div class="node db dn" style="left:1372px;top:1254px;">bd_reports</div>
+<div class="node db dn" style="left:1460px;top:1254px;">report_templates</div>
+<div class="node db dn" style="left:1608px;top:1254px;">saved_reports</div>
+<div class="node db dn" style="left:1728px;top:1254px;">settings</div>
+<div class="node db dn" style="left:1806px;top:1254px;">attachments</div>
+<div class="node db dn" style="left:1906px;top:1254px;">entity_attachments</div>
+
+<!-- Row 3 y:1318 -->
+<div class="node db dn" style="left:65px;top:1318px;">users</div>
+<div class="node db dn" style="left:128px;top:1318px;">tasks</div>
+<div class="node db dn" style="left:190px;top:1318px;">crm_activities</div>
+<div class="node db dn" style="left:316px;top:1318px;">booking_comments</div>
+<div class="node db dn" style="left:466px;top:1318px;">ticket_comments</div>
+<div class="node db dn" style="left:586px;top:1318px;">ticket_activity</div>
+<div class="node db dn" style="left:706px;top:1318px;">contract_activity</div>
+<div class="node db dn" style="left:838px;top:1318px;">ticket_types</div>
+</div><!-- /canvas -->
+</div><!-- /wrap -->
+
+<div id="tip"><div class="tt" id="tip-t"></div><div class="td" id="tip-d"></div><div class="ta" id="tip-a"></div></div>
+
+<div id="leg">
+  <h4>Legend</h4>
+  <div class="lr"><div class="la" style="background:var(--bd-l)"></div>Business Development</div>
+  <div class="lr"><div class="la" style="background:var(--pr-l)"></div>Pricing</div>
+  <div class="lr"><div class="la" style="background:var(--op-l)"></div>Operations</div>
+  <div class="lr"><div class="la" style="background:var(--fi-l)"></div>Financial Records</div>
+  <div class="lr"><div class="la" style="background:var(--ac-l)"></div>Accounting Module</div>
+  <div class="lr"><div class="la" style="background:var(--hr-l)"></div>HR / Support</div>
+  <div class="lr"><div class="la" style="background:var(--co-l)"></div>Core (Project hub)</div>
+  <div class="lr"><div class="la" style="background:var(--sh-l)"></div>Shared / Infra</div>
+  <div class="lsep">—— Data flow<br/>- - - Reads / depends on</div>
+</div>
+
+<script>
+/* TOOLTIP */
+const tip = document.getElementById('tip');
+document.querySelectorAll('.node[data-t]').forEach(n => {
+  n.addEventListener('mouseenter', () => {
+    document.getElementById('tip-t').textContent = n.dataset.t;
+    document.getElementById('tip-d').textContent = n.dataset.d || '';
+    const a = n.dataset.a;
+    document.getElementById('tip-a').innerHTML = a ? `<strong>Affects:</strong> ${a}` : '';
+    tip.style.opacity = '1';
+  });
+  n.addEventListener('mousemove', e => {
+    const x = e.clientX + 18, y = e.clientY + 14;
+    tip.style.left = (x + 295 > innerWidth ? e.clientX - 308 : x) + 'px';
+    tip.style.top  = (y + 172 > innerHeight ? e.clientY - 158 : y) + 'px';
+  });
+  n.addEventListener('mouseleave', () => { tip.style.opacity = '0'; });
+});
+
+/* ARROWS */
+const svg = document.getElementById('arw');
+
+function rc(id) {
+  const el = document.getElementById(id);
+  if (!el) return null;
+  const cr = document.getElementById('canvas').getBoundingClientRect();
+  const r  = el.getBoundingClientRect();
+  return {
+    l:r.left-cr.left, r:r.right-cr.left,
+    t:r.top-cr.top,   b:r.bottom-cr.top,
+    cx:r.left-cr.left+r.width/2,
+    cy:r.top-cr.top+r.height/2,
+    w:r.width, h:r.height
+  };
+}
+
+function arrow(a, b, {col='rgba(78,78,112,0.44)', dash=false, lbl='', mk='m'}={}) {
+  const f=rc(a), t=rc(b);
+  if (!f||!t) return;
+  const dx=t.cx-f.cx, dy=t.cy-f.cy;
+  let x1,y1,x2,y2;
+  if (Math.abs(dx)>=Math.abs(dy)) {
+    x1=dx>0?f.r:f.l; y1=f.cy;
+    x2=dx>0?t.l:t.r; y2=t.cy;
+  } else {
+    x1=f.cx; y1=dy>0?f.b:f.t;
+    x2=t.cx; y2=dy>0?t.t:t.b;
+  }
+  const mx=(x1+x2)/2, my=(y1+y2)/2;
+  let cx1,cy1,cx2,cy2;
+  if (Math.abs(dx)>=Math.abs(dy)) { cx1=mx;cy1=y1;cx2=mx;cy2=y2; }
+  else                             { cx1=x1;cy1=my;cx2=x2;cy2=my; }
+
+  const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+  const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+  p.setAttribute('d',`M${x1},${y1} C${cx1},${cy1} ${cx2},${cy2} ${x2},${y2}`);
+  p.setAttribute('fill','none');
+  p.setAttribute('stroke',col);
+  p.setAttribute('stroke-width','1.2');
+  if (dash) p.setAttribute('stroke-dasharray','4,4');
+  p.setAttribute('marker-end',`url(#${mk})`);
+  g.appendChild(p);
+
+  if (lbl) {
+    const lx=(x1+x2)/2, ly=(y1+y2)/2-5;
+    const tw=lbl.length*5.4+10;
+    const bg=document.createElementNS('http://www.w3.org/2000/svg','rect');
+    bg.setAttribute('x',lx-tw/2); bg.setAttribute('y',ly-11);
+    bg.setAttribute('width',tw); bg.setAttribute('height',14);
+    bg.setAttribute('rx',3); bg.setAttribute('fill','#14141A');
+    g.appendChild(bg);
+    const tx=document.createElementNS('http://www.w3.org/2000/svg','text');
+    tx.setAttribute('x',lx); tx.setAttribute('y',ly);
+    tx.setAttribute('text-anchor','middle');
+    tx.setAttribute('fill',col); tx.setAttribute('opacity','0.82');
+    tx.setAttribute('font-size','9');
+    tx.setAttribute('font-family','Inter,system-ui,sans-serif');
+    tx.textContent=lbl;
+    g.appendChild(tx);
+  }
+  svg.appendChild(g);
+}
+
+requestAnimationFrame(() => {
+  /* auth */
+  arrow('n-login',  'n-sbauth', {col:'rgba(70,70,100,0.38)'});
+  arrow('n-sbauth', 'n-user',   {col:'rgba(70,70,100,0.38)'});
+  arrow('n-user',   'n-rg',     {col:'rgba(70,70,100,0.38)'});
+  arrow('n-rg',     'n-appmode',{col:'rgba(70,70,100,0.30)',dash:true});
+
+  /* BD pipeline */
+  arrow('n-customer','n-contact', {col:'rgba(59,122,90,0.44)',mk:'m-bd',lbl:'has'});
+  arrow('n-customer','n-inquiry', {col:'rgba(59,122,90,0.44)',mk:'m-bd',lbl:'generates'});
+  arrow('n-inquiry', 'n-quotation',{col:'rgba(58,94,158,0.52)',mk:'m-pr',lbl:'spawns'});
+
+  /* pricing → core */
+  arrow('n-quotation','n-project',{col:'rgba(44,120,80,0.64)',mk:'m-co',lbl:'becomes'});
+  arrow('n-contract', 'n-project',{col:'rgba(44,120,80,0.52)',mk:'m-co',lbl:'scopes'});
+  arrow('n-ratematrix','n-contract',{col:'rgba(58,94,158,0.36)',mk:'m-pr',dash:true,lbl:'embedded in'});
+
+  /* project → bookings */
+  arrow('n-project','n-bk-fwd',{col:'rgba(150,118,42,0.56)',mk:'m-op',lbl:'parent of'});
+  arrow('n-project','n-bk-bro',{col:'rgba(150,118,42,0.46)',mk:'m-op'});
+  arrow('n-project','n-bk-trk',{col:'rgba(150,118,42,0.46)',mk:'m-op'});
+  arrow('n-project','n-bk-mar',{col:'rgba(150,118,42,0.40)',mk:'m-op'});
+  arrow('n-project','n-bk-oth',{col:'rgba(150,118,42,0.36)',mk:'m-op'});
+
+  /* contract → bookings rate source */
+  arrow('n-contract','n-bk-fwd',{col:'rgba(58,94,158,0.28)',mk:'m-pr',dash:true,lbl:'rate source'});
+
+  /* bookings → billing */
+  arrow('n-bk-fwd','n-billing',{col:'rgba(150,58,82,0.56)',mk:'m-fi',lbl:'generates'});
+  arrow('n-bk-bro','n-billing',{col:'rgba(150,58,82,0.42)',mk:'m-fi'});
+  arrow('n-bk-trk','n-billing',{col:'rgba(150,58,82,0.42)',mk:'m-fi'});
+  arrow('n-bk-mar','n-billing',{col:'rgba(150,58,82,0.36)',mk:'m-fi'});
+  arrow('n-bk-oth','n-billing',{col:'rgba(150,58,82,0.32)',mk:'m-fi'});
+
+  /* financial flow */
+  arrow('n-billing',   'n-invoice',   {col:'rgba(150,58,82,0.54)',mk:'m-fi',lbl:'grouped into'});
+  arrow('n-invoice',   'n-collection',{col:'rgba(150,58,82,0.54)',mk:'m-fi',lbl:'paid via'});
+  arrow('n-bk-fwd',    'n-expense',   {col:'rgba(150,58,82,0.36)',mk:'m-fi',dash:true,lbl:'has costs'});
+  arrow('n-expense',   'n-evoucher',  {col:'rgba(118,74,154,0.54)',mk:'m-ac',lbl:'documented by'});
+  arrow('n-vendor',    'n-expense',   {col:'rgba(58,94,158,0.32)',mk:'m-pr',dash:true,lbl:'billed as'});
+
+  /* catalog */
+  arrow('n-catalog','n-billing',{col:'rgba(118,74,154,0.36)',mk:'m-ac',dash:true,lbl:'pre-fills'});
+
+  /* project → unified tabs */
+  arrow('n-project','n-ubill',{col:'rgba(70,70,100,0.28)',dash:true,lbl:'uses'});
+  arrow('n-project','n-uinv', {col:'rgba(70,70,100,0.24)',dash:true});
+  arrow('n-project','n-ucol', {col:'rgba(70,70,100,0.22)',dash:true});
+  arrow('n-project','n-uexp', {col:'rgba(70,70,100,0.20)',dash:true});
+
+  /* app mode */
+  arrow('n-appmode','n-uexp',{col:'rgba(70,70,100,0.26)',dash:true,lbl:'controls'});
+
+  /* aggregates + reports */
+  arrow('n-billing',   'n-agg',    {col:'rgba(118,74,154,0.30)',mk:'m-ac',dash:true,lbl:'aggregated'});
+  arrow('n-invoice',   'n-agg',    {col:'rgba(118,74,154,0.24)',mk:'m-ac',dash:true});
+  arrow('n-collection','n-agg',    {col:'rgba(118,74,154,0.22)',mk:'m-ac',dash:true});
+  arrow('n-agg',       'n-exec',   {col:'rgba(176,112,56,0.52)',mk:'m-ex',lbl:'feeds'});
+  arrow('n-billing',   'n-rpt-fin',{col:'rgba(176,112,56,0.34)',mk:'m-ex',dash:true});
+  arrow('n-rpt-fin',   'n-exec',   {col:'rgba(176,112,56,0.50)',mk:'m-ex'});
+  arrow('n-rpt-bd',    'n-exec',   {col:'rgba(176,112,56,0.38)',mk:'m-ex',dash:true});
+  arrow('n-rpt-ops',   'n-exec',   {col:'rgba(176,112,56,0.38)',mk:'m-ex',dash:true});
+});
+</script>
+</body>
+</html>

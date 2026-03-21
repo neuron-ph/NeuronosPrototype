@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Neuron OS — Architecture Map</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #F7FAF8; color: #12332B; min-height: 100vh; padding: 32px; }
+  h1 { font-size: 24px; font-weight: 700; color: #12332B; margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: #667085; margin-bottom: 32px; }
+
+  /* LAYERS */
+  .layer { margin-bottom: 24px; }
+  .layer-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #667085; margin-bottom: 10px; padding-left: 4px; }
+
+  /* GRID */
+  .grid { display: flex; flex-wrap: wrap; gap: 12px; }
+
+  /* CARDS */
+  .card {
+    background: #fff;
+    border: 1px solid #E5E9F0;
+    border-radius: 10px;
+    padding: 14px 16px;
+    min-width: 180px;
+    flex: 1 1 180px;
+    max-width: 260px;
+    transition: box-shadow 0.15s;
+    cursor: default;
+  }
+  .card:hover { box-shadow: 0 4px 16px rgba(15,118,110,0.10); border-color: #0F766E; }
+  .card-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+  .card-body { font-size: 11px; color: #667085; line-height: 1.6; }
+  .badge { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 99px; background: #E5E9F0; color: #667085; }
+  .badge.teal { background: #CCFBF1; color: #0F766E; }
+  .badge.green { background: #DCFCE7; color: #16A34A; }
+  .badge.amber { background: #FEF3C7; color: #D97706; }
+  .badge.blue { background: #DBEAFE; color: #2563EB; }
+  .badge.red { background: #FEE2E2; color: #DC2626; }
+  .badge.purple { background: #F3E8FF; color: #7C3AED; }
+
+  /* FLOW CONNECTOR */
+  .flow { display: flex; align-items: center; justify-content: center; gap: 0; margin-bottom: 4px; overflow-x: auto; padding: 12px 0; }
+  .flow-node {
+    background: #fff;
+    border: 1.5px solid #E5E9F0;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    color: #12332B;
+  }
+  .flow-node.primary { background: #0F766E; color: #fff; border-color: #0F766E; }
+  .flow-node.secondary { background: #F0FDF4; border-color: #16A34A; color: #166534; }
+  .arrow { color: #0F766E; font-size: 18px; margin: 0 4px; flex-shrink: 0; }
+
+  /* DATABASE TABLE */
+  .db-group { margin-bottom: 12px; }
+  .db-group-title { font-size: 11px; font-weight: 700; color: #667085; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+  .db-tables { display: flex; flex-wrap: wrap; gap: 6px; }
+  .db-table { font-size: 11px; background: #F0FDF4; border: 1px solid #BBF7D0; color: #166534; padding: 3px 10px; border-radius: 6px; font-family: 'Courier New', monospace; }
+
+  /* DIVIDER */
+  .divider { border: none; border-top: 1px solid #E5E9F0; margin: 28px 0; }
+
+  /* SECTION */
+  section { margin-bottom: 32px; }
+  section > h2 { font-size: 15px; font-weight: 700; color: #12332B; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 2px solid #E5E9F0; }
+
+  /* ROUTE TABLE */
+  .route-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .route-table th { text-align: left; padding: 8px 12px; background: #F9FAFB; font-weight: 600; color: #667085; font-size: 11px; text-transform: uppercase; border-bottom: 1px solid #E5E9F0; }
+  .route-table td { padding: 7px 12px; border-bottom: 1px solid #F0F0F0; vertical-align: top; }
+  .route-table tr:last-child td { border-bottom: none; }
+  .route-table code { background: #F3F4F6; padding: 1px 6px; border-radius: 4px; font-family: 'Courier New', monospace; font-size: 11px; }
+
+  /* LEGEND */
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #667085; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+
+  /* HOOK TABLE */
+  .hook-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+  .hook-item { background: #F9FAFB; border: 1px solid #E5E9F0; border-radius: 8px; padding: 10px 12px; }
+  .hook-name { font-size: 12px; font-weight: 600; color: #0F766E; font-family: 'Courier New', monospace; margin-bottom: 3px; }
+  .hook-desc { font-size: 11px; color: #667085; }
+</style>
+</head>
+<body>
+
+<h1>Neuron OS — Architecture Map</h1>
+<p class="subtitle">Asset-light freight forwarding ERP · React 18 + TypeScript + Supabase · Generated 2026-03-21</p>
+
+<!-- BUSINESS FLOW -->
+<section>
+  <h2>Business Lifecycle Flow</h2>
+  <div class="flow">
+    <div class="flow-node">Inquiry</div>
+    <span class="arrow">→</span>
+    <div class="flow-node">Quotation</div>
+    <span class="arrow">→</span>
+    <div class="flow-node">Contract</div>
+    <span class="arrow">→</span>
+    <div class="flow-node primary">Project</div>
+    <span class="arrow">→</span>
+    <div class="flow-node">Booking</div>
+    <span class="arrow">→</span>
+    <div class="flow-node secondary">Billing</div>
+    <span class="arrow">→</span>
+    <div class="flow-node secondary">Invoice</div>
+    <span class="arrow">→</span>
+    <div class="flow-node secondary">Collection</div>
+  </div>
+  <p style="font-size:11px;color:#667085;text-align:center;margin-top:4px;">
+    All financial records ultimately link back to <strong>Project</strong> as the central entity
+  </p>
+</section>
+
+<hr class="divider" />
+
+<!-- TECH STACK -->
+<section>
+  <h2>Tech Stack</h2>
+  <div class="grid">
+    <div class="card">
+      <div class="card-title">⚛️ Frontend <span class="badge teal">React 18</span></div>
+      <div class="card-body">TypeScript · Vite 6.3 · SWC compiler<br/>Port 3000 (dev)</div>
+    </div>
+    <div class="card">
+      <div class="card-title">🎨 Styling <span class="badge blue">Tailwind v4</span></div>
+      <div class="card-body">No tailwind.config.js<br/>Config in <code>globals.css</code> via @theme inline</div>
+    </div>
+    <div class="card">
+      <div class="card-title">🧩 UI Lib <span class="badge">shadcn/ui</span></div>
+      <div class="card-body">53 Radix UI primitives<br/>in <code>/components/ui/</code></div>
+    </div>
+    <div class="card">
+      <div class="card-title">🗄️ Backend <span class="badge green">Supabase</span></div>
+      <div class="card-body">Postgres + Auth + RLS<br/>Direct client — no Edge Functions</div>
+    </div>
+    <div class="card">
+      <div class="card-title">🔀 Routing <span class="badge">react-router</span></div>
+      <div class="card-body">NOT react-router-dom<br/>RouteGuard wraps all protected routes</div>
+    </div>
+    <div class="card">
+      <div class="card-title">📊 Charts <span class="badge purple">Recharts</span></div>
+      <div class="card-body">Financial dashboards &amp; KPI charts<br/>+ motion/react for animations</div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- DEPARTMENTS & ACCESS -->
+<section>
+  <h2>Departments &amp; Role Hierarchy</h2>
+  <div class="grid">
+    <div class="card">
+      <div class="card-title">📈 Business Development</div>
+      <div class="card-body">Contacts · Customers · Inquiries<br/>Tasks · Activities · Budget Requests<br/>Reports</div>
+    </div>
+    <div class="card">
+      <div class="card-title">💰 Pricing</div>
+      <div class="card-body">Quotations · Contracts<br/>Rate Matrix · Vendors<br/>Network Partners · Reports</div>
+    </div>
+    <div class="card">
+      <div class="card-title">🚢 Operations</div>
+      <div class="card-body">Forwarding · Brokerage<br/>Trucking · Marine Insurance<br/>Others · Reports</div>
+    </div>
+    <div class="card">
+      <div class="card-title">🧾 Accounting</div>
+      <div class="card-body">Billings · Invoices · Collections<br/>Expenses · E-Vouchers · CoA<br/>Ledger · Transactions · Reports</div>
+    </div>
+    <div class="card">
+      <div class="card-title">👥 HR</div>
+      <div class="card-body">Employee management<br/>Payroll · Timekeeping</div>
+    </div>
+    <div class="card">
+      <div class="card-title">📊 Executive</div>
+      <div class="card-body">Dashboard · All departments<br/>Auto-promoted to director privileges</div>
+    </div>
+  </div>
+  <div style="margin-top:14px;padding:12px 16px;background:#F9FAFB;border:1px solid #E5E9F0;border-radius:8px;font-size:12px;">
+    <strong>Role Hierarchy:</strong> &nbsp; rep (0) &lt; manager (1) &lt; director (2) &nbsp;|&nbsp;
+    <strong>Manager+:</strong> Ticket Queue, Activity Log &nbsp;|&nbsp;
+    <strong>Director only:</strong> Admin Panel
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- MODULES -->
+<section>
+  <h2>Module Inventory (223 files)</h2>
+  <div class="grid">
+    <div class="card">
+      <div class="card-title">Accounting <span class="badge">38 files</span></div>
+      <div class="card-body">
+        Billing list &amp; details<br/>
+        Collections &amp; details<br/>
+        E-Vouchers + workflow state machine<br/>
+        Expenses list &amp; details<br/>
+        Chart of Accounts<br/>
+        Ledger &amp; Journal Entries<br/>
+        Aggregate financial views<br/>
+        Financial Dashboard + reports<br/>
+        Catalog management<br/>
+        Auditing module
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Business Dev <span class="badge">33 files</span></div>
+      <div class="card-body">
+        Contacts &amp; Customers CRUD<br/>
+        Inquiry pipeline &amp; status<br/>
+        Tasks with inline editing<br/>
+        Activity timeline<br/>
+        Budget request workflow<br/>
+        BD Reports<br/>
+        Report Control Center<br/>
+        <em>CustomDropdown (portal pattern)</em>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">UI Library <span class="badge">53 files</span></div>
+      <div class="card-body">
+        shadcn/ui Radix primitives<br/>
+        Accordion · Alert · Badge<br/>
+        Button · Card · Dialog<br/>
+        DropdownMenu · Form · Input<br/>
+        Popover · Select · Sheet<br/>
+        Sidebar · Tabs · Table<br/>
+        Toast · Tooltip · …
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Pricing <span class="badge">19 files</span></div>
+      <div class="card-body">
+        Quotation list &amp; builder (v3)<br/>
+        Contract detail + builder<br/>
+        Rate Matrix editor<br/>
+        Rate Breakdown sheet<br/>
+        Trucking destination blocks<br/>
+        Vendor &amp; partner management<br/>
+        Status workflow button
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Projects <span class="badge">18 files</span></div>
+      <div class="card-body">
+        Project list + detail tabs<br/>
+        Details · Overview · Financials<br/>
+        Billings · Expenses · Bookings<br/>
+        Collections · Attachments<br/>
+        Invoice builder + document<br/>
+        Collection creator panel<br/>
+        Create booking from project
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Operations <span class="badge">15 files</span></div>
+      <div class="card-body">
+        Universal BookingFullView<br/>
+        <em>5 service types:</em><br/>
+        Forwarding · Brokerage<br/>
+        Trucking · Marine Insurance<br/>
+        Others (catch-all)<br/>
+        Contract detection banner<br/>
+        Project autofill
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Shared Financial Tabs <span class="badge teal">reused</span></div>
+      <div class="card-body">
+        UnifiedBillingsTab<br/>
+        UnifiedInvoicesTab<br/>
+        UnifiedCollectionsTab<br/>
+        UnifiedExpensesTab<br/>
+        <em>Used by: Projects, Contracts,<br/>Bookings &amp; Aggregate views</em>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Reports <span class="badge">9 files</span></div>
+      <div class="card-body">
+        Company P&amp;L<br/>
+        Client Profitability<br/>
+        Booking Profitability<br/>
+        Expense Breakdown<br/>
+        Receivables Report
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Transactions <span class="badge">10 files</span></div>
+      <div class="card-body">Bank transaction management<br/>Import &amp; reconciliation</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Contracts <span class="badge">7 files</span></div>
+      <div class="card-body">
+        Contract list &amp; status<br/>
+        Booking from contract<br/>
+        Rate card generator<br/>
+        Rate calculation sheet
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Ticketing <span class="badge">7 files</span></div>
+      <div class="card-body">Internal issue tracking<br/>Ticket queue (manager+)<br/>Comments &amp; activity</div>
+    </div>
+    <div class="card">
+      <div class="card-title">HR <span class="badge">8 files</span></div>
+      <div class="card-body">Employee management<br/>Payroll · Timekeeping</div>
+    </div>
+    <div class="card">
+      <div class="card-title">CRM <span class="badge">8 files</span></div>
+      <div class="card-body">
+        Contacts CRUD + detail view<br/>
+        Customer list + autocomplete<br/>
+        Contact person autocomplete<br/>
+        Company name search
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Common <span class="badge">3 files</span></div>
+      <div class="card-body">
+        <strong>DataTable</strong> — all data tables<br/>
+        CustomDatePicker — date ranges<br/>
+        SidePanel — generic drawer
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- HOOKS -->
+<section>
+  <h2>Custom Hooks (18 total)</h2>
+  <div class="hook-list">
+    <div class="hook-item"><div class="hook-name">useUser</div><div class="hook-desc">Auth context, login/signup, dev role override</div></div>
+    <div class="hook-item"><div class="hook-name">useUsers</div><div class="hook-desc">All users for dropdowns &amp; pickers</div></div>
+    <div class="hook-item"><div class="hook-name">useNeuronCache</div><div class="hook-desc">Client-side caching layer with context</div></div>
+    <div class="hook-item"><div class="hook-name">useProjectFinancials</div><div class="hook-desc">All financial data for a project</div></div>
+    <div class="hook-item"><div class="hook-name">useProjectsFinancialsMap</div><div class="hook-desc">Batch financials for project list views</div></div>
+    <div class="hook-item"><div class="hook-name">useContractFinancials</div><div class="hook-desc">Financial data for a contract</div></div>
+    <div class="hook-item"><div class="hook-name">useBookingFinancials</div><div class="hook-desc">Financial calculation per booking</div></div>
+    <div class="hook-item"><div class="hook-name">useBookingRateCard</div><div class="hook-desc">Rate card data for a booking</div></div>
+    <div class="hook-item"><div class="hook-name">useBookingGrouping</div><div class="hook-desc">Group bookings by dimension</div></div>
+    <div class="hook-item"><div class="hook-name">useBillingMerge</div><div class="hook-desc">Merge virtual billing items from quotation with actual</div></div>
+    <div class="hook-item"><div class="hook-name">useEVouchers</div><div class="hook-desc">E-voucher data fetching</div></div>
+    <div class="hook-item"><div class="hook-name">useEVoucherSubmit</div><div class="hook-desc">E-voucher creation &amp; submission (complex)</div></div>
+    <div class="hook-item"><div class="hook-name">useConsignees</div><div class="hook-desc">Consignees by booking ID</div></div>
+    <div class="hook-item"><div class="hook-name">useContainerFinancials</div><div class="hook-desc">Financial data by container</div></div>
+    <div class="hook-item"><div class="hook-name">useFinancialHealthReport</div><div class="hook-desc">Aggregate data for sales report</div></div>
+    <div class="hook-item"><div class="hook-name">useNetworkPartners</div><div class="hook-desc">Network partners data</div></div>
+    <div class="hook-item"><div class="hook-name">useReportsData</div><div class="hook-desc">Generic report data fetching</div></div>
+    <div class="hook-item"><div class="hook-name">financialData</div><div class="hook-desc">Financial data types &amp; helpers</div></div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- DATABASE -->
+<section>
+  <h2>Supabase Database (43 tables)</h2>
+  <div class="db-group">
+    <div class="db-group-title">Core Business Entities</div>
+    <div class="db-tables">
+      <span class="db-table">customers</span>
+      <span class="db-table">contacts</span>
+      <span class="db-table">projects</span>
+      <span class="db-table">quotations</span>
+      <span class="db-table">contracts</span>
+    </div>
+  </div>
+  <div class="db-group">
+    <div class="db-group-title">Operations — Bookings</div>
+    <div class="db-tables">
+      <span class="db-table">bookings</span>
+      <span class="db-table">forwarding_bookings</span>
+      <span class="db-table">trucking_bookings</span>
+      <span class="db-table">brokerage_bookings</span>
+      <span class="db-table">marine_insurance_bookings</span>
+      <span class="db-table">others_bookings</span>
+      <span class="db-table">consignees</span>
+    </div>
+  </div>
+  <div class="db-group">
+    <div class="db-group-title">Financial</div>
+    <div class="db-tables">
+      <span class="db-table">invoices</span>
+      <span class="db-table">billing_line_items</span>
+      <span class="db-table">collections</span>
+      <span class="db-table">expenses</span>
+      <span class="db-table">evouchers</span>
+      <span class="db-table">accounts</span>
+      <span class="db-table">journal_entries</span>
+      <span class="db-table">transactions</span>
+    </div>
+  </div>
+  <div class="db-group">
+    <div class="db-group-title">Catalog &amp; Settings</div>
+    <div class="db-tables">
+      <span class="db-table">catalog_items</span>
+      <span class="db-table">catalog_categories</span>
+      <span class="db-table">vendor_charge_categories</span>
+      <span class="db-table">settings</span>
+    </div>
+  </div>
+  <div class="db-group">
+    <div class="db-group-title">Partnerships &amp; Relationships</div>
+    <div class="db-tables">
+      <span class="db-table">network_partners</span>
+      <span class="db-table">service_providers</span>
+      <span class="db-table">client_handler_preferences</span>
+    </div>
+  </div>
+  <div class="db-group">
+    <div class="db-group-title">Activity &amp; Comments</div>
+    <div class="db-tables">
+      <span class="db-table">tasks</span>
+      <span class="db-table">crm_activities</span>
+      <span class="db-table">booking_comments</span>
+      <span class="db-table">comments</span>
+      <span class="db-table">ticket_comments</span>
+      <span class="db-table">ticket_activity</span>
+      <span class="db-table">contract_activity</span>
+      <span class="db-table">evoucher_history</span>
+    </div>
+  </div>
+  <div class="db-group">
+    <div class="db-group-title">Reporting &amp; Templates</div>
+    <div class="db-tables">
+      <span class="db-table">bd_reports</span>
+      <span class="db-table">report_templates</span>
+      <span class="db-table">saved_reports</span>
+    </div>
+  </div>
+  <div class="db-group">
+    <div class="db-group-title">Admin &amp; Metadata</div>
+    <div class="db-tables">
+      <span class="db-table">users</span>
+      <span class="db-table">ticket_types</span>
+      <span class="db-table">attachments</span>
+      <span class="db-table">entity_attachments</span>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ROUTES -->
+<section>
+  <h2>Route Map</h2>
+  <table class="route-table">
+    <thead>
+      <tr><th>Path</th><th>Component</th><th>Guard</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>/dashboard</code></td><td>ExecutiveDashboard</td><td>All authenticated</td></tr>
+      <tr><td><code>/bd/*</code></td><td>BusinessDevelopment module</td><td>Business Development dept</td></tr>
+      <tr><td><code>/pricing/*</code></td><td>Pricing module</td><td>Pricing dept</td></tr>
+      <tr><td><code>/operations/*</code></td><td>Operations module</td><td>Operations dept</td></tr>
+      <tr><td><code>/accounting/*</code></td><td>Accounting module</td><td>Accounting dept</td></tr>
+      <tr><td><code>/hr</code></td><td>HR module</td><td>HR dept</td></tr>
+      <tr><td><code>/ticket-queue</code></td><td>TicketQueuePage</td><td>Manager+ only</td></tr>
+      <tr><td><code>/activity-log</code></td><td>ActivityLogPage</td><td>Manager+ only</td></tr>
+      <tr><td><code>/admin</code></td><td>Admin panel</td><td>Director only</td></tr>
+      <tr><td><code>/inbox</code></td><td>InboxPage</td><td>All authenticated</td></tr>
+      <tr><td><code>/profile</code></td><td>EmployeeProfile</td><td>All authenticated</td></tr>
+      <tr><td><code>/calendar</code></td><td>Calendar (coming soon)</td><td>All authenticated</td></tr>
+      <tr><td><code>/diagnostics</code></td><td>DiagnosticsPage</td><td>Hidden utility</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<hr class="divider" />
+
+<!-- CRITICAL PATTERNS -->
+<section>
+  <h2>Critical Architectural Patterns</h2>
+  <div class="grid">
+    <div class="card">
+      <div class="card-title">Module Router Pattern</div>
+      <div class="card-body">Each major module (Accounting, Pricing, BD, Operations) has a top-level router component accepting a <code>view</code> prop, delegating to sub-pages. Never bypass this shell.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Unified Tab Reuse</div>
+      <div class="card-body">Financial tabs are never recreated. Always import UnifiedBillingsTab, UnifiedInvoicesTab, UnifiedCollectionsTab, UnifiedExpensesTab with props.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Portal Dropdown</div>
+      <div class="card-body">CustomDropdown uses <code>createPortal → document.body</code>, <code>position:fixed</code>, <code>zIndex:9999</code>, scroll-reposition (not close). Never change this.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">RouteGuard + dept/role</div>
+      <div class="card-body">All protected routes wrapped by RouteGuard checking <code>allowedDepartments</code> &amp; <code>requireMinRole</code>. App Mode System: "Essentials" vs "Full Suite".</div>
+    </div>
+    <div class="card">
+      <div class="card-title">JSONB details columns</div>
+      <div class="card-body"><code>quotations</code>, <code>projects</code>, <code>bookings</code>, <code>evouchers</code> store overflow fields in a <code>details</code> JSONB column. Always merge: <code>&#123;...data?.details, ...data&#125;</code></div>
+    </div>
+    <div class="card">
+      <div class="card-title">quotations dual-type</div>
+      <div class="card-body">Same <code>quotations</code> table serves both. Distinguished by <code>quotation_type: "spot" | "contract"</code>. ContractDetailView and QuotationDetail both read from it.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">DataTable standard</div>
+      <div class="card-body">All data tables use <code>/components/common/DataTable.tsx</code>. Never build custom tables from scratch.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Blueprint-Driven Dev</div>
+      <div class="card-body">45 blueprint files in <code>/src/docs/blueprints/</code>. Read blueprint → create/update blueprint → wait for Go Ahead → implement phase by phase.</div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<p style="font-size:11px;color:#667085;text-align:center;padding-bottom:32px;">
+  Neuron OS · Freight Forwarding ERP for Philippine SMEs · Built with React 18 + Supabase
+</p>
+
+</body>
+</html>
