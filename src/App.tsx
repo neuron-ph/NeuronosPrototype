@@ -11,6 +11,7 @@ import { toast, Toaster } from "sonner@2.0.3";
 import type { Customer } from "./types/bd";
 import logoImage from "figma:asset/28c84ed117b026fbf800de0882eb478561f37f4f.png";
 import { projectId } from "./utils/supabase/info";
+import { useWorkspaceTheme } from "./theme/useWorkspaceTheme";
 
 const ExecutiveDashboard = lazy(() => import("./components/ExecutiveDashboard").then((module) => ({ default: module.ExecutiveDashboard })));
 const BusinessDevelopment = lazy(() => import("./components/BusinessDevelopment").then((module) => ({ default: module.BusinessDevelopment })));
@@ -35,6 +36,8 @@ const OperationsReports = lazy(() => import("./components/operations/OperationsR
 const DiagnosticsPage = lazy(() => import("./components/DiagnosticsPage").then((module) => ({ default: module.DiagnosticsPage })));
 const SupabaseDebug = lazy(() => import("./components/SupabaseDebug").then((module) => ({ default: module.SupabaseDebug })));
 const DesignSystemGuide = lazy(() => import("./components/DesignSystemGuide").then((module) => ({ default: module.DesignSystemGuide })));
+const Settings = lazy(() => import("./components/settings/Settings").then((m) => ({ default: m.Settings })));
+const UserManagement = lazy(() => import("./components/admin/UserManagement").then((m) => ({ default: m.UserManagement })));
 
 function RouteLoadingState() {
   return (
@@ -319,9 +322,9 @@ function LoginPage() {
                   disabled={isLoading}
                 >
                   <option value="" disabled>Select...</option>
-                  <option value="rep">Rep</option>
+                  <option value="staff">Staff</option>
+                  <option value="team_leader">Team Leader</option>
                   <option value="manager">Manager</option>
-                  <option value="director">Director</option>
                 </select>
               </div>
             </div>
@@ -482,7 +485,8 @@ function RouteWrapper({ children, page }: { children: React.ReactNode; page: str
     if (path.startsWith("/calendar")) return "calendar";
     if (path.startsWith("/inbox")) return "inbox";
     if (path.startsWith("/activity-log")) return "activity-log";
-    if (path.startsWith("/profile")) return "profile";
+    if (path.startsWith("/settings")) return "settings";
+    if (path.startsWith("/admin/users")) return "admin-users";
     if (path.startsWith("/admin")) return "admin";
     if (path.startsWith("/design-system")) return "design-system";
     return "dashboard";
@@ -536,7 +540,8 @@ function RouteWrapper({ children, page }: { children: React.ReactNode; page: str
       "calendar": "/calendar",
       "inbox": "/inbox",
       "activity-log": "/activity-log",
-      "profile": "/profile",
+      "settings": "/settings",
+      "admin-users": "/admin/users",
       "admin": "/admin",
       "design-system": "/design-system"
     };
@@ -1096,7 +1101,7 @@ function HRPage() {
   const { effectiveRole } = useUser();
   return (
     <RouteWrapper page="hr">
-      <HR userRole={(effectiveRole as 'rep' | 'manager' | 'director') || 'rep'} />
+      <HR userRole={(effectiveRole as 'staff' | 'team_leader' | 'manager') || 'staff'} />
     </RouteWrapper>
   );
 }
@@ -1130,23 +1135,18 @@ function ActivityLogPageWrapper() {
   );
 }
 
-function ProfilePage() {
-  const { user } = useUser();
-  const navigate = useNavigate();
-  
-  const handleDepartmentChange = (dept: string) => {
-    if (user) {
-      user.department = dept as 'Business Development' | 'Pricing' | 'Operations' | 'Accounting' | 'Executive' | 'HR';
-      navigate('/dashboard');
-    }
-  };
-  
+function SettingsPage() {
   return (
-    <RouteWrapper page="profile">
-      <EmployeeProfile 
-        currentUser={user || undefined} 
-        onDepartmentChange={handleDepartmentChange} 
-      />
+    <RouteWrapper page="settings">
+      <Settings />
+    </RouteWrapper>
+  );
+}
+
+function UserManagementPage() {
+  return (
+    <RouteWrapper page="admin-users">
+      <UserManagement />
     </RouteWrapper>
   );
 }
@@ -1168,7 +1168,7 @@ function DesignSystemPage() {
 }
 
 // Layout route that enforces department/role guards on child routes
-function GuardedLayout({ allowedDepartments, requireMinRole }: { allowedDepartments?: string[]; requireMinRole?: "rep" | "manager" | "director" }) {
+function GuardedLayout({ allowedDepartments, requireMinRole }: { allowedDepartments?: string[]; requireMinRole?: "staff" | "team_leader" | "manager" }) {
   return (
     <RouteGuard allowedDepartments={allowedDepartments} requireMinRole={requireMinRole}>
       <Outlet />
@@ -1178,6 +1178,7 @@ function GuardedLayout({ allowedDepartments, requireMinRole }: { allowedDepartme
 
 function AppContent() {
   const { isAuthenticated, isLoading } = useUser();
+  useWorkspaceTheme();
 
   // Show loading state while checking auth
   if (isLoading) {
@@ -1285,15 +1286,16 @@ function AppContent() {
           <Route path="/activity-log" element={<ActivityLogPageWrapper />} />
         </Route>
 
-        {/* Director only routes */}
-        <Route element={<GuardedLayout requireMinRole="director" />}>
+        {/* Executive only routes — PermissionsHub lives here */}
+        <Route element={<GuardedLayout allowedDepartments={["Executive"]} />}>
           <Route path="/admin" element={<AdminPage />} />
+          <Route path="/admin/users" element={<UserManagementPage />} />
         </Route>
 
         {/* Open to all authenticated users */}
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/inbox" element={<InboxPageWrapper />} />
-        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="/design-system" element={<DesignSystemPage />} />
         
         {/* Diagnostics (hidden utility page) */}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Home,
   Users,
@@ -33,7 +33,7 @@ import { useUser } from "../hooks/useUser";
 import { useAppMode } from "../config/appMode";
 import { supabase } from "../utils/supabase/client";
 
-type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" | "bd-reports" | "pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" | "pricing-reports" | "ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" | "ops-reports" | "operations" | "acct-transactions" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-coa" | "acct-reports" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "calendar" | "inbox" | "ticket-queue" | "profile" | "admin" | "ticket-testing" | "activity-log" | "design-system";
+type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" | "bd-reports" | "pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" | "pricing-reports" | "ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" | "ops-reports" | "operations" | "acct-transactions" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-coa" | "acct-reports" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "calendar" | "inbox" | "ticket-queue" | "settings" | "admin-users" | "admin" | "ticket-testing" | "activity-log" | "design-system";
 
 // SVG for Philippine Peso icon
 const Vector = () => (
@@ -66,6 +66,9 @@ const PesoIcon = ({ size = 20, style }: { size?: number; style?: React.CSSProper
 
 export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSidebarProps) {
   const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
+  const navRef = useRef<HTMLElement | null>(null);
+  const [showTopScrollFade, setShowTopScrollFade] = useState(false);
+  const [showBottomScrollFade, setShowBottomScrollFade] = useState(false);
 
   // Initialize collapsed state from localStorage, default to false (expanded)
   const [isCollapsed, setIsCollapsed] = useState(() => {
@@ -130,6 +133,40 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
   useEffect(() => {
     localStorage.setItem('neuron_acct_expanded', String(isAcctExpanded));
   }, [isAcctExpanded]);
+
+  const updateScrollFade = useCallback(() => {
+    const nav = navRef.current;
+    if (!nav) {
+      setShowTopScrollFade(false);
+      setShowBottomScrollFade(false);
+      return;
+    }
+
+    const canScroll = nav.scrollHeight > nav.clientHeight + 1;
+    const isPastTop = nav.scrollTop > 8;
+    const isAtBottom = nav.scrollTop + nav.clientHeight >= nav.scrollHeight - 2;
+    setShowTopScrollFade(canScroll && isPastTop);
+    setShowBottomScrollFade(canScroll && !isAtBottom);
+  }, []);
+
+  useEffect(() => {
+    updateScrollFade();
+
+    const handleResize = () => updateScrollFade();
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [
+    updateScrollFade,
+    isCollapsed,
+    isBDExpanded,
+    isPricingExpanded,
+    isOperationsExpanded,
+    isAcctExpanded,
+    inboxUnreadCount,
+  ]);
   
   // Use effectiveDepartment from context for dev role override support
   const { user, effectiveDepartment, effectiveRole } = useUser();
@@ -141,7 +178,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
     const { data } = await supabase.rpc("get_unread_count", {
       p_user_id: user.id,
       p_dept: effectiveDepartment || "",
-      p_role: effectiveRole || "rep",
+      p_role: effectiveRole || "staff",
     });
     setInboxUnreadCount(data || 0);
   }, [user, effectiveDepartment, effectiveRole]);
@@ -255,8 +292,8 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
     personalItems.push({ id: "ticket-queue" as Page, label: "Tickets", icon: ListTodo });
   }
   
-  // Add Activity Log for Managers and Directors only
-  if (isManager || currentUser?.role === "director") {
+  // Add Activity Log for Managers and Executive dept
+  if (isManager || effectiveDepartment === "Executive") {
     personalItems.push({ id: "activity-log" as Page, label: "Activity Log", icon: Activity });
   }
 
@@ -396,7 +433,12 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-4 space-y-1 pt-6 overflow-y-auto">
+      <div className="relative flex-1 min-h-0">
+        <nav
+          ref={navRef}
+          onScroll={updateScrollFade}
+          className="scrollbar-hide h-full overflow-y-auto px-4 pt-6 pb-4 space-y-1"
+        >
         {/* Dashboard */}
         {renderNavButton(dashboardItem)}
         
@@ -817,18 +859,73 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
         </button>
 
         {otherItems.map(item => renderNavButton(item))}
-      </nav>
+        </nav>
+
+        {showTopScrollFade && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute right-4 top-0 left-4 h-8"
+            style={{
+              background: "linear-gradient(to top, rgba(255,255,255,0), var(--sidebar, #FFFFFF) 88%)",
+            }}
+          />
+        )}
+
+        {showBottomScrollFade && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute right-4 bottom-0 left-4 h-12"
+            style={{
+              background: "linear-gradient(to bottom, rgba(255,255,255,0), var(--sidebar, #FFFFFF) 78%)",
+            }}
+          />
+        )}
+      </div>
+
+      {/* Users nav entry — Executive only */}
+      {currentUser?.department === 'Executive' && (
+        <div style={{ padding: "0 16px 8px" }}>
+          {(() => {
+            const isActive = currentPage === "admin-users";
+            return (
+              <button
+                onClick={() => onNavigate("admin-users")}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150"
+                style={{
+                  height: "40px",
+                  backgroundColor: isActive ? "var(--neuron-state-selected)" : "transparent",
+                  border: isActive ? "1.5px solid var(--neuron-ui-active-border)" : "1.5px solid transparent",
+                  color: isActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-secondary)",
+                  fontWeight: isActive ? 600 : 400,
+                  justifyContent: isCollapsed ? "center" : "flex-start",
+                  paddingLeft: isCollapsed ? "0" : "12px",
+                  paddingRight: isCollapsed ? "0" : "12px",
+                }}
+                onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)"; }}
+                onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = "transparent"; }}
+                title={isCollapsed ? "Users" : undefined}
+              >
+                <Users
+                  size={20}
+                  style={{ color: isActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)", flexShrink: 0 }}
+                />
+                {!isCollapsed && <span style={{ fontSize: "14px", lineHeight: "20px" }}>Users</span>}
+              </button>
+            );
+          })()}
+        </div>
+      )}
 
       {/* Footer */}
       <div className="px-4 py-4" style={{ borderTop: "1px solid var(--neuron-ui-border)" }}>
         {/* User Profile */}
         {currentUser && currentUser.name && (
           <button
-            onClick={() => onNavigate("profile")}
+            onClick={() => onNavigate("settings")}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150"
             style={{
-              backgroundColor: currentPage === "profile" ? "var(--neuron-state-selected)" : "var(--neuron-bg-page)",
-              border: currentPage === "profile" ? "1.5px solid var(--neuron-ui-active-border)" : "1.5px solid transparent",
+              backgroundColor: currentPage === "settings" ? "var(--neuron-state-selected)" : "var(--neuron-bg-page)",
+              border: currentPage === "settings" ? "1.5px solid var(--neuron-ui-active-border)" : "1.5px solid transparent",
               minHeight: "48px",
               justifyContent: isCollapsed ? "center" : "flex-start",
               paddingLeft: isCollapsed ? "0" : "12px",
@@ -836,12 +933,12 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
               cursor: "pointer",
             }}
             onMouseEnter={(e) => {
-              if (currentPage !== "profile") {
+              if (currentPage !== "settings") {
                 e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
               }
             }}
             onMouseLeave={(e) => {
-              if (currentPage !== "profile") {
+              if (currentPage !== "settings") {
                 e.currentTarget.style.backgroundColor = "var(--neuron-bg-page)";
               }
             }}
