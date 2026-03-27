@@ -285,7 +285,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
   const fetchCustomerContracts = async () => {
     setIsLoadingContracts(true);
     try {
-      const { data, error } = await supabase.from('contracts').select('*').eq('customer_name', customer.company_name || customer.name || '');
+      const { data, error } = await supabase.from('quotations').select('*').eq('quotation_type', 'contract').eq('customer_id', customer.id);
       if (!error) setCustomerContracts(data || []);
     } catch (error) {
       console.error("Error fetching customer contracts:", error);
@@ -2098,11 +2098,14 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
           try {
             console.log('[CustomerDetail] Creating contact for customer:', customer.id);
             // Pre-populate customer_id with this customer
+            const firstName = contactData.first_name || '';
+            const lastName = contactData.last_name || '';
             const newContactData = {
               ...contactData,
+              name: `${firstName} ${lastName}`.trim() || 'Contact',
               customer_id: customer.id, // Set the current customer as the company
             };
-            
+
             const { error } = await supabase.from('contacts').insert({
               ...newContactData,
               id: `contact-${Date.now()}`,

@@ -44,7 +44,7 @@ export interface NetworkPartner {
 // Helper function to check if partnership is expired
 export function isExpired(expiresDate: string): boolean {
   if (!expiresDate) return false;
-  const today = new Date('2026-01-13'); // Current date in system
+  const today = new Date();
   const expiry = new Date(expiresDate);
   return expiry < today;
 }
@@ -52,7 +52,7 @@ export function isExpired(expiresDate: string): boolean {
 // Helper function to check if partnership expires soon (within 60 days)
 export function expiresSoon(expiresDate: string): boolean {
   if (!expiresDate) return false;
-  const today = new Date('2026-01-13');
+  const today = new Date();
   const expiry = new Date(expiresDate);
   const daysUntilExpiry = Math.floor((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
   return daysUntilExpiry >= 0 && daysUntilExpiry <= 60;

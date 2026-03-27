@@ -135,20 +135,22 @@ export function ContactsListWithFilters({ userDepartment, onViewContact }: Conta
       const customerId = contactData.customer_id || contactData.company_id || null;
       const customer = customers.find((c: any) => c.id === customerId);
 
+      const firstName = contactData.first_name || '';
+      const lastName = contactData.last_name || '';
       const transformedData = {
-        first_name: contactData.first_name || null,
-        last_name: contactData.last_name || null,
+        name: `${firstName} ${lastName}`.trim() || 'Contact',
+        first_name: firstName || null,
+        last_name: lastName || null,
         title: contactData.title || null,
         email: contactData.email || null,
         phone: contactData.phone || contactData.mobile_number || null,
         customer_id: customerId,
-        company: customer?.name || customer?.company_name || '',
         owner_id: contactData.owner_id || null,
         lifecycle_stage: contactData.lifecycle_stage || "Lead",
         lead_status: contactData.lead_status || "New",
         notes: contactData.notes || null,
       };
-      
+
       const { data, error } = await supabase.from('contacts').insert({
         ...transformedData,
         id: `contact-${Date.now()}`,

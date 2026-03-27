@@ -478,16 +478,16 @@ export function ContractsList({
                         overflow: "hidden",
                         textOverflow: "ellipsis"
                       }}>
-                        {contract.quotation_name || contract.quote_number}
+                        {contract.quotation_name || (contract.customer_name ? `${contract.customer_name} Contract` : null) || contract.quote_number || 'Untitled Contract'}
                       </div>
-                      <div style={{ 
-                        fontSize: "12px", 
+                      <div style={{
+                        fontSize: "12px",
                         color: "#6B7280",
                         whiteSpace: "nowrap",
                         overflow: "hidden",
                         textOverflow: "ellipsis"
                       }}>
-                        {contract.quote_number}
+                        {contract.quote_number || contract.id?.slice(0, 12)}
                       </div>
                     </div>
                   </div>

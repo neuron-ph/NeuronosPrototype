@@ -691,13 +691,13 @@ export function ContractDetailView({
             Back to Contracts
           </button>
           
-          <h1 style={{ 
+          <h1 style={{
             fontSize: "20px",
             fontWeight: 600,
             color: "var(--neuron-ink-primary)",
             marginBottom: "4px"
           }}>
-            {quotation.quotation_name || quotation.quote_number}
+            {quotation.quotation_name || (quotation.customer_name ? `${quotation.customer_name} Contract` : quotation.quote_number)}
           </h1>
           <p style={{ fontSize: "13px", color: "var(--neuron-ink-muted, #6B7280)", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
             <span className="font-mono">{quotation.quote_number}</span>

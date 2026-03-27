@@ -364,9 +364,12 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
   const handleSave = async () => {
     try {
       // Map frontend field names to backend field names
+      const firstName = editedContact.first_name ?? (contact.name || '').split(' ')[0];
+      const lastName = editedContact.last_name ?? (contact.name || '').split(' ').slice(1).join(' ');
       const updatePayload: any = {
-        first_name: editedContact.first_name,
-        last_name: editedContact.last_name,
+        first_name: firstName || null,
+        last_name: lastName || null,
+        name: `${firstName || ''} ${lastName || ''}`.trim() || contact.name,
         title: editedContact.title ?? editedContact.job_title ?? null,
         email: editedContact.email,
         phone: editedContact.phone ?? editedContact.mobile_number ?? null,
@@ -574,7 +577,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                   {isEditing ? (
                     <input
                       type="text"
-                      value={editedContact.first_name || ""}
+                      value={editedContact.first_name ?? (contact.name || '').split(' ')[0]}
                       onChange={(e) => setEditedContact({ ...editedContact, first_name: e.target.value })}
                       className="w-full px-3 py-2 text-[14px] rounded-lg transition-colors"
                       style={{
@@ -591,7 +594,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                     />
                   ) : (
                     <div className="text-[14px]" style={{ color: "#12332B" }}>
-                      {contact.first_name}
+                      {(contact.name || '').split(' ')[0] || '—'}
                     </div>
                   )}
                 </div>
@@ -607,7 +610,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                   {isEditing ? (
                     <input
                       type="text"
-                      value={editedContact.last_name || ""}
+                      value={editedContact.last_name ?? (contact.name || '').split(' ').slice(1).join(' ')}
                       onChange={(e) => setEditedContact({ ...editedContact, last_name: e.target.value })}
                       className="w-full px-3 py-2 text-[14px] rounded-lg transition-colors"
                       style={{
@@ -624,7 +627,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                     />
                   ) : (
                     <div className="text-[14px]" style={{ color: "#12332B" }}>
-                      {contact.last_name}
+                      {(contact.name || '').split(' ').slice(1).join(' ') || '—'}
                     </div>
                   )}
                 </div>

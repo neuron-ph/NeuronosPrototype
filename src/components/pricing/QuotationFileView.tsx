@@ -97,7 +97,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
       pickup_address: quotation.pickup_address,
       
       // Status & Meta
-      status: quotation.status === "Converted to Project" ? "Active" : "Active", // Placeholder
+      status: "Active",
       booking_status: "No Bookings Yet",
       created_at: quotation.created_at,
       updated_at: quotation.updated_at,

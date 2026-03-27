@@ -348,6 +348,9 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
         // ⚡ PERFORMANCE: GPU acceleration for smooth animations
         willChange: "width",
         transform: "translateZ(0)",
+        // Always above any fixed-position backdrops in main content (e.g. dropdown overlays at z-10)
+        position: "relative",
+        zIndex: 100,
       }}
     >
       {/* Header */}

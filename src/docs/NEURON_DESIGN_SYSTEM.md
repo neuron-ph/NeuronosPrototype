@@ -233,6 +233,101 @@ Loaded via Google Fonts with weights: 400 (Regular), 500 (Medium), 600 (Semibold
 
 ---
 
+## Surface Hierarchy
+
+Every user interaction in Neuron OS must be presented at the correct surface level. Choose based on the complexity and weight of the interaction — never upsize or downsize.
+
+### The Four Surfaces
+
+| Surface | When to Use | Examples |
+|---|---|---|
+| **Full Screen** | The primary task is large, has many fields, or requires the user's full focus. The user navigates *into* it. | Quotation Builder, Contract Builder, Booking Detail, Invoice Builder |
+| **Side Panel** | Important action or detail that doesn't require full focus. The underlying context remains visible. | Customer Detail, Contact Detail, Task Detail, Budget Request Detail |
+| **Inline** | A small number of fields (1–3) that logically belong within the current context. No navigation required. | Inline task edit, adding a line item, renaming a record |
+| **Modal** | A system-level action that requires explicit confirmation before proceeding. **Requires permission from Marcus before introducing a new modal.** Only for irreversible or high-consequence actions. | Delete, Void, Cancel, Override |
+
+### Rules
+
+- **Default to Side Panel** for any detail view or CRUD form that isn't a primary workspace.
+- **Use Inline** only when the action is truly contained (e.g., clicking a row to edit one field).
+- **Never use Modal for forms.** A form with more than one field belongs in a Side Panel or Full Screen view.
+- **Modal = system action only.** Do not use modals for create, edit, or navigation flows.
+- **No new modals without explicit approval.** The `NeuronModal` component is the only permitted modal implementation.
+
+---
+
+## Modal Design System
+
+### When a Modal Is Appropriate
+
+Modals are reserved for **system actions** — operations that are irreversible, high-consequence, or require the user to explicitly confirm before the system proceeds. Examples:
+
+- Permanent deletion of a record
+- Voiding a financial document
+- Cancelling a contract or booking
+- Overriding a locked state
+
+### The `NeuronModal` Component
+
+All modals in Neuron OS use the shared `NeuronModal` component at `/src/components/ui/NeuronModal.tsx`. Never build a one-off modal inline.
+
+```tsx
+import { NeuronModal } from "../ui/NeuronModal";
+
+<NeuronModal
+  isOpen={showDeleteModal}
+  onClose={() => setShowDeleteModal(false)}
+  title="Delete Quotation"
+  description="Are you sure you want to delete QUO-2026-001? This action is permanent and cannot be undone. All associated history and linked documents will be removed."
+  confirmLabel="Delete Quotation"
+  confirmIcon={<Trash2 size={15} />}
+  onConfirm={handleDelete}
+  variant="danger"
+/>
+```
+
+### Variants
+
+| Variant | Use Case | Confirm Button Color | Category Label |
+|---|---|---|---|
+| `danger` | Permanent deletion, irreversible destruction | `#C94F3D` | DANGER ZONE |
+| `warning` | Voiding, cancellation, status override | `#C88A2B` | WARNING |
+| `info` | Confirmation of non-destructive system action | `#237F66` | CONFIRMATION |
+
+### Anatomy
+
+```
+┌─────────────────────────────────────────┐
+│  Delete Quotation                         │  ← Title: 20px/600, #12332B
+│                                           │
+│  Are you sure you want to delete this     │  ← Description: 14px, #6B7A76
+│  quotation? This action is permanent...   │
+│  ────────────────────────────────────     │  ← Divider: #EEF3F1
+│                     Cancel  🗑 Delete     │  ← Footer: right-aligned buttons
+└─────────────────────────────────────────┘
+```
+
+**Dimensions**: max-width 420px, padding 28px body / 18px footer
+
+**Backdrop**: `rgba(18, 51, 43, 0.35)` with `blur(2px)` — uses Neuron primary color, not generic black
+
+**Card**: `#FFFFFF` background, `border: 1px solid #E5ECE9`, `border-radius: 8px`, `box-shadow: 0 8px 32px 0 rgba(16, 24, 20, 0.12)`
+
+**Buttons**:
+- Cancel: transparent background, `border: 1px solid #E5ECE9`, `#12332B` text — hover `#F1F6F4`, `border-radius: 6px`
+- Confirm: solid variant color, white text — hover darkens by ~15%, `border-radius: 6px`
+
+**Keyboard**: Escape closes the modal. Clicking the backdrop closes the modal. Focus trap within the card.
+
+### What NOT to Put in a Modal
+
+- Forms with more than one field → use Side Panel
+- Create flows → use Full Screen or Side Panel
+- Navigation → use routing
+- Informational messages → use Toast (sonner)
+
+---
+
 ## Component Architecture
 
 ### Card Anatomy

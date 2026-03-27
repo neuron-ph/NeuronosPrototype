@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { MoreVertical, Edit, Copy, Download, Trash2, FileText, FolderOpen, Ticket } from "lucide-react";
 import type { QuotationNew } from "../../types/pricing";
 import { getNormalizedQuotationStatus } from "../../utils/quotationStatus";
+import { NeuronModal } from "../ui/NeuronModal";
 
 interface QuotationActionMenuProps {
   quotation: QuotationNew;
@@ -232,134 +233,16 @@ export function QuotationActionMenu({
       )}
 
       {/* Delete Modal */}
-      {showDeleteModal && (
-        <div style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: "rgba(0, 0, 0, 0.5)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 1000,
-          padding: "20px"
-        }}>
-          <div style={{
-            backgroundColor: "white",
-            borderRadius: "12px",
-            width: "480px",
-            boxShadow: "0px 20px 25px -5px rgba(0, 0, 0, 0.1), 0px 10px 10px -5px rgba(0, 0, 0, 0.04)"
-          }}>
-            {/* Modal Header with Icon */}
-            <div style={{
-              padding: "24px 24px 20px 24px",
-              borderBottom: "1px solid #F3F4F6",
-              display: "flex",
-              alignItems: "flex-start",
-              gap: "12px"
-            }}>
-              <div style={{
-                width: "36px",
-                height: "36px",
-                borderRadius: "18px",
-                backgroundColor: "#FEF2F2",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0
-              }}>
-                <Trash2 size={16} style={{ color: "#EF4444" }} />
-              </div>
-              
-              <div style={{ flex: 1 }}>
-                <h2 style={{
-                  fontSize: "16px",
-                  fontWeight: 600,
-                  color: "#12332B",
-                  marginBottom: "6px",
-                  lineHeight: "1.4"
-                }}>
-                  Delete Quotation
-                </h2>
-                <p style={{
-                  fontSize: "13px",
-                  color: "#667085",
-                  lineHeight: "1.5",
-                  margin: 0,
-                  marginBottom: "12px"
-                }}>
-                  Are you sure you want to delete <strong style={{ color: "#12332B" }}>{quotation.quote_number}</strong>?
-                </p>
-                <p style={{
-                  fontSize: "13px",
-                  color: "#667085",
-                  lineHeight: "1.5",
-                  margin: 0
-                }}>
-                  This action cannot be undone.
-                </p>
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div style={{
-              padding: "16px 24px 20px 24px",
-              display: "flex",
-              gap: "8px",
-              justifyContent: "flex-end"
-            }}>
-              <button
-                onClick={() => setShowDeleteModal(false)}
-                style={{
-                  padding: "8px 16px",
-                  backgroundColor: "white",
-                  border: "1px solid #D1D5DB",
-                  borderRadius: "6px",
-                  fontSize: "13px",
-                  fontWeight: 500,
-                  color: "#374151",
-                  cursor: "pointer",
-                  transition: "all 0.2s ease"
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "#F9FAFB";
-                  e.currentTarget.style.borderColor = "#9CA3AF";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "white";
-                  e.currentTarget.style.borderColor = "#D1D5DB";
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDelete}
-                style={{
-                  padding: "8px 16px",
-                  backgroundColor: "#EF4444",
-                  border: "none",
-                  borderRadius: "6px",
-                  fontSize: "13px",
-                  fontWeight: 500,
-                  color: "white",
-                  cursor: "pointer",
-                  transition: "all 0.2s ease"
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "#DC2626";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "#EF4444";
-                }}
-              >
-                Delete Quotation
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <NeuronModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        title="Delete Quotation"
+        description={`Are you sure you want to delete ${quotation.quote_number || quotation.quotation_name || "this quotation"}? This action is permanent and cannot be undone. All associated history and linked documents will be removed.`}
+        confirmLabel="Delete Quotation"
+        confirmIcon={<Trash2 size={15} />}
+        onConfirm={confirmDelete}
+        variant="danger"
+      />
     </div>
   );
 }

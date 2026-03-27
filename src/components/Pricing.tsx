@@ -58,8 +58,16 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
         .order('created_at', { ascending: false });
       
       if (error) throw error;
-      setQuotations(data || []);
-      console.log(`Fetched ${(data || []).length} quotations for Pricing module`);
+      // Merge details JSONB so financial fields (charge_categories, buying_price, etc.) are accessible
+      // Also normalize contract date column names (DB: contract_start_date → type: contract_validity_start)
+      const merged = (data || []).map((row: any) => {
+        const m = { ...(row?.details ?? {}), ...row };
+        if (!m.contract_validity_start && m.contract_start_date) m.contract_validity_start = m.contract_start_date;
+        if (!m.contract_validity_end && m.contract_end_date) m.contract_validity_end = m.contract_end_date;
+        return m;
+      });
+      setQuotations(merged);
+      console.log(`Fetched ${merged.length} quotations for Pricing module`);
     } catch (error) {
       console.log('Error fetching quotations:', error);
       setQuotations([]);
@@ -142,16 +150,25 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
 
   const handleSaveQuotation = async (data: QuotationNew) => {
     console.log("Saving quotation:", data);
-    
+
+    // Remap contract date fields to match DB column names
+    const contractDateFields = {
+      contract_start_date: (data as any).contract_validity_start || (data as any).contract_start_date,
+      contract_end_date: (data as any).contract_validity_end || (data as any).contract_end_date,
+    };
+
     try {
-      const isUpdate = !!data.id && data.id.startsWith('QUO-');
-      
+      // IDs from builder: existing records use original DB id (QUO.../CQ...),
+      // new records use builder-generated temp id (quot-...). Treat anything
+      // that isn't a temp id and is non-empty as an update.
+      const isUpdate = !!data.id && !data.id.startsWith('quot-');
+
       if (isUpdate) {
         const { error } = await supabase
           .from('quotations')
-          .update({ ...data, updated_at: new Date().toISOString() })
+          .update({ ...data, ...contractDateFields, updated_at: new Date().toISOString() })
           .eq('id', data.id);
-        
+
         if (error) throw error;
         console.log('Quotation updated successfully');
         await fetchQuotations();
@@ -160,11 +177,12 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
         const newId = `QUO-${Date.now()}`;
         const newData = {
           ...data,
+          ...contractDateFields,
           id: newId,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
-        
+
         const { error } = await supabase.from('quotations').insert(newData);
         if (error) throw error;
         console.log('Quotation created successfully:', newId);
@@ -313,22 +331,26 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
                 }}
                 onSave={async (data) => {
                   try {
-                    const isUpdate = !!data.id && data.id.startsWith('QUO-');
-                    
+                    const contractDateFields = {
+                      contract_start_date: (data as any).contract_validity_start || (data as any).contract_start_date,
+                      contract_end_date: (data as any).contract_validity_end || (data as any).contract_end_date,
+                    };
+                    const isUpdate = !!data.id && !data.id.startsWith('quot-');
+
                     if (isUpdate) {
                       const { error } = await supabase
                         .from('quotations')
-                        .update({ ...data, updated_at: new Date().toISOString() })
+                        .update({ ...data, ...contractDateFields, updated_at: new Date().toISOString() })
                         .eq('id', data.id);
                       if (error) throw error;
                     } else {
                       const newId = `QUO-${Date.now()}`;
                       const { error } = await supabase
                         .from('quotations')
-                        .insert({ ...data, id: newId, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+                        .insert({ ...data, ...contractDateFields, id: newId, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
                       if (error) throw error;
                     }
-                    
+
                     console.log('Inquiry saved successfully');
                     setSubView("detail");
                     setSelectedQuotation(null);

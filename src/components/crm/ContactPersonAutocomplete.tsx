@@ -36,7 +36,7 @@ export function ContactPersonAutocomplete({
     try {
       let query = supabase.from('contacts').select('*');
       if (search) {
-        query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%`);
+        query = query.ilike('name', `%${search}%`);
       }
       if (customer_id) {
         query = query.eq('customer_id', customer_id);
@@ -82,7 +82,7 @@ export function ContactPersonAutocomplete({
   }, []);
 
   const handleSelect = (contact: Contact) => {
-    const fullName = `${contact.first_name || ''} ${contact.last_name || ''}`.trim();
+    const fullName = (contact as any).name || `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || 'Unknown Contact';
     onChange(fullName, contact.id);
     setIsOpen(false);
     setSearchQuery("");
@@ -306,7 +306,7 @@ export function ContactPersonAutocomplete({
                     color: "var(--neuron-ink-primary)",
                   }}
                 >
-                  {`${contact.first_name || ''} ${contact.last_name || ''}`.trim()}
+                  {(contact as any).name || `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || 'Unknown Contact'}
                 </div>
               </div>
             ))}

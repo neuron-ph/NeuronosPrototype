@@ -111,7 +111,8 @@ export function TasksList({ onViewTask }: TasksListProps) {
   const getContactName = (contactId: string | null) => {
     if (!contactId) return null;
     const contact = contacts.find(c => c.id === contactId);
-    return contact ? `${contact.first_name} ${contact.last_name}` : null;
+    if (!contact) return null;
+    return contact.name || `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || null;
   };
 
   const getCustomerName = (customerId: string | null) => {
