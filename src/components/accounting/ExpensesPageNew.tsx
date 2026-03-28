@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { Plus, Search, Calendar } from "lucide-react";
 import type { Expense } from "../../types/accounting";
@@ -7,15 +8,11 @@ import { useDataScope } from "../../hooks/useDataScope";
 import { AddRequestForPaymentPanel } from "./AddRequestForPaymentPanel";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { ExpensesListTable } from "./ExpensesListTable";
+import { queryKeys } from "../../lib/queryKeys";
 
 export function ExpensesPageNew() {
   const navigate = useNavigate();
 
-  // State for data
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  
   // State for UI
   const [showAddPanel, setShowAddPanel] = useState(false);
   
@@ -25,73 +22,68 @@ export function ExpensesPageNew() {
   const [dateRange, setDateRange] = useState<{ from?: string; to?: string }>({});
   
   const { scope, isLoaded } = useDataScope();
+  const queryClient = useQueryClient();
 
-  // Fetch expenses from API
-  useEffect(() => {
-    fetchExpenses();
-  }, [dateRange, scope, isLoaded]);
+  // Get current user from localStorage (needed for Panel defaultRequestor)
+  const userData = typeof window !== "undefined" ? localStorage.getItem("neuron_user") : null;
+  const currentUser = userData ? JSON.parse(userData) : null;
 
-  const fetchExpenses = async () => {
-    if (!isLoaded) return;
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Fetch from evouchers table (expense type) + posted expenses
+  const { data: rawEvouchers = [], isLoading: evouchersLoading } = useQuery({
+    queryKey: ["expenses", "evouchers", scope, dateRange],
+    queryFn: async () => {
+      if (!isLoaded) return [];
       let query = supabase.from('evouchers').select('*').eq('transaction_type', 'expense');
       if (scope.type === 'userIds') query = query.in('created_by', scope.ids);
       else if (scope.type === 'own') query = query.eq('created_by', scope.userId);
-      if (dateRange.from) {
-        query = query.gte('request_date', dateRange.from);
-      }
-      if (dateRange.to) {
-        query = query.lte('request_date', dateRange.to);
-      }
+      if (dateRange.from) query = query.gte('request_date', dateRange.from);
+      if (dateRange.to) query = query.lte('request_date', dateRange.to);
       query = query.order('created_at', { ascending: false });
-      
-      const { data: evoucherRows, error: fetchError } = await query;
-      
-      if (fetchError) {
-        throw new Error(`Supabase error: ${fetchError.message}`);
-      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: isLoaded,
+    staleTime: 30_000,
+  });
 
-      // Also fetch posted expenses from the expenses table
-      const { data: postedRows } = await supabase
-        .from('expenses')
-        .select('*');
+  const { data: postedRows = [], isLoading: postedLoading } = useQuery({
+    queryKey: ["expenses", "posted"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('expenses').select('*');
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
 
-      // Merge: posted expenses + unposted evouchers
-      const postedIds = new Set((postedRows || []).map((e: any) => e.evoucher_id));
-      const unpostedEvouchers = (evoucherRows || []).filter((ev: any) => !postedIds.has(ev.id));
-      
-      const mappedExpenses = [
-        ...(postedRows || []),
-        ...unpostedEvouchers.map((ev: any) => ({
-          id: ev.id,
-          evoucher_id: ev.id,
-          evoucher_number: ev.voucher_number,
-          date: ev.request_date || ev.created_at,
-          vendor: ev.vendor_name,
-          category: ev.expense_category,
-          amount: ev.amount,
-          currency: ev.currency || 'PHP',
-          description: ev.purpose || ev.description,
-          status: ev.status,
-          project_number: ev.project_number,
-          payment_method: ev.payment_method,
-          created_at: ev.created_at,
-        }))
-      ];
+  const loading = evouchersLoading || postedLoading;
 
-      console.log('Fetched expenses:', mappedExpenses.length);
-      setExpenses(mappedExpenses);
-    } catch (err) {
-      console.error('Error fetching expenses:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load expenses';
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
-    }
+  // Merge: posted expenses + unposted evouchers
+  const expenses: Expense[] = useMemo(() => {
+    const postedIds = new Set((postedRows || []).map((e: any) => e.evoucher_id));
+    const unpostedEvouchers = rawEvouchers.filter((ev: any) => !postedIds.has(ev.id));
+    return [
+      ...(postedRows || []),
+      ...unpostedEvouchers.map((ev: any) => ({
+        id: ev.id,
+        evoucher_id: ev.id,
+        evoucher_number: ev.voucher_number,
+        date: ev.request_date || ev.created_at,
+        vendor: ev.vendor_name,
+        category: ev.expense_category,
+        amount: ev.amount,
+        currency: ev.currency || 'PHP',
+        description: ev.purpose || ev.description,
+        status: ev.status,
+        project_number: ev.project_number,
+        payment_method: ev.payment_method,
+        created_at: ev.created_at,
+      })),
+    ] as Expense[];
+  }, [rawEvouchers, postedRows]);
+
+  const fetchExpenses = () => {
+    queryClient.invalidateQueries({ queryKey: ["expenses"] });
   };
 
   // Filter and sort logic
@@ -256,8 +248,8 @@ export function ExpensesPageNew() {
           context="accounting"
           isOpen={showAddPanel}
           onClose={() => setShowAddPanel(false)}
-          onSave={async () => {
-            await fetchExpenses();
+          onSave={() => {
+            fetchExpenses();
             setShowAddPanel(false);
           }}
           defaultRequestor={currentUser?.name || "Current User"}

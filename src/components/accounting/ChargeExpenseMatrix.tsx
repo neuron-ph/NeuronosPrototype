@@ -1,7 +1,9 @@
 // ChargeExpenseMatrix — Pivot table: bookings as rows, catalog items as columns
 // Styled 1:1 with ContractsList.tsx layout tokens (borders, header colors, border-radius, font sizes)
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "../../lib/queryKeys";
 import { Loader2, AlertCircle, Grid3X3, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
@@ -141,108 +143,108 @@ const CELL_MIN_WIDTH = 110;
 export function ChargeExpenseMatrix() {
   const [period, setPeriod] = useState(getCurrentPeriod);
   const [serviceType, setServiceType] = useState("All");
-  const [data, setData] = useState<MatrixData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
 
-  const fetchMatrix = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      // Fetch billing line items and catalog items, build matrix client-side
-      const [{ data: lineItems }, { data: catalogItems }] = await Promise.all([
-        supabase.from('billing_line_items').select('*'),
-        supabase.from('catalog_items').select('id, name, category_id'),
-      ]);
+  const { data: lineItems = [], isLoading: lineItemsLoading, error: lineItemsError } = useQuery({
+    queryKey: ["billing_line_items", "list"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('billing_line_items').select('*');
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
 
-      const emptyMeta = (): MatrixMeta => ({
-        total_bookings: 0,
-        total_line_items: 0,
-        unlinked_count: 0,
-        linked_count: 0,
-        linked_percentage: 0,
-        period,
-        service_type: serviceType,
-        view: "all",
-      });
+  const { data: catalogItems = [], isLoading: catalogLoading, error: catalogError } = useQuery({
+    queryKey: queryKeys.catalog.items(),
+    queryFn: async () => {
+      const { data, error } = await supabase.from('catalog_items').select('id, name, category_id');
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
 
-      if (!catalogItems || catalogItems.length === 0) {
-        setData({ columns: [], rows: [], totals: {}, meta: emptyMeta() });
-        return;
-      }
+  const loading = lineItemsLoading || catalogLoading;
+  const error = lineItemsError || catalogError ? String(lineItemsError || catalogError) : null;
 
-      // Build pivot: columns = all catalog items, rows = bookings
-      const columns = (catalogItems as any[]).map((ci: any) => ({
-        catalog_item_id: ci.id,
-        name: ci.name,
-      }));
+  // Build matrix client-side from fetched data
+  const data: MatrixData | null = (() => {
+    if (loading) return null;
 
-      if (!lineItems || lineItems.length === 0) {
-        setData({
-          columns,
-          rows: [],
-          totals: Object.fromEntries(columns.map((c: MatrixColumn) => [c.catalog_item_id, 0])),
-          meta: emptyMeta(),
-        });
-        return;
-      }
+    const emptyMeta = (): MatrixMeta => ({
+      total_bookings: 0,
+      total_line_items: 0,
+      unlinked_count: 0,
+      linked_count: 0,
+      linked_percentage: 0,
+      period,
+      service_type: serviceType,
+      view: "all",
+    });
 
-      // Group line items by booking
-      const byBooking = new Map<string, any[]>();
-      for (const li of lineItems) {
-        const key = li.booking_id || li.project_number || 'unassigned';
-        if (!byBooking.has(key)) byBooking.set(key, []);
-        byBooking.get(key)!.push(li);
-      }
-
-      const rows = Array.from(byBooking.entries()).map(([bookingId, items]) => ({
-        booking_id: bookingId,
-        project_number: items[0]?.project_number || bookingId,
-        service_type: items[0]?.service_type || '',
-        cells: Object.fromEntries(
-          columns.map((col: any) => {
-            const match = items.find((li: any) => li.catalog_item_id === col.catalog_item_id);
-            return [col.catalog_item_id, match ? { amount: Number(match.amount) || 0, currency: match.currency || 'PHP' } : null];
-          })
-        ),
-      }));
-
-      // Compute column totals
-      const totals: Record<string, number> = {};
-      for (const col of columns) {
-        totals[col.catalog_item_id] = rows.reduce(
-          (sum, row) => sum + (row.cells[col.catalog_item_id]?.amount || 0), 0
-        );
-      }
-
-      // Compute meta stats
-      const linkedItems = lineItems.filter((li: any) => li.catalog_item_id);
-      const linkedPct = lineItems.length > 0
-        ? Math.round((linkedItems.length / lineItems.length) * 100)
-        : 0;
-      const meta: MatrixMeta = {
-        total_bookings: byBooking.size,
-        total_line_items: lineItems.length,
-        unlinked_count: lineItems.length - linkedItems.length,
-        linked_count: linkedItems.length,
-        linked_percentage: linkedPct,
-        period,
-        service_type: serviceType,
-        view,
-      };
-
-      setData({ columns, rows, totals, meta });
-    } catch (err) {
-      console.error("Matrix fetch error:", err);
-      setError(String(err));
-      toast.error("Failed to load matrix", String(err));
-    } finally {
-      setLoading(false);
+    if (!catalogItems.length) {
+      return { columns: [], rows: [], totals: {}, meta: emptyMeta() };
     }
-  }, [period, serviceType]);
 
-  useEffect(() => { fetchMatrix(); }, [fetchMatrix]);
+    const columns = (catalogItems as any[]).map((ci: any) => ({
+      catalog_item_id: ci.id,
+      name: ci.name,
+    }));
+
+    if (!lineItems.length) {
+      return {
+        columns,
+        rows: [],
+        totals: Object.fromEntries(columns.map((c: MatrixColumn) => [c.catalog_item_id, 0])),
+        meta: emptyMeta(),
+      };
+    }
+
+    // Group line items by booking
+    const byBooking = new Map<string, any[]>();
+    for (const li of lineItems) {
+      const key = (li as any).booking_id || (li as any).project_number || 'unassigned';
+      if (!byBooking.has(key)) byBooking.set(key, []);
+      byBooking.get(key)!.push(li);
+    }
+
+    const rows = Array.from(byBooking.entries()).map(([bookingId, items]) => ({
+      booking_id: bookingId,
+      project_number: items[0]?.project_number || bookingId,
+      service_type: items[0]?.service_type || '',
+      cells: Object.fromEntries(
+        columns.map((col: any) => {
+          const match = items.find((li: any) => li.catalog_item_id === col.catalog_item_id);
+          return [col.catalog_item_id, match ? { amount: Number(match.amount) || 0, currency: match.currency || 'PHP' } : null];
+        })
+      ),
+    }));
+
+    const totals: Record<string, number> = {};
+    for (const col of columns) {
+      totals[col.catalog_item_id] = rows.reduce(
+        (sum, row) => sum + (row.cells[col.catalog_item_id]?.amount || 0), 0
+      );
+    }
+
+    const linkedItems = lineItems.filter((li: any) => (li as any).catalog_item_id);
+    const linkedPct = lineItems.length > 0
+      ? Math.round((linkedItems.length / lineItems.length) * 100)
+      : 0;
+    const meta: MatrixMeta = {
+      total_bookings: byBooking.size,
+      total_line_items: lineItems.length,
+      unlinked_count: lineItems.length - linkedItems.length,
+      linked_count: linkedItems.length,
+      linked_percentage: linkedPct,
+      period,
+      service_type: serviceType,
+      view: "all",
+    };
+
+    return { columns, rows, totals, meta };
+  })();
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -334,7 +336,7 @@ export function ChargeExpenseMatrix() {
       {/* Table area */}
       <div style={{ flex: 1, overflow: "hidden", position: "relative" }}>
         {loading && <LoadingOverlay />}
-        {error && <ErrorState message={error} onRetry={fetchMatrix} />}
+        {error && <ErrorState message={error} onRetry={() => {}} />}
         {!loading && !error && data && data.columns.length === 0 && <NoCatalogState />}
         {!loading && !error && data && data.columns.length > 0 && data.rows.length === 0 && <EmptyState period={period} />}
         {!loading && !error && data && data.columns.length > 0 && data.rows.length > 0 && (

@@ -1,4 +1,6 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "../../lib/queryKeys";
 import { useNavigate } from "react-router";
 import { Plus, FileText, Search, Filter, Calendar, DollarSign, CreditCard, Banknote, Building2 } from "lucide-react";
 import type { Collection } from "../../types/accounting";
@@ -10,91 +12,65 @@ import { CollectionDetailsSheet } from "./collections/CollectionDetailsSheet";
 export function CollectionsContentNew() {
   const navigate = useNavigate();
 
-  // State for data
-  const [collections, setCollections] = useState<Collection[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  
   // State for UI
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
-  
+
   // State for filters
   const [searchQuery, setSearchQuery] = useState("");
   const [paymentMethodFilter, setPaymentMethodFilter] = useState("all");
-  
+
   // Get current user
   const userData = localStorage.getItem("neuron_user");
   const currentUser = userData ? JSON.parse(userData) : null;
 
   // Check if user has collection access
-  const hasCollectionAccess = 
-    currentUser?.department === "Accounting" || 
+  const hasCollectionAccess =
+    currentUser?.department === "Accounting" ||
     currentUser?.department === "Executive";
 
-  // Fetch collections from API
-  useEffect(() => {
-    fetchCollections();
-  }, []);
-
-  const fetchCollections = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // PHASE 4 FIX: Fetch from Universal E-Vouchers table
-      const { data: evoucherRows, error: fetchError } = await supabase
+  const { data: rawEvouchers = [], isLoading: loading, error: queryError, refetch } = useQuery({
+    queryKey: queryKeys.evouchers.list("collections"),
+    queryFn: async () => {
+      const { data, error } = await supabase
         .from('evouchers')
         .select('*')
         .order('created_at', { ascending: false });
-      
-      if (fetchError) {
-        throw new Error(`Supabase error: ${fetchError.message}`);
-      }
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
 
-      const evouchers = evoucherRows || [];
-      
-      // Map E-Vouchers to Collection interface
-      const mappedCollections = evouchers
-        .filter((ev: any) => ev.transaction_type === 'collection')
-        .map((ev: any) => {
-          const isPosted = ev.status === 'posted' || ev.status === 'Posted';
-          const primaryId = (isPosted && ev.ledger_entry_id) ? ev.ledger_entry_id : ev.id;
-          
-          return {
-            id: primaryId,
-            reference_number: ev.voucher_number,
-            evoucher_number: ev.voucher_number,
-            customer_name: ev.customer_name || ev.vendor_name || "Unknown Customer",
-            description: ev.purpose || ev.description,
-            project_number: ev.project_number,
-            amount: ev.amount,
-            collection_date: ev.request_date,
-            payment_method: ev.payment_method || "Cash",
-            received_by_name: ev.requestor_name,
-            evoucher_id: ev.id,
-            created_at: ev.created_at,
-            // Extra fields that might be in EVoucher but mapped for UI
-            status: ev.status
-          };
-        });
+  const error = queryError ? (queryError instanceof Error ? queryError.message : 'Failed to load collections') : null;
 
-      console.log('✅ Fetched collections from E-Vouchers:', mappedCollections);
-      setCollections(mappedCollections);
-    } catch (err) {
-      console.error('❌ Error fetching collections:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load collections';
-      setError(errorMessage);
-      
-      // If it's a network error, show a more helpful message
-      if (errorMessage.includes('Failed to fetch')) {
-        setError('Unable to connect to server. Please check your connection and try again.');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Map E-Vouchers to Collection interface
+  const collections: Collection[] = useMemo(() => {
+    return rawEvouchers
+      .filter((ev: any) => ev.transaction_type === 'collection')
+      .map((ev: any) => {
+        const isPosted = ev.status === 'posted' || ev.status === 'Posted';
+        const primaryId = (isPosted && ev.ledger_entry_id) ? ev.ledger_entry_id : ev.id;
+        return {
+          id: primaryId,
+          reference_number: ev.voucher_number,
+          evoucher_number: ev.voucher_number,
+          customer_name: ev.customer_name || ev.vendor_name || "Unknown Customer",
+          description: ev.purpose || ev.description,
+          project_number: ev.project_number,
+          amount: ev.amount,
+          collection_date: ev.request_date,
+          payment_method: ev.payment_method || "Cash",
+          received_by_name: ev.requestor_name,
+          evoucher_id: ev.id,
+          created_at: ev.created_at,
+          status: ev.status,
+        };
+      });
+  }, [rawEvouchers]);
+
+  const fetchCollections = () => { refetch(); };
 
   // Filter logic
   const filteredCollections = useMemo(() => {

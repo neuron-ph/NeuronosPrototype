@@ -1,4 +1,6 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "../../lib/queryKeys";
 import { useNavigate } from "react-router";
 import { Plus, Search, Calendar } from "lucide-react";
 import type { Billing } from "../../types/accounting";
@@ -10,90 +12,61 @@ import { BillingsListTable } from "./BillingsListTable";
 export function BillingsContentNew() {
   const navigate = useNavigate();
 
-  // State for data
-  const [billings, setBillings] = useState<Billing[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  
   // State for UI
   const [showAddPanel, setShowAddPanel] = useState(false);
-  
+
   // State for filters
   const [searchQuery, setSearchQuery] = useState("");
   const [paymentStatusFilter, setPaymentStatusFilter] = useState("all");
-  
+
   // Get current user
   const userData = localStorage.getItem("neuron_user");
   const currentUser = userData ? JSON.parse(userData) : null;
 
   // Check if user has billing access
-  const hasBillingAccess = 
-    currentUser?.department === "Accounting" || 
+  const hasBillingAccess =
+    currentUser?.department === "Accounting" ||
     currentUser?.department === "Executive";
 
-  // Fetch billings from API
-  useEffect(() => {
-    fetchBillings();
-  }, []);
-
-  const fetchBillings = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // PHASE 1 FIX: Fetch from Universal E-Vouchers table
-      const { data: evoucherRows, error: fetchError } = await supabase
+  const { data: rawEvouchers = [], isLoading: loading, refetch } = useQuery({
+    queryKey: queryKeys.evouchers.list("billings"),
+    queryFn: async () => {
+      const { data, error } = await supabase
         .from('evouchers')
         .select('*')
         .order('created_at', { ascending: false });
-      
-      if (fetchError) {
-        throw new Error(`Supabase error: ${fetchError.message}`);
-      }
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
 
-      const evouchers = evoucherRows || [];
-      
-      // Map E-Vouchers to Billing interface
-      const mappedBillings = evouchers
-        .filter((ev: any) => ev.transaction_type === 'billing')
-        .map((ev: any) => {
-          const isPosted = ev.status === 'posted' || ev.status === 'Posted';
-          // Use ledger_entry_id as the primary ID if posted (this links to the real billing record)
-          // Otherwise use evoucher ID (this links to the virtual billing record)
-          const primaryId = (isPosted && ev.ledger_entry_id) ? ev.ledger_entry_id : ev.id;
-          
-          return {
-            id: primaryId,
-            invoice_number: ev.voucher_number,
-            evoucher_number: ev.voucher_number,
-            customer_name: ev.customer_name || ev.vendor_name || "Unknown Customer", // Fallback
-            description: ev.purpose || ev.description,
-            project_number: ev.project_number,
-            total_amount: ev.amount,
-            amount_due: ev.amount, // TODO: Calculate based on payments
-            invoice_date: ev.request_date,
-            due_date: ev.due_date || ev.request_date,
-            payment_status: isPosted ? 'unpaid' : 'pending', // Default to unpaid if posted, pending otherwise
-            evoucher_id: ev.id,
-            created_at: ev.created_at
-          };
-        });
+  // Map E-Vouchers to Billing interface
+  const billings: Billing[] = useMemo(() => {
+    return rawEvouchers
+      .filter((ev: any) => ev.transaction_type === 'billing')
+      .map((ev: any) => {
+        const isPosted = ev.status === 'posted' || ev.status === 'Posted';
+        const primaryId = (isPosted && ev.ledger_entry_id) ? ev.ledger_entry_id : ev.id;
+        return {
+          id: primaryId,
+          invoice_number: ev.voucher_number,
+          evoucher_number: ev.voucher_number,
+          customer_name: ev.customer_name || ev.vendor_name || "Unknown Customer",
+          description: ev.purpose || ev.description,
+          project_number: ev.project_number,
+          total_amount: ev.amount,
+          amount_due: ev.amount,
+          invoice_date: ev.request_date,
+          due_date: ev.due_date || ev.request_date,
+          payment_status: isPosted ? 'unpaid' : 'pending',
+          evoucher_id: ev.id,
+          created_at: ev.created_at,
+        };
+      });
+  }, [rawEvouchers]);
 
-      console.log('✅ Fetched billings from E-Vouchers:', mappedBillings);
-      setBillings(mappedBillings);
-    } catch (err) {
-      console.error('❌ Error fetching billings:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load billings';
-      setError(errorMessage);
-      
-      // If it's a network error, show a more helpful message
-      if (errorMessage.includes('Failed to fetch')) {
-        setError('Unable to connect to server. Please check your connection and try again.');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+  const fetchBillings = () => { refetch(); };
 
   // Filter logic
   const filteredBillings = useMemo(() => {

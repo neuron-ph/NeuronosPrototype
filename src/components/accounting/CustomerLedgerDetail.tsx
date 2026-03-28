@@ -1,4 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "../../lib/queryKeys";
 import { 
   ArrowLeft, Building2, MapPin, Briefcase, Edit, Users, Calendar, MessageSquare, 
   Plus, Search, FileText, CreditCard, DollarSign, Activity, TrendingUp, Target, 
@@ -29,66 +31,74 @@ type TabType = "overview" | "projects" | "billings" | "collections" | "expenses"
 
 export function CustomerLedgerDetail({ customer, onClose }: CustomerLedgerDetailProps) {
   const [activeTab, setActiveTab] = useState<TabType>("overview");
-  const [billings, setBillings] = useState<any[]>([]);
-  const [collections, setCollections] = useState<any[]>([]);
-  const [projects, setProjects] = useState<any[]>([]);
-  const [expenses, setExpenses] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  
+
   // Filters for Tabs
   const [projectSearch, setProjectSearch] = useState("");
   const [projectDateFilter, setProjectDateFilter] = useState("All Time");
-  
+
   const [billingSearch, setBillingSearch] = useState("");
   const [billingDateFilter, setBillingDateFilter] = useState("All Time");
-  
+
   const [collectionSearch, setCollectionSearch] = useState("");
   const [collectionDateFilter, setCollectionDateFilter] = useState("All Time");
-  
+
   // State for Customer Profile editing (read-only for now based on requirement to look like BD)
   const [isEditing, setIsEditing] = useState(false);
 
-  useEffect(() => {
-    fetchFinancials();
-  }, [customer.id]);
+  const customerId = customer.id;
 
-  const fetchFinancials = async () => {
-    try {
-      setIsLoading(true);
-      
-      // Fetch Revenue (Billings) from billing_line_items
-      const { data: billingsData, error: billingsError } = await supabase
-        .from('billing_line_items')
-        .select('*');
-      
-      // Fetch Collections
-      const { data: collectionsData, error: collectionsError } = await supabase
+  const { data: billings = [], isLoading: billingsLoading } = useQuery({
+    queryKey: ["billing_line_items", "list"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('billing_line_items').select('*');
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
+
+  const { data: collections = [], isLoading: collectionsLoading } = useQuery({
+    queryKey: ["collections", "by_customer", customerId],
+    queryFn: async () => {
+      const { data, error } = await supabase
         .from('collections')
         .select('*')
-        .eq('customer_id', customer.id);
+        .eq('customer_id', customerId);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!customerId,
+    staleTime: 30_000,
+  });
 
-      // Fetch Projects
-      const { data: projectsData, error: projectsError } = await supabase
+  const { data: projects = [], isLoading: projectsLoading } = useQuery({
+    queryKey: [...queryKeys.projects.list(), { customerId }],
+    queryFn: async () => {
+      const { data, error } = await supabase
         .from('projects')
         .select('*')
-        .eq('customer_id', customer.id);
+        .eq('customer_id', customerId);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!customerId,
+    staleTime: 30_000,
+  });
 
-      // Fetch Expenses (evouchers with expense transaction_type + posted expenses)
-      const { data: expensesData, error: expensesError } = await supabase
+  const { data: expenses = [], isLoading: expensesLoading } = useQuery({
+    queryKey: ["expenses", "by_customer", customerId],
+    queryFn: async () => {
+      const { data, error } = await supabase
         .from('evouchers')
         .select('*')
         .eq('transaction_type', 'expense');
-      
-      if (!billingsError && billingsData) setBillings(billingsData);
-      if (!collectionsError && collectionsData) setCollections(collectionsData);
-      if (!projectsError && projectsData) setProjects(projectsData);
-      if (!expensesError && expensesData) setExpenses(expensesData);
-    } catch (error) {
-      console.error("Error fetching financials:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
+
+  const isLoading = billingsLoading || collectionsLoading || projectsLoading || expensesLoading;
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-PH", {

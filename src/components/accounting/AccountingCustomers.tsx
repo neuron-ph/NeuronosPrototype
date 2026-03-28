@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { Search, Plus, Building2, Target, Briefcase, TrendingUp, Trash2, MoreHorizontal, Users as UsersIcon } from "lucide-react";
 import { NeuronKPICard } from "../ui/NeuronKPICard";
 import { toast } from "../ui/toast-utils";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "../../lib/queryKeys";
 import { supabase } from "../../utils/supabase/client";
 import type { Customer, Industry, CustomerStatus } from "../../types/bd";
 import { CustomDropdown } from "../bd/CustomDropdown";
@@ -9,120 +11,67 @@ import { AddCustomerPanel } from "../bd/AddCustomerPanel";
 import { CustomerLedgerDetail } from "./CustomerLedgerDetail";
 
 export function AccountingCustomers() {
+  const queryClient = useQueryClient();
   const [view, setView] = useState<"list" | "detail">("list");
   const [searchQuery, setSearchQuery] = useState("");
   const [industryFilter, setIndustryFilter] = useState<Industry | "All">("All");
   const [statusFilter, setStatusFilter] = useState<CustomerStatus | "All">("All");
   const [ownerFilter, setOwnerFilter] = useState<string>("All");
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [allContacts, setAllContacts] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
-  const [activities, setActivities] = useState<any[]>([]);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Fetch users from backend
-  const fetchUsers = async () => {
-    try {
+  const { data: customers = [], isLoading } = useQuery({
+    queryKey: [...queryKeys.customers.list(), { searchQuery, industryFilter, statusFilter }],
+    queryFn: async () => {
+      let query = supabase.from('customers').select('*');
+      if (searchQuery) query = query.ilike('name', `%${searchQuery}%`);
+      if (industryFilter && industryFilter !== "All") query = query.eq('industry', industryFilter);
+      if (statusFilter && statusFilter !== "All") query = query.eq('status', statusFilter);
+      query = query.order('created_at', { ascending: false });
+      const { data, error } = await query;
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
+
+  const { data: allContacts = [] } = useQuery({
+    queryKey: queryKeys.contacts.list(),
+    queryFn: async () => {
+      const { data, error } = await supabase.from('contacts').select('*');
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
+
+  const { data: users = [] } = useQuery({
+    queryKey: ["users", "bd"],
+    queryFn: async () => {
       const { data, error } = await supabase
         .from('users')
         .select('*')
         .eq('department', 'Business Development');
-      if (error) {
-        console.warn("Failed to fetch users:", error.message);
-        setUsers([]);
-        return;
-      }
-      setUsers(data || []);
-    } catch (error) {
-      console.error("Error fetching users:", error);
-      setUsers([]);
-    }
-  };
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 60_000,
+  });
 
-  // Fetch activities from backend
-  const fetchActivities = async () => {
-    try {
+  const { data: activities = [] } = useQuery({
+    queryKey: queryKeys.crmActivities.list(),
+    queryFn: async () => {
       const { data, error } = await supabase
         .from('crm_activities')
         .select('*')
         .order('date', { ascending: false });
-      if (error) {
-        console.warn("Failed to fetch activities:", error.message);
-        setActivities([]);
-        return;
-      }
-      setActivities(data || []);
-    } catch (error) {
-      console.error("Error fetching activities:", error);
-      setActivities([]);
-    }
-  };
-
-  // Fetch customers from backend
-  const fetchCustomers = async () => {
-    setIsLoading(true);
-    try {
-      let query = supabase.from('customers').select('*');
-      if (searchQuery) {
-        query = query.ilike('name', `%${searchQuery}%`);
-      }
-      if (industryFilter && industryFilter !== "All") {
-        query = query.eq('industry', industryFilter);
-      }
-      if (statusFilter && statusFilter !== "All") {
-        query = query.eq('status', statusFilter);
-      }
-      query = query.order('created_at', { ascending: false });
-      
-      const { data, error } = await query;
-      if (error) {
-        console.error("Error fetching customers:", error.message);
-        setCustomers([]);
-        return;
-      }
-      setCustomers(data || []);
-    } catch (error) {
-      console.error("Error fetching customers:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Fetch all contacts for counting
-  const fetchContacts = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('contacts')
-        .select('*');
-      if (error) {
-        console.error('Error fetching contacts:', error.message);
-        return;
-      }
-      setAllContacts(data || []);
-    } catch (error) {
-      console.error('Error fetching contacts:', error);
-    }
-  };
-
-  // Fetch on mount
-  useEffect(() => {
-    fetchCustomers();
-    fetchContacts();
-    fetchUsers();
-    fetchActivities();
-  }, []);
-
-  // Debounced search and filter updates
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchCustomers();
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery, industryFilter, statusFilter]);
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -152,8 +101,8 @@ export function AccountingCustomers() {
         toast.error(`Failed to delete customer: ${error.message}`);
         return;
       }
-      await fetchCustomers(); // Refresh list
-      await fetchContacts(); // Refresh contacts
+      queryClient.invalidateQueries({ queryKey: queryKeys.customers.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all() });
       setOpenDropdownId(null); // Close dropdown
       toast.success("Customer deleted successfully");
     } catch (error) {
@@ -177,8 +126,8 @@ export function AccountingCustomers() {
         toast.error(`Failed to create customer: ${error.message}`);
         return;
       }
-      await fetchCustomers(); // Refresh list
-      await fetchContacts(); // Refresh contacts for accurate counts
+      queryClient.invalidateQueries({ queryKey: queryKeys.customers.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all() });
       setIsAddCustomerOpen(false);
       toast.success("Customer added successfully");
     } catch (error) {

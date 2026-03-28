@@ -1,7 +1,7 @@
 // AggregateInvoicesPage — Renders UnifiedInvoicesTab with ALL invoices (system-wide)
 // Constructs a FinancialData object and minimal Project for the Unified component
 
-import { useState, useEffect, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { UnifiedInvoicesTab } from "../shared/invoices/UnifiedInvoicesTab";
 import type { FinancialData } from "../../hooks/useProjectFinancials";
 import { calculateFinancialTotals } from "../../utils/financialCalculations";
@@ -9,43 +9,46 @@ import { isInvoiceVisibleDocument } from "../../utils/invoiceReversal";
 import { supabase } from "../../utils/supabase/client";
 
 export function AggregateInvoicesPage() {
-  const [invoices, setInvoices] = useState<any[]>([]);
-  const [billingItems, setBillingItems] = useState<any[]>([]);
-  const [collections, setCollections] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  const fetchAll = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const [
-        { data: invoiceRows, error: invoiceErr },
-        { data: billingRows, error: billingErr },
-        { data: collectionRows, error: collectionErr },
-      ] = await Promise.all([
-        supabase.from('invoices').select('*'),
-        supabase.from('billing_line_items').select('*'),
-        supabase.from('collections').select('*'),
-      ]);
+  const { data: rawInvoices = [], isLoading: invoicesLoading } = useQuery({
+    queryKey: ["invoices", "list"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('invoices').select('*');
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
 
-      if (!invoiceErr && invoiceRows) {
-        setInvoices(invoiceRows.filter((invoice: any) => isInvoiceVisibleDocument(invoice)));
-      }
+  const { data: billingItems = [], isLoading: billingLoading } = useQuery({
+    queryKey: ["billing_line_items", "list"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('billing_line_items').select('*');
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
 
-      if (!billingErr && billingRows) {
-        setBillingItems(billingRows);
-      }
+  const { data: collections = [], isLoading: collectionsLoading } = useQuery({
+    queryKey: ["collections", "list"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('collections').select('*');
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
 
-      if (!collectionErr && collectionRows) {
-        setCollections(collectionRows);
-      }
-    } catch (error) {
-      console.error("Error fetching aggregate invoices data:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const isLoading = invoicesLoading || billingLoading || collectionsLoading;
+  const invoices = rawInvoices.filter((invoice: any) => isInvoiceVisibleDocument(invoice));
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  const fetchAll = () => {
+    queryClient.invalidateQueries({ queryKey: ["invoices", "list"] });
+    queryClient.invalidateQueries({ queryKey: ["billing_line_items", "list"] });
+    queryClient.invalidateQueries({ queryKey: ["collections", "list"] });
+  };
 
   // Construct FinancialData for UnifiedInvoicesTab
   const financials: FinancialData = {

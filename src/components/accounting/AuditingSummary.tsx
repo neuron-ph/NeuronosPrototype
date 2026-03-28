@@ -1,7 +1,9 @@
 // AuditingSummary — Per-catalog-item aggregation with data quality progress bar
 // Styled 1:1 with ContractsList.tsx layout tokens
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "../../lib/queryKeys";
 import { Loader2, AlertCircle, BarChart3, ChevronLeft, ChevronRight } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
@@ -84,81 +86,79 @@ export function AuditingSummary() {
   const [period, setPeriod] = useState(getCurrentPeriod);
   const [serviceType, setServiceType] = useState("All");
   const [view, setView] = useState<ViewMode>("both");
-  const [data, setData] = useState<SummaryData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const fetchSummary = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      // Fetch billing line items and catalog items, aggregate client-side
-      const [{ data: lineItems }, { data: catalogItems }] = await Promise.all([
-        supabase.from('billing_line_items').select('*'),
-        supabase.from('catalog_items').select('id, name, category_id'),
-      ]);
+  const { data: lineItems = [] } = useQuery({
+    queryKey: ["billing_line_items", "list"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('billing_line_items').select('*');
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
 
-      if (!lineItems || !catalogItems) {
-        setData({ items: [], meta: { total_catalog_items: 0, total_line_items: 0, linked_count: 0, unlinked_count: 0, linked_percentage: 0, period, service_type: serviceType, view } });
-        return;
-      }
+  const { data: catalogItems = [], isLoading: loading, error: queryError } = useQuery({
+    queryKey: queryKeys.catalog.items(),
+    queryFn: async () => {
+      const { data, error } = await supabase.from('catalog_items').select('id, name, category_id');
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
 
-      // Aggregate by catalog item
-      const itemMap = new Map<string, any>();
-      for (const ci of catalogItems) {
-        itemMap.set(ci.id, {
-          catalog_item_id: ci.id,
-          name: ci.name,
-          type: ci.type,
-          booking_count: 0,
-          total_amount: 0,
-          avg_amount: 0,
-          min_amount: Infinity,
-          max_amount: -Infinity,
-        });
-      }
+  const error = queryError ? String(queryError) : null;
 
-      for (const li of lineItems) {
-        if (li.catalog_item_id && itemMap.has(li.catalog_item_id)) {
-          const entry = itemMap.get(li.catalog_item_id);
-          entry.booking_count++;
-          entry.total_amount += (li.amount || 0);
-          entry.min_amount = Math.min(entry.min_amount, li.amount || 0);
-          entry.max_amount = Math.max(entry.max_amount, li.amount || 0);
-        }
-      }
+  // Aggregate by catalog item (client-side)
+  const data: SummaryData | null = (() => {
+    if (!catalogItems.length && !lineItems.length) return null;
 
-      const items = Array.from(itemMap.values()).map(item => ({
-        ...item,
-        avg_amount: item.booking_count > 0 ? item.total_amount / item.booking_count : 0,
-        min_amount: item.min_amount === Infinity ? 0 : item.min_amount,
-        max_amount: item.max_amount === -Infinity ? 0 : item.max_amount,
-      }));
-
-      const linkedCount = lineItems.filter((li: any) => li.catalog_item_id).length;
-      setData({
-        items,
-        meta: {
-          total_catalog_items: catalogItems.length,
-          total_line_items: lineItems.length,
-          linked_count: linkedCount,
-          unlinked_count: lineItems.length - linkedCount,
-          linked_percentage: lineItems.length > 0 ? Math.round((linkedCount / lineItems.length) * 100) : 0,
-          period,
-          service_type: serviceType,
-          view,
-        },
+    const itemMap = new Map<string, any>();
+    for (const ci of catalogItems) {
+      itemMap.set(ci.id, {
+        catalog_item_id: ci.id,
+        name: ci.name,
+        type: (ci as any).type,
+        booking_count: 0,
+        total_amount: 0,
+        avg_amount: 0,
+        min_amount: Infinity,
+        max_amount: -Infinity,
       });
-    } catch (err) {
-      console.error("Summary fetch error:", err);
-      setError(String(err));
-      toast.error("Failed to load summary", String(err));
-    } finally {
-      setLoading(false);
     }
-  }, [period, serviceType, view]);
 
-  useEffect(() => { fetchSummary(); }, [fetchSummary]);
+    for (const li of lineItems) {
+      if ((li as any).catalog_item_id && itemMap.has((li as any).catalog_item_id)) {
+        const entry = itemMap.get((li as any).catalog_item_id);
+        entry.booking_count++;
+        entry.total_amount += ((li as any).amount || 0);
+        entry.min_amount = Math.min(entry.min_amount, (li as any).amount || 0);
+        entry.max_amount = Math.max(entry.max_amount, (li as any).amount || 0);
+      }
+    }
+
+    const items = Array.from(itemMap.values()).map(item => ({
+      ...item,
+      avg_amount: item.booking_count > 0 ? item.total_amount / item.booking_count : 0,
+      min_amount: item.min_amount === Infinity ? 0 : item.min_amount,
+      max_amount: item.max_amount === -Infinity ? 0 : item.max_amount,
+    }));
+
+    const linkedCount = lineItems.filter((li: any) => li.catalog_item_id).length;
+    return {
+      items,
+      meta: {
+        total_catalog_items: catalogItems.length,
+        total_line_items: lineItems.length,
+        linked_count: linkedCount,
+        unlinked_count: lineItems.length - linkedCount,
+        linked_percentage: lineItems.length > 0 ? Math.round((linkedCount / lineItems.length) * 100) : 0,
+        period,
+        service_type: serviceType,
+        view,
+      },
+    };
+  })();
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -233,7 +233,7 @@ export function AuditingSummary() {
       {/* Content area */}
       <div style={{ flex: 1, overflow: "auto", position: "relative" }}>
         {loading && <LoadingOverlay />}
-        {error && <ErrorState message={error} onRetry={fetchSummary} />}
+        {error && <ErrorState message={error} onRetry={() => {}} />}
         {!loading && !error && data && data.items.length === 0 && <EmptyState period={period} />}
         {!loading && !error && data && data.items.length > 0 && (
           <SummaryContent data={data} />

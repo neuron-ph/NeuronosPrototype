@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search, Plus, ChevronRight, ChevronDown } from "lucide-react";
 import { PhilippinePeso } from "../icons/PhilippinePeso";
 import type { Expense } from "../../types/accounting";
@@ -16,11 +17,6 @@ export function ExpensesPage() {
   const [showDetailPanel, setShowDetailPanel] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   
-  // State for data
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  
   // State for filters
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -36,29 +32,19 @@ export function ExpensesPage() {
   // Mock data for current user
   const currentUserName = "Maria Santos";
 
-  // Fetch expenses from API
-  useEffect(() => {
-    fetchExpenses();
-  }, []);
+  const queryClient = useQueryClient();
+  const { data: expenses = [], isLoading: loading, error: queryError, refetch } = useQuery({
+    queryKey: ["expenses", "list"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('expenses').select('*');
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
 
-  const fetchExpenses = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const { data, error: fetchErr } = await supabase.from('expenses').select('*');
-      
-      if (fetchErr) throw new Error(fetchErr.message);
-      
-      console.log('Fetched expenses:', (data || []).length);
-      setExpenses(data || []);
-    } catch (err) {
-      console.error('Error fetching expenses:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load expenses');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const error = queryError ? (queryError instanceof Error ? queryError.message : 'Failed to load expenses') : null;
+  const fetchExpenses = () => { refetch(); };
 
   const handleCreateExpense = async (expenseData: any) => {
     try {
@@ -85,8 +71,8 @@ export function ExpensesPage() {
 
       const { error: insertErr } = await supabase.from('expenses').insert(mappedData);
       if (insertErr) throw new Error(insertErr.message);
-      
-      await fetchExpenses();
+
+      queryClient.invalidateQueries({ queryKey: ["expenses", "list"] });
       setShowAddPanel(false);
     } catch (err) {
       console.error('Error creating expense:', err);
@@ -119,8 +105,8 @@ export function ExpensesPage() {
 
       const { error: insertErr } = await supabase.from('expenses').insert(mappedData);
       if (insertErr) throw new Error(insertErr.message);
-      
-      await fetchExpenses();
+
+      queryClient.invalidateQueries({ queryKey: ["expenses", "list"] });
       setShowAddPanel(false);
     } catch (err) {
       console.error('Error saving draft:', err);
