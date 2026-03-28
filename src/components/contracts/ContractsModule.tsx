@@ -11,7 +11,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
-import { useCachedFetch, useInvalidateCache } from "../../hooks/useNeuronCache";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "../../lib/queryKeys";
 import type { QuotationNew } from "../../types/pricing";
 import { useDataScope } from "../../hooks/useDataScope";
 import { ContractsList } from "./ContractsList";
@@ -34,7 +35,7 @@ interface ContractsModuleProps {
 export function ContractsModule({ currentUser, onCreateTicket, initialContract, departmentOverride }: ContractsModuleProps) {
   const [view, setView] = useState<ContractsView>(initialContract ? "detail" : "list");
   const [selectedContract, setSelectedContract] = useState<QuotationNew | null>(initialContract || null);
-  const invalidateCache = useInvalidateCache();
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [initialTab, setInitialTab] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -47,41 +48,42 @@ export function ContractsModule({ currentUser, onCreateTicket, initialContract, 
     }
   }, [initialContract]);
 
-  // ── Cached contracts fetch ────────────────────────────────
-  const contractsFetcher = async (): Promise<QuotationNew[]> => {
-    const { data, error } = await supabase
-      .from('quotations')
-      .select('*')
-      .eq('quotation_type', 'contract')
-      .in('contract_status', ['Active', 'Expiring', 'Expired', 'Renewed']);
-
-    if (error) throw new Error(error.message);
-
-    // Also include "Converted to Contract" status
-    const { data: converted, error: convError } = await supabase
-      .from('quotations')
-      .select('*')
-      .eq('quotation_type', 'contract')
-      .in('status', ['Converted to Contract', 'Active Contract']);
-
-    const allContracts = [...(data || [])];
-    if (!convError && converted) {
-      // Merge without duplicates
-      const existingIds = new Set(allContracts.map(c => c.id));
-      converted.forEach(c => { if (!existingIds.has(c.id)) allContracts.push(c); });
-    }
-
-    console.log(`ContractsModule: ${allContracts.length} activated contracts found`);
-    return allContracts;
-  };
-
   const { scope, isLoaded: scopeLoaded } = useDataScope();
 
+  // ── Contracts fetch ───────────────────────────────────────
   const {
-    data: contracts,
+    data: contracts = [],
     isLoading,
-    refresh: refreshContracts,
-  } = useCachedFetch<QuotationNew[]>("contracts", contractsFetcher, []);
+    refetch,
+  } = useQuery<QuotationNew[]>({
+    queryKey: queryKeys.contracts.list(),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('quotations')
+        .select('*')
+        .eq('quotation_type', 'contract')
+        .in('contract_status', ['Active', 'Expiring', 'Expired', 'Renewed']);
+
+      if (error) throw new Error(error.message);
+
+      const { data: converted, error: convError } = await supabase
+        .from('quotations')
+        .select('*')
+        .eq('quotation_type', 'contract')
+        .in('status', ['Converted to Contract', 'Active Contract']);
+
+      const allContracts = [...(data || [])];
+      if (!convError && converted) {
+        const existingIds = new Set(allContracts.map(c => c.id));
+        converted.forEach(c => { if (!existingIds.has(c.id)) allContracts.push(c); });
+      }
+
+      console.log(`ContractsModule: ${allContracts.length} activated contracts found`);
+      return allContracts;
+    },
+    staleTime: 30_000,
+  });
+  const refreshContracts = () => { refetch(); };
 
   // Apply scope filter client-side (cache doesn't support per-user keys)
   const scopedContracts = useMemo(() => {
@@ -146,7 +148,7 @@ export function ContractsModule({ currentUser, onCreateTicket, initialContract, 
     }
 
     // Invalidate the contracts list cache so it's fresh when user navigates back to list
-    invalidateCache("contracts");
+    queryClient.invalidateQueries({ queryKey: queryKeys.contracts.list() });
   };
 
   const handleEditContract = () => {

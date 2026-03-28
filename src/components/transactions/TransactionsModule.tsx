@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { Settings, ChevronDown, Globe, Wallet } from "lucide-react";
-import { useCachedFetch, useInvalidateCache } from "../../hooks/useNeuronCache";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "../../lib/queryKeys";
 import { getAccounts, saveAccount, deleteAccount, getTransactions, getTransactionViewSettings, saveTransactionViewSettings } from "../../utils/accounting-api";
 import type { Account } from "../../types/accounting-core";
 import type { Transaction, Currency } from "../../types/accounting";
@@ -32,26 +33,26 @@ export function TransactionsModule() {
   const [dateTo, setDateTo] = useState("");
   const [filterType, setFilterType] = useState("all");
 
-  const invalidateCache = useInvalidateCache();
+  const queryClient = useQueryClient();
 
-  // ── Cached Data Fetching ──────────────────────────────────
-  const { data: accounts, isLoading: loadingAccounts, refresh: refreshAccounts } = useCachedFetch<Account[]>(
-    "accounts",
-    getAccounts,
-    [],
-  );
+  // ── Data Fetching ─────────────────────────────────────────
+  const { data: accounts = [], isLoading: loadingAccounts, refetch: refreshAccounts } = useQuery<Account[]>({
+    queryKey: queryKeys.transactions.accounts(),
+    queryFn: getAccounts,
+    staleTime: 30_000,
+  });
 
-  const { data: transactions, isLoading: loadingTxns, refresh: refreshTxns, mutate: mutateTxns } = useCachedFetch<Transaction[]>(
-    "transactions",
-    getTransactions,
-    [],
-  );
+  const { data: transactions = [], isLoading: loadingTxns, refetch: refreshTxns } = useQuery<Transaction[]>({
+    queryKey: queryKeys.transactions.list(),
+    queryFn: getTransactions,
+    staleTime: 30_000,
+  });
 
-  const { data: settings, isLoading: loadingSettings, refresh: refreshSettings } = useCachedFetch(
-    "transaction-view-settings",
-    getTransactionViewSettings,
-    { visibleAccountIds: [] as string[] },
-  );
+  const { data: settings, isLoading: loadingSettings, refetch: refreshSettings } = useQuery({
+    queryKey: queryKeys.transactions.settings(),
+    queryFn: getTransactionViewSettings,
+    staleTime: 30_000,
+  });
 
   const isLoading = loadingAccounts || loadingTxns || loadingSettings;
 
@@ -218,9 +219,9 @@ export function TransactionsModule() {
 
       // Phase 4: Optimistic UI — instantly move transaction to "posted"
       const originalTxns = [...transactions];
-      mutateTxns(prev => prev.map(t => 
-        t.id === txn.id ? { ...t, status: 'posted' as const } : t
-      ));
+      queryClient.setQueryData<Transaction[]>(queryKeys.transactions.list(), prev =>
+        (prev || []).map(t => t.id === txn.id ? { ...t, status: 'posted' as const } : t)
+      );
 
       try {
         if (txn.source_document_id) {
@@ -254,7 +255,7 @@ export function TransactionsModule() {
         console.error(error);
         toast.error(`Failed to post: ${error instanceof Error ? error.message : 'Unknown error'}`);
         // Revert optimistic update
-        mutateTxns(originalTxns);
+        queryClient.setQueryData(queryKeys.transactions.list(), originalTxns);
       }
     } else {
         toast.info(`Action ${action} triggered for ${txn.description}`);

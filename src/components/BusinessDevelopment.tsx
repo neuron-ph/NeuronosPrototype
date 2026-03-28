@@ -1,5 +1,5 @@
 import { supabase } from '../utils/supabase/client';
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { ContactsListWithFilters } from "./crm/ContactsListWithFilters";
 import { CustomersListWithFilters } from "./crm/CustomersListWithFilters";
 import { CustomerDetail } from "./bd/CustomerDetail";
@@ -20,7 +20,8 @@ import type { Task } from "../types/bd";
 import type { Activity } from "../types/bd";
 import type { QuotationNew, Project, QuotationType } from "../types/pricing";
 import { toast } from "./ui/toast-utils";
-import { useCachedFetch, useInvalidateCache } from "../hooks/useNeuronCache";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "../lib/queryKeys";
 
 type BDView = "contacts" | "customers" | "inquiries" | "projects" | "tasks" | "activities" | "budget-requests" | "reports";
 type SubView = "list" | "detail" | "builder";
@@ -60,47 +61,39 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
   // Map department name to userDepartment format
   const userDepartment: "Business Development" | "Pricing" = "Business Development"; // Always BD since this is the Business Development module
 
-  // ── Cached data fetching ──────────────────────────────────
-  const invalidateCache = useInvalidateCache();
+  // ── Data fetching ─────────────────────────────────────────
+  const queryClient = useQueryClient();
 
-  const quotationsFetcher = useCallback(async (): Promise<QuotationNew[]> => {
-    const { data, error } = await supabase
-      .from('quotations')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error) throw new Error(error.message);
-    return data || [];
-  }, []);
+  const { data: quotations = [], isLoading: quotationsLoading } = useQuery<QuotationNew[]>({
+    queryKey: queryKeys.quotations.list(),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('quotations')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+    staleTime: 30_000,
+  });
 
-  const { data: cachedQuotations, isLoading: quotationsLoading, refresh: refreshQuotations } = useCachedFetch<QuotationNew[]>(
-    "quotations-bd",
-    quotationsFetcher,
-    [],
-  );
+  const { data: projects = [], isLoading: projectsLoading } = useQuery<Project[]>({
+    queryKey: queryKeys.projects.list(),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+    staleTime: 30_000,
+  });
 
-  const projectsFetcher = useCallback(async (): Promise<Project[]> => {
-    const { data, error } = await supabase
-      .from('projects')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error) throw new Error(error.message);
-    return data || [];
-  }, []);
-
-  const { data: cachedProjects, isLoading: projectsLoading, refresh: refreshProjects } = useCachedFetch<Project[]>(
-    "projects",
-    projectsFetcher,
-    [],
-  );
-
-  // Sync cached data into local state for backward compat with mutation handlers
-  const quotations = cachedQuotations;
-  const projects = cachedProjects;
   const isLoading = quotationsLoading || projectsLoading;
 
-  // Alias for backward compat
-  const fetchQuotations = async () => { invalidateCache("quotations-bd"); await refreshQuotations(); };
-  const fetchProjects = async () => { invalidateCache("projects"); await refreshProjects(); };
+  const fetchQuotations = () => queryClient.invalidateQueries({ queryKey: queryKeys.quotations.list() });
+  const fetchProjects = () => queryClient.invalidateQueries({ queryKey: queryKeys.projects.list() });
 
   // Reset to list view when switching between main views
   useEffect(() => {

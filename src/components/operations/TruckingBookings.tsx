@@ -6,7 +6,8 @@ import { CreateTruckingBookingPanel } from "./CreateTruckingBookingPanel";
 import { TruckingBookingDetails } from "./TruckingBookingDetails";
 import { NeuronStatusPill } from "../NeuronStatusPill";
 import { toast } from "../ui/toast-utils";
-import { useCachedFetch, useInvalidateCache } from "../../hooks/useNeuronCache";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "../../lib/queryKeys";
 import { useDataScope } from "../../hooks/useDataScope";
 import { SkeletonTable } from "../shared/NeuronSkeleton";
 import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
@@ -43,43 +44,41 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
   const [ownerFilter, setOwnerFilter] = useState<string>("all");
   const [truckTypeFilter, setTruckTypeFilter] = useState<string>("all");
   const [selectedBooking, setSelectedBooking] = useState<TruckingBooking | null>(null);
-  const invalidateCache = useInvalidateCache();
-
-  // ── Cached bookings fetch ─────────────────────────────────
-  const bookingsFetcher = async (): Promise<TruckingBooking[]> => {
-    const { data, error } = await supabase
-      .from('bookings')
-      .select('*')
-      .eq('service_type', 'Trucking')
-      .order('created_at', { ascending: false });
-    if (error) throw error;
-    return (data || []).map((row) => {
-      const d = row.details || {};
-      return {
-        ...row,
-        bookingId: row.id,
-        booking_number: row.booking_number,
-        customerName: row.customer_name,
-        projectNumber: row.project_id,
-        accountOwner: row.manager_name,
-        accountHandler: row.handler_name,
-        status: row.status,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at || row.created_at,
-        truckType: d.truck_type,
-        deliveryAddress: d.delivery_address,
-        preferredDeliveryDate: d.preferred_delivery_date,
-      } as TruckingBooking;
-    });
-  };
 
   const { scope, isLoaded: scopeLoaded } = useDataScope();
 
-  const { data: rawBookings, isLoading, refresh: fetchBookings } = useCachedFetch<TruckingBooking[]>(
-    "trucking-bookings",
-    bookingsFetcher,
-    [],
-  );
+  // ── Bookings fetch ────────────────────────────────────────
+  const { data: rawBookings = [], isLoading, refetch } = useQuery<TruckingBooking[]>({
+    queryKey: queryKeys.bookings.list("trucking"),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('service_type', 'Trucking')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data || []).map((row) => {
+        const d = row.details || {};
+        return {
+          ...row,
+          bookingId: row.id,
+          booking_number: row.booking_number,
+          customerName: row.customer_name,
+          projectNumber: row.project_id,
+          accountOwner: row.manager_name,
+          accountHandler: row.handler_name,
+          status: row.status,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at || row.created_at,
+          truckType: d.truck_type,
+          deliveryAddress: d.delivery_address,
+          preferredDeliveryDate: d.preferred_delivery_date,
+        } as TruckingBooking;
+      });
+    },
+    staleTime: 30_000,
+  });
+  const fetchBookings = () => { refetch(); };
 
   const bookings = useMemo(() => {
     if (!scopeLoaded) return [];
@@ -606,7 +605,7 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
                             border: "1px solid #FCA5A5",
                             borderRadius: "6px",
                             background: "var(--theme-bg-surface)",
-                            color: "#DC2626",
+                            color: "var(--theme-status-danger-fg)",
                             cursor: "pointer",
                             transition: "all 150ms"
                           }}

@@ -6,7 +6,8 @@ import { CreateMarineInsuranceBookingPanel } from "./CreateMarineInsuranceBookin
 import { MarineInsuranceBookingDetails } from "./MarineInsuranceBookingDetails";
 import { NeuronStatusPill } from "../NeuronStatusPill";
 import { toast } from "../ui/toast-utils";
-import { useCachedFetch, useInvalidateCache } from "../../hooks/useNeuronCache";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "../../lib/queryKeys";
 import { useDataScope } from "../../hooks/useDataScope";
 import { SkeletonTable } from "../shared/NeuronSkeleton";
 import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
@@ -44,44 +45,42 @@ export function MarineInsuranceBookings({ currentUser, pendingBookingId, initial
   const [ownerFilter, setOwnerFilter] = useState<string>("all");
   const [coverageTypeFilter, setCoverageTypeFilter] = useState<string>("all");
   const [selectedBooking, setSelectedBooking] = useState<MarineInsuranceBooking | null>(null);
-  const invalidateCache = useInvalidateCache();
-
-  // ── Cached bookings fetch ─────────────────────────────────
-  const bookingsFetcher = async (): Promise<MarineInsuranceBooking[]> => {
-    const { data, error } = await supabase
-      .from('bookings')
-      .select('*')
-      .eq('service_type', 'Marine Insurance')
-      .order('created_at', { ascending: false });
-    if (error) throw error;
-    return (data || []).map((row) => {
-      const d = row.details || {};
-      return {
-        ...row,
-        bookingId: row.id,
-        booking_number: row.booking_number,
-        customerName: row.customer_name,
-        projectNumber: row.project_id,
-        accountOwner: row.manager_name,
-        accountHandler: row.handler_name,
-        status: row.status,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at || row.created_at,
-        coverageType: d.coverage_type,
-        insuredValue: d.insured_value ? String(d.insured_value) : undefined,
-        vessel: d.vessel,
-        voyage: d.voyage,
-      } as MarineInsuranceBooking;
-    });
-  };
 
   const { scope, isLoaded: scopeLoaded } = useDataScope();
 
-  const { data: rawBookings, isLoading, refresh: fetchBookings } = useCachedFetch<MarineInsuranceBooking[]>(
-    "marine-insurance-bookings",
-    bookingsFetcher,
-    [],
-  );
+  // ── Bookings fetch ────────────────────────────────────────
+  const { data: rawBookings = [], isLoading, refetch } = useQuery<MarineInsuranceBooking[]>({
+    queryKey: queryKeys.bookings.list("marine"),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('service_type', 'Marine Insurance')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data || []).map((row) => {
+        const d = row.details || {};
+        return {
+          ...row,
+          bookingId: row.id,
+          booking_number: row.booking_number,
+          customerName: row.customer_name,
+          projectNumber: row.project_id,
+          accountOwner: row.manager_name,
+          accountHandler: row.handler_name,
+          status: row.status,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at || row.created_at,
+          coverageType: d.coverage_type,
+          insuredValue: d.insured_value ? String(d.insured_value) : undefined,
+          vessel: d.vessel,
+          voyage: d.voyage,
+        } as MarineInsuranceBooking;
+      });
+    },
+    staleTime: 30_000,
+  });
+  const fetchBookings = () => { refetch(); };
 
   const bookings = useMemo(() => {
     if (!scopeLoaded) return [];
@@ -592,7 +591,7 @@ export function MarineInsuranceBookings({ currentUser, pendingBookingId, initial
                             border: "1px solid #FCA5A5",
                             borderRadius: "6px",
                             background: "var(--theme-bg-surface)",
-                            color: "#DC2626",
+                            color: "var(--theme-status-danger-fg)",
                             cursor: "pointer",
                             transition: "all 150ms"
                           }}

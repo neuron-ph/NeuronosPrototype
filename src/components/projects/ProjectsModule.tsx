@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
-import { useCachedFetch, useInvalidateCache } from "../../hooks/useNeuronCache";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "../../lib/queryKeys";
 import type { Project } from "../../types/pricing";
 import { ProjectsList } from "./ProjectsList";
 import { ProjectDetail } from "./ProjectDetail";
@@ -26,7 +27,7 @@ export function ProjectsModule({ currentUser, onCreateTicket, initialProject, de
   const [selectedProject, setSelectedProject] = useState<Project | null>(initialProject || null);
   const [initialTab, setInitialTab] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
-  const invalidateCache = useInvalidateCache();
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Update view if initialProject changes
@@ -37,18 +38,17 @@ export function ProjectsModule({ currentUser, onCreateTicket, initialProject, de
     }
   }, [initialProject]);
 
-  // ── Cached projects fetch ────────────────────────────────
-  const projectsFetcher = async (): Promise<Project[]> => {
-    const { data, error } = await supabase.from('projects').select('*').order('created_at', { ascending: false });
-    if (error) throw new Error(error.message);
-    return data || [];
-  };
-
-  const { data: projects, isLoading, refresh: refreshProjects } = useCachedFetch<Project[]>(
-    "projects",
-    projectsFetcher,
-    [],
-  );
+  // ── Projects fetch ────────────────────────────────────────
+  const { data: projects = [], isLoading, refetch } = useQuery<Project[]>({
+    queryKey: queryKeys.projects.list(),
+    queryFn: async () => {
+      const { data, error } = await supabase.from('projects').select('*').order('created_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+    staleTime: 30_000,
+  });
+  const refreshProjects = () => { refetch(); };
 
   // Deep-link: auto-select project from ?project=PROJECT_NUMBER query param
   useEffect(() => {
@@ -101,7 +101,7 @@ export function ProjectsModule({ currentUser, onCreateTicket, initialProject, de
     }
 
     // Invalidate the projects list cache so it's fresh when user navigates back to list
-    invalidateCache("projects");
+    queryClient.invalidateQueries({ queryKey: queryKeys.projects.list() });
   };
 
   // Use the current user's department to determine which tabs to show

@@ -7,7 +7,8 @@ import { assessBookingFinancialState, canHardDeleteBooking, getBookingCancellati
 import { toast } from "../../ui/toast-utils";
 import { NeuronStatusPill } from "../../NeuronStatusPill";
 import { SkeletonTable } from "../../shared/NeuronSkeleton";
-import { useCachedFetch, useInvalidateCache } from "../../../hooks/useNeuronCache";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "../../../lib/queryKeys";
 import { useDataScope } from "../../../hooks/useDataScope";
 import { NeuronRefreshButton } from "../../shared/NeuronRefreshButton";
 
@@ -49,26 +50,24 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
   const [timePeriodFilter, setTimePeriodFilter] = useState<string>("all");
   const [ownerFilter, setOwnerFilter] = useState<string>("all");
   const [modeFilter, setModeFilter] = useState<string>("all");
-  const invalidateCache = useInvalidateCache();
-
-  // ── Cached bookings fetch ─────────────────────────────────
-  const bookingsFetcher = async (): Promise<ForwardingBooking[]> => {
-    const { data, error } = await supabase
-      .from('bookings')
-      .select('*')
-      .eq('service_type', 'Forwarding')
-      .order('created_at', { ascending: false });
-    if (error) throw error;
-    return (data || []).map(mapToForwardingBooking);
-  };
 
   const { scope, isLoaded: scopeLoaded } = useDataScope();
 
-  const { data: rawBookings, isLoading, refresh: fetchBookings } = useCachedFetch<ForwardingBooking[]>(
-    "forwarding-bookings",
-    bookingsFetcher,
-    [],
-  );
+  // ── Bookings fetch ────────────────────────────────────────
+  const { data: rawBookings = [], isLoading, refetch } = useQuery<ForwardingBooking[]>({
+    queryKey: queryKeys.bookings.list("forwarding"),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('service_type', 'Forwarding')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data || []).map(mapToForwardingBooking);
+    },
+    staleTime: 30_000,
+  });
+  const fetchBookings = () => { refetch(); };
 
   const bookings = useMemo(() => {
     if (!scopeLoaded) return [];
@@ -602,7 +601,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
                             border: "1px solid #FCA5A5",
                             borderRadius: "6px",
                             background: "var(--theme-bg-surface)",
-                            color: "#DC2626",
+                            color: "var(--theme-status-danger-fg)",
                             cursor: "pointer",
                             transition: "all 150ms"
                           }}
