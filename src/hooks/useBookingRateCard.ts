@@ -8,8 +8,9 @@
  * @see /docs/blueprints/CONTRACT_BILLINGS_REWORK_BLUEPRINT.md — Phase 5D, Task 5D.1
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../utils/supabase/client";
+import { queryKeys } from "../lib/queryKeys";
 import type { ContractRateMatrix } from "../types/pricing";
 
 export interface BookingRateCardData {
@@ -33,62 +34,36 @@ export interface BookingRateCardData {
  * @param contractId — The booking's `contract_id` field (undefined/empty if not a contract booking)
  */
 export function useBookingRateCard(contractId?: string): BookingRateCardData {
-  const [rateMatrices, setRateMatrices] = useState<ContractRateMatrix[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [contractNumber, setContractNumber] = useState("");
-  const [customerName, setCustomerName] = useState("");
-  const [currency, setCurrency] = useState("PHP");
-
-  const isContractBooking = Boolean(contractId);
-
-  const fetchContract = useCallback(async () => {
-    if (!contractId) {
-      setRateMatrices([]);
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-
-      // Fetch all quotations and find the parent contract by ID
-      const { data, error } = await supabase
-        .from('quotations')
-        .select('*')
-        .eq('id', contractId)
+  const { data } = useQuery({
+    queryKey: queryKeys.contracts.rateCard(contractId ?? ""),
+    queryFn: async () => {
+      const { data: row, error } = await supabase
+        .from("quotations")
+        .select("*")
+        .eq("id", contractId!)
         .maybeSingle();
 
-      if (error) {
-        throw new Error(error.message);
-      }
+      if (error) throw error;
+      if (!row) return null;
 
-      if (data) {
-        setRateMatrices(data.rate_matrices || []);
-        setContractNumber(data.quote_number || "");
-        setCustomerName(data.customer_name || "");
-        setCurrency(data.currency || "PHP");
-      } else {
-        console.warn(`useBookingRateCard: Contract ${contractId} not found`);
-        setRateMatrices([]);
-      }
-    } catch (error) {
-      console.error("Error fetching contract for rate card:", error);
-      setRateMatrices([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [contractId]);
-
-  useEffect(() => {
-    fetchContract();
-  }, [fetchContract]);
+      return {
+        rateMatrices: (row.rate_matrices ?? []) as ContractRateMatrix[],
+        contractNumber: row.quote_number ?? "",
+        customerName: row.customer_name ?? "",
+        currency: row.currency ?? "PHP",
+      };
+    },
+    enabled: !!contractId,
+    staleTime: 5 * 60 * 1000,
+  });
 
   return {
-    rateMatrices,
-    isLoading,
-    isContractBooking,
-    contractId: contractId || "",
-    contractNumber,
-    customerName,
-    currency,
+    rateMatrices: data?.rateMatrices ?? [],
+    isLoading: !data,
+    isContractBooking: !!contractId,
+    contractId: contractId ?? "",
+    contractNumber: data?.contractNumber ?? "",
+    customerName: data?.customerName ?? "",
+    currency: data?.currency ?? "PHP",
   };
 }
