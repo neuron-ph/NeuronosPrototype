@@ -18,8 +18,8 @@ export function CustomCheckbox({ checked, onChange, disabled = false }: CustomCh
         width: "18px",
         height: "18px",
         borderRadius: "4px",
-        border: checked ? "none" : "1.5px solid #D1D5DB",
-        backgroundColor: checked ? "var(--neuron-brand-green)" : "white",
+        border: checked ? "none" : `1.5px solid var(--theme-border-default)`,
+        backgroundColor: checked ? "var(--neuron-brand-green)" : "var(--theme-bg-surface)",
         cursor: disabled ? "not-allowed" : "pointer",
         display: "flex",
         alignItems: "center",
@@ -31,13 +31,13 @@ export function CustomCheckbox({ checked, onChange, disabled = false }: CustomCh
       onMouseEnter={(e) => {
         if (!disabled && !checked) {
           e.currentTarget.style.borderColor = "var(--neuron-brand-green)";
-          e.currentTarget.style.backgroundColor = "#F0F9F8";
+          e.currentTarget.style.backgroundColor = "var(--theme-state-hover)";
         }
       }}
       onMouseLeave={(e) => {
         if (!disabled && !checked) {
           e.currentTarget.style.borderColor = "var(--theme-border-default)";
-          e.currentTarget.style.backgroundColor = "white";
+          e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
         }
       }}
     >

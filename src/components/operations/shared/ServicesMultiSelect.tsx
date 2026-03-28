@@ -123,7 +123,7 @@ export function ServicesMultiSelect({
                   className="px-3.5 py-2.5 text-[13px] cursor-pointer flex items-center justify-between hover:bg-[var(--theme-action-primary-bg)]/5 transition-colors"
                   style={{
                     backgroundColor: isSelected ? "#0F766E10" : "transparent",
-                    color: isSelected ? "#0F766E" : "#12332B",
+                    color: isSelected ? "var(--theme-action-primary-bg)" : "var(--theme-text-primary)",
                   }}
                 >
                   <span>{service}</span>

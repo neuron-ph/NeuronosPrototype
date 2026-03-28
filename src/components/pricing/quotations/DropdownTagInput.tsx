@@ -328,7 +328,7 @@ export function DropdownTagInput({
                     padding: "9px 12px",
                     fontSize: "13px",
                     textAlign: "left",
-                    backgroundColor: isSelected ? "#E8F5F3" : "#FFFFFF",
+                    backgroundColor: isSelected ? "var(--theme-state-selected)" : "var(--theme-bg-surface)",
                     color: isSelected ? "#0F766E" : "var(--neuron-ink-base)",
                     border: "none",
                     borderBottom: (index < filteredOptions.length - 1 || isCustomValue) ? "1px solid var(--theme-border-subtle)" : "none",
@@ -339,7 +339,7 @@ export function DropdownTagInput({
                     if (!isSelected) e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = isSelected ? "#E8F5F3" : "#FFFFFF";
+                    e.currentTarget.style.backgroundColor = isSelected ? "var(--theme-state-selected)" : "var(--theme-bg-surface)";
                   }}
                 >
                   {/* Checkbox */}

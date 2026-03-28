@@ -52,7 +52,7 @@ export function GroupedDropdown({ options = [], value, onChange, placeholder = "
           fontSize: "14px",
           border: "1.5px solid #E5E7EB",
           borderRadius: "6px",
-          backgroundColor: disabled ? "#F9FAFB" : "#FFFFFF",
+          backgroundColor: disabled ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface)",
           color: value ? "#12332B" : "#9CA3AF",
           cursor: disabled ? "default" : "pointer",
           display: "flex",

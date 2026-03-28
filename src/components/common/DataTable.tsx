@@ -74,14 +74,14 @@ export function DataTable<T extends { id?: string | number }>({
   return (
     <div className="border border-[var(--theme-border-default)] rounded-[10px] overflow-hidden bg-[var(--theme-bg-surface)]">
       <table className="w-full border-collapse">
-        <thead className="bg-[#F7FAF8] border-b border-[var(--theme-border-default)]">
+        <thead className="bg-[var(--theme-bg-surface-subtle)] border-b border-[var(--theme-border-default)]">
           <tr>
             {/* Selection Header Column */}
             {enableSelection && (
               <th className="w-10 px-4 py-3 text-center">
                  <input 
                     type="checkbox"
-                    className="w-4 h-4 rounded border-[var(--theme-border-default)] text-[var(--theme-action-primary-bg)] focus:ring-[#0F766E]"
+                    className="w-4 h-4 rounded border-[var(--theme-border-default)] text-[var(--theme-action-primary-bg)] focus:ring-[var(--theme-action-primary-bg)]"
                     checked={allSelected}
                     ref={input => {
                       if (input) input.indeterminate = isIndeterminate;
@@ -108,7 +108,7 @@ export function DataTable<T extends { id?: string | number }>({
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-[#E5E9F0]">
+        <tbody className="divide-y divide-[var(--theme-border-default)]">
           {data.length === 0 && renderTableOnEmpty ? (
             <tr>
               <td 
@@ -125,7 +125,7 @@ export function DataTable<T extends { id?: string | number }>({
               onClick={() => onRowClick?.(item)}
               className={`
                 transition-colors 
-                ${onRowClick ? "cursor-pointer hover:bg-[#F1F6F4]" : ""}
+                ${onRowClick ? "cursor-pointer hover:bg-[var(--theme-state-hover)]" : ""}
                 ${rowClassName ? rowClassName(item) : ""}
               `}
             >
@@ -134,7 +134,7 @@ export function DataTable<T extends { id?: string | number }>({
                 <td className="w-10 px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                    <input 
                       type="checkbox"
-                      className="w-4 h-4 rounded border-[var(--theme-border-default)] text-[var(--theme-action-primary-bg)] focus:ring-[#0F766E]"
+                      className="w-4 h-4 rounded border-[var(--theme-border-default)] text-[var(--theme-action-primary-bg)] focus:ring-[var(--theme-action-primary-bg)]"
                       checked={item.id ? selectedIds.includes(item.id) : false}
                       onChange={() => item.id && onSelectRow?.(item.id)}
                    />
@@ -159,7 +159,7 @@ export function DataTable<T extends { id?: string | number }>({
                   {col.cell ? (
                     col.cell(item)
                   ) : (
-                    <span className="text-[12px] text-[#111827] font-medium">
+                    <span className="text-[12px] text-[var(--theme-text-primary)] font-medium">
                        {/* @ts-ignore - Generic accessor handling */}
                        {item[col.accessorKey]}
                     </span>

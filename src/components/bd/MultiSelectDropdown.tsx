@@ -186,8 +186,8 @@ export function MultiSelectDropdown({
                   textAlign: "left",
                   fontSize: "14px",
                   transition: "background-color 0.15s ease",
-                  backgroundColor: isSelected ? "#E8F5F3" : "#FFFFFF",
-                  color: isSelected ? "#0F766E" : "#12332B",
+                  backgroundColor: isSelected ? "var(--theme-state-selected)" : "var(--theme-bg-surface)",
+                  color: isSelected ? "var(--theme-action-primary-bg)" : "var(--theme-text-primary)",
                   borderBottom: index < normalizedOptions.length - 1 ? "1px solid var(--theme-border-subtle)" : "none",
                   display: "flex",
                   alignItems: "center",
@@ -202,7 +202,7 @@ export function MultiSelectDropdown({
                   }
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = isSelected ? "#E8F5F3" : "#FFFFFF";
+                  e.currentTarget.style.backgroundColor = isSelected ? "var(--theme-state-selected)" : "var(--theme-bg-surface)";
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>

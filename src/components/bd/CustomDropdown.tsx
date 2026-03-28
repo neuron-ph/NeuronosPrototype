@@ -148,7 +148,7 @@ export function CustomDropdown({
           className={`${currentSize.padding} rounded-lg ${currentSize.fontSize} transition-all flex items-center ${currentSize.gap} ${fullWidth ? "w-full" : currentSize.minWidth} ${buttonClassName || ""}`}
           style={{
             border: "1px solid var(--neuron-ui-border)",
-            backgroundColor: disabled ? "#F3F4F6" : "#FFFFFF",
+            backgroundColor: disabled ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface)",
             color: "var(--theme-text-primary)",
             cursor: disabled ? "not-allowed" : "pointer",
             opacity: disabled ? 0.6 : 1,
@@ -167,9 +167,9 @@ export function CustomDropdown({
           }}
         >
           <span style={{ 
-            color: buttonStyle?.color 
-              ? "inherit" 
-              : (multiSelect ? multiValue.length > 0 : value) ? "#12332B" : "#9CA3AF",
+            color: buttonStyle?.color
+              ? "inherit"
+              : (multiSelect ? multiValue.length > 0 : value) ? "var(--theme-text-primary)" : "var(--theme-text-muted)",
             flex: 1, 
             textAlign: "left", 
             display: "flex", 
@@ -186,7 +186,7 @@ export function CustomDropdown({
           <ChevronDown 
             size={currentSize.iconSize} 
             style={{ 
-              color: buttonStyle?.color ? "inherit" : "#667085",
+              color: buttonStyle?.color ? "inherit" : "var(--theme-text-muted)",
               transition: "transform 0.2s",
               transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
               flexShrink: 0
@@ -232,8 +232,8 @@ export function CustomDropdown({
                     }}
                     className={`w-full ${currentSize.padding} text-left ${currentSize.fontSize} transition-colors flex items-center ${currentSize.gap}`}
                     style={{
-                      backgroundColor: isSelected ? "#E8F5F3" : "#FFFFFF",
-                      color: isSelected ? "#0F766E" : "#12332B",
+                      backgroundColor: isSelected ? "var(--theme-state-selected)" : "var(--theme-bg-surface)",
+                      color: isSelected ? "var(--theme-action-primary-bg)" : "var(--theme-text-primary)",
                       borderBottom: "1px solid var(--theme-border-subtle)"
                     }}
                     onMouseEnter={(e) => {
@@ -242,15 +242,15 @@ export function CustomDropdown({
                       }
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = isSelected ? "#E8F5F3" : "#FFFFFF";
+                      e.currentTarget.style.backgroundColor = isSelected ? "var(--theme-state-selected)" : "var(--theme-bg-surface)";
                     }}
                   >
                     {multiSelect && (
                       <span style={{
                         width: "16px", height: "16px",
                         borderRadius: "3px",
-                        border: isSelected ? "none" : "1.5px solid #D1D5DB",
-                        backgroundColor: isSelected ? "#0F766E" : "transparent",
+                        border: isSelected ? "none" : "1.5px solid var(--theme-border-default)",
+                        backgroundColor: isSelected ? "var(--theme-action-primary-bg)" : "transparent",
                         display: "flex", alignItems: "center", justifyContent: "center",
                         flexShrink: 0,
                       }}>
@@ -274,7 +274,7 @@ export function CustomDropdown({
   return (
     <div className={fullWidth ? "w-full" : ""}>
       {/* Label */}
-      <label className="block text-sm font-['Inter:Medium',sans-serif] font-medium text-[#0a1d4d] mb-1.5">
+      <label className="block text-sm font-['Inter:Medium',sans-serif] font-medium text-[var(--theme-text-primary)] mb-1.5">
         {label} {required && <span className="text-red-500">*</span>}
         {helperText && <span className="ml-2">{helperText}</span>}
       </label>
@@ -289,8 +289,8 @@ export function CustomDropdown({
           className={`${fullWidth ? 'w-full' : ''} px-3.5 py-2.5 rounded-lg transition-all flex items-center justify-between gap-2 ${buttonClassName || ""}`}
           style={{
             border: "1px solid var(--theme-border-default)",
-            backgroundColor: disabled ? "#F9FAFB" : "#FFFFFF",
-            color: (multiSelect ? multiValue.length > 0 : value) ? "#0a1d4d" : "#9CA3AF",
+            backgroundColor: disabled ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface)",
+            color: (multiSelect ? multiValue.length > 0 : value) ? "var(--theme-text-primary)" : "var(--theme-text-muted)",
             cursor: disabled ? "not-allowed" : "pointer",
             ...buttonStyle
           }}
@@ -357,8 +357,8 @@ export function CustomDropdown({
                     }}
                     className="w-full px-3.5 py-2.5 text-left text-sm transition-colors flex items-center gap-2"
                     style={{
-                      backgroundColor: isSelected ? "#E8F5F3" : "#FFFFFF",
-                      color: isSelected ? "#0F766E" : "#0a1d4d",
+                      backgroundColor: isSelected ? "var(--theme-state-selected)" : "var(--theme-bg-surface)",
+                      color: isSelected ? "var(--theme-action-primary-bg)" : "var(--theme-text-primary)",
                       borderBottom: index < options.length - 1 ? "1px solid var(--theme-border-subtle)" : "none"
                     }}
                     onMouseEnter={(e) => {
@@ -367,15 +367,15 @@ export function CustomDropdown({
                       }
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = isSelected ? "#E8F5F3" : "#FFFFFF";
+                      e.currentTarget.style.backgroundColor = isSelected ? "var(--theme-state-selected)" : "var(--theme-bg-surface)";
                     }}
                   >
                     {multiSelect && (
                       <span style={{
                         width: "16px", height: "16px",
                         borderRadius: "3px",
-                        border: isSelected ? "none" : "1.5px solid #D1D5DB",
-                        backgroundColor: isSelected ? "#0F766E" : "transparent",
+                        border: isSelected ? "none" : "1.5px solid var(--theme-border-default)",
+                        backgroundColor: isSelected ? "var(--theme-action-primary-bg)" : "transparent",
                         display: "flex", alignItems: "center", justifyContent: "center",
                         flexShrink: 0,
                       }}>

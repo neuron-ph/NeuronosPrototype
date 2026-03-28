@@ -52,7 +52,7 @@ export function CustomSelect({
         style={{
           border: "1px solid var(--neuron-ui-border)",
           backgroundColor: "var(--theme-bg-surface)",
-          color: value ? "var(--neuron-ink-primary)" : "#9CA3AF",
+          color: value ? "var(--neuron-ink-primary)" : "var(--theme-text-muted)",
         }}
         onFocus={(e) => {
           e.currentTarget.style.borderColor = "var(--neuron-brand-green)";
@@ -95,20 +95,20 @@ export function CustomSelect({
               }}
               className="w-full px-3.5 py-2.5 text-left text-[13px] transition-colors"
               style={{
-                backgroundColor: value === option.value ? "#E0F2FE" : "#FFFFFF",
-                color: value === option.value ? "#0F766E" : "var(--neuron-ink-primary)",
+                backgroundColor: value === option.value ? "var(--theme-state-selected)" : "var(--theme-bg-surface)",
+                color: value === option.value ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-primary)",
                 border: "none",
               }}
               onMouseEnter={(e) => {
                 if (value !== option.value) {
-                  e.currentTarget.style.backgroundColor = "#F0F9FF";
+                  e.currentTarget.style.backgroundColor = "var(--theme-state-hover)";
                 }
               }}
               onMouseLeave={(e) => {
                 if (value !== option.value) {
                   e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
                 } else {
-                  e.currentTarget.style.backgroundColor = "#E0F2FE";
+                  e.currentTarget.style.backgroundColor = "var(--theme-state-selected)";
                 }
               }}
             >

@@ -111,7 +111,7 @@ export function SearchableDropdown({
             disabled={disabled}
             className="w-full px-3.5 py-2.5 pr-9 rounded-lg text-[13px] transition-all border border-[var(--theme-border-default)]"
             style={{
-              backgroundColor: disabled ? "#F9FAFB" : "#FFFFFF",
+              backgroundColor: disabled ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface)",
               color: "var(--theme-text-primary)",
               cursor: disabled ? "not-allowed" : "text",
             }}
@@ -169,8 +169,8 @@ export function SearchableDropdown({
                     onClick={() => handleSelect(option)}
                     className="w-full px-3.5 py-2.5 text-left text-[13px] transition-colors flex items-center gap-2"
                     style={{
-                      backgroundColor: isSelected ? "#E8F5F3" : "#FFFFFF",
-                      color: isSelected ? "#0F766E" : "#12332B",
+                      backgroundColor: isSelected ? "var(--theme-state-selected)" : "var(--theme-bg-surface)",
+                      color: isSelected ? "var(--theme-action-primary-bg)" : "var(--theme-text-primary)",
                       borderBottom:
                         index < filtered.length - 1
                           ? "1px solid var(--theme-border-subtle)"
@@ -183,8 +183,8 @@ export function SearchableDropdown({
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.backgroundColor = isSelected
-                        ? "#E8F5F3"
-                        : "#FFFFFF";
+                        ? "var(--theme-state-selected)"
+                        : "var(--theme-bg-surface)";
                     }}
                   >
                     {option.label}

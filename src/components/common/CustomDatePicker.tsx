@@ -177,7 +177,7 @@ export function CustomDatePicker({
           fontSize: "13px",
           border: "1px solid var(--neuron-ui-border)",
           borderRadius: "8px", // Updated to rounded-lg equivalent (8px)
-          backgroundColor: disabled ? "#F3F4F6" : "white",
+          backgroundColor: disabled ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface)",
           color: value ? "var(--neuron-ink-primary)" : "var(--neuron-ink-muted)",
           cursor: disabled ? "not-allowed" : "pointer",
           outline: "none",
@@ -289,8 +289,8 @@ export function CustomDatePicker({
                         padding: "8px 12px",
                         textAlign: "left",
                         border: "none",
-                        backgroundColor: index === viewDate.getMonth() ? "#E8F5F3" : "white",
-                        color: index === viewDate.getMonth() ? "#0F766E" : "var(--neuron-ink-primary)",
+                        backgroundColor: index === viewDate.getMonth() ? "var(--theme-state-selected)" : "var(--theme-bg-surface)",
+                        color: index === viewDate.getMonth() ? "var(--theme-action-primary-bg)" : "var(--theme-text-primary)",
                         cursor: "pointer",
                         fontSize: "13px",
                         fontWeight: index === viewDate.getMonth() ? 600 : 400
@@ -301,7 +301,7 @@ export function CustomDatePicker({
                         }
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = index === viewDate.getMonth() ? "#E8F5F3" : "white";
+                        e.currentTarget.style.backgroundColor = index === viewDate.getMonth() ? "var(--theme-state-selected)" : "var(--theme-bg-surface)";
                       }}
                     >
                       {month}
@@ -372,8 +372,8 @@ export function CustomDatePicker({
                         padding: "8px 12px",
                         textAlign: "left",
                         border: "none",
-                        backgroundColor: year === viewDate.getFullYear() ? "#E8F5F3" : "white",
-                        color: year === viewDate.getFullYear() ? "#0F766E" : "var(--neuron-ink-primary)",
+                        backgroundColor: year === viewDate.getFullYear() ? "var(--theme-state-selected)" : "var(--theme-bg-surface)",
+                        color: year === viewDate.getFullYear() ? "var(--theme-action-primary-bg)" : "var(--theme-text-primary)",
                         cursor: "pointer",
                         fontSize: "13px",
                         fontWeight: year === viewDate.getFullYear() ? 600 : 400
@@ -384,7 +384,7 @@ export function CustomDatePicker({
                         }
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = year === viewDate.getFullYear() ? "#E8F5F3" : "white";
+                        e.currentTarget.style.backgroundColor = year === viewDate.getFullYear() ? "var(--theme-state-selected)" : "var(--theme-bg-surface)";
                       }}
                     >
                       {year}
@@ -441,9 +441,9 @@ export function CustomDatePicker({
                     padding: "8px",
                     fontSize: "13px",
                     fontWeight: selected ? 600 : 400,
-                    color: selected ? "white" : today ? "#0F766E" : "var(--neuron-ink-primary)",
-                    backgroundColor: selected ? "#0F766E" : "transparent",
-                    border: today && !selected ? "1px solid #0F766E" : "1px solid transparent",
+                    color: selected ? "white" : today ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-primary)",
+                    backgroundColor: selected ? "var(--theme-action-primary-bg)" : "transparent",
+                    border: today && !selected ? "1px solid var(--theme-action-primary-bg)" : "1px solid transparent",
                     borderRadius: "6px",
                     cursor: "pointer",
                     transition: "background-color 0.2s"

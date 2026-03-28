@@ -132,6 +132,22 @@ const REPLACEMENTS = [
   ['style.color = "#6B7280"', 'style.color = "var(--theme-text-muted)"'],
   ['style.color = "#9CA3AF"', 'style.color = "var(--theme-text-muted)"'],
   ['style.color = "#12332B"', 'style.color = "var(--theme-text-primary)"'],
+  // Ternary-embedded option selected/unselected backgrounds (dropdowns, selects)
+  ['backgroundColor: isSelected \\? "#E8F5F3" : "#FFFFFF"', 'backgroundColor: isSelected ? "var(--theme-state-selected)" : "var(--theme-bg-surface)"'],
+  ['e\\.currentTarget\\.style\\.backgroundColor = isSelected \\? "#E8F5F3" : "#FFFFFF"', 'e.currentTarget.style.backgroundColor = isSelected ? "var(--theme-state-selected)" : "var(--theme-bg-surface)"'],
+  ['color: isSelected \\? "#0F766E" : "#12332B"', 'color: isSelected ? "var(--theme-action-primary-bg)" : "var(--theme-text-primary)"'],
+  ['color: isSelected \\? "#0F766E" : "#0a1d4d"', 'color: isSelected ? "var(--theme-action-primary-bg)" : "var(--theme-text-primary)"'],
+  // Month/year picker ternary patterns
+  ['backgroundColor: index === viewDate\\.getMonth\\(\\) \\? "#E8F5F3" : "white"', 'backgroundColor: index === viewDate.getMonth() ? "var(--theme-state-selected)" : "var(--theme-bg-surface)"'],
+  ['e\\.currentTarget\\.style\\.backgroundColor = index === viewDate\\.getMonth\\(\\) \\? "#E8F5F3" : "white"', 'e.currentTarget.style.backgroundColor = index === viewDate.getMonth() ? "var(--theme-state-selected)" : "var(--theme-bg-surface)"'],
+  ['color: index === viewDate\\.getMonth\\(\\) \\? "#0F766E" : "var\\(--neuron-ink-primary\\)"', 'color: index === viewDate.getMonth() ? "var(--theme-action-primary-bg)" : "var(--theme-text-primary)"'],
+  ['backgroundColor: year === viewDate\\.getFullYear\\(\\) \\? "#E8F5F3" : "white"', 'backgroundColor: year === viewDate.getFullYear() ? "var(--theme-state-selected)" : "var(--theme-bg-surface)"'],
+  ['e\\.currentTarget\\.style\\.backgroundColor = year === viewDate\\.getFullYear\\(\\) \\? "#E8F5F3" : "white"', 'e.currentTarget.style.backgroundColor = year === viewDate.getFullYear() ? "var(--theme-state-selected)" : "var(--theme-bg-surface)"'],
+  ['color: year === viewDate\\.getFullYear\\(\\) \\? "#0F766E" : "var\\(--neuron-ink-primary\\)"', 'color: year === viewDate.getFullYear() ? "var(--theme-action-primary-bg)" : "var(--theme-text-primary)"'],
+  // Trigger button disabled/enabled backgrounds (inline style)
+  ['backgroundColor: disabled \\? "#F3F4F6" : "#FFFFFF"', 'backgroundColor: disabled ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface)"'],
+  ['backgroundColor: disabled \\? "#F9FAFB" : "#FFFFFF"', 'backgroundColor: disabled ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface)"'],
+  ['backgroundColor: disabled \\? "#F3F4F6" : "white"', 'backgroundColor: disabled ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface)"'],
   // JSX icon color= prop (Lucide icons)
   ['color="#12332B"', 'color="var(--theme-text-primary)"'],
   ['color="#0A1D4D"', 'color="var(--theme-text-primary)"'],
