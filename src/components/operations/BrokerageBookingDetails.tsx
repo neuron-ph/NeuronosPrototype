@@ -17,6 +17,7 @@ import { LinkedTicketBadge } from "../common/LinkedTicketBadge";
 import { RequestBillingButton } from "../common/RequestBillingButton";
 import { loadBookingActivityLog, appendBookingActivity } from "../../utils/bookingActivityLog";
 import { BookingCommentsTab } from "../shared/BookingCommentsTab";
+import { useQuery } from "@tanstack/react-query";
 
 interface BrokerageBookingDetailsProps {
   booking: BrokerageBooking;
@@ -185,11 +186,21 @@ export function BrokerageBookingDetails({ booking, onBack, onUpdate, currentUser
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
 
+  const { data: fetchedActivityLog } = useQuery({
+    queryKey: ["brokerage_booking_activity", booking.bookingId],
+    queryFn: async () => {
+      const entries = await loadBookingActivityLog(booking.bookingId);
+      return entries as ActivityLogEntry[];
+    },
+    enabled: !!booking.bookingId,
+    staleTime: 30_000,
+  });
+
   useEffect(() => {
-    loadBookingActivityLog(booking.bookingId).then((entries) => {
-      if (entries.length > 0) setActivityLog(entries as ActivityLogEntry[]);
-    });
-  }, [booking.bookingId]);
+    if (fetchedActivityLog && fetchedActivityLog.length > 0) {
+      setActivityLog(fetchedActivityLog);
+    }
+  }, [fetchedActivityLog]);
 
   useEffect(() => {
     if (!showMoreMenu) return;

@@ -1,6 +1,7 @@
 import { supabase } from "../../../utils/supabase/client";
 import { toast } from "../../ui/toast-utils";
 import { useState, useRef, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, MoreVertical, Lock, Clock, ChevronRight, User } from "lucide-react";
 import type { ForwardingBooking, ExecutionStatus } from "../../../types/operations";
 import { UnifiedBillingsTab } from "../../shared/billings/UnifiedBillingsTab";
@@ -87,11 +88,21 @@ export function ForwardingBookingDetails({
   const [showTimeline, setShowTimeline] = useState(false);
   const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>(initialActivityLog);
 
+  const { data: fetchedActivityLog } = useQuery({
+    queryKey: ["forwarding_booking_activity", booking.bookingId],
+    queryFn: async () => {
+      const entries = await loadBookingActivityLog(booking.bookingId);
+      return entries as ActivityLogEntry[];
+    },
+    enabled: !!booking.bookingId,
+    staleTime: 30_000,
+  });
+
   useEffect(() => {
-    loadBookingActivityLog(booking.bookingId).then((entries) => {
-      if (entries.length > 0) setActivityLog(entries as ActivityLogEntry[]);
-    });
-  }, [booking.bookingId]);
+    if (fetchedActivityLog && fetchedActivityLog.length > 0) {
+      setActivityLog(fetchedActivityLog);
+    }
+  }, [fetchedActivityLog]);
 
   // Local state to track edited booking values
   const [editedBooking, setEditedBooking] = useState<ForwardingBooking>(booking);

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, MoreVertical, Lock, Clock, ChevronRight } from "lucide-react";
 import type { TruckingBooking, ExecutionStatus } from "../../types/operations";
 import { UnifiedBillingsTab } from "../shared/billings/UnifiedBillingsTab";
@@ -154,11 +155,21 @@ export function TruckingBookingDetails({ booking, onBack, onUpdate, currentUser,
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
 
+  const { data: fetchedActivityLog } = useQuery({
+    queryKey: ["trucking_booking_activity", booking.bookingId],
+    queryFn: async () => {
+      const entries = await loadBookingActivityLog(booking.bookingId);
+      return entries as ActivityLogEntry[];
+    },
+    enabled: !!booking.bookingId,
+    staleTime: 30_000,
+  });
+
   useEffect(() => {
-    loadBookingActivityLog(booking.bookingId).then((entries) => {
-      if (entries.length > 0) setActivityLog(entries as ActivityLogEntry[]);
-    });
-  }, [booking.bookingId]);
+    if (fetchedActivityLog && fetchedActivityLog.length > 0) {
+      setActivityLog(fetchedActivityLog);
+    }
+  }, [fetchedActivityLog]);
 
   useEffect(() => {
     if (!showMoreMenu) return;
