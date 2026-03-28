@@ -1,5 +1,6 @@
 import { supabase } from "../../utils/supabase/client";
-import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { BarChart3, Download, Calendar, Filter } from "lucide-react";
 
 
@@ -25,24 +26,14 @@ export function OperationsReports() {
     status: "All",
     customer: "",
   });
-  const [loading, setLoading] = useState(false);
-  const [summary, setSummary] = useState<ReportSummary>({ totalBookings: 0, byStatus: {}, byService: {} });
-  const [bookings, setBookings] = useState<any[]>([]);
-
   const serviceTypes = ["All", "Forwarding", "Trucking", "Brokerage", "Marine Insurance", "Others"];
   const statusOptions = ["All", "Draft", "Confirmed", "In Progress", "Pending", "On Hold", "Completed", "Cancelled"];
 
-  const fetchAllBookings = async () => {
-    setLoading(true);
-    try {
-      const services = [
-        { type: "Forwarding", endpoint: "forwarding-bookings" },
-        { type: "Trucking", endpoint: "trucking-bookings" },
-        { type: "Brokerage", endpoint: "brokerage-bookings" },
-        { type: "Marine Insurance", endpoint: "marine-insurance-bookings" },
-        { type: "Others", endpoint: "others-bookings" }
-      ];
+  const [queryFilters, setQueryFilters] = useState(filters);
 
+  const { data: reportData, isLoading: loading, refetch } = useQuery({
+    queryKey: ["operations_reports", queryFilters],
+    queryFn: async () => {
       const tableMap: Record<string, string> = {
         "Forwarding": "forwarding_bookings",
         "Trucking": "trucking_bookings",
@@ -51,9 +42,17 @@ export function OperationsReports() {
         "Others": "others_bookings",
       };
 
+      const serviceEntries = [
+        { type: "Forwarding" },
+        { type: "Trucking" },
+        { type: "Brokerage" },
+        { type: "Marine Insurance" },
+        { type: "Others" },
+      ];
+
       const allBookings: any[] = [];
-      
-      for (const service of services) {
+
+      for (const service of serviceEntries) {
         const tableName = tableMap[service.type];
         if (!tableName) continue;
         const { data } = await supabase.from(tableName).select('*').order('created_at', { ascending: false });
@@ -63,40 +62,37 @@ export function OperationsReports() {
       }
 
       // Apply filters
-      let filtered = allBookings.filter(b => {
+      const filtered = allBookings.filter(b => {
         const createdDate = new Date(b.createdAt);
-        const matchesDate = createdDate >= new Date(filters.startDate) && createdDate <= new Date(filters.endDate);
-        const matchesService = filters.serviceType === "All" || b.serviceType === filters.serviceType;
-        const matchesStatus = filters.status === "All" || b.status === filters.status;
-        const matchesCustomer = !filters.customer || b.customerName?.toLowerCase().includes(filters.customer.toLowerCase());
+        const matchesDate = createdDate >= new Date(queryFilters.startDate) && createdDate <= new Date(queryFilters.endDate);
+        const matchesService = queryFilters.serviceType === "All" || b.serviceType === queryFilters.serviceType;
+        const matchesStatus = queryFilters.status === "All" || b.status === queryFilters.status;
+        const matchesCustomer = !queryFilters.customer || b.customerName?.toLowerCase().includes(queryFilters.customer.toLowerCase());
         return matchesDate && matchesService && matchesStatus && matchesCustomer;
       });
-
-      setBookings(filtered);
 
       // Calculate summary
       const byStatus: Record<string, number> = {};
       const byService: Record<string, number> = {};
-      
+
       filtered.forEach(b => {
         byStatus[b.status] = (byStatus[b.status] || 0) + 1;
         byService[b.serviceType] = (byService[b.serviceType] || 0) + 1;
       });
 
-      setSummary({ totalBookings: filtered.length, byStatus, byService });
-    } catch (error) {
-      console.error("Error fetching bookings for report:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+      return {
+        bookings: filtered,
+        summary: { totalBookings: filtered.length, byStatus, byService } as ReportSummary,
+      };
+    },
+    staleTime: 30_000,
+  });
 
-  useEffect(() => {
-    fetchAllBookings();
-  }, []);
+  const bookings = reportData?.bookings ?? [];
+  const summary = reportData?.summary ?? { totalBookings: 0, byStatus: {}, byService: {} };
 
   const handleFilter = () => {
-    fetchAllBookings();
+    setQueryFilters({ ...filters });
   };
 
   const handleExportCSV = () => {

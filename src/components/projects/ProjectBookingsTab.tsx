@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, ChevronDown, FileText } from "lucide-react";
 import { CreateBookingFromProjectPanel } from "./CreateBookingFromProjectPanel";
 import { supabase } from "../../utils/supabase/client";
@@ -20,12 +21,11 @@ interface ProjectBookingsTabProps {
 }
 
 export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: ProjectBookingsTabProps) {
+  const queryClient = useQueryClient();
   const [selectedBooking, setSelectedBooking] = useState<{
     bookingId: string;
     bookingType: string;
   } | null>(null);
-  const [verifiedBookings, setVerifiedBookings] = useState<any[]>([]);
-  const [isVerifying, setIsVerifying] = useState(true);
   const [hasCleanedUp, setHasCleanedUp] = useState(false);
   const [createBookingService, setCreateBookingService] = useState<any>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -34,33 +34,18 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
   const linkedBookings = project.linkedBookings || [];
   const servicesMetadata = project.services_metadata || [];
 
-  // Auto-open booking if selectedBookingId is provided
-  useEffect(() => {
-    if (selectedBookingId && !selectedBooking && verifiedBookings.length > 0) {
-      // Find the booking in the verified bookings list
-      const booking = verifiedBookings.find(b => b.bookingId === selectedBookingId);
-      if (booking) {
-        const type = booking.bookingType || booking.serviceType || booking.service || "others";
-        setSelectedBooking({
-          bookingId: selectedBookingId,
-          bookingType: type.toLowerCase().replace(' ', '-')
-        });
-      }
-    }
-  }, [selectedBookingId, selectedBooking, verifiedBookings]);
-  
-  // Verify that linked bookings actually exist
-  useEffect(() => {
-    async function verifyBookings() {
-      setIsVerifying(true);
+  const bookingsQueryKey = ["project_bookings", project.project_number, linkedBookings.length, hasCleanedUp, refreshTrigger];
+
+  const { data: verifiedBookings = [], isLoading: isVerifying } = useQuery({
+    queryKey: bookingsQueryKey,
+    queryFn: async () => {
       const verified: any[] = [];
-      
+
       for (const booking of linkedBookings) {
         try {
-          // Determine the endpoint based on service type
           const serviceType = booking.serviceType || booking.service;
           let endpoint = "";
-          
+
           switch (serviceType) {
             case "Forwarding":
               endpoint = "forwarding_bookings";
@@ -81,10 +66,9 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
               console.warn(`Unknown service type: ${serviceType}`);
               continue;
           }
-          
-          // Fetch the booking to verify it exists
+
           const { data: bookingData } = await supabase.from(endpoint).select('*').eq('id', booking.bookingId).maybeSingle();
-          
+
           if (bookingData) {
             verified.push({
               ...booking,
@@ -97,36 +81,26 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
           console.error(`Error verifying booking ${booking.bookingId}:`, error);
         }
       }
-      
-      setVerifiedBookings(verified);
-      setIsVerifying(false);
-      
+
       // If some bookings were removed, clean up the project automatically
       if (verified.length !== linkedBookings.length && !hasCleanedUp) {
         const orphanedCount = linkedBookings.length - verified.length;
         console.warn(
-          `⚠️ Found ${orphanedCount} orphaned booking reference(s) in project ${project.project_number}. ` +
+          `Found ${orphanedCount} orphaned booking reference(s) in project ${project.project_number}. ` +
           `Only ${verified.length} of ${linkedBookings.length} linked bookings actually exist.`
         );
-        
-        // Automatically clean up orphaned bookings
+
         try {
-          console.log(`🧹 Automatically cleaning up orphaned bookings from project ${project.project_number}...`);
-          // Update project's linkedBookings to only include verified ones
+          console.log(`Automatically cleaning up orphaned bookings from project ${project.project_number}...`);
           const { error: cleanupError } = await supabase.from('projects').update({
             linked_bookings: verified,
             updated_at: new Date().toISOString(),
           }).eq('id', project.id);
-          
+
           if (!cleanupError) {
-            console.log(`✅ Cleanup completed: removed ${orphanedCount} orphaned reference(s)`);
-            
-            // Mark as cleaned up to prevent repeated cleanup calls
+            console.log(`Cleanup completed: removed ${orphanedCount} orphaned reference(s)`);
             setHasCleanedUp(true);
-            
-            // Update local state to reflect the cleanup immediately
-            // This makes the UI show the empty state without requiring a page refresh
-            setVerifiedBookings([]);
+            return [];
           } else {
             console.error('Failed to clean up orphaned bookings:', cleanupError?.message);
           }
@@ -134,10 +108,25 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
           console.error('Error during automatic cleanup:', error);
         }
       }
+
+      return verified;
+    },
+    staleTime: 30_000,
+  });
+
+  // Auto-open booking if selectedBookingId is provided
+  useEffect(() => {
+    if (selectedBookingId && !selectedBooking && verifiedBookings.length > 0) {
+      const booking = verifiedBookings.find((b: any) => b.bookingId === selectedBookingId);
+      if (booking) {
+        const type = booking.bookingType || booking.serviceType || booking.service || "others";
+        setSelectedBooking({
+          bookingId: selectedBookingId,
+          bookingType: type.toLowerCase().replace(' ', '-')
+        });
+      }
     }
-    
-    verifyBookings();
-  }, [linkedBookings.length, project.project_number, project.id, hasCleanedUp, refreshTrigger]);
+  }, [selectedBookingId, selectedBooking, verifiedBookings]);
   
   // DEBUG: Log the project data to console to help diagnose the booking issue
   console.log('🔍 ProjectBookingsTab Debug:', {

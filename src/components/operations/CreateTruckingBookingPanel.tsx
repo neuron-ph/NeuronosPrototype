@@ -1,7 +1,8 @@
 import { supabase } from "../../utils/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "../ui/toast-utils";
 import { Plus, X, Truck, MapPin, Package } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { SearchableDropdown } from "../shared/SearchableDropdown";
 import { MovementToggle } from "./shared/MovementToggle";
@@ -35,29 +36,26 @@ export function CreateTruckingBookingPanel({
   const [loading, setLoading] = useState(false);
   // ✨ CONTRACT: Detected contract ID for auto-linking
   const [detectedContractId, setDetectedContractId] = useState<string | null>(null);
-  // ✨ DESTINATION COMBOBOX: Contract destinations for combobox dropdown
-  const [contractDestinations, setContractDestinations] = useState<string[]>([]);
 
-  // Fetch contract destinations when a contract is detected
-  useEffect(() => {
-    if (!detectedContractId) {
-      setContractDestinations([]);
-      return;
-    }
-    (async () => {
+  // ✨ DESTINATION COMBOBOX: Contract destinations for combobox dropdown
+  const { data: contractDestinations = [] } = useQuery({
+    queryKey: ["client_handler_preferences", detectedContractId],
+    queryFn: async () => {
+      if (!detectedContractId) return [];
       try {
         const fullContract = await fetchFullContract(detectedContractId);
         if (fullContract?.rate_matrices) {
-          setContractDestinations(extractContractDestinations(fullContract.rate_matrices));
-        } else {
-          setContractDestinations([]);
+          return extractContractDestinations(fullContract.rate_matrices);
         }
+        return [];
       } catch (err) {
         console.error("[CreateTruckingBookingPanel] Error fetching contract destinations:", err);
-        setContractDestinations([]);
+        return [];
       }
-    })();
-  }, [detectedContractId]);
+    },
+    enabled: !!detectedContractId,
+    staleTime: 30_000,
+  });
   const customerOptions = useCustomerOptions(isOpen);
   // ✨ Multi-line trucking: dispatch line items state
   const [truckingLineItems, setTruckingLineItems] = useState<TruckingLineItem[]>([

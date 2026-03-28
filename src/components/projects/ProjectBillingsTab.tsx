@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { FileText, Plus, Loader2, Filter, CheckSquare, Square, ChevronRight, Printer, Mail } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
 import type { Project } from "../../types/pricing";
@@ -11,33 +12,32 @@ interface ProjectBillingsTabProps {
 }
 
 export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabProps) {
-  const [billings, setBillings] = useState<EVoucher[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isGenerating, setIsGenerating] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  
+
   // Expanded states for statements
   const [expandedStatements, setExpandedStatements] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    fetchBillings();
-  }, [project.project_number]);
+  const billingsQueryKey = ["project_billings", project.project_number];
 
-  const fetchBillings = async () => {
-    try {
-      setIsLoading(true);
-      const { data, error } = await supabase.from('evouchers').select('*').eq('transaction_type', 'billing').eq('project_number', project.project_number);
-      
-      if (!error && data) {
-        setBillings(data);
-      }
-    } catch (error) {
-      console.error("Error fetching billings:", error);
-      toast.error("Failed to load billings");
-    } finally {
-      setIsLoading(false);
-    }
+  const { data: billings = [], isLoading } = useQuery({
+    queryKey: billingsQueryKey,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('evouchers')
+        .select('*')
+        .eq('transaction_type', 'billing')
+        .eq('project_number', project.project_number);
+      if (error) throw error;
+      return (data ?? []) as EVoucher[];
+    },
+    staleTime: 30_000,
+  });
+
+  const fetchBillings = () => {
+    queryClient.invalidateQueries({ queryKey: billingsQueryKey });
   };
   
   const handleImportFromQuotation = async () => {
