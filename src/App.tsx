@@ -4,7 +4,6 @@ import { useState, useEffect, Suspense, lazy } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation, useParams, useSearchParams, Outlet } from "react-router";
 import { Layout } from "./components/Layout";
 import { UserProvider, useUser } from "./hooks/useUser";
-import { NeuronCacheProvider } from "./hooks/useNeuronCache";
 import { RouteGuard } from "./components/RouteGuard";
 import { AppModeProvider, useAppMode } from "./config/appMode";
 import { toast, Toaster } from "sonner@2.0.3";
@@ -1318,13 +1317,11 @@ export default function App() {
 
   return (
     <UserProvider>
-      <NeuronCacheProvider>
-        <AppModeProvider>
-          <BrowserRouter>
-            <AppContent />
-          </BrowserRouter>
-        </AppModeProvider>
-      </NeuronCacheProvider>
+      <AppModeProvider>
+        <BrowserRouter>
+          <AppContent />
+        </BrowserRouter>
+      </AppModeProvider>
     </UserProvider>
   );
 }
