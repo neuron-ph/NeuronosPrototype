@@ -1,5 +1,7 @@
 import { ArrowLeft, Mail, Phone, Building2, User, Edit, Trash2, Paperclip, Download, FileText, Image as ImageIcon, File, Upload, CheckCircle2, AlertCircle, MessageSquare, Send, Plus, Users, MessageCircle, Linkedin, StickyNote, Flag, CheckSquare } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "../../lib/queryKeys";
 import type { Contact, LifecycleStage, LeadStatus, Task, Activity, Customer, ActivityType, TaskType } from "../../types/bd";
 import type { QuotationNew } from "../../types/pricing";
 import { CustomDropdown } from "./CustomDropdown";
@@ -155,104 +157,67 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
     setAttachments([newAttachment, ...attachments]);
   };
   
-  // Backend data state
-  const [customer, setCustomer] = useState<Customer | null>(null);
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [quotations, setQuotations] = useState<QuotationNew[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
-  const [isLoadingData, setIsLoadingData] = useState(true);
-
-  // Fetch customer (company) data
   // Backend uses 'customer_id', frontend alias is 'company_id' — support both
   const effectiveCustomerId = contact.customer_id || contact.company_id;
-  useEffect(() => {
-    if (effectiveCustomerId) {
-      fetchCustomer(effectiveCustomerId);
-    }
-  }, [effectiveCustomerId]);
+  const queryClient = useQueryClient();
 
-  // Fetch all related data on mount
-  useEffect(() => {
-    if (variant === "bd") {
-      fetchActivities();
-      fetchTasks();
-    }
-    fetchQuotations();
-    fetchUsers();
-  }, [contact.id, variant]);
+  // Fetch customer (company) data
+  const { data: customer = null } = useQuery({
+    queryKey: queryKeys.customers.detail(effectiveCustomerId || ""),
+    queryFn: async () => {
+      const { data } = await supabase.from('customers').select('*').eq('id', effectiveCustomerId).maybeSingle();
+      return (data || null) as Customer | null;
+    },
+    enabled: !!effectiveCustomerId,
+    staleTime: 5 * 60 * 1000,
+  });
 
-  const fetchCustomer = async (customerId: string) => {
-    try {
-      const { data } = await supabase.from('customers').select('*').eq('id', customerId).maybeSingle();
-      if (data) {
-        setCustomer(data);
-      }
-    } catch (error) {
-      console.error("Error fetching customer:", error);
-    }
-  };
-
-  const fetchActivities = async () => {
-    try {
+  // Fetch activities for this contact
+  const { data: activities = [] } = useQuery({
+    queryKey: ["crm_activities", "contact", contact.id],
+    queryFn: async () => {
       const { data, error } = await supabase.from('crm_activities').select('*').eq('contact_id', contact.id).order('created_at', { ascending: false });
-      if (!error && data) {
-        setActivities(data);
-      } else {
-        console.error("Failed to fetch activities:", error);
-        setActivities([]);
-      }
-    } catch (error) {
-      console.error("Error fetching activities:", error);
-      // Silently fail - set empty array
-      setActivities([]);
-    }
-  };
+      if (error) { console.error("Failed to fetch activities:", error); return []; }
+      return (data || []) as Activity[];
+    },
+    enabled: !!contact.id && variant === "bd",
+    staleTime: 30_000,
+  });
 
-  const fetchTasks = async () => {
-    try {
+  // Fetch tasks for this contact
+  const { data: tasks = [], isLoading: isLoadingData } = useQuery({
+    queryKey: ["tasks", "contact", contact.id],
+    queryFn: async () => {
       const { data, error } = await supabase.from('tasks').select('*').eq('contact_id', contact.id).order('created_at', { ascending: false });
-      if (!error && data) {
-        const result = { success: true, data };
-        setTasks(result.data);
-      }
-    } catch (error) {
-      console.error("Error fetching tasks:", error);
-    } finally {
-      setIsLoadingData(false);
-    }
-  };
+      if (error) { console.error("Error fetching tasks:", error); return []; }
+      return (data || []) as Task[];
+    },
+    enabled: !!contact.id && variant === "bd",
+    staleTime: 30_000,
+  });
 
-  const fetchQuotations = async () => {
-    try {
-      const params = new URLSearchParams();
-      const custId = contact.customer_id || contact.company_id;
-      if (custId) {
-        params.append("customer_id", custId);
-      }
-      params.append("contact_id", contact.id);
-      
+  // Fetch quotations for this contact
+  const { data: quotations = [] } = useQuery({
+    queryKey: [...queryKeys.quotations.list(), { contact_id: contact.id }],
+    queryFn: async () => {
       const { data, error } = await supabase.from('quotations').select('*').eq('contact_id', contact.id).order('created_at', { ascending: false });
-      if (!error && data) {
-        const result = { success: true, data };
-        setQuotations(result.data);
-      }
-    } catch (error) {
-      console.error("Error fetching quotations:", error);
-    }
-  };
+      if (error) { console.error("Error fetching quotations:", error); return []; }
+      return (data || []) as QuotationNew[];
+    },
+    enabled: !!contact.id,
+    staleTime: 30_000,
+  });
 
-  const fetchUsers = async () => {
-    try {
+  // Fetch users for lookups
+  const { data: users = [] } = useQuery({
+    queryKey: queryKeys.users.list(),
+    queryFn: async () => {
       const { data, error } = await supabase.from('users').select('*');
-      if (!error && data) {
-        const result = { success: true, data };
-        setUsers(result.data);
-      }
-    } catch (error) {
-      console.error("Error fetching users:", error);
-    }
-  };
+      if (error) throw error;
+      return data || [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
   // Helper function to determine if proof is required for a task type
   const isProofRequired = (taskType: string): boolean => {
@@ -388,6 +353,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
 
       if (!updateError && updatedData) {
         console.log("Contact updated successfully:", updatedData);
+        queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all() });
         Object.assign(contact, updatedData, {
           job_title: updatedData.title,
           mobile_number: updatedData.phone,
@@ -428,7 +394,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
             e.currentTarget.style.color = "#0D6560";
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.color = "#0F766E";
+            e.currentTarget.style.color = "var(--theme-action-primary-bg)";
           }}
         >
           <ArrowLeft size={16} />
@@ -700,7 +666,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                         e.currentTarget.style.color = "#0D6560";
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.color = "#0F766E";
+                        e.currentTarget.style.color = "var(--theme-action-primary-bg)";
                       }}
                     >
                       {contact.email}
@@ -743,7 +709,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                         e.currentTarget.style.color = "#0D6560";
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.color = "#0F766E";
+                        e.currentTarget.style.color = "var(--theme-action-primary-bg)";
                       }}
                     >
                       {contact.phone || contact.mobile_number}
@@ -879,7 +845,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                     style={{
                       border: "1px solid #FFE5E5",
                       backgroundColor: "var(--theme-bg-surface)",
-                      color: "#C94F3D"
+                      color: "var(--theme-status-danger-fg)"
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.backgroundColor = "#FFE5E5";
@@ -1004,7 +970,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                             e.currentTarget.style.color = "#0D6560";
                           }}
                           onMouseLeave={(e) => {
-                            e.currentTarget.style.color = "#0F766E";
+                            e.currentTarget.style.color = "var(--theme-action-primary-bg)";
                           }}
                         >
                           <ArrowLeft size={16} />
@@ -1200,7 +1166,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                                         }}
                                         className="px-2 py-1 rounded text-[11px] font-medium transition-colors"
                                         style={{
-                                          color: "#C94F3D"
+                                          color: "var(--theme-status-danger-fg)"
                                         }}
                                       >
                                         <Trash2 size={14} />
@@ -1246,7 +1212,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                                       });
                                       setActivityAttachments([]);
                                       // Refresh activities list
-                                      fetchActivities();
+                                      queryClient.invalidateQueries({ queryKey: ["crm_activities", "contact", contact.id] });
                                     } else {
                                       console.error("Error saving activity:", actErr);
                                     }
@@ -1582,7 +1548,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                             e.currentTarget.style.color = "#0D6560";
                           }}
                           onMouseLeave={(e) => {
-                            e.currentTarget.style.color = "#0F766E";
+                            e.currentTarget.style.color = "var(--theme-action-primary-bg)";
                           }}
                         >
                           <ArrowLeft size={16} />
@@ -1720,7 +1686,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                               </div>
                               <CustomDropdown
                                 options={[
-                                  { value: "High", label: "High", icon: <Flag size={16} style={{ color: "#EF4444" }} /> },
+                                  { value: "High", label: "High", icon: <Flag size={16} style={{ color: "var(--theme-status-danger-fg)" }} /> },
                                   { value: "Medium", label: "Medium", icon: <Flag size={16} style={{ color: "#F59E0B" }} /> },
                                   { value: "Low", label: "Low", icon: <Flag size={16} style={{ color: "#10B981" }} /> }
                                 ]}
@@ -1817,7 +1783,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                                         }}
                                         className="px-2 py-1 rounded text-[11px] font-medium transition-colors"
                                         style={{
-                                          color: "#C94F3D"
+                                          color: "var(--theme-status-danger-fg)"
                                         }}
                                       >
                                         <Trash2 size={14} />
@@ -1863,7 +1829,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                                       });
                                       setTaskAttachments([]);
                                       // Refresh tasks list
-                                      fetchTasks();
+                                      queryClient.invalidateQueries({ queryKey: ["tasks", "contact", contact.id] });
                                     } else {
                                       console.error("Error saving task:", taskErr);
                                     }
@@ -2133,7 +2099,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                                 options={[
                                   { value: "Low", label: "Low", icon: <Flag size={16} style={{ color: "#10B981" }} /> },
                                   { value: "Medium", label: "Medium", icon: <Flag size={16} style={{ color: "#F59E0B" }} /> },
-                                  { value: "High", label: "High", icon: <Flag size={16} style={{ color: "#EF4444" }} /> }
+                                  { value: "High", label: "High", icon: <Flag size={16} style={{ color: "var(--theme-status-danger-fg)" }} /> }
                                 ]}
                               />
                             ) : (

@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { X, FileText, User, Calendar, Building2, CheckCircle, XCircle, Clock, ArrowRight, ExternalLink } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { PhilippinePeso } from "../icons/PhilippinePeso";
 import { EVoucherStatusBadge } from "./evouchers/EVoucherStatusBadge";
 import { EVoucherWorkflowPanel } from "./evouchers/EVoucherWorkflowPanel";
 import { EVoucherHistoryTimeline } from "./evouchers/EVoucherHistoryTimeline";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "sonner@2.0.3";
+import { queryKeys } from "../../lib/queryKeys";
 import type { EVoucher } from "../../types/evoucher";
 
 interface EVoucherDetailViewProps {
@@ -16,27 +18,28 @@ interface EVoucherDetailViewProps {
 }
 
 export function EVoucherDetailView({ evoucher, onClose, currentUser, onStatusChange }: EVoucherDetailViewProps) {
+  const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case "Approved":
-        return { bg: "#E8F5F3", color: "var(--theme-action-primary-bg)", icon: CheckCircle };
+        return { bg: "var(--theme-bg-surface-tint)", color: "var(--theme-action-primary-bg)", icon: CheckCircle };
       case "Disbursed":
-        return { bg: "#D1FAE5", color: "#059669", icon: CheckCircle };
+        return { bg: "var(--theme-status-success-bg)", color: "var(--theme-status-success-fg)", icon: CheckCircle };
       case "Recorded":
       case "Audited":
         return { bg: "#DBEAFE", color: "#1D4ED8", icon: CheckCircle };
       case "Disapproved":
       case "Cancelled":
-        return { bg: "#FFE5E5", color: "#C94F3D", icon: XCircle };
+        return { bg: "var(--theme-status-danger-bg)", color: "var(--theme-status-danger-fg)", icon: XCircle };
       case "Under Review":
       case "Processing":
         return { bg: "#FEF3E7", color: "#C88A2B", icon: Clock };
       case "Submitted":
-        return { bg: "#F3F4F6", color: "var(--theme-text-muted)", icon: Clock };
+        return { bg: "var(--theme-bg-surface-subtle)", color: "var(--theme-text-muted)", icon: Clock };
       default: // Draft
-        return { bg: "#F9FAFB", color: "var(--theme-text-muted)", icon: FileText };
+        return { bg: "var(--theme-bg-page)", color: "var(--theme-text-muted)", icon: FileText };
     }
   };
 
@@ -80,6 +83,7 @@ export function EVoucherDetailView({ evoucher, onClose, currentUser, onStatusCha
         performed_by: payload.user_id, performed_by_name: payload.user_name,
         performed_by_role: payload.user_role, created_at: new Date().toISOString()
       });
+      queryClient.invalidateQueries({ queryKey: queryKeys.evouchers.all() });
       toast.success("E-Voucher approved successfully");
       onStatusChange?.();
       onClose();
@@ -107,6 +111,7 @@ export function EVoucherDetailView({ evoucher, onClose, currentUser, onStatusCha
         performed_by: payload.user_id, performed_by_name: payload.user_name,
         performed_by_role: payload.user_role, notes: reason, created_at: new Date().toISOString()
       });
+      queryClient.invalidateQueries({ queryKey: queryKeys.evouchers.all() });
       toast.success("E-Voucher disapproved");
       onStatusChange?.();
       onClose();
@@ -133,6 +138,7 @@ export function EVoucherDetailView({ evoucher, onClose, currentUser, onStatusCha
         performed_by: payload.user_id, performed_by_name: payload.user_name,
         performed_by_role: payload.user_role, created_at: new Date().toISOString()
       });
+      queryClient.invalidateQueries({ queryKey: queryKeys.evouchers.all() });
       toast.success("E-Voucher marked as disbursed");
       onStatusChange?.();
       onClose();
@@ -159,6 +165,7 @@ export function EVoucherDetailView({ evoucher, onClose, currentUser, onStatusCha
         performed_by: payload.user_id, performed_by_name: payload.user_name,
         performed_by_role: payload.user_role, created_at: new Date().toISOString()
       });
+      queryClient.invalidateQueries({ queryKey: queryKeys.evouchers.all() });
       toast.success("Transaction recorded and posted to ledger");
       onStatusChange?.();
       onClose();
@@ -185,6 +192,7 @@ export function EVoucherDetailView({ evoucher, onClose, currentUser, onStatusCha
         performed_by: payload.user_id, performed_by_name: payload.user_name,
         performed_by_role: payload.user_role, created_at: new Date().toISOString()
       });
+      queryClient.invalidateQueries({ queryKey: queryKeys.evouchers.all() });
       toast.success("E-Voucher audit completed");
       onStatusChange?.();
       onClose();
@@ -532,7 +540,7 @@ export function EVoucherDetailView({ evoucher, onClose, currentUser, onStatusCha
                   <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                     {(evoucher.approvers || []).map((approver) => (
                       <div key={approver.id} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <CheckCircle size={16} style={{ color: "#059669" }} />
+                        <CheckCircle size={16} style={{ color: "var(--theme-status-success-fg)" }} />
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: "14px", fontWeight: 500, color: "var(--theme-text-secondary)" }}>
                             {approver.name}
@@ -626,7 +634,7 @@ export function EVoucherDetailView({ evoucher, onClose, currentUser, onStatusCha
                           borderRadius: "8px",
                           border: "1px solid #EF4444",
                           backgroundColor: "var(--theme-bg-surface)",
-                          color: "#EF4444",
+                          color: "var(--theme-status-danger-fg)",
                           fontSize: "14px",
                           fontWeight: 500,
                           cursor: "pointer",

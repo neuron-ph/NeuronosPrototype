@@ -1,6 +1,8 @@
 import { ArrowLeft, Building2, MapPin, Briefcase, Edit, Users, Plus, Mail, Phone, User, CheckCircle, Clock, AlertCircle, Calendar, Paperclip, Upload, MessageSquare, Send, FileText, MessageCircle, Linkedin, StickyNote, Image as ImageIcon, File, Download } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "../../lib/queryKeys";
 import type { Customer, Contact, Industry, CustomerStatus, Task, Activity } from "../../types/bd";
 import type { QuotationNew, Project } from "../../types/pricing";
 import { CustomDropdown } from "./CustomDropdown";
@@ -105,9 +107,6 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"contacts" | "activities" | "tasks" | "inquiries" | "comments" | "attachments" | "projects" | "contracts">(variant === "pricing" ? "inquiries" : "contacts");
   
-  // ✨ PHASE 5: Customer contracts state
-  const [customerContracts, setCustomerContracts] = useState<any[]>([]);
-  const [isLoadingContracts, setIsLoadingContracts] = useState(false);
   const [newComment, setNewComment] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [localCustomer, setLocalCustomer] = useState(customer);
@@ -151,72 +150,56 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isEditingTask, setIsEditingTask] = useState(false);
   const [editedTask, setEditedTask] = useState<Task | null>(null);
-  const [quotations, setQuotations] = useState<QuotationNew[]>([]);
-  const [isLoadingQuotations, setIsLoadingQuotations] = useState(false);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [isLoadingContacts, setIsLoadingContacts] = useState(false);
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [isLoadingActivities, setIsLoadingActivities] = useState(false);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [isLoadingTasks, setIsLoadingTasks] = useState(false);
-  const [users, setUsers] = useState<any[]>([]);
   const [isAddContactPanelOpen, setIsAddContactPanelOpen] = useState(false);
+  const queryClient = useQueryClient();
 
-  // Fetch full customer details including quotations and contacts from backend
-  const fetchCustomerDetails = async () => {
-    setIsLoadingQuotations(true);
-    setIsLoadingContacts(true);
-    try {
-      console.log(`Fetching customer details for: ${customer.id} (${customer.name || customer.company_name})`);
-      
-      const [{ data: quotationRows }, { data: contactRows }] = await Promise.all([
-        supabase.from('quotations').select('*').eq('customer_id', customer.id).order('created_at', { ascending: false }),
-        supabase.from('contacts').select('*').eq('customer_id', customer.id),
-      ]);
-      setQuotations(quotationRows || []);
-      setContacts(contactRows || []);
-    } catch (error) {
-      console.error('Error fetching customer details:', error);
-      setQuotations([]);
-      setContacts([]);
-    } finally {
-      setIsLoadingQuotations(false);
-      setIsLoadingContacts(false);
-    }
-  };
+  // Fetch quotations for this customer
+  const { data: quotations = [], isLoading: isLoadingQuotations } = useQuery({
+    queryKey: [...queryKeys.quotations.list(), { customer_id: customer.id }],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('quotations').select('*').eq('customer_id', customer.id).order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data || []) as QuotationNew[];
+    },
+    enabled: !!customer.id,
+    staleTime: 30_000,
+  });
+
+  // Fetch contacts for this customer
+  const { data: contacts = [], isLoading: isLoadingContacts } = useQuery({
+    queryKey: queryKeys.customers.consignees(customer.id),
+    queryFn: async () => {
+      const { data, error } = await supabase.from('contacts').select('*').eq('customer_id', customer.id);
+      if (error) throw error;
+      return (data || []) as Contact[];
+    },
+    enabled: !!customer.id,
+    staleTime: 30_000,
+  });
 
   // Fetch activities for this customer
-  const fetchActivities = async () => {
-    setIsLoadingActivities(true);
-    try {
+  const { data: activities = [], isLoading: isLoadingActivities } = useQuery({
+    queryKey: ["crm_activities", "customer", customer.id],
+    queryFn: async () => {
       const { data, error } = await supabase.from('crm_activities').select('*').eq('customer_id', customer.id).order('created_at', { ascending: false });
-      if (!error) setActivities(data || []);
-      else setActivities([]);
-    } catch (error) {
-      console.error("Error fetching activities:", error);
-      // Silently fail - set empty array
-      setActivities([]);
-    } finally {
-      setIsLoadingActivities(false);
-    }
-  };
+      if (error) { console.error("Error fetching activities:", error); return []; }
+      return (data || []) as Activity[];
+    },
+    enabled: !!customer.id,
+    staleTime: 30_000,
+  });
 
   // Fetch tasks for this customer
-  const fetchTasks = async () => {
-    setIsLoadingTasks(true);
-    try {
+  const { data: tasks = [], isLoading: isLoadingTasks } = useQuery({
+    queryKey: ["tasks", "customer", customer.id],
+    queryFn: async () => {
       const { data, error } = await supabase.from('tasks').select('*').eq('customer_id', customer.id).order('created_at', { ascending: false });
-      if (!error) setTasks(data || []);
-      else setTasks([]);
-    } catch (error) {
-      console.error("Error fetching tasks:", error);
-      setTasks([]);
-    } finally {
-      setIsLoadingTasks(false);
-    }
-  };
+      if (error) { console.error("Error fetching tasks:", error); return []; }
+      return (data || []) as Task[];
+    },
+    enabled: !!customer.id,
+    staleTime: 30_000,
+  });
 
   // Create new task
   const handleCreateTask = async () => {
@@ -239,10 +222,10 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
         created_at: new Date().toISOString(),
       });
       if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["tasks", "customer", customer.id] });
       toast.success('Task created successfully');
       setIsCreatingTask(false);
       setNewTask({ type: "Call", priority: "Medium", status: "Pending", customer_id: customer.id });
-      fetchTasks();
     } catch (error) {
       console.error('Error creating task:', error);
       toast.error('Unable to create task. Please try again.');
@@ -250,62 +233,42 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
   };
 
   // Fetch projects for this customer
-  const fetchProjects = async () => {
-    setIsLoadingProjects(true);
-    try {
+  const { data: projects = [], isLoading: isLoadingProjects } = useQuery({
+    queryKey: [...queryKeys.projects.list(), { customer_id: customer.id }],
+    queryFn: async () => {
       const { data, error } = await supabase.from('projects').select('*');
-      if (!error && data) {
-        const customerProjects = data.filter((p: Project) => 
-          p.customer_id === customer.id || 
-          p.customer_name === (customer.name || customer.company_name)
-        );
-        setProjects(customerProjects);
-      } else {
-        setProjects([]);
-      }
-    } catch (error) {
-      console.error("Error fetching projects:", error);
-      setProjects([]);
-    } finally {
-      setIsLoadingProjects(false);
-    }
-  };
+      if (error) throw error;
+      return ((data || []) as Project[]).filter((p) =>
+        p.customer_id === customer.id ||
+        p.customer_name === (customer.name || customer.company_name)
+      );
+    },
+    enabled: !!customer.id,
+    staleTime: 30_000,
+  });
 
   // Fetch users for lookups
-  const fetchUsers = async () => {
-    try {
+  const { data: users = [] } = useQuery({
+    queryKey: queryKeys.users.list(),
+    queryFn: async () => {
       const { data, error } = await supabase.from('users').select('*');
-      if (!error && data) setUsers(data);
-    } catch (error) {
-      console.error("Error fetching users:", error);
-    }
-  };
+      if (error) throw error;
+      return data || [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
-  // ✨ PHASE 5: Fetch customer contracts
-  const fetchCustomerContracts = async () => {
-    setIsLoadingContracts(true);
-    try {
+  // Fetch customer contracts
+  const { data: customerContracts = [], isLoading: isLoadingContracts } = useQuery({
+    queryKey: [...queryKeys.quotations.list(), { customer_id: customer.id, quotation_type: "contract" }],
+    queryFn: async () => {
       const { data, error } = await supabase.from('quotations').select('*').eq('quotation_type', 'contract').eq('customer_id', customer.id);
-      if (!error) setCustomerContracts(data || []);
-    } catch (error) {
-      console.error("Error fetching customer contracts:", error);
-      setCustomerContracts([]);
-    } finally {
-      setIsLoadingContracts(false);
-    }
-  };
-
-  // Fetch customer details when component mounts or customer changes
-  useEffect(() => {
-    fetchCustomerDetails();
-    fetchProjects();
-    fetchCustomerContracts();
-    if (variant === "bd") {
-      fetchActivities();
-      fetchTasks();
-    }
-    fetchUsers();
-  }, [customer.id, variant]);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!customer.id,
+    staleTime: 30_000,
+  });
 
   // Get all contacts for this customer (now from backend state)
   const getCustomerContacts = () => {
@@ -414,6 +377,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
       };
       const { error } = await supabase.from('customers').update(updatePayload).eq('id', customer.id);
       if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: queryKeys.customers.all() });
       setLocalCustomer({ ...localCustomer, ...editedCustomer });
       toast.success("Customer saved successfully");
       setIsEditing(false);
@@ -472,7 +436,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
             e.currentTarget.style.color = "#0D6560";
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.color = "#0F766E";
+            e.currentTarget.style.color = "var(--theme-action-primary-bg)";
           }}
         >
           <ArrowLeft size={16} />
@@ -1135,7 +1099,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                             e.currentTarget.style.color = "#0D6560";
                           }}
                           onMouseLeave={(e) => {
-                            e.currentTarget.style.color = "#0F766E";
+                            e.currentTarget.style.color = "var(--theme-action-primary-bg)";
                           }}
                         >
                           <ArrowLeft size={16} />
@@ -1419,12 +1383,12 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                     onBack={() => setSelectedActivity(null)}
                     onUpdate={async () => {
                       // Refresh activities list
-                      await fetchActivities();
+                      queryClient.invalidateQueries({ queryKey: ["crm_activities", "customer", customer.id] });
                       setSelectedActivity(null);
                     }}
                     onDelete={async () => {
                       // Refresh activities list and go back
-                      await fetchActivities();
+                      queryClient.invalidateQueries({ queryKey: ["crm_activities", "customer", customer.id] });
                       setSelectedActivity(null);
                     }}
                     contactInfo={selectedActivity.contact_id ? contacts.find(c => c.id === selectedActivity.contact_id) : null}
@@ -1508,7 +1472,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                                     {task.status === "Completed" ? (
                                       <CheckCircle size={14} style={{ color: "var(--theme-action-primary-bg)" }} />
                                     ) : task.status === "Cancelled" ? (
-                                      <AlertCircle size={14} style={{ color: "#C94F3D" }} />
+                                      <AlertCircle size={14} style={{ color: "var(--theme-status-danger-fg)" }} />
                                     ) : (
                                       <Clock size={14} style={{ color: "#C88A2B" }} />
                                     )}
@@ -1558,7 +1522,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                             e.currentTarget.style.color = "#0D6560";
                           }}
                           onMouseLeave={(e) => {
-                            e.currentTarget.style.color = "#0F766E";
+                            e.currentTarget.style.color = "var(--theme-action-primary-bg)";
                           }}
                         >
                           <ArrowLeft size={16} />
@@ -1776,11 +1740,11 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                   <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                     {customerContracts.map((contract: any) => {
                       const statusColors: Record<string, { text: string; bg: string }> = {
-                        Draft: { text: "#6B7280", bg: "#F3F4F6" },
+                        Draft: { text: "var(--theme-text-muted)", bg: "var(--theme-bg-surface-subtle)" },
                         Sent: { text: "#3B82F6", bg: "#DBEAFE" },
-                        Active: { text: "#059669", bg: "#D1FAE5" },
-                        Expiring: { text: "#D97706", bg: "#FEF3C7" },
-                        Expired: { text: "#6B7280", bg: "#F3F4F6" },
+                        Active: { text: "var(--theme-status-success-fg)", bg: "var(--theme-status-success-bg)" },
+                        Expiring: { text: "var(--theme-status-warning-fg)", bg: "var(--theme-status-warning-bg)" },
+                        Expired: { text: "var(--theme-text-muted)", bg: "var(--theme-bg-surface-subtle)" },
                         Renewed: { text: "#7C3AED", bg: "#EDE9FE" },
                       };
                       const sc = statusColors[contract.contract_status] || statusColors.Draft;
@@ -2113,7 +2077,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
             });
             if (!error) {
               console.log('Contact created successfully');
-              fetchCustomerDetails();
+              queryClient.invalidateQueries({ queryKey: queryKeys.customers.consignees(customer.id) });
             } else {
               console.error('Failed to create contact:', error.message);
             }
