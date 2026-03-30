@@ -60,6 +60,7 @@ export function CreateUserPanel({ isOpen, onClose, onCreated }: Props) {
   const [department, setDepartment] = useState("");
   const [role, setRole] = useState("");
   const [teamId, setTeamId] = useState("");
+  const [status, setStatus] = useState<"active" | "inactive">("active");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -126,7 +127,7 @@ export function CreateUserPanel({ isOpen, onClose, onCreated }: Props) {
       // Update the profile using the admin's main client
       const { error: updateError } = await supabase
         .from("users")
-        .update({ name: name.trim(), department, role, team_id: teamId || null })
+        .update({ name: name.trim(), department, role, team_id: teamId || null, status, is_active: status === "active" })
         .eq("auth_id", data.user.id);
 
       if (updateError) {
@@ -268,6 +269,26 @@ export function CreateUserPanel({ isOpen, onClose, onCreated }: Props) {
             />
           </div>
         )}
+
+        <div style={{ marginBottom: "20px" }}>
+          <FieldLabel>Status</FieldLabel>
+          <div style={{ display: "flex", gap: 8 }}>
+            {(["active", "inactive"] as const).map(s => (
+              <button
+                key={s}
+                onClick={() => setStatus(s)}
+                style={{
+                  height: 36, padding: "0 16px", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer",
+                  border: status === s ? "1px solid var(--neuron-action-primary)" : "1px solid var(--neuron-ui-border)",
+                  background: status === s ? "#F0FDF9" : "var(--neuron-bg-elevated)",
+                  color: status === s ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
+                }}
+              >
+                {s.charAt(0).toUpperCase() + s.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div style={{ marginBottom: "8px" }}>
           <FieldLabel required>Initial password</FieldLabel>

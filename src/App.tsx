@@ -36,6 +36,7 @@ const SupabaseDebug = lazy(() => import("./components/SupabaseDebug").then((modu
 const DesignSystemGuide = lazy(() => import("./components/DesignSystemGuide").then((module) => ({ default: module.DesignSystemGuide })));
 const Settings = lazy(() => import("./components/settings/Settings").then((m) => ({ default: m.Settings })));
 const UserManagement = lazy(() => import("./components/admin/UserManagement").then((m) => ({ default: m.UserManagement })));
+const UserDetailPage = lazy(() => import("./components/admin/UserDetailPage").then((m) => ({ default: m.UserDetailPage })));
 
 function RouteLoadingState() {
   return (
@@ -891,6 +892,14 @@ function UserManagementPage() {
   );
 }
 
+function UserDetailPageWrapper() {
+  return (
+    <RouteWrapper page="admin-users">
+      <UserDetailPage />
+    </RouteWrapper>
+  );
+}
+
 function DesignSystemPage() {
   return (
     <RouteWrapper page="design-system">
@@ -1021,6 +1030,7 @@ function AppContent() {
         {/* Executive only routes */}
         <Route element={<GuardedLayout allowedDepartments={["Executive"]} />}>
           <Route path="/admin/users" element={<UserManagementPage />} />
+          <Route path="/admin/users/:userId" element={<UserDetailPageWrapper />} />
         </Route>
 
         {/* Open to all authenticated users */}

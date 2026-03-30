@@ -3,3 +3,6 @@ build/
 .claude/
 .mcp.json
 vite-qa*.log
+
+# dora code context index
+.dora/

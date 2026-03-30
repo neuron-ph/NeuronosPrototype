@@ -14,7 +14,9 @@ export type UserRow = {
   role: string;
   team_id: string | null;
   is_active: boolean;
+  status?: "active" | "inactive" | "suspended" | null;
   avatar_url?: string | null;
+  created_at?: string;
   teams: { name: string } | null;
 };
 
