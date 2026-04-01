@@ -5,6 +5,7 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import App from "./App.tsx";
 import "./styles/globals.css";
 import { bootstrapTheme } from "./theme/themeBootstrap";
+import { startKeepalive } from "./utils/supabase/keepalive";
 
 Sentry.init({
   dsn: import.meta.env.VITE_SENTRY_DSN || "",
@@ -14,6 +15,7 @@ Sentry.init({
 });
 
 bootstrapTheme();
+startKeepalive();
 
 const queryClient = new QueryClient({
   defaultOptions: {

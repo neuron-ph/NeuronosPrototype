@@ -81,14 +81,14 @@ export function readCachedTheme(storageKey: string = THEME_STORAGE_KEYS.resolved
 export function readThemeModePreference(storageKey: string = THEME_STORAGE_KEYS.modePreference): ThemeModePreference {
   const storage = getLocalStorage();
   if (!storage) {
-    return "system";
+    return "light";
   }
 
   try {
     const raw = storage.getItem(storageKey);
-    return isThemeModePreference(raw) ? raw : "system";
+    return isThemeModePreference(raw) ? raw : "light";
   } catch {
-    return "system";
+    return "light";
   }
 }
 

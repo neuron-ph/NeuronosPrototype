@@ -1,0 +1,24 @@
+name: Supabase Keepalive
+
+on:
+  schedule:
+    # Runs every 5 days at 08:00 UTC — well within Supabase's 7-day pause window.
+    - cron: "0 8 */5 * *"
+  workflow_dispatch: # allow manual trigger from GitHub Actions UI
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://ubspbukgcxmzegnomlgi.supabase.co/rest/v1/users?select=id&limit=1" \
+            -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVic3BidWtnY3htemVnbm9tbGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0MjY2ODEsImV4cCI6MjA4OTAwMjY4MX0.KsadQq3kvfp2Ud8gkjc0tSsukj4m4LbL5r9FF17Iq74" \
+            -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVic3BidWtnY3htemVnbm9tbGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0MjY2ODEsImV4cCI6MjA4OTAwMjY4MX0.KsadQq3kvfp2Ud8gkjc0tSsukj4m4LbL5r9FF17Iq74")
+          echo "Supabase ping status: $STATUS"
+          if [ "$STATUS" -lt 200 ] || [ "$STATUS" -ge 300 ]; then
+            echo "Ping failed with HTTP $STATUS"
+            exit 1
+          fi
+          echo "Supabase is alive."

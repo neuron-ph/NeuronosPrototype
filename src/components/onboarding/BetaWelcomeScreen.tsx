@@ -95,7 +95,8 @@ export function BetaWelcomeScreen({ userId, onDone }: BetaWelcomeScreenProps) {
       onClose={onDone}
       title={title}
       footer={footer}
-      size="sm"
+      size="md"
+      width="480px"
       showCloseButton={false}
     >
       <div className="px-12 py-8 flex flex-col gap-6 overflow-y-auto h-full">
@@ -112,7 +113,7 @@ export function BetaWelcomeScreen({ userId, onDone }: BetaWelcomeScreenProps) {
             className="text-[14px] leading-relaxed"
             style={{ color: "var(--theme-text-muted)" }}
           >
-            You're one of our first beta users — and that means a lot to us.
+            You’re using an early beta version of the Falcons System.
           </p>
         </div>
 
@@ -124,16 +125,23 @@ export function BetaWelcomeScreen({ userId, onDone }: BetaWelcomeScreenProps) {
             className="text-[13px] leading-[1.75]"
             style={{ color: "var(--theme-text-primary)" }}
           >
-            Neuron OS was built for your team. At this stage, things will evolve
-            — some features are still rough around the edges, and that's expected.
-            You're part of shaping how this grows.
+            Neuron OS was built for your team.
           </p>
           <p
             className="text-[13px] leading-[1.75]"
             style={{ color: "var(--theme-text-primary)" }}
           >
-            Everything you do here is live. Browse your modules, test the
-            workflows, and let us know how it feels.
+            Since we're still in beta, things will keep improving, and some
+            features may feel a little rough around the edges for now. That's
+            part of the process — and your feedback helps shape what the system
+            becomes.
+          </p>
+          <p
+            className="text-[13px] leading-[1.75]"
+            style={{ color: "var(--theme-text-primary)" }}
+          >
+            Everything you do here is live, so feel free to explore the modules,
+            try the workflows, and see how it feels in real use.
           </p>
         </div>
 
