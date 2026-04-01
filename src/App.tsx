@@ -52,6 +52,29 @@ function RouteLoadingState() {
   );
 }
 
+function friendlyAuthError(raw: string): string {
+  const msg = raw.toLowerCase();
+  if (msg.includes("invalid login credentials") || msg.includes("invalid credentials")) {
+    return "Incorrect email or password. Please try again.";
+  }
+  if (msg.includes("email not confirmed")) {
+    return "Please confirm your email address before signing in.";
+  }
+  if (msg.includes("too many requests") || msg.includes("rate limit")) {
+    return "Too many attempts. Please wait a moment and try again.";
+  }
+  if (msg.includes("user not found") || msg.includes("no user found")) {
+    return "No account found with that email address.";
+  }
+  if (msg.includes("network") || msg.includes("fetch") || msg.includes("failed to fetch")) {
+    return "Unable to reach the server. Check your connection and try again.";
+  }
+  if (msg.includes("database") || msg.includes("schema") || msg.includes("unexpected")) {
+    return "Something went wrong on our end. Please try again in a moment.";
+  }
+  return "Sign-in failed. Please check your credentials and try again.";
+}
+
 function LoginPage() {
   const { login } = useUser();
   const [email, setEmail] = useState("");
@@ -63,11 +86,11 @@ function LoginPage() {
     e.preventDefault();
     setIsLoading(true);
     setError("");
-    
+
     const result = await login(email, password);
-    
+
     if (!result.success) {
-      setError(result.error || "Login failed");
+      setError(friendlyAuthError(result.error || "Login failed"));
     } else {
       toast.success('Welcome to Neuron OS!');
     }

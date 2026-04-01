@@ -42,29 +42,43 @@ export function useDataScope(): DataScopeResult {
         return { type: 'own', userId: '' };
       }
 
-      // 1. Executive department — full access
+      // 1. Executive department — full access, no queries needed
       if (effectiveDepartment === 'Executive') {
         return { type: 'all' };
       }
 
-      // 2. Check for permission_override
-      const { data: override } = await supabase
+      // 2. Fire permission_override check and role-based users query in parallel.
+      //    For staff the users query is wasted (~1 row returned and discarded), but
+      //    it saves a full round-trip for manager/team_leader paths which are common.
+      const overridePromise = supabase
         .from('permission_overrides')
         .select('scope, departments')
         .eq('user_id', user.id)
         .maybeSingle();
 
+      const deptUsersPromise =
+        effectiveRole === 'manager'
+          ? supabase.from('users').select('id').eq('department', effectiveDepartment).eq('is_active', true)
+          : effectiveRole === 'team_leader' && user.team_id
+          ? supabase.from('users').select('id').eq('team_id', user.team_id).eq('is_active', true)
+          : Promise.resolve({ data: null });
+
+      const [{ data: override }, { data: roleUsers }] = await Promise.all([
+        overridePromise,
+        deptUsersPromise,
+      ]);
+
+      // Override takes precedence over role
       if (override) {
         if (override.scope === 'full') {
           return { type: 'all' };
         }
         if (override.scope === 'department_wide') {
-          const { data: deptUsers } = await supabase
-            .from('users')
-            .select('id')
-            .eq('department', effectiveDepartment)
-            .eq('is_active', true);
-          return { type: 'userIds', ids: deptUsers?.map((u) => u.id) ?? [] };
+          // Re-use the already-fetched dept users if role also matched department
+          const ids = roleUsers?.map((u) => u.id) ??
+            (await supabase.from('users').select('id').eq('department', effectiveDepartment).eq('is_active', true))
+              .data?.map((u) => u.id) ?? [];
+          return { type: 'userIds', ids };
         }
         if (override.scope === 'cross_department' && override.departments?.length) {
           const { data: crossUsers } = await supabase
@@ -76,24 +90,14 @@ export function useDataScope(): DataScopeResult {
         }
       }
 
-      // 3. Manager — all active users in same department
+      // 3. Manager — all active users in same department (already fetched above)
       if (effectiveRole === 'manager') {
-        const { data: deptUsers } = await supabase
-          .from('users')
-          .select('id')
-          .eq('department', effectiveDepartment)
-          .eq('is_active', true);
-        return { type: 'userIds', ids: deptUsers?.map((u) => u.id) ?? [] };
+        return { type: 'userIds', ids: roleUsers?.map((u) => u.id) ?? [] };
       }
 
-      // 4. Team leader — all active users in same team
+      // 4. Team leader — all active users in same team (already fetched above)
       if (effectiveRole === 'team_leader' && user.team_id) {
-        const { data: teamUsers } = await supabase
-          .from('users')
-          .select('id')
-          .eq('team_id', user.team_id)
-          .eq('is_active', true);
-        return { type: 'userIds', ids: teamUsers?.map((u) => u.id) ?? [] };
+        return { type: 'userIds', ids: roleUsers?.map((u) => u.id) ?? [] };
       }
 
       // 5. Staff (or team_leader with no team assigned) — own records only

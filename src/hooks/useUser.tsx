@@ -144,17 +144,22 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
         // Try to load cached profile first for instant render
         const cached = localStorage.getItem('neuron_user');
+        let hasCache = false;
         if (cached) {
           try {
             const parsed = JSON.parse(cached);
             // Validate it's not stale format
             if (parsed.department !== "BD" && parsed.department !== "PD") {
               setUser(parsed);
+              hasCache = true;
             }
           } catch { /* ignore */ }
         }
 
-        // Fetch fresh profile in background
+        // If we have a cached user, unblock the UI immediately and fetch fresh in true background
+        if (hasCache && isMounted) setIsLoading(false);
+
+        // Fetch fresh profile (background if cache existed, blocking if not)
         const profile = await fetchUserProfile(initialSession.user.id);
         if (isMounted && profile) {
           setUser(profile);
@@ -173,6 +178,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         }
       }
 
+      // Mark loading done (no-op if already cleared above via cache path)
       if (isMounted) setIsLoading(false);
     }).catch(() => {
       if (isMounted) setIsLoading(false);

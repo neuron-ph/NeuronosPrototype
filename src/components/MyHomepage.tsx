@@ -1267,7 +1267,18 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
       </div>
 
       {/* ── Content ── */}
-      <div className="flex-1 overflow-auto px-12 pt-6 pb-12">
+      <div className="flex-1 relative overflow-hidden">
+        {/* Scroll fade top */}
+        <div
+          className="absolute top-0 left-0 right-0 z-10 pointer-events-none"
+          style={{ height: "40px", background: "linear-gradient(to bottom, var(--theme-bg-surface), transparent)" }}
+        />
+        {/* Scroll fade bottom */}
+        <div
+          className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none"
+          style={{ height: "40px", background: "linear-gradient(to top, var(--theme-bg-surface), transparent)" }}
+        />
+        <div className="h-full overflow-auto scrollbar-hide px-12 pt-6 pb-12">
         <div
           className="grid gap-4"
           style={{
@@ -1336,6 +1347,7 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
               />
             </div>
           )}
+        </div>
         </div>
       </div>
 
