@@ -10,10 +10,6 @@ dist/
 vite-qa*.log
 
 # QA artifacts
-*.png
-*.jpg
-*.jpeg
-*.gif
 
 # Vercel (keep project.json for linking, ignore local build output)
 .vercel/output/

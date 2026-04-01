@@ -10,6 +10,7 @@ import { Toaster } from "./components/ui/sonner";
 import type { Customer } from "./types/bd";
 import { NeuronLogo } from "./components/NeuronLogo";
 import { useWorkspaceTheme } from "./theme/useWorkspaceTheme";
+import { BetaWelcomeScreen } from "./components/onboarding/BetaWelcomeScreen";
 
 const MyHomepage = lazy(() => import("./components/MyHomepage").then((module) => ({ default: module.MyHomepage })));
 const BusinessDevelopment = lazy(() => import("./components/BusinessDevelopment").then((module) => ({ default: module.BusinessDevelopment })));
@@ -920,8 +921,15 @@ function GuardedLayout({ allowedDepartments, requireMinRole }: { allowedDepartme
 }
 
 function AppContent() {
-  const { isAuthenticated, isLoading } = useUser();
+  const { isAuthenticated, isLoading, user } = useUser();
   useWorkspaceTheme();
+
+  const [showWelcome, setShowWelcome] = useState(false);
+  useEffect(() => {
+    if (!user?.id) return;
+    const acked = localStorage.getItem(`neuron_beta_acked_${user.id}`);
+    if (!acked) setShowWelcome(true);
+  }, [user?.id]);
 
   // Show loading state while checking auth
   if (isLoading) {
@@ -945,6 +953,9 @@ function AppContent() {
 
   return (
     <>
+      {showWelcome && user && (
+        <BetaWelcomeScreen userId={user.id} onDone={() => setShowWelcome(false)} />
+      )}
       <Toaster />
       <Suspense fallback={<RouteLoadingState />}>
       <Routes>

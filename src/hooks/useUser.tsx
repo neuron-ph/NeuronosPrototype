@@ -380,15 +380,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch {
-      // Network error — continue with local cleanup so the user is always signed out
-    }
+    // Clear local state immediately so the UI redirects to login without waiting
     setUser(null);
     setSession(null);
     localStorage.removeItem('neuron_user');
     setDevOverride(null);
+    // Fire-and-forget — invalidate the server session in the background
+    supabase.auth.signOut().catch(() => {});
   };
 
   return (

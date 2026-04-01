@@ -271,6 +271,7 @@ export function Settings() {
 
   // Logout
   const [loggingOut, setLoggingOut] = useState(false);
+  const [confirmingLogout, setConfirmingLogout] = useState(false);
 
   const { data: teamName = null } = useQuery({
     queryKey: ["teams", user?.team_id ?? ""],
@@ -415,7 +416,7 @@ export function Settings() {
 
   const handleLogout = async () => {
     setLoggingOut(true);
-    await (logout() as unknown as Promise<void>);
+    logout();
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -434,7 +435,12 @@ export function Settings() {
       </div>
 
       {/* Scrollable content */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "24px 48px 48px", backgroundColor: "var(--theme-bg-surface)" }}>
+      <div style={{ flex: 1, position: "relative", overflow: "hidden", backgroundColor: "var(--theme-bg-surface)" }}>
+        {/* Scroll fade top */}
+        <div className="absolute top-0 left-0 right-0 z-10 pointer-events-none" style={{ height: "40px", background: "linear-gradient(to bottom, var(--theme-bg-surface), transparent)" }} />
+        {/* Scroll fade bottom */}
+        <div className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none" style={{ height: "40px", background: "linear-gradient(to top, var(--theme-bg-surface), transparent)" }} />
+        <div className="scrollbar-hide" style={{ height: "100%", overflowY: "auto", padding: "24px 48px 48px" }}>
         <div style={{ maxWidth: "560px", display: "flex", flexDirection: "column", gap: "24px" }}>
 
           {/* ── Profile ──────────────────────────────────────────────────── */}
@@ -664,38 +670,59 @@ export function Settings() {
                   You'll be signed out of Neuron on this device.
                 </p>
               </div>
-              <button
-                onClick={handleLogout}
-                disabled={loggingOut}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  height: "32px",
-                  padding: "0 12px",
-                  borderRadius: "8px",
-                  border: "1px solid var(--neuron-semantic-danger)",
-                  backgroundColor: "transparent",
-                  color: "var(--neuron-semantic-danger)",
-                  fontSize: "13px",
-                  fontWeight: 500,
-                  cursor: loggingOut ? "not-allowed" : "pointer",
-                  opacity: loggingOut ? 0.7 : 1,
-                  transition: "background-color 120ms ease",
-                  flexShrink: 0,
-                }}
-                onMouseEnter={(e) => { if (!loggingOut) e.currentTarget.style.backgroundColor = "color-mix(in srgb, var(--neuron-semantic-danger) 8%, transparent)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
-              >
-                {loggingOut
-                  ? <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} />
-                  : <LogOut size={13} />
-                }
-                {loggingOut ? "Signing out…" : "Sign out"}
-              </button>
+              {confirmingLogout ? (
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                  <span style={{ fontSize: "13px", color: "var(--theme-text-muted)" }}>Sign out?</span>
+                  <button
+                    onClick={() => setConfirmingLogout(false)}
+                    style={{
+                      height: "32px", padding: "0 12px", borderRadius: "8px",
+                      border: "1px solid var(--theme-border-default)", backgroundColor: "transparent",
+                      color: "var(--theme-text-primary)", fontSize: "13px", fontWeight: 500, cursor: "pointer",
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleLogout}
+                    disabled={loggingOut}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: "6px",
+                      height: "32px", padding: "0 12px", borderRadius: "8px",
+                      border: "none", backgroundColor: "var(--neuron-semantic-danger)",
+                      color: "#fff", fontSize: "13px", fontWeight: 500,
+                      cursor: loggingOut ? "not-allowed" : "pointer",
+                      opacity: loggingOut ? 0.7 : 1,
+                    }}
+                  >
+                    {loggingOut
+                      ? <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} />
+                      : <LogOut size={13} />
+                    }
+                    {loggingOut ? "Signing out…" : "Yes, sign out"}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmingLogout(true)}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: "6px",
+                    height: "32px", padding: "0 12px", borderRadius: "8px",
+                    border: "1px solid var(--neuron-semantic-danger)", backgroundColor: "transparent",
+                    color: "var(--neuron-semantic-danger)", fontSize: "13px", fontWeight: 500,
+                    cursor: "pointer", transition: "background-color 120ms ease", flexShrink: 0,
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "color-mix(in srgb, var(--neuron-semantic-danger) 8%, transparent)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
+                >
+                  <LogOut size={13} />
+                  Sign out
+                </button>
+              )}
             </div>
           </div>
 
+        </div>
         </div>
       </div>
     </div>

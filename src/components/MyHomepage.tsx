@@ -300,6 +300,38 @@ function PanelHeader({ title, action }: { title: string; action?: React.ReactNod
 
 // ─── Greeting Panel ───────────────────────────────────────────────────────────
 
+const MOTIVATIONAL_MESSAGES = {
+  morning: [
+    "Let's start the day strong.",
+    "Fresh day, fresh chance to move things forward.",
+    "Let's get an early win today.",
+    "A strong start changes everything.",
+    "Let's build momentum.",
+  ],
+  afternoon: [
+    "Let's finish the day stronger than we started.",
+    "Still time to make today productive.",
+    "Let's get a few more wins in.",
+    "The day's not over — let's make it count.",
+    "You've got this!",
+  ],
+  evening: [
+    "Let's wrap up the day.",
+    "One last solid push for the day.",
+    "Let's wrap up with progress.",
+    "Finish strong — even small progress counts.",
+    "Let's close the day well.",
+    "A little more progress before we call it.",
+  ],
+};
+
+function getMessagePool(): string[] {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 12) return MOTIVATIONAL_MESSAGES.morning;
+  if (h >= 12 && h < 18) return MOTIVATIONAL_MESSAGES.afternoon;
+  return MOTIVATIONAL_MESSAGES.evening;
+}
+
 function GreetingPanel({
   firstName,
   dept,
@@ -313,10 +345,9 @@ function GreetingPanel({
   attentionCount: number;
   loading: boolean;
 }) {
-  const dayLabel = new Date().toLocaleDateString("en-PH", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
+  const [msgIndex] = useState(() => {
+    const pool = getMessagePool();
+    return Math.floor(Math.random() * pool.length);
   });
 
   const deptRoleLabel = [dept, role ? role.charAt(0).toUpperCase() + role.slice(1) : ""]
@@ -331,7 +362,7 @@ function GreetingPanel({
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-[12px] mb-1" style={{ color: "var(--neuron-ink-muted)" }}>
-              {dayLabel}
+              {getMessagePool()[msgIndex]}
             </p>
             <h1 className="text-[26px] font-semibold tracking-tight leading-tight" style={{ color: "var(--neuron-ink-primary)" }}>
               {getGreeting()}, {firstName}.
@@ -1119,6 +1150,12 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
   const userId = user?.id ?? "";
   const firstName = (currentUser?.name || (user as any)?.name || "there").split(" ")[0];
 
+  // ── Motivational message ─────────────────────────────────────────────────
+  const [msgIndex] = useState(() => {
+    const pool = getMessagePool();
+    return Math.floor(Math.random() * pool.length);
+  });
+
   // ── My Work ───────────────────────────────────────────────────────────────
   const [myTickets, setMyTickets]   = useState<TicketItem[]>([]);
   const [myApprovals, setMyApprovals] = useState<EVoucherItem[]>([]);
@@ -1259,8 +1296,7 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
               {getGreeting()}, {firstName}.
             </h1>
             <p style={{ fontSize: "14px", color: "var(--theme-text-muted)" }}>
-              {new Date().toLocaleDateString("en-PH", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
-              {dept ? ` · ${dept}` : ""}
+              {getMessagePool()[msgIndex]}
             </p>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import { NeuronSidebar } from "./NeuronSidebar";
+import { FeedbackButton } from "./feedback/FeedbackButton";
 
 type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-tasks" | "bd-activities" | "bd-budget-requests" | "bd-reports" | "pricing" | "operations" | "acct-transactions" | "acct-evouchers" | "acct-billings" | "acct-collections" | "acct-expenses" | "acct-ledger" | "acct-coa" | "acct-reports" | "acct-projects" | "acct-contracts" | "acct-customers" | "hr" | "calendar" | "inbox" | "profile" | "admin";
 
@@ -24,6 +25,8 @@ export function Layout({ children, currentPage, onNavigate, currentUser }: Layou
       <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
         {children}
       </main>
+
+      <FeedbackButton />
     </div>
   );
 }

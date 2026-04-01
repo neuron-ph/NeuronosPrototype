@@ -1,1 +1,16 @@
-{"projectId":"prj_pXJkeaIzQlUfitncfHGO9kt116Lp","orgId":"dhii5vd8hQtQoSvHp9HDQhxz"}
+{
+  "projectId": "prj_pXJkeaIzQlUfitncfHGO9kt116Lp",
+  "orgId": "dhii5vd8hQtQoSvHp9HDQhxz",
+  "projectName": "neuronos-prototype",
+  "settings": {
+    "createdAt": 1775001967583,
+    "framework": "vite",
+    "devCommand": null,
+    "installCommand": null,
+    "buildCommand": null,
+    "outputDirectory": null,
+    "rootDirectory": null,
+    "directoryListing": false,
+    "nodeVersion": "24.x"
+  }
+}
