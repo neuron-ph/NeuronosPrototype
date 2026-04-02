@@ -199,7 +199,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
   const showOperations = isExecutive || userDepartment === "Operations";
   const showAccounting = isExecutive || userDepartment === "Accounting";
   const showTransactions = isExecutive || userDepartment === "Accounting" || userDepartment === "Operations";
-  const showHR = isExecutive || userDepartment === "HR";
+  const showHR = !import.meta.env.PROD && (isExecutive || userDepartment === "HR");
   
   // Dashboard - standalone
   const dashboardItem = { id: "dashboard" as Page, label: "Dashboard", icon: Home };
