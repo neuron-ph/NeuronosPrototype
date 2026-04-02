@@ -227,8 +227,20 @@ function FilterBar({
 
 function UsersTab({ onCountUpdate }: { onCountUpdate: (count: number) => void }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [filters, setFilters] = useState<FiltersState>({ search: "", dept: "", role: "", status: "", overrides: "all" });
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("users-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "users" }, () => {
+        queryClient.invalidateQueries({ queryKey: queryKeys.users.list() });
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [queryClient]);
 
   const { data: users = [], isLoading, isError, error: queryError } = useQuery({
     queryKey: queryKeys.users.list(),
