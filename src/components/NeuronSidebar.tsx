@@ -34,7 +34,7 @@ import { NeuronLogo } from "./NeuronLogo";
 import { useUser } from "../hooks/useUser";
 import { supabase } from "../utils/supabase/client";
 
-type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" | "bd-reports" | "pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" | "pricing-reports" | "ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" | "ops-reports" | "operations" | "acct-transactions" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-coa" | "acct-reports" | "acct-statements" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "calendar" | "inbox" | "ticket-queue" | "settings" | "admin-users" | "admin" | "ticket-testing" | "activity-log" | "design-system";
+type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" |"pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" |"ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" |"operations" | "acct-transactions" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-coa" | "acct-reports" | "acct-statements" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "calendar" | "inbox" | "ticket-queue" | "settings" | "admin-users" | "admin" | "ticket-testing" | "activity-log" | "design-system";
 
 // SVG for Philippine Peso icon
 const Vector = () => (
@@ -215,7 +215,6 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
     { id: "bd-tasks" as Page, label: "Tasks", icon: Package },
     { id: "bd-activities" as Page, label: "Activities", icon: Activity },
     { id: "bd-budget-requests" as Page, label: "Budget Requests", icon: Banknote },
-    { id: "bd-reports" as Page, label: "Reports", icon: BarChart3 },
   ];
 
   // Pricing sub-items
@@ -226,7 +225,6 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
     { id: "pricing-projects" as Page, label: "Projects", icon: Briefcase },
     { id: "pricing-contracts" as Page, label: "Contracts", icon: Handshake },
     { id: "pricing-vendors" as Page, label: "Vendor", icon: Palette },
-    { id: "pricing-reports" as Page, label: "Reports", icon: BarChart3 },
   ];
 
   // Operations sub-items
@@ -236,7 +234,6 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
     { id: "ops-trucking" as Page, label: "Trucking", icon: Truck },
     { id: "ops-marine-insurance" as Page, label: "Marine Insurance", icon: Ship },
     { id: "ops-others" as Page, label: "Others", icon: FileText },
-    { id: "ops-reports" as Page, label: "Reports", icon: BarChart3 },
   ];
 
   // Accounting sub-items

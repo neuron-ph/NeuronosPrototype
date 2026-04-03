@@ -13,3 +13,5 @@ vite-qa*.log
 
 # Vercel (keep project.json for linking, ignore local build output)
 .vercel/output/
+
+.vercel

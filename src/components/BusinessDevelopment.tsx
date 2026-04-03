@@ -9,7 +9,6 @@ import { TaskDetailInline } from "./bd/TaskDetailInline";
 import { ActivitiesList } from "./bd/ActivitiesList";
 import { ActivityDetailInline } from "./bd/ActivityDetailInline";
 import { BudgetRequestList } from "./bd/BudgetRequestList";
-import { BDReports } from "./bd/BDReports";
 import { QuotationsListWithFilters } from "./pricing/QuotationsListWithFilters";
 import { QuotationBuilder } from "./bd/QuotationBuilder";
 import { QuotationDetail } from "./pricing/QuotationDetail";
@@ -722,10 +721,6 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
 
         {view === "budget-requests" && (
           <BudgetRequestList />
-        )}
-
-        {view === "reports" && (
-          <BDReports />
         )}
 
         {view === "inquiries" && (

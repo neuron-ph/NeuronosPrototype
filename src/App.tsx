@@ -27,14 +27,12 @@ const HR = lazy(() => import("./components/HR").then((module) => ({ default: mod
 const InboxPage = lazy(() => import("./components/InboxPage").then((module) => ({ default: module.InboxPage })));
 const ActivityLogPage = lazy(() => import("./components/ActivityLogPage").then((module) => ({ default: module.ActivityLogPage })));
 const EmployeeProfile = lazy(() => import("./components/EmployeeProfile").then((module) => ({ default: module.EmployeeProfile })));
-const ReportControlCenter = lazy(() => import("./components/bd/reports/ReportControlCenter").then((module) => ({ default: module.ReportControlCenter })));
 const CreateBooking = lazy(() => import("./components/operations/CreateBooking").then((module) => ({ default: module.CreateBooking })));
 const BookingFullView = lazy(() => import("./components/operations/BookingFullView").then((module) => ({ default: module.BookingFullView })));
 const TruckingBookings = lazy(() => import("./components/operations/TruckingBookings").then((module) => ({ default: module.TruckingBookings })));
 const BrokerageBookings = lazy(() => import("./components/operations/BrokerageBookings").then((module) => ({ default: module.BrokerageBookings })));
 const MarineInsuranceBookings = lazy(() => import("./components/operations/MarineInsuranceBookings").then((module) => ({ default: module.MarineInsuranceBookings })));
 const OthersBookings = lazy(() => import("./components/operations/OthersBookings").then((module) => ({ default: module.OthersBookings })));
-const OperationsReports = lazy(() => import("./components/operations/OperationsReports").then((module) => ({ default: module.OperationsReports })));
 const DiagnosticsPage = lazy(() => import("./components/DiagnosticsPage").then((module) => ({ default: module.DiagnosticsPage })));
 const SupabaseDebug = lazy(() => import("./components/SupabaseDebug").then((module) => ({ default: module.SupabaseDebug })));
 const DesignSystemGuide = lazy(() => import("./components/DesignSystemGuide").then((module) => ({ default: module.DesignSystemGuide })));
@@ -190,20 +188,17 @@ function RouteWrapper({ children, page }: { children: React.ReactNode; page: str
     if (path.startsWith("/bd/tasks")) return "bd-tasks";
     if (path.startsWith("/bd/activities")) return "bd-activities";
     if (path.startsWith("/bd/budget-requests")) return "bd-budget-requests";
-    if (path.startsWith("/bd/reports")) return "bd-reports";
     if (path.startsWith("/pricing/contacts")) return "pricing-contacts";
     if (path.startsWith("/pricing/customers")) return "pricing-customers";
     if (path.startsWith("/pricing/quotations")) return "pricing-quotations";
     if (path.startsWith("/pricing/projects")) return "pricing-projects";
     if (path.startsWith("/pricing/contracts")) return "pricing-contracts";
     if (path.startsWith("/pricing/vendors")) return "pricing-vendors";
-    if (path.startsWith("/pricing/reports")) return "pricing-reports";
     if (path.startsWith("/operations/forwarding")) return "ops-forwarding";
     if (path.startsWith("/operations/brokerage")) return "ops-brokerage";
     if (path.startsWith("/operations/trucking")) return "ops-trucking";
     if (path.startsWith("/operations/marine-insurance")) return "ops-marine-insurance";
     if (path.startsWith("/operations/others")) return "ops-others";
-    if (path.startsWith("/operations/reports")) return "ops-reports";
     if (path.startsWith("/operations")) return "operations";
     if (path.startsWith("/projects")) return "projects";
     if (path.startsWith("/contracts")) return "contracts";
@@ -247,21 +242,18 @@ function RouteWrapper({ children, page }: { children: React.ReactNode; page: str
       "bd-tasks": "/bd/tasks",
       "bd-activities": "/bd/activities",
       "bd-budget-requests": "/bd/budget-requests",
-      "bd-reports": "/bd/reports",
       "pricing-contacts": "/pricing/contacts",
       "pricing-customers": "/pricing/customers",
       "pricing-quotations": "/pricing/quotations",
       "pricing-projects": "/pricing/projects",
       "pricing-contracts": "/pricing/contracts",
       "pricing-vendors": "/pricing/vendors",
-      "pricing-reports": "/pricing/reports",
       "operations": "/operations",
       "ops-forwarding": "/operations/forwarding",
       "ops-brokerage": "/operations/brokerage",
       "ops-trucking": "/operations/trucking",
       "ops-marine-insurance": "/operations/marine-insurance",
       "ops-others": "/operations/others",
-      "ops-reports": "/operations/reports",
       "acct-transactions": "/accounting/transactions",
       "acct-coa": "/accounting/coa",
       "acct-evouchers": "/accounting/evouchers",
@@ -434,21 +426,6 @@ function BDBudgetRequestsPage() {
   );
 }
 
-function BDReportsPage() {
-  const navigate = useNavigate();
-  
-  const handleBack = () => {
-    // For now, just refresh or stay on reports
-    // In future, this could navigate to a reports list view
-  };
-  
-  return (
-    <RouteWrapper page="bd-reports">
-      <ReportControlCenter onBack={handleBack} />
-    </RouteWrapper>
-  );
-}
-
 // Unified Projects Page (Bridge Module for BD and Operations)
 function ProjectsPage() {
   const { user } = useUser();
@@ -588,15 +565,6 @@ function PricingVendorsPage() {
   return (
     <RouteWrapper page="pricing-vendors">
       <Pricing view="vendors" currentUser={user} />
-    </RouteWrapper>
-  );
-}
-
-function PricingReportsPage() {
-  const { user } = useUser();
-  return (
-    <RouteWrapper page="pricing-reports">
-      <Pricing view="reports" currentUser={user} />
     </RouteWrapper>
   );
 }
@@ -977,7 +945,6 @@ function AppContent() {
           <Route path="/bd/contracts" element={<BDContractsPage />} />
           <Route path="/bd/activities" element={<BDActivitiesPage />} />
           <Route path="/bd/budget-requests" element={<BDBudgetRequestsPage />} />
-          <Route path="/bd/reports" element={<BDReportsPage />} />
         </Route>
         
         {/* Unified Projects Page */}
@@ -995,7 +962,6 @@ function AppContent() {
           <Route path="/pricing/projects" element={<PricingProjectsPage />} />
           <Route path="/pricing/contracts" element={<PricingContractsPage />} />
           <Route path="/pricing/vendors" element={<PricingVendorsPage />} />
-          <Route path="/pricing/reports" element={<PricingReportsPage />} />
         </Route>
         
         {/* Operations — guarded */}
@@ -1008,7 +974,6 @@ function AppContent() {
           <Route path="/operations/brokerage" element={<RouteWrapper page="ops-brokerage"><BrokerageBookings /></RouteWrapper>} />
           <Route path="/operations/marine-insurance" element={<RouteWrapper page="ops-marine-insurance"><MarineInsuranceBookings /></RouteWrapper>} />
           <Route path="/operations/others" element={<RouteWrapper page="ops-others"><OthersBookings /></RouteWrapper>} />
-          <Route path="/operations/reports" element={<RouteWrapper page="ops-reports"><OperationsReports /></RouteWrapper>} />
         </Route>
         
         {/* Accounting — guarded */}

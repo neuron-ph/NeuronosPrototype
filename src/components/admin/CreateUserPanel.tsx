@@ -1,10 +1,8 @@
 import { useState, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
 import { useTeams } from "../../hooks/useTeams";
 import { Eye, EyeOff, AlertCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { supabase } from "../../utils/supabase/client";
-import { projectId, publicAnonKey } from "../../utils/supabase/info";
 import { SidePanel } from "../common/SidePanel";
 import { CustomDropdown } from "../bd/CustomDropdown";
 
@@ -97,55 +95,33 @@ export function CreateUserPanel({ isOpen, onClose, onCreated }: Props) {
     if (!validate()) return;
     setSubmitting(true);
     try {
-      // Use an isolated client so signUp never touches the main auth state or
-      // triggers onAuthStateChange in the admin's active session.
-      const tempClient = createClient(
-        `https://${projectId}.supabase.co`,
-        publicAnonKey,
-        { auth: { persistSession: false, autoRefreshToken: false, storageKey: `neuron-signup-${Date.now()}` } }
-      );
-
-      const { data, error } = await tempClient.auth.signUp({
-        email: email.trim().toLowerCase(),
-        password,
-        options: { data: { name: name.trim() } },
-      });
-
-      if (error) {
-        toast.error(error.message);
-        return;
-      }
-
-      if (!data.user) {
-        toast.error("Failed to create account. Check Supabase Auth settings.");
-        return;
-      }
-
-      if (data.user.identities?.length === 0) {
-        toast.error("An account with this email already exists.");
-        return;
-      }
-
-      // Wait for the auto-profile trigger to insert the users row
-      await new Promise((r) => setTimeout(r, 1000));
-
-      // Update the profile using the admin's main client
-      const { error: updateError } = await supabase
-        .from("users")
-        .update({
+      const { data, error } = await supabase.functions.invoke("create-user", {
+        body: {
           name: name.trim(),
+          email: email.trim().toLowerCase(),
+          password,
           department,
           role,
-          position: position.trim() || null,
           team_id: teamId || null,
-          service_type: serviceType || null,
-          status,
-          is_active: status === "active",
-        })
-        .eq("auth_id", data.user.id);
+        },
+      });
 
-      if (updateError) {
-        console.warn("Profile update failed:", updateError);
+      if (error || !data?.success) {
+        toast.error(data?.error ?? error?.message ?? "Failed to create account.");
+        return;
+      }
+
+      // Edge Function sets name/dept/role/team_id. Apply remaining fields via follow-up update.
+      if (data.user?.id && (position.trim() || serviceType || status !== "active")) {
+        await supabase
+          .from("users")
+          .update({
+            position: position.trim() || null,
+            service_type: serviceType || null,
+            status,
+            is_active: status === "active",
+          })
+          .eq("id", data.user.id);
       }
 
       toast.success(`Account created for ${name.trim()}`);

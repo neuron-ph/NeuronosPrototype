@@ -14,7 +14,6 @@ import { CustomerDetail } from "./bd/CustomerDetail";
 import { PricingCustomerDetail } from "./pricing/PricingCustomerDetail";
 import { NetworkPartnersModule } from "./pricing/NetworkPartnersModule";
 import { VendorDetail } from "./pricing/VendorDetail";
-import { PricingReports } from "./pricing/PricingReports";
 import type { Contact, Customer } from "../types/bd";
 import type { NetworkPartner } from "../data/networkPartners";
 // Removed static import: import { NETWORK_PARTNERS } from "../data/networkPartners";
@@ -75,7 +74,7 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
       console.log(`Fetched ${merged.length} quotations for Pricing module`);
       return merged as QuotationNew[];
     },
-    enabled: isLoaded && (view === "quotations" || view === "reports"),
+    enabled: isLoaded && view === "quotations",
     staleTime: 30_000,
   });
 
@@ -523,9 +522,6 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
           </>
         )}
 
-        {view === "reports" && (
-          <PricingReports quotations={quotations} isLoading={isLoading} />
-        )}
       </div>
     </div>
   );
