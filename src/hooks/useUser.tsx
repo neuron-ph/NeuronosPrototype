@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import posthog from 'posthog-js';
 import { supabase } from '../utils/supabase/client';
 import type { Session } from '@supabase/supabase-js';
 
@@ -164,6 +165,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
         if (isMounted && profile) {
           setUser(profile);
           localStorage.setItem('neuron_user', JSON.stringify(profile));
+          posthog.identify(profile.id, {
+            email: profile.email,
+            name: profile.name,
+            department: profile.department,
+            role: profile.role,
+          });
         }
       } else {
         // No session — check for legacy localStorage user (pre-auth)
@@ -196,6 +203,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
           if (isMounted && profile) {
             setUser(profile);
             localStorage.setItem('neuron_user', JSON.stringify(profile));
+            posthog.identify(profile.id, {
+              email: profile.email,
+              name: profile.name,
+              department: profile.department,
+              role: profile.role,
+            });
           }
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
@@ -380,6 +393,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    posthog.reset();
     // Clear local state immediately so the UI redirects to login without waiting
     setUser(null);
     setSession(null);
