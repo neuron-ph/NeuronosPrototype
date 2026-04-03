@@ -11,6 +11,7 @@ import type { Customer } from "./types/bd";
 import { NeuronLogo } from "./components/NeuronLogo";
 import { useWorkspaceTheme } from "./theme/useWorkspaceTheme";
 import { BetaWelcomeScreen } from "./components/onboarding/BetaWelcomeScreen";
+import posthog from "posthog-js";
 
 const MyHomepage = lazy(() => import("./components/MyHomepage").then((module) => ({ default: module.MyHomepage })));
 const BusinessDevelopment = lazy(() => import("./components/BusinessDevelopment").then((module) => ({ default: module.BusinessDevelopment })));
@@ -1034,6 +1035,14 @@ function AppContent() {
   );
 }
 
+function PostHogPageView() {
+  const location = useLocation();
+  useEffect(() => {
+    posthog.capture("$pageview", { $current_url: window.location.href });
+  }, [location.pathname]);
+  return null;
+}
+
 export default function App() {
   // Inject Google Fonts dynamically to avoid CSS @import issues
   useEffect(() => {
@@ -1051,6 +1060,7 @@ export default function App() {
   return (
     <UserProvider>
       <BrowserRouter>
+        <PostHogPageView />
         <AppContent />
       </BrowserRouter>
     </UserProvider>

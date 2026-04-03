@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/react";
+import posthog from "posthog-js";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
@@ -13,6 +14,15 @@ Sentry.init({
   enabled: !!import.meta.env.VITE_SENTRY_DSN,
   tracesSampleRate: 0.2,
 });
+
+if (import.meta.env.VITE_POSTHOG_KEY) {
+  posthog.init(import.meta.env.VITE_POSTHOG_KEY, {
+    api_host: import.meta.env.VITE_POSTHOG_HOST || "https://us.i.posthog.com",
+    person_profiles: "identified_only",
+    capture_pageview: false,
+    capture_pageleave: true,
+  });
+}
 
 bootstrapTheme();
 startKeepalive();
