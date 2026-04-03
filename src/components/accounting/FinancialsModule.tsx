@@ -239,7 +239,7 @@ export function FinancialsModule() {
   }, []);
 
   // Centralised data (fetched once, shared across all tabs)
-  const { data: financialsData, isFetching: isLoading, refetch: fetchAll } = useQuery({
+  const { data: financialsData, isLoading, refetch: fetchAll } = useQuery({
     queryKey: [...queryKeys.financials.reportsData(), JSON.stringify(dataScope)],
     enabled: isScopeLoaded,
     queryFn: async () => {

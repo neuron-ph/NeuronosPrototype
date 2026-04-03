@@ -27,7 +27,7 @@ export function ExpensesTab({
 }: ExpensesTabProps) {
   const queryClient = useQueryClient();
 
-  const { data: expenses = [], isFetching: isLoading } = useQuery({
+  const { data: expenses = [], isLoading } = useQuery({
     queryKey: ["evouchers", "booking_expenses", bookingId],
     queryFn: async () => {
       const { data: allEVouchers, error } = await supabase.from("evouchers").select("*");

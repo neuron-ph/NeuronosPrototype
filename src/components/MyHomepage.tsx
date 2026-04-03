@@ -1126,7 +1126,7 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
   });
 
   // ── My Work (cached 2 min via TanStack Query) ─────────────────────────────
-  const { data: myWorkData, isPending: loadingMyWork } = useQuery({
+  const { data: myWorkData, isLoading: loadingMyWork } = useQuery({
     queryKey: ["myWork", dept, role],
     queryFn: () => fetchMyWork(dept, role),
     enabled: !!dept,
@@ -1137,7 +1137,7 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
   const myApprovals = myWorkData?.approvals ?? [];
 
   // ── Dept queue (cached 2 min via TanStack Query) ──────────────────────────
-  const { data: deptQueueData, isPending: loadingDept } = useQuery({
+  const { data: deptQueueData, isLoading: loadingDept } = useQuery({
     queryKey: ["deptQueue", dept, userId],
     queryFn: () => fetchDeptQueue(dept, userId),
     enabled: !!dept,

@@ -55,7 +55,7 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
   const scopeKey = isLoaded ? JSON.stringify(scope) : null;
 
   // Fetch quotations from backend
-  const { data: quotations = [], isFetching: isLoading } = useQuery({
+  const { data: quotations = [], isLoading } = useQuery({
     queryKey: [...queryKeys.quotations.list(), scopeKey],
     queryFn: async () => {
       let query = supabase.from('quotations').select('*');
