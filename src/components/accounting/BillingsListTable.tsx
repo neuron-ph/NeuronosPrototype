@@ -3,6 +3,7 @@ import { FileText, Calendar, Receipt, AlertCircle, CheckCircle2, Clock } from "l
 import { useState } from "react";
 import type { Billing } from "../../types/accounting";
 import { BillingDetailsSheet } from "./billings/BillingDetailsSheet";
+import { SkeletonTable } from "../shared/NeuronSkeleton";
 
 interface BillingsListTableProps {
   billings: Billing[];
@@ -97,16 +98,7 @@ export function BillingsListTable({ billings, isLoading, onRowClick }: BillingsL
   };
 
   if (isLoading) {
-    return (
-      <div className="rounded-[10px] overflow-hidden" style={{ 
-        backgroundColor: "var(--theme-bg-surface)",
-        border: "1px solid var(--neuron-ui-border)"
-      }}>
-        <div className="px-6 py-12 text-center" style={{ color: "var(--theme-text-muted)" }}>
-          Loading invoices...
-        </div>
-      </div>
-    );
+    return <SkeletonTable rows={8} cols={6} />;
   }
 
   if (billings.length === 0) {

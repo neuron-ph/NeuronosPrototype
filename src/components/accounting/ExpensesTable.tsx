@@ -1,5 +1,6 @@
-import { Receipt, FileText, LoaderCircle, ArrowRightLeft, CheckCircle } from "lucide-react";
+import { Receipt, FileText, ArrowRightLeft, CheckCircle } from "lucide-react";
 import { useRef, useEffect } from "react";
+import { SkeletonTable } from "../shared/NeuronSkeleton";
 
 export interface ExpenseTableItem {
   id: string;
@@ -111,14 +112,7 @@ export function ExpensesTable({
     : `grid grid-cols-[32px_140px_120px_minmax(200px,1fr)_150px_100px_120px${hasConvertCol ? "_100px" : ""}]`;
 
   if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-[var(--theme-text-muted)]">
-        <div className="animate-spin mb-3 text-[var(--theme-action-primary-bg)]">
-          <LoaderCircle size={32} />
-        </div>
-        <p className="text-[13px] font-medium">Loading expenses...</p>
-      </div>
-    );
+    return <SkeletonTable rows={8} cols={7} />;
   }
 
   if (data.length === 0) {

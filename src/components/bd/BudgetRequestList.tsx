@@ -10,6 +10,7 @@ import { MultiSelectDropdown } from "./MultiSelectDropdown";
 import { AddRequestForPaymentPanel } from "../accounting/AddRequestForPaymentPanel";
 import { BudgetRequestDetailPanel } from "./BudgetRequestDetailPanel";
 import { PhilippinePeso } from "../icons/PhilippinePeso";
+import { SkeletonTable } from "../shared/NeuronSkeleton";
 
 type QuickFilterTab = "all" | "my-requests";
 type DateRangeFilter = "all" | "today" | "this-week" | "this-month" | "this-quarter" | "last-30-days";
@@ -37,7 +38,7 @@ export function BudgetRequestList() {
 
   const queryClient = useQueryClient();
 
-  const { data: budgetRequests = [] } = useQuery({
+  const { data: budgetRequests = [], isLoading } = useQuery({
     queryKey: queryKeys.evouchers.list("bd"),
     queryFn: async () => {
       const { data, error } = await supabase
@@ -562,7 +563,9 @@ export function BudgetRequestList() {
 
       {/* Table View */}
       <div className="flex-1 overflow-auto px-12 pt-6 pb-6">
-        {filteredAndSortedRequests.length === 0 ? (
+        {isLoading ? (
+          <SkeletonTable rows={8} cols={6} />
+        ) : filteredAndSortedRequests.length === 0 ? (
           <div
             style={{
               borderRadius: "10px",

@@ -1,6 +1,7 @@
-import { Receipt, Plus, DollarSign, LoaderCircle, ChevronDown, ChevronRight, Briefcase, Ship, Truck, Shield, Package, Ban, Trash2 } from "lucide-react";
+import { Receipt, Plus, DollarSign, ChevronDown, ChevronRight, Briefcase, Ship, Truck, Shield, Package, Ban, Trash2 } from "lucide-react";
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 // Shared Components
+import { SkeletonTable } from "../NeuronSkeleton";
 import { PricingTableHeader } from "../pricing/PricingTableHeader";
 import { UniversalPricingRow, PricingItemData } from "../pricing/UniversalPricingRow";
 // Pricing Components & Types
@@ -172,14 +173,7 @@ export function BillingsTable({
   };
 
   if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-[var(--theme-text-muted)]">
-        <div className="animate-spin mb-3 text-[var(--theme-action-primary-bg)]">
-          <LoaderCircle size={32} />
-        </div>
-        <p className="text-[13px] font-medium">Loading billings...</p>
-      </div>
-    );
+    return <SkeletonTable rows={8} cols={5} />;
   }
 
   // Helper to map BillingTableItem to PricingItemData
