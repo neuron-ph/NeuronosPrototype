@@ -56,7 +56,7 @@ export function ProjectsModule({ currentUser, onCreateTicket, initialProject, de
         };
       });
     },
-    staleTime: 30_000,
+    // Inherits 5-minute staleTime from global QueryClient config
   });
   const refreshProjects = () => { refetch(); };
 

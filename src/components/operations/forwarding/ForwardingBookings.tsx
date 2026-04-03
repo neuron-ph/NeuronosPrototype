@@ -87,7 +87,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
       if (error) throw error;
       return (data || []).map(mapToForwardingBooking);
     },
-    staleTime: 30_000,
+    // Inherits 5-minute staleTime from global QueryClient config
   });
   const fetchBookings = () => { refetch(); };
 

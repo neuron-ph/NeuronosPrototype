@@ -76,7 +76,7 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
         } as TruckingBooking;
       });
     },
-    staleTime: 30_000,
+    // Inherits 5-minute staleTime from global QueryClient config
   });
   const fetchBookings = () => { refetch(); };
 

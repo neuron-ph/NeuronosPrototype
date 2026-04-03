@@ -75,7 +75,7 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
       return merged as QuotationNew[];
     },
     enabled: isLoaded && view === "quotations",
-    staleTime: 30_000,
+    // Inherits 5-minute staleTime from global QueryClient config
   });
 
   const fetchQuotations = () => {

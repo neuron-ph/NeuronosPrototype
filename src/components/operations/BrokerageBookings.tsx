@@ -78,7 +78,7 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
         } as BrokerageBooking;
       });
     },
-    staleTime: 30_000,
+    // Inherits 5-minute staleTime from global QueryClient config
   });
   const fetchBookings = () => { refetch(); };
 

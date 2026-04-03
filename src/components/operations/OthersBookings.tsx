@@ -71,7 +71,7 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
         } as OthersBooking;
       });
     },
-    staleTime: 30_000,
+    // Inherits 5-minute staleTime from global QueryClient config
   });
   const fetchBookings = () => { refetch(); };
 

@@ -8,6 +8,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Development is now fully local with Claude Code. No Figma Make. All data access goes through the Supabase JS client directly. Edge Functions are reserved for operations that cannot be done from the frontend client (see below).
 
+## Branch & Deployment Workflow
+
+| Branch | Vercel Environment | Supabase |
+|---|---|---|
+| `dev` | Preview deployment | `oqermaidggvanahumjmj` (dev/staging) |
+| `main` | Production deployment | `ubspbukgcxmzegnomlgi` (prod) |
+
+- **Always develop and commit on `dev`** — pushing to `dev` triggers a Vercel preview build against the dev Supabase
+- **Never commit directly to `main`** — it is production
+- **To release to prod**: merge `dev → main` and push — always confirm with Marcus before doing this
+- Vercel env vars are scoped per environment: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set to the dev instance for Preview, and the prod instance for Production
+
 ## Commands
 
 ```bash

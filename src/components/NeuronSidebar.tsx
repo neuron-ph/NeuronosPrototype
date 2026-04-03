@@ -34,6 +34,14 @@ import { NeuronLogo } from "./NeuronLogo";
 import { useUser } from "../hooks/useUser";
 import { supabase } from "../utils/supabase/client";
 
+// Prefetch lazy module bundles on sidebar hover — React caches the promise so the
+// bundle downloads at most once regardless of how many times the user hovers.
+const prefetchBD         = () => void import("./BusinessDevelopment");
+const prefetchPricing    = () => void import("./Pricing");
+const prefetchOperations = () => void import("./Operations");
+const prefetchAccounting = () => void import("./accounting/FinancialsModule");
+const prefetchInbox      = () => void import("./InboxPage");
+
 type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" |"pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" |"ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" |"operations" | "acct-transactions" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-coa" | "acct-reports" | "acct-statements" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "calendar" | "inbox" | "ticket-queue" | "settings" | "admin-users" | "admin" | "ticket-testing" | "activity-log" | "design-system";
 
 // SVG for Philippine Peso icon
@@ -440,6 +448,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
+                prefetchBD();
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = "transparent";
@@ -515,6 +524,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
+                prefetchPricing();
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = "transparent";
@@ -590,6 +600,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
+                prefetchOperations();
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = "transparent";
@@ -670,6 +681,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
+                prefetchAccounting();
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = "transparent";
@@ -741,6 +753,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
                 }}
                 onMouseEnter={(e) => {
                   if (!isActive) e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
+                  prefetchInbox();
                 }}
                 onMouseLeave={(e) => {
                   if (!isActive) e.currentTarget.style.backgroundColor = "transparent";

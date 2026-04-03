@@ -1,13 +1,19 @@
 import { useState, useEffect, useRef, KeyboardEvent } from "react";
 import { useNavigate } from "react-router";
+import { useQuery } from "@tanstack/react-query";
 import { useUser } from "../hooks/useUser";
 import { supabase } from "../utils/supabase/client";
+import {
+  fetchMyWork, fetchDeptQueue,
+  type TicketItem, type EVoucherItem, type BookingItem, type QuotationItem,
+} from "../lib/dashboardFetchers";
 import {
   ArrowRight, Plus, Check, X, Package, FileText,
   MessageSquare, Receipt, Clock, Inbox,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+// TicketItem, EVoucherItem, BookingItem, QuotationItem imported from dashboardFetchers
 
 interface TodoItem {
   id: string;
@@ -15,43 +21,6 @@ interface TodoItem {
   done: boolean;
   created_at: string;
   done_at: string | null;
-}
-
-interface TicketItem {
-  id: string;
-  subject: string;
-  type: string;
-  priority: string;
-  linked_record_type: string;
-  created_at: string;
-}
-
-interface EVoucherItem {
-  id: string;
-  evoucher_number: string;
-  description: string | null;
-  amount: number;
-  status: string;
-  created_by_name: string;
-  created_at: string;
-}
-
-interface BookingItem {
-  id: string;
-  booking_number: string;
-  service_type: string;
-  customer_name: string;
-  status: string;
-  created_at: string;
-}
-
-interface QuotationItem {
-  id: string;
-  quotation_number: string | null;
-  customer_name: string;
-  status: string;
-  created_at: string;
-  updated_at: string;
 }
 
 interface RecentItem {
@@ -1156,125 +1125,35 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
     return Math.floor(Math.random() * pool.length);
   });
 
-  // ── My Work ───────────────────────────────────────────────────────────────
-  const [myTickets, setMyTickets]   = useState<TicketItem[]>([]);
-  const [myApprovals, setMyApprovals] = useState<EVoucherItem[]>([]);
-  const [loadingMyWork, setLoadingMyWork] = useState(true);
-
-  // ── Dept queue ────────────────────────────────────────────────────────────
-  const [openInquiries,    setOpenInquiries]    = useState<QuotationItem[]>([]);
-  const [awaitingClient,   setAwaitingClient]   = useState<QuotationItem[]>([]);
-  const [pricingRequests,  setPricingRequests]  = useState<QuotationItem[]>([]);
-  const [pricingInProgress,setPricingInProgress]= useState<QuotationItem[]>([]);
-  const [activeBookings,   setActiveBookings]   = useState<BookingItem[]>([]);
-  const [acctTickets,      setAcctTickets]      = useState<TicketItem[]>([]);
-  const [pendingEVs,       setPendingEVs]       = useState<EVoucherItem[]>([]);
-  const [execCounts, setExecCounts] = useState({
-    openInquiries: 0, inProgressQuotations: 0, activeBookings: 0, openTickets: 0, pendingEVs: 0,
+  // ── My Work (cached 2 min via TanStack Query) ─────────────────────────────
+  const { data: myWorkData, isPending: loadingMyWork } = useQuery({
+    queryKey: ["myWork", dept, role],
+    queryFn: () => fetchMyWork(dept, role),
+    enabled: !!dept,
+    staleTime: 2 * 60 * 1000,
   });
-  const [loadingDept, setLoadingDept] = useState(true);
 
-  // ── Fetch my work ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!dept) return;
-    setLoadingMyWork(true);
+  const myTickets   = myWorkData?.tickets   ?? [];
+  const myApprovals = myWorkData?.approvals ?? [];
 
-    async function load() {
-      const { data: ticketRows } = await supabase
-        .from("tickets")
-        .select("id, subject, type, priority, linked_record_type, created_at, ticket_participants!inner(participant_dept, role)")
-        .eq("status", "open")
-        .eq("ticket_participants.participant_dept", dept)
-        .eq("ticket_participants.role", "to")
-        .order("created_at", { ascending: false })
-        .limit(8);
-      setMyTickets((ticketRows ?? []) as TicketItem[]);
+  // ── Dept queue (cached 2 min via TanStack Query) ──────────────────────────
+  const { data: deptQueueData, isPending: loadingDept } = useQuery({
+    queryKey: ["deptQueue", dept, userId],
+    queryFn: () => fetchDeptQueue(dept, userId),
+    enabled: !!dept,
+    staleTime: 2 * 60 * 1000,
+  });
 
-      const approvalStatuses: string[] = [];
-      if (role.includes("tl") || role === "team_lead") approvalStatuses.push("pending_tl");
-      if (dept === "Executive" || role.includes("executive") || role === "ceo") approvalStatuses.push("pending_ceo");
-      if (dept === "Accounting") approvalStatuses.push("pending_accounting");
-
-      if (approvalStatuses.length > 0) {
-        const { data: evRows } = await supabase
-          .from("evouchers")
-          .select("id, evoucher_number, description, amount, status, created_by_name, created_at")
-          .in("status", approvalStatuses)
-          .order("created_at", { ascending: false })
-          .limit(5);
-        setMyApprovals((evRows ?? []) as EVoucherItem[]);
-      } else {
-        setMyApprovals([]);
-      }
-
-      setLoadingMyWork(false);
-    }
-
-    load();
-  }, [dept, role]);
-
-  // ── Fetch dept queue ──────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!dept) return;
-    setLoadingDept(true);
-
-    async function load() {
-      if (dept === "Business Development") {
-        const [inqRes, awaitRes] = await Promise.all([
-          supabase.from("quotations").select("id, quotation_number, customer_name, status, created_at, updated_at").eq("quotation_type","spot").in("status",["New","Pending","Submitted"]).order("created_at",{ascending:false}).limit(6),
-          supabase.from("quotations").select("id, quotation_number, customer_name, status, created_at, updated_at").eq("status","Sent to Client").order("updated_at",{ascending:false}).limit(6),
-        ]);
-        setOpenInquiries((inqRes.data ?? []) as QuotationItem[]);
-        setAwaitingClient((awaitRes.data ?? []) as QuotationItem[]);
-      }
-
-      if (dept === "Pricing") {
-        const [reqRes, inpRes] = await Promise.all([
-          supabase.from("quotations").select("id, quotation_number, customer_name, status, created_at, updated_at").in("status",["Pending","Assigned to Pricing"]).order("created_at",{ascending:false}).limit(6),
-          supabase.from("quotations").select("id, quotation_number, customer_name, status, created_at, updated_at").in("status",["Pricing in Progress","Draft"]).order("updated_at",{ascending:false}).limit(6),
-        ]);
-        setPricingRequests((reqRes.data ?? []) as QuotationItem[]);
-        setPricingInProgress((inpRes.data ?? []) as QuotationItem[]);
-      }
-
-      if (dept === "Operations") {
-        const orFilter = userId ? `handler_id.eq.${userId},supervisor_id.eq.${userId},manager_id.eq.${userId}` : undefined;
-        const query = supabase.from("bookings").select("id, booking_number, service_type, customer_name, status, created_at").not("status","in",'("Completed","Cancelled")').order("created_at",{ascending:false}).limit(10);
-        const { data } = orFilter ? await query.or(orFilter) : await query;
-        setActiveBookings((data ?? []) as BookingItem[]);
-      }
-
-      if (dept === "Accounting") {
-        const [tRes, evRes] = await Promise.all([
-          supabase.from("tickets").select("id, subject, type, priority, linked_record_type, created_at, ticket_participants!inner(participant_dept, role)").eq("status","open").eq("ticket_participants.participant_dept","Accounting").eq("ticket_participants.role","to").order("created_at",{ascending:false}).limit(10),
-          supabase.from("evouchers").select("id, evoucher_number, description, amount, status, created_by_name, created_at").eq("status","pending_accounting").order("created_at",{ascending:false}).limit(6),
-        ]);
-        setAcctTickets((tRes.data ?? []) as TicketItem[]);
-        setPendingEVs((evRes.data ?? []) as EVoucherItem[]);
-      }
-
-      if (dept === "Executive") {
-        const [inqR, quotR, bkgR, tickR, evR] = await Promise.all([
-          supabase.from("quotations").select("id",{count:"exact",head:true}).in("status",["New","Pending"]),
-          supabase.from("quotations").select("id",{count:"exact",head:true}).in("status",["Pricing in Progress","Draft"]),
-          supabase.from("bookings").select("id",{count:"exact",head:true}).not("status","in",'("Completed","Cancelled")'),
-          supabase.from("tickets").select("id",{count:"exact",head:true}).eq("status","open"),
-          supabase.from("evouchers").select("id",{count:"exact",head:true}).in("status",["pending_tl","pending_ceo","pending_accounting"]),
-        ]);
-        setExecCounts({
-          openInquiries: inqR.count ?? 0,
-          inProgressQuotations: quotR.count ?? 0,
-          activeBookings: bkgR.count ?? 0,
-          openTickets: tickR.count ?? 0,
-          pendingEVs: evR.count ?? 0,
-        });
-      }
-
-      setLoadingDept(false);
-    }
-
-    load();
-  }, [dept, userId]);
+  const openInquiries     = deptQueueData?.openInquiries     ?? [];
+  const awaitingClient    = deptQueueData?.awaitingClient    ?? [];
+  const pricingRequests   = deptQueueData?.pricingRequests   ?? [];
+  const pricingInProgress = deptQueueData?.pricingInProgress ?? [];
+  const activeBookings    = deptQueueData?.activeBookings    ?? [];
+  const acctTickets       = deptQueueData?.acctTickets       ?? [];
+  const pendingEVs        = deptQueueData?.pendingEVs        ?? [];
+  const execCounts        = deptQueueData?.execCounts        ?? {
+    openInquiries: 0, inProgressQuotations: 0, activeBookings: 0, openTickets: 0, pendingEVs: 0,
+  };
 
   // ── Derived attention count ───────────────────────────────────────────────
   const attentionCount = myTickets.length + myApprovals.length;

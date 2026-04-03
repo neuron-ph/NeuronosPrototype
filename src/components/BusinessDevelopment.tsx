@@ -80,7 +80,7 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
         contact_person_name: row.contact_person_name || row.contact_name || null,
       }));
     },
-    staleTime: 30_000,
+    // Inherits 5-minute staleTime from global QueryClient config
   });
 
   const { data: projects = [], isLoading: projectsLoading } = useQuery<Project[]>({
@@ -93,7 +93,7 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
       if (error) throw new Error(error.message);
       return data || [];
     },
-    staleTime: 30_000,
+    // Inherits 5-minute staleTime from global QueryClient config
   });
 
   const isLoading = quotationsLoading || projectsLoading;
@@ -189,65 +189,55 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
         return;
       }
 
-      // Fetch contact info if contact_id exists
-      if (selectedActivity.contact_id) {
-        try {
-          const { data: backendContact } = await supabase
-            .from('contacts')
-            .select('*')
-            .eq('id', selectedActivity.contact_id)
-            .maybeSingle();
-          
-          if (backendContact) {
-            const bdContact: Contact = {
-              id: backendContact.id,
-              name: `${backendContact.first_name || ''} ${backendContact.last_name || ''}`.trim(),
-              first_name: backendContact.first_name || '',
-              last_name: backendContact.last_name || '',
-              email: backendContact.email,
-              phone: backendContact.phone || '',
-              mobile_number: backendContact.phone || '',
-              company_id: backendContact.customer_id || backendContact.id,
-              lifecycle_stage: backendContact.status === "Customer" ? "Customer" : 
-                               backendContact.status === "MQL" ? "MQL" : 
-                               backendContact.status === "Prospect" ? "SQL" : "Lead",
-              lead_status: "Connected",
-              job_title: backendContact.title || '',
-              title: backendContact.title || null,
-              customer_id: backendContact.customer_id || null,
-              owner_id: '',
-              notes: backendContact.notes || null,
-              created_by: null,
-              created_at: backendContact.created_date || backendContact.created_at,
-              updated_at: backendContact.updated_at
-            };
-            setActivityContactInfo(bdContact);
-          }
-        } catch (error) {
-          console.error('Error fetching activity contact:', error);
-        }
-      }
-
-      // Fetch customer info if customer_id exists
-      if (selectedActivity.customer_id) {
-        try {
-          const { data: customerData } = await supabase
-            .from('customers')
-            .select('*')
-            .eq('id', selectedActivity.customer_id)
-            .maybeSingle();
-          
-          if (customerData) {
-            setActivityCustomerInfo(customerData);
-          }
-        } catch (error) {
-          console.error('Error fetching activity customer:', error);
-        }
-      }
-
-      // Set user name from activity user_id
       if (selectedActivity.user_id) {
         setActivityUserName(selectedActivity.user_id);
+      }
+
+      const contactQuery = selectedActivity.contact_id
+        ? supabase.from('contacts').select('*').eq('id', selectedActivity.contact_id).maybeSingle()
+        : Promise.resolve({ data: null });
+
+      const customerQuery = selectedActivity.customer_id
+        ? supabase.from('customers').select('*').eq('id', selectedActivity.customer_id).maybeSingle()
+        : Promise.resolve({ data: null });
+
+      try {
+        const [{ data: backendContact }, { data: customerData }] = await Promise.all([
+          contactQuery,
+          customerQuery,
+        ]);
+
+        if (backendContact) {
+          const bdContact: Contact = {
+            id: backendContact.id,
+            name: `${backendContact.first_name || ''} ${backendContact.last_name || ''}`.trim(),
+            first_name: backendContact.first_name || '',
+            last_name: backendContact.last_name || '',
+            email: backendContact.email,
+            phone: backendContact.phone || '',
+            mobile_number: backendContact.phone || '',
+            company_id: backendContact.customer_id || backendContact.id,
+            lifecycle_stage: backendContact.status === "Customer" ? "Customer" :
+                             backendContact.status === "MQL" ? "MQL" :
+                             backendContact.status === "Prospect" ? "SQL" : "Lead",
+            lead_status: "Connected",
+            job_title: backendContact.title || '',
+            title: backendContact.title || null,
+            customer_id: backendContact.customer_id || null,
+            owner_id: '',
+            notes: backendContact.notes || null,
+            created_by: null,
+            created_at: backendContact.created_date || backendContact.created_at,
+            updated_at: backendContact.updated_at
+          };
+          setActivityContactInfo(bdContact);
+        }
+
+        if (customerData) {
+          setActivityCustomerInfo(customerData);
+        }
+      } catch (error) {
+        console.error('Error fetching activity related data:', error);
       }
     };
 
@@ -263,38 +253,23 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
         return;
       }
 
-      // Fetch contact if contact_id exists
-      if (selectedTask.contact_id) {
-        try {
-          const { data: contactData } = await supabase
-            .from('contacts')
-            .select('*')
-            .eq('id', selectedTask.contact_id)
-            .maybeSingle();
-          
-          if (contactData) {
-            setTaskContacts([contactData]);
-          }
-        } catch (error) {
-          console.error('Error fetching task contact:', error);
-        }
-      }
+      const contactQuery = selectedTask.contact_id
+        ? supabase.from('contacts').select('*').eq('id', selectedTask.contact_id).maybeSingle()
+        : Promise.resolve({ data: null });
 
-      // Fetch customer if customer_id exists
-      if (selectedTask.customer_id) {
-        try {
-          const { data: customerData } = await supabase
-            .from('customers')
-            .select('*')
-            .eq('id', selectedTask.customer_id)
-            .maybeSingle();
-          
-          if (customerData) {
-            setTaskCustomers([customerData]);
-          }
-        } catch (error) {
-          console.error('Error fetching task customer:', error);
-        }
+      const customerQuery = selectedTask.customer_id
+        ? supabase.from('customers').select('*').eq('id', selectedTask.customer_id).maybeSingle()
+        : Promise.resolve({ data: null });
+
+      try {
+        const [{ data: contactData }, { data: customerData }] = await Promise.all([
+          contactQuery,
+          customerQuery,
+        ]);
+        if (contactData) setTaskContacts([contactData]);
+        if (customerData) setTaskCustomers([customerData]);
+      } catch (error) {
+        console.error('Error fetching task related data:', error);
       }
     };
 

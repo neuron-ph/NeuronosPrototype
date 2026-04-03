@@ -62,26 +62,17 @@ export function ContractsModule({ currentUser, onCreateTicket, initialContract, 
         .from('quotations')
         .select('*')
         .eq('quotation_type', 'contract')
-        .in('contract_status', ['Active', 'Expiring', 'Expired', 'Renewed']);
+        .or(
+          'contract_status.in.(Active,Expiring,Expired,Renewed),' +
+          'status.in.(Converted to Contract,Active Contract)'
+        )
+        .order('created_at', { ascending: false });
 
       if (error) throw new Error(error.message);
-
-      const { data: converted, error: convError } = await supabase
-        .from('quotations')
-        .select('*')
-        .eq('quotation_type', 'contract')
-        .in('status', ['Converted to Contract', 'Active Contract']);
-
-      const allContracts = [...(data || [])];
-      if (!convError && converted) {
-        const existingIds = new Set(allContracts.map(c => c.id));
-        converted.forEach(c => { if (!existingIds.has(c.id)) allContracts.push(c); });
-      }
-
-      console.log(`ContractsModule: ${allContracts.length} activated contracts found`);
-      return allContracts;
+      console.log(`ContractsModule: ${(data ?? []).length} activated contracts found`);
+      return data ?? [];
     },
-    staleTime: 30_000,
+    // Inherits 5-minute staleTime from global QueryClient config
   });
   const refreshContracts = () => { refetch(); };
 
