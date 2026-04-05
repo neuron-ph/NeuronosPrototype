@@ -10,6 +10,7 @@ import { Toaster } from "./components/ui/sonner";
 import type { Customer } from "./types/bd";
 import { NeuronLogo } from "./components/NeuronLogo";
 import { useWorkspaceTheme } from "./theme/useWorkspaceTheme";
+import { useReferenceDataPrefetch } from "./hooks/useReferenceDataPrefetch";
 import { BetaWelcomeScreen } from "./components/onboarding/BetaWelcomeScreen";
 import posthog from "posthog-js";
 
@@ -892,6 +893,7 @@ function GuardedLayout({ allowedDepartments, requireMinRole }: { allowedDepartme
 function AppContent() {
   const { isAuthenticated, isLoading, user } = useUser();
   useWorkspaceTheme();
+  useReferenceDataPrefetch();
 
   const [showWelcome, setShowWelcome] = useState(false);
   useEffect(() => {

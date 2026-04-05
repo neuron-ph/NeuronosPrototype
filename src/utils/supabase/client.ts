@@ -9,8 +9,19 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? publicAnonKey;
 // refresh coordination; if a previous session's lock is never released
 // (e.g. after an expired-token reload), all subsequent queries queue forever.
 // A no-op lock is safe for single-tab apps where cross-tab coordination isn't needed.
+
+// In dev/preview: give each tab its own auth slot using window.name as a stable
+// tab ID (persists across refreshes within the same tab, empty for new tabs).
+// This prevents session bleed-through when opening a new tab from an existing one.
+function getStorageKey(): string {
+  if (import.meta.env.VITE_SESSION_STORAGE_AUTH !== 'true') return 'sb-auth';
+  if (!window.name) window.name = crypto.randomUUID();
+  return `sb-auth-${window.name}`;
+}
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
+    storageKey: getStorageKey(),
     lock: <R>(_name: string, _acquireTimeout: number, fn: () => Promise<R>) => fn(),
   },
 });
