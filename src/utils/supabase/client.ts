@@ -11,6 +11,7 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? publicAnonKey;
 // A no-op lock is safe for single-tab apps where cross-tab coordination isn't needed.
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
+    storage: import.meta.env.VITE_SESSION_STORAGE_AUTH === 'true' ? window.sessionStorage : window.localStorage,
     lock: <R>(_name: string, _acquireTimeout: number, fn: () => Promise<R>) => fn(),
   },
 });
