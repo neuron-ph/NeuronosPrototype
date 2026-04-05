@@ -57,15 +57,23 @@ Deno.serve(async (req: Request) => {
 
     if (action === "resetPassword") {
       const { userId, newPassword } = params as { userId: string; newPassword: string };
-      const { error } = await adminClient.auth.admin.updateUserById(userId, { password: newPassword });
+      const { data: profile, error: lookupError } = await adminClient
+        .from("users").select("auth_id").eq("id", userId).maybeSingle();
+      if (lookupError) throw lookupError;
+      if (!profile?.auth_id) throw new Error("User auth account not found");
+      const { error } = await adminClient.auth.admin.updateUserById(profile.auth_id, { password: newPassword });
       if (error) throw error;
       return respond({ success: true });
     }
 
     if (action === "deleteUser") {
       const { userId } = params as { userId: string };
-      // Delete auth account first (cascade won't fire for auth.users)
-      const { error: authError } = await adminClient.auth.admin.deleteUser(userId);
+      // Look up auth_id — auth.admin.deleteUser needs the auth UUID, not the public users.id
+      const { data: profile, error: lookupError } = await adminClient
+        .from("users").select("auth_id").eq("id", userId).maybeSingle();
+      if (lookupError) throw lookupError;
+      if (!profile?.auth_id) throw new Error("User auth account not found");
+      const { error: authError } = await adminClient.auth.admin.deleteUser(profile.auth_id);
       if (authError) throw authError;
       // Delete the users row (may already be gone via trigger, ignore error)
       await adminClient.from("users").delete().eq("id", userId);
