@@ -13,6 +13,8 @@ import { useCustomerOptions } from "./shared/useCustomerOptions";
 import type { TruckingLineItem } from "../../types/pricing";
 import { normalizeTruckingLineItems, extractContractDestinations } from "../../utils/contractQuantityExtractor";
 import { fetchFullContract } from "../../utils/contractLookup";
+import { logCreation } from "../../utils/activityLog";
+import { useUser } from "../../hooks/useUser";
 import { FormComboBox } from "../pricing/quotations/FormComboBox";
 import { ConsigneePicker } from "../shared/ConsigneePicker";
 
@@ -33,6 +35,7 @@ export function CreateTruckingBookingPanel({
   onClose,
   onSuccess,
 }: CreateTruckingBookingPanelProps) {
+  const { user } = useUser();
   const [loading, setLoading] = useState(false);
   // ✨ CONTRACT: Detected contract ID for auto-linking
   const [detectedContractId, setDetectedContractId] = useState<string | null>(null);
@@ -127,6 +130,7 @@ export function CreateTruckingBookingPanel({
 
       if (error) throw new Error(error.message);
 
+      logCreation("booking", data.id, data.booking_number ?? data.id, { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" });
       toast.success("Trucking booking created successfully");
       onSuccess?.(data);
       onClose();

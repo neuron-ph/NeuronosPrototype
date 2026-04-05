@@ -11,6 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "../../../lib/queryKeys";
 import { useDataScope } from "../../../hooks/useDataScope";
 import { NeuronRefreshButton } from "../../shared/NeuronRefreshButton";
+import { logDeletion } from "../../../utils/activityLog";
 
 interface ForwardingBookingsProps {
   onSelectBooking: (booking: ForwardingBooking) => void;
@@ -129,6 +130,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
       const { error } = await supabase.from('bookings').delete().eq('id', bookingId);
       if (error) throw error;
 
+      logDeletion("booking", bookingId, bookingId, { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
       toast.success('Booking deleted successfully');
       fetchBookings(); // Refresh list
     } catch (error) {

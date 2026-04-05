@@ -4,6 +4,7 @@ import { useNavigate } from "react-router";
 import { supabase } from "../../utils/supabase/client";
 import { queryKeys } from "../../lib/queryKeys";
 import { useUser } from "../../hooks/useUser";
+import { logCreation, logDeletion, logActivity } from "../../utils/activityLog";
 import { toast } from "sonner@2.0.3";
 import {
   Plus, Users, Shield, UsersRound,
@@ -457,6 +458,7 @@ function EditTeamDialog({ team, onClose, onSaved }: { team: Team | null; onClose
 
 function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void }) {
   const queryClient = useQueryClient();
+  const { user: currentUser } = useUser();
   const [expanded, setExpanded]     = useState<string | null>(null);
   const [creating, setCreating]     = useState(false);
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
@@ -504,9 +506,11 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
   const handleCreate = async () => {
     if (!newName.trim()) { toast.error("Team name is required."); return; }
     setSaving(true);
-    const { error } = await supabase.from("teams").insert({ name: newName.trim(), department: newDept, leader_id: newLeaderId || null });
+    const { data: newTeam, error } = await supabase.from("teams").insert({ name: newName.trim(), department: newDept, leader_id: newLeaderId || null }).select().single();
     setSaving(false);
     if (error) { toast.error("Failed to create team."); return; }
+    const actor = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
+    logCreation("team", newTeam.id, newTeam.name ?? newTeam.id, actor);
     toast.success(`Team "${newName}" created.`);
     setCreating(false);
     setNewName(""); setNewDept("Business Development"); setNewLeaderId("");
@@ -520,6 +524,8 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
     const { error } = await supabase.from("teams").delete().eq("id", teamId);
     setDeletingId(null);
     if (error) { toast.error("Failed to delete team."); return; }
+    const actor = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
+    logDeletion("team", teamId, teamName, actor);
     toast.success(`Team "${teamName}" deleted.`);
     fetchTeams();
     queryClient.invalidateQueries({ queryKey: queryKeys.users.list() });
@@ -733,6 +739,9 @@ function AccessOverridesTab({ onCountUpdate }: { onCountUpdate: (count: number) 
     const { error } = await supabase.from("permission_overrides").upsert(payload, { onConflict: "user_id" });
     setSaving(false);
     if (error) { toast.error("Failed to save override."); return; }
+    const targetUser = allUsers.find(u => u.id === formUserId);
+    const actor = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
+    logActivity("user", formUserId, targetUser?.name ?? formUserId, "updated", actor, { description: "Permissions updated" });
     toast.success("Access override saved.");
     setAdding(false);
     setFormUserId(""); setFormScope("department_wide"); setFormDepts([]); setFormNotes("");

@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { X, Loader2, Plus } from "lucide-react";
+import { useUser } from "../../../hooks/useUser";
+import { logActivity } from "../../../utils/activityLog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../../ui/dialog";
 import { Label } from "../../ui/label";
 import { Input } from "../../ui/input";
@@ -17,6 +19,7 @@ interface AddChargeModalProps {
 }
 
 export function AddChargeModal({ isOpen, onClose, onSuccess, projectId, bookingId }: AddChargeModalProps) {
+  const { user } = useUser();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     description: "",
@@ -77,6 +80,8 @@ export function AddChargeModal({ isOpen, onClose, onSuccess, projectId, bookingI
       });
 
       if (!insertError) {
+        const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+        logActivity("billing", projectId, formData.description || projectId, "created", actor);
         toast.success("Charge added successfully");
         onSuccess();
         onClose();

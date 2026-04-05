@@ -3,6 +3,8 @@ import { Search, Plus, Mail, Phone, Building2, Users, UserCheck, UserCircle, Mor
 import { NeuronKPICard } from "../ui/NeuronKPICard";
 import { supabase } from "../../utils/supabase/client";
 import { useUsers } from "../../hooks/useUsers";
+import { useUser } from "../../hooks/useUser";
+import { logCreation } from "../../utils/activityLog";
 import { useContacts } from "../../hooks/useContacts";
 import { useCRMActivities } from "../../hooks/useCRMActivities";
 import { AddContactPanel } from "../bd/AddContactPanel";
@@ -46,6 +48,7 @@ export function ContactsListWithFilters({ userDepartment, onViewContact }: Conta
   const [ownerFilter, setOwnerFilter] = useState<string>("All");
   const [isAddContactOpen, setIsAddContactOpen] = useState(false);
 
+  const { user } = useUser();
   const { scope, isLoaded } = useDataScope();
 
   // Direct Supabase query for BD users (replaces Edge Function fetch)
@@ -81,7 +84,6 @@ export function ContactsListWithFilters({ userDepartment, onViewContact }: Conta
       //   owner_id, lifecycle_stage, lead_status, notes
       // These map directly to the backend POST /contacts handler field names.
       const customerId = contactData.customer_id || contactData.company_id || null;
-      const customer = customers.find((c: any) => c.id === customerId);
 
       const firstName = contactData.first_name || '';
       const lastName = contactData.last_name || '';
@@ -106,6 +108,8 @@ export function ContactsListWithFilters({ userDepartment, onViewContact }: Conta
       }).select().single();
 
       if (error) throw error;
+      const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+      logCreation("contact", data.id, data.name ?? data.id, _actor);
       invalidateContacts();
       setIsAddContactOpen(false);
     } catch (error) {

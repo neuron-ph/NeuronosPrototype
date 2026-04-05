@@ -3,6 +3,8 @@ import { useTeams } from "../../hooks/useTeams";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { supabase } from "../../utils/supabase/client";
+import { useUser } from "../../hooks/useUser";
+import { logActivity } from "../../utils/activityLog";
 import { SidePanel } from "../common/SidePanel";
 import { CustomDropdown } from "../bd/CustomDropdown";
 
@@ -49,6 +51,7 @@ function FieldLabel({ children }: { children: string }) {
 }
 
 export function EditUserPanel({ isOpen, user, onClose, onSaved }: Props) {
+  const { user: currentUser } = useUser();
   const [department, setDepartment] = useState(user.department);
   const [role, setRole] = useState(user.role);
   const [position, setPosition] = useState(user.position || "");
@@ -79,6 +82,8 @@ export function EditUserPanel({ isOpen, user, onClose, onSaved }: Props) {
         .eq("id", user.id);
 
       if (error) throw new Error(error.message);
+      const actor = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
+      logActivity("user", user.id, user.name ?? user.email ?? user.id, "updated", actor, { description: "User profile updated" });
       toast.success("User updated");
       onSaved();
     } catch (err: unknown) {
@@ -98,6 +103,8 @@ export function EditUserPanel({ isOpen, user, onClose, onSaved }: Props) {
         .eq("id", user.id);
 
       if (error) throw new Error(error.message);
+      const actor = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
+      logActivity("user", user.id, user.name ?? user.email ?? user.id, "deactivated", actor);
       toast.success(`${user.name} has been deactivated`);
       onSaved();
     } catch (err: unknown) {

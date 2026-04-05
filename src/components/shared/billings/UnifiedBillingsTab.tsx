@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { Search, X, Plus, Filter, Download, Loader2, Pencil, Check } from "lucide-react";
+import { useUser } from "../../../hooks/useUser";
+import { logActivity } from "../../../utils/activityLog";
 import { CustomDropdown } from "../../bd/CustomDropdown";
 import { CustomDatePicker } from "../../common/CustomDatePicker";
 import { BillingsTable } from "./BillingsTable";
@@ -83,6 +85,7 @@ export function UnifiedBillingsTab({
   highlightId,
   pendingBillableCount,
 }: UnifiedBillingsTabProps) {
+  const { user } = useUser();
   // Stable reference for empty array to prevent infinite re-render loops
   const stableLinkedBookings = linkedBookings && linkedBookings.length > 0 ? linkedBookings : EMPTY_LINKED_BOOKINGS;
   
@@ -540,6 +543,8 @@ export function UnifiedBillingsTab({
           const saveError = results.find(r => r.error)?.error;
 
           if (!saveError) {
+              const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+              logActivity("billing", projectId, projectId, "updated", actor, { description: "Billing items saved" });
               toast.success("Changes saved successfully");
               setPendingChanges(false);
               onRefresh();
@@ -583,6 +588,8 @@ export function UnifiedBillingsTab({
       toast.error("Failed to void billing item");
       return;
     }
+    const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+    logActivity("billing", itemId, item.description ?? itemId, "cancelled", actor);
     toast.success("Billing item voided");
     onRefresh();
   };

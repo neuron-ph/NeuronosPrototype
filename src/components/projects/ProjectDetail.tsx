@@ -3,6 +3,7 @@ import { ArrowLeft, MoreVertical, Edit3, Copy, Archive, Trash2, Layout, FileText
 import type { Project, ProjectStatus } from "../../types/pricing";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
+import { logStatusChange } from "../../utils/activityLog";
 import { useProjectFinancials } from "../../hooks/useProjectFinancials";
 import { ProjectStatusSelector } from "./ProjectStatusSelector";
 import { ProjectBookingsTab } from "./ProjectBookingsTab";
@@ -152,7 +153,10 @@ export function ProjectDetail({
     try {
       const { error } = await supabase.from('projects').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', project.id);
       if (error) throw new Error(error.message);
-      
+
+      const _actor = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
+      logStatusChange("project", project.id, project.project_number ?? project.id, previousStatus, newStatus, _actor);
+
       toast.success(`Project status updated to ${newStatus}`);
       onUpdate(); // Refresh parent to show new status (server confirmation)
     } catch (error) {

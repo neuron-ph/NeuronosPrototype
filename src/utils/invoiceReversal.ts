@@ -1,5 +1,6 @@
 import { supabase } from "./supabase/client";
 import { NON_APPLIED_COLLECTION_STATUSES } from "./collectionResolution";
+import { logActivity, type ActivityActor } from "./activityLog";
 
 const ACTIVE_INVOICE_STATUSES = new Set(["draft", "posted", "approved", "paid", "open", "partial", "sent"]);
 const ACTIVE_INVOICE_PAYMENT_STATUSES = new Set(["paid", "partial"]);
@@ -102,7 +103,7 @@ export async function findInvoiceReversalDraft(originalInvoiceId: string): Promi
 
 const toNegative = (value: unknown): number => -Math.abs(Number(value) || 0);
 
-export async function createInvoiceReversalDraft(originalInvoice: any): Promise<any> {
+export async function createInvoiceReversalDraft(originalInvoice: any, actor?: ActivityActor): Promise<any> {
   const existingDraft = await findInvoiceReversalDocument(originalInvoice.id);
   if (existingDraft) {
     return existingDraft;
@@ -170,6 +171,10 @@ export async function createInvoiceReversalDraft(originalInvoice: any): Promise<
     .single();
 
   if (error) throw error;
+
+  if (actor) {
+    logActivity("invoice", originalInvoice.id, originalInvoice.invoice_number ?? originalInvoice.id, "updated", actor, { description: "Reversal created" });
+  }
 
   return data;
 }

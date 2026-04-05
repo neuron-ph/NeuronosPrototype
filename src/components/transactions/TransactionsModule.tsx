@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { Settings, ChevronDown, Globe, Wallet } from "lucide-react";
+import { useUser } from "../../hooks/useUser";
+import { logActivity } from "../../utils/activityLog";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../../lib/queryKeys";
 import { getAccounts, saveAccount, deleteAccount, getTransactions, getTransactionViewSettings, saveTransactionViewSettings } from "../../utils/accounting-api";
@@ -18,6 +20,7 @@ import { supabase } from "../../utils/supabase/client";
 import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
 
 export function TransactionsModule() {
+  const { user } = useUser();
   const [currency, setCurrency] = useState<Currency>("USD");
   const [selectedBankId, setSelectedBankId] = useState<string | null>(null);
   const [isAddAccountOpen, setIsAddAccountOpen] = useState(false);
@@ -242,9 +245,12 @@ export function TransactionsModule() {
           const { error: jeError } = await supabase.from('journal_entries').insert(journalEntry);
           if (jeError) throw new Error(jeError.message);
 
+          const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+          logActivity("journal_entry", txn.source_document_id, txn.description ?? txn.source_document_id, "posted", actor);
+
           // Update the evoucher status to posted
           await supabase.from('evouchers').update({ status: 'posted', updated_at: new Date().toISOString() }).eq('id', txn.source_document_id);
-          
+
           toast.success("Transaction posted to ledger");
           refreshTxns();
         } else {

@@ -21,6 +21,7 @@ import type { FinancialContainer } from "../../types/financials";
 import { ContractRateCardV2 as ContractRateMatrixEditor } from "./quotations/ContractRateCardV2";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
+import { logCreation, logStatusChange } from "../../utils/activityLog";
 import { CreateBookingFromContractPanel } from "../contracts/CreateBookingFromContractPanel";
 import type { InquiryService } from "../../types/pricing";
 import { useContractFinancials } from "../../hooks/useContractFinancials";
@@ -191,6 +192,8 @@ export function ContractDetailView({
 
       const { error } = await supabase.from('quotations').update(activationPayload).eq('id', quotation.id);
       if (!error) {
+        const _actorAct = { id: "current-user", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
+        logStatusChange("contract", quotation.id, quotation.quote_number ?? quotation.id, quotation.contract_status ?? "", "Active", _actorAct);
         toast.success("Contract activated successfully! Operations can now link bookings.");
         if (onUpdate) {
           onUpdate(updatedQuotation);
@@ -240,6 +243,8 @@ export function ContractDetailView({
       delete (renewedContract as any).project_id;
       const { data: newContract, error: renewError } = await supabase.from('quotations').insert(renewedContract).select().single();
       if (!renewError && newContract) {
+        const _actorRen = { id: "current-user", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
+        logCreation("contract", newContract.id, newContract.quote_number ?? newContract.id, _actorRen);
         toast.success(`Contract renewed as ${newContract.quote_number}`);
         setShowRenewModal(false);
         setRenewStart("");
@@ -722,6 +727,8 @@ export function ContractDetailView({
                     updated_at: new Date().toISOString(),
                   }).eq('id', quotation.id);
                   if (!statusError) {
+                    const _actorSC = { id: "current-user", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
+                    logStatusChange("contract", quotation.id, quotation.quote_number ?? quotation.id, contractStatus, newStatus, _actorSC);
                     toast.success(`Status changed to ${newStatus}`);
                     if (onUpdate) onUpdate({ ...quotation, contract_status: newStatus });
                   } else {

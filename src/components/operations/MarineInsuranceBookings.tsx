@@ -11,6 +11,7 @@ import { queryKeys } from "../../lib/queryKeys";
 import { useDataScope } from "../../hooks/useDataScope";
 import { SkeletonTable } from "../shared/NeuronSkeleton";
 import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
+import { logDeletion } from "../../utils/activityLog";
 
 interface MarineInsuranceBooking {
   bookingId: string;
@@ -120,6 +121,7 @@ export function MarineInsuranceBookings({ currentUser, pendingBookingId, initial
       const { error } = await supabase.from('bookings').delete().eq('id', bookingId);
       if (error) throw error;
 
+      logDeletion("booking", bookingId, bookingId, { id: "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
       toast.success('Booking deleted successfully');
       fetchBookings(); // Refresh list
     } catch (error) {

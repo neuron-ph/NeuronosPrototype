@@ -1,6 +1,7 @@
 import { supabase } from "../../../utils/supabase/client";
 import { canPerformEVAction } from "../../../utils/permissions";
 import { createWorkflowTicket } from "../../../utils/workflowTickets";
+import { logActivity, logApproval } from "../../../utils/activityLog";
 import { useState } from "react";
 import { CheckCircle, XCircle, Send, Ban, Loader2, ClipboardList, Unlock } from "lucide-react";
 import { toast } from "sonner@2.0.3";
@@ -54,6 +55,9 @@ export function EVoucherWorkflowPanel({
 
   const userId = currentUser?.id;
   const isOwner = !requestorId || requestorId === userId;
+  const actor = currentUser
+    ? { id: currentUser.id, name: currentUser.name, department: currentUser.department ?? "" }
+    : null;
 
   // Requestor actions (visible to EV owner only)
   const canSubmit = isOwner && currentStatus === "draft";
@@ -134,6 +138,7 @@ export function EVoucherWorkflowPanel({
         ? "pending_accounting"
         : "pending_ceo";
       await transition(nextStatus, "Approved by Team Leader / Manager");
+      if (actor) logApproval("evoucher", evoucherId, evoucherNumber, currentStatus, nextStatus, actor, true);
       toast.success(
         nextStatus === "pending_accounting"
           ? "Approved — forwarded to Accounting"
@@ -168,6 +173,7 @@ export function EVoucherWorkflowPanel({
     setIsSubmitting(true);
     try {
       await transition("pending_accounting", "Approved by CEO / Executive");
+      if (actor) logApproval("evoucher", evoucherId, evoucherNumber, currentStatus, "pending_accounting", actor, true);
       toast.success("Approved — forwarded to Accounting");
       if (currentUser?.id) {
         createWorkflowTicket({
@@ -238,6 +244,7 @@ export function EVoucherWorkflowPanel({
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           });
+          if (actor) logActivity("evoucher", evoucherId, evoucherNumber, "posted", actor);
         }
       }
 
@@ -249,6 +256,7 @@ export function EVoucherWorkflowPanel({
 
       if (updateError) throw updateError;
 
+      if (actor) logActivity("evoucher", evoucherId, evoucherNumber, "updated", actor, { description: "Unlocked for correction" });
       await writeHistory("Unlocked for GL Correction — Original Entry Reversed", currentStatus, "pending_accounting");
       toast.success("E-Voucher unlocked — original journal entry reversed. Post a new GL entry.");
       onStatusChange?.();

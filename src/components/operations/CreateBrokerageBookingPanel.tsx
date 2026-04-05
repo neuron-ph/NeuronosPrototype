@@ -12,6 +12,7 @@ import type { User } from "../../hooks/useUser";
 import { BookingCreationPanel } from "./shared/BookingCreationPanel";
 import { useCustomerOptions } from "./shared/useCustomerOptions";
 import { ConsigneePicker } from "../shared/ConsigneePicker";
+import { logCreation } from "../../utils/activityLog";
 
 // Brokerage Booking Form Data Interface
 interface BrokerageBookingFormData {
@@ -217,8 +218,9 @@ export function CreateBrokerageBookingPanel({
         throw new Error(error.message);
       }
 
+      logCreation("booking", data.id, data.booking_number ?? data.id, { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
       toast.success("Brokerage booking created successfully");
-      
+
       // Save team preference if requested and from Pricing
       if (source === "pricing" && teamAssignment?.saveAsDefault && customerId) {
         try {

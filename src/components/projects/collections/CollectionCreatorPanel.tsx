@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Loader2, ArrowRight, Check, Trash2 } from "lucide-react";
+import { logCreation } from "../../../utils/activityLog";
 import { toast } from "../../ui/toast-utils";
 import type { FinancialContainer } from "../../../types/financials";
 import type { LinkedBilling } from "../../../types/evoucher";
@@ -311,6 +312,9 @@ export function CollectionCreatorPanel({
         .single();
 
       if (insertErr) throw new Error(insertErr.message);
+
+      const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+      logCreation("collection", created.id, created.collection_number ?? created.id, actor);
 
       toast.success(`Collection ${collectionNumber} recorded successfully!`);
 

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { FileText, Plus, Loader2, Filter, CheckSquare, Square, ChevronRight, Printer, Mail } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../utils/supabase/client";
+import { logActivity, logStatusChange } from "../../utils/activityLog";
 import { toast } from "../ui/toast-utils";
 import type { Project } from "../../types/pricing";
 import type { EVoucher } from "../../types/evoucher";
@@ -66,8 +67,10 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
       }));
       
       const { error: insertError } = await supabase.from('evouchers').insert(billingItems);
-      
+
       if (!insertError) {
+        const actor = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
+        logActivity("billing", project.project_number, project.project_number, "created", actor);
         toast.success("Invoice generated successfully!", { id: "import-billing" });
         fetchBillings(); // Refresh the list
       } else {
@@ -146,7 +149,9 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
       );
 
       await Promise.all(updatePromises);
-      
+
+      const actor = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
+      logStatusChange("billing", statementRef, statementRef, "draft", "pending", actor);
       toast.success(`Statement ${statementRef} generated successfully!`);
       setSelectedIds(new Set());
       fetchBillings(); // Refresh
@@ -191,6 +196,8 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
       }).eq('statement_reference', statementRef);
 
       if (!finalizeError) {
+        const actor = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
+        logActivity("billing", statementRef, statementRef, "updated", actor, { description: "Billing finalized" });
         toast.success("Statement Finalized & Posted to Ledger!", { id: "finalize-stmt" });
         fetchBillings();
       } else {

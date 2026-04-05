@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Plus, Trash2, BookOpen, Loader2, ChevronDown } from "lucide-react";
 import { supabase } from "../../../utils/supabase/client";
 import { useUser } from "../../../hooks/useUser";
+import { logCreation } from "../../../utils/activityLog";
 import { toast } from "../../ui/toast-utils";
 import { SidePanel } from "../../common/SidePanel";
 
@@ -254,6 +255,8 @@ export function ManualJournalEntryPanel({
 
       if (jeError) throw jeError;
 
+      const actor = { id: user.id, name: user.name, department: user.department ?? "" };
+      logCreation("journal_entry", entryId, memo.trim() || entryId, actor);
       toast.success("Journal entry created");
       onCreated?.();
       onClose();

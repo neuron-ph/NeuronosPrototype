@@ -3,6 +3,8 @@ import { Plus, Search, Users as UsersIcon, MoreHorizontal, Building2, Target, Br
 import { NeuronKPICard } from "../ui/NeuronKPICard";
 import { supabase } from "../../utils/supabase/client";
 import { useUsers } from "../../hooks/useUsers";
+import { useUser } from "../../hooks/useUser";
+import { logCreation, logDeletion } from "../../utils/activityLog";
 import { useCustomers } from "../../hooks/useCustomers";
 import { useContacts } from "../../hooks/useContacts";
 import { useCRMActivities } from "../../hooks/useCRMActivities";
@@ -24,6 +26,8 @@ export function CustomersListWithFilters({ userDepartment, onViewCustomer }: Cus
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const { user } = useUser();
 
   const { scope, isLoaded } = useDataScope();
 
@@ -76,6 +80,8 @@ export function CustomersListWithFilters({ userDepartment, onViewCustomer }: Cus
     try {
       const { error } = await supabase.from('customers').delete().eq('id', customerId);
       if (!error) {
+        const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+        logDeletion("customer", customerId, customerName, _actor);
         invalidateCustomers();
         invalidateContacts();
         setOpenDropdownId(null);
@@ -91,12 +97,15 @@ export function CustomersListWithFilters({ userDepartment, onViewCustomer }: Cus
   // Handle save customer
   const handleSaveCustomer = async (customerData: Partial<Customer>) => {
     try {
+      const newCustId = `CUST-${Date.now()}`;
       const { error } = await supabase.from('customers').insert({
         ...customerData,
-        id: `CUST-${Date.now()}`,
+        id: newCustId,
         created_at: new Date().toISOString(),
       });
       if (error) throw error;
+      const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+      logCreation("customer", newCustId, customerData.name ?? newCustId, _actor);
       invalidateCustomers();
       invalidateContacts();
       setIsAddCustomerOpen(false);

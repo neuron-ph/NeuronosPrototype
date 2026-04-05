@@ -1,5 +1,6 @@
 import { supabase } from '../utils/supabase/client';
 import { createWorkflowTicket } from '../utils/workflowTickets';
+import { logActivity, logCreation } from '../utils/activityLog';
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../lib/queryKeys";
@@ -231,6 +232,8 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
 
         if (error) throw error;
         console.log('Quotation updated successfully');
+        const _actor = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
+        logActivity("quotation", d.id, d.quote_number ?? d.id, "updated", _actor);
 
         // Pricing → BD handoff: fire ticket when builder saves with status "Priced"
         if (d.status === "Priced" && currentUser?.id) {
@@ -261,6 +264,8 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
         });
         if (error) throw error;
         console.log('Quotation created successfully:', newId);
+        const _actorC = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
+        logCreation("quotation", newId, payload.quote_number ?? newId, _actorC);
         await fetchQuotations();
         setSubView("list");
       }
@@ -296,6 +301,8 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
 
       if (!error) {
         console.log("Quotation updated successfully");
+        const _actorU = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
+        logActivity("quotation", updatedQuotation.id, updatedQuotation.quotation_number ?? updatedQuotation.id, "updated", _actorU);
         await fetchQuotations();
       } else {
         console.error('Error updating quotation:', error.message);
@@ -427,12 +434,14 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
                     };
                     const isUpdate = !!data.id && !data.id.startsWith('quot-');
 
+                    const _actorInline = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
                     if (isUpdate) {
                       const { error } = await supabase
                         .from('quotations')
                         .update({ ...data, ...contractDateFields, updated_at: new Date().toISOString() })
                         .eq('id', data.id);
                       if (error) throw error;
+                      logActivity("contract", data.id, (data as any).quote_number ?? data.id, "updated", _actorInline);
                     } else {
                       const newId = `QUO-${Date.now()}`;
                       const { error } = await supabase

@@ -12,6 +12,7 @@ import { QuotationPDFScreen } from "../projects/quotation/screen/QuotationPDFScr
 import { QuotationFormView } from "../projects/quotation/QuotationFormView";
 import { supabase } from "../../utils/supabase/client";
 import { createWorkflowTicket, getOpenWorkflowTicket } from "../../utils/workflowTickets";
+import { logActivity, logCreation, logStatusChange } from "../../utils/activityLog";
 import { LinkedTicketBadge } from "../common/LinkedTicketBadge";
 import {
   getNormalizedContractStatus,
@@ -185,13 +186,18 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
       return;
     }
 
+    const _normalizedNew = normalizeQuotationStatus(newStatus, quotation);
     const updatedQuotation = {
       ...quotation,
-      status: normalizeQuotationStatus(newStatus, quotation),
+      status: _normalizedNew,
       disapproval_reason: reason,
       cancellation_reason: reason
     };
     onUpdate(updatedQuotation);
+    if (currentUser) {
+      const _actorSC = { id: currentUser.id, name: currentUser.name, department: currentUser.department };
+      logStatusChange("quotation", quotation.id, quotation.quote_number ?? quotation.id, quotation.status ?? "", _normalizedNew, _actorSC);
+    }
 
     // BD → Pricing handoff: create workflow ticket when submitting for pricing
     if (normalizeQuotationStatus(newStatus, quotation) === "Pending Pricing" && currentUser) {
@@ -322,6 +328,8 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
       };
       const { data: project, error: pError } = await supabase.from('projects').insert(projectData).select().single();
       if (pError) throw new Error(pError.message);
+      const _actorProj = { id: currentUser.id, name: currentUser.name, department: currentUser.department };
+      logCreation("project", project.id, project.project_number ?? project.id, _actorProj);
 
       const projectConversionPayload = {
         status: "Converted to Project" as QuotationNew["status"],
@@ -339,6 +347,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
         .update(projectConversionPayload)
         .eq('id', quotation.id);
       if (qError) throw new Error(qError.message);
+      logActivity("quotation", quotation.id, quotation.quote_number ?? quotation.id, "converted", _actorProj, { description: "Converted to project" });
 
       const updatedQuotation = { ...quotation, ...projectConversionPayload };
       onUpdate(updatedQuotation);
@@ -384,6 +393,8 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
         .eq('id', quotation.id);
 
       if (activateError) throw new Error(activateError.message);
+      const _actorAct = { id: currentUser.id, name: currentUser.name, department: currentUser.department };
+      logStatusChange("quotation", quotation.id, quotation.quote_number ?? quotation.id, quotation.status ?? "", "Active", _actorAct);
 
       const updatedContract = { ...quotation, ...contractActivationPayload };
       onUpdate(updatedContract);

@@ -1,6 +1,8 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { Loader2, ZoomIn, ZoomOut, Maximize, ChevronDown, User, Layout, Check, FileText, Calendar, Box, Truck, CreditCard, ArrowLeft, Download, Printer, RefreshCw, Coins } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useUser } from "../../../hooks/useUser";
+import { logCreation, logActivity } from "../../../utils/activityLog";
 import { toast } from "../../ui/toast-utils";
 import type { FinancialContainer } from "../../../types/financials";
 import type { Project } from "../../../types/pricing";
@@ -61,6 +63,7 @@ export function InvoiceBuilder({
   onRefreshData
 }: InvoiceBuilderProps) {
   // -- Common State --
+  const { user } = useUser();
   const [scale, setScale] = useState(0.85);
   const [autoScale, setAutoScale] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -514,6 +517,8 @@ export function InvoiceBuilder({
           const { data: batchResult, error: batchSaveError } = await supabase.from('evouchers').insert(batchInsertItems).select();
           if (batchSaveError) throw new Error(batchSaveError.message);
           const savedItems: any[] = batchResult || [];
+          const batchActor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+          savedItems.forEach(inv => logCreation("invoice", inv.id, inv.invoice_number ?? inv.id, batchActor));
           
           // Map Virtual IDs -> Real IDs
           const idMap = new Map<string, string>();
@@ -609,12 +614,16 @@ export function InvoiceBuilder({
 
       if (invoiceError) throw new Error(invoiceError.message);
 
+      const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+      logCreation("invoice", invoiceData.id, invoiceData.invoice_number ?? invoiceData.id, actor);
+
       // Mark selected billing items as invoiced
       const { error: updateError } = await supabase
         .from('billing_line_items')
         .update({ status: 'invoiced', invoice_id: invoiceData.id, invoice_number: invoiceData.invoice_number })
         .in('id', finalBillingItemIds);
       if (updateError) console.warn('[InvoiceBuilder] Failed to mark items as invoiced:', updateError.message);
+      else logActivity("invoice", invoiceData.id, invoiceData.invoice_number ?? invoiceData.id, "updated", actor, { description: "Marked as invoiced" });
 
       toast.success(`Invoice ${invoiceData.invoice_number} created`);
       if (onSuccess) onSuccess();
