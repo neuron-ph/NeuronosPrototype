@@ -8,10 +8,18 @@ import { logCreation } from "../../utils/activityLog";
 import { SidePanel } from "../common/SidePanel";
 import { CustomDropdown } from "../bd/CustomDropdown";
 
+interface CreatedUser {
+  id: string;
+  name: string;
+  email: string;
+  department: string;
+  role: string;
+}
+
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onCreated: () => void;
+  onCreated: (user: CreatedUser) => void;
 }
 
 const DEPARTMENTS = [
@@ -130,7 +138,7 @@ export function CreateUserPanel({ isOpen, onClose, onCreated }: Props) {
       const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
       logCreation("user", data.user.id, name.trim() ?? data.user.email ?? data.user.id, actor);
       toast.success(`Account created for ${name.trim()}`);
-      onCreated();
+      onCreated({ ...data.user, status } as CreatedUser & { status: string });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Unexpected error";
       toast.error(message);

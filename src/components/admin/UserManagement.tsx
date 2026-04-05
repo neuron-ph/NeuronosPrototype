@@ -381,7 +381,27 @@ function UsersTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
       />
 
       {showCreate && (
-        <CreateUserPanel isOpen={showCreate} onClose={() => setShowCreate(false)} onCreated={() => setShowCreate(false)} />
+        <CreateUserPanel
+          isOpen={showCreate}
+          onClose={() => setShowCreate(false)}
+          onCreated={(newUser) => {
+            // Optimistically insert the new user into the list immediately
+            queryClient.setQueryData<(UserRow & { status?: UserStatus; teams?: { name: string } | null })[]>(
+              queryKeys.users.list(),
+              (old = []) => {
+                const fresh = {
+                  ...newUser,
+                  is_active: (newUser as any).status !== "inactive",
+                  teams: null,
+                } as UserRow & { status?: UserStatus; teams?: null };
+                return [...old, fresh].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+              }
+            );
+            // Also refetch in background to get server-canonical data
+            queryClient.invalidateQueries({ queryKey: queryKeys.users.list() });
+            setShowCreate(false);
+          }}
+        />
       )}
     </>
   );
