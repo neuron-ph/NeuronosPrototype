@@ -5,6 +5,8 @@ import { ContactCreationModal } from "./ContactCreationModal";
 import { ContactDetailView } from "./ContactDetailView";
 import { QuotationBuilderV3 } from "../pricing/quotations/QuotationBuilderV3";
 import { supabase } from "../../utils/supabase/client";
+import { useUser } from "../../hooks/useUser";
+import { logActivity, logCreation } from "../../utils/activityLog";
 import { toast } from "../ui/toast-utils";
 import type { QuotationNew } from "../../types/pricing";
 import { CustomDropdown } from "../bd/CustomDropdown";
@@ -27,6 +29,7 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
   const [statusFilter, setStatusFilter] = useState("All Statuses");
   const [quotation, setQuotation] = useState<QuotationNew | null>(null);
 
+  const { user } = useUser();
   const queryClient = useQueryClient();
   const { contacts: allContacts, isLoading } = useContacts();
 
@@ -60,12 +63,15 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
   // Create new contact
   const handleCreateContact = async (contactData: Partial<Contact>) => {
     try {
+      const newId = `contact-${Date.now()}`;
       const { error } = await supabase.from('contacts').insert({
         ...contactData,
-        id: `contact-${Date.now()}`,
+        id: newId,
         created_at: new Date().toISOString(),
       });
       if (error) throw error;
+      const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+      logCreation("contact", newId, contactData.name ?? newId, _actor);
       queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all() });
       setIsCreating(false);
     } catch (error) {
@@ -79,6 +85,8 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
     try {
       const { error } = await supabase.from('contacts').update(updates).eq('id', id);
       if (error) throw error;
+      const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+      logActivity("contact", id, updates.name ?? selectedContact?.name ?? id, "updated", _actor);
       queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all() });
       if (selectedContact && selectedContact.id === id) {
         setSelectedContact({ ...selectedContact, ...updates });
@@ -146,13 +154,16 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
         }}
         onSave={async (newQuotation) => {
           try {
+            const newQId = `quot-${Date.now()}`;
             const { error } = await supabase.from('quotations').insert({
               ...newQuotation,
-              id: `quot-${Date.now()}`,
+              id: newQId,
               created_at: new Date().toISOString(),
             });
 
             if (error) throw error;
+            const _actorQ = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+            logCreation("quotation", newQId, (newQuotation as any).quotation_number ?? newQId, _actorQ);
             toast.success("Inquiry created successfully!");
             queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all() });
             setView("detail");

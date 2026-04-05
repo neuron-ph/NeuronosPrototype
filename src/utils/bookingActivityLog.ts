@@ -1,4 +1,5 @@
 import { supabase } from "./supabase/client";
+import { logActivity } from "./activityLog";
 
 export interface BookingActivityEntry {
   id: string;
@@ -57,19 +58,17 @@ export function appendBookingActivity(
     : entry.action === "note_added"   ? "note_added"
     : "updated";
 
-  // Fire-and-forget — do not await, optimistic UI is already updated locally
-  supabase.from("activity_log").insert({
-    entity_type:     "booking",
-    entity_id:       bookingId,
-    action_type:     actionType,
-    old_value:       entry.oldValue ?? null,
-    new_value:       entry.newValue ?? null,
-    user_name:       actor.name,
-    user_department: actor.department,
-    metadata: {
-      ...(entry.fieldName  ? { fieldName:  entry.fieldName  } : {}),
-      ...(entry.statusFrom ? { statusFrom: entry.statusFrom } : {}),
-      ...(entry.statusTo   ? { statusTo:   entry.statusTo   } : {}),
+  // Delegate to the shared logActivity utility (fire-and-forget)
+  logActivity(
+    "booking",
+    bookingId,
+    bookingId,
+    actionType,
+    { id: "", name: actor.name, department: actor.department },
+    {
+      oldValue: entry.oldValue ?? entry.statusFrom ?? undefined,
+      newValue: entry.newValue ?? entry.statusTo ?? undefined,
+      description: entry.fieldName ? `Updated ${entry.fieldName}` : undefined,
     },
-  });
+  );
 }

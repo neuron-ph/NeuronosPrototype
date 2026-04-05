@@ -2,6 +2,7 @@ import { useRef, useEffect, useState } from "react";
 import { UserPlus, MessageSquare, Check, CheckCircle, X, RotateCcw, Zap } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { useUser } from "../../hooks/useUser";
+import { logStatusChange } from "../../utils/activityLog";
 import { toast } from "sonner@2.0.3";
 import { useThread } from "../../hooks/useThread";
 import { MessageBubble } from "./MessageBubble";
@@ -96,6 +97,8 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated }: ThreadDetailPan
 
     if (!error) {
       await logSystemEvent("status_changed", { from: thread.status, to: nextStatus, changed_by_name: user!.name });
+      const actor = { id: user!.id, name: user!.name, department: user!.department };
+      logStatusChange("ticket", thread.id, thread.subject ?? thread.id, thread.status, nextStatus, actor);
 
       // If marking done, execute resolution action if present
       if (nextStatus === "done" && thread.resolution_action && thread.linked_record_type && thread.linked_record_id) {
@@ -128,6 +131,8 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated }: ThreadDetailPan
 
     if (!error) {
       await logSystemEvent("status_changed", { from: thread.status, to: "returned", changed_by_name: user!.name, reason: returnReason.trim() });
+      const actor = { id: user!.id, name: user!.name, department: user!.department };
+      logStatusChange("ticket", thread.id, thread.subject ?? thread.id, thread.status, "returned", actor);
       toast.success("Ticket returned");
       setShowReturnPanel(false);
       setReturnReason("");
@@ -179,8 +184,11 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated }: ThreadDetailPan
   const handleReopen = async () => {
     if (!isSender) return;
     setIsUpdatingStatus(true);
+    const oldStatus = thread.status;
     await supabase.from("tickets").update({ status: "open", updated_at: new Date().toISOString() }).eq("id", thread.id);
-    await logSystemEvent("status_changed", { from: thread.status, to: "open", changed_by_name: user!.name });
+    await logSystemEvent("status_changed", { from: oldStatus, to: "open", changed_by_name: user!.name });
+    const actor = { id: user!.id, name: user!.name, department: user!.department };
+    logStatusChange("ticket", thread.id, thread.subject ?? thread.id, oldStatus, "open", actor);
     toast.success("Ticket reopened");
     refresh();
     onThreadUpdated();
@@ -494,6 +502,7 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated }: ThreadDetailPan
       {showAssignModal && deptParticipants[0] && (
         <AssignModal
           ticketId={thread.id}
+          ticketSubject={thread.subject}
           department={deptParticipants[0].department!}
           onAssigned={() => { setShowAssignModal(false); refresh(); onThreadUpdated(); }}
           onClose={() => setShowAssignModal(false)}

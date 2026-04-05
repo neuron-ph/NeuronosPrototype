@@ -7,6 +7,9 @@ import type { QuotationNew } from "../../types/pricing";
 import { CustomDropdown } from "./CustomDropdown";
 import { ActivityTimelineTable } from "./ActivityTimelineTable";
 import { supabase } from "../../utils/supabase/client";
+import { useUser } from "../../hooks/useUser";
+import { logActivity, logCreation } from "../../utils/activityLog";
+import { toast } from "sonner@2.0.3";
 
 interface ContactDetailProps {
   contact: Contact;
@@ -157,6 +160,8 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
     setAttachments([newAttachment, ...attachments]);
   };
   
+  const { user } = useUser();
+
   // Backend uses 'customer_id', frontend alias is 'company_id' — support both
   const effectiveCustomerId = contact.customer_id || contact.company_id;
   const queryClient = useQueryClient();
@@ -352,7 +357,29 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
         .single();
 
       if (!updateError && updatedData) {
-        console.log("Contact updated successfully:", updatedData);
+        const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+
+        // Detect which fields changed and summarise old → new
+        const fieldLabels: Record<string, string> = {
+          name: "Name", title: "Title", email: "Email", phone: "Phone",
+          lifecycle_stage: "Stage", lead_status: "Lead Status", notes: "Notes",
+        };
+        const changedFields = Object.keys(fieldLabels).filter(f => {
+          const oldVal = (contact as Record<string, unknown>)[f];
+          const newVal = (updatedData as Record<string, unknown>)[f];
+          return oldVal !== newVal && (oldVal || newVal);
+        });
+        const details = changedFields.length === 1
+          ? {
+              oldValue: String((contact as Record<string, unknown>)[changedFields[0]] ?? ""),
+              newValue: String((updatedData as Record<string, unknown>)[changedFields[0]] ?? ""),
+              description: `Updated ${fieldLabels[changedFields[0]]}`,
+            }
+          : changedFields.length > 1
+            ? { description: `Updated ${changedFields.map(f => fieldLabels[f]).join(", ")}` }
+            : undefined;
+
+        logActivity("contact", contact.id, updatedData.name ?? contact.name ?? contact.id, "updated", _actor, details);
         queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all() });
         Object.assign(contact, updatedData, {
           job_title: updatedData.title,
@@ -360,13 +387,16 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
           company_id: updatedData.customer_id,
         });
         setEditedContact({ ...contact });
+        toast.success("Contact updated successfully");
+        setIsEditing(false);
       } else {
         console.error("Failed to update contact:", updateError?.message);
+        toast.error(`Failed to save: ${updateError?.message ?? "Unknown error"}`);
       }
     } catch (error) {
       console.error("Error saving contact:", error);
+      toast.error("Unable to save contact. Please try again.");
     }
-    setIsEditing(false);
   };
 
   const handleCancel = () => {

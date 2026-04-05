@@ -1,6 +1,7 @@
 import { supabase } from "./supabase/client";
 import { NON_APPLIED_COLLECTION_STATUSES } from "./collectionResolution";
 import { isInvoiceFinanciallyActive } from "./invoiceReversal";
+import { logActivity, type ActivityActor } from "./activityLog";
 
 export type BookingCancellationAction =
   | "safe-delete"
@@ -190,7 +191,7 @@ export const getBookingCancellationStatusMessage = (state: BookingFinancialState
   }
 };
 
-export async function voidBookingUnbilledCharges(bookingId: string): Promise<VoidBookingChargesResult> {
+export async function voidBookingUnbilledCharges(bookingId: string, actor?: ActivityActor): Promise<VoidBookingChargesResult> {
   const [
     { data: billingRows, error: billingFetchError },
     { data: evoucherRows, error: evoucherFetchError },
@@ -234,6 +235,10 @@ export async function voidBookingUnbilledCharges(bookingId: string): Promise<Voi
       .update({ status: "voided", updated_at: new Date().toISOString() })
       .in("id", evoucherIdsToVoid);
     if (error) throw error;
+  }
+
+  if (actor) {
+    logActivity("booking", bookingId, bookingId, "cancelled", actor);
   }
 
   return {

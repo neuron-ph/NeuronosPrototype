@@ -1,4 +1,5 @@
 import { supabase } from "./supabase/client";
+import { logCreation, type ActivityActor } from "./activityLog";
 
 export type WorkflowRecordType =
   | "quotation"
@@ -23,6 +24,7 @@ export interface WorkflowTicketParams {
   createdByName: string;
   createdByDept: string;
   autoCreated?: boolean;
+  actor?: ActivityActor;
 }
 
 /**
@@ -45,6 +47,7 @@ export async function createWorkflowTicket(
     createdByName,
     createdByDept,
     autoCreated = false,
+    actor,
   } = params;
 
   // 1. Create the ticket
@@ -71,6 +74,9 @@ export async function createWorkflowTicket(
   }
 
   const ticketId = ticket.id;
+  if (actor) {
+    logCreation("ticket", ticketId, subject ?? ticketId, actor);
+  }
 
   // 2. Add sender as participant
   await supabase.from("ticket_participants").insert({

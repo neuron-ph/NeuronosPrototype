@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from '../utils/supabase/client';
 import { toast } from '../components/ui/toast-utils';
 import { queryKeys } from "../lib/queryKeys";
+import { logCreation, logStatusChange, logDeletion, type ActivityActor } from '../utils/activityLog';
 
 type EVoucherContext = "bd" | "accounting" | "operations" | "collection" | "billing";
 
@@ -33,7 +34,7 @@ interface EVoucherData {
   linkedBillings?: { id: string; amount: number }[];
 }
 
-export function useEVoucherSubmit(context: EVoucherContext = "bd") {
+export function useEVoucherSubmit(context: EVoucherContext = "bd", actor?: ActivityActor) {
   const queryClient = useQueryClient();
 
   const getTransactionType = (data?: EVoucherData) => {
@@ -123,6 +124,7 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd") {
 
       if (insertErr) throw new Error(insertErr.message);
 
+      if (actor) logCreation("evoucher", created.id, created.voucher_number ?? created.id, actor);
       console.log('E-Voucher draft created:', created);
       return created;
     },
@@ -206,6 +208,7 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd") {
       const createdId = created.id;
       const createdVoucherNumber = created.voucher_number;
 
+      if (actor) logCreation("evoucher", createdId, createdVoucherNumber ?? createdId, actor);
       console.log('E-Voucher created:', createdVoucherNumber);
       console.log('Submitting E-Voucher for approval...');
 
@@ -215,6 +218,7 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd") {
         .eq('id', createdId);
 
       if (submitErr) throw new Error(submitErr.message);
+      if (actor) logStatusChange("evoucher", createdId, createdVoucherNumber ?? createdId, "draft", "pending", actor);
 
       await supabase.from('evoucher_history').insert({
         id: `EH-${Date.now()}`,
@@ -303,6 +307,7 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd") {
 
       if (insertErr) throw new Error(insertErr.message);
 
+      if (actor) logCreation("evoucher", created.id, created.voucher_number ?? created.id, actor);
       await supabase.from('evoucher_history').insert([
         {
           id: `EH-${Date.now()}-1`,
@@ -352,6 +357,7 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd") {
 
       if (deleteErr) throw new Error(deleteErr.message);
 
+      if (actor) logDeletion("evoucher", id, id, actor);
       console.log('E-Voucher deleted:', id);
       return true;
     },

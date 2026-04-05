@@ -3,6 +3,8 @@ import { X } from "lucide-react";
 import type { Expense } from "../../../types/operations";
 import { supabase } from "../../../utils/supabase/client";
 import { toast } from "../../ui/toast-utils";
+import { useUser } from "../../../hooks/useUser";
+import { logCreation } from "../../../utils/activityLog";
 
 interface CreateExpenseModalProps {
   bookingId: string;
@@ -29,6 +31,7 @@ export function CreateExpenseModal({
   onClose,
   onExpenseCreated
 }: CreateExpenseModalProps) {
+  const { user } = useUser();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -63,13 +66,15 @@ export function CreateExpenseModal({
         notes: notes || undefined,
       };
 
+      const expenseId = `exp-${Date.now()}`;
       const { error } = await supabase.from('expenses').insert({
         ...expenseData,
-        id: `exp-${Date.now()}`,
+        id: expenseId,
         created_at: new Date().toISOString(),
       });
 
       if (error) throw error;
+      logCreation("expense", expenseId, description || expenseId, { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" });
       toast.success("Expense created successfully");
       onExpenseCreated();
     } catch (error) {

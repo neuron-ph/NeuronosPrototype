@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { Loader2, ChevronDown, BookOpen } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../../../utils/supabase/client";
+import { useUser } from "../../../hooks/useUser";
+import { logActivity } from "../../../utils/activityLog";
 import { toast } from "../../ui/toast-utils";
 import { SidePanel } from "../../common/SidePanel";
 
@@ -137,6 +139,7 @@ export function CollectionGLPostingSheet({
   collectionId,
   onPosted,
 }: CollectionGLPostingSheetProps) {
+  const { user } = useUser();
   // ---- local form state ----
   const [debitAccountId, setDebitAccountId] = useState("");
   const [debitAccountName, setDebitAccountName] = useState("");
@@ -294,6 +297,11 @@ export function CollectionGLPostingSheet({
       });
 
       if (jeError) throw jeError;
+
+      if (user && collection) {
+        const actor = { id: user.id, name: user.name, department: user.department ?? "" };
+        logActivity("collection", collection.id, collection.reference_number ?? collection.id, "posted", actor);
+      }
 
       // 2. Link journal entry + mark collection as posted
       const { error: colError } = await supabase

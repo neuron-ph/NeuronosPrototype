@@ -21,6 +21,7 @@ import { RequestBillingButton } from "../../common/RequestBillingButton";
 import { loadBookingActivityLog, appendBookingActivity } from "../../../utils/bookingActivityLog";
 import { useUser } from "../../../hooks/useUser";
 import { fireBillingTicketOnCompletion } from "../../../utils/workflowTickets";
+import { logStatusChange, logDeletion } from "../../../utils/activityLog";
 
 interface ForwardingBookingDetailsProps {
   booking: ForwardingBooking;
@@ -134,6 +135,7 @@ export function ForwardingBookingDetails({
       if (!window.confirm(`Delete booking ${booking.bookingId}? This cannot be undone.`)) return;
       const { error } = await supabase.from('bookings').delete().eq('id', booking.bookingId);
       if (error) throw error;
+      logDeletion("booking", booking.bookingId, (booking as any).booking_number ?? booking.bookingId, { id: user?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
       toast.success('Booking deleted');
       onBack();
     } catch (err) {
@@ -208,6 +210,7 @@ export function ForwardingBookingDetails({
     try {
       const { error } = await supabase.from('bookings').update({ status: newStatus }).eq('id', booking.id || booking.bookingId);
       if (error) throw error;
+      logStatusChange("booking", booking.id || booking.bookingId, (booking as any).booking_number ?? booking.bookingId, oldStatus, newStatus, { id: user?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
       toast.success(`Status updated to ${newStatus}`);
       onBookingUpdated();
       if (newStatus === "Completed" && user?.id) {

@@ -1,4 +1,5 @@
 import { supabase } from '../utils/supabase/client';
+import { logActivity, logCreation } from '../utils/activityLog';
 import { useState, useEffect } from "react";
 import { ContactsListWithFilters } from "./crm/ContactsListWithFilters";
 import { CustomersListWithFilters } from "./crm/CustomersListWithFilters";
@@ -399,12 +400,14 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
       // Builder uses "quot-" prefix; update detection uses "QUO-" prefix
       const isUpdate = !!data.id && data.id.startsWith('QUO-');
 
+      const _actorBD = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
       if (isUpdate) {
         const { error } = await supabase
           .from('quotations')
           .update({ ...dbPayload, updated_at: new Date().toISOString() })
           .eq('id', data.id);
         if (error) throw error;
+        logActivity("quotation", data.id, (data as any).quotation_number ?? data.id, "updated", _actorBD);
         queryClient.invalidateQueries({ queryKey: queryKeys.quotations.list() });
         setSubView("list");
       } else {
@@ -416,6 +419,7 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
           updated_at: new Date().toISOString(),
         });
         if (error) throw error;
+        logCreation("quotation", newId, dbPayload.quotation_number ?? newId, _actorBD);
         queryClient.invalidateQueries({ queryKey: queryKeys.quotations.list() });
         setSubView("list");
       }
@@ -480,6 +484,8 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
         .eq('id', updatedQuotation.id);
 
       if (!error) {
+        const _actorUpd = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+        logActivity("quotation", updatedQuotation.id, updatedQuotation.quotation_number ?? updatedQuotation.id, "updated", _actorUpd);
         await fetchQuotations();
       } else {
         console.error('Error updating quotation:', error.message);
@@ -622,8 +628,10 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
                     };
                     
                     const { error } = await supabase.from('quotations').insert(newData);
-                    
+
                     if (!error) {
+                      const _actorInq = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+                      logCreation("quotation", newId, data.quotation_number ?? newId, _actorInq);
                       toast.success("Inquiry created successfully!");
                       setCustomerDetailKey(prev => prev + 1);
                       setSubView("detail");

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../utils/supabase/client";
+import { queryKeys } from "../../lib/queryKeys";
 import { useUser } from "../../hooks/useUser";
 import { useTeams } from "../../hooks/useTeams";
 import { toast } from "sonner@2.0.3";
@@ -78,6 +79,11 @@ export function UserDetailPage() {
       return data;
     },
     enabled: !!userId,
+    // Seed from list cache so page renders instantly on SPA navigation
+    placeholderData: () => {
+      const list = queryClient.getQueryData<{ id: string; [key: string]: unknown }[]>(queryKeys.users.list());
+      return list?.find((u) => u.id === userId) ?? undefined;
+    },
   });
 
   const handleStartEdit = () => {
@@ -256,7 +262,7 @@ export function UserDetailPage() {
                     ...(teamName ? [["Team", teamName]] : []),
                     ...(user.service_type ? [["Service Type", user.service_type]] : []),
                     ...(user.department === "Operations" ? [["Ops Role", getOpsDisplayLabel(user.role)]] : []),
-                    ["Member since", new Date(user.created_at).toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" })],
+                    ...(user.created_at ? [["Member since", new Date(user.created_at).toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" })]] : []),
                   ].map(([label, value]) => (
                     <span key={label} style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>
                       <span style={{ fontWeight: 500, color: "var(--neuron-ink-primary)" }}>{label}:</span> {value}

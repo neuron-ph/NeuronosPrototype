@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { supabase } from '../../utils/supabase/client';
+import { logCreation } from "../../utils/activityLog";
 import { toast } from "../ui/toast-utils";
 import type { QuotationNew } from "../../types/pricing";
 
@@ -55,7 +56,9 @@ export function CreateProjectModal({ quotation, onClose, onSuccess, currentUser 
 
       const { data, error } = await supabase.from('projects').insert(projectData).select().single();
       if (error) throw error;
-      
+      const _actor = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
+      logCreation("project", data.id, data.project_number ?? data.id, _actor);
+
       toast.success("Project created successfully!");
       onSuccess(data.id);
     } catch (error) {

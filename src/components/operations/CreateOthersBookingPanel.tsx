@@ -8,6 +8,8 @@ import { MovementToggle } from "./shared/MovementToggle";
 import { ContractDetectionBanner } from "./shared/ContractDetectionBanner";
 import { BookingCreationPanel } from "./shared/BookingCreationPanel";
 import { useCustomerOptions } from "./shared/useCustomerOptions";
+import { logCreation } from "../../utils/activityLog";
+import { useUser } from "../../hooks/useUser";
 
 interface CreateOthersBookingPanelProps {
   isOpen: boolean;
@@ -26,6 +28,7 @@ export function CreateOthersBookingPanel({
   onClose,
   onSuccess,
 }: CreateOthersBookingPanelProps) {
+  const { user } = useUser();
   const [loading, setLoading] = useState(false);
   // ✨ CONTRACT: Detected contract ID for auto-linking
   const [detectedContractId, setDetectedContractId] = useState<string | null>(null);
@@ -75,6 +78,7 @@ export function CreateOthersBookingPanel({
 
       if (error) throw new Error(error.message);
 
+      logCreation("booking", data.id, data.booking_number ?? data.id, { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" });
       toast.success("Service booking created successfully");
       onSuccess?.(data);
       onClose();

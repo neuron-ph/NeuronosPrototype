@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Search, Plus, Calendar, Flag, Phone, Mail, Send, Users, MessageSquare, MessageCircle, Linkedin, ListTodo, CheckCircle2 } from "lucide-react";
 import { supabase } from '../../utils/supabase/client';
+import { useUser } from "../../hooks/useUser";
+import { logCreation } from "../../utils/activityLog";
 import { toast } from "../ui/toast-utils";
 import { useDataScope } from '../../hooks/useDataScope';
 import type { Task, TaskPriority, TaskStatus, TaskType } from "../../types/bd";
@@ -21,6 +23,8 @@ export function TasksList({ onViewTask }: TasksListProps) {
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | "All">("All");
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
 
+  const { user } = useUser();
+
   const { scope, isLoaded } = useDataScope();
 
   // Build scope-aware filters for useTasks
@@ -34,6 +38,8 @@ export function TasksList({ onViewTask }: TasksListProps) {
       const newTask = { ...taskData, id: `task-${Date.now()}`, created_at: new Date().toISOString() };
       const { error } = await supabase.from('tasks').insert(newTask);
       if (error) throw error;
+      const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+      logCreation("task", newTask.id, newTask.title ?? newTask.id, _actor);
       toast.success('Task created successfully');
       invalidateTasks();
     } catch (error) {

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { X, Link2, Paperclip, FileText, Send, Save, Building2 } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { useUser } from "../../hooks/useUser";
+import { logCreation } from "../../utils/activityLog";
 import { toast } from "sonner@2.0.3";
 import { RecordBrowser } from "./RecordBrowser";
 import type { LinkedEntity } from "./RecordBrowser";
@@ -204,14 +205,24 @@ export function ComposePanel({ onClose, onSent, initialEntity, initialSubject, i
     setIsSending(true);
     const ticket = await createTicket("open");
     setIsSending(false);
-    if (ticket) { toast.success("Message sent"); onSent(); }
+    if (ticket) {
+      const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+      logCreation("ticket", ticket.id, ticket.subject ?? ticket.id, actor);
+      toast.success("Message sent");
+      onSent();
+    }
   };
 
   const handleSaveDraft = async () => {
     setIsSavingDraft(true);
     const ticket = await createTicket("draft");
     setIsSavingDraft(false);
-    if (ticket) { toast.success("Draft saved"); onSent(); }
+    if (ticket) {
+      const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+      logCreation("ticket", ticket.id, ticket.subject ?? ticket.id, actor);
+      toast.success("Draft saved");
+      onSent();
+    }
   };
 
   const allChipIds = [...recipients, ...ccRecipients].map((r) => r.id);

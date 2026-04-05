@@ -2,6 +2,8 @@ import { useState } from "react";
 import { ArrowLeft, CheckCircle, CheckSquare, CircleCheckBig, Flag, User, Building2, Phone, Mail, Users, Send, MessageCircle, MessageSquare, Linkedin, Upload, Paperclip, Trash2 } from "lucide-react";
 import { CustomDropdown } from "./CustomDropdown";
 import { supabase } from '../../utils/supabase/client';
+import { useUser } from "../../hooks/useUser";
+import { logActivity, logDeletion, logStatusChange } from "../../utils/activityLog";
 import { toast } from "../ui/toast-utils";
 import type { Task, TaskPriority, TaskStatus, TaskType } from "../../types/bd";
 
@@ -27,6 +29,8 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
   const [comments, setComments] = useState<Comment[]>([]);
   const [attachments, setAttachments] = useState<string[]>([]);
   const [isEditing, setIsEditing] = useState(false);
+
+  const { user } = useUser();
 
   const isCompleted = editedTask.status === 'Completed';
 
@@ -98,6 +102,8 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
     try {
       const { error } = await supabase.from('tasks').update(editedTask).eq('id', task.id);
       if (error) throw error;
+      const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+      logActivity("task", task.id, task.title ?? task.id, "updated", _actor);
       toast.success('Task updated successfully');
       setIsEditing(false);
       if (onUpdate) onUpdate();
@@ -128,6 +134,8 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
     try {
       const { error } = await supabase.from('tasks').delete().eq('id', task.id);
       if (error) throw error;
+      const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+      logDeletion("task", task.id, task.title ?? task.id, _actor);
       toast.success('Task deleted successfully');
       if (onDelete) {
         onDelete(); // Callback will navigate back and refresh
@@ -147,6 +155,8 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
       
       const { error: updateErr } = await supabase.from('tasks').update(updatedTask).eq('id', task.id);
       if (updateErr) throw updateErr;
+      const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+      logStatusChange("task", task.id, task.title ?? task.id, editedTask.status ?? "", "Completed", _actor);
 
       // Create activity record for completed task
       const activityData = {

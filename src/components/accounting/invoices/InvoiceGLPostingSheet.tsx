@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, ChevronDown, BookOpen, Receipt } from "lucide-react";
 import { supabase } from "../../../utils/supabase/client";
+import { logActivity } from "../../../utils/activityLog";
 import { toast } from "../../ui/toast-utils";
 import { SidePanel } from "../../common/SidePanel";
 import { useUser } from "../../../hooks/useUser";
@@ -313,6 +314,11 @@ export function InvoiceGLPostingSheet({
       });
 
       if (jeError) throw jeError;
+
+      if (user && invoice) {
+        const actor = { id: user.id, name: user.name, department: user.department ?? "" };
+        logActivity("invoice", invoice.id, invoice.invoice_number ?? invoice.id, "posted", actor);
+      }
 
       // 2. Update invoice — link journal entry and set status to posted
       const { error: invError } = await supabase

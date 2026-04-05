@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Plus, Trash2, Loader2, AlertTriangle } from "lucide-react";
 import { supabase } from "../../../utils/supabase/client";
+import { logCreation, logStatusChange } from "../../../utils/activityLog";
 import { toast } from "sonner@2.0.3";
 import { SidePanel } from "../../common/SidePanel";
 import type { LiquidationLineItem } from "../../../types/evoucher";
@@ -96,6 +97,9 @@ export function LiquidationForm({
           .eq("id", evoucherId);
         if (evError) throw evError;
 
+        const actor = { id: currentUser.id, name: currentUser.name, department: "" };
+        logStatusChange("evoucher", evoucherId, evoucherNumber, "liquidation_open", "liquidation_pending", actor);
+
         await supabase.from("evoucher_history").insert({
           id: `EH-${Date.now()}`,
           evoucher_id: evoucherId,
@@ -135,6 +139,8 @@ export function LiquidationForm({
             console.warn("Reimbursement EV creation failed — create manually:", reimburseError);
             toast.warning("Overspend reimbursement EV could not be auto-created. Please create it manually.");
           } else {
+            const reimburseActor = { id: currentUser.id, name: currentUser.name, department: "" };
+            logCreation("evoucher", `EV-REIMB-${Date.now()}`, `Reimbursement for ${evoucherNumber}`, reimburseActor);
             toast.info(`A draft Reimbursement EV for ₱${overspend.toLocaleString()} has been created. Submit it separately.`);
           }
         }

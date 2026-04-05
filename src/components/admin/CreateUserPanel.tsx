@@ -3,13 +3,23 @@ import { useTeams } from "../../hooks/useTeams";
 import { Eye, EyeOff, AlertCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { supabase } from "../../utils/supabase/client";
+import { useUser } from "../../hooks/useUser";
+import { logCreation } from "../../utils/activityLog";
 import { SidePanel } from "../common/SidePanel";
 import { CustomDropdown } from "../bd/CustomDropdown";
+
+interface CreatedUser {
+  id: string;
+  name: string;
+  email: string;
+  department: string;
+  role: string;
+}
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onCreated: () => void;
+  onCreated: (user: CreatedUser) => void;
 }
 
 const DEPARTMENTS = [
@@ -53,6 +63,7 @@ function FieldError({ message }: { message: string }) {
 }
 
 export function CreateUserPanel({ isOpen, onClose, onCreated }: Props) {
+  const { user } = useUser();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [department, setDepartment] = useState("");
@@ -124,8 +135,10 @@ export function CreateUserPanel({ isOpen, onClose, onCreated }: Props) {
           .eq("id", data.user.id);
       }
 
+      const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+      logCreation("user", data.user.id, name.trim() ?? data.user.email ?? data.user.id, actor);
       toast.success(`Account created for ${name.trim()}`);
-      onCreated();
+      onCreated({ ...data.user, status } as CreatedUser & { status: string });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Unexpected error";
       toast.error(message);

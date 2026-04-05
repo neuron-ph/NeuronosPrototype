@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, ChevronDown } from "lucide-react";
 import { supabase } from "../../../utils/supabase/client";
+import { logActivity } from "../../../utils/activityLog";
 import { toast } from "sonner@2.0.3";
 import { SidePanel } from "../../common/SidePanel";
 import type { EVoucherAPType } from "../../../types/evoucher";
@@ -231,6 +232,9 @@ export function GLConfirmationSheet({
         .eq("id", evoucherId);
 
       if (evError) throw evError;
+
+      const actor = { id: currentUser.id, name: currentUser.name, department: currentUser.department ?? "" };
+      logActivity("evoucher", evoucherId, evoucherNumber ?? evoucherId, "posted", actor);
 
       // Write history
       await supabase.from("evoucher_history").insert({

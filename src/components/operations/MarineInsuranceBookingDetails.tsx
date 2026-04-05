@@ -19,6 +19,7 @@ import { RequestBillingButton } from "../common/RequestBillingButton";
 import { loadBookingActivityLog, appendBookingActivity } from "../../utils/bookingActivityLog";
 import { useUser } from "../../hooks/useUser";
 import { fireBillingTicketOnCompletion } from "../../utils/workflowTickets";
+import { logStatusChange, logDeletion } from "../../utils/activityLog";
 
 
 interface MarineInsuranceBookingDetailsProps {
@@ -196,6 +197,7 @@ export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, curre
       if (!window.confirm(`Delete booking ${booking.bookingId}? This cannot be undone.`)) return;
       const { error } = await supabase.from('bookings').delete().eq('id', booking.bookingId);
       if (error) throw error;
+      logDeletion("booking", booking.bookingId, (booking as any).booking_number ?? booking.bookingId, { id: user?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
       toast.success('Booking deleted');
       onBack();
     } catch (err) {
@@ -239,6 +241,7 @@ export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, curre
     try {
       const { error } = await supabase.from('marine_insurance_bookings').update({ status: newStatus }).eq('bookingId', booking.bookingId);
       if (error) throw error;
+      logStatusChange("booking", booking.bookingId, (booking as any).booking_number ?? booking.bookingId, oldStatus, newStatus, { id: user?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
       toast.success(`Status updated to ${newStatus}`);
       onUpdate();
       if (newStatus === "Completed" && user?.id) {

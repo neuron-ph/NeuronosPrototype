@@ -2,6 +2,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import posthog from 'posthog-js';
 import { supabase } from '../utils/supabase/client';
+import { logActivity } from '../utils/activityLog';
 import type { Session } from '@supabase/supabase-js';
 
 export interface User {
@@ -386,6 +387,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('neuron_user', JSON.stringify(tempUser));
       }
 
+      logActivity("user", data.user.id, data.user.email ?? data.user.id, "login", {
+        id: data.user.id,
+        name: data.user.email ?? "",
+        department: "",
+      });
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message || 'Login failed' };
@@ -393,6 +399,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    if (user) {
+      logActivity("user", user.id, user.name ?? user.email ?? user.id, "logout", {
+        id: user.id,
+        name: user.name ?? "",
+        department: user.department ?? "",
+      });
+    }
     posthog.reset();
     // Clear local state immediately so the UI redirects to login without waiting
     setUser(null);

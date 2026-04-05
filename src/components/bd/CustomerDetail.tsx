@@ -15,6 +15,8 @@ import { CustomerInquiriesTab } from "./CustomerInquiriesTab";
 import { ConsigneeInlineSection } from "./ConsigneeInlineSection";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
+import { useUser } from "../../hooks/useUser";
+import { logActivity } from "../../utils/activityLog";
 
 interface CustomerDetailProps {
   customer: Customer;
@@ -151,6 +153,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
   const [isEditingTask, setIsEditingTask] = useState(false);
   const [editedTask, setEditedTask] = useState<Task | null>(null);
   const [isAddContactPanelOpen, setIsAddContactPanelOpen] = useState(false);
+  const { user } = useUser();
   const queryClient = useQueryClient();
 
   // Fetch quotations for this customer
@@ -212,7 +215,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
       const taskToCreate = {
         ...newTask,
         customer_id: customer.id,
-        owner_id: customer.owner_id || 'user-1', // Use customer's owner or default
+        owner_id: customer.owner_id || user?.id,
         status: 'Pending'
       };
 
@@ -377,6 +380,8 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
       };
       const { error } = await supabase.from('customers').update(updatePayload).eq('id', customer.id);
       if (error) throw error;
+      const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+      logActivity("customer", customer.id, customer.name ?? customer.id, "updated", _actor);
       queryClient.invalidateQueries({ queryKey: queryKeys.customers.all() });
       setLocalCustomer({ ...localCustomer, ...editedCustomer });
       toast.success("Customer saved successfully");
@@ -2060,14 +2065,13 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
         prefilledCustomerName={customer.company_name || customer.name}
         onSave={async (contactData) => {
           try {
-            console.log('[CustomerDetail] Creating contact for customer:', customer.id);
-            // Pre-populate customer_id with this customer
             const firstName = contactData.first_name || '';
             const lastName = contactData.last_name || '';
             const newContactData = {
               ...contactData,
               name: `${firstName} ${lastName}`.trim() || 'Contact',
-              customer_id: customer.id, // Set the current customer as the company
+              customer_id: customer.id,
+              created_by: user?.id,
             };
 
             const { error } = await supabase.from('contacts').insert({
@@ -2076,13 +2080,15 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
               created_at: new Date().toISOString(),
             });
             if (!error) {
-              console.log('Contact created successfully');
               queryClient.invalidateQueries({ queryKey: queryKeys.customers.consignees(customer.id) });
+              toast.success('Contact created successfully');
             } else {
               console.error('Failed to create contact:', error.message);
+              toast.error(`Unable to create contact: ${error.message}`);
             }
           } catch (error) {
             console.error('❌ Error creating contact:', error);
+            toast.error('Unable to create contact. Please try again.');
           }
         }}
       />

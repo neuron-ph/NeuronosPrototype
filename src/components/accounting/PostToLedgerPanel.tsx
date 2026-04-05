@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "../../lib/queryKeys";
 import { X, Save, ArrowRightLeft, Calendar } from "lucide-react";
+import { logActivity } from "../../utils/activityLog";
 import { toast } from "sonner@2.0.3";
 import { motion, AnimatePresence } from "motion/react";
 import { supabase } from "../../utils/supabase/client";
@@ -52,6 +53,9 @@ export function PostToLedgerPanel({ evoucher, isOpen, onClose, onSuccess, curren
         .eq('id', evoucher.id);
       
       if (updateErr) throw new Error(updateErr.message);
+
+      const actor = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
+      logActivity("evoucher", evoucher.id, evoucher.voucher_number ?? evoucher.id, "posted", actor);
 
       // Insert history record
       await supabase.from('evoucher_history').insert({

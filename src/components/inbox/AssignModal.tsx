@@ -3,10 +3,12 @@ import { X, UserCheck } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../../utils/supabase/client";
 import { useUser } from "../../hooks/useUser";
+import { logActivity } from "../../utils/activityLog";
 import { toast } from "sonner@2.0.3";
 
 interface AssignModalProps {
   ticketId: string;
+  ticketSubject?: string;
   department: string;
   onAssigned: () => void;
   onClose: () => void;
@@ -14,7 +16,7 @@ interface AssignModalProps {
 
 interface DeptMember { id: string; name: string; role: string; }
 
-export function AssignModal({ ticketId, department, onAssigned, onClose }: AssignModalProps) {
+export function AssignModal({ ticketId, ticketSubject, department, onAssigned, onClose }: AssignModalProps) {
   const { user } = useUser();
   const [isAssigning, setIsAssigning] = useState(false);
   const [note, setNote] = useState("");
@@ -77,6 +79,8 @@ export function AssignModal({ ticketId, department, onAssigned, onClose }: Assig
         .update({ last_message_at: new Date().toISOString(), updated_at: new Date().toISOString() })
         .eq("id", ticketId);
 
+      const actor = { id: user!.id, name: user!.name, department: user!.department };
+      logActivity("ticket", ticketId, ticketSubject ?? ticketId, "assigned", actor);
       toast.success(`Thread assigned to ${memberName}`);
       onAssigned();
     } catch (err) {

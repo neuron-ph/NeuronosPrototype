@@ -17,6 +17,7 @@ import { MultiInputField } from "../../shared/MultiInputField";
 import { BookingCreationPanel } from "../shared/BookingCreationPanel";
 import { useCustomerOptions } from "../shared/useCustomerOptions";
 import { ConsigneePicker } from "../../shared/ConsigneePicker";
+import { logCreation } from "../../../utils/activityLog";
 
 interface CreateForwardingBookingPanelProps {
   isOpen: boolean;
@@ -345,6 +346,7 @@ export function CreateForwardingBookingPanel({
         }
       }
 
+      logCreation("booking", createdBooking.id, createdBooking.booking_number ?? createdBooking.id, { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
       toast.success(`Forwarding booking ${createdBooking.booking_number} created successfully`);
       onBookingCreated(createdBooking);
       onClose();

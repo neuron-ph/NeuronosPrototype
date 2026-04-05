@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { CheckCircle2, FileText } from "lucide-react";
 import { supabase } from '../../utils/supabase/client';
+import { logApproval } from "../../utils/activityLog";
 import { toast } from "sonner@2.0.3";
 import { AddRequestForPaymentPanel } from "../accounting/AddRequestForPaymentPanel";
 import { PostToLedgerPanel } from "../accounting/PostToLedgerPanel";
@@ -67,7 +68,9 @@ export function BudgetRequestDetailPanel({
         .eq('id', request.id);
       
       if (error) throw error;
-      
+      const _actor = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
+      logApproval("budget_request", request.id, request.title ?? request.id, request.status ?? "", "Approved", _actor, true);
+
       // Insert history
       await supabase.from('evoucher_history').insert({
         id: `EH-${Date.now()}`,
@@ -79,7 +82,7 @@ export function BudgetRequestDetailPanel({
         performed_by_name: 'Current User',
         created_at: new Date().toISOString()
       });
-      
+
       toast.success("Budget request approved");
       if (onStatusChange) onStatusChange();
       

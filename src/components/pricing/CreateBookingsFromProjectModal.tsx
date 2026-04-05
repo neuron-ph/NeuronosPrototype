@@ -2,6 +2,7 @@ import { useState } from "react";
 import { X, Package, Check, Loader2 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { supabase } from "../../utils/supabase/client";
+import { logCreation } from "../../utils/activityLog";
 import type { Project, ServiceType } from "../../types/pricing";
 import { TeamAssignmentForm, type TeamAssignment } from "./TeamAssignmentForm";
 
@@ -218,6 +219,8 @@ export function CreateBookingsFromProjectModal({
       if (bookingError) {
         throw new Error(bookingError.message || "Failed to create booking");
       }
+      const _actorBk = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
+      logCreation("booking", bookingResult.id, bookingResult.booking_number ?? bookingResult.id, _actorBk);
 
       // Save handler preference if checkbox was checked
       if (serviceState.assignment.saveAsDefault) {
