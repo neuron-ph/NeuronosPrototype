@@ -8,6 +8,7 @@ import { RouteGuard } from "./components/RouteGuard";
 import { toast } from "sonner@2.0.3";
 import { Toaster } from "./components/ui/sonner";
 import type { Customer } from "./types/bd";
+import { RouteTracker } from "./components/RouteTracker";
 import { NeuronLogo } from "./components/NeuronLogo";
 import { useWorkspaceTheme } from "./theme/useWorkspaceTheme";
 import { useReferenceDataPrefetch } from "./hooks/useReferenceDataPrefetch";
@@ -354,18 +355,18 @@ function BDInquiriesPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const customerId = searchParams.get('customerId');
-  
+
   // TODO: Fetch customer data if customerId is provided
   const customerData = null;
-  
+
   const handleCreateTicket = (quotation: any) => {
     navigate('/inbox', quotation?.id ? { state: { compose: { entity_type: 'quotation', entity_id: quotation.id, entity_label: quotation.quotationNumber || quotation.id } } } : undefined);
   };
 
   return (
     <RouteWrapper page="bd-inquiries">
-      <BusinessDevelopment 
-        view="inquiries" 
+      <BusinessDevelopment
+        view="inquiries"
         customerData={customerData}
         inquiryId={inquiryId}
         currentUser={user}
@@ -509,15 +510,15 @@ function PricingQuotationsPage() {
   const { user } = useUser();
   const { inquiryId } = useParams();
   const navigate = useNavigate();
-  
+
   const handleCreateTicket = (quotation: any) => {
     navigate('/inbox', quotation?.id ? { state: { compose: { entity_type: 'quotation', entity_id: quotation.id, entity_label: quotation.quotationNumber || quotation.id } } } : undefined);
   };
 
   return (
     <RouteWrapper page="pricing-quotations">
-      <Pricing 
-        view="quotations" 
+      <Pricing
+        view="quotations"
         inquiryId={inquiryId}
         currentUser={user}
         onCreateTicket={handleCreateTicket}
@@ -924,6 +925,7 @@ function AppContent() {
 
   return (
     <>
+      <RouteTracker />
       {showWelcome && user && (
         <BetaWelcomeScreen userId={user.id} onDone={() => setShowWelcome(false)} />
       )}

@@ -2082,6 +2082,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
             if (!error) {
               queryClient.invalidateQueries({ queryKey: queryKeys.customers.consignees(customer.id) });
               toast.success('Contact created successfully');
+              setIsAddContactPanelOpen(false);
             } else {
               console.error('Failed to create contact:', error.message);
               toast.error(`Unable to create contact: ${error.message}`);

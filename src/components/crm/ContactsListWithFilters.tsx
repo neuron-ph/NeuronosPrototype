@@ -99,6 +99,7 @@ export function ContactsListWithFilters({ userDepartment, onViewContact }: Conta
         lifecycle_stage: contactData.lifecycle_stage || "Lead",
         lead_status: contactData.lead_status || "New",
         notes: contactData.notes || null,
+        created_by: user?.id ?? null,
       };
 
       const { data, error } = await supabase.from('contacts').insert({
@@ -111,10 +112,11 @@ export function ContactsListWithFilters({ userDepartment, onViewContact }: Conta
       const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
       logCreation("contact", data.id, data.name ?? data.id, _actor);
       invalidateContacts();
+      toast.success("Contact created.");
       setIsAddContactOpen(false);
     } catch (error) {
       console.error("Error creating contact:", error);
-      throw error;
+      toast.error("Failed to create contact. Please try again.");
     }
   };
 

@@ -7,9 +7,11 @@ import {
   fetchMyWork, fetchDeptQueue,
   type TicketItem, type EVoucherItem, type BookingItem, type QuotationItem,
 } from "../lib/dashboardFetchers";
+import { getRecents, trackRecent, type RecentItem, type RecentType } from "../lib/recents";
 import {
-  ArrowRight, Plus, Check, X, Package, FileText,
-  MessageSquare, Receipt, Clock, Inbox,
+  ArrowRight, Plus, Check, X,
+  Clock, Inbox,
+  User, Building2, FileText, FileQuestion, Truck, MessageSquare, Receipt, FolderOpen,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -23,13 +25,6 @@ interface TodoItem {
   done_at: string | null;
 }
 
-interface RecentItem {
-  label: string;
-  sub: string;
-  path: string;
-  type: "booking" | "quotation" | "ticket" | "evoucher";
-  time: string;
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -69,34 +64,43 @@ function bookingRoute(serviceType: string): string {
   return map[serviceType] ?? "/operations";
 }
 
-// ─── Recently viewed (localStorage) ──────────────────────────────────────────
+// ─── Recently viewed ──────────────────────────────────────────────────────────
+// trackRecent / getRecents / RecentItem imported from ../lib/recents
 
-const RECENTS_KEY = "neuron_recents_v1";
-
-function trackRecent(item: RecentItem) {
-  try {
-    const existing: RecentItem[] = JSON.parse(localStorage.getItem(RECENTS_KEY) || "[]");
-    const deduped = [item, ...existing.filter((r) => r.path !== item.path)].slice(0, 5);
-    localStorage.setItem(RECENTS_KEY, JSON.stringify(deduped));
-  } catch {}
-}
-
-function getRecents(): RecentItem[] {
-  try {
-    return (JSON.parse(localStorage.getItem(RECENTS_KEY) || "[]") as RecentItem[]).slice(0, 3);
-  } catch {
-    return [];
-  }
-}
-
-function recentTypeIcon(type: RecentItem["type"]) {
-  const cls = "w-3.5 h-3.5 flex-shrink-0";
-  if (type === "booking")    return <Package   className={cls} />;
-  if (type === "quotation")  return <FileText   className={cls} />;
-  if (type === "ticket")     return <MessageSquare className={cls} />;
-  if (type === "evoucher")   return <Receipt    className={cls} />;
+function recentTypeIcon(type: RecentType) {
+  const cls = "w-4 h-4";
+  if (type === "contact")   return <User          className={cls} />;
+  if (type === "customer")  return <Building2     className={cls} />;
+  if (type === "inquiry")   return <FileQuestion  className={cls} />;
+  if (type === "quotation") return <FileText      className={cls} />;
+  if (type === "booking")   return <Truck         className={cls} />;
+  if (type === "ticket")    return <MessageSquare className={cls} />;
+  if (type === "evoucher")  return <Receipt       className={cls} />;
+  if (type === "project")   return <FolderOpen    className={cls} />;
   return <FileText className={cls} />;
 }
+
+const RECENT_TYPE_COLOR: Record<RecentType, string> = {
+  booking:   "#0F766E", // teal — Operations
+  quotation: "#2563EB", // blue — Pricing
+  inquiry:   "#7C3AED", // violet — BD inquiry
+  ticket:    "#D97706", // amber — Inbox
+  evoucher:  "#EA580C", // orange — Accounting
+  project:   "#059669", // emerald — Projects
+  contact:   "#0891B2", // cyan — BD contact
+  customer:  "#16A34A", // green — BD customer
+};
+
+const RECENT_TYPE_LABEL: Record<RecentType, string> = {
+  booking:   "Booking",
+  quotation: "Quotation",
+  inquiry:   "Inquiry",
+  ticket:    "Ticket",
+  evoucher:  "E-Voucher",
+  project:   "Project",
+  contact:   "Contact",
+  customer:  "Customer",
+};
 
 // ─── Atoms ────────────────────────────────────────────────────────────────────
 
@@ -451,7 +455,7 @@ function TodoPanel({ userId }: { userId: string }) {
   const done = todos.filter((t) => t.done);
 
   return (
-    <Panel className="flex flex-col" style={{ minHeight: 0 }}>
+    <Panel className="flex flex-col h-full" style={{ minHeight: 0 }}>
       <PanelHeader
         title="My Tasks"
         action={
@@ -486,7 +490,7 @@ function TodoPanel({ userId }: { userId: string }) {
         </div>
       )}
 
-      <div className="overflow-y-auto" style={{ maxHeight: "320px" }}>
+      <div className="overflow-y-auto flex-1" style={{ minHeight: 0 }}>
         {loading ? (
           <><SkeletonRow /><SkeletonRow /><SkeletonRow /></>
         ) : open.length === 0 && done.length === 0 ? (
@@ -689,10 +693,11 @@ function DeptQuickCounts({
 // ─── Jump Back In ─────────────────────────────────────────────────────────────
 
 function JumpBackIn({ onNavigate }: { onNavigate: (path: string) => void }) {
-  const [recents] = useState<RecentItem[]>(() => getRecents());
+  const [recents, setRecents] = useState<RecentItem[]>([]);
+  useEffect(() => { setRecents(getRecents()); }, []);
 
   return (
-    <Panel className="h-full">
+    <Panel>
       <PanelHeader title="Continue Work" />
       {recents.length === 0 ? (
         <EmptyRow
@@ -700,31 +705,39 @@ function JumpBackIn({ onNavigate }: { onNavigate: (path: string) => void }) {
           icon={<Clock className="w-5 h-5" />}
         />
       ) : (
-        <div>
+        <div className="py-1">
           {recents.map((r, i) => (
-            <div key={i}>
-              <div
-                onClick={() => onNavigate(r.path)}
-                className="px-4 py-3 flex items-start gap-3 cursor-pointer transition-colors"
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--neuron-state-hover)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "")}
-              >
-                <span className="mt-0.5" style={{ color: "var(--neuron-ink-muted)" }}>
-                  {recentTypeIcon(r.type)}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[12.5px] font-medium truncate" style={{ color: "var(--neuron-ink-primary)" }}>
-                    {r.label}
-                  </p>
-                  <p className="text-[11px] truncate mt-0.5" style={{ color: "var(--neuron-ink-muted)" }}>
-                    {r.sub}
-                  </p>
-                </div>
-                <span className="text-[10.5px] flex-shrink-0 mt-0.5" style={{ color: "var(--neuron-ink-muted)" }}>
-                  {timeAgo(r.time)}
-                </span>
+            <div
+              key={i}
+              onClick={() => onNavigate(r.path)}
+              className="px-5 py-2 flex items-center gap-3 cursor-pointer transition-colors"
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--neuron-state-hover)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "")}
+            >
+              {/* Icon */}
+              <span className="flex-shrink-0" style={{ color: RECENT_TYPE_COLOR[r.type] }}>
+                {recentTypeIcon(r.type)}
+              </span>
+
+              {/* Name + type */}
+              <div className="flex-1 min-w-0">
+                <p className="text-[12.5px] font-medium truncate leading-tight" style={{ color: "var(--neuron-ink-primary)" }}>
+                  {r.label}
+                </p>
+                <p className="text-[11px] leading-tight mt-0.5" style={{ color: "var(--neuron-ink-muted)" }}>
+                  {RECENT_TYPE_LABEL[r.type]}
+                </p>
               </div>
-              {i < recents.length - 1 && <Divider />}
+
+              {/* Right meta */}
+              <div className="flex-shrink-0 text-right">
+                <p className="text-[11px] leading-tight" style={{ color: "var(--neuron-ink-muted)" }}>
+                  {r.sub.split(" · ")[0]}
+                </p>
+                <p className="text-[10.5px] leading-tight mt-0.5 tabular-nums" style={{ color: "var(--neuron-ui-muted)" }}>
+                  {timeAgo(r.time)}
+                </p>
+              </div>
             </div>
           ))}
         </div>
@@ -761,48 +774,25 @@ function MyWorkPanel({
   return (
     <Panel>
       <PanelHeader title="My Work" />
-      <div className="grid grid-cols-1 sm:grid-cols-2" style={{ minHeight: "160px" }}>
+      <div style={{ minHeight: "160px" }}>
         {/* Inbox */}
-        <div style={{ borderRight: "1px solid var(--neuron-ui-divider)" }}>
-          <SectionLabel label="Inbox" count={tickets.length} onViewAll={onViewInbox} />
-          {loading ? (
-            <><SkeletonRow /><SkeletonRow /></>
-          ) : tickets.length === 0 ? (
-            <EmptyRow message="Inbox is clear." icon={<Inbox className="w-5 h-5" />} />
-          ) : (
-            tickets.map((t) => (
-              <ItemRow
-                key={t.id}
-                dotColor={ticketDotColor(t.type, t.priority)}
-                label={t.subject}
-                sub={`${t.type} · ${t.linked_record_type.replace(/_/g, " ")}`}
-                meta={timeAgo(t.created_at)}
-                onClick={() => onTicket(t.id)}
-              />
-            ))
-          )}
-        </div>
-
-        {/* Pending Approval */}
-        <div>
-          <SectionLabel label="Pending Approval" count={approvals.length} onViewAll={onViewEVouchers} />
-          {loading ? (
-            <SkeletonRow />
-          ) : approvals.length === 0 ? (
-            <EmptyRow message="Nothing to approve." icon={<Check className="w-5 h-5" />} />
-          ) : (
-            approvals.map((ev) => (
-              <ItemRow
-                key={ev.id}
-                dotColor="amber"
-                label={`${ev.evoucher_number}${ev.description ? ` — ${ev.description}` : ""}`}
-                sub={`${pesos(ev.amount)} · ${ev.created_by_name}`}
-                meta={timeAgo(ev.created_at)}
-                onClick={onEVoucher}
-              />
-            ))
-          )}
-        </div>
+        <SectionLabel label="Inbox" count={tickets.length} onViewAll={onViewInbox} />
+        {loading ? (
+          <><SkeletonRow /><SkeletonRow /></>
+        ) : tickets.length === 0 ? (
+          <EmptyRow message="Inbox is clear." icon={<Inbox className="w-5 h-5" />} />
+        ) : (
+          tickets.map((t) => (
+            <ItemRow
+              key={t.id}
+              dotColor={ticketDotColor(t.type, t.priority)}
+              label={t.subject}
+              sub={`${t.type} · ${t.linked_record_type.replace(/_/g, " ")}`}
+              meta={timeAgo(t.created_at)}
+              onClick={() => onTicket(t.id)}
+            />
+          ))
+        )}
       </div>
     </Panel>
   );
@@ -1158,9 +1148,9 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
   // ── Derived attention count ───────────────────────────────────────────────
   const attentionCount = myTickets.length + myApprovals.length;
 
-  // ── Nav helpers ───────────────────────────────────────────────────────────
+  // ── Nav helpers — RouteTracker handles all recent recording automatically ──
   const goTo       = (path: string) => navigate(path);
-  const goTicket   = (id: string) => { trackRecent({ label: "Inbox ticket", sub: "ticket", path: `/inbox?ticketId=${id}`, type: "ticket", time: new Date().toISOString() }); navigate(`/inbox?ticketId=${id}`); };
+  const goTicket   = (id: string) => navigate(`/inbox?ticketId=${id}`);
   const goEVoucher = () => navigate("/accounting/evouchers");
   const goBooking  = (b: BookingItem) => navigate(bookingRoute(b.service_type));
 
@@ -1214,32 +1204,17 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
             />
           </div>
 
-          {/* Col 2, Rows 1-2 — Dept counts + Jump back in */}
+          {/* Col 2, Rows 1-2 — My Tasks (tall card) */}
           <div
-            className="flex flex-col gap-4"
+            className="flex flex-col h-full min-h-0"
             style={{ gridColumn: "2", gridRow: "1 / 3" }}
           >
-            <DeptQuickCounts
-              dept={dept}
-              openInquiries={openInquiries.length}
-              awaitingClient={awaitingClient.length}
-              pricingRequests={pricingRequests.length}
-              pricingInProgress={pricingInProgress.length}
-              activeBookings={activeBookings.length}
-              acctTickets={acctTickets.length}
-              pendingEVs={pendingEVs.length}
-              execCounts={execCounts}
-              loading={loadingDept}
-              onNavigate={goTo}
-            />
-            <div className="flex-1 flex flex-col min-h-0">
-              <JumpBackIn onNavigate={goTo} />
-            </div>
+            {userId && <TodoPanel userId={userId} />}
           </div>
 
-          {/* Row 2, Col 1 — To-Do */}
+          {/* Row 2, Col 1 — Continue Work */}
           <div style={{ gridColumn: "1", gridRow: "2" }}>
-            {userId && <TodoPanel userId={userId} />}
+            <JumpBackIn onNavigate={goTo} />
           </div>
 
           {/* Row 3, full width — Dept Queue */}
