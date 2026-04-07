@@ -23,19 +23,30 @@ export function TasksList({ onViewTask }: TasksListProps) {
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | "All">("All");
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
 
-  const { user } = useUser();
+  const { user, effectiveRole, effectiveDepartment } = useUser();
+  const canAssignToOthers = effectiveRole === 'manager' || effectiveDepartment === 'Executive';
 
   const { scope, isLoaded } = useDataScope();
 
   // Build scope-aware filters for useTasks
-  const scopeFilter = isLoaded && scope.type === 'own' ? { assigneeId: scope.userId } : {};
+  // 'all' → no extra filter (RLS handles it)
+  // 'userIds' → filter owner_id IN (ids) for manager/TL views
+  // 'own' → no extra filter (RLS already restricts staff to their own records)
+  const scopeFilter = isLoaded && scope.type === 'userIds' ? { ownerIds: scope.ids } : {};
   const { tasks, isLoading, invalidate: invalidateTasks } = useTasks({ ...scopeFilter, enabled: isLoaded });
   const { customers } = useCustomers();
   const { contacts } = useContacts();
 
   const handleSaveTask = async (taskData: Partial<Task>) => {
     try {
-      const newTask = { ...taskData, id: `task-${Date.now()}`, created_at: new Date().toISOString() };
+      const newTask = {
+        ...taskData,
+        id: `task-${Date.now()}`,
+        owner_id: user?.id,
+        // Staff always assigned to themselves; managers may have set assigned_to via the dropdown
+        assigned_to: canAssignToOthers ? (taskData.assigned_to || null) : user?.id,
+        created_at: new Date().toISOString(),
+      };
       const { error } = await supabase.from('tasks').insert(newTask);
       if (error) throw error;
       const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
