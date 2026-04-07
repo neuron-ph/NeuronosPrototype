@@ -5,6 +5,8 @@ import type { Task, TaskType, TaskPriority } from "../../types/bd";
 import { useCustomers } from "../../hooks/useCustomers";
 import { useContacts } from "../../hooks/useContacts";
 import { useUsers } from "../../hooks/useUsers";
+import { useUser } from "../../hooks/useUser";
+import { CustomDatePicker } from "../common/CustomDatePicker";
 
 interface AddTaskPanelProps {
   isOpen: boolean;
@@ -23,14 +25,17 @@ export function AddTaskPanel({ isOpen, onClose, onSave }: AddTaskPanelProps) {
     remarks: "",
     contact_id: null,
     customer_id: null,
-    owner_id: "user-1" // Mock current user
+    owner_id: ""
   });
 
   const [attachments, setAttachments] = useState<File[]>([]);
 
+  const { user, effectiveRole, effectiveDepartment } = useUser();
+  const canAssignToOthers = effectiveRole === 'manager' || effectiveDepartment === 'Executive';
+
   const { customers } = useCustomers({ enabled: isOpen });
   const { contacts } = useContacts({ enabled: isOpen });
-  const { users: bdUsers } = useUsers({ department: 'Business Development', enabled: isOpen });
+  const { users: bdUsers } = useUsers({ department: 'Business Development', enabled: isOpen && canAssignToOthers });
 
   if (!isOpen) return null;
 
@@ -58,7 +63,7 @@ export function AddTaskPanel({ isOpen, onClose, onSave }: AddTaskPanelProps) {
       remarks: "",
       contact_id: null,
       customer_id: null,
-      owner_id: "user-1"
+      owner_id: ""
     });
     setAttachments([]);
     onClose();
@@ -172,17 +177,10 @@ export function AddTaskPanel({ isOpen, onClose, onSave }: AddTaskPanelProps) {
               <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
                 Due Date *
               </label>
-              <input
-                type="date"
+              <CustomDatePicker
                 value={taskData.due_date || ""}
-                onChange={(e) => setTaskData({ ...taskData, due_date: e.target.value })}
-                required
-                className="w-full px-3 py-2.5 rounded-lg text-[13px] focus:outline-none focus:ring-2"
-                style={{
-                  border: "1px solid var(--neuron-ui-border)",
-                  backgroundColor: "var(--theme-bg-surface)",
-                  color: "var(--theme-text-primary)"
-                }}
+                onChange={(value) => setTaskData({ ...taskData, due_date: value })}
+                placeholder="Select due date"
               />
             </div>
 
@@ -248,24 +246,26 @@ export function AddTaskPanel({ isOpen, onClose, onSave }: AddTaskPanelProps) {
               )}
             </div>
 
-            {/* Assigned To */}
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
-                Assign To (Optional)
-              </label>
-              <CustomDropdown
-                value={taskData.assigned_to || ""}
-                onChange={(value) => setTaskData({ ...taskData, assigned_to: value || undefined })}
-                options={[
-                  { value: "", label: "Assign to someone..." },
-                  ...bdUsers.map(user => ({
-                    value: user.id,
-                    label: `${user.name} - ${user.role}`,
-                    icon: <UserCircle size={16} />
-                  }))
-                ]}
-              />
-            </div>
+            {/* Assigned To — managers/executives only */}
+            {canAssignToOthers && (
+              <div>
+                <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
+                  Assign To (Optional)
+                </label>
+                <CustomDropdown
+                  value={taskData.assigned_to || ""}
+                  onChange={(value) => setTaskData({ ...taskData, assigned_to: value || undefined })}
+                  options={[
+                    { value: "", label: "Assign to someone..." },
+                    ...bdUsers.map(u => ({
+                      value: u.id,
+                      label: `${u.name} - ${u.role}`,
+                      icon: <UserCircle size={16} />
+                    }))
+                  ]}
+                />
+              </div>
+            )}
 
             {/* Remarks */}
             <div>
