@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { ForwardingBookings } from "./operations/forwarding/ForwardingBookings";
 import { ForwardingBookingDetails } from "./operations/forwarding/ForwardingBookingDetails";
 import type { ForwardingBooking } from "../types/operations";
+import { trackRecent } from "../lib/recents";
 
 export type OperationsView = "forwarding" | "brokerage" | "trucking" | "marine-insurance" | "others" | "reporting";
 type SubView = "list" | "detail";
@@ -24,6 +25,13 @@ export function Operations({ view = "forwarding", currentUser }: OperationsProps
   const handleSelectBooking = (booking: ForwardingBooking) => {
     setSelectedBooking(booking);
     setSubView("detail");
+    trackRecent({
+      label: booking.bookingId || "Booking",
+      sub: `Operations · ${booking.customerName || ""}`,
+      path: `/operations/forwarding`,
+      type: "booking",
+      time: new Date().toISOString(),
+    });
   };
 
   const handleBackToList = () => {

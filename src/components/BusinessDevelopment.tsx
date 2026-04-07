@@ -1,5 +1,6 @@
 import { supabase } from '../utils/supabase/client';
 import { logActivity, logCreation } from '../utils/activityLog';
+import { trackRecent } from '../lib/recents';
 import { useState, useEffect } from "react";
 import { ContactsListWithFilters } from "./crm/ContactsListWithFilters";
 import { CustomersListWithFilters } from "./crm/CustomersListWithFilters";
@@ -280,6 +281,13 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
   const handleViewContact = (contact: Contact) => {
     setSelectedContact(contact);
     setSubView("detail");
+    trackRecent({
+      label: contact.name || [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Contact",
+      sub: `BD · Contact`,
+      path: `/bd/contacts/${contact.id}`,
+      type: "contact",
+      time: new Date().toISOString(),
+    });
   };
 
   const handleBackFromContact = () => {
@@ -290,6 +298,13 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
   const handleViewCustomer = (customer: Customer) => {
     setSelectedCustomer(customer);
     setSubView("detail");
+    trackRecent({
+      label: customer.name || customer.company_name || "Customer",
+      sub: `BD · Customer`,
+      path: `/bd/customers`,
+      type: "customer",
+      time: new Date().toISOString(),
+    });
   };
 
   const handleBackFromCustomer = () => {
@@ -320,6 +335,13 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
   const handleViewInquiry = (quotation: QuotationNew) => {
     setSelectedQuotation(quotation);
     setSubView("detail");
+    trackRecent({
+      label: quotation.quote_number || "Inquiry",
+      sub: `BD · ${quotation.customer_name || ""}`,
+      path: `/bd/inquiries/${quotation.id}`,
+      type: "inquiry",
+      time: new Date().toISOString(),
+    });
   };
 
   const handleViewProject = (project: Project) => {

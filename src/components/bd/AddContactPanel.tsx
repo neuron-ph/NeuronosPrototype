@@ -8,13 +8,14 @@ import { useCustomers } from "../../hooks/useCustomers";
 interface AddContactPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (contactData: any) => void;
+  onSave: (contactData: any) => Promise<void>;
   prefilledCustomerId?: string; // Pre-fill and lock customer when adding from Customer Detail page
   prefilledCustomerName?: string; // Display name of pre-filled customer
 }
 
 
 export function AddContactPanel({ isOpen, onClose, onSave, prefilledCustomerId, prefilledCustomerName }: AddContactPanelProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     first_name: "",
     last_name: "",
@@ -39,28 +40,20 @@ export function AddContactPanel({ isOpen, onClose, onSave, prefilledCustomerId, 
     }
   }, [isOpen, prefilledCustomerId]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSave({
-      ...formData,
-      id: `contact-${Date.now()}`,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    });
-    onClose();
-    // Reset form
-    setFormData({
-      first_name: "",
-      last_name: "",
-      title: "",
-      email: "",
-      phone: "",
-      customer_id: "",
-      owner_id: "",
-      lifecycle_stage: "Lead",
-      lead_status: "New",
-      notes: "",
-    });
+    setIsSubmitting(true);
+    try {
+      await onSave({
+        ...formData,
+        id: `contact-${Date.now()}`,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      // Parent closes the panel on success via setIsAddContactOpen(false)
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleChange = (field: string, value: string) => {
@@ -467,30 +460,30 @@ export function AddContactPanel({ isOpen, onClose, onSave, prefilledCustomerId, 
           <button
             type="submit"
             form="add-contact-form"
-            disabled={!isFormValid}
+            disabled={!isFormValid || isSubmitting}
             className="px-6 py-2.5 rounded-lg transition-all flex items-center gap-2"
             style={{
-              backgroundColor: isFormValid ? "var(--theme-action-primary-bg)" : "var(--neuron-ui-muted)",
+              backgroundColor: isFormValid && !isSubmitting ? "var(--theme-action-primary-bg)" : "var(--neuron-ui-muted)",
               color: "#FFFFFF",
               fontSize: "14px",
               fontWeight: 600,
               border: "none",
-              cursor: isFormValid ? "pointer" : "not-allowed",
-              opacity: isFormValid ? 1 : 0.6
+              cursor: isFormValid && !isSubmitting ? "pointer" : "not-allowed",
+              opacity: isFormValid && !isSubmitting ? 1 : 0.6
             }}
             onMouseEnter={(e) => {
-              if (isFormValid) {
+              if (isFormValid && !isSubmitting) {
                 e.currentTarget.style.backgroundColor = "var(--theme-action-primary-border)";
               }
             }}
             onMouseLeave={(e) => {
-              if (isFormValid) {
+              if (isFormValid && !isSubmitting) {
                 e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
               }
             }}
           >
             <UserPlus size={16} />
-            Create Contact
+            {isSubmitting ? "Saving..." : "Create Contact"}
           </button>
         </div>
       </div>

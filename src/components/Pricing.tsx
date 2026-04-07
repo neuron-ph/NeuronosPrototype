@@ -1,6 +1,7 @@
 import { supabase } from '../utils/supabase/client';
 import { createWorkflowTicket } from '../utils/workflowTickets';
 import { logActivity, logCreation } from '../utils/activityLog';
+import { trackRecent } from '../lib/recents';
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../lib/queryKeys";
@@ -105,6 +106,13 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
   const handleViewContact = (contact: Contact) => {
     setSelectedContact(contact);
     setSubView("detail");
+    trackRecent({
+      label: contact.name || [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Contact",
+      sub: `Pricing · Contact`,
+      path: `/pricing/contacts`,
+      type: "quotation",
+      time: new Date().toISOString(),
+    });
   };
 
   const handleBackFromContact = () => {
@@ -115,6 +123,13 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
   const handleViewCustomer = (customer: Customer) => {
     setSelectedCustomer(customer);
     setSubView("detail");
+    trackRecent({
+      label: customer.name || customer.company_name || "Customer",
+      sub: `Pricing · Customer`,
+      path: `/pricing/customers`,
+      type: "quotation",
+      time: new Date().toISOString(),
+    });
   };
 
   const handleBackFromCustomer = () => {
@@ -125,6 +140,13 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
   const handleViewQuotation = (quotation: QuotationNew) => {
     setSelectedQuotation(quotation);
     setSubView("detail");
+    trackRecent({
+      label: quotation.quote_number || "Quotation",
+      sub: `Pricing · ${quotation.customer_name || ""}`,
+      path: `/pricing/quotations/${quotation.id}`,
+      type: "quotation",
+      time: new Date().toISOString(),
+    });
   };
 
   const handleBackFromQuotation = () => {
