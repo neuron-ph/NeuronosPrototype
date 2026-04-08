@@ -1,6 +1,6 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Eye, EyeOff, Loader2, LogOut, Monitor, Moon, Pencil, Sun, X } from "lucide-react";
+import { Eye, EyeOff, Loader2, LogOut, Minus, Monitor, Moon, Pencil, Plus, Sun, X } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { supabase } from "../../utils/supabase/client";
 import { useUser } from "../../hooks/useUser";
@@ -238,6 +238,249 @@ function ThemeDropdown({
 }
 
 // ---------------------------------------------------------------------------
+// Avatar Crop Modal
+// ---------------------------------------------------------------------------
+
+function AvatarCropModal({
+  src,
+  onConfirm,
+  onCancel,
+}: {
+  src: string;
+  onConfirm: (blob: Blob) => void;
+  onCancel: () => void;
+}) {
+  const SIZE = 300;
+  const RADIUS = SIZE / 2;
+
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [imgEl, setImgEl] = useState<HTMLImageElement | null>(null);
+  const [scale, setScale] = useState(1);
+  const [minScale, setMinScale] = useState(0.1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragging = useRef(false);
+  const dragOrigin = useRef({ mx: 0, my: 0, ox: 0, oy: 0 });
+
+  // Load image and auto-fit to cover the circle
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => {
+      const cover = Math.max(SIZE / img.width, SIZE / img.height);
+      setMinScale(cover * 0.5);
+      setScale(cover);
+      setOffset({
+        x: (SIZE - img.width * cover) / 2,
+        y: (SIZE - img.height * cover) / 2,
+      });
+      setImgEl(img);
+    };
+    img.src = src;
+  }, [src]);
+
+  // Redraw canvas whenever image, scale, or offset changes
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !imgEl) return;
+    const ctx = canvas.getContext("2d")!;
+    ctx.clearRect(0, 0, SIZE, SIZE);
+    ctx.drawImage(imgEl, offset.x, offset.y, imgEl.width * scale, imgEl.height * scale);
+
+    // Dim area outside the crop circle using brand ink color
+    ctx.save();
+    ctx.fillStyle = "rgba(18, 51, 43, 0.55)";
+    ctx.beginPath();
+    ctx.rect(0, 0, SIZE, SIZE);
+    ctx.arc(RADIUS, RADIUS, RADIUS - 1, 0, Math.PI * 2, true); // counterclockwise = cutout
+    ctx.fill("evenodd");
+    ctx.restore();
+
+    // Circle border — crisp white ring
+    ctx.save();
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(RADIUS, RADIUS, RADIUS - 1, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }, [imgEl, scale, offset]);
+
+  // Wheel zoom — must be non-passive to call preventDefault
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.08 : 0.93;
+      setScale(s => Math.max(minScale, Math.min(8, s * factor)));
+    };
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", onWheel);
+  }, [minScale]);
+
+  const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    dragging.current = true;
+    setIsDragging(true);
+    dragOrigin.current = { mx: e.clientX, my: e.clientY, ox: offset.x, oy: offset.y };
+  };
+
+  const onMouseMove = (e: React.MouseEvent) => {
+    if (!dragging.current) return;
+    setOffset({
+      x: dragOrigin.current.ox + (e.clientX - dragOrigin.current.mx),
+      y: dragOrigin.current.oy + (e.clientY - dragOrigin.current.my),
+    });
+  };
+
+  const stopDrag = () => {
+    dragging.current = false;
+    setIsDragging(false);
+  };
+
+  const handleApply = () => {
+    if (!imgEl) return;
+    const off = document.createElement("canvas");
+    off.width = SIZE;
+    off.height = SIZE;
+    const ctx = off.getContext("2d")!;
+    ctx.beginPath();
+    ctx.arc(RADIUS, RADIUS, RADIUS, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(imgEl, offset.x, offset.y, imgEl.width * scale, imgEl.height * scale);
+    off.toBlob(blob => { if (blob) onConfirm(blob); }, "image/png");
+  };
+
+  // Normalized zoom percentage for the readout (0–100)
+  const zoomPct = Math.round(
+    Math.min(100, Math.max(0, ((scale - minScale) / (8 - minScale)) * 100))
+  );
+
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, zIndex: 10000,
+        // Brand ink scrim — softer than plain black, tonally consistent
+        background: "rgba(18, 51, 43, 0.6)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}
+      onMouseMove={onMouseMove}
+      onMouseUp={stopDrag}
+    >
+      <div
+        style={{
+          background: "#FFFFFF",
+          border: "1px solid var(--theme-border-default)",
+          borderRadius: 16,
+          width: 420,
+          overflow: "hidden",
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* ── Header ── */}
+        <div style={{
+          padding: "20px 24px 16px",
+          borderBottom: "1px solid var(--theme-border-default)",
+        }}>
+          <p style={{ fontSize: 14, fontWeight: 600, color: "#12332B", margin: 0 }}>
+            Crop profile photo
+          </p>
+          <p style={{ fontSize: 12, color: "#667085", margin: "3px 0 0" }}>
+            Drag to reposition · Scroll or use the slider to zoom
+          </p>
+        </div>
+
+        {/* ── Canvas stage ── */}
+        <div style={{
+          background: "#F9FAFB",
+          borderBottom: "1px solid var(--theme-border-default)",
+          padding: "28px 0",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+        }}>
+          <canvas
+            ref={canvasRef}
+            width={SIZE}
+            height={SIZE}
+            onMouseDown={onMouseDown}
+            onMouseLeave={stopDrag}
+            style={{
+              borderRadius: "50%",
+              cursor: isDragging ? "grabbing" : "grab",
+              display: "block",
+              userSelect: "none",
+              // Outer ring so the circle sits clearly against the stage bg
+              outline: "1px solid var(--theme-border-default)",
+              outlineOffset: "2px",
+            }}
+          />
+        </div>
+
+        {/* ── Controls ── */}
+        <div style={{ padding: "16px 24px 20px" }}>
+          {/* Zoom row: − slider + pct */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
+            <button
+              onMouseDown={e => { e.preventDefault(); setScale(s => Math.max(minScale, s * 0.9)); }}
+              style={{
+                width: 30, height: 30, borderRadius: 6, flexShrink: 0,
+                border: "1px solid var(--theme-border-default)",
+                background: "transparent", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: "#667085",
+              }}
+              title="Zoom out"
+            >
+              <Minus size={13} />
+            </button>
+            <input
+              type="range"
+              min={Math.round(minScale * 100)}
+              max={800}
+              value={Math.round(scale * 100)}
+              onChange={e => setScale(Number(e.target.value) / 100)}
+              style={{ flex: 1, accentColor: "#0F766E" }}
+            />
+            <button
+              onMouseDown={e => { e.preventDefault(); setScale(s => Math.min(8, s * 1.1)); }}
+              style={{
+                width: 30, height: 30, borderRadius: 6, flexShrink: 0,
+                border: "1px solid var(--theme-border-default)",
+                background: "transparent", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: "#667085",
+              }}
+              title="Zoom in"
+            >
+              <Plus size={13} />
+            </button>
+            <span style={{
+              fontSize: 12, fontWeight: 500, color: "#667085",
+              width: 34, textAlign: "right", flexShrink: 0,
+              fontVariantNumeric: "tabular-nums",
+            }}>
+              {zoomPct}%
+            </span>
+          </div>
+
+          {/* Actions */}
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button onClick={onCancel} style={quietButtonStyle}>Cancel</button>
+            <button
+              onClick={handleApply}
+              disabled={!imgEl}
+              style={{ ...primaryButtonStyle, opacity: !imgEl ? 0.6 : 1 }}
+            >
+              Apply crop
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
@@ -252,6 +495,7 @@ export function Settings() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(user?.avatar_url || null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -297,8 +541,19 @@ export function Settings() {
   const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    // Read as data URL so the crop modal can display it
+    const reader = new FileReader();
+    reader.onload = () => setCropSrc(reader.result as string);
+    reader.readAsDataURL(file);
+    // Reset so re-selecting the same file fires onChange again
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleCropConfirm = (blob: Blob) => {
+    const file = new File([blob], "avatar.png", { type: "image/png" });
     setAvatarFile(file);
-    setAvatarPreview(URL.createObjectURL(file));
+    setAvatarPreview(URL.createObjectURL(blob));
+    setCropSrc(null);
   };
 
   const handleRemoveAvatar = () => {
@@ -319,17 +574,35 @@ export function Settings() {
     try {
       let newAvatarUrl = avatarUrl;
 
+      // Avatar upload — has its own try-catch so any failure (including a
+      // 15s timeout on a hung request) is non-fatal: name/phone still save.
       if (avatarFile && authUid) {
-        const ext = avatarFile.name.split(".").pop() || "jpg";
+        const ext = avatarFile.name.split(".").pop() || "png";
         const path = `${authUid}/avatar.${ext}`;
-        const { error: uploadError } = await supabase.storage
-          .from("avatars")
-          .upload(path, avatarFile, { upsert: true, contentType: avatarFile.type });
-        if (uploadError) throw new Error(`Avatar upload failed: ${uploadError.message}`);
-        const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
-        newAvatarUrl = urlData.publicUrl;
+        try {
+          const { error: uploadError } = await Promise.race([
+            supabase.storage
+              .from("avatars")
+              .upload(path, avatarFile, { upsert: true, contentType: avatarFile.type }),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error("Upload timed out")), 15_000)
+            ),
+          ]);
+          if (uploadError) {
+            toast.warning("Photo couldn't be saved — profile updated without it");
+            console.error("Avatar upload error:", uploadError);
+          } else {
+            const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
+            newAvatarUrl = `${urlData.publicUrl}?v=${Date.now()}`;
+          }
+        } catch (uploadErr) {
+          // Timeout or network hang — non-fatal, continue saving name/phone
+          toast.warning("Photo upload timed out — saving profile without it");
+          console.error("Avatar upload failed:", uploadErr);
+        }
       }
 
+      // Remove old avatar from storage when user explicitly cleared it
       if (!avatarFile && avatarUrl === null && user?.avatar_url && authUid) {
         const { data: files } = await supabase.storage.from("avatars").list(authUid);
         if (files && files.length > 0) {
@@ -725,6 +998,14 @@ export function Settings() {
         </div>
         </div>
       </div>
+
+      {cropSrc && (
+        <AvatarCropModal
+          src={cropSrc}
+          onConfirm={handleCropConfirm}
+          onCancel={() => setCropSrc(null)}
+        />
+      )}
     </div>
   );
 }
