@@ -368,7 +368,7 @@ function AvatarCropModal({
     >
       <div
         style={{
-          background: "#FFFFFF",
+          background: "var(--theme-bg-surface)",
           border: "1px solid var(--theme-border-default)",
           borderRadius: 16,
           width: 420,
@@ -381,17 +381,17 @@ function AvatarCropModal({
           padding: "20px 24px 16px",
           borderBottom: "1px solid var(--theme-border-default)",
         }}>
-          <p style={{ fontSize: 14, fontWeight: 600, color: "#12332B", margin: 0 }}>
+          <p style={{ fontSize: 14, fontWeight: 600, color: "var(--theme-text-primary)", margin: 0 }}>
             Crop profile photo
           </p>
-          <p style={{ fontSize: 12, color: "#667085", margin: "3px 0 0" }}>
+          <p style={{ fontSize: 12, color: "var(--theme-text-muted)", margin: "3px 0 0" }}>
             Drag to reposition · Scroll or use the slider to zoom
           </p>
         </div>
 
         {/* ── Canvas stage ── */}
         <div style={{
-          background: "#F9FAFB",
+          background: "var(--theme-bg-surface-subtle)",
           borderBottom: "1px solid var(--theme-border-default)",
           padding: "28px 0",
           display: "flex",
@@ -427,7 +427,7 @@ function AvatarCropModal({
                 border: "1px solid var(--theme-border-default)",
                 background: "transparent", cursor: "pointer",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                color: "#667085",
+                color: "var(--theme-text-secondary)",
               }}
               title="Zoom out"
             >
@@ -439,7 +439,7 @@ function AvatarCropModal({
               max={800}
               value={Math.round(scale * 100)}
               onChange={e => setScale(Number(e.target.value) / 100)}
-              style={{ flex: 1, accentColor: "#0F766E" }}
+              style={{ flex: 1, accentColor: "var(--neuron-ui-active-border)" }}
             />
             <button
               onMouseDown={e => { e.preventDefault(); setScale(s => Math.min(8, s * 1.1)); }}
@@ -448,14 +448,14 @@ function AvatarCropModal({
                 border: "1px solid var(--theme-border-default)",
                 background: "transparent", cursor: "pointer",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                color: "#667085",
+                color: "var(--theme-text-secondary)",
               }}
               title="Zoom in"
             >
               <Plus size={13} />
             </button>
             <span style={{
-              fontSize: 12, fontWeight: 500, color: "#667085",
+              fontSize: 12, fontWeight: 500, color: "var(--theme-text-secondary)",
               width: 34, textAlign: "right", flexShrink: 0,
               fontVariantNumeric: "tabular-nums",
             }}>
