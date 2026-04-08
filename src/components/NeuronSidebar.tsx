@@ -54,7 +54,7 @@ const Vector = () => (
 interface NeuronSidebarProps {
   currentPage: Page;
   onNavigate: (page: Page) => void;
-  currentUser?: { name?: string; email?: string; department?: string; role?: string } | null;
+  currentUser?: { name?: string; email?: string; department?: string; role?: string; avatar_url?: string | null } | null;
 }
 
 // Wrapper component for the Philippine Peso icon
@@ -903,20 +903,29 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
               }
             }}
           >
-            <div 
+            <div
               className="flex items-center justify-center rounded-full"
               style={{
                 width: "32px",
                 height: "32px",
-                backgroundColor: "var(--neuron-brand-green-100)",
+                backgroundColor: currentUser.avatar_url ? "transparent" : "var(--neuron-brand-green-100)",
                 color: "var(--neuron-brand-green)",
                 fontSize: "14px",
                 fontWeight: 600,
-                flexShrink: 0
+                flexShrink: 0,
+                overflow: "hidden",
               }}
               title={isCollapsed ? currentUser.name : undefined}
             >
-              {currentUser.name.charAt(0).toUpperCase()}
+              {currentUser.avatar_url ? (
+                <img
+                  src={currentUser.avatar_url}
+                  alt={currentUser.name}
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              ) : (
+                currentUser.name.charAt(0).toUpperCase()
+              )}
             </div>
             {!isCollapsed && (
               <div className="flex-1 min-w-0">

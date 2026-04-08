@@ -34,7 +34,7 @@ interface Team {
 }
 
 interface TeamWithMembers extends Team {
-  members: { id: string; name: string; role: Role; email: string }[];
+  members: { id: string; name: string; role: Role; email: string; avatar_url?: string | null }[];
 }
 
 type OverrideScope = "department_wide" | "cross_department" | "full";
@@ -409,84 +409,221 @@ function UsersTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
 
 // ─── Teams Tab ────────────────────────────────────────────────────────────────
 
-function EditTeamDialog({ team, onClose, onSaved }: { team: Team | null; onClose: () => void; onSaved: () => void }) {
-  const [newName, setNewName]       = useState(team?.name ?? "");
-  const [newDept, setNewDept]       = useState<Department>((team?.department as Department) ?? "Business Development");
-  const [newLeaderId, setNewLeaderId] = useState(team?.leader_id ?? "");
-  const [saving, setSaving]         = useState(false);
+function InlineTeamCreateRow({
+  dept,
+  users,
+  onSaved,
+  onCancel,
+}: {
+  dept: Department;
+  users: { id: string; name: string }[];
+  onSaved: (teamId: string) => void;
+  onCancel: () => void;
+}) {
+  const { user: currentUser } = useUser();
+  const [name, setName]           = useState("");
+  const [leaderId, setLeaderId]   = useState("__none__");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [saving, setSaving]       = useState(false);
 
-  const { data: allUsers = [] } = useQuery({
-    queryKey: ["users", "active-list"],
-    queryFn: async () => {
-      const { data } = await supabase.from("users").select("id, name, department").eq("is_active", true).order("name");
-      return (data ?? []) as { id: string; name: string; department: string }[];
-    },
-    staleTime: 5 * 60 * 1000,
-  });
+  useEffect(() => {
+    if (leaderId && leaderId !== "__none__") {
+      setSelectedIds(prev => prev.includes(leaderId) ? prev : [...prev, leaderId]);
+    }
+  }, [leaderId]);
 
-  const deptUsers = allUsers.filter(u => u.department === newDept);
+  const toggle = (id: string) =>
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+
+  const handleCreate = async () => {
+    if (!name.trim()) { toast.error("Team name is required."); return; }
+    setSaving(true);
+    const finalLeaderId = leaderId !== "__none__" ? leaderId : null;
+    const { data: newTeam, error } = await supabase
+      .from("teams")
+      .insert({ name: name.trim(), department: dept, leader_id: finalLeaderId })
+      .select()
+      .single();
+    if (error) { setSaving(false); toast.error("Failed to create team."); return; }
+
+    // Ensure leader is always included in members, regardless of effect timing
+    const memberIds = finalLeaderId
+      ? Array.from(new Set([...selectedIds, finalLeaderId]))
+      : selectedIds;
+    if (memberIds.length > 0) {
+      const { error: memberError } = await supabase.from("users").update({ team_id: newTeam.id }).in("id", memberIds);
+      if (memberError) console.error("[TeamsTab] member assignment failed:", memberError);
+    }
+    const actor = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
+    logCreation("team", newTeam.id, newTeam.name ?? newTeam.id, actor);
+    toast.success(`Team "${name.trim()}" created.`);
+    setSaving(false);
+    onSaved(newTeam.id);
+  };
+
+  return (
+    <div style={{ padding: "14px 20px", borderTop: "1px solid var(--neuron-ui-border)", background: "var(--neuron-bg-page)", display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ flex: 1 }}>
+          <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>Team Name</Label>
+          <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g., North Luzon BD Team" autoFocus style={{ height: 34, fontSize: 13 }} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>Team Leader <span style={{ fontWeight: 400 }}>(optional)</span></Label>
+          <Select value={leaderId} onValueChange={v => setLeaderId(v)}>
+            <SelectTrigger style={{ height: 34, fontSize: 13 }}><SelectValue placeholder="No leader yet" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">No leader yet</SelectItem>
+              {users.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div>
+        <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>
+          Members <span style={{ fontWeight: 400 }}>({selectedIds.length} selected)</span>
+        </Label>
+        <div style={{ border: "1px solid var(--neuron-ui-border)", borderRadius: 8, maxHeight: 160, overflowY: "auto" }}>
+          {users.length === 0
+            ? <p style={{ padding: "10px 14px", fontSize: 13, color: "var(--neuron-ink-muted)" }}>No users in this department.</p>
+            : users.map((u, idx) => (
+              <label key={u.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 14px", cursor: "pointer", borderTop: idx > 0 ? "1px solid var(--neuron-ui-border)" : undefined, background: selectedIds.includes(u.id) ? "var(--neuron-bg-elevated)" : undefined }}>
+                <input type="checkbox" checked={selectedIds.includes(u.id)} onChange={() => toggle(u.id)} style={{ accentColor: "var(--neuron-action-primary)", flexShrink: 0 }} />
+                <span style={{ fontSize: 13, color: "var(--neuron-ink-primary)", flex: 1 }}>{u.name}</span>
+                {u.id === leaderId && leaderId !== "__none__" && <span style={{ fontSize: 11, color: "var(--theme-action-primary-bg)", background: "var(--theme-status-success-bg)", padding: "1px 8px", borderRadius: 999 }}>Leader</span>}
+              </label>
+            ))
+          }
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <Button variant="outline" onClick={onCancel} disabled={saving} style={{ height: 32, fontSize: 13 }}>Cancel</Button>
+        <Button onClick={handleCreate} disabled={saving} style={{ height: 32, fontSize: 13, background: "var(--neuron-action-primary)", color: "white", border: "none" }}>
+          {saving ? "Creating…" : "Create Team"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function InlineTeamEditRow({
+  team,
+  users,
+  onSaved,
+  onCancel,
+}: {
+  team: Team;
+  users: { id: string; name: string; department: string; team_id: string | null }[];
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const [name, setName]           = useState(team.name);
+  const [dept, setDept]           = useState<Department>(team.department as Department);
+  const [leaderId, setLeaderId]   = useState(team.leader_id ?? "__none__");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [saving, setSaving]       = useState(false);
+
+  // Init members from current DB state
+  useEffect(() => {
+    setSelectedIds(users.filter(u => u.team_id === team.id).map(u => u.id));
+  }, [team.id, users.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-include leader as member
+  useEffect(() => {
+    if (leaderId && leaderId !== "__none__") {
+      setSelectedIds(prev => prev.includes(leaderId) ? prev : [...prev, leaderId]);
+    }
+  }, [leaderId]);
+
+  const deptUsers = users.filter(u => u.department === dept);
+
+  const toggle = (id: string) =>
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
   const handleSave = async () => {
-    if (!team || !newName.trim()) return;
+    if (!name.trim()) { toast.error("Team name is required."); return; }
     setSaving(true);
-    const { error } = await supabase.from("teams").update({ name: newName.trim(), department: newDept, leader_id: newLeaderId || null }).eq("id", team.id);
+    const finalLeaderId = (leaderId === "__none__" || !leaderId) ? null : leaderId;
+    const { error } = await supabase
+      .from("teams")
+      .update({ name: name.trim(), department: dept, leader_id: finalLeaderId })
+      .eq("id", team.id);
+    if (error) { setSaving(false); toast.error("Failed to update team."); return; }
+
+    await supabase.from("users").update({ team_id: null }).eq("team_id", team.id);
+    // Ensure leader is always included in members
+    const memberIds = finalLeaderId
+      ? Array.from(new Set([...selectedIds, finalLeaderId]))
+      : selectedIds;
+    if (memberIds.length > 0) {
+      const { error: memberError } = await supabase.from("users").update({ team_id: team.id }).in("id", memberIds);
+      if (memberError) console.error("[TeamsTab] member assignment failed:", memberError);
+    }
+
     setSaving(false);
-    if (error) { toast.error("Failed to update team."); return; }
     toast.success("Team updated.");
     onSaved();
   };
 
   return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent style={{ maxWidth: 440 }}>
-        <DialogHeader>
-          <DialogTitle style={{ fontSize: 18, color: "var(--theme-text-primary)" }}>Edit Team</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 mt-2">
-          <div>
-            <Label style={{ fontSize: 13, marginBottom: 6, display: "block" }}>Team Name</Label>
-            <Input value={newName} onChange={e => setNewName(e.target.value)} autoFocus />
-          </div>
-          <div>
-            <Label style={{ fontSize: 13, marginBottom: 6, display: "block" }}>Department</Label>
-            <Select value={newDept} onValueChange={v => { setNewDept(v as Department); setNewLeaderId(""); }}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{DEPARTMENTS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label style={{ fontSize: 13, marginBottom: 6, display: "block" }}>Team Leader</Label>
-            <Select value={newLeaderId} onValueChange={setNewLeaderId}>
-              <SelectTrigger><SelectValue placeholder="No leader assigned" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">No leader</SelectItem>
-                {deptUsers.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-            <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
-            <Button onClick={handleSave} disabled={saving} className="bg-[var(--theme-action-primary-bg)] hover:bg-[var(--theme-action-primary-border)] text-white">
-              {saving ? "Saving…" : "Save Changes"}
-            </Button>
-          </div>
+    <div style={{ padding: "14px 20px", borderTop: "1px solid var(--neuron-ui-border)", background: "var(--neuron-bg-page)", display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ flex: 1 }}>
+          <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>Team Name</Label>
+          <Input value={name} onChange={e => setName(e.target.value)} autoFocus style={{ height: 34, fontSize: 13 }} />
         </div>
-      </DialogContent>
-    </Dialog>
+        <div style={{ flex: 1 }}>
+          <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>Department</Label>
+          <Select value={dept} onValueChange={v => { setDept(v as Department); setLeaderId("__none__"); setSelectedIds([]); }}>
+            <SelectTrigger style={{ height: 34, fontSize: 13 }}><SelectValue /></SelectTrigger>
+            <SelectContent>{DEPARTMENTS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <div style={{ flex: 1 }}>
+          <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>Team Leader</Label>
+          <Select value={leaderId} onValueChange={v => setLeaderId(v)}>
+            <SelectTrigger style={{ height: 34, fontSize: 13 }}><SelectValue placeholder="No leader" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">No leader</SelectItem>
+              {deptUsers.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div>
+        <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>
+          Members <span style={{ fontWeight: 400 }}>({selectedIds.length} selected)</span>
+        </Label>
+        <div style={{ border: "1px solid var(--neuron-ui-border)", borderRadius: 8, maxHeight: 160, overflowY: "auto" }}>
+          {deptUsers.length === 0
+            ? <p style={{ padding: "10px 14px", fontSize: 13, color: "var(--neuron-ink-muted)" }}>No users in this department.</p>
+            : deptUsers.map((u, idx) => (
+              <label key={u.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 14px", cursor: "pointer", borderTop: idx > 0 ? "1px solid var(--neuron-ui-border)" : undefined, background: selectedIds.includes(u.id) ? "var(--neuron-bg-elevated)" : undefined }}>
+                <input type="checkbox" checked={selectedIds.includes(u.id)} onChange={() => toggle(u.id)} style={{ accentColor: "var(--neuron-action-primary)", flexShrink: 0 }} />
+                <span style={{ fontSize: 13, color: "var(--neuron-ink-primary)", flex: 1 }}>{u.name}</span>
+                {u.id === leaderId && leaderId !== "__none__" && <span style={{ fontSize: 11, color: "var(--theme-action-primary-bg)", background: "var(--theme-status-success-bg)", padding: "1px 8px", borderRadius: 999 }}>Leader</span>}
+              </label>
+            ))
+          }
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <Button variant="outline" onClick={onCancel} disabled={saving} style={{ height: 32, fontSize: 13 }}>Cancel</Button>
+        <Button onClick={handleSave} disabled={saving} style={{ height: 32, fontSize: 13, background: "var(--neuron-action-primary)", color: "white", border: "none" }}>
+          {saving ? "Saving…" : "Save Changes"}
+        </Button>
+      </div>
+    </div>
   );
 }
 
 function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void }) {
   const queryClient = useQueryClient();
   const { user: currentUser } = useUser();
-  const [expanded, setExpanded]     = useState<string | null>(null);
-  const [creating, setCreating]     = useState(false);
-  const [editingTeam, setEditingTeam] = useState<Team | null>(null);
-  const [newName, setNewName]       = useState("");
-  const [newDept, setNewDept]       = useState<Department>("Business Development");
-  const [newLeaderId, setNewLeaderId] = useState("");
-  const [saving, setSaving]         = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [expanded, setExpanded]           = useState<string | null>(null);
+  const [creatingInDept, setCreatingInDept] = useState<string | null>(null);
+  const [editingTeamId, setEditingTeamId]   = useState<string | null>(null);
+  const [deletingId, setDeletingId]         = useState<string | null>(null);
 
   const { data: teams = [], refetch: fetchTeams } = useQuery({
     queryKey: ["teams"],
@@ -500,15 +637,15 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
   const { data: allUsers = [] } = useQuery({
     queryKey: ["users", "active-list"],
     queryFn: async () => {
-      const { data } = await supabase.from("users").select("id, name, role, department, email, team_id").eq("is_active", true).order("name");
-      return (data ?? []) as { id: string; name: string; role: Role; department: string; email: string; team_id: string | null }[];
+      const { data } = await supabase.from("users").select("id, name, role, department, email, team_id, avatar_url").eq("is_active", true).order("name");
+      return (data ?? []) as { id: string; name: string; role: Role; department: string; email: string; team_id: string | null; avatar_url?: string | null }[];
     },
     staleTime: 5 * 60 * 1000,
   });
 
   const teamsWithMembers: TeamWithMembers[] = teams.map(t => ({
     ...t,
-    members: allUsers.filter(u => u.team_id === t.id).map(u => ({ id: u.id, name: u.name, role: u.role, email: u.email })),
+    members: allUsers.filter(u => u.team_id === t.id).map(u => ({ id: u.id, name: u.name, role: u.role, email: u.email, avatar_url: u.avatar_url })),
   }));
 
   // Update parent with teams count
@@ -522,20 +659,6 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
   }, {});
 
   const deptUsersFor = (dept: Department) => allUsers.filter(u => u.department === dept);
-
-  const handleCreate = async () => {
-    if (!newName.trim()) { toast.error("Team name is required."); return; }
-    setSaving(true);
-    const { data: newTeam, error } = await supabase.from("teams").insert({ name: newName.trim(), department: newDept, leader_id: newLeaderId || null }).select().single();
-    setSaving(false);
-    if (error) { toast.error("Failed to create team."); return; }
-    const actor = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
-    logCreation("team", newTeam.id, newTeam.name ?? newTeam.id, actor);
-    toast.success(`Team "${newName}" created.`);
-    setCreating(false);
-    setNewName(""); setNewDept("Business Development"); setNewLeaderId("");
-    fetchTeams();
-  };
 
   const handleDelete = async (teamId: string, teamName: string) => {
     if (!confirm(`Delete team "${teamName}"? Members will be unassigned.`)) return;
@@ -555,22 +678,18 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
   const totalMembers = allUsers.filter(u => u.team_id !== null).length;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
         <div>
           <p style={{ fontSize: 18, fontWeight: 600, color: "var(--neuron-ink-primary)", marginBottom: 2 }}>
             Teams{" "}
             <span style={{ fontWeight: 400, color: "var(--neuron-ink-muted)", fontSize: 15 }}>({totalTeams})</span>
           </p>
-          <p style={{ fontSize: 13, color: "var(--neuron-ink-muted)" }}>{totalMembers} assigned member{totalMembers !== 1 ? "s" : ""} across all teams</p>
+          <p style={{ fontSize: 13, color: "var(--neuron-ink-muted)" }}>
+            {totalMembers} assigned member{totalMembers !== 1 ? "s" : ""} across all teams
+          </p>
         </div>
-        <button
-          onClick={() => { setCreating(true); setNewName(""); setNewDept("Business Development"); setNewLeaderId(""); }}
-          style={{ height: 36, padding: "0 14px", borderRadius: 8, background: "var(--neuron-action-primary)", border: "none", color: "white", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
-        >
-          <Plus size={14} /> New Team
-        </button>
       </div>
 
       {/* Department sections */}
@@ -578,119 +697,163 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
         const deptTeams = byDept[dept] ?? [];
         const colors = DEPT_BADGE[dept] ?? { bg: "var(--neuron-pill-inactive-bg)", text: "var(--theme-text-secondary)" };
         return (
-          <div key={dept} style={{ border: "1px solid var(--neuron-ui-border)", borderRadius: 10, overflow: "hidden", background: "var(--neuron-bg-elevated)" }}>
+          <div key={dept} style={{ border: "1px solid var(--neuron-ui-border)", borderRadius: 12, overflow: "hidden", background: "var(--neuron-bg-elevated)" }}>
             {/* Dept header */}
-            <div style={{ padding: "12px 20px", display: "flex", alignItems: "center", gap: 8, borderBottom: deptTeams.length > 0 ? "1px solid var(--neuron-ui-border)" : "none" }}>
-              <span style={{ display: "inline-flex", padding: "2px 10px", borderRadius: 999, fontSize: 12, fontWeight: 500, backgroundColor: colors.bg, color: colors.text }}>
-                {dept}
-              </span>
-              <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>
-                {deptTeams.length} {deptTeams.length === 1 ? "team" : "teams"}
-              </span>
+            <div style={{ padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--neuron-ui-border)", background: "var(--neuron-bg-page)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ display: "inline-flex", padding: "2px 10px", borderRadius: 999, fontSize: 12, fontWeight: 500, backgroundColor: colors.bg, color: colors.text }}>
+                  {dept}
+                </span>
+                <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>
+                  {deptTeams.length} {deptTeams.length === 1 ? "team" : "teams"}
+                </span>
+              </div>
+              <button
+                onClick={() => setCreatingInDept(dept)}
+                style={{ fontSize: 12, fontWeight: 500, color: "var(--neuron-action-primary)", background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 4 }}
+              >
+                <Plus size={12} /> Add Team
+              </button>
             </div>
 
-            {deptTeams.length === 0
-              ? <div style={{ padding: "12px 20px", fontSize: 13, color: "var(--neuron-ink-muted)" }}>No teams yet.</div>
-              : deptTeams.map((team, idx) => {
-                const isExpanded = expanded === team.id;
-                const leader = allUsers.find(u => u.id === team.leader_id);
-                return (
-                  <div key={team.id} style={{ borderTop: idx > 0 ? "1px solid var(--neuron-ui-border)" : undefined }}>
-                    <div
-                      style={{ padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}
-                      onClick={() => setExpanded(isExpanded ? null : team.id)}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        {isExpanded ? <ChevronDown size={13} style={{ color: "var(--neuron-ink-muted)" }} /> : <ChevronRight size={13} style={{ color: "var(--neuron-ink-muted)" }} />}
-                        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--neuron-ink-primary)" }}>{team.name}</span>
-                        <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>{team.members.length} member{team.members.length !== 1 ? "s" : ""}</span>
-                        {leader && (
-                          <span style={{ fontSize: 11, color: "var(--theme-action-primary-bg)", background: "var(--theme-status-success-bg)", padding: "1px 8px", borderRadius: 999 }}>
-                            {leader.name}
+            {/* Teams list */}
+            {deptTeams.length === 0 && creatingInDept !== dept && (
+              <div style={{ padding: "20px", fontSize: 13, color: "var(--neuron-ink-muted)", textAlign: "center" }}>No teams yet.</div>
+            )}
+
+            {deptTeams.map((team, idx) => {
+              const isEditing = editingTeamId === team.id;
+              const isExpanded = expanded === team.id && !isEditing;
+              const leader = allUsers.find(u => u.id === team.leader_id);
+              return (
+                <div key={team.id} style={{ borderTop: idx > 0 || deptTeams.length > 0 ? "1px solid var(--neuron-ui-border)" : undefined }}>
+                  {isEditing ? (
+                    <InlineTeamEditRow
+                      team={team}
+                      users={allUsers}
+                      onSaved={() => { setEditingTeamId(null); fetchTeams(); queryClient.invalidateQueries({ queryKey: queryKeys.users.list() }); }}
+                      onCancel={() => setEditingTeamId(null)}
+                    />
+                  ) : (
+                    <>
+                      {/* Team header row */}
+                      <div
+                        style={{ padding: "11px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", transition: "background 0.1s" }}
+                        onClick={() => setExpanded(isExpanded ? null : team.id)}
+                        onMouseEnter={e => { e.currentTarget.style.background = "var(--neuron-bg-page)"; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = ""; }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          {isExpanded
+                            ? <ChevronDown size={13} style={{ color: "var(--neuron-ink-muted)", flexShrink: 0 }} />
+                            : <ChevronRight size={13} style={{ color: "var(--neuron-ink-muted)", flexShrink: 0 }} />}
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--neuron-ink-primary)" }}>{team.name}</span>
+                          <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>
+                            {team.members.length} {team.members.length === 1 ? "member" : "members"}
                           </span>
-                        )}
-                      </div>
-                      <div style={{ display: "flex", gap: 2 }} onClick={e => e.stopPropagation()}>
-                        <button onClick={() => setEditingTeam(team)} style={{ padding: 6, background: "transparent", border: "none", cursor: "pointer", color: "var(--neuron-ink-muted)", borderRadius: 6 }} title="Edit">
-                          <Edit size={13} />
-                        </button>
-                        <button onClick={() => handleDelete(team.id, team.name)} disabled={deletingId === team.id} style={{ padding: 6, background: "transparent", border: "none", cursor: "pointer", color: "var(--theme-status-danger-fg)", borderRadius: 6 }} title="Delete">
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </div>
-                    {isExpanded && (
-                      <div style={{ padding: "0 20px 14px 42px" }}>
-                        {team.members.length === 0
-                          ? <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>No members assigned yet.</p>
-                          : (
-                            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                              {team.members.map(m => {
-                                const rc = ROLE_COLORS[m.role] ?? ROLE_COLORS.staff;
-                                return (
-                                  <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", background: "var(--neuron-bg-page)", borderRadius: 7 }}>
-                                    <span style={{ fontSize: 13, fontWeight: 500, color: "var(--neuron-ink-primary)", flex: 1 }}>{m.name}</span>
-                                    <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>{m.email}</span>
-                                    <span style={{ fontSize: 11, fontWeight: 500, padding: "1px 7px", borderRadius: 999, backgroundColor: rc.bg, color: rc.text }}>
-                                      {ROLES.find(r => r.value === m.role)?.label ?? m.role}
-                                    </span>
-                                  </div>
-                                );
-                              })}
-                            </div>
+                          {leader && (
+                            <span style={{ fontSize: 11, fontWeight: 500, color: "var(--theme-action-primary-bg)", background: "var(--theme-status-success-bg)", padding: "2px 8px", borderRadius: 999 }}>
+                              {leader.name}
+                            </span>
                           )}
+                        </div>
+                        <div style={{ display: "flex", gap: 2 }} onClick={e => e.stopPropagation()}>
+                          <button
+                            onClick={() => { setEditingTeamId(team.id); setExpanded(null); }}
+                            style={{ padding: "5px 7px", background: "transparent", border: "none", cursor: "pointer", color: "var(--neuron-ink-muted)", borderRadius: 6, display: "flex", alignItems: "center" }}
+                            title="Edit team"
+                          >
+                            <Edit size={13} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(team.id, team.name)}
+                            disabled={deletingId === team.id}
+                            style={{ padding: "5px 7px", background: "transparent", border: "none", cursor: "pointer", color: "var(--theme-status-danger-fg)", borderRadius: 6, display: "flex", alignItems: "center" }}
+                            title="Delete team"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+
+                      {/* Expanded member table */}
+                      {isExpanded && (
+                        <div style={{ borderTop: "1px solid var(--neuron-ui-border)" }}>
+                          {/* Table header */}
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 140px", padding: "8px 20px 8px 44px", background: "var(--neuron-bg-page)" }}>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Name</span>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Role</span>
+                          </div>
+                          {/* Member rows */}
+                          {team.members.length === 0 ? (
+                            <div style={{ padding: "16px 20px 16px 44px", fontSize: 13, color: "var(--neuron-ink-muted)" }}>No members assigned yet.</div>
+                          ) : (
+                            team.members.map((m, mIdx) => {
+                              const rc = ROLE_COLORS[m.role] ?? ROLE_COLORS.staff;
+                              const isLeader = m.id === team.leader_id;
+                              const initial = (m.name || m.email || "?").charAt(0).toUpperCase();
+                              return (
+                                <div
+                                  key={m.id}
+                                  style={{
+                                    display: "grid",
+                                    gridTemplateColumns: "1fr 140px",
+                                    padding: "10px 20px 10px 44px",
+                                    alignItems: "center",
+                                    borderTop: mIdx > 0 ? "1px solid var(--neuron-ui-border)" : undefined,
+                                    background: "var(--neuron-bg-elevated)",
+                                  }}
+                                >
+                                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                    {/* Avatar */}
+                                    <div style={{
+                                      width: 32, height: 32, borderRadius: "50%",
+                                      backgroundColor: isLeader ? "var(--theme-status-success-bg)" : "var(--neuron-bg-surface-subtle)",
+                                      display: "flex", alignItems: "center", justifyContent: "center",
+                                      flexShrink: 0, border: "1px solid var(--neuron-ui-border)",
+                                      overflow: "hidden",
+                                    }}>
+                                      {m.avatar_url
+                                        ? <img src={m.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                        : <span style={{ fontSize: 12, fontWeight: 600, color: isLeader ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-muted)" }}>{initial}</span>
+                                      }
+                                    </div>
+                                    {/* Name + email */}
+                                    <div>
+                                      <p style={{ fontSize: 13, fontWeight: 500, color: "var(--neuron-ink-primary)", margin: 0, lineHeight: 1.3 }}>{m.name}</p>
+                                      <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: 0, lineHeight: 1.3 }}>{m.email}</p>
+                                    </div>
+                                  </div>
+                                  {/* Role badge */}
+                                  <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 999, backgroundColor: rc.bg, color: rc.text, justifySelf: "start" }}>
+                                    {ROLES.find(r => r.value === m.role)?.label ?? m.role}
+                                  </span>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Inline create row (per dept) */}
+            {creatingInDept === dept && (
+              <div style={{ borderTop: deptTeams.length > 0 ? "1px solid var(--neuron-ui-border)" : undefined }}>
+                <InlineTeamCreateRow
+                  dept={dept as Department}
+                  users={deptUsersFor(dept as Department)}
+                  onSaved={() => { setCreatingInDept(null); fetchTeams(); queryClient.invalidateQueries({ queryKey: queryKeys.users.list() }); }}
+                  onCancel={() => setCreatingInDept(null)}
+                />
+              </div>
+            )}
           </div>
         );
       })}
-
-      {/* Create Team Dialog */}
-      {creating && (
-        <Dialog open onOpenChange={() => setCreating(false)}>
-          <DialogContent style={{ maxWidth: 440 }}>
-            <DialogHeader>
-              <DialogTitle style={{ fontSize: 18, color: "var(--theme-text-primary)" }}>Create New Team</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 mt-2">
-              <div>
-                <Label style={{ fontSize: 13, marginBottom: 6, display: "block" }}>Team Name</Label>
-                <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g., North Luzon BD Team" autoFocus />
-              </div>
-              <div>
-                <Label style={{ fontSize: 13, marginBottom: 6, display: "block" }}>Department</Label>
-                <Select value={newDept} onValueChange={v => { setNewDept(v as Department); setNewLeaderId(""); }}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{DEPARTMENTS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label style={{ fontSize: 13, marginBottom: 6, display: "block" }}>Team Leader <span style={{ color: "var(--theme-text-muted)", fontWeight: 400 }}>(optional)</span></Label>
-                <Select value={newLeaderId} onValueChange={setNewLeaderId}>
-                  <SelectTrigger><SelectValue placeholder="Assign later" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">No leader yet</SelectItem>
-                    {deptUsersFor(newDept).map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                <Button variant="outline" onClick={() => setCreating(false)} disabled={saving}>Cancel</Button>
-                <Button onClick={handleCreate} disabled={saving} className="bg-[var(--theme-action-primary-bg)] hover:bg-[var(--theme-action-primary-border)] text-white">
-                  {saving ? "Creating…" : "Create Team"}
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
-
-      {editingTeam && (
-        <EditTeamDialog team={editingTeam} onClose={() => setEditingTeam(null)} onSaved={() => { setEditingTeam(null); fetchTeams(); }} />
-      )}
     </div>
   );
 }
