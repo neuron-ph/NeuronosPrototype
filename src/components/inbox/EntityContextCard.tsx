@@ -1,4 +1,17 @@
-import { ExternalLink } from "lucide-react";
+import {
+  FileText,
+  Handshake,
+  Package,
+  Briefcase,
+  Receipt,
+  ArrowLeftRight,
+  CreditCard,
+  Building,
+  User,
+  Banknote,
+  ExternalLink,
+  type LucideIcon,
+} from "lucide-react";
 import { useNavigate } from "react-router";
 import { useUser } from "../../hooks/useUser";
 import { TICKET_ENTITY_TONES } from "./ticketingTheme";
@@ -9,17 +22,17 @@ export interface EntityContextCardProps {
   entity_label: string;
 }
 
-const ENTITY_CONFIG: Record<string, { label: string }> = {
-  quotation: { label: "Quotation" },
-  contract: { label: "Contract" },
-  booking: { label: "Booking" },
-  project: { label: "Project" },
-  invoice: { label: "Invoice" },
-  collection: { label: "Collection" },
-  expense: { label: "Expense" },
-  customer: { label: "Customer" },
-  contact: { label: "Contact" },
-  budget_request: { label: "Budget Request" },
+const ENTITY_CONFIG: Record<string, { label: string; icon: LucideIcon }> = {
+  quotation:      { label: "Quotation",      icon: FileText },
+  contract:       { label: "Contract",       icon: Handshake },
+  booking:        { label: "Booking",        icon: Package },
+  project:        { label: "Project",        icon: Briefcase },
+  invoice:        { label: "Invoice",        icon: Receipt },
+  collection:     { label: "Collection",     icon: ArrowLeftRight },
+  expense:        { label: "Expense",        icon: CreditCard },
+  customer:       { label: "Customer",       icon: Building },
+  contact:        { label: "Contact",        icon: User },
+  budget_request: { label: "Budget Request", icon: Banknote },
 };
 
 /**
@@ -85,8 +98,8 @@ export function EntityContextCard({ entity_type, entity_id, entity_label }: Enti
   const config = ENTITY_CONFIG[entity_type];
   const tone = TICKET_ENTITY_TONES[entity_type] ?? { bg: "#F7FAF8", text: "#5F6E69", border: "#E2E8E5" };
   const label = config?.label ?? entity_type;
+  const Icon = config?.icon;
 
-  // Pick route based on who is viewing — null means no access
   const routeFn = ENTITY_ROUTES[entity_type]?.[effectiveDepartment ?? ""];
   const route = routeFn ? routeFn(entity_id) : null;
 
@@ -97,13 +110,13 @@ export function EntityContextCard({ entity_type, entity_id, entity_label }: Enti
       style={{
         display: "inline-flex",
         alignItems: "center",
-        gap: 8,
-        padding: "5px 10px",
-        borderRadius: 6,
+        gap: 10,
+        padding: "8px 12px",
+        borderRadius: 8,
         border: `1px solid ${tone.border}`,
         backgroundColor: tone.bg,
         cursor: route ? "pointer" : "default",
-        transition: "background-color 120ms ease, border-color 120ms ease",
+        transition: "background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease",
         textAlign: "left",
         outline: "none",
       }}
@@ -111,20 +124,49 @@ export function EntityContextCard({ entity_type, entity_id, entity_label }: Enti
         if (!route) return;
         e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
         e.currentTarget.style.borderColor = "var(--neuron-ui-active-border)";
+        e.currentTarget.style.boxShadow = "0 1px 4px rgba(0,0,0,0.06)";
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.backgroundColor = tone.bg;
         e.currentTarget.style.borderColor = tone.border;
+        e.currentTarget.style.boxShadow = "none";
       }}
     >
-      <span style={{ fontSize: 10, fontWeight: 700, color: tone.text, letterSpacing: "0.2px", flexShrink: 0 }}>
-        {label}
-      </span>
-      <span style={{ fontSize: 12, fontWeight: 500, color: "var(--theme-text-primary)" }}>
-        {entity_label || entity_id}
-      </span>
+      {/* Icon */}
+      {Icon && (
+        <Icon size={16} style={{ color: tone.text, flexShrink: 0 }} />
+      )}
+
+      {/* Text stack */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
+        <span
+          style={{
+            fontSize: 13,
+            fontWeight: 600,
+            color: "var(--theme-text-primary)",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            lineHeight: 1.3,
+          }}
+        >
+          {entity_label || entity_id}
+        </span>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 500,
+            color: tone.text,
+            letterSpacing: "0.2px",
+            lineHeight: 1.3,
+          }}
+        >
+          {label}
+        </span>
+      </div>
+
       {route && (
-        <ExternalLink size={10} style={{ color: "var(--theme-text-muted)", flexShrink: 0, marginLeft: 2 }} />
+        <ExternalLink size={11} style={{ color: tone.text, flexShrink: 0, opacity: 0.5, marginLeft: 2 }} />
       )}
     </button>
   );

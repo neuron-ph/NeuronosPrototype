@@ -53,7 +53,7 @@
  * @since 2026-01-24 - Category Merge System completed
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useUser } from "../../../hooks/useUser";
 import { toast } from "sonner@2.0.3";
 import { X, Save, FileText, Handshake } from "lucide-react";
@@ -265,7 +265,12 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
   const [selectedServices, setSelectedServices] = useState<string[]>(initialData?.services || []);
   const [date, setDate] = useState(initialData?.created_date || new Date().toISOString().split('T')[0]);
   const [creditTerms, setCreditTerms] = useState(initialData?.credit_terms || "");
-  const [validity, setValidity] = useState(initialData?.validity_period || "");
+  // Parse numeric days from stored string — handles legacy "30 days" and plain "30"
+  const [validity, setValidity] = useState(() => {
+    const raw = initialData?.validity_period || "";
+    const n = parseInt(raw, 10);
+    return isNaN(n) ? "" : String(n);
+  });
   const [vendors, setVendors] = useState<Vendor[]>([]);
   
   // ✨ NEW: Movement State (Import/Export)
@@ -410,6 +415,22 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
     }
   }, [viewMode, initialData]);
 
+  // When Marine Insurance is added AFTER Forwarding is already filled, carry over the route fields
+  const prevSelectedServicesRef = useRef<string[]>(selectedServices);
+  useEffect(() => {
+    const prev = prevSelectedServicesRef.current;
+    const marineJustAdded = selectedServices.includes("Marine Insurance") && !prev.includes("Marine Insurance");
+    if (marineJustAdded) {
+      setMarineInsuranceData(cur => ({
+        ...cur,
+        ...(!cur.aolPol && forwardingData.aolPol ? { aolPol: forwardingData.aolPol } : {}),
+        ...(!cur.aodPod && forwardingData.aodPod ? { aodPod: forwardingData.aodPod } : {}),
+        ...(!cur.commodityDescription && forwardingData.commodityDescription ? { commodityDescription: forwardingData.commodityDescription } : {}),
+      }));
+    }
+    prevSelectedServicesRef.current = selectedServices;
+  }, [selectedServices]);
+
   // ✨ CONTRACT: Auto-manage rate matrices when services change
   useEffect(() => {
     if (!isContractMode) return;
@@ -552,8 +573,9 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
     }
     
     if (serviceType === "Marine Insurance") {
-      const aolPol = details.aolPol || (details.aol && details.pol ? `${details.aol} → ${details.pol}` : "");
-      const aodPod = details.aodPod || (details.aod && details.pod ? `${details.aod} → ${details.pod}` : "");
+      // Check aol_pol (snake_case saved by builder), then camelCase, then reconstruct from separate fields
+      const aolPol = details.aol_pol || details.aolPol || (details.aol && details.pol ? `${details.aol} → ${details.pol}` : details.aol || "");
+      const aodPod = details.aod_pod || details.aodPod || (details.aod && details.pod ? `${details.aod} → ${details.pod}` : details.aod || "");
       
       return {
         ...defaultData,
@@ -647,7 +669,9 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
       } catch (err) {
         console.error("[ContractRateBridge] Detection error:", err);
       } finally {
-        if (!cancelled) setContractBridgeLoading(false);
+        // Always clear loading — guarding with `cancelled` causes a stuck spinner
+        // when cleanup fires mid-fetch (new effect cycle sets it true again anyway)
+        setContractBridgeLoading(false);
       }
     };
 
@@ -1913,9 +1937,12 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
       services_metadata.push({
         service_type: "Marine Insurance",
         service_details: {
-          // Map camelCase form data to snake_case TypeScript types
           commodity_description: marineInsuranceData.commodityDescription,
           hs_code: marineInsuranceData.hsCode,
+          // Save compound fields directly so load can recover them without splitting
+          aol_pol: marineInsuranceData.aolPol,
+          aod_pod: marineInsuranceData.aodPod,
+          // Also save split fields for downstream consumers (e.g. invoices)
           aol: aol,
           pol: pol || marineInsuranceData.pol,
           aod: aod,

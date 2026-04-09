@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState } from "react";
-import { UserPlus, MessageSquare, Check, CheckCircle, X, RotateCcw, Zap } from "lucide-react";
+import { UserPlus, MessageSquare, Check, CheckCircle, X, Zap, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { useUser } from "../../hooks/useUser";
 import { logStatusChange } from "../../utils/activityLog";
@@ -8,11 +8,15 @@ import { useThread } from "../../hooks/useThread";
 import { MessageBubble } from "./MessageBubble";
 import { SystemEventRow } from "./SystemEventRow";
 import { ComposeBox } from "./ComposeBox";
+import type { RecipientChip } from "./RecipientField";
 import { AssignModal } from "./AssignModal";
-import { TICKET_PRIORITY_TONES, TICKET_TYPE_TONES, ticketBadgeStyle, ticketToggleStyle } from "./ticketingTheme";
+import { TICKET_PRIORITY_TONES, TICKET_STATUS_TONES, TICKET_TYPE_TONES, ticketBadgeStyle } from "./ticketingTheme";
 import { executeResolutionAction } from "../../utils/workflowTickets";
 
+// ── Constants ────────────────────────────────────────────────────────────────
+
 const STATUS_STEPS = ["open", "acknowledged", "in_progress", "done"] as const;
+
 const STATUS_LABELS: Record<string, string> = {
   open: "Open",
   acknowledged: "Acknowledged",
@@ -33,12 +37,48 @@ const RECORD_TYPE_LABEL: Record<string, string> = {
   budget_request: "Budget Request",
 };
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function getInitials(name?: string) {
+  if (!name) return "?";
+  return name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
+}
+
+function formatTime(dateStr: string) {
+  return new Date(dateStr).toLocaleString("en-PH", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+function formatRelative(dateStr: string): string {
+  const diffMs = Date.now() - new Date(dateStr).getTime();
+  const diffMins = Math.floor(diffMs / 60_000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffMins < 1) return "just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays === 1) return "yesterday";
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return "";
+}
+
+// ── Props ────────────────────────────────────────────────────────────────────
+
 interface ThreadDetailPanelProps {
   ticketId: string | null;
   onThreadUpdated: () => void;
+  threadIds?: string[];
+  onNavigate?: (id: string) => void;
 }
 
-export function ThreadDetailPanel({ ticketId, onThreadUpdated }: ThreadDetailPanelProps) {
+// ── Component ────────────────────────────────────────────────────────────────
+
+export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavigate }: ThreadDetailPanelProps) {
   const { user, effectiveRole } = useUser();
   const { thread, isLoading, refresh } = useThread(ticketId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -46,6 +86,9 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated }: ThreadDetailPan
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [showReturnPanel, setShowReturnPanel] = useState(false);
   const [returnReason, setReturnReason] = useState("");
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [localStatus, setLocalStatus] = useState<string | null>(null);
+  const statusDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isLoading && thread) {
@@ -53,21 +96,66 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated }: ThreadDetailPan
     }
   }, [thread?.messages.length, isLoading]);
 
+  useEffect(() => { setLocalStatus(null); }, [thread?.status]);
+
+  useEffect(() => {
+    if (!statusOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(e.target as Node)) {
+        setStatusOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [statusOpen]);
+
   if (!ticketId) return <EmptyState />;
   if (isLoading) return <ThreadDetailSkeleton />;
   if (!thread) return <EmptyState message="Thread not found" />;
 
   const isSender = thread.created_by === user?.id;
   const isRecipient = !isSender && thread.participants.some(
-    (p) => p.participant_type === "user" && p.user_id === user?.id
+    (p) => p.participant_type === "user" && p.participant_user_id === user?.id
   );
   const isManagerOrDirector = effectiveRole === "manager" || effectiveRole === "team_leader";
-  const deptParticipants = thread.participants.filter((p) => p.participant_type === "department" && p.role === "to");
+  const deptParticipants = thread.participants.filter(
+    (p) => p.participant_type === "department" && p.role === "to"
+  );
   const canAssign = isManagerOrDirector && deptParticipants.length > 0;
   const canAdvanceStatus = isRecipient && !["done", "returned", "archived", "draft"].includes(thread.status);
   const isApprovalPending = thread.type === "approval" && thread.approval_result === null && isRecipient;
   const isDone = thread.status === "done";
   const isReturned = thread.status === "returned";
+
+  const toParticipants = thread.participants.filter((p) => p.role === "to");
+  const ccParticipants = thread.participants.filter((p) => p.role === "cc");
+
+  // First message — embedded in the sender block
+  const firstMessage = thread.messages.find((m) => !m.is_system) ?? null;
+
+  // Prev / next navigation
+  const navIdx = threadIds ? threadIds.indexOf(thread.id) : -1;
+  const hasPrev = navIdx > 0;
+  const hasNext = threadIds ? navIdx < threadIds.length - 1 : false;
+  const navTotal = threadIds?.length ?? 0;
+
+  const renderParticipant = (p: typeof toParticipants[0]) =>
+    p.participant_type === "department" ? `${p.participant_dept} dept` : p.user_name || "Unknown";
+
+  // Build recipient chips for ComposeBox — everyone in the thread except self
+  // Includes senders, to, and cc so "Reply" naturally addresses the right people
+  const toChips: RecipientChip[] = thread.participants
+    .filter((p) => p.participant_user_id !== user?.id)
+    .map((p) =>
+      p.participant_type === "user"
+        ? { id: p.participant_user_id!, label: p.user_name || "Unknown", type: "user" as const, userId: p.participant_user_id! }
+        : { id: `dept-${p.participant_dept}`, label: p.participant_dept!, type: "department" as const, department: p.participant_dept! }
+    );
+
+  const typeTone = TICKET_TYPE_TONES[thread.type] ?? TICKET_TYPE_TONES.fyi;
+
+
+  // ── Status / workflow helpers ────────────────────────────────────────────
 
   const logSystemEvent = async (event: string, metadata: Record<string, any>) => {
     await supabase.from("ticket_messages").insert({
@@ -80,7 +168,10 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated }: ThreadDetailPan
       system_metadata: metadata,
       is_retracted: false,
     });
-    await supabase.from("tickets").update({ last_message_at: new Date().toISOString() }).eq("id", thread.id);
+    await supabase
+      .from("tickets")
+      .update({ last_message_at: new Date().toISOString() })
+      .eq("id", thread.id);
   };
 
   const advanceStatus = async () => {
@@ -96,11 +187,14 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated }: ThreadDetailPan
       .eq("id", thread.id);
 
     if (!error) {
-      await logSystemEvent("status_changed", { from: thread.status, to: nextStatus, changed_by_name: user!.name });
+      await logSystemEvent("status_changed", {
+        from: thread.status,
+        to: nextStatus,
+        changed_by_name: user!.name,
+      });
       const actor = { id: user!.id, name: user!.name, department: user!.department };
       logStatusChange("ticket", thread.id, thread.subject ?? thread.id, thread.status, nextStatus, actor);
 
-      // If marking done, execute resolution action if present
       if (nextStatus === "done" && thread.resolution_action && thread.linked_record_type && thread.linked_record_id) {
         await executeResolutionAction(thread.resolution_action, thread.linked_record_type, thread.linked_record_id);
         toast.success("Done — linked record updated");
@@ -115,8 +209,40 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated }: ThreadDetailPan
     setIsUpdatingStatus(false);
   };
 
+  const setStatus = async (targetStatus: typeof STATUS_STEPS[number]) => {
+    if (!canAdvanceStatus || targetStatus === thread.status) return;
+    setIsUpdatingStatus(true);
+    const { error } = await supabase
+      .from("tickets")
+      .update({ status: targetStatus, updated_at: new Date().toISOString() })
+      .eq("id", thread.id);
+    if (!error) {
+      await logSystemEvent("status_changed", {
+        from: thread.status,
+        to: targetStatus,
+        changed_by_name: user!.name,
+      });
+      const actor = { id: user!.id, name: user!.name, department: user!.department };
+      logStatusChange("ticket", thread.id, thread.subject ?? thread.id, thread.status, targetStatus, actor);
+      if (targetStatus === "done" && thread.resolution_action && thread.linked_record_type && thread.linked_record_id) {
+        await executeResolutionAction(thread.resolution_action, thread.linked_record_type, thread.linked_record_id);
+        toast.success("Done — linked record updated");
+      } else {
+        toast.success(`Marked as ${STATUS_LABELS[targetStatus]}`);
+      }
+      refresh();
+      onThreadUpdated();
+    } else {
+      toast.error("Failed to update status");
+    }
+    setIsUpdatingStatus(false);
+  };
+
   const handleReturn = async () => {
-    if (!returnReason.trim()) { toast.error("A reason is required to return this ticket"); return; }
+    if (!returnReason.trim()) {
+      toast.error("A reason is required to return this ticket");
+      return;
+    }
     setIsUpdatingStatus(true);
     const { error } = await supabase
       .from("tickets")
@@ -130,7 +256,12 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated }: ThreadDetailPan
       .eq("id", thread.id);
 
     if (!error) {
-      await logSystemEvent("status_changed", { from: thread.status, to: "returned", changed_by_name: user!.name, reason: returnReason.trim() });
+      await logSystemEvent("status_changed", {
+        from: thread.status,
+        to: "returned",
+        changed_by_name: user!.name,
+        reason: returnReason.trim(),
+      });
       const actor = { id: user!.id, name: user!.name, department: user!.department };
       logStatusChange("ticket", thread.id, thread.subject ?? thread.id, thread.status, "returned", actor);
       toast.success("Ticket returned");
@@ -163,12 +294,21 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated }: ThreadDetailPan
     const { error } = await supabase.from("tickets").update(updates).eq("id", thread.id);
 
     if (!error) {
-      await logSystemEvent(result === "accepted" ? "approval_accepted" : "approval_declined", {
-        decided_by_name: user!.name,
-        reason: reason ?? null,
-      });
-      if (result === "accepted" && thread.resolution_action && thread.linked_record_type && thread.linked_record_id) {
-        await executeResolutionAction(thread.resolution_action, thread.linked_record_type, thread.linked_record_id);
+      await logSystemEvent(
+        result === "accepted" ? "approval_accepted" : "approval_declined",
+        { decided_by_name: user!.name, reason: reason ?? null }
+      );
+      if (
+        result === "accepted" &&
+        thread.resolution_action &&
+        thread.linked_record_type &&
+        thread.linked_record_id
+      ) {
+        await executeResolutionAction(
+          thread.resolution_action,
+          thread.linked_record_type,
+          thread.linked_record_id
+        );
       }
       toast.success(result === "accepted" ? "Request approved" : "Request declined");
       setShowReturnPanel(false);
@@ -185,7 +325,10 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated }: ThreadDetailPan
     if (!isSender) return;
     setIsUpdatingStatus(true);
     const oldStatus = thread.status;
-    await supabase.from("tickets").update({ status: "open", updated_at: new Date().toISOString() }).eq("id", thread.id);
+    await supabase
+      .from("tickets")
+      .update({ status: "open", updated_at: new Date().toISOString() })
+      .eq("id", thread.id);
     await logSystemEvent("status_changed", { from: oldStatus, to: "open", changed_by_name: user!.name });
     const actor = { id: user!.id, name: user!.name, department: user!.department };
     logStatusChange("ticket", thread.id, thread.subject ?? thread.id, oldStatus, "open", actor);
@@ -195,264 +338,574 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated }: ThreadDetailPan
     setIsUpdatingStatus(false);
   };
 
-  const typeTone = TICKET_TYPE_TONES[thread.type] ?? TICKET_TYPE_TONES.fyi;
-  const toParticipants = thread.participants.filter((p) => p.role === "to");
-  const ccParticipants = thread.participants.filter((p) => p.role === "cc");
-  const renderParticipant = (p: typeof toParticipants[0]) =>
-    p.participant_type === "department" ? `${p.department} dept` : p.user_name || "Unknown";
-
-  const currentStepIdx = STATUS_STEPS.indexOf(thread.status as any);
-  const nextStep = currentStepIdx >= 0 && currentStepIdx < STATUS_STEPS.length - 1
-    ? STATUS_STEPS[currentStepIdx + 1]
-    : null;
+  // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="ticketing-ui flex flex-col h-full" style={{ backgroundColor: "var(--theme-bg-surface)" }}>
-      {/* Header */}
-      <div style={{ padding: "20px 28px 16px", borderBottom: "1px solid var(--theme-border-default)", flexShrink: 0 }}>
+    <div
+      className="ticketing-ui flex flex-col h-full"
+      style={{ backgroundColor: "var(--theme-bg-surface)" }}
+    >
+      {/* ══ ACTION BAR ════════════════════════════════════════════════════ */}
+      <div
+        style={{
+          padding: "10px 20px",
+          borderBottom: "1px solid var(--theme-border-subtle)",
+          flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          flexWrap: "wrap",
+          backgroundColor: "var(--theme-bg-surface)",
+        }}
+      >
+        {/* Left: type badge + priority */}
+        <span
+          style={{
+            ...ticketBadgeStyle(typeTone, 700),
+            fontSize: 12,
+            padding: "4px 10px",
+            letterSpacing: "0.4px",
+          }}
+        >
+          {thread.type === "fyi" ? "FYI" : thread.type === "request" ? "Request" : "Approval"}
+        </span>
+        {thread.priority === "urgent" && (
+          <span style={ticketBadgeStyle(TICKET_PRIORITY_TONES.urgent)}>Urgent</span>
+        )}
 
-        {/* Type + priority + actions row */}
-        <div className="flex items-center gap-2 mb-3 flex-wrap">
-          <span style={{
-            ...ticketBadgeStyle(typeTone),
-          }}>
-            {thread.type === "fyi" ? "FYI" : thread.type === "request" ? "Request" : "Approval"}
-          </span>
+        <div style={{ flex: 1 }} />
 
-          {thread.priority === "urgent" && (
-            <span style={ticketBadgeStyle(TICKET_PRIORITY_TONES.urgent)}>
-              Urgent
-            </span>
+        {/* Right: action buttons */}
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {/* Approval buttons */}
+          {isApprovalPending && (
+            <>
+              <ActionButton
+                onClick={() => handleApproval("accepted")}
+                disabled={isUpdatingStatus}
+                variant="success"
+                icon={<Check size={12} />}
+                label="Accept"
+              />
+              <ActionButton
+                onClick={() => setShowReturnPanel(true)}
+                disabled={isUpdatingStatus}
+                variant="danger"
+                icon={<X size={12} />}
+                label="Decline"
+              />
+            </>
           )}
 
-          <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
-            {/* Approval buttons */}
-            {isApprovalPending && (
-              <>
+          {/* Status dropdown */}
+          {(() => {
+            const displayStatus = localStatus ?? thread.status;
+            const displayStepIdx = STATUS_STEPS.indexOf(displayStatus as any);
+            const statusTone = TICKET_STATUS_TONES[displayStatus] ?? TICKET_STATUS_TONES.open;
+            const canChangeStatus = canAdvanceStatus && thread.type !== "approval" && !isUpdatingStatus;
+            return (
+              <div ref={statusDropdownRef} style={{ position: "relative" }}>
                 <button
-                  onClick={() => handleApproval("accepted")}
-                  disabled={isUpdatingStatus}
-                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 6, border: "1px solid var(--neuron-ui-active-border)", backgroundColor: "var(--neuron-state-selected)", color: "var(--neuron-brand-green)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                  onClick={() => canChangeStatus && setStatusOpen((o) => !o)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 5,
+                    padding: "4px 10px",
+                    borderRadius: 6,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    border: `1px solid ${statusTone.border}`,
+                    backgroundColor: statusTone.bg,
+                    color: statusTone.text,
+                    cursor: canChangeStatus ? "pointer" : "default",
+                    letterSpacing: "0.2px",
+                    opacity: isUpdatingStatus ? 0.6 : 1,
+                    transition: "opacity 150ms ease",
+                  }}
                 >
-                  <Check size={13} /> Accept
+                  {STATUS_LABELS[displayStatus] ?? displayStatus}
+                  {canChangeStatus && <ChevronDown size={11} style={{ opacity: 0.7 }} />}
                 </button>
-                <button
-                  onClick={() => setShowReturnPanel(true)}
-                  disabled={isUpdatingStatus}
-                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 6, border: "1px solid #E7D1C7", backgroundColor: "#FAF1EE", color: "#A05B45", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                {statusOpen && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 4px)",
+                      right: 0,
+                      backgroundColor: "var(--theme-bg-surface)",
+                      border: "1px solid var(--theme-border-default)",
+                      borderRadius: 8,
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.10)",
+                      zIndex: 200,
+                      minWidth: 160,
+                      padding: "4px 0",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {STATUS_STEPS.map((step, idx) => {
+                      const isCurrent = displayStatus === step;
+                      const isCompleted = displayStepIdx > idx;
+                      return (
+                        <div
+                          key={step}
+                          onClick={() => {
+                            if (isCurrent || isUpdatingStatus) return;
+                            setLocalStatus(step);
+                            setStatusOpen(false);
+                            setStatus(step);
+                          }}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                            padding: "7px 12px",
+                            fontSize: 12,
+                            fontWeight: isCurrent ? 600 : 400,
+                            color: isCurrent ? "var(--neuron-brand-green)" : "var(--theme-text-primary)",
+                            backgroundColor: isCurrent ? "var(--neuron-state-selected)" : "transparent",
+                            cursor: isCurrent || isUpdatingStatus ? "default" : "pointer",
+                            transition: "background 120ms ease",
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isCurrent && !isUpdatingStatus) e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isCurrent) e.currentTarget.style.backgroundColor = "transparent";
+                          }}
+                        >
+                          <span style={{ width: 12, display: "flex", alignItems: "center" }}>
+                            {(isCurrent || isCompleted) && (
+                              <Check size={10} style={{ color: "var(--neuron-brand-green)" }} />
+                            )}
+                          </span>
+                          {STATUS_LABELS[step]}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Mark Done (sender only, when in_progress) */}
+          {isSender && thread.status === "in_progress" && (
+            <ActionButton
+              onClick={advanceStatus}
+              disabled={isUpdatingStatus}
+              variant="success"
+              icon={<CheckCircle size={12} />}
+              label="Mark Done"
+            />
+          )}
+
+          {/* Reopen */}
+          {isSender && (isDone || isReturned) && (
+            <ActionButton
+              onClick={handleReopen}
+              disabled={isUpdatingStatus}
+              variant="ghost"
+              label="Reopen"
+            />
+          )}
+
+          {/* Assign */}
+          {canAssign && (
+            <ActionButton
+              onClick={() => setShowAssignModal(true)}
+              variant="ghost"
+              icon={<UserPlus size={11} />}
+              label={thread.assignment ? "Reassign" : "Assign"}
+            />
+          )}
+
+          {/* Prev / Next navigation */}
+          {threadIds && navTotal > 1 && onNavigate && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 0,
+                borderLeft: "1px solid var(--theme-border-default)",
+                paddingLeft: 8,
+                marginLeft: 2,
+              }}
+            >
+              <button
+                onClick={() => hasPrev && onNavigate(threadIds[navIdx - 1])}
+                disabled={!hasPrev}
+                title="Previous thread (↑)"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 26,
+                  height: 26,
+                  borderRadius: 5,
+                  border: "1px solid var(--theme-border-default)",
+                  backgroundColor: "transparent",
+                  color: hasPrev ? "var(--theme-text-secondary)" : "var(--theme-text-muted)",
+                  cursor: hasPrev ? "pointer" : "not-allowed",
+                  opacity: hasPrev ? 1 : 0.4,
+                }}
+                onMouseEnter={(e) => { if (hasPrev) e.currentTarget.style.backgroundColor = "var(--theme-bg-page)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
+              >
+                <ChevronLeft size={13} />
+              </button>
+              <span
+                style={{
+                  fontSize: 11,
+                  color: "var(--theme-text-muted)",
+                  padding: "0 6px",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {navIdx + 1} / {navTotal}
+              </span>
+              <button
+                onClick={() => hasNext && onNavigate(threadIds[navIdx + 1])}
+                disabled={!hasNext}
+                title="Next thread (↓)"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 26,
+                  height: 26,
+                  borderRadius: 5,
+                  border: "1px solid var(--theme-border-default)",
+                  backgroundColor: "transparent",
+                  color: hasNext ? "var(--theme-text-secondary)" : "var(--theme-text-muted)",
+                  cursor: hasNext ? "pointer" : "not-allowed",
+                  opacity: hasNext ? 1 : 0.4,
+                }}
+                onMouseEnter={(e) => { if (hasNext) e.currentTarget.style.backgroundColor = "var(--theme-bg-page)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
+              >
+                <ChevronRight size={13} />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ══ SENDER BLOCK + SUBJECT ════════════════════════════════════════ */}
+      <div
+        style={{
+          padding: "20px 28px 18px",
+          borderBottom: "1px solid var(--theme-border-default)",
+          flexShrink: 0,
+        }}
+      >
+        {/* Sender block */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 12,
+            marginBottom: 16,
+          }}
+        >
+          {/* Left: avatar + sender info */}
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12, minWidth: 0 }}>
+            <div
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                backgroundColor: thread.created_by_avatar_url ? "transparent" : "var(--neuron-brand-green)",
+                color: "#FFFFFF",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 14,
+                fontWeight: 700,
+                flexShrink: 0,
+                letterSpacing: "0.3px",
+                overflow: "hidden",
+                border: "1.5px solid var(--theme-border-default)",
+              }}
+            >
+              {thread.created_by_avatar_url ? (
+                <img
+                  src={thread.created_by_avatar_url}
+                  alt={thread.created_by_name}
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              ) : (
+                getInitials(thread.created_by_name)
+              )}
+            </div>
+
+            <div style={{ minWidth: 0 }}>
+              <p
+                style={{
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: "var(--theme-text-primary)",
+                  margin: 0,
+                  marginBottom: 1,
+                  lineHeight: 1.3,
+                }}
+              >
+                {thread.created_by_name || "Unknown"}
+              </p>
+              {thread.created_by_department && (
+                <p
+                  style={{
+                    fontSize: 11,
+                    color: "var(--theme-text-muted)",
+                    margin: 0,
+                    marginBottom: 3,
+                    lineHeight: 1.3,
+                  }}
                 >
-                  <X size={13} /> Decline
-                </button>
-              </>
-            )}
+                  {thread.created_by_department}
+                </p>
+              )}
+              {toParticipants.length > 0 && (
+                <p
+                  style={{
+                    fontSize: 12,
+                    color: "var(--theme-text-muted)",
+                    margin: 0,
+                    lineHeight: 1.4,
+                  }}
+                >
+                  To:{" "}
+                  <span style={{ color: "var(--theme-text-secondary)" }}>
+                    {toParticipants.map(renderParticipant).join(", ")}
+                  </span>
+                  {ccParticipants.length > 0 && (
+                    <>
+                      {" · "}CC:{" "}
+                      <span style={{ color: "var(--theme-text-secondary)" }}>
+                        {ccParticipants.map(renderParticipant).join(", ")}
+                      </span>
+                    </>
+                  )}
+                </p>
+              )}
+              {thread.assignment && (
+                <p
+                  style={{
+                    fontSize: 12,
+                    color: "var(--theme-action-primary-bg)",
+                    margin: 0,
+                    marginTop: 3,
+                    lineHeight: 1.4,
+                  }}
+                >
+                  Assigned to {thread.assignment.assigned_to_name}
+                </p>
+              )}
+            </div>
+          </div>
 
-            {/* Return button (non-approval requests) */}
-            {canAdvanceStatus && thread.type !== "approval" && (
-              <button
-                onClick={() => setShowReturnPanel(true)}
-                style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 6, border: "1px solid var(--neuron-ui-border)", backgroundColor: "transparent", color: "var(--neuron-ink-secondary)", fontSize: 12, fontWeight: 500, cursor: "pointer" }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#E7D1C7"; e.currentTarget.style.color = "#A05B45"; e.currentTarget.style.backgroundColor = "#FAF1EE"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--neuron-ui-border)"; e.currentTarget.style.color = "var(--neuron-ink-secondary)"; e.currentTarget.style.backgroundColor = "transparent"; }}
-              >
-                <RotateCcw size={12} /> Return
-              </button>
-            )}
-
-
-            {/* Sender: mark done */}
-            {isSender && thread.status === "in_progress" && (
-              <button
-                onClick={advanceStatus}
-                disabled={isUpdatingStatus}
-                style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 6, border: "1px solid var(--neuron-ui-active-border)", backgroundColor: "var(--neuron-state-selected)", color: "var(--neuron-brand-green)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
-              >
-                <CheckCircle size={13} /> Mark Done
-              </button>
-            )}
-
-            {/* Reopen */}
-            {isSender && (isDone || isReturned) && (
-              <button
-                onClick={handleReopen}
-                disabled={isUpdatingStatus}
-                style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 6, border: "1px solid var(--neuron-ui-border)", backgroundColor: "transparent", color: "var(--neuron-ink-secondary)", fontSize: 12, fontWeight: 500, cursor: "pointer" }}
-              >
-                Reopen
-              </button>
-            )}
-
-            {/* Assign */}
-            {canAssign && (
-              <button
-                onClick={() => setShowAssignModal(true)}
-                style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 6, border: "1px solid var(--neuron-ui-border)", backgroundColor: "transparent", color: "var(--neuron-ink-secondary)", fontSize: 12, fontWeight: 500, cursor: "pointer" }}
-                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)"; e.currentTarget.style.borderColor = "var(--neuron-ui-active-border)"; e.currentTarget.style.color = "var(--neuron-brand-green)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.borderColor = "var(--neuron-ui-border)"; e.currentTarget.style.color = "var(--neuron-ink-secondary)"; }}
-              >
-                <UserPlus size={13} />
-                {thread.assignment ? "Reassign" : "Assign"}
-              </button>
+          {/* Right: timestamp */}
+          <div style={{ flexShrink: 0, marginTop: 2, textAlign: "right" }}>
+            <p style={{ fontSize: 12, color: "var(--theme-text-muted)", margin: 0, whiteSpace: "nowrap" }}>
+              {formatTime(thread.created_at)}
+            </p>
+            {formatRelative(thread.created_at) && (
+              <p style={{ fontSize: 11, color: "var(--theme-text-muted)", margin: 0, marginTop: 1, whiteSpace: "nowrap", opacity: 0.7 }}>
+                {formatRelative(thread.created_at)}
+              </p>
             )}
           </div>
         </div>
 
-        {/* Status progression bar (non-returned/done hidden from bar) */}
-        {!isReturned && !isDone && thread.status !== "draft" && (
-          <div className="flex items-center gap-2 mb-3">
-            {STATUS_STEPS.map((step, idx) => {
-              const isCompleted = currentStepIdx > idx;
-              const isCurrent = currentStepIdx === idx;
-              const isNext = idx === currentStepIdx + 1;
-              const isClickable = isNext && canAdvanceStatus && thread.type !== "approval" && !isUpdatingStatus;
-              return (
-                <div key={step} className="flex items-center gap-2">
-                  <div
-                    onClick={isClickable ? advanceStatus : undefined}
-                    title={isClickable ? `Mark as ${STATUS_LABELS[step]}` : undefined}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 4,
-                      padding: "4px 8px", borderRadius: 6,
-                      backgroundColor: isCurrent ? "var(--neuron-state-selected)" : isCompleted ? "var(--theme-bg-surface-tint)" : "var(--theme-bg-page)",
-                      color: isCurrent ? "var(--neuron-brand-green)" : isCompleted ? "var(--neuron-brand-green)" : isClickable ? "var(--neuron-ink-secondary)" : "var(--theme-text-muted)",
-                      fontSize: 11, fontWeight: isCurrent ? 600 : 400,
-                      cursor: isClickable ? "pointer" : "default",
-                      border: `1px solid ${isCurrent || isCompleted ? "var(--neuron-ui-active-border)" : "var(--neuron-ui-border)"}`,
-                      transition: "border-color 150ms ease, color 150ms ease, background-color 150ms ease",
-                    }}
-                    onMouseEnter={isClickable ? (e) => {
-                      e.currentTarget.style.borderColor = "var(--neuron-ui-active-border)";
-                      e.currentTarget.style.color = "var(--neuron-brand-green)";
-                      e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
-                    } : undefined}
-                    onMouseLeave={isClickable ? (e) => {
-                      e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
-                      e.currentTarget.style.color = "var(--neuron-ink-secondary)";
-                      e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
-                    } : undefined}
-                  >
-                    {isCompleted && <Check size={9} />}
-                    {STATUS_LABELS[step]}
-                  </div>
-                  {idx < STATUS_STEPS.length - 1 && (
-                    <div style={{ width: 16, height: 1, backgroundColor: currentStepIdx > idx ? "var(--neuron-ui-active-border)" : "var(--neuron-ui-border)" }} />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {/* Subject */}
+        <h1
+          style={{
+            fontSize: 22,
+            fontWeight: 700,
+            color: "var(--theme-text-primary)",
+            lineHeight: 1.3,
+            letterSpacing: "-0.4px",
+            margin: 0,
+            marginBottom:
+              (thread.linked_record_type ||
+                (isReturned && thread.return_reason) ||
+                thread.approval_result ||
+                firstMessage)
+                ? 14
+                : 0,
+          }}
+        >
+          {thread.subject}
+        </h1>
 
         {/* Linked record banner */}
         {thread.linked_record_type && thread.linked_record_id && (
-          <div style={{
-            display: "flex", alignItems: "center", gap: 8,
-            padding: "6px 10px", borderRadius: 6,
-            backgroundColor: "#FBF7F2", border: "1px solid #E6D9CC",
-            marginBottom: 12,
-          }}>
-            <Zap size={12} style={{ color: "#7A6048", flexShrink: 0 }} />
-            <span style={{ fontSize: 12, color: "#7A6048", fontWeight: 500 }}>
-              This ticket is about {RECORD_TYPE_LABEL[thread.linked_record_type] ?? thread.linked_record_type}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "6px 10px",
+              borderRadius: 6,
+              backgroundColor: "var(--theme-status-warning-bg)",
+              border: "1px solid var(--theme-status-warning-border)",
+              marginBottom:
+                (isReturned && thread.return_reason) || thread.approval_result ? 8 : 0,
+            }}
+          >
+            <Zap size={12} style={{ color: "var(--theme-status-warning-fg)", flexShrink: 0 }} />
+            <span style={{ fontSize: 12, color: "var(--theme-status-warning-fg)", fontWeight: 500 }}>
+              This ticket is about{" "}
+              {RECORD_TYPE_LABEL[thread.linked_record_type] ?? thread.linked_record_type}
             </span>
           </div>
         )}
 
         {/* Returned banner */}
         {isReturned && thread.return_reason && (
-          <div style={{
-            padding: "8px 12px", borderRadius: 6,
-            backgroundColor: "#FAF1EE", border: "1px solid #E7D1C7",
-            marginBottom: 12,
-          }}>
-            <p style={{ fontSize: 12, color: "#8A5A44" }}>
+          <div
+            style={{
+              padding: "8px 12px",
+              borderRadius: 6,
+              backgroundColor: "var(--theme-status-danger-bg)",
+              border: "1px solid var(--theme-status-danger-border)",
+              marginBottom: thread.approval_result ? 8 : 0,
+            }}
+          >
+            <p style={{ fontSize: 12, color: "var(--theme-status-danger-fg)", margin: 0 }}>
               <span style={{ fontWeight: 600 }}>↩ Returned</span>
               {thread.returned_by_name && ` by ${thread.returned_by_name}`}
-              {" — "}{thread.return_reason}
+              {" — "}
+              {thread.return_reason}
             </p>
           </div>
         )}
 
         {/* Approval result banner */}
         {thread.approval_result && (
-          <div style={{
-            padding: "8px 12px", borderRadius: 6,
-            backgroundColor: thread.approval_result === "accepted" ? "#EEF4F1" : "#FAF1EE",
-            border: `1px solid ${thread.approval_result === "accepted" ? "#D7E5E0" : "#E7D1C7"}`,
-            marginBottom: 12,
-          }}>
-            <p style={{ fontSize: 12, color: thread.approval_result === "accepted" ? "#2E5147" : "#A05B45", fontWeight: 500 }}>
+          <div
+            style={{
+              padding: "8px 12px",
+              borderRadius: 6,
+              backgroundColor:
+                thread.approval_result === "accepted"
+                  ? "var(--theme-status-success-bg)"
+                  : "var(--theme-status-danger-bg)",
+              border: `1px solid ${
+                thread.approval_result === "accepted"
+                  ? "var(--theme-status-success-border)"
+                  : "var(--theme-status-danger-border)"
+              }`,
+              marginBottom: firstMessage ? 14 : 0,
+            }}
+          >
+            <p
+              style={{
+                fontSize: 12,
+                color:
+                  thread.approval_result === "accepted"
+                    ? "var(--theme-status-success-fg)"
+                    : "var(--theme-status-danger-fg)",
+                fontWeight: 500,
+                margin: 0,
+              }}
+            >
               {thread.approval_result === "accepted" ? "✓ Request accepted" : "✕ Request declined"}
               {thread.return_reason && ` — ${thread.return_reason}`}
             </p>
           </div>
         )}
 
-        {/* Subject */}
-        <h1 style={{ fontSize: 18, fontWeight: 600, color: "var(--theme-text-primary)", lineHeight: 1.3, marginBottom: 10 }}>
-          {thread.subject}
-        </h1>
-
-        {/* Participants */}
-        <div className="flex flex-wrap gap-x-4 gap-y-1">
-          <div className="flex items-center gap-1.5">
-            <span style={{ fontSize: 11, color: "var(--theme-text-muted)", fontWeight: 500 }}>From</span>
-            <span style={{ fontSize: 12, color: "var(--theme-text-secondary)", fontWeight: 500 }}>{thread.created_by_name || "Unknown"}</span>
+        {/* ── First message body + attachments (inline in this block) ── */}
+        {firstMessage && (
+          <div
+            style={{
+              paddingTop: 20,
+              borderTop: "1px solid var(--theme-border-subtle)",
+            }}
+          >
+            <MessageBubble message={firstMessage} onRetract={refresh} variant="first" />
           </div>
-          {toParticipants.length > 0 && (
-            <div className="flex items-center gap-1.5">
-              <span style={{ fontSize: 11, color: "var(--theme-text-muted)", fontWeight: 500 }}>To</span>
-              <span style={{ fontSize: 12, color: "var(--theme-text-secondary)", fontWeight: 500 }}>{toParticipants.map(renderParticipant).join(", ")}</span>
-            </div>
-          )}
-          {ccParticipants.length > 0 && (
-            <div className="flex items-center gap-1.5">
-              <span style={{ fontSize: 11, color: "var(--theme-text-muted)", fontWeight: 500 }}>CC</span>
-              <span style={{ fontSize: 12, color: "var(--theme-text-secondary)" }}>{ccParticipants.map(renderParticipant).join(", ")}</span>
-            </div>
-          )}
-          {thread.assignment && (
-            <div className="flex items-center gap-1.5">
-              <span style={{ fontSize: 11, color: "var(--theme-text-muted)", fontWeight: 500 }}>Assigned</span>
-              <span style={{ fontSize: 12, color: "var(--theme-action-primary-bg)", fontWeight: 500 }}>{thread.assignment.assigned_to_name}</span>
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
-      {/* Return reason panel (inline) */}
+      {/* ══ RETURN REASON PANEL ══════════════════════════════════════════ */}
       {showReturnPanel && (
-        <div style={{ padding: "12px 28px", borderBottom: "1px solid var(--theme-border-default)", backgroundColor: "var(--theme-status-warning-bg)", flexShrink: 0 }}>
-          <p style={{ fontSize: 12, fontWeight: 600, color: "var(--theme-status-warning-fg)", marginBottom: 8 }}>
+        <div
+          style={{
+            padding: "12px 28px",
+            borderBottom: "1px solid var(--theme-border-default)",
+            backgroundColor: "var(--theme-status-warning-bg)",
+            flexShrink: 0,
+          }}
+        >
+          <p
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: "var(--theme-status-warning-fg)",
+              marginBottom: 8,
+            }}
+          >
             {thread.type === "approval" ? "Reason for declining" : "Reason for returning"} (required)
           </p>
           <textarea
             value={returnReason}
             onChange={(e) => setReturnReason(e.target.value)}
-            placeholder="Explain why you're returning this ticket..."
+            placeholder="Explain why you're returning this ticket…"
             rows={2}
             style={{
-              width: "100%", padding: "8px 10px", borderRadius: 6,
-              border: "1px solid var(--theme-status-warning-border)", fontSize: 12, color: "var(--theme-text-primary)",
-              resize: "none", outline: "none", backgroundColor: "var(--theme-bg-surface)",
+              width: "100%",
+              padding: "8px 10px",
+              borderRadius: 6,
+              border: "1px solid var(--theme-status-warning-border)",
+              fontSize: 12,
+              color: "var(--theme-text-primary)",
+              resize: "none",
+              outline: "none",
+              backgroundColor: "var(--theme-bg-surface)",
             }}
             autoFocus
           />
-          <div className="flex items-center gap-2 mt-2">
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
             <button
-              onClick={() => thread.type === "approval" ? handleApproval("declined", returnReason) : handleReturn()}
+              onClick={() =>
+                thread.type === "approval"
+                  ? handleApproval("declined", returnReason)
+                  : handleReturn()
+              }
               disabled={!returnReason.trim() || isUpdatingStatus}
               style={{
-                padding: "5px 14px", borderRadius: 6, fontSize: 12, fontWeight: 600,
-                backgroundColor: returnReason.trim() ? "var(--theme-status-danger-fg)" : "var(--theme-border-default)",
+                padding: "5px 14px",
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 600,
+                backgroundColor: returnReason.trim()
+                  ? "var(--theme-status-danger-fg)"
+                  : "var(--theme-border-default)",
                 color: returnReason.trim() ? "#FFFFFF" : "var(--theme-text-muted)",
-                border: "none", cursor: returnReason.trim() ? "pointer" : "default",
+                border: "none",
+                cursor: returnReason.trim() ? "pointer" : "default",
               }}
             >
               {thread.type === "approval" ? "Confirm Decline" : "Confirm Return"}
             </button>
             <button
-              onClick={() => { setShowReturnPanel(false); setReturnReason(""); }}
-              style={{ padding: "5px 14px", borderRadius: 6, fontSize: 12, fontWeight: 500, backgroundColor: "transparent", border: "1px solid var(--theme-border-default)", color: "var(--theme-text-muted)", cursor: "pointer" }}
+              onClick={() => {
+                setShowReturnPanel(false);
+                setReturnReason("");
+              }}
+              style={{
+                padding: "5px 14px",
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 500,
+                backgroundColor: "transparent",
+                border: "1px solid var(--theme-border-default)",
+                color: "var(--theme-text-muted)",
+                cursor: "pointer",
+              }}
             >
               Cancel
             </button>
@@ -460,51 +913,90 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated }: ThreadDetailPan
         </div>
       )}
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto" style={{ padding: "8px 12px" }}>
-        {thread.messages.length === 0 ? (
-          <div style={{ textAlign: "center", padding: 40, color: "var(--theme-text-muted)", fontSize: 13 }}>No messages yet</div>
+      {/* ══ MESSAGES ═════════════════════════════════════════════════════ */}
+      <div className="flex-1 overflow-y-auto">
+        {thread.messages.filter((m) => m.id !== firstMessage?.id).length === 0 ? (
+          <div
+            style={{
+              textAlign: "center",
+              padding: 40,
+              color: "var(--theme-text-muted)",
+              fontSize: 13,
+            }}
+          >
+            {firstMessage ? "No replies yet" : "No messages yet"}
+          </div>
         ) : (
-          thread.messages.map((msg) =>
-            msg.is_system ? (
-              <SystemEventRow key={msg.id} message={msg} />
-            ) : (
-              <MessageBubble key={msg.id} message={msg} onRetract={refresh} />
+          thread.messages
+            .filter((msg) => msg.id !== firstMessage?.id)
+            .map((msg) =>
+              msg.is_system ? (
+                <SystemEventRow key={msg.id} message={msg} />
+              ) : (
+                <MessageBubble key={msg.id} message={msg} onRetract={refresh} />
+              )
             )
-          )
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Reply composer */}
+      {/* ══ COMPOSE BOX ══════════════════════════════════════════════════ */}
       {!["done", "returned", "archived", "draft"].includes(thread.status) && (
         <ComposeBox
           ticketId={thread.id}
-          onSent={() => { refresh(); onThreadUpdated(); }}
+          toChips={toChips}
+          onSent={() => {
+            refresh();
+            onThreadUpdated();
+          }}
         />
       )}
 
-      {/* Done / returned footer */}
+      {/* ══ CLOSED FOOTER ════════════════════════════════════════════════ */}
       {(isDone || isReturned) && (
-        <div style={{ padding: "10px 20px", borderTop: "1px solid var(--theme-border-default)", backgroundColor: "var(--theme-bg-page)", textAlign: "center" }}>
-          <p style={{ fontSize: 12, color: "var(--theme-text-muted)" }}>
-            {isDone ? "This ticket is done." : "This ticket was returned."}
-            {" "}
-            {isSender && (
-              <button onClick={handleReopen} style={{ color: "var(--theme-action-primary-bg)", fontWeight: 500, background: "none", border: "none", cursor: "pointer", fontSize: 12 }}>
-                Reopen
-              </button>
-            )}
+        <div
+          style={{
+            padding: "12px 28px",
+            borderTop: "1px solid var(--theme-border-default)",
+            backgroundColor: "var(--theme-bg-page)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <p style={{ fontSize: 12, color: "var(--theme-text-muted)", margin: 0 }}>
+            {isDone ? "This ticket is closed." : "This ticket was returned."}
           </p>
+          {isSender && (
+            <button
+              onClick={handleReopen}
+              style={{
+                fontSize: 12,
+                color: "var(--theme-action-primary-bg)",
+                fontWeight: 500,
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: 0,
+              }}
+            >
+              Reopen
+            </button>
+          )}
         </div>
       )}
 
+      {/* ══ ASSIGN MODAL ═════════════════════════════════════════════════ */}
       {showAssignModal && deptParticipants[0] && (
         <AssignModal
           ticketId={thread.id}
           ticketSubject={thread.subject}
-          department={deptParticipants[0].department!}
-          onAssigned={() => { setShowAssignModal(false); refresh(); onThreadUpdated(); }}
+          department={deptParticipants[0].participant_dept!}
+          onAssigned={() => {
+            setShowAssignModal(false);
+            refresh();
+            onThreadUpdated();
+          }}
           onClose={() => setShowAssignModal(false)}
         />
       )}
@@ -512,11 +1004,104 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated }: ThreadDetailPan
   );
 }
 
+// ── Action button helper ─────────────────────────────────────────────────────
+
+interface ActionButtonProps {
+  onClick: () => void;
+  disabled?: boolean;
+  variant: "success" | "danger" | "ghost";
+  icon?: React.ReactNode;
+  label: string;
+  dangerOnHover?: boolean;
+}
+
+function ActionButton({ onClick, disabled, variant, icon, label, dangerOnHover }: ActionButtonProps) {
+  const base: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 5,
+    padding: "5px 11px",
+    borderRadius: 6,
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: disabled ? "not-allowed" : "pointer",
+    transition: "all 150ms ease",
+    opacity: disabled ? 0.5 : 1,
+    border: "1px solid transparent",
+  };
+
+  const styles: Record<string, React.CSSProperties> = {
+    success: {
+      ...base,
+      border: "1px solid var(--neuron-ui-active-border)",
+      backgroundColor: "var(--neuron-state-selected)",
+      color: "var(--neuron-brand-green)",
+    },
+    danger: {
+      ...base,
+      border: "1px solid var(--theme-status-danger-border)",
+      backgroundColor: "var(--theme-status-danger-bg)",
+      color: "var(--theme-status-danger-fg)",
+    },
+    ghost: {
+      ...base,
+      border: "1px solid var(--neuron-ui-border)",
+      backgroundColor: "transparent",
+      color: "var(--neuron-ink-secondary)",
+    },
+  };
+
+  return (
+    <button
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      style={styles[variant]}
+      onMouseEnter={
+        !disabled && dangerOnHover
+          ? (e) => {
+              e.currentTarget.style.borderColor = "var(--theme-status-danger-border)";
+              e.currentTarget.style.color = "var(--theme-status-danger-fg)";
+              e.currentTarget.style.backgroundColor = "var(--theme-status-danger-bg)";
+            }
+          : !disabled && variant === "ghost"
+          ? (e) => {
+              e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
+              e.currentTarget.style.borderColor = "var(--neuron-ui-active-border)";
+              e.currentTarget.style.color = "var(--neuron-brand-green)";
+            }
+          : undefined
+      }
+      onMouseLeave={
+        !disabled && (dangerOnHover || variant === "ghost")
+          ? (e) => {
+              e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
+              e.currentTarget.style.backgroundColor = "transparent";
+              e.currentTarget.style.color = "var(--neuron-ink-secondary)";
+            }
+          : undefined
+      }
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+// ── Empty / skeleton states ──────────────────────────────────────────────────
+
 function EmptyState({ message }: { message?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center h-full" style={{ color: "var(--theme-text-muted)" }}>
-      <MessageSquare size={40} style={{ marginBottom: 12, color: "var(--theme-border-default)" }} />
-      <p style={{ fontSize: 14, color: "var(--theme-text-muted)" }}>{message || "Select a ticket to read it"}</p>
+    <div
+      className="flex flex-col items-center justify-center h-full"
+      style={{ color: "var(--theme-text-muted)" }}
+    >
+      <MessageSquare
+        size={40}
+        style={{ marginBottom: 12, color: "var(--theme-border-default)" }}
+      />
+      <p style={{ fontSize: 14, color: "var(--theme-text-muted)" }}>
+        {message || "Select a ticket to read it"}
+      </p>
     </div>
   );
 }
@@ -524,9 +1109,35 @@ function EmptyState({ message }: { message?: string }) {
 function ThreadDetailSkeleton() {
   return (
     <div style={{ padding: "20px 28px" }}>
-      <div style={{ height: 16, width: 120, borderRadius: 4, backgroundColor: "var(--theme-bg-surface-subtle)", marginBottom: 12, animation: "pulse 1.5s infinite" }} />
-      <div style={{ height: 24, width: "60%", borderRadius: 4, backgroundColor: "var(--theme-bg-surface-subtle)", marginBottom: 12, animation: "pulse 1.5s infinite" }} />
-      <div style={{ height: 12, width: "40%", borderRadius: 4, backgroundColor: "var(--theme-bg-surface-subtle)", animation: "pulse 1.5s infinite" }} />
+      <div
+        style={{
+          height: 16,
+          width: 120,
+          borderRadius: 4,
+          backgroundColor: "var(--theme-bg-surface-subtle)",
+          marginBottom: 12,
+          animation: "pulse 1.5s infinite",
+        }}
+      />
+      <div
+        style={{
+          height: 24,
+          width: "60%",
+          borderRadius: 4,
+          backgroundColor: "var(--theme-bg-surface-subtle)",
+          marginBottom: 12,
+          animation: "pulse 1.5s infinite",
+        }}
+      />
+      <div
+        style={{
+          height: 12,
+          width: "40%",
+          borderRadius: 4,
+          backgroundColor: "var(--theme-bg-surface-subtle)",
+          animation: "pulse 1.5s infinite",
+        }}
+      />
       <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }`}</style>
     </div>
   );

@@ -152,6 +152,8 @@ export function InboxPage() {
           <ThreadDetailPanel
             ticketId={selectedId}
             onThreadUpdated={handleThreadUpdated}
+            threadIds={listRef.current}
+            onNavigate={setSelectedId}
           />
         )}
       </div>

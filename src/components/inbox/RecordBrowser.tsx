@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Search,
@@ -154,13 +154,8 @@ function getVisibleSections(department: string | null | undefined) {
   return NAV.filter((section) => isExecutive || section.ownerDepts.includes(department ?? ""));
 }
 
-function getSearchPlaceholder(entity: EntityDef, canBrowse: boolean) {
-  if (canBrowse) return `Search ${entity.label.toLowerCase()}...`;
-  return `Search ${entity.label.toLowerCase()} by reference number...`;
-}
-
-function getSearchFirstHint(entity: EntityDef) {
-  return `Enter a name or reference number to find ${entity.label.toLowerCase()}.`;
+function getSearchPlaceholder(entity: EntityDef) {
+  return `Search ${entity.label.toLowerCase()}…`;
 }
 
 function getNoResultsCopy(entity: EntityDef, query: string) {
@@ -185,7 +180,6 @@ export function RecordBrowser({ isOpen, onClose, onLink, alreadyLinked = [] }: R
 
   const activeSection = visibleSections.find((section) => section.id === activeSectionId) ?? visibleSections[0] ?? null;
   const activeEntity = activeSection?.entities.find((entity) => entity.key === activeEntityKey) ?? activeSection?.entities[0] ?? null;
-  const canBrowse = effectiveDepartment === "Executive";
 
   useEffect(() => {
     if (isOpen) {
@@ -225,10 +219,9 @@ export function RecordBrowser({ isOpen, onClose, onLink, alreadyLinked = [] }: R
   }, [search]);
 
   const { data: records = [], isFetching: isLoading } = useQuery({
-    queryKey: ["entity_attachments", "record_browser", activeEntityKey, debouncedSearch, canBrowse],
+    queryKey: ["entity_attachments", "record_browser", activeEntityKey, debouncedSearch],
     queryFn: async () => {
       if (!activeEntity) return [];
-      if (!canBrowse && !debouncedSearch.trim()) return [];
       let query = (supabase.from(activeEntity.table) as any)
         .select(activeEntity.columns)
         .order("created_at", { ascending: false })
@@ -245,11 +238,8 @@ export function RecordBrowser({ isOpen, onClose, onLink, alreadyLinked = [] }: R
       return data ?? [];
     },
     staleTime: 0,
-    enabled: !!activeEntity && (canBrowse || debouncedSearch.trim().length > 0),
+    enabled: !!activeEntity,
   });
-
-  // Keep fetchRecords for compatibility (not used for data but referenced shape-wise)
-  const fetchRecords = useCallback(() => {}, []);
 
   const switchSection = (sectionId: string) => {
     const section = visibleSections.find((item) => item.id === sectionId);
@@ -422,7 +412,7 @@ export function RecordBrowser({ isOpen, onClose, onLink, alreadyLinked = [] }: R
                 ref={searchRef}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder={getSearchPlaceholder(activeEntity, canBrowse)}
+                placeholder={getSearchPlaceholder(activeEntity)}
                 style={{ border: "none", outline: "none", fontSize: 13, color: "var(--neuron-ink-primary)", backgroundColor: "transparent", flex: 1 }}
               />
               {search && (
@@ -434,15 +424,6 @@ export function RecordBrowser({ isOpen, onClose, onLink, alreadyLinked = [] }: R
           </div>
 
           <div style={{ flex: 1, overflowY: "auto" }}>
-            {!canBrowse && !search && (
-              <div style={{ padding: "40px 20px", textAlign: "center" }}>
-                <Search size={22} style={{ color: "var(--theme-border-default)", margin: "0 auto 10px" }} />
-                <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", lineHeight: 1.5 }}>
-                  {getSearchFirstHint(activeEntity)}
-                </p>
-              </div>
-            )}
-
             {isLoading && (
               <div style={{ padding: "12px 16px" }}>
                 {[1, 2, 3, 4].map((item) => (
@@ -457,7 +438,7 @@ export function RecordBrowser({ isOpen, onClose, onLink, alreadyLinked = [] }: R
               </div>
             )}
 
-            {!isLoading && (canBrowse || search) && records.length === 0 && (
+            {!isLoading && records.length === 0 && (
               <div style={{ padding: "40px 20px", textAlign: "center" }}>
                 <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", lineHeight: 1.5 }}>{getNoResultsCopy(activeEntity, search)}</p>
               </div>

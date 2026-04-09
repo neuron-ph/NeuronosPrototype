@@ -510,7 +510,7 @@ export function GeneralDetailsSection({
             <>
               <DisplayField label="Date" value={formatDate(date)} />
               <DisplayField label="Credit Terms" value={creditTerms} />
-              <DisplayField label="Validity" value={validity} />
+              <DisplayField label="Validity" value={validity ? `${validity} days` : ""} />
             </>
           ) : (
             <>
@@ -586,29 +586,33 @@ export function GeneralDetailsSection({
                 }}>
                   Validity
                 </label>
-                <input
-                  type="text"
-                  value={validity}
-                  onChange={(e) => setValidity(e.target.value)}
-                  placeholder="e.g., 7 days, 30 days"
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    fontSize: "13px",
-                    color: "var(--neuron-ink-base)",
-                    backgroundColor: "var(--theme-bg-surface)",
-                    border: "1px solid var(--neuron-ui-border)",
-                    borderRadius: "6px",
-                    outline: "none",
-                    transition: "border-color 0.15s ease"
-                  }}
-                  onFocus={(e) => {
-                    e.currentTarget.style.borderColor = "var(--neuron-brand-teal)";
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
-                  }}
-                />
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <input
+                    type="number"
+                    min="1"
+                    value={validity}
+                    onChange={(e) => setValidity(e.target.value)}
+                    placeholder="e.g., 30"
+                    style={{
+                      flex: 1,
+                      padding: "10px 12px",
+                      fontSize: "13px",
+                      color: "var(--neuron-ink-base)",
+                      backgroundColor: "var(--theme-bg-surface)",
+                      border: "1px solid var(--neuron-ui-border)",
+                      borderRadius: "6px",
+                      outline: "none",
+                      transition: "border-color 0.15s ease"
+                    }}
+                    onFocus={(e) => {
+                      e.currentTarget.style.borderColor = "var(--neuron-brand-teal)";
+                    }}
+                    onBlur={(e) => {
+                      e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
+                    }}
+                  />
+                  <span style={{ fontSize: "13px", color: "var(--neuron-ink-muted)", whiteSpace: "nowrap" }}>days</span>
+                </div>
               </div>
             </>
           )}

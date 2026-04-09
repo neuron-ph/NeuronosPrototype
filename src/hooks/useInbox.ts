@@ -36,6 +36,7 @@ export interface ParticipantSummary {
   participant_dept: string | null;
   role: "sender" | "to" | "cc";
   user_name?: string;
+  user_avatar_url?: string | null;
 }
 
 export type InboxTab = "inbox" | "queue" | "sent" | "drafts";
@@ -144,13 +145,13 @@ export function useInbox() {
             .map((p) => p.participant_user_id as string)
         ),
       ];
-      let userMap: Record<string, string> = {};
+      let userMap: Record<string, { name: string; avatar_url: string | null }> = {};
       if (userIds.length > 0) {
         const { data: usersData } = await supabase
           .from("users")
-          .select("id, name")
+          .select("id, name, avatar_url")
           .in("id", userIds);
-        userMap = Object.fromEntries((usersData || []).map((u) => [u.id, u.name]));
+        userMap = Object.fromEntries((usersData || []).map((u) => [u.id, { name: u.name, avatar_url: u.avatar_url ?? null }]));
       }
 
       const readMap = Object.fromEntries(
@@ -174,7 +175,8 @@ export function useInbox() {
           .filter((p) => p.ticket_id === t.id)
           .map((p) => ({
             ...p,
-            user_name: p.participant_user_id ? userMap[p.participant_user_id] : undefined,
+            user_name: p.participant_user_id ? userMap[p.participant_user_id]?.name : undefined,
+            user_avatar_url: p.participant_user_id ? (userMap[p.participant_user_id]?.avatar_url ?? null) : null,
           }));
 
         const lastMsg = lastMsgMap[t.id];
@@ -190,7 +192,7 @@ export function useInbox() {
           linked_record_id: t.linked_record_id ?? null,
           auto_created: t.auto_created ?? false,
           last_message_preview: lastMsg?.body ? lastMsg.body.slice(0, 120) : undefined,
-          last_message_sender: lastMsg?.sender_id ? userMap[lastMsg.sender_id] : undefined,
+          last_message_sender: lastMsg?.sender_id ? userMap[lastMsg.sender_id]?.name : undefined,
           participants: tParticipants,
           attachment_count: attachCountMap[t.id] || 0,
           is_unread: isUnread,
