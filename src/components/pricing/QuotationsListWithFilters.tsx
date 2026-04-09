@@ -1,6 +1,8 @@
 import { getServiceIcon, getQuotationStatusColor, getQuotationStatusBgColor, formatShortDate } from "../../utils/quotation-helpers";
 import { Search, Briefcase, Ship, Shield, Truck, SlidersHorizontal, Calendar, CircleDot, Building2, FileText } from "lucide-react";
 import { useState, useRef, useMemo, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "../../utils/supabase/client";
 import type { QuotationNew, QuotationType } from "../../types/pricing";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { CustomDatePicker } from "../common/CustomDatePicker";
@@ -21,7 +23,8 @@ const DEFAULT_COLUMN_WIDTHS = {
   services: 120,
   total: 100,
   date: 95,
-  status: 115
+  status: 115,
+  assignee: 130
 };
 
 // Minimum column widths to prevent collapse
@@ -32,7 +35,8 @@ const MIN_COLUMN_WIDTHS = {
   services: 90,
   total: 80,
   date: 80,
-  status: 90
+  status: 90,
+  assignee: 90
 };
 
 interface QuotationsListWithFiltersProps {
@@ -42,6 +46,8 @@ interface QuotationsListWithFiltersProps {
   isLoading?: boolean;
   userDepartment?: "Business Development" | "Pricing";
   onRefresh?: () => void;
+  currentUserId?: string;
+  userRole?: string;
 }
 
 interface QuotationTableRowProps {
@@ -51,9 +57,11 @@ interface QuotationTableRowProps {
   onItemClick: (item: QuotationNew) => void;
   gridTemplateColumns: string;
   showStatus?: boolean;
+  showAssignee?: boolean;
+  assigneeName?: string;
 }
 
-function QuotationTableRow({ item, index, totalItems, onItemClick, gridTemplateColumns, showStatus }: QuotationTableRowProps) {
+function QuotationTableRow({ item, index, totalItems, onItemClick, gridTemplateColumns, showStatus, showAssignee, assigneeName }: QuotationTableRowProps) {
   const [showTooltip, setShowTooltip] = useState(false);
   const [showNameTooltip, setShowNameTooltip] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
@@ -112,7 +120,7 @@ function QuotationTableRow({ item, index, totalItems, onItemClick, gridTemplateC
         e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)";
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = index % 2 === 0 ? "white" : "#FAFBFC";
+        e.currentTarget.style.backgroundColor = index % 2 === 0 ? "var(--theme-bg-surface)" : "var(--theme-bg-surface-subtle)";
       }}
     >
       {/* Icon — type-aware (Project vs Contract) */}
@@ -127,8 +135,8 @@ function QuotationTableRow({ item, index, totalItems, onItemClick, gridTemplateC
         onMouseEnter={handleNameMouseEnter}
         onMouseLeave={() => setShowNameTooltip(false)}
       >
-        <span style={{ 
-          fontSize: "13px", 
+        <span style={{
+          fontSize: "13px",
           color: "var(--theme-text-primary)",
           overflow: "hidden",
           textOverflow: "ellipsis",
@@ -149,7 +157,7 @@ function QuotationTableRow({ item, index, totalItems, onItemClick, gridTemplateC
             top: `${tooltipPosition.y}px`,
             transform: "translate(-50%, -100%)",
             backgroundColor: "var(--theme-text-primary)",
-            color: "white",
+            color: "var(--theme-bg-surface)",
             padding: "6px 12px",
             borderRadius: "6px",
             fontSize: "12px",
@@ -225,11 +233,51 @@ function QuotationTableRow({ item, index, totalItems, onItemClick, gridTemplateC
           </span>
         </div>
       )}
+
+      {/* Assignee */}
+      {showAssignee && (
+        <div style={{ display: "flex", alignItems: "center" }}>
+          {assigneeName ? (
+            <span style={{
+              fontSize: "12px",
+              fontWeight: 500,
+              color: "var(--neuron-brand-green)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}>
+              {assigneeName}
+            </span>
+          ) : (
+            <span style={{
+              fontSize: "12px",
+              fontWeight: 500,
+              color: "var(--theme-status-warning-fg)",
+              backgroundColor: "var(--theme-status-warning-bg)",
+              padding: "2px 8px",
+              borderRadius: "4px",
+            }}>
+              Unassigned
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quotations, isLoading, userDepartment, onRefresh }: QuotationsListWithFiltersProps) {
+export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quotations, isLoading, userDepartment, onRefresh, currentUserId, userRole }: QuotationsListWithFiltersProps) {
+  // Fetch Pricing user names to display assignee chips in the Inquiries tab
+  const { data: pricingUserMap = {} } = useQuery({
+    queryKey: ["users", "pricing-name-map"],
+    queryFn: async () => {
+      const { data } = await supabase.from("users").select("id, name").eq("department", "Pricing");
+      return Object.fromEntries((data || []).map((u: { id: string; name: string }) => [u.id, u.name])) as Record<string, string>;
+    },
+    enabled: userDepartment === "Pricing",
+    staleTime: 5 * 60 * 1000,
+  });
+
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -309,9 +357,12 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
 
   // Build grid template columns string
   const showStatus = userDepartment === "Business Development";
-  const gridTemplateColumns = showStatus 
+  const showAssigneeCol = userDepartment === "Pricing" && workflowTab === "Inquiries";
+  const gridTemplateColumns = showStatus
     ? `${columnWidths.icon}px ${columnWidths.name}px ${columnWidths.customer}px ${columnWidths.services}px ${columnWidths.total}px ${columnWidths.date}px ${columnWidths.status}px`
-    : `${columnWidths.icon}px ${columnWidths.name}px ${columnWidths.customer}px ${columnWidths.services}px ${columnWidths.total}px ${columnWidths.date}px`;
+    : showAssigneeCol
+      ? `${columnWidths.icon}px ${columnWidths.name}px ${columnWidths.customer}px ${columnWidths.services}px ${columnWidths.total}px ${columnWidths.date}px ${columnWidths.assignee}px`
+      : `${columnWidths.icon}px ${columnWidths.name}px ${columnWidths.customer}px ${columnWidths.services}px ${columnWidths.total}px ${columnWidths.date}px`;
 
   // Get unique customers and services for filters
   const uniqueCustomers = useMemo(() => {
@@ -373,9 +424,13 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
     // Workflow tab filter
     if (workflowTab === "Inquiries") {
       // Unpriced quotations (Draft + Pending Pricing + Needs Revision)
-      filtered = filtered.filter(item => 
+      filtered = filtered.filter(item =>
         QUOTATION_INQUIRY_STATUSES.includes(getNormalizedQuotationStatus(item))
       );
+      // Pricing staff see only their assigned inquiries
+      if (userRole === "staff" && currentUserId) {
+        filtered = filtered.filter(item => (item as any).assigned_to === currentUserId);
+      }
     } else if (workflowTab === "Quotations") {
       // Priced quotations being negotiated
       filtered = filtered.filter(item =>
@@ -389,17 +444,21 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
     }
 
     return filtered;
-  }, [quotations, searchQuery, dateFrom, dateTo, statusFilter, serviceFilter, customerFilter, workflowTab, typeFilter]);
+  }, [quotations, searchQuery, dateFrom, dateTo, statusFilter, serviceFilter, customerFilter, workflowTab, typeFilter, userRole, currentUserId]);
 
-  // Calculate tab counts
+  // Calculate tab counts (Inquiries respects staff scoping)
   const tabCounts = useMemo(() => {
     const all = quotations || [];
+    const inquiryItems = all.filter(q => QUOTATION_INQUIRY_STATUSES.includes(getNormalizedQuotationStatus(q)));
+    const inquiryCount = (userRole === "staff" && currentUserId)
+      ? inquiryItems.filter(q => (q as any).assigned_to === currentUserId).length
+      : inquiryItems.length;
     return {
-      Inquiries: all.filter(q => QUOTATION_INQUIRY_STATUSES.includes(getNormalizedQuotationStatus(q))).length,
+      Inquiries: inquiryCount,
       Quotations: all.filter(q => QUOTATION_NEGOTIATION_STATUSES.includes(getNormalizedQuotationStatus(q))).length,
       Completed: all.filter(q => QUOTATION_COMPLETED_STATUSES.includes(getNormalizedQuotationStatus(q))).length
     };
-  }, [quotations]);
+  }, [quotations, userRole, currentUserId]);
 
   // Conditional text based on department
   const headerTitle = showStatus ? "Inquiries" : "Quotations";
@@ -814,6 +873,11 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
                   STATUS
                 </div>
               )}
+              {showAssigneeCol && (
+                <div style={{ padding: "10px 0", display: "flex", alignItems: "center" }}>
+                  ASSIGNEE
+                </div>
+              )}
             </div>
 
             {/* Table Rows */}
@@ -826,6 +890,8 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
                 onItemClick={onViewItem}
                 gridTemplateColumns={gridTemplateColumns}
                 showStatus={showStatus}
+                showAssignee={showAssigneeCol}
+                assigneeName={pricingUserMap[(item as any).assigned_to] || ""}
               />
             ))}
           </div>

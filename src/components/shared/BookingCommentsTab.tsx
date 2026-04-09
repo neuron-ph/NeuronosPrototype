@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useFeedbackPosition } from "../../contexts/FeedbackPositionContext";
 import { Send, Paperclip, X, Download, FileText } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../utils/supabase/client";
@@ -35,6 +36,12 @@ export function BookingCommentsTab({
   currentUserName,
   currentUserDepartment,
 }: BookingCommentsTabProps) {
+  const { setHasCommentBar } = useFeedbackPosition();
+  useEffect(() => {
+    setHasCommentBar(true);
+    return () => setHasCommentBar(false);
+  }, [setHasCommentBar]);
+
   const queryClient = useQueryClient();
   const [newComment, setNewComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);

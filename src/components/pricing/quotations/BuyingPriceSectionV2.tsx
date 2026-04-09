@@ -337,7 +337,7 @@ export function BuyingPriceSectionV2({
               e.currentTarget.style.transform = "translateY(-1px)";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = "white";
+              e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
               e.currentTarget.style.borderColor = "#D9E1DE";
               e.currentTarget.style.transform = "translateY(0)";
             }}
@@ -426,7 +426,7 @@ export function BuyingPriceSectionV2({
                     e.currentTarget.style.backgroundColor = "#F0F9F8";
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = "#F8FBFB";
+                    e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -519,7 +519,7 @@ export function BuyingPriceSectionV2({
                               e.currentTarget.style.backgroundColor = "#F0F9F8";
                             }}
                             onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = "#F8FBFB";
+                              e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
                             }}
                           >
                             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -626,7 +626,7 @@ export function BuyingPriceSectionV2({
                                             fontSize: "13px",
                                             border: "1px solid #E0E6E4",
                                             borderRadius: "6px",
-                                            backgroundColor: viewMode ? "#F9FAFB" : "white",
+                                            backgroundColor: viewMode ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface)",
                                             fontWeight: 500,
                                             color: "#2C3E38",
                                             transition: "all 0.15s ease",
@@ -663,7 +663,7 @@ export function BuyingPriceSectionV2({
                                             textAlign: "right",
                                             border: "1px solid #E0E6E4",
                                             borderRadius: "6px",
-                                            backgroundColor: viewMode ? "#F9FAFB" : "white",
+                                            backgroundColor: viewMode ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface)",
                                             color: "var(--neuron-brand-green)",
                                             fontWeight: 600,
                                             outline: "none",
@@ -697,7 +697,7 @@ export function BuyingPriceSectionV2({
                                             textAlign: "right",
                                             border: "1px solid #E0E6E4",
                                             borderRadius: "6px",
-                                            backgroundColor: viewMode ? "#F9FAFB" : "white",
+                                            backgroundColor: viewMode ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface)",
                                             color: "var(--neuron-brand-green)",
                                             fontWeight: 600,
                                             outline: "none",
@@ -746,7 +746,7 @@ export function BuyingPriceSectionV2({
                                             textAlign: "right",
                                             border: "1px solid #E0E6E4",
                                             borderRadius: "6px",
-                                            backgroundColor: viewMode ? "#F9FAFB" : "#F8FBFB",
+                                            backgroundColor: viewMode ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface-subtle)",
                                             outline: "none",
                                             cursor: viewMode ? "default" : "text"
                                           }}
@@ -825,7 +825,7 @@ export function BuyingPriceSectionV2({
                                               fontSize: "12px",
                                               border: "1px solid #E0E6E4",
                                               borderRadius: "6px",
-                                              backgroundColor: viewMode ? "#F9FAFB" : "white",
+                                              backgroundColor: viewMode ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface)",
                                               color: "#2C3E38",
                                               outline: "none",
                                               transition: "all 0.15s ease",
@@ -891,7 +891,7 @@ export function BuyingPriceSectionV2({
                                             e.currentTarget.style.transform = "translateY(-1px)";
                                           }}
                                           onMouseLeave={(e) => {
-                                            e.currentTarget.style.backgroundColor = "white";
+                                            e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
                                             e.currentTarget.style.borderColor = "#FCD4D1";
                                             e.currentTarget.style.transform = "translateY(0)";
                                           }}

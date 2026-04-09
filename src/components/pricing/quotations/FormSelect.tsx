@@ -123,7 +123,7 @@ export function FormSelect({ value, options, onChange, placeholder = "Select..."
                 }
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = value === option.value ? "#E8F5F3" : "white";
+                e.currentTarget.style.backgroundColor = value === option.value ? "var(--theme-bg-surface-tint)" : "var(--theme-bg-surface)";
               }}
             >
               {option.label}

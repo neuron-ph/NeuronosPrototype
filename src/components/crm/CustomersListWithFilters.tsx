@@ -42,7 +42,12 @@ export function CustomersListWithFilters({ userDepartment, onViewCustomer }: Cus
   // Direct Supabase query for BD users (replaces Edge Function fetch)
   const { users } = useUsers({ department: 'Business Development' });
 
-  const { customers: allCustomers, isLoading, invalidate: invalidateCustomers } = useCustomers({ scope, enabled: isLoaded });
+  // Pricing (and other non-BD departments) need to see all customers — scope
+  // filtering is only for BD's own CRM view (staff see their accounts, etc.)
+  const { customers: allCustomers, isLoading, invalidate: invalidateCustomers } = useCustomers({
+    scope: userDepartment === "Business Development" ? scope : undefined,
+    enabled: isLoaded,
+  });
   const { contacts: allContacts, invalidate: invalidateContacts } = useContacts();
   const { activities } = useCRMActivities();
 

@@ -152,7 +152,7 @@ export function ChargeItemDropdown({
                 e.currentTarget.style.backgroundColor = "#F0FDF4";
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "white";
+                e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
               }}
             >
               {charge}

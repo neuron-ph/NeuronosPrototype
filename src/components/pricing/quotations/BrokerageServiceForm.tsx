@@ -112,12 +112,12 @@ export function BrokerageServiceForm({ data, onChange, movement = "IMPORT", view
               const isHovered = hoveredType === type;
               
               // Compute styles based on state
-              let backgroundColor = "white";
+              let backgroundColor = "var(--theme-bg-surface)";
               let borderColor = "var(--neuron-ui-border)";
               let textColor = "var(--neuron-ink-base)";
               let cursor = viewMode ? "default" : "pointer";
               let opacity = viewMode && !isSelected ? 0.6 : 1;
-              
+
               if (isSelected) {
                 backgroundColor = "var(--theme-action-primary-bg)";
                 borderColor = "var(--theme-action-primary-bg)";

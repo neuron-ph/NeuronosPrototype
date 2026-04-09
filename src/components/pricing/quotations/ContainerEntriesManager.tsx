@@ -169,7 +169,7 @@ export function ContainerEntriesManager({ containers, onChange, disabled = false
                   e.currentTarget.style.backgroundColor = "var(--theme-status-danger-bg)";
                 }}
                 onMouseOut={(e) => {
-                  e.currentTarget.style.backgroundColor = "white";
+                  e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
                 }}
               >
                 <Trash2 size={16} />

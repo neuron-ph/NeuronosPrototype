@@ -13,6 +13,8 @@ import { NeuronLogo } from "./components/NeuronLogo";
 import { useWorkspaceTheme } from "./theme/useWorkspaceTheme";
 import { useReferenceDataPrefetch } from "./hooks/useReferenceDataPrefetch";
 import { BetaWelcomeScreen } from "./components/onboarding/BetaWelcomeScreen";
+import { FeedbackButton } from "./components/feedback/FeedbackButton";
+import { FeedbackPositionProvider } from "./contexts/FeedbackPositionContext";
 import posthog from "posthog-js";
 
 const MyHomepage = lazy(() => import("./components/MyHomepage").then((module) => ({ default: module.MyHomepage })));
@@ -911,7 +913,8 @@ function AppContent() {
   // Show login page if not authenticated
   if (!isAuthenticated) {
     return (
-      <>
+      <FeedbackPositionProvider>
+        <FeedbackButton />
         <Toaster />
         <Suspense fallback={<RouteLoadingState />}>
           <Routes>
@@ -919,11 +922,13 @@ function AppContent() {
             <Route path="*" element={<LoginPage />} />
           </Routes>
         </Suspense>
-      </>
+      </FeedbackPositionProvider>
     );
   }
 
   return (
+    <FeedbackPositionProvider>
+    <FeedbackButton />
     <>
       <RouteTracker />
       {showWelcome && user && (
@@ -1036,6 +1041,7 @@ function AppContent() {
       </Routes>
       </Suspense>
     </>
+    </FeedbackPositionProvider>
   );
 }
 

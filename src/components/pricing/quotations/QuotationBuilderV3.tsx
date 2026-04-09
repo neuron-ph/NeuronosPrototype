@@ -2323,7 +2323,7 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
                   fontSize: "13px",
                   border: "1px solid var(--neuron-ui-border)",
                   borderRadius: "8px",
-                  backgroundColor: "#FAFCFB",
+                  backgroundColor: "var(--theme-bg-surface-subtle)",
                 }}>
                   Select one or more services above to configure rate cards.
                 </div>
@@ -2449,9 +2449,9 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
                       padding: "10px 12px",
                       fontSize: "13px",
                       fontWeight: 400,
-                      color: "#2C3E38",
-                      backgroundColor: "#FAFCFB",
-                      border: "1px solid #E0E6E4",
+                      color: "var(--neuron-ink-primary)",
+                      backgroundColor: "var(--theme-bg-surface)",
+                      border: "1px solid var(--neuron-ui-border)",
                       borderRadius: "6px",
                       outline: "none",
                       fontFamily: "inherit",
@@ -2461,11 +2461,9 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
                     }}
                     onFocus={(e) => {
                       e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
-                      e.currentTarget.style.backgroundColor = "white";
                     }}
                     onBlur={(e) => {
-                      e.currentTarget.style.borderColor = "#E0E6E4";
-                      e.currentTarget.style.backgroundColor = "#FAFCFB";
+                      e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
                     }}
                   />
                 )}
@@ -2518,9 +2516,9 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
                       padding: "10px 12px",
                       fontSize: "13px",
                       fontWeight: 400,
-                      color: "#2C3E38",
-                      backgroundColor: "#FAFCFB",
-                      border: "1px solid #E0E6E4",
+                      color: "var(--neuron-ink-primary)",
+                      backgroundColor: "var(--theme-bg-surface)",
+                      border: "1px solid var(--neuron-ui-border)",
                       borderRadius: "6px",
                       outline: "none",
                       fontFamily: "inherit",
@@ -2530,11 +2528,9 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
                     }}
                     onFocus={(e) => {
                       e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
-                      e.currentTarget.style.backgroundColor = "white";
                     }}
                     onBlur={(e) => {
-                      e.currentTarget.style.borderColor = "#E0E6E4";
-                      e.currentTarget.style.backgroundColor = "#FAFCFB";
+                      e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
                     }}
                   />
                 )}

@@ -76,7 +76,7 @@ const tableHeaderCellStyle: React.CSSProperties = {
   textTransform: "uppercase",
   letterSpacing: "0.5px",
   borderBottom: "2px solid var(--neuron-ui-border)",
-  backgroundColor: "#FAFCFB",
+  backgroundColor: "var(--theme-bg-surface)",
   textAlign: "left",
 };
 
@@ -151,7 +151,7 @@ function SucceedingRuleEditor({
         padding: "6px 12px 10px 40px",
         fontSize: "12px",
         color: "var(--neuron-ink-muted)",
-        backgroundColor: "#FAFCFB",
+        backgroundColor: "var(--theme-bg-surface)",
       }}>
         <Info size={12} />
         <span>
@@ -171,7 +171,7 @@ function SucceedingRuleEditor({
       padding: "6px 12px 10px 40px",
       fontSize: "12px",
       color: "var(--neuron-ink-muted)",
-      backgroundColor: "#FAFCFB",
+      backgroundColor: "var(--theme-bg-surface)",
     }}>
       <Info size={12} style={{ flexShrink: 0 }} />
       <span style={{ whiteSpace: "nowrap" }}>After first</span>
@@ -652,7 +652,7 @@ export function ContractRateMatrixEditor({
                 alignItems: "center",
                 gap: "6px",
                 borderTop: "1px solid var(--neuron-ui-border)",
-                backgroundColor: "#FAFCFB",
+                backgroundColor: "var(--theme-bg-surface)",
               }}
             >
               <Plus size={14} />
@@ -827,7 +827,7 @@ function RowGroup({
                 fontStyle: "italic",
                 color: "var(--theme-text-muted)",
                 textAlign: "right",
-                backgroundColor: viewMode ? "transparent" : "#F9FAFB",
+                backgroundColor: viewMode ? "transparent" : "var(--theme-bg-surface-subtle)",
                 borderRadius: "4px",
               }}>
                 At Cost

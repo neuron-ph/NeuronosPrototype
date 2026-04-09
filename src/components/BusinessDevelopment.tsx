@@ -1,5 +1,6 @@
 import { supabase } from '../utils/supabase/client';
 import { logActivity, logCreation } from '../utils/activityLog';
+import { createWorkflowTicket, getOpenWorkflowTicket } from '../utils/workflowTickets';
 import { trackRecent } from '../lib/recents';
 import { useState, useEffect, useRef } from "react";
 import { ContactsListWithFilters } from "./crm/ContactsListWithFilters";
@@ -287,13 +288,13 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
   const handleViewContact = (contact: Contact) => {
     setSelectedContact(contact);
     setSubView("detail");
-    trackRecent({
+    if (user?.id) trackRecent({
       label: contact.name || [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Contact",
       sub: `BD · Contact`,
       path: `/bd/contacts/${contact.id}`,
       type: "contact",
       time: new Date().toISOString(),
-    });
+    }, user.id);
   };
 
   const handleBackFromContact = () => {
@@ -304,13 +305,13 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
   const handleViewCustomer = (customer: Customer) => {
     setSelectedCustomer(customer);
     setSubView("detail");
-    trackRecent({
+    if (user?.id) trackRecent({
       label: customer.name || customer.company_name || "Customer",
       sub: `BD · Customer`,
       path: `/bd/customers`,
       type: "customer",
       time: new Date().toISOString(),
-    });
+    }, user.id);
   };
 
   const handleBackFromCustomer = () => {
@@ -341,13 +342,13 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
   const handleViewInquiry = (quotation: QuotationNew) => {
     setSelectedQuotation(quotation);
     setSubView("detail");
-    trackRecent({
+    if (user?.id) trackRecent({
       label: quotation.quote_number || "Inquiry",
       sub: `BD · ${quotation.customer_name || ""}`,
       path: `/bd/inquiries/${quotation.id}`,
       type: "inquiry",
       time: new Date().toISOString(),
-    });
+    }, user.id);
   };
 
   const handleViewProject = (project: Project) => {
@@ -463,6 +464,27 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
         });
         if (error) throw error;
         logCreation("quotation", newId, dbPayload.quotation_number ?? newId, _actorBD);
+
+        // Ticket 1: notify Pricing dept when inquiry is ready for pricing
+        if (dbPayload.status === 'Pending Pricing') {
+          const hasTicket = await getOpenWorkflowTicket("quotation", newId);
+          if (!hasTicket) {
+            createWorkflowTicket({
+              subject: `New Inquiry: ${dbPayload.customer_name || 'Unknown'} – ${(dbPayload.services as string[] || []).join(', ') || 'N/A'}`,
+              body: `${user?.name} has submitted a new inquiry for pricing.\n\nCustomer: ${dbPayload.customer_name || 'Unknown'}\nServices: ${(dbPayload.services as string[] || []).join(', ') || 'N/A'}`,
+              type: "request",
+              priority: "normal",
+              recipientDept: "Pricing",
+              linkedRecordType: "quotation",
+              linkedRecordId: newId,
+              createdBy: user?.id ?? "",
+              createdByName: user?.name ?? "",
+              createdByDept: user?.department ?? "",
+              autoCreated: true,
+            }).catch(console.error);
+          }
+        }
+
         toast.success('Inquiry created.');
         queryClient.invalidateQueries({ queryKey: queryKeys.quotations.list() });
         setSubView("list");
@@ -678,6 +700,27 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
                     if (!error) {
                       const _actorInq = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
                       logCreation("quotation", newId, data.quotation_number ?? newId, _actorInq);
+
+                      // Ticket 1: notify Pricing dept when inquiry is ready for pricing
+                      if (data.status === 'Pending Pricing') {
+                        const hasTicket = await getOpenWorkflowTicket("quotation", newId);
+                        if (!hasTicket) {
+                          createWorkflowTicket({
+                            subject: `New Inquiry: ${data.customer_name || 'Unknown'} – ${(data.services || []).join(', ') || 'N/A'}`,
+                            body: `${user?.name} has submitted a new inquiry for pricing.\n\nCustomer: ${data.customer_name || 'Unknown'}\nServices: ${(data.services || []).join(', ') || 'N/A'}`,
+                            type: "request",
+                            priority: "normal",
+                            recipientDept: "Pricing",
+                            linkedRecordType: "quotation",
+                            linkedRecordId: newId,
+                            createdBy: user?.id ?? "",
+                            createdByName: user?.name ?? "",
+                            createdByDept: user?.department ?? "",
+                            autoCreated: true,
+                          }).catch(console.error);
+                        }
+                      }
+
                       toast.success("Inquiry created successfully!");
                       setCustomerDetailKey(prev => prev + 1);
                       setSubView("detail");

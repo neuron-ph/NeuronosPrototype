@@ -10,6 +10,7 @@ import { useEffect, useRef } from "react";
 import { useLocation } from "react-router";
 import { trackRecent, type RecentItem } from "../lib/recents";
 import { supabase } from "../utils/supabase/client";
+import { useUser } from "../hooks/useUser";
 
 // Paths that should never be recorded
 const SKIP_PATHS = new Set([
@@ -71,12 +72,12 @@ const DYNAMIC_ROUTES: Array<[RegExp, Resolver]> = [
     async ([, id], path) => {
       const { data } = await supabase
         .from("quotations")
-        .select("quotation_number, customer_name")
+        .select("quotation_name, quotation_number, customer_name")
         .eq("id", id)
         .maybeSingle();
       if (!data) return null;
       return {
-        label: data.quotation_number || "Quotation",
+        label: data.quotation_name || data.quotation_number || "Quotation",
         sub: `Pricing · ${data.customer_name || ""}`,
         path,
         type: "quotation",
@@ -112,8 +113,10 @@ const DYNAMIC_ROUTES: Array<[RegExp, Resolver]> = [
 export function RouteTracker() {
   const location = useLocation();
   const lastTracked = useRef<string>("");
+  const { user } = useUser();
 
   useEffect(() => {
+    if (!user?.id) return;
     const { pathname } = location;
 
     if (SKIP_PATHS.has(pathname)) return;
@@ -127,12 +130,12 @@ export function RouteTracker() {
       const match = pathname.match(pattern);
       if (match) {
         resolve(match, pathname).then((item) => {
-          if (item) trackRecent(item);
+          if (item) trackRecent(item, user.id);
         });
         return;
       }
     }
-  }, [location]);
+  }, [location, user?.id]);
 
   return null;
 }

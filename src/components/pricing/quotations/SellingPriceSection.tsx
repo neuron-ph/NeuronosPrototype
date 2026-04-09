@@ -245,11 +245,11 @@ export function SellingPriceSection({
                 transition: "all 0.2s ease"
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "#F8FBFB";
+                e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)";
                 e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "white";
+                e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
                 e.currentTarget.style.borderColor = "#E0E6E4";
               }}
             >
@@ -282,7 +282,7 @@ export function SellingPriceSection({
               e.currentTarget.style.transform = "translateY(-1px)";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = "white";
+              e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
               e.currentTarget.style.borderColor = "#D9E1DE";
               e.currentTarget.style.transform = "translateY(0)";
             }}

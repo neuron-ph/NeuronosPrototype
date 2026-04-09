@@ -389,7 +389,7 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
             setIsAddVendorHovered(true);
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = "white";
+            e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
             e.currentTarget.style.borderColor = "#D9E1DE";
             e.currentTarget.style.transform = "translateY(0)";
             setIsAddVendorHovered(false);
@@ -786,7 +786,7 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
                             e.currentTarget.style.borderColor = "var(--neuron-brand-teal)";
                           }}
                           onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = "white";
+                            e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
                             e.currentTarget.style.borderColor = "#D9E1DE";
                           }}
                         >
@@ -828,7 +828,7 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
                             e.currentTarget.style.borderColor = "#B0B0B0";
                           }}
                           onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = "white";
+                            e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
                             e.currentTarget.style.borderColor = "#D9E1DE";
                           }}
                         >

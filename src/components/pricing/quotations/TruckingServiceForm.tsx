@@ -91,7 +91,7 @@ export function TruckingServiceForm({ data, onChange, movement = "IMPORT", viewM
     padding: "10px 12px",
     fontSize: "13px",
     color: "var(--neuron-ink-base)",
-    backgroundColor: disabled ? "#F9FAFB" : "white",
+    backgroundColor: disabled ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface)",
     border: "1px solid var(--neuron-ui-border)",
     borderRadius: "6px",
     outline: "none",
@@ -436,7 +436,7 @@ function DispatchRow({ li, isExport, viewMode, canRemove, showRemoveSlot, onFiel
           onMouseLeave={(e) => {
             e.currentTarget.style.borderColor = "var(--theme-border-default)";
             e.currentTarget.style.color = "var(--theme-text-muted)";
-            e.currentTarget.style.backgroundColor = "white";
+            e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
           }}
           title="Remove line"
         >

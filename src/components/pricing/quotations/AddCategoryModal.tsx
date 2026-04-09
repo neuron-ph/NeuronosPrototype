@@ -192,11 +192,11 @@ export function AddCategoryModal({ onClose, onAdd }: AddCategoryModalProps) {
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
-                    e.currentTarget.style.backgroundColor = "#F8FBFB";
+                    e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)";
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
-                    e.currentTarget.style.backgroundColor = "white";
+                    e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
                   }}
                 >
                   {name}

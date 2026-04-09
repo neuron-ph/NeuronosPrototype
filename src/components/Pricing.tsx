@@ -3,6 +3,7 @@ import { createWorkflowTicket } from '../utils/workflowTickets';
 import { logActivity, logCreation } from '../utils/activityLog';
 import { trackRecent } from '../lib/recents';
 import { useState, useEffect } from "react";
+import { useUser } from "../hooks/useUser";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../lib/queryKeys";
 import { QuotationDetail } from "./pricing/QuotationDetail";
@@ -22,7 +23,6 @@ import type { NetworkPartner } from "../data/networkPartners";
 import { ContactsModuleWithBackend } from "./crm/ContactsModuleWithBackend";
 // projectId/publicAnonKey removed — using supabase.from() (Phase 3)
 import { useNetworkPartners } from "../hooks/useNetworkPartners";
-import { useDataScope } from "../hooks/useDataScope";
 
 export type PricingView = "contacts" | "customers" | "quotations" | "vendors" | "reports";
 type SubView = "list" | "detail" | "create";
@@ -45,8 +45,8 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
   const [selectedVendor, setSelectedVendor] = useState<NetworkPartner | null>(null);
   const [pendingQuotationType, setPendingQuotationType] = useState<QuotationType>("project");
 
-  const { scope, isLoaded } = useDataScope();
   const queryClient = useQueryClient();
+  const { effectiveRole } = useUser();
 
   // Hook for Network Partners (Lifting State Up)
   const { partners, isLoading: isPartnersLoading, savePartner } = useNetworkPartners();
@@ -54,15 +54,13 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
   // Map department name to userDepartment format
   const userDepartment: "Business Development" | "Pricing" = currentUser?.department === "Pricing" ? "Pricing" : "Business Development";
 
-  const scopeKey = isLoaded ? JSON.stringify(scope) : null;
-
-  // Fetch quotations from backend
+  // Fetch quotations from backend — Pricing sees the full pipeline (no scope
+  // filter). RLS policy already restricts to permitted departments; owner-based
+  // narrowing would hide BD-originated or manager-created quotations from staff.
   const { data: quotations = [], isLoading } = useQuery({
-    queryKey: [...queryKeys.quotations.list(), scopeKey],
+    queryKey: queryKeys.quotations.list(),
     queryFn: async () => {
       let query = supabase.from('quotations').select('*');
-      if (scope.type === 'userIds') query = query.in('prepared_by', scope.ids);
-      else if (scope.type === 'own') query = query.eq('prepared_by', scope.userId);
       const { data, error } = await query.order('created_at', { ascending: false });
       if (error) throw error;
       // Merge details JSONB so financial fields (charge_categories, buying_price, etc.) are accessible
@@ -78,7 +76,7 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
       console.log(`Fetched ${merged.length} quotations for Pricing module`);
       return merged as QuotationNew[];
     },
-    enabled: isLoaded && view === "quotations",
+    enabled: view === "quotations",
     // Inherits 5-minute staleTime from global QueryClient config
   });
 
@@ -108,13 +106,13 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
   const handleViewContact = (contact: Contact) => {
     setSelectedContact(contact);
     setSubView("detail");
-    trackRecent({
+    if (currentUser?.id) trackRecent({
       label: contact.name || [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Contact",
       sub: `Pricing · Contact`,
       path: `/pricing/contacts`,
       type: "quotation",
       time: new Date().toISOString(),
-    });
+    }, currentUser.id);
   };
 
   const handleBackFromContact = () => {
@@ -125,13 +123,13 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
   const handleViewCustomer = (customer: Customer) => {
     setSelectedCustomer(customer);
     setSubView("detail");
-    trackRecent({
+    if (currentUser?.id) trackRecent({
       label: customer.name || customer.company_name || "Customer",
       sub: `Pricing · Customer`,
       path: `/pricing/customers`,
       type: "quotation",
       time: new Date().toISOString(),
-    });
+    }, currentUser.id);
   };
 
   const handleBackFromCustomer = () => {
@@ -142,13 +140,13 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
   const handleViewQuotation = (quotation: QuotationNew) => {
     setSelectedQuotation(quotation);
     setSubView("detail");
-    trackRecent({
+    if (currentUser?.id) trackRecent({
       label: quotation.quote_number || "Quotation",
       sub: `Pricing · ${quotation.customer_name || ""}`,
       path: `/pricing/quotations/${quotation.id}`,
       type: "quotation",
       time: new Date().toISOString(),
-    });
+    }, currentUser.id);
   };
 
   const handleBackFromQuotation = () => {
@@ -302,6 +300,14 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
 
   const handleUpdateQuotation = async (updatedQuotation: QuotationNew) => {
     setSelectedQuotation(updatedQuotation);
+
+    // _localUpdate: the caller already wrote directly to the DB (e.g. confirmAssign).
+    // Just sync the list cache — no second write.
+    if ((updatedQuotation as any)._localUpdate) {
+      fetchQuotations();
+      return;
+    }
+
     // Status/field-only updates from QuotationFileView — safe columns only
     const u = updatedQuotation as any;
     const safeUpdate: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -312,6 +318,7 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
       'quotation_type', 'quotation_date', 'expiry_date', 'validity_date',
       'contract_start_date', 'contract_end_date',
       'created_by', 'created_by_name', 'inquiry_id', 'project_id', 'pricing',
+      'assigned_to', 'details',
     ];
     for (const col of SAFE_COLS) {
       if (u[col] !== undefined) safeUpdate[col] = u[col];
@@ -493,13 +500,15 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
         {view === "quotations" && (
           <>
             {subView === "list" && (
-              <QuotationsListWithFilters 
+              <QuotationsListWithFilters
                 onViewItem={handleViewQuotation}
                 onCreateQuotation={handleCreateQuotation}
                 quotations={quotations}
                 isLoading={isLoading}
                 userDepartment="Pricing"
                 onRefresh={fetchQuotations}
+                currentUserId={currentUser?.id}
+                userRole={effectiveRole}
               />
             )}
             {subView === "detail" && selectedQuotation && (

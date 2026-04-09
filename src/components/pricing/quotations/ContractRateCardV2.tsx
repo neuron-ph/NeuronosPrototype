@@ -490,7 +490,7 @@ export function ContractRateCardV2({
                 gridTemplateColumns: buildGridTemplate(columns, viewMode, isTrucking),
                 gap: "0",
                 padding: "10px 16px",
-                backgroundColor: "#FAFCFB",
+                backgroundColor: "var(--theme-bg-surface)",
                 borderBottom: "2px solid #E5E9E8",
                 borderRadius: "10px 10px 0 0",
                 minWidth: "fit-content",
@@ -621,7 +621,7 @@ export function ContractRateCardV2({
             <div
               style={{
                 padding: "8px 16px",
-                backgroundColor: "#FAFCFB",
+                backgroundColor: "var(--theme-bg-surface)",
                 borderTop: "1px solid #E5E9E8",
                 borderRadius: "0 0 10px 10px",
                 fontSize: "11px",
@@ -733,7 +733,7 @@ function RateLineItem({
       onMouseLeave={() => setIsHovered(false)}
       style={{
         borderBottom: isLast ? "none" : "1px solid #E5E9E8",
-        backgroundColor: isHovered && !viewMode ? "#FAFCFB" : "transparent",
+        backgroundColor: isHovered && !viewMode ? "var(--theme-bg-surface-subtle)" : "transparent",
         transition: "background-color 0.1s ease",
       }}
     >
@@ -970,7 +970,7 @@ function RateLineItem({
                 height: "12px",
                 borderRadius: "3px",
                 border: isAtCost ? "1.5px solid #3B82F6" : "1.5px solid #C8D0CD",
-                backgroundColor: isAtCost ? "#3B82F6" : "white",
+                backgroundColor: isAtCost ? "#3B82F6" : "var(--theme-bg-surface)",
                 position: "relative",
                 flexShrink: 0,
                 transition: "all 0.15s ease",
@@ -1038,7 +1038,7 @@ function RateLineItem({
                   height: "12px",
                   borderRadius: "3px",
                   border: hasTiered ? "1.5px solid #0F766E" : "1.5px solid #C8D0CD",
-                  backgroundColor: hasTiered ? "#0F766E" : "white",
+                  backgroundColor: hasTiered ? "#0F766E" : "var(--theme-bg-surface)",
                   position: "relative",
                   flexShrink: 0,
                   transition: "all 0.15s ease",
