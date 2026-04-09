@@ -694,7 +694,8 @@ function DeptQuickCounts({
 
 function JumpBackIn({ onNavigate }: { onNavigate: (path: string) => void }) {
   const [recents, setRecents] = useState<RecentItem[]>([]);
-  useEffect(() => { setRecents(getRecents()); }, []);
+  const { user } = useUser();
+  useEffect(() => { if (user?.id) setRecents(getRecents(user.id)); }, [user?.id]);
 
   return (
     <Panel>
@@ -856,6 +857,7 @@ function DeptQueuePanel({
   }
 
   const [activeTab, setActiveTab] = useState<TabKey>(tabs[0]?.key ?? "");
+  const { user } = useUser();
 
   // Reset active tab when dept changes
   useEffect(() => {
@@ -936,7 +938,7 @@ function DeptQueuePanel({
                     sub={`${q.customer_name} · ${q.status}`}
                     meta={timeAgo(q.created_at)}
                     onClick={() => {
-                      trackRecent({ label: q.quotation_number ?? q.id.slice(0, 8), sub: q.customer_name, path: "/bd/inquiries", type: "quotation", time: new Date().toISOString() });
+                      if (user?.id) trackRecent({ label: q.quotation_number ?? q.id.slice(0, 8), sub: q.customer_name, path: "/bd/inquiries", type: "quotation", time: new Date().toISOString() }, user.id);
                       onNavigate("/bd/inquiries");
                     }}
                   />
@@ -953,7 +955,7 @@ function DeptQueuePanel({
                     sub={q.customer_name}
                     meta={timeAgo(q.updated_at ?? q.created_at)}
                     onClick={() => {
-                      trackRecent({ label: q.quotation_number ?? q.id.slice(0, 8), sub: q.customer_name, path: "/bd/inquiries", type: "quotation", time: new Date().toISOString() });
+                      if (user?.id) trackRecent({ label: q.quotation_number ?? q.id.slice(0, 8), sub: q.customer_name, path: "/bd/inquiries", type: "quotation", time: new Date().toISOString() }, user.id);
                       onNavigate("/bd/inquiries");
                     }}
                   />
@@ -972,7 +974,7 @@ function DeptQueuePanel({
                     sub={`${q.customer_name} · ${q.status}`}
                     meta={timeAgo(q.created_at)}
                     onClick={() => {
-                      trackRecent({ label: q.quotation_number ?? q.id.slice(0, 8), sub: q.customer_name, path: "/pricing/quotations", type: "quotation", time: new Date().toISOString() });
+                      if (user?.id) trackRecent({ label: q.quotation_number ?? q.id.slice(0, 8), sub: q.customer_name, path: "/pricing/quotations", type: "quotation", time: new Date().toISOString() }, user.id);
                       onNavigate("/pricing/quotations");
                     }}
                   />
@@ -989,7 +991,7 @@ function DeptQueuePanel({
                     sub={`${q.customer_name} · ${q.status}`}
                     meta={timeAgo(q.updated_at ?? q.created_at)}
                     onClick={() => {
-                      trackRecent({ label: q.quotation_number ?? q.id.slice(0, 8), sub: q.customer_name, path: "/pricing/quotations", type: "quotation", time: new Date().toISOString() });
+                      if (user?.id) trackRecent({ label: q.quotation_number ?? q.id.slice(0, 8), sub: q.customer_name, path: "/pricing/quotations", type: "quotation", time: new Date().toISOString() }, user.id);
                       onNavigate("/pricing/quotations");
                     }}
                   />
@@ -1008,7 +1010,7 @@ function DeptQueuePanel({
                     sub={`${b.customer_name} · ${b.service_type} · ${b.status}`}
                     meta={timeAgo(b.created_at)}
                     onClick={() => {
-                      trackRecent({ label: b.booking_number, sub: `${b.customer_name} · ${b.service_type}`, path: bookingRoute(b.service_type), type: "booking", time: new Date().toISOString() });
+                      if (user?.id) trackRecent({ label: b.booking_number, sub: `${b.customer_name} · ${b.service_type}`, path: bookingRoute(b.service_type), type: "booking", time: new Date().toISOString() }, user.id);
                       onBooking(b);
                     }}
                   />
@@ -1027,7 +1029,7 @@ function DeptQueuePanel({
                     sub={t.linked_record_type.replace(/_/g, " ")}
                     meta={timeAgo(t.created_at)}
                     onClick={() => {
-                      trackRecent({ label: t.subject, sub: t.linked_record_type.replace(/_/g, " "), path: "/inbox", type: "ticket", time: new Date().toISOString() });
+                      if (user?.id) trackRecent({ label: t.subject, sub: t.linked_record_type.replace(/_/g, " "), path: "/inbox", type: "ticket", time: new Date().toISOString() }, user.id);
                       onTicket(t.id);
                     }}
                   />
@@ -1044,7 +1046,7 @@ function DeptQueuePanel({
                     sub={`${pesos(ev.amount)} · ${ev.created_by_name}`}
                     meta={timeAgo(ev.created_at)}
                     onClick={() => {
-                      trackRecent({ label: ev.evoucher_number, sub: ev.created_by_name, path: "/accounting/evouchers", type: "evoucher", time: new Date().toISOString() });
+                      if (user?.id) trackRecent({ label: ev.evoucher_number, sub: ev.created_by_name, path: "/accounting/evouchers", type: "evoucher", time: new Date().toISOString() }, user.id);
                       onNavigate("/accounting/evouchers");
                     }}
                   />

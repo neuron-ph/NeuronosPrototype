@@ -186,9 +186,9 @@ export function TruckingDestinationBlocks({
             textAlign: "center",
             color: "var(--neuron-ink-muted)",
             fontSize: "13px",
-            border: "1px solid #E5E9E8",
+            border: "1px solid var(--neuron-ui-border)",
             borderRadius: "10px",
-            backgroundColor: "#FAFCFB",
+            backgroundColor: "var(--theme-bg-surface)",
           }}
         >
           <MapPin
@@ -346,8 +346,8 @@ function DestinationBlockCard({
           alignItems: "center",
           gap: "8px",
           padding: "10px 16px",
-          backgroundColor: "#FAFCFB",
-          borderBottom: collapsed ? "none" : "1px solid #E5E9E8",
+          backgroundColor: "var(--theme-bg-surface-subtle)",
+          borderBottom: collapsed ? "none" : "1px solid var(--neuron-ui-border)",
           minHeight: "42px",
         }}
       >
@@ -577,8 +577,8 @@ function ConfigRow({
                 width: "14px",
                 height: "14px",
                 borderRadius: "3px",
-                border: config.enabled ? "1.5px solid #0F766E" : "1.5px solid #C8D0CD",
-                backgroundColor: config.enabled ? "#0F766E" : "white",
+                border: config.enabled ? "1.5px solid #0F766E" : "1.5px solid var(--neuron-ui-border)",
+                backgroundColor: config.enabled ? "#0F766E" : "var(--theme-bg-surface)",
                 position: "relative",
                 flexShrink: 0,
                 transition: "all 0.15s ease",

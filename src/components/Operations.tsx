@@ -3,6 +3,7 @@ import { ForwardingBookings } from "./operations/forwarding/ForwardingBookings";
 import { ForwardingBookingDetails } from "./operations/forwarding/ForwardingBookingDetails";
 import type { ForwardingBooking } from "../types/operations";
 import { trackRecent } from "../lib/recents";
+import { useUser } from "../hooks/useUser";
 
 export type OperationsView = "forwarding" | "brokerage" | "trucking" | "marine-insurance" | "others" | "reporting";
 type SubView = "list" | "detail";
@@ -15,6 +16,7 @@ interface OperationsProps {
 export function Operations({ view = "forwarding", currentUser }: OperationsProps) {
   const [subView, setSubView] = useState<SubView>("list");
   const [selectedBooking, setSelectedBooking] = useState<ForwardingBooking | null>(null);
+  const { user } = useUser();
 
   // Reset to list view when switching between main views
   useEffect(() => {
@@ -25,13 +27,13 @@ export function Operations({ view = "forwarding", currentUser }: OperationsProps
   const handleSelectBooking = (booking: ForwardingBooking) => {
     setSelectedBooking(booking);
     setSubView("detail");
-    trackRecent({
+    if (user?.id) trackRecent({
       label: booking.bookingId || "Booking",
       sub: `Operations · ${booking.customerName || ""}`,
       path: `/operations/forwarding`,
       type: "booking",
       time: new Date().toISOString(),
-    });
+    }, user.id);
   };
 
   const handleBackToList = () => {

@@ -58,9 +58,13 @@ export function ContactsListWithFilters({ userDepartment, onViewContact }: Conta
   const { activities } = useCRMActivities();
 
   // Apply scope + search client-side
+  // Scope filtering only applies to BD's own CRM view — Pricing (and other
+  // non-BD departments) need to see all contacts.
   const contacts = allContacts.filter((contact: BackendContact) => {
-    if (scope.type === 'userIds' && contact.owner_id && !scope.ids.includes(contact.owner_id)) return false;
-    if (scope.type === 'own' && contact.owner_id !== scope.userId) return false;
+    if (userDepartment === "Business Development") {
+      if (scope.type === 'userIds' && contact.owner_id && !scope.ids.includes(contact.owner_id)) return false;
+      if (scope.type === 'own' && contact.owner_id !== scope.userId) return false;
+    }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const matchesSearch = (contact.name || '').toLowerCase().includes(q) ||

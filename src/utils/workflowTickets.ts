@@ -15,7 +15,8 @@ export interface WorkflowTicketParams {
   body: string;
   type: "fyi" | "request" | "approval";
   priority?: "normal" | "urgent";
-  recipientDept: string;
+  recipientDept?: string;       // department recipient (use when targeting a whole dept)
+  recipientUserId?: string;     // individual user recipient (use for assignment notifications)
   linkedRecordType: WorkflowRecordType;
   linkedRecordId: string;
   linkedRecordLabel?: string;
@@ -40,6 +41,7 @@ export async function createWorkflowTicket(
     type,
     priority = "normal",
     recipientDept,
+    recipientUserId,
     linkedRecordType,
     linkedRecordId,
     resolutionAction,
@@ -85,28 +87,58 @@ export async function createWorkflowTicket(
     participant_user_id: createdBy,
     participant_dept: null,
     role: "sender",
+    added_by: createdBy,
   });
 
-  // 3. Add recipient department as participant
-  await supabase.from("ticket_participants").insert({
-    ticket_id: ticketId,
-    participant_type: "department",
-    participant_user_id: null,
-    participant_dept: recipientDept,
-    role: "to",
-  });
+  // 3. Add recipient as participant (individual user or whole department)
+  if (recipientUserId) {
+    await supabase.from("ticket_participants").insert({
+      ticket_id: ticketId,
+      participant_type: "user",
+      participant_user_id: recipientUserId,
+      participant_dept: null,
+      role: "to",
+      added_by: createdBy,
+    });
+  } else if (recipientDept) {
+    await supabase.from("ticket_participants").insert({
+      ticket_id: ticketId,
+      participant_type: "department",
+      participant_user_id: null,
+      participant_dept: recipientDept,
+      role: "to",
+      added_by: createdBy,
+    });
+  }
 
   // 4. Insert opening message
-  await supabase.from("ticket_messages").insert({
-    ticket_id: ticketId,
-    sender_id: createdBy,
-    sender_name: createdByName,
-    sender_department: createdByDept,
-    body,
-    message_type: "user",
-    is_system: false,
-    is_retracted: false,
-  });
+  const { data: message } = await supabase
+    .from("ticket_messages")
+    .insert({
+      ticket_id: ticketId,
+      sender_id: createdBy,
+      sender_name: createdByName,
+      sender_department: createdByDept,
+      body,
+      message_type: "user",
+      is_system: false,
+      is_retracted: false,
+    })
+    .select("id")
+    .single();
+
+  // 5. Attach the linked record as an entity attachment on the opening message
+  if (message?.id) {
+    await supabase.from("ticket_attachments").insert({
+      ticket_id: ticketId,
+      message_id: message.id,
+      attachment_type: "entity",
+      entity_type: params.linkedRecordType,
+      entity_id: params.linkedRecordId,
+      entity_label: params.linkedRecordLabel ?? params.linkedRecordId,
+      uploaded_by: createdBy,
+    });
+  }
 
   return ticketId;
 }

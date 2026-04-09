@@ -1,6 +1,6 @@
-import { Paperclip, Zap } from "lucide-react";
+import { Paperclip } from "lucide-react";
 import type { ThreadSummary } from "../../hooks/useInbox";
-import { TICKET_TYPE_TONES } from "./ticketingTheme";
+import { TICKET_ENTITY_TONES, TICKET_TYPE_TONES, ticketBadgeStyle } from "./ticketingTheme";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -263,17 +263,19 @@ export function ThreadListItem({ thread, isSelected, onClick }: ThreadListItemPr
             {thread.linked_record_type && (
               <span
                 style={{
+                  ...ticketBadgeStyle(
+                    TICKET_ENTITY_TONES[thread.linked_record_type] ?? TICKET_ENTITY_TONES.quotation
+                  ),
                   display: "inline-flex",
                   alignItems: "center",
-                  gap: 3,
                   marginRight: 4,
-                  color: "var(--theme-status-warning-fg)",
-                  fontWeight: 500,
+                  verticalAlign: "middle",
+                  fontSize: 10,
+                  padding: "1px 5px",
+                  borderRadius: 4,
                 }}
               >
-                <Zap size={9} />
-                {thread.linked_record_type.replace("_", " ")}
-                {thread.last_message_preview && " ·"}
+                {thread.linked_record_type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
               </span>
             )}
             {thread.last_message_preview || (nonDefaultStatus ?? "")}

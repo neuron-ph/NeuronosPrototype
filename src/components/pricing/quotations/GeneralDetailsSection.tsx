@@ -424,10 +424,10 @@ export function GeneralDetailsSection({
                 const isHovered = hoveredService === service;
                 
                 // Compute styles based on state
-                let backgroundColor = "white";
+                let backgroundColor = "var(--theme-bg-surface)";
                 let borderColor = "var(--neuron-ui-border)";
                 let textColor = "var(--neuron-ink-base)";
-                
+
                 if (isSelected) {
                   backgroundColor = "var(--theme-action-primary-bg)";
                   borderColor = "var(--theme-action-primary-bg)";
@@ -639,7 +639,7 @@ export function GeneralDetailsSection({
               padding: "10px 12px",
               fontSize: "13px",
               color: "var(--theme-text-muted)",
-              backgroundColor: "#FAFCFB",
+              backgroundColor: "var(--theme-bg-surface)",
               border: "1px solid var(--neuron-ui-border)",
               borderRadius: "6px",
               minHeight: "38px",
@@ -661,8 +661,8 @@ export function GeneralDetailsSection({
             <div style={{
               padding: "10px 12px",
               fontSize: "13px",
-              backgroundColor: "#F0FAFA",
-              border: "1px solid #B2DFDB",
+              backgroundColor: "var(--theme-bg-surface-tint)",
+              border: "1px solid var(--neuron-ui-border)",
               borderRadius: "6px",
               minHeight: "38px",
               display: "flex",

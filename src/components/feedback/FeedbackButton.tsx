@@ -3,6 +3,7 @@ import { MessageSquare, X, Send, Bug, Lightbulb } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { useUser } from "../../hooks/useUser";
 import { toast } from "sonner@2.0.3";
+import { useFeedbackPosition } from "../../contexts/FeedbackPositionContext";
 
 type FeedbackType = "bug" | "feedback" | "feature";
 
@@ -14,6 +15,7 @@ const TYPE_OPTIONS: { value: FeedbackType; label: string; icon: React.ReactNode 
 
 export function FeedbackButton() {
   const { user } = useUser();
+  const { hasCommentBar } = useFeedbackPosition();
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<FeedbackType>("feedback");
   const [title, setTitle] = useState("");
@@ -59,7 +61,10 @@ export function FeedbackButton() {
   };
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
+    <div
+      className="fixed right-5 z-50 flex flex-col items-end gap-2 transition-all duration-200"
+      style={{ bottom: hasCommentBar ? "80px" : "20px" }}
+    >
 
       {/* Floating card */}
       {open && (

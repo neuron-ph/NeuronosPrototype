@@ -290,7 +290,7 @@ export function CategoryPresetDropdown({ isOpen, onClose, onSelect, buttonRef, a
                   e.currentTarget.style.backgroundColor = "#F8F9FA";
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "white";
+                  e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
                 }}
               >
                 <span>{preset.name}</span>
@@ -339,7 +339,7 @@ export function CategoryPresetDropdown({ isOpen, onClose, onSelect, buttonRef, a
                         e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)"; // Light green hover
                     }}
                     onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = "white";
+                        e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
                     }}
                 >
                     <Plus size={16} />

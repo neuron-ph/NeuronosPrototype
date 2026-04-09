@@ -1,6 +1,10 @@
-import { ArrowLeft, Edit3, FileText, FolderPlus, Layout } from "lucide-react";
+import { ArrowLeft, Edit3, FileText, FolderPlus, Layout, UserCircle } from "lucide-react";
+import { CustomDatePicker } from "../common/CustomDatePicker";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import type { QuotationNew, Project } from "../../types/pricing";
+import { useUser } from "../../hooks/useUser";
+import { CustomDropdown } from "../bd/CustomDropdown";
 import { QuotationActionMenu } from "./QuotationActionMenu";
 import { StatusChangeButton } from "./StatusChangeButton";
 import { CreateProjectModal } from "../bd/CreateProjectModal";
@@ -13,7 +17,6 @@ import { QuotationFormView } from "../projects/quotation/QuotationFormView";
 import { supabase } from "../../utils/supabase/client";
 import { createWorkflowTicket, getOpenWorkflowTicket } from "../../utils/workflowTickets";
 import { logActivity, logCreation, logStatusChange } from "../../utils/activityLog";
-import { LinkedTicketBadge } from "../common/LinkedTicketBadge";
 import {
   getNormalizedContractStatus,
   getNormalizedQuotationStatus,
@@ -46,14 +49,151 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
   const [showCreateBookingsModal, setShowCreateBookingsModal] = useState(false);
   const [createdProject, setCreatedProject] = useState<Project | null>(null);
   const [isActivatingContract, setIsActivatingContract] = useState(false);
+  const [assignedToId, setAssignedToId] = useState<string>((quotation as any).assigned_to || "");
+  const [isAssigning, setIsAssigning] = useState(false);
+  const [pendingAssigneeId, setPendingAssigneeId] = useState<string | null>(null);
+  const [pricingDeadline, setPricingDeadline] = useState<string>("");
   const normalizedStatus = getNormalizedQuotationStatus(quotation);
   const normalizedContractStatus = getNormalizedContractStatus(quotation);
   const isLocked = isQuotationLocked(quotation);
-  
+
+  const { effectiveRole } = useUser();
+
   // TODO: Replace with actual user data from context/auth
   const currentUserId = currentUser?.id || "user-123";
   const currentUserName = currentUser?.name || "John Doe";
   const currentUserDepartment = currentUser?.department || userDepartment || "BD";
+
+  // Can assign if user is a Pricing Manager only (handles both old "manager" and new "Manager" role values)
+  const canAssign = userDepartment === "Pricing" && effectiveRole?.toLowerCase() === "manager";
+
+  // Fetch all Pricing users for the assignment dropdown, filter out managers/above in JS
+  // No 'enabled' guard — query always runs; the UI is already gated by canAssign
+  const MANAGER_ROLES = ["manager", "Manager", "director", "Director", "Executive", "executive"];
+  const { data: pricingUsers = [] } = useQuery({
+    queryKey: ["users", "pricing-assignable"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("users")
+        .select("id, name, role")
+        .eq("department", "Pricing")
+        .order("name");
+      return ((data || []) as { id: string; name: string; role: string }[])
+        .filter(u => !MANAGER_ROLES.includes(u.role));
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const confirmAssign = async (newUserId: string, deadline: string) => {
+    if (isAssigning) return;
+    setIsAssigning(true);
+    try {
+      const previousAssigneeId = (quotation as any).assigned_to as string | undefined;
+      const newAssignee = pricingUsers.find(u => u.id === newUserId);
+
+      const updatedDetails = newUserId && deadline
+        ? { ...(quotation as any).details, pricing_deadline: deadline }
+        : { ...(quotation as any).details, pricing_deadline: null };
+
+      const { error } = await supabase
+        .from("quotations")
+        .update({ assigned_to: newUserId || null, details: updatedDetails, updated_at: new Date().toISOString() })
+        .eq("id", quotation.id);
+      if (error) throw error;
+
+      setAssignedToId(newUserId);
+      setPendingAssigneeId(null);
+      // _localUpdate: true tells handleUpdateQuotation to skip the redundant second DB write —
+      // confirmAssign already wrote assigned_to + details directly above.
+      onUpdate({ ...quotation, assigned_to: newUserId, details: updatedDetails, _localUpdate: true } as QuotationNew);
+
+      const quotationLabel = quotation.quote_number || quotation.quotation_name || quotation.id;
+      const customerLabel = quotation.customer_name || "Unknown";
+      const servicesLabel = (quotation.services || []).join(", ") || "N/A";
+
+      // Notify newly assigned staff — include deadline in body.
+      // resolutionAction: when the staff marks this ticket Done, the quotation status
+      // automatically advances to "Pricing in Progress" (acknowledgement).
+      if (newUserId) {
+        const deadlineLine = deadline
+          ? `\nDue: ${new Date(deadline + "T00:00:00").toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" })}`
+          : "";
+        createWorkflowTicket({
+          subject: `Pricing request: ${quotationLabel}`,
+          body: `You have a new pricing assignment.\n\nCustomer: ${customerLabel}\nServices: ${servicesLabel}${deadlineLine}\nAssigned by: ${currentUserName}`,
+          type: "request",
+          priority: "normal",
+          recipientUserId: newUserId,
+          linkedRecordType: "quotation",
+          linkedRecordId: quotation.id,
+          linkedRecordLabel: quotationLabel,
+          resolutionAction: "set_quotation_pricing_in_progress",
+          createdBy: currentUserId,
+          createdByName: currentUserName,
+          createdByDept: currentUserDepartment,
+          autoCreated: true,
+        }).catch(console.error);
+      }
+
+      // FYI to the BD rep who created the inquiry
+      const bdRepId = (quotation as any).created_by as string | undefined;
+      if (bdRepId && bdRepId !== currentUserId) {
+        createWorkflowTicket({
+          subject: `Inquiry assigned to pricing: ${customerLabel} – ${servicesLabel}`,
+          body: `Your inquiry for ${customerLabel} has been assigned to ${newAssignee?.name || "a pricing staff member"} for pricing.\n\nQuotation: ${quotationLabel}`,
+          type: "fyi",
+          priority: "normal",
+          recipientUserId: bdRepId,
+          linkedRecordType: "quotation",
+          linkedRecordId: quotation.id,
+          createdBy: currentUserId,
+          createdByName: currentUserName,
+          createdByDept: currentUserDepartment,
+          autoCreated: true,
+        }).catch(console.error);
+      }
+
+      // Notify previous assignee they've been unassigned
+      if (previousAssigneeId && previousAssigneeId !== newUserId) {
+        createWorkflowTicket({
+          subject: `Unassigned: ${customerLabel} – ${servicesLabel}`,
+          body: `You have been unassigned from the following inquiry.\n\nCustomer: ${customerLabel}\nServices: ${servicesLabel}\nQuotation: ${quotationLabel}`,
+          type: "fyi",
+          priority: "normal",
+          recipientUserId: previousAssigneeId,
+          linkedRecordType: "quotation",
+          linkedRecordId: quotation.id,
+          createdBy: currentUserId,
+          createdByName: currentUserName,
+          createdByDept: currentUserDepartment,
+          autoCreated: true,
+        }).catch(console.error);
+      }
+
+      toast.success(newUserId ? `Assigned to ${newAssignee?.name || "staff"}` : "Assignment cleared");
+    } catch (err: any) {
+      toast.error("Failed to assign: " + (err?.message ?? "Unknown error"));
+    } finally {
+      setIsAssigning(false);
+    }
+  };
+
+  const handleDropdownChange = (newUserId: string) => {
+    if (!newUserId) {
+      // Clearing assignment — no deadline needed, fire immediately
+      confirmAssign("", "");
+      return;
+    }
+    // Calculate default deadline: today + 3 business days
+    const d = new Date();
+    let count = 0;
+    while (count < 3) {
+      d.setDate(d.getDate() + 1);
+      if (d.getDay() !== 0 && d.getDay() !== 6) count++;
+    }
+    setPendingAssigneeId(newUserId);
+    setPricingDeadline(d.toISOString().split("T")[0]);
+  };
   
   // Adapter function to convert QuotationNew to Project for compatibility with Project components
   const adaptQuotationToProject = (quotation: QuotationNew): Project => {
@@ -219,24 +359,22 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
       }
     }
 
-    // Pricing → BD handoff: notify BD when quotation is priced and ready to send
+    // Pricing → BD handoff: notify BD rep when quotation is priced and ready to send
     if (normalizeQuotationStatus(newStatus, quotation) === "Priced" && currentUser) {
-      const existingReadyTicket = await getOpenWorkflowTicket("quotation", quotation.id);
-      if (!existingReadyTicket) {
-        await createWorkflowTicket({
-          subject: `Ready to Send: ${quotation.quote_number || quotation.quotation_name}`,
-          body: `Pricing for "${quotation.quotation_name}" (${quotation.quote_number}) is complete. Please review and send the quotation to ${quotation.customer_name}.`,
-          type: "fyi",
-          priority: "normal",
-          recipientDept: "Business Development",
-          linkedRecordType: "quotation",
-          linkedRecordId: quotation.id,
-          createdBy: currentUser.id,
-          createdByName: currentUser.name,
-          createdByDept: currentUser.department,
-          autoCreated: true,
-        });
-      }
+      const bdRepId = (quotation as any).created_by as string | undefined;
+      await createWorkflowTicket({
+        subject: `Ready to Send: ${quotation.quote_number || quotation.quotation_name}`,
+        body: `Pricing for "${quotation.quotation_name}" (${quotation.quote_number}) is complete. Please review and send the quotation to ${quotation.customer_name}.`,
+        type: "request",
+        priority: "normal",
+        ...(bdRepId ? { recipientUserId: bdRepId } : { recipientDept: "Business Development" }),
+        linkedRecordType: "quotation",
+        linkedRecordId: quotation.id,
+        createdBy: currentUser.id,
+        createdByName: currentUser.name,
+        createdByDept: currentUser.department,
+        autoCreated: true,
+      });
     }
 
     // Project cascade: cancel linked project when quotation is rejected/cancelled
@@ -487,12 +625,28 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
           <p style={{ fontSize: "13px", color: "var(--neuron-ink-muted)", margin: 0 }}>
             {quotation.quote_number}
           </p>
-          <div style={{ marginTop: 8 }}>
-            <LinkedTicketBadge recordType="quotation" recordId={quotation.id} />
-          </div>
         </div>
 
-        {/* No action buttons here anymore - moved to toolbar */}
+        {/* Assign to — Pricing Manager only, top-right of header */}
+        {canAssign && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <UserCircle size={14} style={{ color: "var(--neuron-ink-muted)", flexShrink: 0 }} />
+            <span style={{ fontSize: "12px", color: "var(--neuron-ink-muted)", whiteSpace: "nowrap" }}>
+              Assign to:
+            </span>
+            <div style={{ minWidth: 160 }}>
+              <CustomDropdown
+                value={pendingAssigneeId ?? assignedToId}
+                onChange={handleDropdownChange}
+                options={[
+                  { value: "", label: "Unassigned" },
+                  ...pricingUsers.map(u => ({ value: u.id, label: u.name })),
+                ]}
+                placeholder={isAssigning ? "Saving…" : "Select staff"}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Merged Toolbar: Tabs + Actions */}
@@ -548,6 +702,74 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
 
         {/* Action Controls - Right Side */}
         <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+
+          {/* Deadline confirmation — shown in toolbar when a pending assignee is selected */}
+          {canAssign && pendingAssigneeId && (
+            <>
+              <span style={{ fontSize: 13, color: "var(--neuron-ink-muted)", whiteSpace: "nowrap" }}>
+                Price by:
+              </span>
+              <CustomDatePicker
+                value={pricingDeadline}
+                onChange={setPricingDeadline}
+                placeholder="Pick a date"
+                minWidth="140px"
+              />
+              <button
+                onClick={() => { setPendingAssigneeId(null); setPricingDeadline(""); }}
+                style={{
+                  fontSize: 13,
+                  padding: "5px 12px",
+                  borderRadius: 6,
+                  border: "1px solid var(--neuron-ui-border)",
+                  background: "transparent",
+                  color: "var(--neuron-ink-muted)",
+                  cursor: "pointer",
+                  height: 34,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => confirmAssign(pendingAssigneeId, pricingDeadline)}
+                disabled={!pricingDeadline || isAssigning}
+                style={{
+                  fontSize: 13,
+                  padding: "5px 14px",
+                  borderRadius: 6,
+                  border: "none",
+                  background: pricingDeadline && !isAssigning ? "var(--theme-action-primary-bg)" : "var(--neuron-ui-border)",
+                  color: pricingDeadline && !isAssigning ? "#fff" : "var(--neuron-ink-muted)",
+                  cursor: pricingDeadline && !isAssigning ? "pointer" : "not-allowed",
+                  fontWeight: 500,
+                  height: 34,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {isAssigning ? "Saving…" : "Confirm Assign"}
+              </button>
+              {/* Divider */}
+              <div style={{ width: 1, height: 20, background: "var(--neuron-ui-border)" }} />
+            </>
+          )}
+
+          {/* Deadline chip — visible when assigned, no pending action */}
+          {canAssign && assignedToId && !pendingAssigneeId && (quotation as any).details?.pricing_deadline && (
+            <>
+              <span style={{
+                fontSize: 12,
+                color: "var(--neuron-ink-muted)",
+                background: "var(--neuron-ui-bg-subtle)",
+                border: "1px solid var(--neuron-ui-border)",
+                borderRadius: 6,
+                padding: "3px 8px",
+                whiteSpace: "nowrap",
+              }}>
+                Due: {new Date((quotation as any).details.pricing_deadline + "T00:00:00").toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
+              </span>
+              <div style={{ width: 1, height: 20, background: "var(--neuron-ui-border)" }} />
+            </>
+          )}
           {/* Edit Button (Ghost Style) — hidden when locked (converted to project or contract) */}
           {!isLocked && (
             <button

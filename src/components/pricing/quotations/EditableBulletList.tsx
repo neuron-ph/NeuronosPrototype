@@ -228,7 +228,7 @@ export function EditableBulletList({
               padding: "8px 12px",
               fontSize: "13px",
               color: "var(--neuron-ink-base)",
-              backgroundColor: "#FAFCFB",
+              backgroundColor: "var(--theme-bg-surface)",
               border: "1px dashed var(--neuron-ui-border)",
               borderRadius: "6px",
               outline: "none",

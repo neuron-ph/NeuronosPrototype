@@ -131,7 +131,42 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
   const ccParticipants = thread.participants.filter((p) => p.role === "cc");
 
   // First message — embedded in the sender block
-  const firstMessage = thread.messages.find((m) => !m.is_system) ?? null;
+  const rawFirstMessage = thread.messages.find((m) => !m.is_system) ?? null;
+
+  // For old tickets that were created before entity attachments were auto-generated,
+  // synthesize one from the ticket's own linked_record fields so the chip appears
+  // at the bottom of the first message body (matching the reference UX).
+  const firstMessage = (() => {
+    if (!rawFirstMessage) return null;
+    if (!thread.linked_record_type || !thread.linked_record_id) return rawFirstMessage;
+    const alreadyLinked = rawFirstMessage.attachments?.some(
+      (a) => a.attachment_type === "entity" && a.entity_id === thread.linked_record_id
+    );
+    if (alreadyLinked) return rawFirstMessage;
+    const derivedLabel =
+      thread.subject?.includes(": ")
+        ? thread.subject.split(": ").slice(1).join(": ")
+        : thread.linked_record_id;
+    return {
+      ...rawFirstMessage,
+      attachments: [
+        ...(rawFirstMessage.attachments ?? []),
+        {
+          id: `synthetic-${thread.linked_record_id}`,
+          message_id: rawFirstMessage.id,
+          attachment_type: "entity" as const,
+          file_path: null,
+          file_name: null,
+          file_size: null,
+          file_mime_type: null,
+          entity_type: thread.linked_record_type,
+          entity_id: thread.linked_record_id,
+          entity_label: derivedLabel,
+          uploaded_by: thread.created_by,
+        },
+      ],
+    };
+  })();
 
   // Prev / next navigation
   const navIdx = threadIds ? threadIds.indexOf(thread.id) : -1;
@@ -728,8 +763,7 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
             letterSpacing: "-0.4px",
             margin: 0,
             marginBottom:
-              (thread.linked_record_type ||
-                (isReturned && thread.return_reason) ||
+              ((isReturned && thread.return_reason) ||
                 thread.approval_result ||
                 firstMessage)
                 ? 14
@@ -738,29 +772,6 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
         >
           {thread.subject}
         </h1>
-
-        {/* Linked record banner */}
-        {thread.linked_record_type && thread.linked_record_id && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "6px 10px",
-              borderRadius: 6,
-              backgroundColor: "var(--theme-status-warning-bg)",
-              border: "1px solid var(--theme-status-warning-border)",
-              marginBottom:
-                (isReturned && thread.return_reason) || thread.approval_result ? 8 : 0,
-            }}
-          >
-            <Zap size={12} style={{ color: "var(--theme-status-warning-fg)", flexShrink: 0 }} />
-            <span style={{ fontSize: 12, color: "var(--theme-status-warning-fg)", fontWeight: 500 }}>
-              This ticket is about{" "}
-              {RECORD_TYPE_LABEL[thread.linked_record_type] ?? thread.linked_record_type}
-            </span>
-          </div>
-        )}
 
         {/* Returned banner */}
         {isReturned && thread.return_reason && (

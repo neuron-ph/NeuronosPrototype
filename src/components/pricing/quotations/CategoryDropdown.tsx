@@ -157,7 +157,7 @@ export function CategoryDropdown({ onAdd, onClose }: CategoryDropdownProps) {
                   e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "white";
+                  e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
                   e.currentTarget.style.borderColor = "transparent";
                 }}
               >

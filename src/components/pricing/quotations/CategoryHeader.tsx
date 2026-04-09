@@ -124,7 +124,7 @@ export function CategoryHeader({
       }}
       onMouseLeave={(e) => {
         if (!isEditing) {
-          e.currentTarget.style.backgroundColor = "#F8FBFB";
+          e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)";
         }
       }}
     >

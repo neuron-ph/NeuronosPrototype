@@ -13,7 +13,7 @@ export function FormCheckbox({ checked, onChange, label, disabled = false }: For
   
   // Compute styles based on state
   let borderColor = "var(--neuron-ui-border)";
-  let backgroundColor = "white";
+  let backgroundColor = "var(--theme-bg-surface)";
   let cursor = disabled ? "default" : "pointer";
   let opacity = disabled ? 0.6 : 1;
   
