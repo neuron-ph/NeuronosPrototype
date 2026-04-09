@@ -68,7 +68,9 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
       // Merge details JSONB so financial fields (charge_categories, buying_price, etc.) are accessible
       // Also normalize contract date column names (DB: contract_start_date → type: contract_validity_start)
       const merged = (data || []).map((row: any) => {
-        const m = { ...(row?.details ?? {}), ...row };
+        // Spread details first, then pricing JSONB (so credit_terms, validity_period etc. are top-level),
+        // then the raw row last so real columns always win.
+        const m = { ...(row?.details ?? {}), ...(row?.pricing ?? {}), ...row };
         if (!m.contract_validity_start && m.contract_start_date) m.contract_validity_start = m.contract_start_date;
         if (!m.contract_validity_end && m.contract_end_date) m.contract_validity_end = m.contract_end_date;
         return m;

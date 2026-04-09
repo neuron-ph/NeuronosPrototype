@@ -1,30 +1,18 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { X, Link2, Paperclip, FileText, Send, Save, Building2 } from "lucide-react";
+import { X, Link2, Paperclip, FileText, Send, Save } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { useUser } from "../../hooks/useUser";
 import { logCreation } from "../../utils/activityLog";
 import { toast } from "sonner@2.0.3";
 import { RecordBrowser } from "./RecordBrowser";
 import type { LinkedEntity } from "./RecordBrowser";
-import { TICKET_AVATAR_TONES, TICKET_PRIORITY_TONES, TICKET_TYPE_TONES, ticketBadgeStyle, ticketToggleStyle } from "./ticketingTheme";
+import { TICKET_PRIORITY_TONES, TICKET_TYPE_TONES, ticketToggleStyle } from "./ticketingTheme";
+import { RecipientField, avatarColor, initials, DEPARTMENTS } from "./RecipientField";
+import type { RecipientChip, UserOption } from "./RecipientField";
 
 type MessageType = "fyi" | "request" | "approval";
 type MessagePriority = "normal" | "urgent";
-
-interface RecipientChip {
-  id: string;
-  label: string;
-  type: "user" | "department";
-  userId?: string;
-  department?: string;
-}
-
-interface UserOption {
-  id: string;
-  name: string;
-  department: string;
-}
 
 interface PendingAttachment {
   type: "file" | "entity";
@@ -42,24 +30,11 @@ interface ComposePanelProps {
   initialRecipientDept?: string;
 }
 
-const DEPARTMENTS = [
-  "Business Development", "Pricing", "Operations",
-  "Accounting", "HR", "Executive",
-];
-
 const TYPE_OPTIONS: { key: MessageType; label: string }[] = [
   { key: "fyi", label: "FYI" },
   { key: "request", label: "Request" },
   { key: "approval", label: "Approval" },
 ];
-
-function avatarColor(name: string) {
-  return TICKET_AVATAR_TONES[name.charCodeAt(0) % TICKET_AVATAR_TONES.length];
-}
-
-function initials(name: string) {
-  return name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
-}
 
 // ── Main component ───────────────────────────────────────────────────────────
 
@@ -154,21 +129,24 @@ export function ComposePanel({ onClose, onSent, initialEntity, initialSubject, i
     if (tErr || !ticket) { toast.error("Failed to create thread"); return null; }
 
     const participantRows: any[] = [
-      { ticket_id: ticket.id, participant_type: "user", participant_user_id: user.id, participant_dept: null, role: "sender" },
+      { ticket_id: ticket.id, participant_type: "user", participant_user_id: user.id, participant_dept: null, role: "sender", added_by: user.id },
     ];
     recipients.forEach((r) => participantRows.push({
       ticket_id: ticket.id, participant_type: r.type,
       participant_user_id: r.type === "user" ? r.userId : null,
       participant_dept: r.type === "department" ? r.department : null,
       role: "to",
+      added_by: user.id,
     }));
     ccRecipients.forEach((r) => participantRows.push({
       ticket_id: ticket.id, participant_type: r.type,
       participant_user_id: r.type === "user" ? r.userId : null,
       participant_dept: r.type === "department" ? r.department : null,
       role: "cc",
+      added_by: user.id,
     }));
-    await supabase.from("ticket_participants").insert(participantRows);
+    const { error: pErr } = await supabase.from("ticket_participants").insert(participantRows);
+    if (pErr) { toast.error("Failed to add recipients"); await supabase.from("tickets").delete().eq("id", ticket.id); return null; }
 
     if (body.trim()) {
       const { data: msg } = await supabase
@@ -203,25 +181,37 @@ export function ComposePanel({ onClose, onSent, initialEntity, initialSubject, i
 
   const handleSend = async () => {
     setIsSending(true);
-    const ticket = await createTicket("open");
-    setIsSending(false);
-    if (ticket) {
-      const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
-      logCreation("ticket", ticket.id, ticket.subject ?? ticket.id, actor);
-      toast.success("Message sent");
-      onSent();
+    try {
+      const ticket = await createTicket("open");
+      if (ticket) {
+        const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+        logCreation("ticket", ticket.id, ticket.subject ?? ticket.id, actor);
+        toast.success("Message sent");
+        onSent();
+      }
+    } catch (err) {
+      console.error("Send failed:", err);
+      toast.error("Failed to send message");
+    } finally {
+      setIsSending(false);
     }
   };
 
   const handleSaveDraft = async () => {
     setIsSavingDraft(true);
-    const ticket = await createTicket("draft");
-    setIsSavingDraft(false);
-    if (ticket) {
-      const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
-      logCreation("ticket", ticket.id, ticket.subject ?? ticket.id, actor);
-      toast.success("Draft saved");
-      onSent();
+    try {
+      const ticket = await createTicket("draft");
+      if (ticket) {
+        const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+        logCreation("ticket", ticket.id, ticket.subject ?? ticket.id, actor);
+        toast.success("Draft saved");
+        onSent();
+      }
+    } catch (err) {
+      console.error("Save draft failed:", err);
+      toast.error("Failed to save draft");
+    } finally {
+      setIsSavingDraft(false);
     }
   };
 
@@ -452,202 +442,3 @@ export function ComposePanel({ onClose, onSent, initialEntity, initialSubject, i
   );
 }
 
-// ── Recipient field ──────────────────────────────────────────────────────────
-
-interface RecipientFieldProps {
-  label: string;
-  chips: RecipientChip[];
-  allUsers: UserOption[];
-  excludeIds: string[];
-  onAdd: (chip: RecipientChip) => void;
-  onRemove: (id: string) => void;
-  action?: React.ReactNode;
-}
-
-function buildOptions(allUsers: UserOption[], query: string, excludeIds: string[]): { people: RecipientChip[]; depts: RecipientChip[] } {
-  const q = query.trim().toLowerCase();
-
-  const people = allUsers
-    .filter((u) => !excludeIds.includes(u.id) && (!q || u.name.toLowerCase().includes(q) || (u.department || "").toLowerCase().includes(q)))
-    .slice(0, 8)
-    .map((u) => ({ id: u.id, label: u.name, type: "user" as const, userId: u.id, department: u.department }));
-
-  const depts = DEPARTMENTS
-    .filter((d) => !excludeIds.includes(`dept-${d}`) && (!q || d.toLowerCase().includes(q)))
-    .map((d) => ({ id: `dept-${d}`, label: d, type: "department" as const, department: d }));
-
-  return { people, depts };
-}
-
-function RecipientField({ label, chips, allUsers, excludeIds, onAdd, onRemove, action }: RecipientFieldProps) {
-  const [query, setQuery] = useState("");
-  const [isOpen, setIsOpen] = useState(false);
-  const [highlightedIdx, setHighlightedIdx] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  const { people, depts } = buildOptions(allUsers, query, excludeIds);
-  const flatOptions = [...people, ...depts];
-
-  const select = (chip: RecipientChip) => {
-    onAdd(chip);
-    setQuery("");
-    setHighlightedIdx(0);
-    inputRef.current?.focus();
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!isOpen) return;
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setHighlightedIdx((i) => Math.min(i + 1, flatOptions.length - 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setHighlightedIdx((i) => Math.max(i - 1, 0));
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      if (flatOptions[highlightedIdx]) select(flatOptions[highlightedIdx]);
-    } else if (e.key === "Escape") {
-      setIsOpen(false);
-    } else if (e.key === "Backspace" && query === "" && chips.length > 0) {
-      onRemove(chips[chips.length - 1].id);
-    }
-  };
-
-  // Scroll highlighted item into view
-  useEffect(() => {
-    const el = dropdownRef.current?.querySelector(`[data-idx="${highlightedIdx}"]`) as HTMLElement | null;
-    el?.scrollIntoView({ block: "nearest" });
-  }, [highlightedIdx]);
-
-  // Reset highlight when results change
-  useEffect(() => { setHighlightedIdx(0); }, [query, excludeIds.length]);
-
-  const showDropdown = isOpen && (people.length > 0 || depts.length > 0);
-
-  return (
-    <div style={{ padding: "10px 0", borderBottom: `1px solid ${isOpen ? "var(--theme-status-success-border)" : "var(--theme-border-default)"}`, position: "relative", transition: "border-color 150ms ease" }}>
-      <div className="flex items-start gap-3 flex-wrap">
-        <span style={{ fontSize: 12, color: "var(--theme-text-muted)", fontWeight: 500, marginTop: 5, width: 32, flexShrink: 0 }}>{label}</span>
-        <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
-          {chips.map((chip) => {
-            const col = chip.type === "user" ? avatarColor(chip.label) : { bg: "#EEF4F1", text: "#2E5147", border: "#D7E5E0" };
-            return (
-              <span key={chip.id} className="flex items-center gap-1.5"
-                style={{ padding: "3px 8px 3px 4px", borderRadius: 6, border: `1px solid ${col.border}`, backgroundColor: col.bg, fontSize: 12, color: col.text, fontWeight: 500 }}>
-                {chip.type === "user" ? (
-                  <span style={{ width: 18, height: 18, borderRadius: "50%", backgroundColor: "var(--theme-bg-surface)", color: col.text, fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, border: `1px solid ${col.border}` }}>
-                    {initials(chip.label)}
-                  </span>
-                ) : (
-                  <Building2 size={11} style={{ color: col.text, flexShrink: 0 }} />
-                )}
-                {chip.type === "department" ? `${chip.department} dept` : chip.label}
-                <button onClick={() => onRemove(chip.id)}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--theme-text-muted)", padding: 0, display: "flex" }}
-                  onMouseEnter={(e) => { e.currentTarget.style.color = "var(--neuron-accent-terracotta)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = "var(--theme-text-muted)"; }}
-                >
-                  <X size={11} />
-                </button>
-              </span>
-            );
-          })}
-          <input
-            ref={inputRef}
-            value={query}
-            onChange={(e) => { setQuery(e.target.value); setIsOpen(true); }}
-            onFocus={() => setIsOpen(true)}
-            onBlur={() => setTimeout(() => setIsOpen(false), 150)}
-            onKeyDown={handleKeyDown}
-            placeholder={chips.length === 0 ? "Search people or departments…" : ""}
-            style={{ border: "none", outline: "none", fontSize: 13, color: "var(--theme-text-primary)", minWidth: 160, flex: 1, backgroundColor: "transparent" }}
-          />
-          {action}
-        </div>
-      </div>
-
-      {/* Dropdown */}
-      {showDropdown && (
-        <div
-          ref={dropdownRef}
-          style={{
-            position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 100,
-            backgroundColor: "var(--theme-bg-surface)", border: "1px solid var(--theme-border-default)", borderRadius: 10,
-            boxShadow: "0 8px 24px rgba(0,0,0,0.08)", maxHeight: 280, overflowY: "auto",
-          }}
-        >
-          {/* People group */}
-          {people.length > 0 && (
-            <>
-              <div style={{ padding: "8px 12px 4px", fontSize: 10, fontWeight: 700, color: "var(--theme-text-muted)", letterSpacing: "0.5px", textTransform: "uppercase" }}>
-                People
-              </div>
-              {people.map((r, i) => {
-                const col = avatarColor(r.label);
-                const isHighlighted = flatOptions[highlightedIdx]?.id === r.id;
-                return (
-                  <button
-                    key={r.id}
-                    data-idx={i}
-                    onMouseDown={() => select(r)}
-                    onMouseEnter={() => setHighlightedIdx(i)}
-                    className="w-full flex items-center gap-3 text-left"
-                    style={{
-                      padding: "8px 12px", border: "none",
-                      backgroundColor: isHighlighted ? "var(--theme-bg-surface-tint)" : "transparent",
-                      cursor: "pointer", transition: "background-color 80ms ease",
-                    }}
-                  >
-                    <span style={{ width: 28, height: 28, borderRadius: "50%", backgroundColor: col.bg, color: col.text, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      {initials(r.label)}
-                    </span>
-                    <div style={{ minWidth: 0 }}>
-                      <p style={{ fontSize: 13, fontWeight: 500, color: "var(--theme-text-primary)", margin: 0 }}>{r.label}</p>
-                      {r.department && <p style={{ fontSize: 11, color: "var(--theme-text-muted)", margin: 0 }}>{r.department}</p>}
-                    </div>
-                  </button>
-                );
-              })}
-            </>
-          )}
-
-          {/* Departments group */}
-          {depts.length > 0 && (
-            <>
-              <div style={{ padding: `${people.length > 0 ? "8px" : "8px"} 12px 4px`, fontSize: 10, fontWeight: 700, color: "var(--theme-text-muted)", letterSpacing: "0.5px", textTransform: "uppercase", borderTop: people.length > 0 ? "1px solid var(--theme-border-subtle)" : "none" }}>
-                Departments
-              </div>
-              {depts.map((r, i) => {
-                const flatIdx = people.length + i;
-                const isHighlighted = flatOptions[highlightedIdx]?.id === r.id;
-                return (
-                  <button
-                    key={r.id}
-                    data-idx={flatIdx}
-                    onMouseDown={() => select(r)}
-                    onMouseEnter={() => setHighlightedIdx(flatIdx)}
-                    className="w-full flex items-center gap-3 text-left"
-                    style={{
-                      padding: "8px 12px", border: "none",
-                      backgroundColor: isHighlighted ? "var(--theme-bg-surface-tint)" : "transparent",
-                      cursor: "pointer", transition: "background-color 80ms ease",
-                    }}
-                  >
-                    <span style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: "var(--theme-bg-surface-tint)", border: "1px solid var(--theme-status-success-border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <Building2 size={13} style={{ color: "var(--theme-action-primary-bg)" }} />
-                    </span>
-                    <div>
-                      <p style={{ fontSize: 13, fontWeight: 500, color: "var(--theme-text-primary)", margin: 0 }}>{r.label}</p>
-                      <p style={{ fontSize: 11, color: "var(--theme-text-muted)", margin: 0 }}>All managers</p>
-                    </div>
-                  </button>
-                );
-              })}
-            </>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}

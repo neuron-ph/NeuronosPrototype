@@ -10,6 +10,7 @@ export interface ThreadMessage {
   sender_id: string;
   sender_name?: string;
   sender_department?: string;
+  sender_avatar_url?: string | null;
   body: string | null;
   is_system: boolean;
   system_event: string | null;
@@ -38,11 +39,12 @@ export interface ThreadAttachment {
 export interface ThreadParticipant {
   id: string;
   participant_type: "user" | "department";
-  user_id: string | null;
-  department: string | null;
+  participant_user_id: string | null;
+  participant_dept: string | null;
   role: "sender" | "to" | "cc";
   user_name?: string;
   user_department?: string;
+  user_avatar_url?: string | null;
 }
 
 export interface ThreadDetail {
@@ -53,6 +55,8 @@ export interface ThreadDetail {
   status: "draft" | "open" | "acknowledged" | "in_progress" | "done" | "returned" | "archived";
   created_by: string;
   created_by_name?: string;
+  created_by_department?: string;
+  created_by_avatar_url?: string | null;
   created_at: string;
   last_message_at: string;
   // Workflow linkage
@@ -125,13 +129,13 @@ export function useThread(ticketId: string | null) {
 
       const allUserIds = new Set<string>();
       allUserIds.add(ticket.created_by);
-      (participants || []).forEach((p) => { if (p.user_id) allUserIds.add(p.user_id); });
+      (participants || []).forEach((p) => { if (p.participant_user_id) allUserIds.add(p.participant_user_id); });
       (messages || []).forEach((m) => { allUserIds.add(m.sender_id); if (m.retracted_by) allUserIds.add(m.retracted_by); });
       if (assignment) { allUserIds.add(assignment.assigned_to); allUserIds.add(assignment.assigned_by); }
 
       const { data: usersData } = await supabase
         .from("users")
-        .select("id, name, department")
+        .select("id, name, department, avatar_url")
         .in("id", [...allUserIds]);
       const userMap = Object.fromEntries((usersData || []).map((u) => [u.id, u]));
 
@@ -145,18 +149,22 @@ export function useThread(ticketId: string | null) {
         ...m,
         sender_name: userMap[m.sender_id]?.name,
         sender_department: userMap[m.sender_id]?.department,
+        sender_avatar_url: userMap[m.sender_id]?.avatar_url ?? null,
         attachments: attachByMsg[m.id] || [],
       }));
 
       const enrichedParticipants: ThreadParticipant[] = (participants || []).map((p) => ({
         ...p,
-        user_name: p.user_id ? userMap[p.user_id]?.name : undefined,
-        user_department: p.user_id ? userMap[p.user_id]?.department : undefined,
+        user_name: p.participant_user_id ? userMap[p.participant_user_id]?.name : undefined,
+        user_department: p.participant_user_id ? userMap[p.participant_user_id]?.department : undefined,
+        user_avatar_url: p.participant_user_id ? (userMap[p.participant_user_id]?.avatar_url ?? null) : null,
       }));
 
       const detail: ThreadDetail = {
         ...ticket,
         created_by_name: userMap[ticket.created_by]?.name,
+        created_by_department: userMap[ticket.created_by]?.department,
+        created_by_avatar_url: userMap[ticket.created_by]?.avatar_url ?? null,
         messages: enrichedMessages,
         participants: enrichedParticipants,
         assignment: assignment

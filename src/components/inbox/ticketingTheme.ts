@@ -5,43 +5,43 @@ export interface TicketTone {
 }
 
 export const TICKET_TYPE_TONES: Record<string, TicketTone> = {
-  fyi: { bg: "#F4F6F5", text: "#5F6E69", border: "#E2E8E5" },
-  request: { bg: "#EEF4F1", text: "#2E5147", border: "#D7E5E0" },
-  approval: { bg: "#F6F2EC", text: "#7A6048", border: "#E6D9CC" },
+  fyi:      { bg: "var(--neuron-pill-inactive-bg)",    text: "var(--neuron-pill-inactive-text)",   border: "var(--neuron-pill-inactive-border)" },
+  request:  { bg: "var(--theme-status-success-bg)",    text: "var(--theme-status-success-fg)",     border: "var(--theme-status-success-border)" },
+  approval: { bg: "var(--theme-status-warning-bg)",    text: "var(--theme-status-warning-fg)",     border: "var(--theme-status-warning-border)" },
 };
 
 export const TICKET_PRIORITY_TONES: Record<string, TicketTone> = {
-  normal: { bg: "#F4F6F5", text: "#5F6E69", border: "#E2E8E5" },
-  urgent: { bg: "#FAF1EE", text: "#A05B45", border: "#E7D1C7" },
+  normal: { bg: "var(--neuron-pill-inactive-bg)", text: "var(--neuron-pill-inactive-text)", border: "var(--neuron-pill-inactive-border)" },
+  urgent: { bg: "var(--theme-status-danger-bg)",  text: "var(--theme-status-danger-fg)",   border: "var(--theme-status-danger-border)" },
 };
 
 export const TICKET_STATUS_TONES: Record<string, TicketTone> = {
-  draft: { bg: "#F4F6F5", text: "#7A8782", border: "#E2E8E5" },
-  open: { bg: "#F7FAF8", text: "#5F6E69", border: "#E2E8E5" },
-  acknowledged: { bg: "#EEF4F1", text: "#2E5147", border: "#D7E5E0" },
-  in_progress: { bg: "#F6F2EC", text: "#8A5A44", border: "#E6D9CC" },
-  done: { bg: "#EEF4F1", text: "#2E5147", border: "#D7E5E0" },
-  returned: { bg: "#FAF1EE", text: "#A05B45", border: "#E7D1C7" },
-  archived: { bg: "#F4F6F5", text: "#7A8782", border: "#E2E8E5" },
+  draft:        { bg: "var(--neuron-pill-inactive-bg)",  text: "var(--neuron-pill-inactive-text)", border: "var(--neuron-pill-inactive-border)" },
+  open:         { bg: "var(--neuron-semantic-info-bg)",  text: "var(--neuron-semantic-info)",      border: "var(--neuron-semantic-info-border)" },
+  acknowledged: { bg: "var(--theme-status-success-bg)",  text: "var(--theme-status-success-fg)",   border: "var(--theme-status-success-border)" },
+  in_progress:  { bg: "var(--theme-status-warning-bg)",  text: "var(--theme-status-warning-fg)",   border: "var(--theme-status-warning-border)" },
+  done:         { bg: "var(--theme-status-success-bg)",  text: "var(--theme-status-success-fg)",   border: "var(--theme-status-success-border)" },
+  returned:     { bg: "var(--theme-status-danger-bg)",   text: "var(--theme-status-danger-fg)",    border: "var(--theme-status-danger-border)" },
+  archived:     { bg: "var(--neuron-pill-inactive-bg)",  text: "var(--neuron-pill-inactive-text)", border: "var(--neuron-pill-inactive-border)" },
 };
 
 export const TICKET_ENTITY_TONES: Record<string, TicketTone> = {
-  quotation: { bg: "#F7FAF8", text: "#2E5147", border: "#D7E5E0" },
-  contract: { bg: "#F7FAF8", text: "#2E5147", border: "#D7E5E0" },
-  booking: { bg: "#F7FAF8", text: "#2E5147", border: "#D7E5E0" },
-  project: { bg: "#F7FAF8", text: "#2E5147", border: "#D7E5E0" },
-  customer: { bg: "#F7FAF8", text: "#2E5147", border: "#D7E5E0" },
-  contact: { bg: "#F7FAF8", text: "#2E5147", border: "#D7E5E0" },
-  budget_request: { bg: "#F7FAF8", text: "#2E5147", border: "#D7E5E0" },
-  invoice: { bg: "#FBF7F2", text: "#7A6048", border: "#E6D9CC" },
-  collection: { bg: "#FBF7F2", text: "#7A6048", border: "#E6D9CC" },
-  expense: { bg: "#FBF7F2", text: "#7A6048", border: "#E6D9CC" },
+  quotation:      { bg: "var(--theme-bg-surface-tint)", text: "var(--theme-text-secondary)", border: "var(--theme-border-default)" },
+  contract:       { bg: "var(--theme-bg-surface-tint)", text: "var(--theme-text-secondary)", border: "var(--theme-border-default)" },
+  booking:        { bg: "var(--theme-bg-surface-tint)", text: "var(--theme-text-secondary)", border: "var(--theme-border-default)" },
+  project:        { bg: "var(--theme-bg-surface-tint)", text: "var(--theme-text-secondary)", border: "var(--theme-border-default)" },
+  customer:       { bg: "var(--theme-bg-surface-tint)", text: "var(--theme-text-secondary)", border: "var(--theme-border-default)" },
+  contact:        { bg: "var(--theme-bg-surface-tint)", text: "var(--theme-text-secondary)", border: "var(--theme-border-default)" },
+  budget_request: { bg: "var(--theme-bg-surface-tint)", text: "var(--theme-text-secondary)", border: "var(--theme-border-default)" },
+  invoice:        { bg: "var(--theme-status-warning-bg)", text: "var(--theme-status-warning-fg)", border: "var(--theme-status-warning-border)" },
+  collection:     { bg: "var(--theme-status-warning-bg)", text: "var(--theme-status-warning-fg)", border: "var(--theme-status-warning-border)" },
+  expense:        { bg: "var(--theme-status-warning-bg)", text: "var(--theme-status-warning-fg)", border: "var(--theme-status-warning-border)" },
 };
 
 export const TICKET_AVATAR_TONES = [
-  { bg: "#E8F2EE", text: "#2E5147", border: "#D7E5E0" },
-  { bg: "#F2F4F3", text: "#5F6E69", border: "#E2E8E5" },
-  { bg: "#F3EEE8", text: "#8A5A44", border: "#E6D9CC" },
+  { bg: "var(--neuron-dept-bd-bg)",          text: "var(--neuron-dept-bd-text)",      border: "var(--theme-status-success-border)" },
+  { bg: "var(--neuron-pill-inactive-bg)",    text: "var(--neuron-pill-inactive-text)", border: "var(--neuron-pill-inactive-border)" },
+  { bg: "var(--neuron-dept-ops-bg)",         text: "var(--neuron-dept-ops-text)",     border: "var(--theme-status-warning-border)" },
 ];
 
 export function ticketBadgeStyle(tone: TicketTone, fontWeight = 600) {
@@ -74,7 +74,7 @@ export function ticketToggleStyle(selected: boolean, tone: TicketTone) {
     padding: "4px 12px",
     borderRadius: 6,
     border: "1px solid var(--neuron-ui-border)",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "var(--theme-bg-surface)",
     color: "var(--neuron-ink-secondary)",
     cursor: "pointer",
     transition: "all 150ms ease",

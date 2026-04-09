@@ -1,4 +1,5 @@
-import { Edit, Inbox, Send, FileText, Layers } from "lucide-react";
+import { useState } from "react";
+import { Edit, Inbox, Send, FileText, Layers, Search, X } from "lucide-react";
 import type { InboxTab, ThreadSummary } from "../../hooks/useInbox";
 import { ThreadListItem } from "./ThreadListItem";
 
@@ -72,6 +73,20 @@ export function ThreadListPanel({
   onSelectThread,
   onCompose,
 }: ThreadListPanelProps) {
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredThreads = searchQuery.trim()
+    ? threads.filter((t) => {
+        const q = searchQuery.toLowerCase();
+        const senderName =
+          t.participants?.find((p) => p.role === "sender")?.user_name ?? "";
+        return (
+          t.subject.toLowerCase().includes(q) ||
+          senderName.toLowerCase().includes(q)
+        );
+      })
+    : threads;
+
   const tabs: { key: InboxTab; label: string; icon: React.ReactNode; count?: number }[] = [
     { key: "inbox", label: "Inbox", icon: <Inbox size={13} />, count: unreadCount || undefined },
     ...(isManager ? [{ key: "queue" as InboxTab, label: "Queue", icon: <Layers size={13} />, count: queueCount || undefined }] : []),
@@ -108,6 +123,59 @@ export function ThreadListPanel({
             <Edit size={12} />
             Compose
           </button>
+        </div>
+
+        {/* Search bar */}
+        <div style={{ position: "relative", marginBottom: 10 }}>
+          <Search
+            size={12}
+            style={{
+              position: "absolute",
+              left: 9,
+              top: "50%",
+              transform: "translateY(-50%)",
+              color: "var(--theme-text-muted)",
+              pointerEvents: "none",
+            }}
+          />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search tickets…"
+            style={{
+              width: "100%",
+              padding: "6px 28px 6px 28px",
+              borderRadius: 6,
+              border: "1px solid var(--theme-border-default)",
+              backgroundColor: "var(--theme-bg-page)",
+              fontSize: 12,
+              color: "var(--theme-text-primary)",
+              outline: "none",
+              fontFamily: "inherit",
+            }}
+            onFocus={(e) => { e.currentTarget.style.borderColor = "var(--neuron-ui-active-border)"; }}
+            onBlur={(e) => { e.currentTarget.style.borderColor = "var(--theme-border-default)"; }}
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              style={{
+                position: "absolute",
+                right: 7,
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "var(--theme-text-muted)",
+                display: "flex",
+                padding: 0,
+              }}
+            >
+              <X size={11} />
+            </button>
+          )}
         </div>
 
         {/* Tab bar */}
@@ -158,10 +226,10 @@ export function ThreadListPanel({
       <div className="flex-1 overflow-y-auto" style={{ overscrollBehavior: "contain" }}>
         {isLoading ? (
           <ThreadListSkeleton />
-        ) : threads.length === 0 ? (
+        ) : filteredThreads.length === 0 ? (
           <EmptyState tab={activeTab} onCompose={onCompose} />
         ) : (
-          threads.map((thread) => (
+          filteredThreads.map((thread) => (
             <ThreadListItem
               key={thread.id}
               thread={thread}
