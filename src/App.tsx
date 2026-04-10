@@ -24,6 +24,10 @@ const Operations = lazy(() => import("./components/Operations").then((module) =>
 const ProjectsModule = lazy(() => import("./components/projects/ProjectsModule").then((module) => ({ default: module.ProjectsModule })));
 const ContractsModule = lazy(() => import("./components/contracts/ContractsModule").then((module) => ({ default: module.ContractsModule })));
 const FinancialsModule = lazy(() => import("./components/accounting/FinancialsModule").then((module) => ({ default: module.FinancialsModule })));
+const CatalogManagementPage = lazy(() => import("./components/accounting/CatalogManagementPage").then((module) => ({ default: module.CatalogManagementPage })));
+const AccountingBookingsShell = lazy(() => import("./components/accounting/AccountingBookingsShell").then((module) => ({ default: module.AccountingBookingsShell })));
+const AccountingCustomers = lazy(() => import("./components/accounting/AccountingCustomers").then((module) => ({ default: module.AccountingCustomers })));
+const ReportsModule = lazy(() => import("./components/accounting/reports/ReportsModule").then((module) => ({ default: module.ReportsModule })));
 const FinancialStatementsPage = lazy(() => import("./components/accounting/FinancialStatementsPage").then((module) => ({ default: module.FinancialStatementsPage })));
 const EVouchersContent = lazy(() => import("./components/accounting/EVouchersContent").then((module) => ({ default: module.EVouchersContent })));
 const TransactionsModule = lazy(() => import("./components/transactions/TransactionsModule").then((module) => ({ default: module.TransactionsModule })));
@@ -740,7 +744,7 @@ function AccountingLedgerPage() {
 function AccountingReportsPage() {
   return (
     <RouteWrapper page="acct-reports">
-      <FinancialsModule />
+      <ReportsModule />
     </RouteWrapper>
   );
 }
@@ -764,7 +768,7 @@ function AccountingCoaPage() {
 function AccountingProjectsPage() {
   return (
     <RouteWrapper page="acct-projects">
-      <FinancialsModule />
+      <ProjectsModule />
     </RouteWrapper>
   );
 }
@@ -772,7 +776,7 @@ function AccountingProjectsPage() {
 function AccountingContractsPage() {
   return (
     <RouteWrapper page="acct-contracts">
-      <FinancialsModule />
+      <ContractsModule />
     </RouteWrapper>
   );
 }
@@ -780,7 +784,7 @@ function AccountingContractsPage() {
 function AccountingCustomersPage() {
   return (
     <RouteWrapper page="acct-customers">
-      <FinancialsModule />
+      <AccountingCustomers />
     </RouteWrapper>
   );
 }
@@ -788,7 +792,7 @@ function AccountingCustomersPage() {
 function AccountingBookingsPage() {
   return (
     <RouteWrapper page="acct-bookings">
-      <FinancialsModule />
+      <AccountingBookingsShell />
     </RouteWrapper>
   );
 }
@@ -796,7 +800,7 @@ function AccountingBookingsPage() {
 function AccountingCatalogPage() {
   return (
     <RouteWrapper page="acct-catalog">
-      <FinancialsModule />
+      <CatalogManagementPage />
     </RouteWrapper>
   );
 }
