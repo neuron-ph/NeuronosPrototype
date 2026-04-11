@@ -358,7 +358,7 @@ export function BillingDetailsSheet({ isOpen, onClose, billingId }: BillingDetai
                 </label>
                 <div className="rounded-lg border border-[var(--theme-border-default)] overflow-hidden">
                   <table className="w-full text-sm text-left">
-                    <thead className="bg-[var(--theme-bg-surface-subtle)] border-b border-[var(--theme-border-default)]">
+                    <thead className="bg-[var(--theme-bg-surface)] border-b border-[var(--theme-border-default)]">
                       <tr>
                         <th className="px-4 py-3 font-medium text-[var(--theme-text-muted)]">Description</th>
                         <th className="px-4 py-3 font-medium text-[var(--theme-text-muted)] text-right w-20">Qty</th>

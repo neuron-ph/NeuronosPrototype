@@ -262,7 +262,7 @@ export function TransactionsTable({
   return (
     <div className="bg-[var(--theme-bg-surface)] min-h-[500px]">
       <table className="w-full border-collapse">
-        <thead className="bg-[var(--theme-bg-surface-subtle)] border-y border-[var(--theme-border-default)] sticky top-0 z-10">
+        <thead className="bg-[var(--theme-bg-surface)] border-y border-[var(--theme-border-default)] sticky top-0 z-10">
           <tr>
             <th className="w-10 py-3 px-4">
               <input 

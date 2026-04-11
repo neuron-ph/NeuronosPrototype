@@ -74,7 +74,7 @@ export function DataTable<T extends { id?: string | number }>({
   return (
     <div className="border border-[var(--theme-border-default)] rounded-[10px] overflow-hidden bg-[var(--theme-bg-surface)]">
       <table className="w-full border-collapse">
-        <thead className="bg-[var(--theme-bg-surface-subtle)] border-b border-[var(--theme-border-default)]">
+        <thead className="bg-[var(--theme-bg-surface)] border-b border-[var(--theme-border-default)]">
           <tr>
             {/* Selection Header Column */}
             {enableSelection && (

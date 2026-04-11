@@ -86,7 +86,7 @@ export function AddLineItemModal({
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          backgroundColor: "var(--theme-bg-page)"
+          backgroundColor: "var(--theme-bg-surface-subtle)"
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             {mode === "add" ? (
@@ -358,7 +358,7 @@ export function AddLineItemModal({
                     fontSize: "14px",
                     border: "1px solid var(--neuron-ui-border)",
                     borderRadius: "6px",
-                    backgroundColor: "var(--theme-bg-page)"
+                    backgroundColor: "var(--theme-bg-surface-subtle)"
                   }}
                 />
                 {buyingPrice > 0 && (
@@ -413,7 +413,7 @@ export function AddLineItemModal({
           <div style={{
             padding: "16px 20px",
             borderTop: "1px solid var(--neuron-ui-border)",
-            backgroundColor: "var(--theme-bg-page)",
+            backgroundColor: "var(--theme-bg-surface-subtle)",
             display: "flex",
             justifyContent: "flex-end",
             gap: "12px"

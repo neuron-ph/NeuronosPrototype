@@ -127,7 +127,7 @@ export function UniversalPricingRow({
                 fontSize: "13px",
                 border: "1px solid var(--theme-border-default)",
                 borderRadius: "6px",
-                backgroundColor: "var(--theme-bg-page)",
+                backgroundColor: "var(--theme-bg-surface-subtle)",
                 fontWeight: 500,
                 color: "var(--theme-text-primary)",
                 overflow: "hidden",
@@ -274,9 +274,9 @@ export function UniversalPricingRow({
               padding: "6px 8px",
               fontSize: "13px",
               textAlign: "right",
-              border: isViewMode ? "1px solid #E0E6E4" : "1px solid #FBBF88",
+              border: isViewMode ? "1px solid var(--theme-border-default)" : "1px solid var(--theme-markup-border)",
               borderRadius: "6px",
-              backgroundColor: isViewMode ? "var(--neuron-pill-inactive-bg)" : "#FFFBF5",
+              backgroundColor: isViewMode ? "var(--neuron-pill-inactive-bg)" : "var(--theme-markup-bg)",
               color: isViewMode ? "var(--theme-text-muted)" : "var(--neuron-brand-teal)",
               fontWeight: 600,
               outline: "none",
@@ -285,12 +285,12 @@ export function UniversalPricingRow({
             }}
             onFocus={(e) => {
               if (isViewMode) return;
-              e.currentTarget.style.borderColor = "#F59E0B";
+              e.currentTarget.style.borderColor = "var(--theme-markup-focus)";
               e.currentTarget.style.boxShadow = "0 0 0 3px rgba(245, 158, 11, 0.1)";
             }}
             onBlur={(e) => {
               if (isViewMode) return;
-              e.currentTarget.style.borderColor = "#FBBF88";
+              e.currentTarget.style.borderColor = "var(--theme-markup-border)";
               e.currentTarget.style.boxShadow = "none";
             }}
           />
@@ -314,9 +314,9 @@ export function UniversalPricingRow({
               padding: "6px 8px",
               fontSize: "13px",
               textAlign: "right",
-              border: isViewMode ? "1px solid #E0E6E4" : "1px solid #FBBF88",
+              border: isViewMode ? "1px solid var(--theme-border-default)" : "1px solid var(--theme-markup-border)",
               borderRadius: "6px",
-              backgroundColor: isViewMode ? "var(--neuron-pill-inactive-bg)" : "#FFFBF5",
+              backgroundColor: isViewMode ? "var(--neuron-pill-inactive-bg)" : "var(--theme-markup-bg)",
               color: isViewMode ? "var(--theme-text-muted)" : "var(--neuron-brand-teal)",
               fontWeight: 600,
               outline: "none",
@@ -325,12 +325,12 @@ export function UniversalPricingRow({
             }}
             onFocus={(e) => {
               if (isViewMode) return;
-              e.currentTarget.style.borderColor = "#F59E0B";
+              e.currentTarget.style.borderColor = "var(--theme-markup-focus)";
               e.currentTarget.style.boxShadow = "0 0 0 3px rgba(245, 158, 11, 0.1)";
             }}
             onBlur={(e) => {
               if (isViewMode) return;
-              e.currentTarget.style.borderColor = "#FBBF88";
+              e.currentTarget.style.borderColor = "var(--theme-markup-border)";
               e.currentTarget.style.boxShadow = "none";
             }}
           />
@@ -372,7 +372,7 @@ export function UniversalPricingRow({
               textAlign: "right",
               border: "1px solid var(--theme-border-default)",
               borderRadius: "6px",
-              backgroundColor: isViewMode ? "var(--neuron-pill-inactive-bg)" : "#F8FBFB",
+              backgroundColor: isViewMode ? "var(--neuron-pill-inactive-bg)" : "var(--theme-input-subtle-bg)",
               outline: "none",
               cursor: isViewMode ? "default" : "text"
             }}
@@ -456,7 +456,7 @@ export function UniversalPricingRow({
         alignItems: "center",
         gap: "14px",
         padding: "10px 16px 12px 28px",
-        backgroundColor: "var(--theme-bg-page)",
+        backgroundColor: "var(--theme-bg-surface-subtle)",
         borderTop: "1px solid var(--theme-border-default)",
         fontSize: "12px",
         color: "var(--theme-text-muted)",
@@ -484,7 +484,7 @@ export function UniversalPricingRow({
               fontSize: "12px",
               border: "1px solid var(--theme-border-default)",
               borderRadius: "6px",
-              backgroundColor: isViewMode ? "var(--neuron-pill-inactive-bg)" : "white",
+              backgroundColor: isViewMode ? "var(--neuron-pill-inactive-bg)" : "var(--theme-bg-surface)",
               color: "var(--theme-text-primary)",
               outline: "none",
               transition: "all 0.15s ease",

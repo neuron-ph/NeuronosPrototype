@@ -34,6 +34,12 @@
   --theme-status-danger-fg: #B42318;
   --theme-status-danger-border: #FCA5A5;
 
+  /* Markup accent (orange-tinted inputs for selling price markup fields) */
+  --theme-markup-bg: #FFFBF5;
+  --theme-markup-border: #FBBF88;
+  --theme-markup-focus: #F59E0B;
+  --theme-input-subtle-bg: #F8FBFB;
+
   /* ===== NEURON DESIGN TOKENS ===== */
   /* Backgrounds */
   --neuron-bg-page: var(--theme-bg-page);
@@ -143,8 +149,8 @@
   --neuron-toggle-inactive-text: #6B7A76;
 
   /* Elevations (Shadows) */
-  --elevation-1: 0 1px 2px 0 rgba(16, 24, 20, 0.04);
-  --elevation-2: 0 2px 8px 0 rgba(16, 24, 20, 0.06);
+  --elevation-1: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  --elevation-2: 0 2px 8px 0 rgba(0, 0, 0, 0.06);
   
   /* Radius */
   --neuron-radius-s: 6px;
@@ -202,26 +208,26 @@
 }
 
 .dark {
-  --theme-bg-page: #111216;
-  --theme-bg-surface: #181A1F;
-  --theme-bg-surface-subtle: #1E2128;
-  --theme-bg-surface-tint: #1B1E24;
-  --theme-text-primary: #F7F8FB;
-  --theme-text-secondary: #C8CDD8;
-  --theme-text-muted: #9097A7;
+  --theme-bg-page: #1f2023;
+  --theme-bg-surface: #1f2023;
+  --theme-bg-surface-subtle: #25262a;
+  --theme-bg-surface-tint: #1c1d1f;
+  --theme-text-primary: #f0f0f0;
+  --theme-text-secondary: #c5c5c5;
+  --theme-text-muted: #959595;
   --theme-text-inverse: #10201B;
-  --theme-border-default: #2A2D35;
-  --theme-border-subtle: #22252D;
-  --theme-border-strong: #5E6AD2;
+  --theme-border-default: #2e2f33;
+  --theme-border-subtle: #272830;
+  --theme-border-strong: #5FC4A1;
   --theme-action-primary-bg: #27846B;
   --theme-action-primary-text: #FFFFFF;
   --theme-action-primary-border: #3E8F7B;
   --theme-action-accent-bg: #B57257;
   --theme-action-accent-text: #FFFFFF;
   --theme-action-accent-border: #C7886F;
-  --theme-state-hover: #20232B;
-  --theme-state-selected: #252A3B;
-  --theme-state-focus-ring: #7583F6;
+  --theme-state-hover: #25262a;
+  --theme-state-selected: #2e3035;
+  --theme-state-focus-ring: #5FC4A1;
   --theme-status-success-bg: #123126;
   --theme-status-success-fg: #8FE3BC;
   --theme-status-success-border: #2B8A6E;
@@ -231,7 +237,16 @@
   --theme-status-danger-bg: #351815;
   --theme-status-danger-fg: #F0AAA1;
   --theme-status-danger-border: #C94F3D;
-  --neuron-state-focus-ring: 0 0 0 3px rgba(117, 131, 246, 0.22);
+  --neuron-state-focus-ring: 0 0 0 3px rgba(95, 196, 161, 0.22);
+
+  /* UI Muted (disabled states) -- dark mode */
+  --neuron-ui-muted: #3a3b3f;
+
+  /* Markup accent -- dark mode */
+  --theme-markup-bg: #2a1f0e;
+  --theme-markup-border: #C88A2B;
+  --theme-markup-focus: #FBBF24;
+  --theme-input-subtle-bg: #25262a;
 
   /* Info status -- dark mode */
   --neuron-semantic-info: #7DD3FC;
@@ -244,8 +259,8 @@
   --neuron-status-accent-border: #7C3AED;
 
   /* Pill / Chip tokens -- dark mode */
-  --neuron-pill-inactive-bg: #1E2128;
-  --neuron-pill-inactive-text: #9097A7;
+  --neuron-pill-inactive-bg: #2a2a2a;
+  --neuron-pill-inactive-text: #9a9a9a;
   --neuron-pill-inactive-border: var(--theme-border-default);
 
   /* Department Badge Colors -- dark mode */
@@ -261,8 +276,8 @@
   --neuron-dept-hr-text: #F9A8D4;
   --neuron-dept-executive-bg: #14261A;
   --neuron-dept-executive-text: #86EFAC;
-  --neuron-dept-default-bg: #1E2128;
-  --neuron-dept-default-text: #D1D5DB;
+  --neuron-dept-default-bg: #2a2a2a;
+  --neuron-dept-default-text: #d1d1d1;
 
   /* Calendar Event Colors -- Dark Mode */
   --neuron-cal-bd: #123126;
@@ -283,9 +298,9 @@
   --neuron-cal-executive: #14261A;
   --neuron-cal-executive-text: #86EFAC;
   --neuron-cal-executive-border: #22C55E;
-  --neuron-cal-personal: #1E2128;
-  --neuron-cal-personal-text: #D1D5DB;
-  --neuron-cal-personal-border: #4B5563;
+  --neuron-cal-personal: #2a2a2a;
+  --neuron-cal-personal-text: #d1d1d1;
+  --neuron-cal-personal-border: #505050;
   --neuron-cal-crm: #2D2305;
   --neuron-cal-crm-text: #FCD34D;
   --neuron-cal-crm-border: #D97706;

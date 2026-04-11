@@ -359,7 +359,7 @@ export function ForwardingServiceForm({ data, onChange, builderMode = "quotation
         {!contractMode && data.mode === "FCL" && (
           <div style={{
             padding: "16px",
-            backgroundColor: "var(--theme-bg-page)",
+            backgroundColor: "var(--theme-bg-surface-subtle)",
             border: "1px solid var(--neuron-ui-border)",
             borderRadius: "6px"
           }}>
@@ -374,7 +374,7 @@ export function ForwardingServiceForm({ data, onChange, builderMode = "quotation
         {!contractMode && data.mode === "LCL" && (
           <div style={{
             padding: "16px",
-            backgroundColor: "var(--theme-bg-page)",
+            backgroundColor: "var(--theme-bg-surface-subtle)",
             border: "1px solid var(--neuron-ui-border)",
             borderRadius: "6px"
           }}>
@@ -458,7 +458,7 @@ export function ForwardingServiceForm({ data, onChange, builderMode = "quotation
         {!contractMode && data.mode === "AIR" && (
           <div style={{
             padding: "16px",
-            backgroundColor: "var(--theme-bg-page)",
+            backgroundColor: "var(--theme-bg-surface-subtle)",
             border: "1px solid var(--neuron-ui-border)",
             borderRadius: "6px"
           }}>
@@ -543,7 +543,7 @@ export function ForwardingServiceForm({ data, onChange, builderMode = "quotation
         {!contractMode && data.incoterms === "EXW" && (
           <div style={{
             padding: "16px",
-            backgroundColor: "var(--theme-bg-page)",
+            backgroundColor: "var(--theme-bg-surface-subtle)",
             border: "1px solid var(--neuron-ui-border)",
             borderRadius: "6px"
           }}>
@@ -588,7 +588,7 @@ export function ForwardingServiceForm({ data, onChange, builderMode = "quotation
         {!contractMode && !isExport && (data.incoterms === "EXW" || data.incoterms === "FOB" || data.incoterms === "FCA") && (
           <div style={{
             padding: "16px",
-            backgroundColor: "var(--theme-bg-page)",
+            backgroundColor: "var(--theme-bg-surface-subtle)",
             border: "1px solid var(--neuron-ui-border)",
             borderRadius: "6px"
           }}>

@@ -27,7 +27,7 @@ export const DEFAULT_WORKSPACE_THEME_SEEDS: WorkspaceThemeSeeds = {
   primary: "#237F66",
   accent: "#B06A4F",
   surfaceTint: "#E8F2EE",
-  neutralBase: "#6B7A76",
+  neutralBase: "#737373",
 };
 
 export const SEMANTIC_TOKENS = [
@@ -269,12 +269,12 @@ function generateDarkTokens(seeds: WorkspaceThemeSeeds): ThemeTokenMap {
   const accent = tint(seeds.accent, 0.02);
   const neutral = seeds.neutralBase;
   const surfaceTint = seeds.surfaceTint;
-  const pageBase = blend("#0F1014", neutral, 0.04);
-  const surfaceBase = blend("#17191E", neutral, 0.05);
-  const surfaceSubtle = blend("#1D2027", neutral, 0.05);
-  const borderDefault = blend("#2A2D35", neutral, 0.04);
-  const borderSubtle = blend("#22252D", neutral, 0.03);
-  const hoverState = blend("#20232B", neutral, 0.03);
+  const pageBase = "#1f2023";
+  const surfaceBase = "#1f2023";
+  const surfaceSubtle = "#25262a";
+  const borderDefault = "#2e2f33";
+  const borderSubtle = "#272830";
+  const hoverState = "#25262a";
 
   const success = createStatusTokens(STATUS_SEEDS.success, true);
   const warning = createStatusTokens(STATUS_SEEDS.warning, true);
@@ -285,13 +285,13 @@ function generateDarkTokens(seeds: WorkspaceThemeSeeds): ThemeTokenMap {
     "bg.surface": surfaceBase,
     "bg.surfaceSubtle": surfaceSubtle,
     "bg.surfaceTint": blend(surfaceBase, surfaceTint, 0.05),
-    "text.primary": blend("#F7F8FB", neutral, 0.04),
-    "text.secondary": blend("#C8CDD8", neutral, 0.08),
-    "text.muted": blend("#8F96A6", neutral, 0.1),
+    "text.primary": blend("#F0F0F0", neutral, 0.04),
+    "text.secondary": blend("#C5C5C5", neutral, 0.08),
+    "text.muted": blend("#959595", neutral, 0.1),
     "text.inverse": "#10201B",
     "border.default": borderDefault,
     "border.subtle": borderSubtle,
-    "border.strong": "#5E6AD2",
+    "border.strong": "#5FC4A1",
     "action.primary.bg": primary,
     "action.primary.text": pickTextColor(primary),
     "action.primary.border": blend(primary, "#FFFFFF", 0.12),
@@ -299,8 +299,8 @@ function generateDarkTokens(seeds: WorkspaceThemeSeeds): ThemeTokenMap {
     "action.accent.text": pickTextColor(accent),
     "action.accent.border": blend(accent, "#FFFFFF", 0.12),
     "state.hover": hoverState,
-    "state.selected": blend(surfaceBase, "#5E6AD2", 0.16),
-    "state.focusRing": "#7583F6",
+    "state.selected": blend(surfaceBase, "#FFFFFF", 0.12),
+    "state.focusRing": "#5FC4A1",
     "status.success.bg": success["status.success.bg"],
     "status.success.fg": success["status.success.fg"],
     "status.success.border": success["status.success.border"],

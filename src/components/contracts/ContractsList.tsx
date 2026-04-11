@@ -408,7 +408,7 @@ export function ContractsList({
               style={{ 
                 gridTemplateColumns: GRID_COLS,
                 borderBottom: "1px solid var(--theme-border-default)",
-                background: "var(--theme-bg-page)"
+                background: "transparent"
               }}
             >
               <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>

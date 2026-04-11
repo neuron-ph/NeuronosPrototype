@@ -66,12 +66,12 @@ export function PricingTableHeader({
       gridTemplateColumns: getGridTemplate(),
       gap: "8px",
       padding: "10px 16px",
-      backgroundColor: "var(--theme-bg-page)",
+      backgroundColor: "var(--theme-bg-surface-subtle)",
       fontSize: "11px",
       fontWeight: 600,
       color: "var(--theme-text-muted)",
       letterSpacing: "0.02em",
-      borderBottom: "1px solid #EDF2F1"
+      borderBottom: "1px solid var(--theme-border-subtle)"
     }}>
       <div>{firstCellContent ?? "Item"}</div>
       

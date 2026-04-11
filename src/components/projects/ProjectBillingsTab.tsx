@@ -387,7 +387,7 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
             ) : (
               <div style={{ maxHeight: "500px", overflowY: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead style={{ position: "sticky", top: 0, backgroundColor: "var(--theme-bg-page)", zIndex: 10 }}>
+                  <thead style={{ position: "sticky", top: 0, backgroundColor: "var(--theme-bg-surface)", zIndex: 10 }}>
                     <tr style={{ borderBottom: "1px solid var(--theme-border-default)" }}>
                       <th style={{ padding: "12px 16px", width: "40px" }}>
                         <button 

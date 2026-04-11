@@ -263,7 +263,7 @@ function SummaryContent({ data }: { data: SummaryData }) {
           style={{
             gridTemplateColumns: GRID_COLS,
             borderBottom: "1px solid var(--theme-border-default)",
-            background: "var(--theme-bg-page)",
+            background: "transparent",
           }}
         >
           <div style={thStyle}>ITEM NAME</div>

@@ -123,7 +123,7 @@ export function DropdownTagInput({
           gap: "6px",
           padding: "10px 12px",
           minHeight: "42px",
-          backgroundColor: "var(--theme-bg-page)",
+          backgroundColor: "var(--theme-bg-surface-subtle)",
           border: "1px solid var(--neuron-ui-border)",
           borderRadius: "6px",
           alignItems: "center",
@@ -336,7 +336,7 @@ export function DropdownTagInput({
                     transition: "background-color 0.1s ease",
                   }}
                   onMouseEnter={(e) => {
-                    if (!isSelected) e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
+                    if (!isSelected) e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)";
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.backgroundColor = isSelected ? "var(--theme-state-selected)" : "var(--theme-bg-surface)";

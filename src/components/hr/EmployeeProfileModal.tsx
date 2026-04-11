@@ -288,7 +288,7 @@ export function EmployeeProfileModal({
               <div>
                 <div className="border border-[var(--theme-border-default)] rounded-lg overflow-hidden mb-4">
                   <table className="w-full">
-                    <thead className="bg-[var(--theme-bg-page)]">
+                    <thead className="bg-[var(--theme-bg-surface)]">
                       <tr>
                         <th
                           className="px-4 py-3 text-left text-[10px] text-[var(--theme-text-muted)] uppercase border-b border-[var(--theme-border-default)]"

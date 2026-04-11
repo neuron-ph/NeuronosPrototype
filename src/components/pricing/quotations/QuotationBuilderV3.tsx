@@ -2101,7 +2101,7 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
       <div style={{
         padding: "20px 48px",
         borderBottom: "1px solid var(--neuron-ui-border)",
-        backgroundColor: "var(--theme-bg-page)",
+        backgroundColor: "var(--theme-bg-surface-subtle)",
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
@@ -2175,7 +2175,7 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
               padding: "8px 24px",
               fontSize: "13px",
               fontWeight: 600,
-              color: "white",
+              color: (isFormValid() && !isLocked) ? "white" : "var(--theme-text-muted)",
               backgroundColor: (isFormValid() && !isLocked) ? "var(--neuron-brand-green)" : "var(--neuron-ui-muted)",
               border: "none",
               borderRadius: "6px",

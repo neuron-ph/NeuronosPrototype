@@ -24,7 +24,7 @@ export const QuotationDocument = React.forwardRef<HTMLDivElement, QuotationDocum
     
     // Determine display toggles (default to true if options not provided)
     const showBankDetails = options ? options.display.show_bank_details : true;
-    const showNotes = options ? options.display.show_notes : true;
+    const showNotes = true; // Always show notes section
     const showTax = options ? options.display.show_tax_summary : true;
     const customNotes = options?.custom_notes ?? quote?.notes;
 
@@ -490,15 +490,15 @@ export const QuotationDocument = React.forwardRef<HTMLDivElement, QuotationDocum
                 <div className="p-ref-grid">
                     <div className="p-ref-item">
                         <span className="p-ref-label">Reference No.</span>
-                        <span className="p-ref-value">{t(project.quotation_number || project.project_number)}</span>
+                        <span className="p-ref-value">{t(quote?.quote_number || (quote as any)?.quotation_number || project.quotation_number || project.project_number)}</span>
                     </div>
                     <div className="p-ref-item">
                         <span className="p-ref-label">Date Issued</span>
-                        <span className="p-ref-value">{new Date().toLocaleDateString()}</span>
+                        <span className="p-ref-value">{quote?.created_date || quote?.created_at ? new Date(quote.created_date || quote.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : new Date().toLocaleDateString()}</span>
                     </div>
                     <div className="p-ref-item">
                         <span className="p-ref-label">Valid Until</span>
-                        <span className="p-ref-value">{t(quote?.valid_until, "30 Days")}</span>
+                        <span className="p-ref-value">{quote?.valid_until ? new Date(quote.valid_until).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "30 Days"}</span>
                     </div>
                 </div>
             </div>
@@ -513,24 +513,20 @@ export const QuotationDocument = React.forwardRef<HTMLDivElement, QuotationDocum
                     <span className="p-cust-label">Customer:</span>
                     <span className="p-cust-val">{t(project.customer_name)}</span>
                 </div>
-                <div className="p-cust-row">
-                    <span className="p-cust-label">Position:</span>
-                    <span className="p-cust-val">{t(quote?.contact_person_name || "Manager")}</span>
-                </div>
+                {quote?.contact_person_name && (
+                    <div className="p-cust-row">
+                        <span className="p-cust-label">Attention:</span>
+                        <span className="p-cust-val">{quote.contact_person_name}</span>
+                    </div>
+                )}
             </div>
-            
+
             {/* Col 2 */}
             <div>
                  <div className="p-cust-row">
                     <span className="p-cust-label">Company:</span>
                     <span className="p-cust-val">{t(quote?.customer_company || quote?.customer_organization)}</span>
                 </div>
-                {quote?.customer_id && (
-                    <div className="p-cust-row">
-                        <span className="p-cust-label">Customer ID:</span>
-                        <span className="p-cust-val">{quote.customer_id}</span>
-                    </div>
-                )}
             </div>
         </div>
 

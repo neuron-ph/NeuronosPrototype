@@ -269,7 +269,7 @@ export function FormComboBox({
                   }}
                   onMouseEnter={(e) => {
                     if (!isSelected) {
-                      e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
+                      e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)";
                     }
                   }}
                   onMouseLeave={(e) => {

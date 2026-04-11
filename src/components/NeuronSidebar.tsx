@@ -295,9 +295,9 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
         style={{
           height: isSubItem ? "36px" : "40px",
           backgroundColor: isActive ? "var(--neuron-state-selected)" : "transparent",
-          border: isActive ? "1.5px solid var(--neuron-ui-active-border)" : "1.5px solid transparent",
-          color: isActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-secondary)",
-          fontWeight: isActive ? 600 : 400,
+          border: "1.5px solid transparent",
+          color: isActive ? "var(--neuron-ink-primary)" : "var(--neuron-ink-secondary)",
+          fontWeight: isActive ? 500 : 400,
           justifyContent: isCollapsed ? "center" : "flex-start",
           paddingLeft: isCollapsed ? "0" : isSubItem ? "28px" : "12px",
           paddingRight: isCollapsed ? "0" : "12px",
@@ -314,12 +314,12 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
         }}
         title={isCollapsed ? item.label : undefined}
       >
-        <Icon 
-          size={isSubItem ? 18 : 20} 
-          style={{ 
-            color: isActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)",
+        <Icon
+          size={isSubItem ? 18 : 20}
+          style={{
+            color: isActive ? "var(--neuron-ink-primary)" : "var(--neuron-ink-muted)",
             flexShrink: 0
-          }} 
+          }}
         />
         {!isCollapsed && (
           <span style={{ fontSize: "14px", lineHeight: "20px" }}>
@@ -744,9 +744,9 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
                 style={{
                   height: "40px",
                   backgroundColor: isActive ? "var(--neuron-state-selected)" : "transparent",
-                  border: isActive ? "1.5px solid var(--neuron-ui-active-border)" : "1.5px solid transparent",
-                  color: isActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-secondary)",
-                  fontWeight: isActive ? 600 : 400,
+                  border: "1.5px solid transparent",
+                  color: isActive ? "var(--neuron-ink-primary)" : "var(--neuron-ink-secondary)",
+                  fontWeight: isActive ? 500 : 400,
                   justifyContent: isCollapsed ? "center" : "flex-start",
                   paddingLeft: isCollapsed ? "0" : "12px",
                   paddingRight: isCollapsed ? "0" : "12px",
@@ -763,7 +763,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
                 <div style={{ position: "relative", flexShrink: 0 }}>
                   <Inbox
                     size={20}
-                    style={{ color: isActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)" }}
+                    style={{ color: isActive ? "var(--neuron-ink-primary)" : "var(--neuron-ink-muted)" }}
                   />
                   {inboxUnreadCount > 0 && (
                     <span
@@ -832,9 +832,9 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
                   style={{
                     height: "40px",
                     backgroundColor: isActive ? "var(--neuron-state-selected)" : "transparent",
-                    border: isActive ? "1.5px solid var(--neuron-ui-active-border)" : "1.5px solid transparent",
-                    color: isActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-secondary)",
-                    fontWeight: isActive ? 600 : 400,
+                    border: "1.5px solid transparent",
+                    color: isActive ? "var(--neuron-ink-primary)" : "var(--neuron-ink-secondary)",
+                    fontWeight: isActive ? 500 : 400,
                     justifyContent: isCollapsed ? "center" : "flex-start",
                     paddingLeft: isCollapsed ? "0" : "12px",
                     paddingRight: isCollapsed ? "0" : "12px",
@@ -845,7 +845,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
                 >
                   <Users
                     size={20}
-                    style={{ color: isActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)", flexShrink: 0 }}
+                    style={{ color: isActive ? "var(--neuron-ink-primary)" : "var(--neuron-ink-muted)", flexShrink: 0 }}
                   />
                   {!isCollapsed && <span style={{ fontSize: "14px", lineHeight: "20px" }}>Users</span>}
                 </button>
@@ -884,8 +884,8 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
             onClick={() => onNavigate("settings")}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150"
             style={{
-              backgroundColor: currentPage === "settings" ? "var(--neuron-state-selected)" : "var(--neuron-bg-page)",
-              border: currentPage === "settings" ? "1.5px solid var(--neuron-ui-active-border)" : "1.5px solid transparent",
+              backgroundColor: currentPage === "settings" ? "var(--neuron-state-selected)" : "var(--theme-bg-surface-subtle)",
+              border: "1.5px solid transparent",
               minHeight: "48px",
               justifyContent: isCollapsed ? "center" : "flex-start",
               paddingLeft: isCollapsed ? "0" : "12px",
@@ -894,12 +894,12 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
             }}
             onMouseEnter={(e) => {
               if (currentPage !== "settings") {
-                e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
+                e.currentTarget.style.backgroundColor = "var(--neuron-state-selected)";
               }
             }}
             onMouseLeave={(e) => {
               if (currentPage !== "settings") {
-                e.currentTarget.style.backgroundColor = "var(--neuron-bg-page)";
+                e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)";
               }
             }}
           >

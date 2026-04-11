@@ -296,8 +296,15 @@ export interface QuotationNew {
   prepared_by?: string;
   prepared_by_title?: string;
   approved_by?: string;
+  approved_by_title?: string;
   customer_signatory?: string;
-  
+
+  // PDF Document fields
+  payment_terms?: string;
+  custom_notes?: string;
+  addressed_to_name?: string;
+  addressed_to_title?: string;
+
   // Metadata
   status: QuotationStatus;
   inquiry_id?: string;           // Link to original inquiry (deprecated - same document now)

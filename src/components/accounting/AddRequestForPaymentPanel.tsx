@@ -1340,7 +1340,7 @@ export function AddRequestForPaymentPanel({
 
               <div style={{ border: "1px solid var(--theme-border-default)", borderRadius: "8px", overflow: "hidden" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead style={{ backgroundColor: "var(--theme-bg-page)", borderBottom: "1px solid var(--theme-border-default)" }}>
+                  <thead style={{ backgroundColor: "var(--theme-bg-surface)", borderBottom: "1px solid var(--theme-border-default)" }}>
                     <tr>
                       <th style={{ padding: "10px 16px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "var(--theme-text-muted)", width: "40%" }}>Particulars</th>
                       <th style={{ padding: "10px 16px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "var(--theme-text-muted)", width: "30%" }}>Description</th>

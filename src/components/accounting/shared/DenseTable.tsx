@@ -130,7 +130,7 @@ export function DenseTable<T>({
         style={{
           display: "grid",
           gridTemplateColumns: columns.map(col => col.width || "1fr").join(" "),
-          backgroundColor: "var(--theme-bg-page)",
+          backgroundColor: "transparent",
           borderBottom: "1px solid var(--neuron-ui-border)",
           position: "sticky",
           top: 0,

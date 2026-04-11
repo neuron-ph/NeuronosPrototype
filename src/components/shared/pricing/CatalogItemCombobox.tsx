@@ -304,7 +304,7 @@ export function CatalogItemCombobox({
           {/* Quick-add option — one click, no form */}
           {searchText.trim() && !exactMatch && (
             <>
-              {hasResults && <div style={{ margin: "2px 12px", borderTop: "1px solid #F0F0F0" }} />}
+              {hasResults && <div style={{ margin: "2px 12px", borderTop: "1px solid var(--theme-border-subtle)" }} />}
               <button
                 type="button"
                 onClick={handleQuickCreate}
@@ -375,7 +375,7 @@ function ItemOption({
         overflow: "hidden",
         textOverflow: "ellipsis",
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--theme-bg-page)"; }}
+      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)"; }}
       onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
     >
       {item.name}

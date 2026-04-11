@@ -374,7 +374,7 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
             fontWeight: 600,
             color: "var(--neuron-brand-green)",
             backgroundColor: "var(--theme-bg-surface)",
-            border: "1px solid #D9E1DE",
+            border: "1px solid var(--theme-border-default)",
             borderRadius: "8px",
             cursor: "pointer",
             display: "flex",
@@ -390,7 +390,7 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
-            e.currentTarget.style.borderColor = "#D9E1DE";
+            e.currentTarget.style.borderColor = "var(--theme-border-default)";
             e.currentTarget.style.transform = "translateY(0)";
             setIsAddVendorHovered(false);
           }}
@@ -405,7 +405,7 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
       {showAddVendor && (
         <div style={{
           padding: "16px",
-          backgroundColor: "var(--theme-bg-page)",
+          backgroundColor: "var(--theme-bg-surface-subtle)",
           border: "1px solid var(--neuron-ui-border)",
           borderRadius: "6px",
           marginBottom: "12px"
@@ -545,7 +545,7 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
               <div
                 style={{
                   padding: "12px 16px",
-                  backgroundColor: "var(--theme-bg-page)",
+                  backgroundColor: "var(--theme-bg-surface-subtle)",
                   border: "1px solid var(--neuron-ui-border)",
                   borderRadius: "6px",
                   display: "flex",
@@ -977,7 +977,7 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
           textAlign: "center",
           color: "var(--neuron-ink-muted)",
           fontSize: "13px",
-          backgroundColor: "var(--theme-bg-page)",
+          backgroundColor: "var(--theme-bg-surface-subtle)",
           border: "1px dashed var(--neuron-ui-border)",
           borderRadius: "6px"
         }}>

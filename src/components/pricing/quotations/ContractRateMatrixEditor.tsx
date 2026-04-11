@@ -62,7 +62,7 @@ const sectionHeaderStyle: React.CSSProperties = {
   alignItems: "center",
   justifyContent: "space-between",
   padding: "14px 16px",
-  backgroundColor: "var(--theme-bg-page)",
+  backgroundColor: "var(--theme-bg-surface-subtle)",
   borderBottom: "1px solid var(--neuron-ui-border)",
   cursor: "pointer",
   userSelect: "none",

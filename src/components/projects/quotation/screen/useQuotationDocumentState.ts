@@ -11,19 +11,19 @@ export interface QuotationPrintOptions {
     prepared_by: Signatory;
     approved_by: Signatory;
   };
+  addressed_to: { name: string; title: string };
+  validity_override?: string;
+  payment_terms: string;
+  custom_notes: string;
   display: {
     show_bank_details: boolean;
-    show_notes: boolean;
     show_tax_summary: boolean;
-    show_letterhead: boolean;
   };
-  custom_notes?: string;
 }
 
 export function useQuotationDocumentState(project: Project, currentUser?: { name: string; email: string; } | null) {
   const quote = project.quotation || (project as any);
 
-  // Initialize state with project defaults or intelligent fallbacks
   const [options, setOptions] = useState<QuotationPrintOptions>({
     signatories: {
       prepared_by: {
@@ -35,13 +35,17 @@ export function useQuotationDocumentState(project: Project, currentUser?: { name
         title: quote?.approved_by_title || "Authorized Signatory"
       }
     },
+    addressed_to: {
+      name: quote?.addressed_to_name || quote?.contact_name || quote?.contact_person_name || "",
+      title: quote?.addressed_to_title || ""
+    },
+    validity_override: quote?.valid_until || quote?.expiry_date || "",
+    payment_terms: quote?.payment_terms || "",
+    custom_notes: quote?.custom_notes || quote?.notes || "",
     display: {
       show_bank_details: true,
-      show_notes: true,
       show_tax_summary: true,
-      show_letterhead: true
     },
-    custom_notes: quote?.notes || ""
   });
 
   // Actions
@@ -56,6 +60,21 @@ export function useQuotationDocumentState(project: Project, currentUser?: { name
         }
       }
     }));
+  };
+
+  const updateAddressedTo = (field: "name" | "title", value: string) => {
+    setOptions(prev => ({
+      ...prev,
+      addressed_to: { ...prev.addressed_to, [field]: value }
+    }));
+  };
+
+  const setValidityOverride = (date: string) => {
+    setOptions(prev => ({ ...prev, validity_override: date }));
+  };
+
+  const setPaymentTerms = (terms: string) => {
+    setOptions(prev => ({ ...prev, payment_terms: terms }));
   };
 
   const toggleDisplay = (key: keyof QuotationPrintOptions["display"]) => {
@@ -75,7 +94,10 @@ export function useQuotationDocumentState(project: Project, currentUser?: { name
   return {
     options,
     updateSignatory,
+    updateAddressedTo,
+    setValidityOverride,
+    setPaymentTerms,
     toggleDisplay,
-    setCustomNotes
+    setCustomNotes,
   };
 }
