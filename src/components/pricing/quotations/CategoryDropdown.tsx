@@ -85,7 +85,7 @@ export function CategoryDropdown({ onAdd, onClose }: CategoryDropdownProps) {
       <div style={{
         padding: "12px",
         borderBottom: "1px solid var(--neuron-ui-border)",
-        backgroundColor: "var(--theme-bg-page)"
+        backgroundColor: "var(--theme-bg-surface-subtle)"
       }}>
         <div style={{
           display: "flex",

@@ -154,7 +154,7 @@ export function ProjectFinancialOverview({ financials }: ProjectFinancialOvervie
               </div>
               <div className="p-0">
                   <table className="w-full">
-                      <thead className="bg-[var(--theme-bg-page)] border-b border-[var(--theme-border-default)]">
+                      <thead className="bg-[var(--theme-bg-surface)] border-b border-[var(--theme-border-default)]">
                           <tr>
                               <th className="px-6 py-3 text-left text-[11px] font-semibold text-[var(--theme-text-muted)] uppercase tracking-[0.02em]">Category</th>
                               <th className="px-6 py-3 text-right text-[11px] font-semibold text-[var(--theme-text-muted)] uppercase tracking-[0.02em]">Amount</th>
@@ -190,7 +190,7 @@ export function ProjectFinancialOverview({ financials }: ProjectFinancialOvervie
               </div>
               <div className="p-0">
                   <table className="w-full">
-                      <thead className="bg-[var(--theme-bg-page)] border-b border-[var(--theme-border-default)]">
+                      <thead className="bg-[var(--theme-bg-surface)] border-b border-[var(--theme-border-default)]">
                           <tr>
                               <th className="px-6 py-3 text-left text-[11px] font-semibold text-[var(--theme-text-muted)] uppercase tracking-[0.02em]">Expense Type</th>
                               <th className="px-6 py-3 text-right text-[11px] font-semibold text-[var(--theme-text-muted)] uppercase tracking-[0.02em]">Amount</th>

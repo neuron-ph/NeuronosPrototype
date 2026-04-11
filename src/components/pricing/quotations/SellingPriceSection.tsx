@@ -183,7 +183,7 @@ export function SellingPriceSection({
     <div
       style={{
         backgroundColor: "var(--theme-bg-surface)",
-        border: "1px solid #E5E9E8",
+        border: "1px solid var(--theme-border-default)",
         borderRadius: "12px",
         padding: "28px",
         marginBottom: "24px",
@@ -197,7 +197,7 @@ export function SellingPriceSection({
         justifyContent: "space-between",
         marginBottom: "24px",
         paddingBottom: "20px",
-        borderBottom: "2px solid #E8F5F3"
+        borderBottom: "2px solid var(--theme-border-subtle)"
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <PhilippinePeso size={18} style={{ color: "var(--neuron-brand-green)" }} />
@@ -239,7 +239,7 @@ export function SellingPriceSection({
                 fontWeight: 500,
                 color: "var(--theme-text-muted)",
                 backgroundColor: "var(--theme-bg-surface)",
-                border: "1px solid #E0E6E4",
+                border: "1px solid var(--theme-border-default)",
                 borderRadius: "8px",
                 cursor: "pointer",
                 transition: "all 0.2s ease"
@@ -250,7 +250,7 @@ export function SellingPriceSection({
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
-                e.currentTarget.style.borderColor = "#E0E6E4";
+                e.currentTarget.style.borderColor = "var(--theme-border-default)";
               }}
             >
               {expandedCategories.size === categories.length ? "Collapse All" : "Expand All"}
@@ -271,7 +271,7 @@ export function SellingPriceSection({
               fontWeight: 600,
               color: "var(--neuron-brand-green)",
               backgroundColor: "var(--theme-bg-surface)",
-              border: "1px solid #D9E1DE",
+              border: "1px solid var(--theme-border-default)",
               borderRadius: "8px",
               cursor: "pointer",
               transition: "all 0.2s ease"
@@ -283,7 +283,7 @@ export function SellingPriceSection({
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
-              e.currentTarget.style.borderColor = "#D9E1DE";
+              e.currentTarget.style.borderColor = "var(--theme-border-default)";
               e.currentTarget.style.transform = "translateY(0)";
             }}
           >
@@ -336,7 +336,7 @@ export function SellingPriceSection({
 
             return (
               <div key={category.id} style={{
-                border: "1px solid #E0E6E4",
+                border: "1px solid var(--theme-border-default)",
                 borderRadius: "10px",
                 overflow: "visible",
                 backgroundColor: "var(--theme-bg-surface)"
@@ -357,7 +357,7 @@ export function SellingPriceSection({
                 {isCategoryExpanded && (
                   <div style={{ padding: "12px", backgroundColor: "var(--theme-bg-surface)" }}>
                     <div style={{
-                      border: "1px solid #E5E9E8",
+                      border: "1px solid var(--theme-border-default)",
                       borderRadius: "10px",
                       overflow: "hidden",
                       backgroundColor: "var(--theme-bg-surface)"

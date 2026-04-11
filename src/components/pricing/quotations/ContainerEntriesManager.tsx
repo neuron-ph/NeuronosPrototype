@@ -78,7 +78,7 @@ export function ContainerEntriesManager({ containers, onChange, disabled = false
         {containers.length === 0 ? (
           <div style={{
             padding: "24px",
-            backgroundColor: "var(--theme-bg-page)",
+            backgroundColor: "var(--theme-bg-surface-subtle)",
             border: "1px dashed var(--neuron-ui-border)",
             borderRadius: "6px",
             textAlign: "center",
@@ -96,7 +96,7 @@ export function ContainerEntriesManager({ containers, onChange, disabled = false
                 gridTemplateColumns: disabled ? "1fr 120px" : "1fr 120px 40px",
                 gap: "12px",
                 padding: "12px",
-                backgroundColor: "var(--theme-bg-page)",
+                backgroundColor: "var(--theme-bg-surface-subtle)",
                 border: "1px solid var(--neuron-ui-border)",
                 borderRadius: "6px",
                 alignItems: "center"

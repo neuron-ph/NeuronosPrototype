@@ -119,7 +119,7 @@ export function FormSelect({ value, options, onChange, placeholder = "Select..."
               }}
               onMouseEnter={(e) => {
                 if (value !== option.value) {
-                  e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
+                  e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)";
                 }
               }}
               onMouseLeave={(e) => {

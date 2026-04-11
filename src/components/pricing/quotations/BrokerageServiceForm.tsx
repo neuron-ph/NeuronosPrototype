@@ -399,7 +399,7 @@ export function BrokerageServiceForm({ data, onChange, movement = "IMPORT", view
             {data.mode === "FCL" && (
               <div style={{
                 padding: "16px",
-                backgroundColor: "var(--theme-bg-page)",
+                backgroundColor: "var(--theme-bg-surface-subtle)",
                 border: "1px solid var(--neuron-ui-border)",
                 borderRadius: "6px",
                 marginTop: "20px"
@@ -638,7 +638,7 @@ export function BrokerageServiceForm({ data, onChange, movement = "IMPORT", view
             {data.mode === "FCL" && (
               <div style={{
                 padding: "16px",
-                backgroundColor: "var(--theme-bg-page)",
+                backgroundColor: "var(--theme-bg-surface-subtle)",
                 border: "1px solid var(--neuron-ui-border)",
                 borderRadius: "6px"
               }}>
@@ -855,7 +855,7 @@ export function BrokerageServiceForm({ data, onChange, movement = "IMPORT", view
             {data.mode === "FCL" && (
               <div style={{
                 padding: "16px",
-                backgroundColor: "var(--theme-bg-page)",
+                backgroundColor: "var(--theme-bg-surface-subtle)",
                 border: "1px solid var(--neuron-ui-border)",
                 borderRadius: "6px",
                 marginTop: "16px"
@@ -871,7 +871,7 @@ export function BrokerageServiceForm({ data, onChange, movement = "IMPORT", view
             {data.mode === "LCL" && (
               <div style={{
                 padding: "16px",
-                backgroundColor: "var(--theme-bg-page)",
+                backgroundColor: "var(--theme-bg-surface-subtle)",
                 border: "1px solid var(--neuron-ui-border)",
                 borderRadius: "6px",
                 marginTop: "16px",
@@ -957,7 +957,7 @@ export function BrokerageServiceForm({ data, onChange, movement = "IMPORT", view
             {data.mode === "AIR" && (
               <div style={{
                 padding: "16px",
-                backgroundColor: "var(--theme-bg-page)",
+                backgroundColor: "var(--theme-bg-surface-subtle)",
                 border: "1px solid var(--neuron-ui-border)",
                 borderRadius: "6px",
                 marginTop: "16px",

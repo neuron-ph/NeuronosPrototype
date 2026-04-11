@@ -155,7 +155,7 @@ export function CategoryPresetDropdown({ isOpen, onClose, onSelect, buttonRef, a
           right: dropdownPosition.right,
           width: "340px",
           backgroundColor: "var(--theme-bg-surface)",
-          border: "1px solid #D9E1DE",
+          border: "1px solid var(--theme-border-default)",
           borderRadius: "8px",
           zIndex: 50,
           overflow: "hidden",
@@ -167,8 +167,8 @@ export function CategoryPresetDropdown({ isOpen, onClose, onSelect, buttonRef, a
         {/* Search Bar with subtle gray background */}
         <div style={{
           padding: "12px 16px",
-          backgroundColor: "#F8F9FA",
-          borderBottom: "1px solid #E8EDEF",
+          backgroundColor: "var(--theme-bg-surface-subtle)",
+          borderBottom: "1px solid var(--theme-border-subtle)",
           flexShrink: 0
         }}>
           <div style={{
@@ -194,7 +194,7 @@ export function CategoryPresetDropdown({ isOpen, onClose, onSelect, buttonRef, a
                 width: "100%",
                 padding: "8px 36px 8px 36px",
                 fontSize: "13px",
-                border: "1px solid #D9E1DE",
+                border: "1px solid var(--theme-border-default)",
                 borderRadius: "6px",
                 outline: "none",
                 backgroundColor: "var(--theme-bg-surface)",
@@ -205,7 +205,7 @@ export function CategoryPresetDropdown({ isOpen, onClose, onSelect, buttonRef, a
                 e.currentTarget.style.boxShadow = "0 0 0 2px rgba(15, 118, 110, 0.1)";
               }}
               onBlur={(e) => {
-                e.currentTarget.style.borderColor = "#D9E1DE";
+                e.currentTarget.style.borderColor = "var(--theme-border-default)";
                 e.currentTarget.style.boxShadow = "none";
               }}
               onKeyDown={(e) => {
@@ -281,13 +281,13 @@ export function CategoryPresetDropdown({ isOpen, onClose, onSelect, buttonRef, a
                   transition: "all 0.15s ease",
                   fontSize: "14px",
                   fontWeight: 500,
-                  color: "#2C3E38",
+                  color: "var(--theme-text-primary)",
                   display: "flex",
                   flexDirection: "column",
                   gap: "2px"
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "#F8F9FA";
+                  e.currentTarget.style.backgroundColor = "var(--theme-state-hover)";
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
@@ -313,7 +313,7 @@ export function CategoryPresetDropdown({ isOpen, onClose, onSelect, buttonRef, a
             <div style={{
                 padding: "12px 16px",
                 backgroundColor: "var(--theme-bg-surface)",
-                borderTop: "1px solid #E8EDEF",
+                borderTop: "1px solid var(--theme-border-subtle)",
                 flexShrink: 0
             }}>
                 <button
@@ -321,7 +321,7 @@ export function CategoryPresetDropdown({ isOpen, onClose, onSelect, buttonRef, a
                     style={{
                         width: "100%",
                         padding: "10px 12px",
-                        border: "1px dashed #0F766E", // Dashed border as per image
+                        border: "1px dashed var(--theme-action-primary-bg)", // Dashed border as per image
                         borderRadius: "8px",
                         backgroundColor: "var(--theme-bg-surface)", // White background for minimal look
                         textAlign: "left",

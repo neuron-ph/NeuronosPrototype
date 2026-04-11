@@ -396,13 +396,13 @@ export function ContactsListWithFilters({ userDepartment, onViewContact }: Conta
           <table className="w-full">
             <thead>
               <tr style={{ borderBottom: "1.5px solid var(--neuron-ui-border)" }}>
-                <th className="text-left px-4 py-3 text-xs" style={{ color: "var(--neuron-ink-muted)", backgroundColor: "var(--theme-bg-page)" }}>CONTACT</th>
-                <th className="text-left px-4 py-3 text-xs" style={{ color: "var(--neuron-ink-muted)", backgroundColor: "var(--theme-bg-page)" }}>COMPANY</th>
-                <th className="text-left px-4 py-3 text-xs" style={{ color: "var(--neuron-ink-muted)", backgroundColor: "var(--theme-bg-page)" }}>PHONE</th>
-                <th className="text-left px-4 py-3 text-xs" style={{ color: "var(--neuron-ink-muted)", backgroundColor: "var(--theme-bg-page)" }}>EMAIL</th>
-                <th className="text-left px-4 py-3 text-xs" style={{ color: "var(--neuron-ink-muted)", backgroundColor: "var(--theme-bg-page)" }}>STAGE</th>
-                <th className="text-left px-4 py-3 text-xs" style={{ color: "var(--neuron-ink-muted)", backgroundColor: "var(--theme-bg-page)" }}>LAST ACTIVITY</th>
-                <th className="text-center px-4 py-3 text-xs" style={{ color: "var(--neuron-ink-muted)", backgroundColor: "var(--theme-bg-page)" }}>ACTIONS</th>
+                <th className="text-left px-4 py-3 text-xs" style={{ color: "var(--neuron-ink-muted)", }}>CONTACT</th>
+                <th className="text-left px-4 py-3 text-xs" style={{ color: "var(--neuron-ink-muted)" }}>COMPANY</th>
+                <th className="text-left px-4 py-3 text-xs" style={{ color: "var(--neuron-ink-muted)" }}>PHONE</th>
+                <th className="text-left px-4 py-3 text-xs" style={{ color: "var(--neuron-ink-muted)" }}>EMAIL</th>
+                <th className="text-left px-4 py-3 text-xs" style={{ color: "var(--neuron-ink-muted)" }}>STAGE</th>
+                <th className="text-left px-4 py-3 text-xs" style={{ color: "var(--neuron-ink-muted)" }}>LAST ACTIVITY</th>
+                <th className="text-center px-4 py-3 text-xs" style={{ color: "var(--neuron-ink-muted)" }}>ACTIONS</th>
               </tr>
             </thead>
             <tbody>

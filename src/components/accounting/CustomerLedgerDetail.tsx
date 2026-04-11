@@ -408,7 +408,7 @@ export function CustomerLedgerDetail({ customer, onClose }: CustomerLedgerDetail
                   </div>
                   <div className="flex-1 overflow-auto">
                     <table className="w-full">
-                      <thead className="bg-[#F8F9FB] border-b border-[var(--theme-border-default)]">
+                      <thead className="bg-[var(--theme-bg-surface)] border-b border-[var(--theme-border-default)]">
                         <tr>
                           <th className="text-left px-6 py-3 text-[11px] font-semibold text-[var(--theme-text-muted)] uppercase tracking-[0.002em]">Date</th>
                           <th className="text-left px-6 py-3 text-[11px] font-semibold text-[var(--theme-text-muted)] uppercase tracking-[0.002em]">Type</th>
@@ -586,7 +586,7 @@ export function CustomerLedgerDetail({ customer, onClose }: CustomerLedgerDetail
               {/* Table Card */}
               <div className="rounded-[10px] border border-[var(--theme-border-default)] bg-[var(--theme-bg-surface)] overflow-hidden">
                 <table className="w-full">
-                  <thead className="bg-[#F8F9FB] border-b border-[var(--theme-border-default)]">
+                  <thead className="bg-[var(--theme-bg-surface)] border-b border-[var(--theme-border-default)]">
                     <tr>
                       <th className="text-left px-6 py-4 text-[11px] font-semibold text-[var(--theme-text-muted)] uppercase tracking-[0.002em]">Invoice #</th>
                       <th className="text-left px-6 py-4 text-[11px] font-semibold text-[var(--theme-text-muted)] uppercase tracking-[0.002em]">Date</th>
@@ -664,7 +664,7 @@ export function CustomerLedgerDetail({ customer, onClose }: CustomerLedgerDetail
               {/* Table Card */}
               <div className="rounded-[10px] border border-[var(--theme-border-default)] bg-[var(--theme-bg-surface)] overflow-hidden">
                 <table className="w-full">
-                  <thead className="bg-[#F8F9FB] border-b border-[var(--theme-border-default)]">
+                  <thead className="bg-[var(--theme-bg-surface)] border-b border-[var(--theme-border-default)]">
                     <tr>
                       <th className="text-left px-6 py-4 text-[11px] font-semibold text-[var(--theme-text-muted)] uppercase tracking-[0.002em]">Reference #</th>
                       <th className="text-left px-6 py-4 text-[11px] font-semibold text-[var(--theme-text-muted)] uppercase tracking-[0.002em]">Payment Date</th>

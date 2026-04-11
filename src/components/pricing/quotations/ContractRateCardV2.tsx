@@ -1200,7 +1200,7 @@ function RateLineItem({
                 padding: "6px 8px",
                 border: "1px solid #E0E6E4",
                 borderRadius: "6px",
-                backgroundColor: "var(--theme-bg-page)",
+                backgroundColor: "var(--theme-bg-surface-subtle)",
                 whiteSpace: "pre-wrap",
                 wordBreak: "break-word",
               }}

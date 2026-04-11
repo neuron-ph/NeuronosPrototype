@@ -1,6 +1,6 @@
 import { ArrowLeft, Edit3, FileText, FolderPlus, Layout, UserCircle } from "lucide-react";
 import { CustomDatePicker } from "../common/CustomDatePicker";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { QuotationNew, Project } from "../../types/pricing";
 import { useUser } from "../../hooks/useUser";
@@ -53,6 +53,13 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
   const [isAssigning, setIsAssigning] = useState(false);
   const [pendingAssigneeId, setPendingAssigneeId] = useState<string | null>(null);
   const [pricingDeadline, setPricingDeadline] = useState<string>("");
+  const [isSavingDeadline, setIsSavingDeadline] = useState(false);
+  const [localDeadline, setLocalDeadline] = useState<string>(() => (quotation as any).details?.pricing_deadline || "");
+
+  // Keep localDeadline in sync when the prop updates (e.g. after parent re-fetch)
+  useEffect(() => {
+    setLocalDeadline((quotation as any).details?.pricing_deadline || "");
+  }, [(quotation as any).details?.pricing_deadline]);
   const normalizedStatus = getNormalizedQuotationStatus(quotation);
   const normalizedContractStatus = getNormalizedContractStatus(quotation);
   const isLocked = isQuotationLocked(quotation);
@@ -195,6 +202,28 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
     setPricingDeadline(d.toISOString().split("T")[0]);
   };
   
+  const handleDeadlineChange = async (newDeadline: string) => {
+    if (isSavingDeadline || !newDeadline) return;
+    const previousDeadline = localDeadline;
+    setLocalDeadline(newDeadline); // optimistic update — date picker reflects change immediately
+    setIsSavingDeadline(true);
+    try {
+      const updatedDetails = { ...(quotation as any).details, pricing_deadline: newDeadline };
+      const { error } = await supabase
+        .from("quotations")
+        .update({ details: updatedDetails, updated_at: new Date().toISOString() })
+        .eq("id", quotation.id);
+      if (error) throw error;
+      onUpdate({ ...quotation, details: updatedDetails, _localUpdate: true } as QuotationNew);
+      toast.success("Deadline updated");
+    } catch (err: any) {
+      setLocalDeadline(previousDeadline); // revert on failure
+      toast.error("Failed to update deadline: " + (err?.message ?? "Unknown error"));
+    } finally {
+      setIsSavingDeadline(false);
+    }
+  };
+
   // Adapter function to convert QuotationNew to Project for compatibility with Project components
   const adaptQuotationToProject = (quotation: QuotationNew): Project => {
     return {
@@ -600,7 +629,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
               color: "var(--neuron-ink-secondary)",
               cursor: "pointer",
               fontSize: "13px",
-              marginBottom: "12px",
+              marginBottom: "10px",
               padding: "0"
             }}
             onMouseEnter={(e) => {
@@ -614,17 +643,20 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
             Back to Quotations
           </button>
           
-          <h1 style={{ 
-            fontSize: "20px",
+          <h1 style={{
+            fontSize: "24px",
             fontWeight: 600,
             color: "var(--neuron-ink-primary)",
-            marginBottom: "4px"
+            margin: 0,
+            lineHeight: 1.2
           }}>
             {quotation.quotation_name || "Untitled Quotation"}
+            {quotation.quote_number && (
+              <span style={{ fontSize: "13px", fontWeight: 400, color: "var(--neuron-ink-muted)", marginLeft: "10px" }}>
+                {quotation.quote_number}
+              </span>
+            )}
           </h1>
-          <p style={{ fontSize: "13px", color: "var(--neuron-ink-muted)", margin: 0 }}>
-            {quotation.quote_number}
-          </p>
         </div>
 
         {/* Assign to — Pricing Manager only, top-right of header */}
@@ -753,23 +785,52 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
             </>
           )}
 
-          {/* Deadline chip — visible when assigned, no pending action */}
-          {canAssign && assignedToId && !pendingAssigneeId && (quotation as any).details?.pricing_deadline && (
-            <>
-              <span style={{
-                fontSize: 12,
-                color: "var(--neuron-ink-muted)",
-                background: "var(--neuron-ui-bg-subtle)",
-                border: "1px solid var(--neuron-ui-border)",
-                borderRadius: 6,
-                padding: "3px 8px",
-                whiteSpace: "nowrap",
-              }}>
-                Due: {new Date((quotation as any).details.pricing_deadline + "T00:00:00").toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
-              </span>
-              <div style={{ width: 1, height: 20, background: "var(--neuron-ui-border)" }} />
-            </>
-          )}
+          {/* Deadline — visible to all Pricing users when a deadline is set */}
+          {userDepartment === "Pricing" && !pendingAssigneeId && (() => {
+            const deadline = localDeadline;
+            if (!deadline) return null;
+            const deadlineDate = new Date(deadline + "T00:00:00");
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            const daysLeft = Math.ceil((deadlineDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+            const isUrgent = daysLeft <= 2;
+            const isOverdue = daysLeft < 0;
+            const chipColor = isOverdue
+              ? { bg: "var(--theme-status-danger-bg)", border: "var(--theme-status-danger-border)", text: "var(--theme-status-danger-fg)" }
+              : isUrgent
+              ? { bg: "var(--theme-status-warning-bg)", border: "var(--theme-status-warning-border)", text: "var(--theme-status-warning-fg)" }
+              : { bg: "var(--neuron-ui-bg-subtle)", border: "var(--neuron-ui-border)", text: "var(--neuron-ink-muted)" };
+            return (
+              <>
+                {canAssign ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 12, color: chipColor.text, whiteSpace: "nowrap", fontWeight: isUrgent ? 500 : 400 }}>
+                      {isOverdue ? "Overdue:" : "Due:"}
+                    </span>
+                    <CustomDatePicker
+                      value={deadline}
+                      onChange={handleDeadlineChange}
+                      placeholder="Pick a date"
+                      minWidth="130px"
+                    />
+                  </div>
+                ) : (
+                  <span style={{
+                    fontSize: 12,
+                    color: chipColor.text,
+                    background: chipColor.bg,
+                    border: `1px solid ${chipColor.border}`,
+                    borderRadius: 6,
+                    padding: "3px 8px",
+                    whiteSpace: "nowrap",
+                    fontWeight: isUrgent ? 500 : 400,
+                  }}>
+                    {isOverdue ? "Overdue: " : "Due: "}{deadlineDate.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
+                  </span>
+                )}
+                <div style={{ width: 1, height: 20, background: "var(--neuron-ui-border)" }} />
+              </>
+            );
+          })()}
           {/* Edit Button (Ghost Style) — hidden when locked (converted to project or contract) */}
           {!isLocked && (
             <button

@@ -28,7 +28,7 @@ type Tab = "items" | "matrix";
 
 // ==================== CONSTANTS ====================
 
-const TEAL = "#0F766E";
+const TEAL = "var(--theme-action-primary-bg)";
 
 // ==================== MAIN COMPONENT ====================
 
@@ -53,14 +53,14 @@ export function CatalogManagementPage() {
         <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: activeTab === "matrix" ? "hidden" : "visible" }}>
 
           {/* ── Tab Bar ── */}
-          <div style={{ display: "flex", alignItems: "center", borderBottom: "1px solid #E0E6E4", marginBottom: "20px" }}>
+          <div style={{ display: "flex", alignItems: "center", borderBottom: "1px solid var(--theme-border-default)", marginBottom: "20px" }}>
             <button
               onClick={() => setActiveTab("items")}
               style={{
                 display: "flex", alignItems: "center", gap: "6px",
                 padding: "10px 20px", fontSize: "13px",
                 fontWeight: activeTab === "items" ? 600 : 400,
-                color: activeTab === "items" ? TEAL : "#667085",
+                color: activeTab === "items" ? TEAL : "var(--theme-text-muted)",
                 background: "none", border: "none",
                 borderBottom: activeTab === "items" ? `2px solid ${TEAL}` : "2px solid transparent",
                 cursor: "pointer", marginBottom: "-1px",
@@ -69,7 +69,7 @@ export function CatalogManagementPage() {
               Items
             </button>
 
-            <div style={{ width: 1, height: 20, backgroundColor: "#E0E6E4", margin: "0 8px" }} />
+            <div style={{ width: 1, height: 20, backgroundColor: "var(--theme-border-default)", margin: "0 8px" }} />
 
             <button
               onClick={() => setActiveTab("matrix")}
@@ -77,7 +77,7 @@ export function CatalogManagementPage() {
                 display: "flex", alignItems: "center", gap: "6px",
                 padding: "10px 20px", fontSize: "13px",
                 fontWeight: activeTab === "matrix" ? 600 : 400,
-                color: activeTab === "matrix" ? TEAL : "#667085",
+                color: activeTab === "matrix" ? TEAL : "var(--theme-text-muted)",
                 background: "none", border: "none",
                 borderBottom: activeTab === "matrix" ? `2px solid ${TEAL}` : "2px solid transparent",
                 cursor: "pointer", marginBottom: "-1px",
@@ -433,7 +433,7 @@ function ItemsTab({
               <button
                 onClick={confirmDelete}
                 disabled={impactLoading}
-                style={{ ...saveBtnStyle, backgroundColor: "#DC2626" }}
+                style={{ ...saveBtnStyle, backgroundColor: "var(--theme-status-danger-fg)" }}
               >
                 Delete
               </button>
@@ -445,8 +445,8 @@ function ItemsTab({
       {/* Stats Bar */}
       {isLoading ? (
         <div style={{ display: "flex", gap: "16px", marginBottom: "20px" }}>
-          <div style={{ height: "13px", width: "72px", backgroundColor: "#F0F0F0", borderRadius: "4px" }} />
-          <div style={{ height: "13px", width: "72px", backgroundColor: "#F0F0F0", borderRadius: "4px" }} />
+          <div style={{ height: "13px", width: "72px", backgroundColor: "var(--theme-border-default)", borderRadius: "4px" }} />
+          <div style={{ height: "13px", width: "72px", backgroundColor: "var(--theme-border-default)", borderRadius: "4px" }} />
         </div>
       ) : (
         <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px", fontSize: "13px", color: "var(--theme-text-muted)" }}>
@@ -459,12 +459,12 @@ function ItemsTab({
               <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                 <strong style={{
                   fontWeight: 600,
-                  color: linkedPct >= 90 ? "#059669" : linkedPct >= 50 ? "#D97706" : "#DC2626",
+                  color: linkedPct >= 90 ? "var(--theme-status-success-fg)" : linkedPct >= 50 ? "var(--theme-status-warning-fg)" : "var(--theme-status-danger-fg)",
                 }}>{linkedPct}%</strong>
                 linked
                 <span
                   title="% of billing lines linked to a catalog item. Low rates mean freetext entries are bypassing the catalog."
-                  style={{ cursor: "help", color: "#C0C7CC", display: "flex", alignItems: "center" }}
+                  style={{ cursor: "help", color: "var(--theme-text-muted)", display: "flex", alignItems: "center" }}
                 >
                   <Info size={11} />
                 </span>
@@ -626,7 +626,7 @@ function ItemsTab({
             </colgroup>
             <thead>
               <tr>
-                <th style={{ ...thStyle, position: "sticky", top: 0, backgroundColor: "#F7FAF8", zIndex: 2, boxShadow: "0 1px 0 #E5E9F0" }}>
+                <th style={{ ...thStyle, position: "sticky", top: 0, backgroundColor: "var(--theme-bg-surface-subtle)", zIndex: 2, boxShadow: "0 1px 0 var(--theme-border-default)" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     {grouped && grouped.length > 0 && (
                       <button
@@ -640,7 +640,7 @@ function ItemsTab({
                     Name
                   </div>
                 </th>
-                <th style={{ ...thStyle, position: "sticky", top: 0, backgroundColor: "#F7FAF8", zIndex: 2, boxShadow: "0 1px 0 #E5E9F0", width: "56px", textAlign: "center" }}>
+                <th style={{ ...thStyle, position: "sticky", top: 0, backgroundColor: "var(--theme-bg-surface-subtle)", zIndex: 2, boxShadow: "0 1px 0 var(--theme-border-default)", width: "56px", textAlign: "center" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "4px", justifyContent: "center" }}>
                     Usage
                     <span title="Number of billing lines referencing this item" style={{ cursor: "help", color: "var(--theme-text-muted)", display: "flex" }}>
@@ -648,7 +648,7 @@ function ItemsTab({
                     </span>
                   </div>
                 </th>
-                <th style={{ ...thStyle, position: "sticky", top: 0, backgroundColor: "#F7FAF8", zIndex: 2, boxShadow: "0 1px 0 #E5E9F0", width: "44px" }} />
+                <th style={{ ...thStyle, position: "sticky", top: 0, backgroundColor: "var(--theme-bg-surface-subtle)", zIndex: 2, boxShadow: "0 1px 0 var(--theme-border-default)", width: "44px" }} />
               </tr>
             </thead>
             <tbody>
@@ -664,7 +664,7 @@ function ItemsTab({
                           position: "sticky",
                           top: "43px",
                           zIndex: 1,
-                          backgroundColor: "#F0F4F2",
+                          backgroundColor: "var(--theme-bg-surface-tint)",
                           padding: "6px 16px",
                           borderBottom: "1px solid var(--theme-border-default)",
                         }}
@@ -797,14 +797,14 @@ function ItemViewRow({
     <tr
       style={{
         borderBottom: "1px solid var(--theme-border-default)",
-        backgroundColor: hovered ? "#F1F6F4" : "transparent",
+        backgroundColor: hovered ? "var(--theme-state-hover)" : "transparent",
         transition: "background-color 150ms",
       }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
       <td style={{ ...tdStyle, overflow: "hidden", maxWidth: 0, paddingLeft: indent ? "36px" : "16px" }}>
-        <div style={{ fontWeight: 500, color: "#2C3E38", fontSize: "13px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <div style={{ fontWeight: 500, color: "var(--theme-text-primary)", fontSize: "13px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {item.name}
         </div>
         {!indent && (item as any).category_name && (
@@ -846,7 +846,7 @@ function ItemEditRow({
   ];
 
   return (
-    <tr style={{ borderBottom: "1px solid var(--theme-border-default)", backgroundColor: "#F7FAF8" }}>
+    <tr style={{ borderBottom: "1px solid var(--theme-border-default)", backgroundColor: "var(--theme-bg-surface-subtle)" }}>
       <td style={{ ...tdStyle, overflow: "hidden" }}>
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
           <input
@@ -940,7 +940,7 @@ function RowActionsMenu({
             background: "var(--theme-bg-surface)",
             border: "1px solid var(--theme-border-default)",
             borderRadius: "8px",
-            boxShadow: "0 4px 16px rgba(18,51,43,0.10)",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
             zIndex: 9999,
             overflow: "hidden",
             padding: "4px 0",
@@ -951,7 +951,7 @@ function RowActionsMenu({
             style={{
               display: "flex", alignItems: "center", gap: "8px",
               width: "100%", padding: "8px 12px",
-              fontSize: "13px", color: "#12332B",
+              fontSize: "13px", color: "var(--theme-text-primary)",
               background: "none", border: "none", cursor: "pointer", textAlign: "left",
             }}
             onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--theme-bg-page)")}
@@ -965,7 +965,7 @@ function RowActionsMenu({
             style={{
               display: "flex", alignItems: "center", gap: "8px",
               width: "100%", padding: "8px 12px",
-              fontSize: "13px", color: "#DC2626",
+              fontSize: "13px", color: "var(--theme-status-danger-fg)",
               background: "none", border: "none", cursor: "pointer", textAlign: "left",
             }}
             onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--theme-bg-page)")}
@@ -1033,7 +1033,7 @@ function CategoryGroupMenu({
             background: "var(--theme-bg-surface)",
             border: "1px solid var(--theme-border-default)",
             borderRadius: "8px",
-            boxShadow: "0 4px 16px rgba(18,51,43,0.10)",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
             zIndex: 9999,
             overflow: "hidden",
             padding: "4px 0",
@@ -1050,8 +1050,8 @@ function CategoryGroupMenu({
           <div style={{ height: "1px", backgroundColor: "var(--theme-bg-surface-subtle)" }} />
           <button
             onClick={() => { onDelete(); setOpen(false); }}
-            style={{ display: "flex", alignItems: "center", gap: "8px", width: "100%", padding: "8px 12px", fontSize: "12px", color: (category.item_count ?? 0) > 0 ? "#C0C7CC" : "var(--theme-status-danger-fg)", background: "none", border: "none", cursor: (category.item_count ?? 0) > 0 ? "not-allowed" : "pointer", textAlign: "left" }}
-            onMouseEnter={e => { if ((category.item_count ?? 0) === 0) e.currentTarget.style.backgroundColor = "#FFF5F5"; }}
+            style={{ display: "flex", alignItems: "center", gap: "8px", width: "100%", padding: "8px 12px", fontSize: "12px", color: (category.item_count ?? 0) > 0 ? "var(--theme-text-muted)" : "var(--theme-status-danger-fg)", background: "none", border: "none", cursor: (category.item_count ?? 0) > 0 ? "not-allowed" : "pointer", textAlign: "left" }}
+            onMouseEnter={e => { if ((category.item_count ?? 0) === 0) e.currentTarget.style.backgroundColor = "var(--theme-status-danger-bg)"; }}
             onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
           >
             <X size={12} /> Delete category
@@ -1189,7 +1189,7 @@ function CategoryFilterPopover({
             background: "var(--theme-bg-surface)",
             border: "1px solid var(--theme-border-default)",
             borderRadius: "10px",
-            boxShadow: "0 8px 24px rgba(18,51,43,0.12)",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
             zIndex: 9999, overflow: "hidden",
           }}
         >
@@ -1234,13 +1234,13 @@ function CategoryFilterPopover({
                   <>
                     <span
                       onClick={() => { onFilterChange(cat.id); setOpen(false); }}
-                      style={{ flex: 1, fontSize: "13px", cursor: "pointer", fontWeight: filterValue === cat.id ? 600 : 400, color: filterValue === cat.id ? TEAL : "#2C3E38" }}
+                      style={{ flex: 1, fontSize: "13px", cursor: "pointer", fontWeight: filterValue === cat.id ? 600 : 400, color: filterValue === cat.id ? TEAL : "var(--theme-text-primary)" }}
                     >
                       {cat.name}
                     </span>
-                    <span style={{ fontSize: "11px", color: "#C0C7CC", minWidth: 18, textAlign: "right" }}>{cat.item_count ?? 0}</span>
-                    <button onClick={e => { e.stopPropagation(); setRenamingId(cat.id); setRenameValue(cat.name); }} style={{ ...iconBtnStyle, color: "#C0C7CC" }} title="Rename"><Pencil size={12} /></button>
-                    <button onClick={e => { e.stopPropagation(); handleDelete(cat); }} style={{ ...iconBtnStyle, color: (cat.item_count ?? 0) > 0 ? "#E5E7EB" : "#DC2626" }} title={(cat.item_count ?? 0) > 0 ? `${cat.item_count} items — reassign first` : "Delete"}><X size={12} /></button>
+                    <span style={{ fontSize: "11px", color: "var(--theme-text-muted)", minWidth: 18, textAlign: "right" }}>{cat.item_count ?? 0}</span>
+                    <button onClick={e => { e.stopPropagation(); setRenamingId(cat.id); setRenameValue(cat.name); }} style={{ ...iconBtnStyle, color: "var(--theme-text-muted)" }} title="Rename"><Pencil size={12} /></button>
+                    <button onClick={e => { e.stopPropagation(); handleDelete(cat); }} style={{ ...iconBtnStyle, color: (cat.item_count ?? 0) > 0 ? "var(--theme-border-default)" : "var(--theme-status-danger-fg)" }} title={(cat.item_count ?? 0) > 0 ? `${cat.item_count} items — reassign first` : "Delete"}><X size={12} /></button>
                   </>
                 )}
               </div>
@@ -1307,9 +1307,9 @@ const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "6px 8px",
   fontSize: "13px",
-  border: "1px solid #E0E6E4",
+  border: "1px solid var(--theme-border-default)",
   borderRadius: "6px",
-  color: "#2C3E38",
+  color: "var(--theme-text-primary)",
   outline: "none",
   backgroundColor: "var(--theme-bg-surface)",
 };
@@ -1330,7 +1330,7 @@ const cancelBtnStyle: React.CSSProperties = {
   fontSize: "12px",
   fontWeight: 500,
   borderRadius: "6px",
-  border: "1px solid #E0E6E4",
+  border: "1px solid var(--theme-border-default)",
   backgroundColor: "var(--theme-bg-surface)",
   color: "var(--theme-text-muted)",
   cursor: "pointer",
@@ -1354,5 +1354,5 @@ const impactChipStyle: React.CSSProperties = {
   fontWeight: 500,
   backgroundColor: "var(--theme-status-warning-bg)",
   color: "var(--theme-status-warning-fg)",
-  border: "1px solid #FDE68A",
+  border: "1px solid var(--theme-status-warning-border)",
 };

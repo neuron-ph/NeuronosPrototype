@@ -64,7 +64,7 @@ export function AddCategoryModal({ onClose, onAdd }: AddCategoryModalProps) {
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          backgroundColor: "var(--theme-bg-page)"
+          backgroundColor: "var(--theme-bg-surface-subtle)"
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <FolderPlus size={18} style={{ color: "var(--neuron-brand-green)" }} />

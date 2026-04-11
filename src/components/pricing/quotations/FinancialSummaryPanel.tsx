@@ -44,7 +44,7 @@ export function FinancialSummaryPanel({
       <div style={{
         padding: "12px 16px",
         borderBottom: "1px solid var(--neuron-ui-border)",
-        backgroundColor: "var(--theme-bg-page)"
+        backgroundColor: "var(--theme-bg-surface-subtle)"
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <Calculator size={16} style={{ color: "var(--neuron-brand-green)" }} />
@@ -69,7 +69,7 @@ export function FinancialSummaryPanel({
             justifyContent: "space-between",
             alignItems: "center",
             padding: "10px 12px",
-            backgroundColor: "var(--theme-bg-page)",
+            backgroundColor: "var(--theme-bg-surface-subtle)",
             borderRadius: "6px"
           }}>
             <span style={{
@@ -94,7 +94,7 @@ export function FinancialSummaryPanel({
             justifyContent: "space-between",
             alignItems: "center",
             padding: "10px 12px",
-            backgroundColor: "var(--theme-bg-page)",
+            backgroundColor: "var(--theme-bg-surface-subtle)",
             borderRadius: "6px"
           }}>
             <span style={{
@@ -169,7 +169,7 @@ export function FinancialSummaryPanel({
           {/* Other Charges */}
           <div style={{
             padding: "12px",
-            backgroundColor: "var(--theme-bg-page)",
+            backgroundColor: "var(--theme-bg-surface-subtle)",
             borderRadius: "6px"
           }}>
             <label style={{
@@ -239,14 +239,14 @@ export function FinancialSummaryPanel({
           <div style={{
             padding: "12px 16px",
             backgroundColor: "var(--theme-bg-surface)", 
-            border: "1px solid #E0E6E4", // Subtle grey
+            border: "1px solid var(--theme-border-default)", // Subtle grey
             borderRadius: "6px"
           }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
               <div style={{
                 fontSize: "11px",
                 fontWeight: 600,
-                color: "#1E40AF",
+                color: "var(--neuron-semantic-info)",
                 textTransform: "uppercase",
                 letterSpacing: "0.5px"
               }}>
@@ -262,10 +262,10 @@ export function FinancialSummaryPanel({
                     width: "50px",
                     padding: "2px 4px",
                     fontSize: "11px",
-                    border: "1px solid #E0E6E4",
+                    border: "1px solid var(--theme-border-default)",
                     borderRadius: "4px",
                     textAlign: "right",
-                    color: "#1E40AF",
+                    color: "var(--neuron-semantic-info)",
                     fontWeight: 600
                   }}
                 />
@@ -274,7 +274,7 @@ export function FinancialSummaryPanel({
             <div style={{
               fontSize: "20px",
               fontWeight: 700,
-              color: "#1E40AF",
+              color: "var(--neuron-semantic-info)",
               lineHeight: 1
             }}>
               $ {formatAmount(calculateApproxUSD())}
@@ -287,7 +287,7 @@ export function FinancialSummaryPanel({
           {/* Breakdown Info */}
           <div style={{
             padding: "12px",
-            backgroundColor: "var(--theme-bg-page)",
+            backgroundColor: "var(--theme-bg-surface-subtle)",
             borderRadius: "6px",
             fontSize: "11px",
             color: "var(--neuron-ink-muted)"

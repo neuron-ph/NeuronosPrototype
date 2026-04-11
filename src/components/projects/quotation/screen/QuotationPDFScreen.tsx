@@ -1,13 +1,14 @@
-import React, { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { ArrowLeft, Printer, Save, ZoomIn, ZoomOut, Maximize, User, Layout, FileText } from "lucide-react";
-import type { Project } from "../../../../types/pricing";
-import { QuotationDocument } from "../QuotationDocument";
+import React, { useState } from "react";
+import { Save, Download, User, Layout, FileText, Settings, UserCheck, Calendar } from "lucide-react";
+import type { Project, QuotationNew } from "../../../../types/pricing";
 import { useQuotationDocumentState } from "./useQuotationDocumentState";
+import { useCompanySettings } from "../../../../hooks/useCompanySettings";
+import { QuotationPDFDocument, downloadQuotationPDF } from "../../../pricing/QuotationPDFRenderer";
 import { SignatoryControl } from "./controls/SignatoryControl";
 import { DisplayOptionsControl } from "./controls/DisplayOptionsControl";
 import { NotesControl } from "./controls/NotesControl";
 import { CollapsibleSection } from "./controls/CollapsibleSection";
+import { PDFViewer } from "@react-pdf/renderer";
 
 interface QuotationPDFScreenProps {
   project: Project;
@@ -17,266 +18,183 @@ interface QuotationPDFScreenProps {
   isEmbedded?: boolean;
 }
 
-// A4 Dimensions in pixels at 96 DPI
-const A4_WIDTH_PX = 794; // 210mm
-const A4_HEIGHT_PX = 1123; // 297mm
-
 export function QuotationPDFScreen({ project, onClose, onSave, currentUser, isEmbedded = false }: QuotationPDFScreenProps) {
-  const { options, updateSignatory, toggleDisplay, setCustomNotes } = useQuotationDocumentState(project, currentUser);
+  const {
+    options,
+    updateSignatory,
+    updateAddressedTo,
+    setValidityOverride,
+    setPaymentTerms,
+    toggleDisplay,
+    setCustomNotes,
+  } = useQuotationDocumentState(project, currentUser);
+
+  const { settings: companySettings } = useCompanySettings();
   const [isSaving, setIsSaving] = useState(false);
-  const [scale, setScale] = useState(0.85);
-  const [autoScale, setAutoScale] = useState(true);
-  
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
 
-  // Auto-scale logic
-  useEffect(() => {
-    if (!autoScale || !containerRef.current) return;
-
-    const calculateScale = () => {
-      if (!containerRef.current) return;
-      const { clientWidth, clientHeight } = containerRef.current;
-      
-      // Target margins
-      const xMargin = 64; // 32px each side
-      const yMargin = 120; // Increased to account for floating controls
-      
-      const availableWidth = clientWidth - xMargin;
-      const availableHeight = clientHeight - yMargin;
-      
-      // Calculate fit scales
-      const scaleX = availableWidth / A4_WIDTH_PX;
-      const scaleY = availableHeight / A4_HEIGHT_PX;
-      
-      // Choose the smaller scale to ensure it fits, but don't go too small
-      const fitScale = Math.min(scaleX, scaleY);
-      
-      // Clamp
-      const finalScale = Math.max(0.4, Math.min(fitScale, 1.1));
-      
-      setScale(finalScale);
-    };
-
-    const observer = new ResizeObserver(calculateScale);
-    observer.observe(containerRef.current);
-    
-    // Initial calculation
-    calculateScale();
-
-    return () => observer.disconnect();
-  }, [autoScale]);
-
-  const handlePrint = () => {
-    window.print();
-  };
+  // Extract the quotation from the project adapter
+  const quotation: QuotationNew = (project.quotation || project) as any;
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-        await onSave({
-            prepared_by: options.signatories.prepared_by.name,
-            prepared_by_title: options.signatories.prepared_by.title,
-            approved_by: options.signatories.approved_by.name,
-            // approved_by_title: options.signatories.approved_by.title, // Not supported by DB schema yet
-            notes: options.custom_notes
-        });
+      await onSave({
+        prepared_by: options.signatories.prepared_by.name,
+        prepared_by_title: options.signatories.prepared_by.title,
+        approved_by: options.signatories.approved_by.name,
+        approved_by_title: options.signatories.approved_by.title,
+        addressed_to_name: options.addressed_to.name,
+        addressed_to_title: options.addressed_to.title,
+        payment_terms: options.payment_terms,
+        custom_notes: options.custom_notes,
+        valid_until: options.validity_override || undefined,
+      });
     } finally {
-        setIsSaving(false);
+      setIsSaving(false);
     }
   };
 
-  const zoomIn = () => {
-    setAutoScale(false);
-    setScale(prev => Math.min(prev + 0.1, 1.5));
+  const handleDownload = async () => {
+    setIsDownloading(true);
+    try {
+      await downloadQuotationPDF(quotation, options, companySettings);
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
-  const zoomOut = () => {
-    setAutoScale(false);
-    setScale(prev => Math.max(prev - 0.1, 0.4));
-  };
-  
-  const toggleFit = () => {
-    setAutoScale(true); // Will trigger useEffect to recalculate
-  };
+  // Input class for consistency
+  const inputCls = "w-full px-3.5 py-2 text-sm border border-[var(--theme-border-default)] rounded-lg focus:border-[var(--theme-action-primary-bg)] focus:ring-1 focus:ring-[var(--theme-action-primary-bg)] outline-none transition-all placeholder:text-[var(--theme-text-muted)]";
 
   return (
     <div className={`flex flex-col h-full w-full bg-[var(--theme-bg-surface-subtle)] overflow-hidden ${isEmbedded ? 'rounded-lg border border-[var(--theme-border-default)]' : ''}`}>
-      {/* Header - Styled like a Module Header - Only show if not embedded */}
-      {!isEmbedded && (
-        <div className="h-16 bg-[var(--theme-bg-surface)] border-b border-[var(--theme-border-default)] px-6 flex items-center justify-between shrink-0 z-20">
-            <div className="flex items-center gap-4">
-            <button 
-                onClick={onClose}
-                className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-[var(--theme-bg-surface-subtle)] text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)] transition-all"
-                title="Close Studio"
-            >
-                <ArrowLeft size={20} />
-            </button>
-            
-            <div>
-                <h2 className="text-xl font-bold text-[var(--theme-text-primary)] tracking-tight">Quotation PDF Studio</h2>
-            </div>
-            </div>
-        </div>
-      )}
-
       {/* Main Workspace */}
       <div className="flex-1 flex overflow-hidden">
-        
-        {/* LEFT: Live Preview Stage */}
-        <div 
-            ref={containerRef}
-            className="flex-1 bg-[var(--theme-bg-surface-subtle)] overflow-hidden flex items-center justify-center relative p-8"
-        >
-            {/* Scrollable Area */}
-            <div className="absolute inset-0 overflow-auto flex items-center justify-center p-8 pb-32">
-                {/* Print Portal Scope */}
-                <div className="print-portal-root flex flex-col items-center">
-                    {/* The Wrapper */}
-                    <div 
-                        style={{ 
-                            width: A4_WIDTH_PX * scale,
-                            height: A4_HEIGHT_PX * scale,
-                            transition: 'width 0.2s, height 0.2s',
-                            position: 'relative'
-                        }}
-                    >
-                        {/* The "Paper" Container */}
-                        <div 
-                            className="bg-[var(--theme-bg-surface)] origin-top-left" 
-                            style={{ 
-                                width: '210mm', 
-                                minHeight: '297mm',
-                                transform: `scale(${scale})`,
-                                position: 'absolute',
-                                top: 0,
-                                left: 0,
-                                // Stronger, layered shadow for "floating on desk" effect
-                                boxShadow: '0 10px 30px -5px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0,0,0,0.02)' 
-                            }}
-                        >
-                            <QuotationDocument 
-                                project={project} 
-                                mode="preview" 
-                                currentUser={currentUser} 
-                                options={options}
-                            />
-                        </div>
-                    </div>
-                </div>
-            </div>
 
-            {/* Floating Zoom Controls */}
-            <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-[var(--theme-bg-surface)]/90 backdrop-blur-sm border border-[var(--theme-border-default)] shadow-lg rounded-full px-4 py-2 flex items-center gap-4 z-30 transition-all hover:bg-[var(--theme-bg-surface)] hover:shadow-xl">
-                 <button onClick={zoomOut} className="p-1.5 hover:bg-[var(--theme-bg-surface-subtle)] rounded-full text-[var(--theme-text-secondary)] transition-all" title="Zoom Out">
-                    <ZoomOut size={18} />
-                 </button>
-                 <span className="text-sm font-medium text-[var(--theme-text-secondary)] w-12 text-center select-none tabular-nums">{Math.round(scale * 100)}%</span>
-                 <button onClick={zoomIn} className="p-1.5 hover:bg-[var(--theme-bg-surface-subtle)] rounded-full text-[var(--theme-text-secondary)] transition-all" title="Zoom In">
-                    <ZoomIn size={18} />
-                 </button>
-                 <div className="w-px h-4 bg-[var(--theme-bg-surface-tint)]" />
-                 <button 
-                    onClick={toggleFit} 
-                    className={`flex items-center gap-2 px-2 py-1 rounded-md text-sm font-medium transition-all ${autoScale ? 'text-[var(--theme-action-primary-bg)] bg-[#F0FDFA]' : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-surface-subtle)]'}`}
-                    title="Fit to Screen"
-                 >
-                    <Maximize size={16} />
-                    <span>Fit</span>
-                 </button>
-            </div>
+        {/* LEFT: PDF Viewer (live preview = actual PDF output) */}
+        <div className="flex-1 bg-[var(--theme-bg-surface-subtle)] overflow-hidden relative">
+          <PDFViewer
+            width="100%"
+            height="100%"
+            showToolbar={false}
+            style={{ border: "none" }}
+          >
+            <QuotationPDFDocument
+              quotation={quotation}
+              options={options}
+              companySettings={companySettings}
+            />
+          </PDFViewer>
         </div>
 
         {/* RIGHT: Document Controls Sidebar */}
         <div className="w-[360px] bg-[var(--theme-bg-surface)] border-l border-[var(--theme-border-default)] flex flex-col overflow-hidden shrink-0 z-20 shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.02)]">
-            
-            {/* Scrollable Content (No padding on container to allow full-width headers) */}
-            <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent">
-                <CollapsibleSection title="Signatories" icon={<User size={18} />} defaultOpen={true}>
-                    <SignatoryControl 
-                        preparedBy={options.signatories.prepared_by}
-                        approvedBy={options.signatories.approved_by}
-                        onUpdate={updateSignatory}
-                    />
-                </CollapsibleSection>
-                
-                <CollapsibleSection title="Display Options" icon={<Layout size={18} />} defaultOpen={true}>
-                    <DisplayOptionsControl 
-                        options={options.display}
-                        onToggle={toggleDisplay}
-                    />
-                </CollapsibleSection>
 
-                <CollapsibleSection title="Custom Notes" icon={<FileText size={18} />} defaultOpen={false}>
-                    <NotesControl 
-                        value={options.custom_notes || ""}
-                        onChange={setCustomNotes}
-                    />
-                </CollapsibleSection>
-            </div>
+          {/* Scrollable Content */}
+          <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent">
 
-            {/* Sidebar Footer - Actions */}
-            <div className="p-6 border-t border-[var(--theme-border-default)] bg-[var(--theme-bg-surface)] shrink-0 flex flex-col gap-3 shadow-[0_-4px_15px_-3px_rgba(0,0,0,0.02)] z-30">
-                 <button 
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    className="flex items-center justify-center gap-2 w-full px-4 py-3 text-sm font-bold text-[var(--theme-text-primary)] bg-[var(--theme-bg-surface)] border border-[var(--theme-border-default)] rounded-lg hover:bg-[var(--theme-bg-surface-subtle)] hover:border-[var(--theme-border-default)] transition-all disabled:opacity-50 shadow-sm"
-                  >
-                    {isSaving ? (
-                        <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                        <Save size={18} />
-                    )}
-                    {isSaving ? "Saving..." : "Save Changes"}
-                  </button>
-                  
-                  <button 
-                    onClick={handlePrint}
-                    className="flex items-center justify-center gap-2 w-full px-4 py-3 text-sm font-bold text-white bg-[var(--theme-action-primary-bg)] rounded-lg hover:bg-[#0D625D] hover:shadow-md transition-all shadow-sm"
-                  >
-                    <Printer size={18} />
-                    Print PDF
-                  </button>
-            </div>
+            {/* Signatories */}
+            <CollapsibleSection title="Signatories" icon={<User size={18} />} defaultOpen={true}>
+              <SignatoryControl
+                preparedBy={options.signatories.prepared_by}
+                approvedBy={options.signatories.approved_by}
+                onUpdate={updateSignatory}
+              />
+            </CollapsibleSection>
+
+            {/* Addressed To */}
+            <CollapsibleSection title="Addressed To" icon={<UserCheck size={18} />} defaultOpen={true}>
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={options.addressed_to.name}
+                  onChange={(e) => updateAddressedTo("name", e.target.value)}
+                  className={inputCls}
+                  placeholder="Contact person name"
+                />
+                <input
+                  type="text"
+                  value={options.addressed_to.title}
+                  onChange={(e) => updateAddressedTo("title", e.target.value)}
+                  className={`${inputCls} bg-[var(--theme-bg-surface-subtle)]`}
+                  placeholder="Position / title"
+                />
+              </div>
+            </CollapsibleSection>
+
+            {/* Quote Settings */}
+            <CollapsibleSection title="Quote Settings" icon={<Settings size={18} />} defaultOpen={true}>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-semibold text-[var(--theme-text-secondary)] uppercase tracking-wider mb-1.5 block">Valid Until</label>
+                  <input
+                    type="date"
+                    value={options.validity_override || ""}
+                    onChange={(e) => setValidityOverride(e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-[var(--theme-text-secondary)] uppercase tracking-wider mb-1.5 block">Payment Terms</label>
+                  <input
+                    type="text"
+                    value={options.payment_terms}
+                    onChange={(e) => setPaymentTerms(e.target.value)}
+                    className={inputCls}
+                    placeholder="e.g. Net 30, COD"
+                  />
+                </div>
+              </div>
+            </CollapsibleSection>
+
+            {/* Display Options */}
+            <CollapsibleSection title="Display Options" icon={<Layout size={18} />} defaultOpen={true}>
+              <DisplayOptionsControl
+                options={options.display}
+                onToggle={toggleDisplay}
+              />
+            </CollapsibleSection>
+
+            {/* Client Note */}
+            <CollapsibleSection title="Client Note" icon={<FileText size={18} />} defaultOpen={false}>
+              <NotesControl
+                value={options.custom_notes || ""}
+                onChange={setCustomNotes}
+              />
+            </CollapsibleSection>
+          </div>
+
+          {/* Sidebar Footer - Actions */}
+          <div className="p-6 border-t border-[var(--theme-border-default)] bg-[var(--theme-bg-surface)] shrink-0 flex flex-col gap-3 shadow-[0_-4px_15px_-3px_rgba(0,0,0,0.02)] z-30">
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="flex items-center justify-center gap-2 w-full px-4 py-3 text-sm font-bold text-[var(--theme-text-primary)] bg-[var(--theme-bg-surface)] border border-[var(--theme-border-default)] rounded-lg hover:bg-[var(--theme-bg-surface-subtle)] transition-all disabled:opacity-50 shadow-sm"
+            >
+              {isSaving ? (
+                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Save size={18} />
+              )}
+              {isSaving ? "Saving..." : "Save Changes"}
+            </button>
+
+            <button
+              onClick={handleDownload}
+              disabled={isDownloading}
+              className="flex items-center justify-center gap-2 w-full px-4 py-3 text-sm font-bold text-white bg-[var(--theme-action-primary-bg)] rounded-lg hover:bg-[#0D625D] hover:shadow-md transition-all shadow-sm disabled:opacity-50"
+            >
+              {isDownloading ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Download size={18} />
+              )}
+              {isDownloading ? "Generating PDF..." : "Download PDF"}
+            </button>
+          </div>
         </div>
       </div>
-
-      {/* Hidden Print Style Setup */}
-      <style>
-        {`
-          @media print {
-            @page { size: A4; margin: 0; }
-            body { margin: 0 !important; padding: 0 !important; background: white !important; }
-            /* Hide the main app root */
-            #root, .app-root, body > div:not(.print-portal-container) { display: none !important; }
-            
-            /* Ensure portal is visible and takes over */
-            .print-portal-container { 
-                display: block !important; 
-                position: absolute; 
-                top: 0; 
-                left: 0; 
-                width: 100%; 
-                height: 100%; 
-                z-index: 9999; 
-                background: white;
-            }
-          }
-        `}
-      </style>
-
-      {/* Actual Print Container (Teleported to Body) */}
-      {createPortal(
-        <div className="print-portal-container hidden">
-           <QuotationDocument 
-              project={project} 
-              mode="print" 
-              currentUser={currentUser} 
-              options={options}
-           />
-        </div>,
-        document.body
-      )}
     </div>
   );
 }

@@ -231,7 +231,7 @@ function BreakdownTable({
         </h3>
       </div>
       <table className="w-full">
-        <thead style={{ background: "var(--neuron-pill-inactive-bg)", borderBottom: "1px solid var(--theme-border-default)" }}>
+        <thead style={{ background: "var(--theme-bg-surface)", borderBottom: "1px solid var(--theme-border-default)" }}>
           <tr>
             <th
               className="px-5 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider"

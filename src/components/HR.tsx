@@ -381,7 +381,7 @@ export function HR({ userRole }: HRProps) {
                 <div className="flex-1 p-6">
                   <div className="border border-[var(--theme-border-default)] rounded-lg overflow-hidden">
                     <table className="min-w-full divide-y divide-[var(--neuron-ui-muted)]">
-                      <thead className="bg-[var(--theme-bg-page)]">
+                      <thead className="bg-[var(--theme-bg-surface)]">
                         <tr>
                           <th
                             className="px-4 py-3 text-left text-[11px] text-[var(--theme-text-primary)] uppercase border-r border-[var(--theme-border-default)]"
