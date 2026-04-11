@@ -8,7 +8,7 @@ interface NeuronLogoProps {
 export function NeuronLogo({
   height = 24,
   className = "",
-  wordmarkClassName = "fill-[#12332B]",
+  wordmarkClassName = "fill-[var(--theme-text-primary)]",
   onClick,
 }: NeuronLogoProps) {
   // Aspect ratio of the original SVG: 2804 × 598
