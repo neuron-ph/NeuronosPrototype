@@ -280,7 +280,7 @@ export function FileCabinet({ isOpen, onLink, onClose, alreadyLinked }: FileCabi
           color: selected.length > 0 ? "#FFFFFF" : "var(--theme-text-muted)",
           fontSize: 12, fontWeight: 600,
           cursor: selected.length > 0 ? "pointer" : "not-allowed",
-          transition: "all 120ms ease",
+          transition: "color 120ms ease, border-color 120ms ease, background-color 120ms ease",
         }}
       >
         <Link2 size={12} />
@@ -310,7 +310,7 @@ export function FileCabinet({ isOpen, onLink, onClose, alreadyLinked }: FileCabi
                   fontSize: 13,
                   fontWeight: isActive ? 600 : 400,
                   cursor: "pointer",
-                  transition: "all 120ms ease",
+                  transition: "color 120ms ease, border-color 120ms ease, background-color 120ms ease",
                   borderRight: isActive ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
                   textAlign: "left",
                 }}
@@ -343,7 +343,7 @@ export function FileCabinet({ isOpen, onLink, onClose, alreadyLinked }: FileCabi
                     fontSize: 12,
                     fontWeight: isActive ? 600 : 400,
                     cursor: "pointer",
-                    transition: "all 120ms ease",
+                    transition: "color 120ms ease, border-color 120ms ease, background-color 120ms ease",
                   }}
                   onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)"; }}
                   onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = "transparent"; }}
@@ -435,7 +435,7 @@ export function FileCabinet({ isOpen, onLink, onClose, alreadyLinked }: FileCabi
                     border: `1.5px solid ${linked ? "var(--neuron-ui-muted)" : sel ? "var(--theme-action-primary-bg)" : "var(--neuron-ui-muted)"}`,
                     backgroundColor: linked ? "var(--neuron-pill-inactive-bg)" : sel ? "var(--theme-action-primary-bg)" : "transparent",
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    transition: "all 120ms ease",
+                    transition: "color 120ms ease, border-color 120ms ease, background-color 120ms ease",
                   }}>
                     {(sel || linked) && <Check size={10} style={{ color: linked ? "var(--theme-text-muted)" : "#FFFFFF" }} strokeWidth={2.5} />}
                   </div>

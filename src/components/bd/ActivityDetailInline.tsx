@@ -1,6 +1,6 @@
 import { supabase } from '../../utils/supabase/client';
 import { ArrowLeft, User, Building2, Calendar, MessageSquare, Upload, Paperclip, Send, Trash2, FileText, Download } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import type { Activity, Contact, Customer } from "../../types/bd";
 import { toast } from "../ui/toast-utils";
 
@@ -40,6 +40,34 @@ export function ActivityDetailInline({
   const [newComment, setNewComment] = useState("");
   const [comments, setComments] = useState<Comment[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>(activity.attachments || []);
+
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [showTopScrollFade, setShowTopScrollFade] = useState(false);
+  const [showBottomScrollFade, setShowBottomScrollFade] = useState(false);
+
+  const updateScrollFade = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) {
+      setShowTopScrollFade(false);
+      setShowBottomScrollFade(false);
+      return;
+    }
+    const canScroll = el.scrollHeight > el.clientHeight + 1;
+    setShowTopScrollFade(canScroll && el.scrollTop > 8);
+    setShowBottomScrollFade(canScroll && el.scrollTop + el.clientHeight < el.scrollHeight - 2);
+  }, []);
+
+  const handleScroll = useCallback(() => updateScrollFade(), [updateScrollFade]);
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(updateScrollFade);
+    const onResize = () => updateScrollFade();
+    window.addEventListener("resize", onResize);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [updateScrollFade]);
 
   // Update attachments if activity prop changes
   useEffect(() => {
@@ -128,7 +156,12 @@ export function ActivityDetailInline({
       </div>
 
       {/* Content - Scrollable */}
-      <div className="flex-1 overflow-auto space-y-4">
+      <div className="relative flex-1 overflow-hidden">
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="absolute inset-0 overflow-y-auto scrollbar-hide space-y-4"
+        >
         {/* Activity Type & Date */}
         <div 
           className="rounded-lg p-4"
@@ -490,6 +523,25 @@ export function ActivityDetailInline({
             </div>
           </div>
         </div>
+        </div>
+        {showTopScrollFade && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute top-0 left-0 right-0 h-8"
+            style={{
+              background: "linear-gradient(to top, transparent, var(--theme-bg-surface) 88%)",
+            }}
+          />
+        )}
+        {showBottomScrollFade && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute bottom-0 left-0 right-0 h-12"
+            style={{
+              background: "linear-gradient(to bottom, transparent, var(--theme-bg-surface) 78%)",
+            }}
+          />
+        )}
       </div>
     </div>
   );

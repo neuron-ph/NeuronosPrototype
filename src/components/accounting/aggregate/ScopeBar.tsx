@@ -91,10 +91,10 @@ export function ScopeBar({ scope, onScopeChange, standalone }: ScopeBarProps) {
           style={{
             border: standalone ? "1px solid var(--theme-border-default)" : "none",
             color: "var(--theme-text-primary)",
-            backgroundColor: open ? "#F0FDFA" : standalone ? "#FFFFFF" : "transparent",
+            backgroundColor: open ? "var(--theme-status-success-bg)" : standalone ? "var(--theme-bg-surface)" : "transparent",
           }}
         >
-          <Calendar size={14} style={{ color: open ? "#0F766E" : "#667085" }} />
+          <Calendar size={14} style={{ color: open ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)" }} />
           <span>{getPresetLabel(scope.preset)}</span>
           <ChevronDown
             size={12}
@@ -120,7 +120,7 @@ export function ScopeBar({ scope, onScopeChange, standalone }: ScopeBarProps) {
                   onClick={() => handlePresetClick(p.value)}
                   className="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] transition-colors hover:bg-[var(--theme-bg-surface-subtle)]"
                   style={{
-                    color: isActive ? "#0F766E" : "var(--neuron-ink-primary)",
+                    color: isActive ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-primary)",
                     fontWeight: isActive ? 600 : 400,
                   }}
                 >

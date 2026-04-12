@@ -46,6 +46,7 @@ export interface UniversalPricingRowProps {
   };
   customActions?: React.ReactNode;
   serviceType?: string; // For CatalogItemCombobox (reserved for future smart-sort)
+  categoryId?: string; // Filters combobox to items in this catalog category
 }
 
 export function UniversalPricingRow({
@@ -62,6 +63,7 @@ export function UniversalPricingRow({
   handlers,
   customActions,
   serviceType,
+  categoryId,
 }: UniversalPricingRowProps) {
   const { simpleMode, showCost, showMarkup, showTax, showForex, priceEditable, showPHPConversion } = config;
   const isViewMode = mode === "view";
@@ -143,6 +145,8 @@ export function UniversalPricingRow({
               value={data.description}
               catalogItemId={data.catalog_item_id}
               serviceType={serviceType}
+              side="revenue"
+              categoryId={categoryId}
               onChange={(description, catalogItemId) => {
                 handleFieldChange('description', description);
                 if (catalogItemId !== undefined) {
@@ -518,7 +522,6 @@ export function UniversalPricingRow({
               value={data.service || data.service_tag || ""}
               onChange={(value) => handleFieldChange('service', value)}
               options={[
-                { value: "", label: "General" },
                 { value: "Forwarding", label: "Forwarding" },
                 { value: "Brokerage", label: "Brokerage" },
                 { value: "Trucking", label: "Trucking" },

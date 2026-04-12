@@ -143,12 +143,27 @@ const CELL_MIN_WIDTH = 110;
 export function ChargeExpenseMatrix() {
   const [period, setPeriod] = useState(getCurrentPeriod);
   const [serviceType, setServiceType] = useState("All");
+  const [matrixView, setMatrixView] = useState<"revenue" | "expense" | "margin">("revenue");
   const tableContainerRef = useRef<HTMLDivElement>(null);
 
   const { data: lineItems = [], isLoading: lineItemsLoading, error: lineItemsError } = useQuery({
     queryKey: ["billing_line_items", "list"],
     queryFn: async () => {
       const { data, error } = await supabase.from('billing_line_items').select('*');
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
+
+  // Phase 5B: Expense-side line items for margin analysis
+  const { data: expenseLineItems = [] } = useQuery({
+    queryKey: ["evoucher_line_items", "list"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('evoucher_line_items')
+        .select('*, evouchers(booking_id, project_number)')
+        .not('catalog_item_id', 'is', null);
       if (error) throw error;
       return data ?? [];
     },
@@ -201,25 +216,50 @@ export function ChargeExpenseMatrix() {
       };
     }
 
+    // Choose data source based on view
+    const sourceItems = matrixView === "expense" ? expenseLineItems : lineItems;
+
     // Group line items by booking
     const byBooking = new Map<string, any[]>();
-    for (const li of lineItems) {
-      const key = (li as any).booking_id || (li as any).project_number || 'unassigned';
-      if (!byBooking.has(key)) byBooking.set(key, []);
-      byBooking.get(key)!.push(li);
+    for (const li of sourceItems) {
+      const bookingId = matrixView === "expense"
+        ? ((li as any).evouchers?.booking_id || (li as any).evouchers?.project_number || 'unassigned')
+        : ((li as any).booking_id || (li as any).project_number || 'unassigned');
+      if (!byBooking.has(bookingId)) byBooking.set(bookingId, []);
+      byBooking.get(bookingId)!.push(li);
     }
 
-    const rows = Array.from(byBooking.entries()).map(([bookingId, items]) => ({
-      booking_id: bookingId,
-      project_number: items[0]?.project_number || bookingId,
-      service_type: items[0]?.service_type || '',
-      cells: Object.fromEntries(
-        columns.map((col: any) => {
-          const match = items.find((li: any) => li.catalog_item_id === col.catalog_item_id);
-          return [col.catalog_item_id, match ? { amount: Number(match.amount) || 0, currency: match.currency || 'PHP' } : null];
-        })
-      ),
-    }));
+    // For margin view, also group expense items
+    const expenseByBooking = new Map<string, any[]>();
+    if (matrixView === "margin") {
+      for (const li of expenseLineItems) {
+        const key = (li as any).evouchers?.booking_id || (li as any).evouchers?.project_number || 'unassigned';
+        if (!expenseByBooking.has(key)) expenseByBooking.set(key, []);
+        expenseByBooking.get(key)!.push(li);
+      }
+    }
+
+    const rows = Array.from(byBooking.entries()).map(([bookingId, items]) => {
+      const expItems = matrixView === "margin" ? (expenseByBooking.get(bookingId) || []) : [];
+      return {
+        booking_id: bookingId,
+        project_number: items[0]?.project_number || (matrixView === "expense" ? (items[0] as any)?.evouchers?.project_number : null) || bookingId,
+        service_type: items[0]?.service_type || '',
+        cells: Object.fromEntries(
+          columns.map((col: any) => {
+            const match = items.find((li: any) => li.catalog_item_id === col.catalog_item_id);
+            if (matrixView === "margin") {
+              const rev = match ? Number(match.amount) || 0 : 0;
+              const expMatch = expItems.find((li: any) => li.catalog_item_id === col.catalog_item_id);
+              const cost = expMatch ? Number(expMatch.amount) || 0 : 0;
+              const margin = rev - cost;
+              return [col.catalog_item_id, (rev > 0 || cost > 0) ? { amount: margin, currency: 'PHP' } : null];
+            }
+            return [col.catalog_item_id, match ? { amount: Number(match.amount) || 0, currency: match.currency || 'PHP' } : null];
+          })
+        ),
+      };
+    });
 
     const totals: Record<string, number> = {};
     for (const col of columns) {
@@ -303,6 +343,24 @@ export function ChargeExpenseMatrix() {
           >
             {SERVICE_TYPES.map(st => <option key={st} value={st}>{st}</option>)}
           </select>
+        </div>
+
+        {/* View toggle: Revenue / Expense / Margin */}
+        <div style={{ display: "flex", gap: "2px", backgroundColor: "var(--theme-bg-surface-subtle)", borderRadius: "6px", padding: "2px" }}>
+          {(["revenue", "expense", "margin"] as const).map(v => (
+            <button
+              key={v}
+              onClick={() => setMatrixView(v)}
+              style={{
+                padding: "5px 12px", borderRadius: "4px", border: "none", fontSize: "12px", fontWeight: matrixView === v ? 600 : 400,
+                backgroundColor: matrixView === v ? "var(--theme-bg-surface)" : "transparent",
+                color: matrixView === v ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)",
+                cursor: "pointer", boxShadow: matrixView === v ? "0 1px 2px rgba(0,0,0,0.05)" : "none",
+              }}
+            >
+              {v === "revenue" ? "Revenue" : v === "expense" ? "Expense" : "Margin"}
+            </button>
+          ))}
         </div>
 
         {/* Right side: meta chips + export */}

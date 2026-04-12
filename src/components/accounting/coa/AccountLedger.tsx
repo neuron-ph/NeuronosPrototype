@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { toast } from "sonner@2.0.3";
 import { ArrowLeft, ArrowUpRight, ArrowDownLeft, FileText, Search, Download, Filter } from 'lucide-react';
 import { format } from 'date-fns';
 import { Account } from '../../../types/accounting-core';
@@ -23,18 +24,19 @@ export function AccountLedger({ account, onBack }: AccountLedgerProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
+
     const loadData = async () => {
       setLoading(true);
       try {
         const allTxns = await getTransactions();
-        
-        // Filter for this account
-        const accountTxns = allTxns.filter(t => 
+        if (cancelled) return;
+
+        const accountTxns = allTxns.filter(t =>
           t.bank_account_id === account.id || t.category_account_id === account.id
         );
 
-        // Sort by date ASC for running balance calculation
-        const sorted = accountTxns.sort((a, b) => 
+        const sorted = accountTxns.sort((a, b) =>
           new Date(a.date).getTime() - new Date(b.date).getTime()
         );
 
@@ -43,28 +45,13 @@ export function AccountLedger({ account, onBack }: AccountLedgerProps) {
           const isDebit = txn.category_account_id === account.id;
           const isCredit = txn.bank_account_id === account.id;
 
-          // Debit increases Asset/Expense, decreases Liability/Equity/Income
-          // Credit decreases Asset/Expense, increases Liability/Equity/Income
-          // However, for simple display:
-          // Debit is typically positive for Asset/Expense
-          // Credit is negative for Asset/Expense
-          // Let's stick to simple Debit/Credit columns and a running balance that respects the account type?
-          // Or just simple: Debit adds, Credit subtracts?
-          // Standard accounting:
-          // Asset: Debit (+), Credit (-)
-          // Liability: Debit (-), Credit (+)
-          // Equity: Debit (-), Credit (+)
-          // Income: Debit (-), Credit (+)
-          // Expense: Debit (+), Credit (-)
-          
           let impact = 0;
           if (['Asset', 'Expense'].includes(account.type)) {
-             if (isDebit) impact = txn.amount;
-             if (isCredit) impact = -txn.amount;
+            if (isDebit) impact = txn.amount;
+            if (isCredit) impact = -txn.amount;
           } else {
-             // Liability, Equity, Income -> Normal Credit Balance
-             if (isDebit) impact = -txn.amount;
-             if (isCredit) impact = txn.amount;
+            if (isDebit) impact = -txn.amount;
+            if (isCredit) impact = txn.amount;
           }
 
           balance += impact;
@@ -73,21 +60,21 @@ export function AccountLedger({ account, onBack }: AccountLedgerProps) {
             ...txn,
             debit: isDebit ? txn.amount : null,
             credit: isCredit ? txn.amount : null,
-            running_balance: balance
+            running_balance: balance,
           };
         });
 
-        // We might want to reverse back to DESC for display (newest first)
-        // providing the running balance is correct for that point in time
         setTransactions(rows.reverse());
       } catch (error) {
         console.error("Failed to load ledger:", error);
+        if (!cancelled) toast.error("Failed to load ledger transactions");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     loadData();
+    return () => { cancelled = true; };
   }, [account]);
 
   const filteredData = useMemo(() => {

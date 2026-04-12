@@ -1,10 +1,11 @@
 import { useRef, useEffect, useState } from "react";
-import { UserPlus, MessageSquare, Check, CheckCircle, X, Zap, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
+import { UserPlus, MessageSquare, Check, CheckCircle, X, ChevronLeft, ChevronRight, ChevronDown, CornerUpLeft } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { useUser } from "../../hooks/useUser";
 import { logStatusChange } from "../../utils/activityLog";
 import { toast } from "sonner@2.0.3";
 import { useThread } from "../../hooks/useThread";
+import type { ThreadMessage } from "../../hooks/useThread";
 import { MessageBubble } from "./MessageBubble";
 import { SystemEventRow } from "./SystemEventRow";
 import { ComposeBox } from "./ComposeBox";
@@ -37,36 +38,6 @@ const RECORD_TYPE_LABEL: Record<string, string> = {
   budget_request: "Budget Request",
 };
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function getInitials(name?: string) {
-  if (!name) return "?";
-  return name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
-}
-
-function formatTime(dateStr: string) {
-  return new Date(dateStr).toLocaleString("en-PH", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
-
-function formatRelative(dateStr: string): string {
-  const diffMs = Date.now() - new Date(dateStr).getTime();
-  const diffMins = Math.floor(diffMs / 60_000);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays === 1) return "yesterday";
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return "";
-}
-
 // ── Props ────────────────────────────────────────────────────────────────────
 
 interface ThreadDetailPanelProps {
@@ -89,6 +60,7 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
   const [statusOpen, setStatusOpen] = useState(false);
   const [localStatus, setLocalStatus] = useState<string | null>(null);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
+  const [showCompose, setShowCompose] = useState(false);
 
   useEffect(() => {
     if (!isLoading && thread) {
@@ -97,16 +69,24 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
   }, [thread?.messages.length, isLoading]);
 
   useEffect(() => { setLocalStatus(null); }, [thread?.status]);
+  useEffect(() => { setShowCompose(false); }, [ticketId]);
 
   useEffect(() => {
     if (!statusOpen) return;
-    const handler = (e: MouseEvent) => {
+    const handleClick = (e: MouseEvent) => {
       if (statusDropdownRef.current && !statusDropdownRef.current.contains(e.target as Node)) {
         setStatusOpen(false);
       }
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setStatusOpen(false);
+    };
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
   }, [statusOpen]);
 
   if (!ticketId) return <EmptyState />;
@@ -375,33 +355,29 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
 
   // ── Render ───────────────────────────────────────────────────────────────
 
+  // Index of the last non-system message (starts expanded)
+  const lastNonSystemIdx = thread.messages.reduce<number>(
+    (acc, m, i) => (!m.is_system ? i : acc), -1
+  );
+
   return (
     <div
       className="ticketing-ui flex flex-col h-full"
       style={{ backgroundColor: "var(--theme-bg-surface)" }}
     >
-      {/* ══ ACTION BAR ════════════════════════════════════════════════════ */}
+      {/* ══ TOOLBAR ═══════════════════════════════════════════════════════ */}
       <div
         style={{
-          padding: "10px 20px",
+          padding: "8px 16px",
           borderBottom: "1px solid var(--theme-border-subtle)",
           flexShrink: 0,
           display: "flex",
           alignItems: "center",
-          gap: 8,
-          flexWrap: "wrap",
+          gap: 6,
           backgroundColor: "var(--theme-bg-surface)",
         }}
       >
-        {/* Left: type badge + priority */}
-        <span
-          style={{
-            ...ticketBadgeStyle(typeTone, 700),
-            fontSize: 12,
-            padding: "4px 10px",
-            letterSpacing: "0.4px",
-          }}
-        >
+        <span style={{ ...ticketBadgeStyle(typeTone, 700), fontSize: 11, padding: "3px 8px", letterSpacing: "0.4px" }}>
           {thread.type === "fyi" ? "FYI" : thread.type === "request" ? "Request" : "Approval"}
         </span>
         {thread.priority === "urgent" && (
@@ -410,607 +386,474 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
 
         <div style={{ flex: 1 }} />
 
-        {/* Right: action buttons */}
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          {/* Approval buttons */}
-          {isApprovalPending && (
-            <>
-              <ActionButton
-                onClick={() => handleApproval("accepted")}
-                disabled={isUpdatingStatus}
-                variant="success"
-                icon={<Check size={12} />}
-                label="Accept"
-              />
-              <ActionButton
-                onClick={() => setShowReturnPanel(true)}
-                disabled={isUpdatingStatus}
-                variant="danger"
-                icon={<X size={12} />}
-                label="Decline"
-              />
-            </>
-          )}
+        {isApprovalPending && (
+          <>
+            <ActionButton onClick={() => handleApproval("accepted")} disabled={isUpdatingStatus} variant="success" icon={<Check size={12} />} label="Accept" />
+            <ActionButton onClick={() => setShowReturnPanel(true)} disabled={isUpdatingStatus} variant="danger" icon={<X size={12} />} label="Decline" />
+          </>
+        )}
 
-          {/* Status dropdown */}
-          {(() => {
-            const displayStatus = localStatus ?? thread.status;
-            const displayStepIdx = STATUS_STEPS.indexOf(displayStatus as any);
-            const statusTone = TICKET_STATUS_TONES[displayStatus] ?? TICKET_STATUS_TONES.open;
-            const canChangeStatus = canAdvanceStatus && thread.type !== "approval" && !isUpdatingStatus;
-            return (
-              <div ref={statusDropdownRef} style={{ position: "relative" }}>
-                <button
-                  onClick={() => canChangeStatus && setStatusOpen((o) => !o)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 5,
-                    padding: "4px 10px",
-                    borderRadius: 6,
-                    fontSize: 12,
-                    fontWeight: 600,
-                    border: `1px solid ${statusTone.border}`,
-                    backgroundColor: statusTone.bg,
-                    color: statusTone.text,
-                    cursor: canChangeStatus ? "pointer" : "default",
-                    letterSpacing: "0.2px",
-                    opacity: isUpdatingStatus ? 0.6 : 1,
-                    transition: "opacity 150ms ease",
-                  }}
-                >
-                  {STATUS_LABELS[displayStatus] ?? displayStatus}
-                  {canChangeStatus && <ChevronDown size={11} style={{ opacity: 0.7 }} />}
-                </button>
-                {statusOpen && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "calc(100% + 4px)",
-                      right: 0,
-                      backgroundColor: "var(--theme-bg-surface)",
-                      border: "1px solid var(--theme-border-default)",
-                      borderRadius: 8,
-                      boxShadow: "0 4px 12px rgba(0,0,0,0.10)",
-                      zIndex: 200,
-                      minWidth: 160,
-                      padding: "4px 0",
-                      overflow: "hidden",
-                    }}
-                  >
-                    {STATUS_STEPS.map((step, idx) => {
-                      const isCurrent = displayStatus === step;
-                      const isCompleted = displayStepIdx > idx;
-                      return (
-                        <div
-                          key={step}
-                          onClick={() => {
-                            if (isCurrent || isUpdatingStatus) return;
-                            setLocalStatus(step);
-                            setStatusOpen(false);
-                            setStatus(step);
-                          }}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 6,
-                            padding: "7px 12px",
-                            fontSize: 12,
-                            fontWeight: isCurrent ? 600 : 400,
-                            color: isCurrent ? "var(--neuron-brand-green)" : "var(--theme-text-primary)",
-                            backgroundColor: isCurrent ? "var(--neuron-state-selected)" : "transparent",
-                            cursor: isCurrent || isUpdatingStatus ? "default" : "pointer",
-                            transition: "background 120ms ease",
-                          }}
-                          onMouseEnter={(e) => {
-                            if (!isCurrent && !isUpdatingStatus) e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!isCurrent) e.currentTarget.style.backgroundColor = "transparent";
-                          }}
-                        >
-                          <span style={{ width: 12, display: "flex", alignItems: "center" }}>
-                            {(isCurrent || isCompleted) && (
-                              <Check size={10} style={{ color: "var(--neuron-brand-green)" }} />
-                            )}
-                          </span>
-                          {STATUS_LABELS[step]}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-
-          {/* Mark Done (sender only, when in_progress) */}
-          {isSender && thread.status === "in_progress" && (
-            <ActionButton
-              onClick={advanceStatus}
-              disabled={isUpdatingStatus}
-              variant="success"
-              icon={<CheckCircle size={12} />}
-              label="Mark Done"
-            />
-          )}
-
-          {/* Reopen */}
-          {isSender && (isDone || isReturned) && (
-            <ActionButton
-              onClick={handleReopen}
-              disabled={isUpdatingStatus}
-              variant="ghost"
-              label="Reopen"
-            />
-          )}
-
-          {/* Assign */}
-          {canAssign && (
-            <ActionButton
-              onClick={() => setShowAssignModal(true)}
-              variant="ghost"
-              icon={<UserPlus size={11} />}
-              label={thread.assignment ? "Reassign" : "Assign"}
-            />
-          )}
-
-          {/* Prev / Next navigation */}
-          {threadIds && navTotal > 1 && onNavigate && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 0,
-                borderLeft: "1px solid var(--theme-border-default)",
-                paddingLeft: 8,
-                marginLeft: 2,
-              }}
-            >
+        {(() => {
+          const displayStatus = localStatus ?? thread.status;
+          const displayStepIdx = STATUS_STEPS.indexOf(displayStatus as any);
+          const statusTone = TICKET_STATUS_TONES[displayStatus] ?? TICKET_STATUS_TONES.open;
+          const canChangeStatus = canAdvanceStatus && thread.type !== "approval" && !isUpdatingStatus;
+          return (
+            <div ref={statusDropdownRef} style={{ position: "relative" }}>
               <button
-                onClick={() => hasPrev && onNavigate(threadIds[navIdx - 1])}
-                disabled={!hasPrev}
-                title="Previous thread (↑)"
+                onClick={() => canChangeStatus && setStatusOpen((o) => !o)}
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  width: 26,
-                  height: 26,
-                  borderRadius: 5,
-                  border: "1px solid var(--theme-border-default)",
-                  backgroundColor: "transparent",
-                  color: hasPrev ? "var(--theme-text-secondary)" : "var(--theme-text-muted)",
-                  cursor: hasPrev ? "pointer" : "not-allowed",
-                  opacity: hasPrev ? 1 : 0.4,
+                  display: "flex", alignItems: "center", gap: 5, padding: "4px 10px",
+                  borderRadius: 6, fontSize: 12, fontWeight: 600,
+                  border: `1px solid ${statusTone.border}`,
+                  backgroundColor: statusTone.bg, color: statusTone.text,
+                  cursor: canChangeStatus ? "pointer" : "default",
+                  letterSpacing: "0.2px", opacity: isUpdatingStatus ? 0.6 : 1,
+                  transition: "opacity 150ms ease",
                 }}
-                onMouseEnter={(e) => { if (hasPrev) e.currentTarget.style.backgroundColor = "var(--theme-bg-page)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
               >
-                <ChevronLeft size={13} />
+                {STATUS_LABELS[displayStatus] ?? displayStatus}
+                {canChangeStatus && <ChevronDown size={11} style={{ opacity: 0.7 }} />}
               </button>
-              <span
-                style={{
-                  fontSize: 11,
-                  color: "var(--theme-text-muted)",
-                  padding: "0 6px",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {navIdx + 1} / {navTotal}
-              </span>
-              <button
-                onClick={() => hasNext && onNavigate(threadIds[navIdx + 1])}
-                disabled={!hasNext}
-                title="Next thread (↓)"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  width: 26,
-                  height: 26,
-                  borderRadius: 5,
+              {statusOpen && (
+                <div role="menu" style={{
+                  position: "absolute", top: "calc(100% + 4px)", right: 0,
+                  backgroundColor: "var(--theme-bg-surface)",
                   border: "1px solid var(--theme-border-default)",
-                  backgroundColor: "transparent",
-                  color: hasNext ? "var(--theme-text-secondary)" : "var(--theme-text-muted)",
-                  cursor: hasNext ? "pointer" : "not-allowed",
-                  opacity: hasNext ? 1 : 0.4,
-                }}
-                onMouseEnter={(e) => { if (hasNext) e.currentTarget.style.backgroundColor = "var(--theme-bg-page)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
-              >
-                <ChevronRight size={13} />
-              </button>
+                  borderRadius: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.10)",
+                  zIndex: 200, minWidth: 160, padding: "4px 0", overflow: "hidden",
+                }}>
+                  {STATUS_STEPS.map((step, idx) => {
+                    const isCurrent = displayStatus === step;
+                    const isCompleted = displayStepIdx > idx;
+                    return (
+                      <div
+                        key={step}
+                        role="menuitem"
+                        onClick={() => { if (isCurrent || isUpdatingStatus) return; setLocalStatus(step); setStatusOpen(false); setStatus(step); }}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 6, padding: "7px 12px",
+                          fontSize: 12, fontWeight: isCurrent ? 600 : 400,
+                          color: isCurrent ? "var(--neuron-brand-green)" : "var(--theme-text-primary)",
+                          backgroundColor: isCurrent ? "var(--neuron-state-selected)" : "transparent",
+                          cursor: isCurrent || isUpdatingStatus ? "default" : "pointer",
+                          transition: "background 120ms ease",
+                        }}
+                        onMouseEnter={(e) => { if (!isCurrent && !isUpdatingStatus) e.currentTarget.style.backgroundColor = "var(--theme-bg-page)"; }}
+                        onMouseLeave={(e) => { if (!isCurrent) e.currentTarget.style.backgroundColor = "transparent"; }}
+                      >
+                        <span style={{ width: 12, display: "flex", alignItems: "center" }}>
+                          {(isCurrent || isCompleted) && <Check size={10} style={{ color: "var(--neuron-brand-green)" }} />}
+                        </span>
+                        {STATUS_LABELS[step]}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          );
+        })()}
+
+        {isSender && thread.status === "in_progress" && (
+          <ActionButton onClick={advanceStatus} disabled={isUpdatingStatus} variant="success" icon={<CheckCircle size={12} />} label="Mark Done" />
+        )}
+
+        {isSender && (isDone || isReturned) && (
+          <ActionButton onClick={handleReopen} disabled={isUpdatingStatus} variant="ghost" label="Reopen" />
+        )}
+
+        {canAssign && (
+          <IconToolbarButton onClick={() => setShowAssignModal(true)} title={thread.assignment ? "Reassign" : "Assign"}>
+            <UserPlus size={14} />
+          </IconToolbarButton>
+        )}
+
+        {threadIds && navTotal > 1 && onNavigate && (
+          <div style={{ display: "flex", alignItems: "center", gap: 0, borderLeft: "1px solid var(--theme-border-default)", paddingLeft: 8, marginLeft: 2 }}>
+            <button
+              onClick={() => hasPrev && onNavigate(threadIds[navIdx - 1])}
+              disabled={!hasPrev}
+              title="Previous thread (↑)"
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                width: 26, height: 26, borderRadius: 5, border: "1px solid var(--theme-border-default)",
+                backgroundColor: "transparent", color: hasPrev ? "var(--theme-text-secondary)" : "var(--theme-text-muted)",
+                cursor: hasPrev ? "pointer" : "not-allowed", opacity: hasPrev ? 1 : 0.4,
+              }}
+              onMouseEnter={(e) => { if (hasPrev) e.currentTarget.style.backgroundColor = "var(--theme-bg-page)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
+            >
+              <ChevronLeft size={13} />
+            </button>
+            <span style={{ fontSize: 11, color: "var(--theme-text-muted)", padding: "0 6px", whiteSpace: "nowrap" }}>
+              {navIdx + 1} / {navTotal}
+            </span>
+            <button
+              onClick={() => hasNext && onNavigate(threadIds[navIdx + 1])}
+              disabled={!hasNext}
+              title="Next thread (↓)"
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                width: 26, height: 26, borderRadius: 5, border: "1px solid var(--theme-border-default)",
+                backgroundColor: "transparent", color: hasNext ? "var(--theme-text-secondary)" : "var(--theme-text-muted)",
+                cursor: hasNext ? "pointer" : "not-allowed", opacity: hasNext ? 1 : 0.4,
+              }}
+              onMouseEnter={(e) => { if (hasNext) e.currentTarget.style.backgroundColor = "var(--theme-bg-page)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
+            >
+              <ChevronRight size={13} />
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* ══ SENDER BLOCK + SUBJECT ════════════════════════════════════════ */}
+      {/* ══ SUBJECT HEADER ════════════════════════════════════════════════ */}
       <div
         style={{
-          padding: "20px 28px 18px",
+          padding: "16px 24px 14px",
           borderBottom: "1px solid var(--theme-border-default)",
           flexShrink: 0,
+          backgroundColor: "var(--theme-bg-surface)",
         }}
       >
-        {/* Sender block */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            gap: 12,
-            marginBottom: 16,
-          }}
-        >
-          {/* Left: avatar + sender info */}
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 12, minWidth: 0 }}>
-            <div
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: "50%",
-                backgroundColor: thread.created_by_avatar_url ? "transparent" : "var(--neuron-brand-green)",
-                color: "#FFFFFF",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 14,
-                fontWeight: 700,
-                flexShrink: 0,
-                letterSpacing: "0.3px",
-                overflow: "hidden",
-                border: "1.5px solid var(--theme-border-default)",
-              }}
-            >
-              {thread.created_by_avatar_url ? (
-                <img
-                  src={thread.created_by_avatar_url}
-                  alt={thread.created_by_name}
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                />
-              ) : (
-                getInitials(thread.created_by_name)
-              )}
-            </div>
-
-            <div style={{ minWidth: 0 }}>
-              <p
-                style={{
-                  fontSize: 14,
-                  fontWeight: 600,
-                  color: "var(--theme-text-primary)",
-                  margin: 0,
-                  marginBottom: 1,
-                  lineHeight: 1.3,
-                }}
-              >
-                {thread.created_by_name || "Unknown"}
-              </p>
-              {thread.created_by_department && (
-                <p
-                  style={{
-                    fontSize: 11,
-                    color: "var(--theme-text-muted)",
-                    margin: 0,
-                    marginBottom: 3,
-                    lineHeight: 1.3,
-                  }}
-                >
-                  {thread.created_by_department}
-                </p>
-              )}
-              {toParticipants.length > 0 && (
-                <p
-                  style={{
-                    fontSize: 12,
-                    color: "var(--theme-text-muted)",
-                    margin: 0,
-                    lineHeight: 1.4,
-                  }}
-                >
-                  To:{" "}
-                  <span style={{ color: "var(--theme-text-secondary)" }}>
-                    {toParticipants.map(renderParticipant).join(", ")}
-                  </span>
-                  {ccParticipants.length > 0 && (
-                    <>
-                      {" · "}CC:{" "}
-                      <span style={{ color: "var(--theme-text-secondary)" }}>
-                        {ccParticipants.map(renderParticipant).join(", ")}
-                      </span>
-                    </>
-                  )}
-                </p>
-              )}
-              {thread.assignment && (
-                <p
-                  style={{
-                    fontSize: 12,
-                    color: "var(--theme-action-primary-bg)",
-                    margin: 0,
-                    marginTop: 3,
-                    lineHeight: 1.4,
-                  }}
-                >
-                  Assigned to {thread.assignment.assigned_to_name}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Right: timestamp */}
-          <div style={{ flexShrink: 0, marginTop: 2, textAlign: "right" }}>
-            <p style={{ fontSize: 12, color: "var(--theme-text-muted)", margin: 0, whiteSpace: "nowrap" }}>
-              {formatTime(thread.created_at)}
-            </p>
-            {formatRelative(thread.created_at) && (
-              <p style={{ fontSize: 11, color: "var(--theme-text-muted)", margin: 0, marginTop: 1, whiteSpace: "nowrap", opacity: 0.7 }}>
-                {formatRelative(thread.created_at)}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Subject */}
-        <h1
-          style={{
-            fontSize: 22,
-            fontWeight: 700,
-            color: "var(--theme-text-primary)",
-            lineHeight: 1.3,
-            letterSpacing: "-0.4px",
-            margin: 0,
-            marginBottom:
-              ((isReturned && thread.return_reason) ||
-                thread.approval_result ||
-                firstMessage)
-                ? 14
-                : 0,
-          }}
-        >
+        <h1 style={{
+          fontSize: 20, fontWeight: 700, color: "var(--theme-text-primary)",
+          lineHeight: 1.3, letterSpacing: "-0.3px", margin: 0,
+          marginBottom: (toParticipants.length > 0 || !!thread.assignment || isReturned || !!thread.approval_result) ? 6 : 0,
+        }}>
           {thread.subject}
         </h1>
 
-        {/* Returned banner */}
+        {(toParticipants.length > 0 || !!thread.assignment) && (
+          <p style={{ fontSize: 12, color: "var(--theme-text-muted)", margin: 0, marginBottom: (isReturned || !!thread.approval_result) ? 10 : 0 }}>
+            {toParticipants.length > 0 && (
+              <>To: <span style={{ color: "var(--theme-text-secondary)" }}>{toParticipants.map(renderParticipant).join(", ")}</span></>
+            )}
+            {ccParticipants.length > 0 && (
+              <> · CC: <span style={{ color: "var(--theme-text-secondary)" }}>{ccParticipants.map(renderParticipant).join(", ")}</span></>
+            )}
+            {thread.assignment && (
+              <> · <span style={{ color: "var(--theme-action-primary-bg)" }}>Assigned to {thread.assignment.assigned_to_name}</span></>
+            )}
+          </p>
+        )}
+
         {isReturned && thread.return_reason && (
-          <div
-            style={{
-              padding: "8px 12px",
-              borderRadius: 6,
-              backgroundColor: "var(--theme-status-danger-bg)",
-              border: "1px solid var(--theme-status-danger-border)",
-              marginBottom: thread.approval_result ? 8 : 0,
-            }}
-          >
+          <div style={{ marginTop: 10, padding: "8px 12px", borderRadius: 6, backgroundColor: "var(--theme-status-danger-bg)", border: "1px solid var(--theme-status-danger-border)" }}>
             <p style={{ fontSize: 12, color: "var(--theme-status-danger-fg)", margin: 0 }}>
               <span style={{ fontWeight: 600 }}>↩ Returned</span>
               {thread.returned_by_name && ` by ${thread.returned_by_name}`}
-              {" — "}
-              {thread.return_reason}
+              {" — "}{thread.return_reason}
             </p>
           </div>
         )}
 
-        {/* Approval result banner */}
         {thread.approval_result && (
-          <div
-            style={{
-              padding: "8px 12px",
-              borderRadius: 6,
-              backgroundColor:
-                thread.approval_result === "accepted"
-                  ? "var(--theme-status-success-bg)"
-                  : "var(--theme-status-danger-bg)",
-              border: `1px solid ${
-                thread.approval_result === "accepted"
-                  ? "var(--theme-status-success-border)"
-                  : "var(--theme-status-danger-border)"
-              }`,
-              marginBottom: firstMessage ? 14 : 0,
-            }}
-          >
-            <p
-              style={{
-                fontSize: 12,
-                color:
-                  thread.approval_result === "accepted"
-                    ? "var(--theme-status-success-fg)"
-                    : "var(--theme-status-danger-fg)",
-                fontWeight: 500,
-                margin: 0,
-              }}
-            >
+          <div style={{
+            marginTop: 10, padding: "8px 12px", borderRadius: 6,
+            backgroundColor: thread.approval_result === "accepted" ? "var(--theme-status-success-bg)" : "var(--theme-status-danger-bg)",
+            border: `1px solid ${thread.approval_result === "accepted" ? "var(--theme-status-success-border)" : "var(--theme-status-danger-border)"}`,
+          }}>
+            <p style={{
+              fontSize: 12, fontWeight: 500, margin: 0,
+              color: thread.approval_result === "accepted" ? "var(--theme-status-success-fg)" : "var(--theme-status-danger-fg)",
+            }}>
               {thread.approval_result === "accepted" ? "✓ Request accepted" : "✕ Request declined"}
               {thread.return_reason && ` — ${thread.return_reason}`}
             </p>
           </div>
         )}
-
-        {/* ── First message body + attachments (inline in this block) ── */}
-        {firstMessage && (
-          <div
-            style={{
-              paddingTop: 20,
-              borderTop: "1px solid var(--theme-border-subtle)",
-            }}
-          >
-            <MessageBubble message={firstMessage} onRetract={refresh} variant="first" />
-          </div>
-        )}
       </div>
 
-      {/* ══ RETURN REASON PANEL ══════════════════════════════════════════ */}
-      {showReturnPanel && (
-        <div
-          style={{
-            padding: "12px 28px",
-            borderBottom: "1px solid var(--theme-border-default)",
-            backgroundColor: "var(--theme-status-warning-bg)",
-            flexShrink: 0,
-          }}
-        >
-          <p
-            style={{
-              fontSize: 12,
-              fontWeight: 600,
-              color: "var(--theme-status-warning-fg)",
-              marginBottom: 8,
-            }}
-          >
-            {thread.type === "approval" ? "Reason for declining" : "Reason for returning"} (required)
-          </p>
-          <textarea
-            value={returnReason}
-            onChange={(e) => setReturnReason(e.target.value)}
-            placeholder="Explain why you're returning this ticket…"
-            rows={2}
-            style={{
-              width: "100%",
-              padding: "8px 10px",
-              borderRadius: 6,
-              border: "1px solid var(--theme-status-warning-border)",
-              fontSize: 12,
-              color: "var(--theme-text-primary)",
-              resize: "none",
-              outline: "none",
-              backgroundColor: "var(--theme-bg-surface)",
-            }}
-            autoFocus
-          />
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
-            <button
-              onClick={() =>
-                thread.type === "approval"
-                  ? handleApproval("declined", returnReason)
-                  : handleReturn()
-              }
-              disabled={!returnReason.trim() || isUpdatingStatus}
-              style={{
-                padding: "5px 14px",
-                borderRadius: 6,
-                fontSize: 12,
-                fontWeight: 600,
-                backgroundColor: returnReason.trim()
-                  ? "var(--theme-status-danger-fg)"
-                  : "var(--theme-border-default)",
-                color: returnReason.trim() ? "#FFFFFF" : "var(--theme-text-muted)",
-                border: "none",
-                cursor: returnReason.trim() ? "pointer" : "default",
-              }}
-            >
-              {thread.type === "approval" ? "Confirm Decline" : "Confirm Return"}
-            </button>
-            <button
-              onClick={() => {
-                setShowReturnPanel(false);
-                setReturnReason("");
-              }}
-              style={{
-                padding: "5px 14px",
-                borderRadius: 6,
-                fontSize: 12,
-                fontWeight: 500,
-                backgroundColor: "transparent",
-                border: "1px solid var(--theme-border-default)",
-                color: "var(--theme-text-muted)",
-                cursor: "pointer",
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+      {/* ══ SCROLLABLE BODY ═══════════════════════════════════════════════ */}
+      <div className="flex-1 overflow-y-auto" style={{ overscrollBehavior: "contain" }}>
 
-      {/* ══ MESSAGES ═════════════════════════════════════════════════════ */}
-      <div className="flex-1 overflow-y-auto">
-        {thread.messages.filter((m) => m.id !== firstMessage?.id).length === 0 ? (
-          <div
-            style={{
-              textAlign: "center",
-              padding: 40,
-              color: "var(--theme-text-muted)",
-              fontSize: 13,
-            }}
-          >
-            {firstMessage ? "No replies yet" : "No messages yet"}
+        {/* Return reason panel */}
+        {showReturnPanel && (
+          <div style={{
+            margin: "16px 20px 0", padding: "12px 16px", borderRadius: 8,
+            backgroundColor: "var(--theme-status-warning-bg)",
+            border: "1px solid var(--theme-status-warning-border)",
+          }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: "var(--theme-status-warning-fg)", marginBottom: 8 }}>
+              {thread.type === "approval" ? "Reason for declining" : "Reason for returning"} (required)
+            </p>
+            <textarea
+              value={returnReason}
+              onChange={(e) => setReturnReason(e.target.value)}
+              placeholder="Explain why you're returning this ticket…"
+              rows={2}
+              style={{
+                width: "100%", padding: "8px 10px", borderRadius: 6,
+                border: "1px solid var(--theme-status-warning-border)",
+                fontSize: 12, color: "var(--theme-text-primary)",
+                resize: "none", outline: "none", backgroundColor: "var(--theme-bg-surface)",
+              }}
+              autoFocus
+            />
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+              <button
+                onClick={() => thread.type === "approval" ? handleApproval("declined", returnReason) : handleReturn()}
+                disabled={!returnReason.trim() || isUpdatingStatus}
+                style={{
+                  padding: "5px 14px", borderRadius: 6, fontSize: 12, fontWeight: 600, border: "none",
+                  backgroundColor: returnReason.trim() ? "var(--theme-status-danger-fg)" : "var(--theme-border-default)",
+                  color: returnReason.trim() ? "#FFFFFF" : "var(--theme-text-muted)",
+                  cursor: returnReason.trim() ? "pointer" : "default",
+                }}
+              >
+                {thread.type === "approval" ? "Confirm Decline" : "Confirm Return"}
+              </button>
+              <button
+                onClick={() => { setShowReturnPanel(false); setReturnReason(""); }}
+                style={{
+                  padding: "5px 14px", borderRadius: 6, fontSize: 12, fontWeight: 500,
+                  backgroundColor: "transparent", border: "1px solid var(--theme-border-default)",
+                  color: "var(--theme-text-muted)", cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
-        ) : (
-          thread.messages
-            .filter((msg) => msg.id !== firstMessage?.id)
-            .map((msg) =>
-              msg.is_system ? (
-                <SystemEventRow key={msg.id} message={msg} />
-              ) : (
-                <MessageBubble key={msg.id} message={msg} onRetract={refresh} />
-              )
-            )
         )}
+
+        {/* ── Message cards ── */}
+        {thread.messages.length === 0 && (
+          <div style={{ textAlign: "center", padding: 40, color: "var(--theme-text-muted)", fontSize: 13 }}>
+            No messages yet
+          </div>
+        )}
+        {thread.messages.map((msg, idx) =>
+          msg.is_system ? (
+            <SystemEventRow key={msg.id} message={msg} />
+          ) : (
+            <CollapsibleMessageCard
+              key={msg.id}
+              message={msg.id === rawFirstMessage?.id ? firstMessage! : msg}
+              defaultExpanded={idx === 0 || idx === lastNonSystemIdx}
+              onRetract={refresh}
+            />
+          )
+        )}
+
+        {/* ── Reply pill ── */}
+        {!showCompose && !["done", "returned", "archived", "draft"].includes(thread.status) && (
+          <div style={{ padding: "16px 24px 20px" }}>
+            <button
+              onClick={() => setShowCompose(true)}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                padding: "7px 20px", borderRadius: 20,
+                border: "1px solid var(--theme-border-default)",
+                backgroundColor: "transparent", color: "var(--theme-text-secondary)",
+                fontSize: 13, fontWeight: 500, cursor: "pointer",
+                transition: "border-color 140ms ease, background-color 140ms ease, color 140ms ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = "var(--neuron-ui-active-border)";
+                e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
+                e.currentTarget.style.color = "var(--neuron-brand-green)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = "var(--theme-border-default)";
+                e.currentTarget.style.backgroundColor = "transparent";
+                e.currentTarget.style.color = "var(--theme-text-secondary)";
+              }}
+            >
+              <CornerUpLeft size={14} />
+              Reply
+            </button>
+          </div>
+        )}
+
+        {/* ── Inline compose ── */}
+        {showCompose && (
+          <div style={{
+            margin: "8px 20px 20px",
+            border: "1px solid var(--theme-border-default)",
+            borderRadius: 8, overflow: "hidden",
+            backgroundColor: "var(--theme-bg-surface)",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+          }}>
+            <ComposeBox
+              ticketId={thread.id}
+              toChips={toChips}
+              onSent={() => { setShowCompose(false); refresh(); onThreadUpdated(); }}
+              onClose={() => setShowCompose(false)}
+            />
+          </div>
+        )}
+
+        {/* ── Closed / reopen footer ── */}
+        {(isDone || isReturned) && isSender && (
+          <div style={{ textAlign: "center", padding: "12px 24px 20px" }}>
+            <button
+              onClick={handleReopen}
+              style={{ fontSize: 12, color: "var(--theme-action-primary-bg)", background: "none", border: "none", cursor: "pointer", fontWeight: 500 }}
+            >
+              Reopen this ticket
+            </button>
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 
-      {/* ══ COMPOSE BOX ══════════════════════════════════════════════════ */}
-      {!["done", "returned", "archived", "draft"].includes(thread.status) && (
-        <ComposeBox
-          ticketId={thread.id}
-          toChips={toChips}
-          onSent={() => {
-            refresh();
-            onThreadUpdated();
-          }}
-        />
-      )}
-
-      {/* ══ CLOSED FOOTER ════════════════════════════════════════════════ */}
-      {(isDone || isReturned) && (
-        <div
-          style={{
-            padding: "12px 28px",
-            borderTop: "1px solid var(--theme-border-default)",
-            backgroundColor: "var(--theme-bg-page)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <p style={{ fontSize: 12, color: "var(--theme-text-muted)", margin: 0 }}>
-            {isDone ? "This ticket is closed." : "This ticket was returned."}
-          </p>
-          {isSender && (
-            <button
-              onClick={handleReopen}
-              style={{
-                fontSize: 12,
-                color: "var(--theme-action-primary-bg)",
-                fontWeight: 500,
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                padding: 0,
-              }}
-            >
-              Reopen
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* ══ ASSIGN MODAL ═════════════════════════════════════════════════ */}
+      {/* ══ ASSIGN MODAL ══════════════════════════════════════════════════ */}
       {showAssignModal && deptParticipants[0] && (
         <AssignModal
           ticketId={thread.id}
           ticketSubject={thread.subject}
           department={deptParticipants[0].participant_dept!}
-          onAssigned={() => {
-            setShowAssignModal(false);
-            refresh();
-            onThreadUpdated();
-          }}
+          onAssigned={() => { setShowAssignModal(false); refresh(); onThreadUpdated(); }}
           onClose={() => setShowAssignModal(false)}
         />
       )}
+    </div>
+  );
+}
+
+// ── IconToolbarButton ────────────────────────────────────────────────────────
+
+function IconToolbarButton({ onClick, title, children }: { onClick: () => void; title: string; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      style={{
+        display: "flex", alignItems: "center", justifyContent: "center",
+        width: 28, height: 28, borderRadius: 6,
+        border: "1px solid var(--neuron-ui-border)",
+        backgroundColor: "transparent", color: "var(--neuron-ink-secondary)",
+        cursor: "pointer",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
+        e.currentTarget.style.borderColor = "var(--neuron-ui-active-border)";
+        e.currentTarget.style.color = "var(--neuron-brand-green)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.backgroundColor = "transparent";
+        e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
+        e.currentTarget.style.color = "var(--neuron-ink-secondary)";
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ── CollapsibleMessageCard (Gmail-style) ──────────────────────────────────────
+
+interface CollapsibleMessageCardProps {
+  message: ThreadMessage;
+  defaultExpanded?: boolean;
+  onRetract: () => void;
+}
+
+function CollapsibleMessageCard({ message, defaultExpanded = false, onRetract }: CollapsibleMessageCardProps) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  function cardInitials(name?: string) {
+    if (!name) return "?";
+    return name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
+  }
+
+  const snippet = message.is_retracted
+    ? "Message retracted"
+    : message.body
+    ? message.body.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim().slice(0, 120)
+    : "";
+
+  const timestamp = new Date(message.created_at).toLocaleString("en-PH", {
+    month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true,
+  });
+
+  return (
+    <div style={{ borderBottom: "1px solid var(--theme-border-subtle)" }}>
+      {/* ── Card header — always visible, click to toggle ── */}
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        onClick={() => setExpanded((v) => !v)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpanded((v) => !v); } }}
+        style={{
+          display: "flex", alignItems: "center", gap: 12,
+          padding: "14px 24px", cursor: "pointer", userSelect: "none",
+          transition: "background-color 120ms ease",
+          outline: "none",
+        }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "var(--theme-bg-page)"; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "transparent"; }}
+      >
+        {/* Avatar */}
+        <div style={{
+          width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+          backgroundColor: message.sender_avatar_url ? "transparent" : "var(--neuron-brand-green)",
+          color: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 13, fontWeight: 700, overflow: "hidden",
+          border: "1.5px solid var(--theme-border-default)",
+        }}>
+          {message.sender_avatar_url
+            ? <img src={message.sender_avatar_url} alt={message.sender_name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            : cardInitials(message.sender_name)
+          }
+        </div>
+
+        {/* Sender + snippet or dept */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--theme-text-primary)" }}>
+              {message.sender_name || "Unknown"}
+            </span>
+            {message.sender_department && (
+              <span style={{ fontSize: 11, color: "var(--theme-text-muted)" }}>
+                {message.sender_department}
+              </span>
+            )}
+          </div>
+          {!expanded && snippet && (
+            <p style={{
+              fontSize: 12, color: "var(--theme-text-muted)", margin: 0,
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            }}>
+              {snippet}
+            </p>
+          )}
+        </div>
+
+        {/* Timestamp + chevron */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          <span style={{ fontSize: 11, color: "var(--theme-text-muted)" }}>{timestamp}</span>
+          <span style={{
+            color: "var(--theme-text-muted)", display: "flex",
+            transition: "transform 150ms ease",
+            transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
+          }}>
+            <ChevronDown size={14} />
+          </span>
+        </div>
+      </div>
+
+      {/* ── Expanded body ── */}
+      <div
+        ref={bodyRef}
+        style={{
+          display: "grid",
+          gridTemplateRows: expanded ? "1fr" : "0fr",
+          transition: "grid-template-rows 200ms ease-out",
+        }}
+      >
+        <div style={{ overflow: "hidden" }}>
+          <div style={{ paddingLeft: 72, paddingRight: 24, paddingBottom: 20 }}>
+            <MessageBubble message={message} onRetract={onRetract} variant="first" />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1036,7 +879,7 @@ function ActionButton({ onClick, disabled, variant, icon, label, dangerOnHover }
     fontSize: 12,
     fontWeight: 600,
     cursor: disabled ? "not-allowed" : "pointer",
-    transition: "all 150ms ease",
+    transition: "color 150ms ease, border-color 150ms ease, background-color 150ms ease, opacity 150ms ease",
     opacity: disabled ? 0.5 : 1,
     border: "1px solid transparent",
   };
@@ -1120,36 +963,9 @@ function EmptyState({ message }: { message?: string }) {
 function ThreadDetailSkeleton() {
   return (
     <div style={{ padding: "20px 28px" }}>
-      <div
-        style={{
-          height: 16,
-          width: 120,
-          borderRadius: 4,
-          backgroundColor: "var(--theme-bg-surface-subtle)",
-          marginBottom: 12,
-          animation: "pulse 1.5s infinite",
-        }}
-      />
-      <div
-        style={{
-          height: 24,
-          width: "60%",
-          borderRadius: 4,
-          backgroundColor: "var(--theme-bg-surface-subtle)",
-          marginBottom: 12,
-          animation: "pulse 1.5s infinite",
-        }}
-      />
-      <div
-        style={{
-          height: 12,
-          width: "40%",
-          borderRadius: 4,
-          backgroundColor: "var(--theme-bg-surface-subtle)",
-          animation: "pulse 1.5s infinite",
-        }}
-      />
-      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }`}</style>
+      <div className="animate-pulse" style={{ height: 16, width: 120, borderRadius: 4, backgroundColor: "var(--theme-bg-surface-subtle)", marginBottom: 12 }} />
+      <div className="animate-pulse" style={{ height: 24, width: "60%", borderRadius: 4, backgroundColor: "var(--theme-bg-surface-subtle)", marginBottom: 12 }} />
+      <div className="animate-pulse" style={{ height: 12, width: "40%", borderRadius: 4, backgroundColor: "var(--theme-bg-surface-subtle)" }} />
     </div>
   );
 }

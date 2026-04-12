@@ -63,10 +63,17 @@ export function useDataScope(): DataScopeResult {
           ? supabase.from('users').select('id').eq('team_id', user.team_id).eq('is_active', true)
           : Promise.resolve({ data: null });
 
-      const [{ data: override }, { data: roleUsers }] = await Promise.all([
-        overridePromise,
-        deptUsersPromise,
-      ]);
+      const [
+        { data: override, error: overrideError },
+        { data: roleUsers, error: roleUsersError },
+      ] = await Promise.all([overridePromise, deptUsersPromise]);
+
+      if (overrideError) {
+        console.warn('[DataScope] permission_override fetch failed:', overrideError.message);
+      }
+      if (roleUsersError) {
+        console.warn('[DataScope] role users fetch failed:', roleUsersError.message);
+      }
 
       // Override takes precedence over role
       if (override) {

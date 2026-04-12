@@ -3,8 +3,11 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
+import { toast } from "sonner@2.0.3";
 import { supabase } from "../../../utils/supabase/client";
+import { queryKeys } from "../../../lib/queryKeys";
 
 // ==================== TYPES ====================
 
@@ -29,9 +32,45 @@ interface CatalogItemComboboxProps {
   value: string;                        // current description text
   catalogItemId?: string;               // current linked catalog item ID
   serviceType?: string;                 // kept for future smart-sort when we link catalog → service
+  side?: "revenue" | "expense" | "both"; // filter items by category side
+  categoryId?: string;                  // when set, shows only items in this catalog category + assigns on quick-create
   onChange: (description: string, catalogItemId?: string) => void;
   disabled?: boolean;
   placeholder?: string;
+}
+
+// ==================== FUZZY MATCH ====================
+
+/** Simple similarity check: case-insensitive, catches near-duplicates */
+function findSimilarItems(name: string, items: CatalogItem[]): CatalogItem[] {
+  const lower = name.toLowerCase().trim();
+  if (!lower) return [];
+  return items.filter((item) => {
+    const itemLower = item.name.toLowerCase();
+    if (itemLower === lower) return true; // exact match (shouldn't happen — exactMatch blocks create button)
+    // Check if one contains the other (e.g., "THC" vs "THC Charges")
+    if (itemLower.includes(lower) || lower.includes(itemLower)) return true;
+    // Levenshtein distance ≤ 2 for short names
+    if (lower.length <= 12 && levenshtein(lower, itemLower) <= 2) return true;
+    return false;
+  });
+}
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
+    Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+  );
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[m][n];
 }
 
 // ==================== CACHE ====================
@@ -41,24 +80,43 @@ let cachedItems: CatalogItem[] | null = null;
 let cacheTimestamp = 0;
 const CACHE_TTL = 60_000; // 60 seconds
 
+// Cache also stores category side info for filtering
+let cachedCategorySides: Record<string, string> = {};
+
 async function fetchCatalogItems(forceRefresh = false): Promise<CatalogItem[]> {
   if (!forceRefresh && cachedItems && Date.now() - cacheTimestamp < CACHE_TTL) {
     return cachedItems;
   }
   try {
-    const { data, error } = await supabase
-      .from('catalog_items')
-      .select('id, name, category_id, created_at, updated_at')
-      .order('name');
-    if (!error && data) {
-      cachedItems = data;
+    const [itemsRes, catsRes] = await Promise.all([
+      supabase.from('catalog_items').select('id, name, category_id, created_at, updated_at').order('name'),
+      supabase.from('catalog_categories').select('id, side'),
+    ]);
+    if (!itemsRes.error && itemsRes.data) {
+      cachedItems = itemsRes.data;
       cacheTimestamp = Date.now();
-      return data;
     }
+    if (!catsRes.error && catsRes.data) {
+      cachedCategorySides = {};
+      for (const cat of catsRes.data) {
+        cachedCategorySides[cat.id] = cat.side || "both";
+      }
+    }
+    return cachedItems || [];
   } catch (err) {
     console.error("Error fetching catalog items:", err);
   }
   return cachedItems || [];
+}
+
+/** Filter items by category side */
+function filterBySide(items: CatalogItem[], side?: string): CatalogItem[] {
+  if (!side || side === "both") return items;
+  return items.filter((item) => {
+    if (!item.category_id) return true; // uncategorized items show everywhere
+    const catSide = cachedCategorySides[item.category_id];
+    return catSide === side || catSide === "both";
+  });
 }
 
 // Invalidate cache (called after creating a new item)
@@ -72,10 +130,13 @@ function invalidateCache() {
 export function CatalogItemCombobox({
   value,
   catalogItemId,
+  side,
+  categoryId,
   onChange,
   disabled = false,
   placeholder = "Item description",
 }: CatalogItemComboboxProps) {
+  const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
   const [searchText, setSearchText] = useState(value || "");
   const [items, setItems] = useState<CatalogItem[]>([]);
@@ -100,11 +161,11 @@ export function CatalogItemCombobox({
     if (isOpen) {
       setIsLoading(true);
       fetchCatalogItems().then((data) => {
-        setItems(data);
+        setItems(filterBySide(data, side));
         setIsLoading(false);
       });
     }
-  }, [isOpen]);
+  }, [isOpen, side]);
 
   // Compute position when opening
   useEffect(() => {
@@ -158,14 +219,20 @@ export function CatalogItemCombobox({
     return () => document.removeEventListener("keydown", handleEscape);
   }, [isOpen, value]);
 
-  // Filter items alphabetically
+  // Filter items — category items first, then rest alphabetically
   const getFilteredItems = useCallback((): CatalogItem[] => {
     const query = searchText.toLowerCase().trim();
-    if (!query) return [...items].sort((a, b) => a.name.localeCompare(b.name));
-    return items
-      .filter(item => item.name.toLowerCase().includes(query))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [items, searchText]);
+    const filtered = query
+      ? items.filter(item => item.name.toLowerCase().includes(query))
+      : [...items];
+    return filtered.sort((a, b) => {
+      // Items in the current category sort before others
+      const aInCat = categoryId && a.category_id === categoryId ? 0 : 1;
+      const bInCat = categoryId && b.category_id === categoryId ? 0 : 1;
+      if (aInCat !== bInCat) return aInCat - bInCat;
+      return a.name.localeCompare(b.name);
+    });
+  }, [items, searchText, categoryId]);
 
   // Check if typed text exactly matches an existing item
   const exactMatch = items.some(
@@ -179,27 +246,45 @@ export function CatalogItemCombobox({
     setIsOpen(false);
   };
 
-  // Handle one-click quick create — no form, just POST immediately
+  // Handle one-click quick create — with fuzzy duplicate check (scoped to same category)
   const handleQuickCreate = async () => {
     const name = searchText.trim();
     if (!name || isCreating) return;
+
+    // Fuzzy duplicate detection — only check items in the same category (or globally if no category)
+    const allItems = cachedItems || items;
+    const scopedItems = categoryId
+      ? allItems.filter((i) => i.category_id === categoryId)
+      : allItems;
+    const similar = findSimilarItems(name, scopedItems);
+    if (similar.length > 0) {
+      const names = similar.slice(0, 3).map((s) => `"${s.name}"`).join(", ");
+      if (!confirm(`Similar item${similar.length > 1 ? "s" : ""} already exist: ${names}.\n\nCreate "${name}" anyway?`)) {
+        return;
+      }
+    }
+
     setIsCreating(true);
 
     try {
       const { data, error } = await supabase
         .from('catalog_items')
-        .insert({ name })
+        .insert({ id: `ci-${Date.now()}`, name, ...(categoryId ? { category_id: categoryId } : {}) })
         .select('id, name, category_id, created_at, updated_at')
         .single();
 
       if (!error && data) {
         invalidateCache();
+        queryClient.invalidateQueries({ queryKey: queryKeys.catalog.all() });
         handleSelect(data);
+        toast.success(`"${data.name}" added to catalog`);
       } else {
-        console.error("Error creating catalog item:", error?.message);
+        console.error("Error creating catalog item:", error);
+        toast.error(`Failed to add item: ${error?.message ?? error?.code ?? "unknown error"}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error creating catalog item:", err);
+      toast.error(`Failed to add item: ${err?.message ?? String(err)}`);
     } finally {
       setIsCreating(false);
     }

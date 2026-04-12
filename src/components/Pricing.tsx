@@ -1,4 +1,5 @@
 import { supabase } from '../utils/supabase/client';
+import { toast } from "sonner@2.0.3";
 import { createWorkflowTicket } from '../utils/workflowTickets';
 import { logActivity, logCreation } from '../utils/activityLog';
 import { trackRecent } from '../lib/recents';
@@ -171,8 +172,6 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
   };
 
   const handleSaveQuotation = async (data: QuotationNew) => {
-    console.log("Saving quotation:", data);
-
     const d = data as any;
 
     // Fields that live inside the `pricing` JSONB column (not top-level DB columns)
@@ -208,7 +207,22 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
       quotation_type: d.quotation_type,
       // Date field remaps
       quotation_date: d.quotation_date ?? d.created_date,
-      expiry_date: d.expiry_date ?? d.valid_until,
+      // valid_until can be either an ISO date string or a plain number (days).
+      // Only write expiry_date when it's actually a date; validity_period (days) lives in the pricing JSONB.
+      expiry_date: (() => {
+        const raw = d.expiry_date ?? d.valid_until;
+        if (!raw) return undefined;
+        const days = Number(raw);
+        if (!isNaN(days) && String(raw).trim() === String(days)) {
+          // It's a plain number — compute expiry from quotation_date + days
+          const base = d.quotation_date ?? d.created_date;
+          if (!base) return undefined;
+          const dt = new Date(base);
+          dt.setDate(dt.getDate() + days);
+          return dt.toISOString();
+        }
+        return raw; // Already a date string
+      })(),
       validity_date: d.validity_date,
       // Contract date fields
       contract_start_date: d.contract_validity_start ?? d.contract_start_date,
@@ -216,7 +230,6 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
       // Misc columns that do exist on the table
       created_by: d.created_by,
       created_by_name: d.created_by_name,
-      inquiry_id: d.inquiry_id,
       project_id: d.project_id,
       // Pack all pricing sub-fields into the JSONB column
       pricing: Object.keys(mergedPricing).length > 0 ? mergedPricing : undefined,
@@ -226,16 +239,20 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
         : d.details ?? undefined,
     };
 
-    // Date fields — null out empty strings so Postgres doesn't choke on ""
+    // Date fields — null out anything Postgres can't parse as a timestamp
     const DATE_COLS = ['quotation_date', 'expiry_date', 'validity_date', 'contract_start_date', 'contract_end_date'];
     for (const col of DATE_COLS) {
-      if (cleanPayload[col] === '') cleanPayload[col] = null;
+      const v = cleanPayload[col];
+      if (v === '' || (typeof v === 'string' && v !== null && isNaN(Date.parse(v)))) {
+        cleanPayload[col] = null;
+      }
     }
 
     // Strip undefined values so we don't send nulls for untouched fields
     const payload = Object.fromEntries(
       Object.entries(cleanPayload).filter(([, v]) => v !== undefined)
     );
+
 
     try {
       const isUpdate = !!d.id && !d.id.startsWith('quot-');
@@ -253,7 +270,7 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
           .eq('id', d.id);
 
         if (error) throw error;
-        console.log('Quotation updated successfully');
+        toast.success("Quotation saved successfully");
         const _actor = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
         logActivity("quotation", d.id, d.quote_number ?? d.id, "updated", _actor);
 
@@ -274,8 +291,18 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
           });
         }
 
-        await fetchQuotations();
-        setSubView("list");
+        fetchQuotations();
+        // Re-fetch the saved record so the detail view shows fresh data immediately
+        const { data: refreshed } = await supabase
+          .from('quotations')
+          .select('*')
+          .eq('id', d.id)
+          .maybeSingle();
+        if (refreshed) {
+          const merged = { ...(refreshed.details ?? {}), ...(refreshed.pricing ?? {}), ...refreshed } as QuotationNew;
+          setSelectedQuotation(merged);
+        }
+        setSubView("detail");
       } else {
         const newId = `QUO-${Date.now()}`;
         const { error } = await supabase.from('quotations').insert({
@@ -288,13 +315,14 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
         console.log('Quotation created successfully:', newId);
         const _actorC = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
         logCreation("quotation", newId, payload.quote_number ?? newId, _actorC);
+        toast.success('Quotation saved.');
         await fetchQuotations();
         setSubView("list");
       }
     } catch (error) {
       console.error('Error saving quotation:', error);
       const msg = (error as any)?.message ?? JSON.stringify(error);
-      alert('Error saving quotation: ' + msg);
+      toast.error('Error saving quotation: ' + msg);
     }
   };
 
@@ -486,7 +514,7 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
                     setSelectedQuotation(null);
                   } catch (error) {
                     console.error('Error saving inquiry:', error);
-                    alert('Error saving inquiry: ' + error);
+                    toast.error('Error saving inquiry: ' + (error as any)?.message ?? String(error));
                   }
                 }}
                 initialData={selectedQuotation || undefined}
@@ -517,6 +545,7 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
                   onBack={handleBackFromQuotation}
                   userDepartment={userDepartment}
                   onUpdate={handleUpdateQuotation}
+                  onSaveQuotation={handleSaveQuotation}
                   onEdit={handleEditQuotation}
                   onDuplicate={handleDuplicateQuotation}
                   onCreateTicket={onCreateTicket}
@@ -533,10 +562,11 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
                 />
             )}
             {subView === "create" && (
-              <QuotationBuilderV3 
+              <QuotationBuilderV3
                 onClose={handleBackFromCreate}
                 onSave={handleSaveQuotation}
                 initialData={selectedQuotation || undefined}
+                mode={selectedQuotation ? "edit" : "create"}
                 builderMode="quotation"
                 initialQuotationType={selectedQuotation?.quotation_type || pendingQuotationType}
               />

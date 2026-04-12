@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Search, Plus, FolderPlus } from "lucide-react";
-import { AVAILABLE_CHARGE_CATEGORIES } from "../../../constants/quotation-charges";
+import { supabase } from "../../../utils/supabase/client";
 
 interface CategoryDropdownProps {
   onAdd: (name: string) => void;
@@ -13,7 +13,18 @@ export function CategoryDropdown({ onAdd, onClose }: CategoryDropdownProps) {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const predefinedCategories = AVAILABLE_CHARGE_CATEGORIES;
+  const [predefinedCategories, setPredefinedCategories] = useState<string[]>([]);
+
+  useEffect(() => {
+    supabase
+      .from("catalog_categories")
+      .select("name")
+      .in("side", ["revenue", "both"])
+      .order("sort_order")
+      .then(({ data }) => {
+        if (data) setPredefinedCategories(data.map((c) => c.name));
+      });
+  }, []);
 
   const filteredCategories = predefinedCategories.filter(cat =>
     cat.toLowerCase().includes(searchTerm.toLowerCase())

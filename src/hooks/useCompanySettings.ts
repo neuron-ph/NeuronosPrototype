@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../utils/supabase/client";
+import { queryKeys } from "../lib/queryKeys";
 
 export interface CompanySettings {
   id: string;
@@ -34,30 +35,21 @@ const FALLBACK: CompanySettings = {
 };
 
 export function useCompanySettings() {
-  const [settings, setSettings] = useState<CompanySettings>(FALLBACK);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function fetch() {
+  const { data: settings = FALLBACK, isLoading: loading } = useQuery<CompanySettings>({
+    queryKey: queryKeys.companySettings.default(),
+    queryFn: async () => {
       const { data, error } = await supabase
         .from("company_settings")
         .select("*")
         .eq("id", "default")
         .maybeSingle();
 
-      if (!cancelled) {
-        if (data && !error) {
-          setSettings(data as CompanySettings);
-        }
-        setLoading(false);
-      }
-    }
-
-    fetch();
-    return () => { cancelled = true; };
-  }, []);
+      if (error || !data) return FALLBACK;
+      return data as CompanySettings;
+    },
+    staleTime: 5 * 60 * 1000, // Company settings rarely change — 5min is fine
+    placeholderData: FALLBACK,
+  });
 
   return { settings, loading };
 }

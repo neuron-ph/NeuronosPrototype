@@ -16,13 +16,13 @@ export function EVoucherDetailView({ evoucher, onClose, currentUser, onStatusCha
     switch (status) {
       case "posted":
       case "disbursed":
-      case "liquidation_closed":
         return { bg: "var(--theme-status-success-bg)", color: "var(--theme-status-success-fg)", icon: CheckCircle };
       case "pending_accounting":
       case "pending_ceo":
-      case "pending_tl":
-      case "liquidation_open":
-      case "liquidation_pending":
+      case "pending_manager":
+      case "pending_tl": // legacy
+      case "pending_liquidation":
+      case "pending_verification":
         return { bg: "var(--theme-status-warning-bg)", color: "var(--theme-status-warning-fg)", icon: FileText };
       case "rejected":
       case "cancelled":

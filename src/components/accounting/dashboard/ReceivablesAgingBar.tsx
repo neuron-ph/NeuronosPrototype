@@ -51,11 +51,11 @@ interface ReceivablesAgingBarProps {
 }
 
 const AGING_CONFIG: { label: string; days: string; min: number; max: number; color: string; bgLight: string }[] = [
-  { label: "Current",  days: "Not yet due",   min: -Infinity, max: 0,   color: "var(--theme-action-primary-bg)", bgLight: "#F0FDFA" },
-  { label: "1–30d",    days: "1–30 days",      min: 1,         max: 30,  color: "var(--theme-status-warning-fg)", bgLight: "#FFFBEB" },
-  { label: "31–60d",   days: "31–60 days",     min: 31,        max: 60,  color: "#EA580C", bgLight: "#FFF7ED" },
-  { label: "61–90d",   days: "61–90 days",     min: 61,        max: 90,  color: "var(--theme-status-danger-fg)", bgLight: "#FEF2F2" },
-  { label: "90d+",     days: "Over 90 days",   min: 91,        max: Infinity, color: "#991B1B", bgLight: "#FEF2F2" },
+  { label: "Current",  days: "Not yet due",   min: -Infinity, max: 0,   color: "var(--theme-action-primary-bg)", bgLight: "var(--theme-status-success-bg)" },
+  { label: "1–30d",    days: "1–30 days",      min: 1,         max: 30,  color: "var(--theme-status-warning-fg)", bgLight: "var(--theme-status-warning-bg)" },
+  { label: "31–60d",   days: "31–60 days",     min: 31,        max: 60,  color: "var(--theme-status-warning-fg)", bgLight: "var(--theme-bg-surface-subtle)" },
+  { label: "61–90d",   days: "61–90 days",     min: 61,        max: 90,  color: "var(--theme-status-danger-fg)", bgLight: "var(--theme-status-danger-bg)" },
+  { label: "90d+",     days: "Over 90 days",   min: 91,        max: Infinity, color: "var(--theme-status-danger-fg)", bgLight: "var(--theme-status-danger-bg)" },
 ];
 
 function getAgingDaysForInvoice(inv: any): number {
@@ -163,7 +163,7 @@ function InvoiceDrillDown({
                   {onRecordPayment && (
                     <button
                       className="px-2 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-colors hover:bg-[var(--theme-bg-surface)]/80"
-                      style={{ color: "var(--theme-action-primary-bg)", border: "1px solid #0F766E30" }}
+                      style={{ color: "var(--theme-action-primary-bg)", border: "1px solid var(--theme-border-default)" }}
                       onClick={(e) => { e.stopPropagation(); onRecordPayment(inv.id || invNumber); }}
                     >
                       Record Payment
@@ -172,7 +172,7 @@ function InvoiceDrillDown({
                   {onSendReminder && (
                     <button
                       className="px-2 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-colors hover:bg-[var(--theme-bg-surface)]/80"
-                      style={{ color: "var(--theme-action-primary-bg)", border: "1px solid #0F766E30" }}
+                      style={{ color: "var(--theme-action-primary-bg)", border: "1px solid var(--theme-border-default)" }}
                       onClick={(e) => { e.stopPropagation(); onSendReminder(inv); }}
                     >
                       Send Reminder
@@ -337,7 +337,7 @@ function UnbilledDrillDown({
                 <div className="opacity-0 group-hover/row:opacity-100 transition-opacity duration-150">
                   <button
                     className="px-2 py-0.5 rounded text-[10px] font-medium cursor-pointer transition-colors hover:bg-[var(--theme-bg-surface)]/80"
-                    style={{ color: "var(--theme-action-primary-bg)", border: "1px solid #0F766E30" }}
+                    style={{ color: "var(--theme-action-primary-bg)", border: "1px solid var(--theme-border-default)" }}
                     onClick={(e) => { e.stopPropagation(); onCreateInvoice(booking.bookingId); }}
                   >
                     Create Invoice
@@ -560,8 +560,8 @@ export function ReceivablesAgingBar({ invoices, collections = [], dso, onBucketC
         {hasUnbilled && (() => {
           const unbilledBarPct = maxBucketAmount > 0 ? (unbilledAmount / maxBucketAmount) * 100 : 0;
           const isExpanded = expandedBucket === "__unbilled__";
-          const UNBILLED_COLOR = "#667085";
-          const UNBILLED_BG = "#F8F9FB";
+          const UNBILLED_COLOR = "var(--theme-text-muted)";
+          const UNBILLED_BG = "var(--theme-bg-surface-subtle)";
 
           return (
             <div>
@@ -631,7 +631,7 @@ export function ReceivablesAgingBar({ invoices, collections = [], dso, onBucketC
 
                 {/* Empty share % slot (unbilled isn't part of AR share) */}
                 <div className="flex-shrink-0 text-right" style={{ width: "36px" }}>
-                  <span className="text-[10px] font-medium tabular-nums" style={{ color: "#B4B9C4" }}>
+                  <span className="text-[10px] font-medium tabular-nums" style={{ color: "var(--theme-text-muted)" }}>
                     —
                   </span>
                 </div>

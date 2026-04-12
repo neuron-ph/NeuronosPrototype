@@ -4,13 +4,14 @@ import { toast } from '../components/ui/toast-utils';
 import { queryKeys } from "../lib/queryKeys";
 import { logCreation, logStatusChange, logDeletion, type ActivityActor } from '../utils/activityLog';
 
-type EVoucherContext = "bd" | "accounting" | "operations" | "collection" | "billing";
+type EVoucherContext = "bd" | "accounting" | "operations" | "collection" | "billing" | "personal";
 
 interface LineItem {
   id: string;
   particular: string;
   description: string;
   amount: number;
+  catalog_item_id?: string;
 }
 
 interface EVoucherData {
@@ -48,6 +49,8 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd", actor?: Activ
         return "expense";
       case "operations":
         return "expense";
+      case "personal":
+        return "reimbursement";
       case "collection":
         return "collection";
       case "billing":
@@ -57,7 +60,7 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd", actor?: Activ
     }
   };
 
-  const getSourceModule = () => context;
+  const getSourceModule = () => context === "personal" ? "accounting" : context;
 
   const assertBookingLinkedWhenRequired = (data: EVoucherData) => {
     const transactionType = getTransactionType(data);
@@ -72,6 +75,22 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd", actor?: Activ
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: queryKeys.evouchers.all() });
+  };
+
+  /** Insert line items into the relational evoucher_line_items table */
+  const insertLineItems = async (evoucherId: string, lineItems: LineItem[]) => {
+    if (!lineItems || lineItems.length === 0) return;
+    const rows = lineItems.map((item, index) => ({
+      id: item.id || `${evoucherId}-li-${index}`,
+      evoucher_id: evoucherId,
+      particular: item.particular,
+      description: item.description,
+      amount: item.amount,
+      catalog_item_id: item.catalog_item_id || null,
+      sort_order: index,
+    }));
+    const { error } = await supabase.from('evoucher_line_items').insert(rows);
+    if (error) throw new Error(`Line items failed: ${error.message}`);
   };
 
   const draftMutation = useMutation({
@@ -90,7 +109,7 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd", actor?: Activ
         project_number: data.projectNumber || null,
         invoice_id: data.invoiceId || null,
         booking_id: data.bookingId || null,
-        line_items: data.lineItems,
+        line_items: data.lineItems, // Legacy JSONB — kept during transition, relational is primary
         linked_billings: data.transactionType === "collection" ? (data as any).linkedBillings : undefined,
         total_amount: data.totalAmount,
         payment_method: data.preferredPayment,
@@ -123,6 +142,9 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd", actor?: Activ
         .single();
 
       if (insertErr) throw new Error(insertErr.message);
+
+      // Insert line items into relational table
+      await insertLineItems(created.id, data.lineItems);
 
       if (actor) logCreation("evoucher", created.id, created.voucher_number ?? created.id, actor);
       console.log('E-Voucher draft created:', created);
@@ -168,7 +190,7 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd", actor?: Activ
         project_number: data.projectNumber || null,
         invoice_id: data.invoiceId || null,
         booking_id: data.bookingId || null,
-        line_items: data.lineItems,
+        line_items: data.lineItems, // Legacy JSONB — kept during transition, relational is primary
         linked_billings: data.transactionType === "collection" ? (data as any).linkedBillings : undefined,
         total_amount: data.totalAmount,
         amount: data.totalAmount,
@@ -204,6 +226,9 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd", actor?: Activ
         .single();
 
       if (insertErr) throw new Error(insertErr.message);
+
+      // Insert line items into relational table
+      await insertLineItems(created.id, data.lineItems);
 
       const createdId = created.id;
       const createdVoucherNumber = created.voucher_number;
@@ -267,7 +292,7 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd", actor?: Activ
         project_number: data.projectNumber || null,
         invoice_id: data.invoiceId || null,
         booking_id: data.bookingId || null,
-        line_items: data.lineItems,
+        line_items: data.lineItems, // Legacy JSONB — kept during transition, relational is primary
         linked_billings: data.transactionType === "collection" ? (data as any).linkedBillings : undefined,
         total_amount: data.totalAmount,
         amount: data.totalAmount,
@@ -306,6 +331,9 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd", actor?: Activ
         .single();
 
       if (insertErr) throw new Error(insertErr.message);
+
+      // Insert line items into relational table
+      await insertLineItems(created.id, data.lineItems);
 
       if (actor) logCreation("evoucher", created.id, created.voucher_number ?? created.id, actor);
       await supabase.from('evoucher_history').insert([

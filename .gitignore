@@ -7,7 +7,14 @@ dist/
 .mcp.json
 .serena/
 .dora/
+.agents/
+.impeccable.md
+skills-lock.json
 vite-qa*.log
+
+# Local env — never commit secrets
+.env.local
+.env*.local
 
 # QA artifacts
 

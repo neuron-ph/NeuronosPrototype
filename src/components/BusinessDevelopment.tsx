@@ -23,6 +23,7 @@ import type { Activity } from "../types/bd";
 import type { QuotationNew, Project, QuotationType } from "../types/pricing";
 import { toast } from "./ui/toast-utils";
 import { useUser } from "../hooks/useUser";
+import { useUsers } from "../hooks/useUsers";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../lib/queryKeys";
 
@@ -62,6 +63,7 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
   const [taskCustomers, setTaskCustomers] = useState<any[]>([]);
 
   const { user } = useUser();
+  const { users } = useUsers();
   const isSavingRef = useRef(false);
 
   // Map department name to userDepartment format
@@ -199,7 +201,8 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
       }
 
       if (selectedActivity.user_id) {
-        setActivityUserName(selectedActivity.user_id);
+        const resolved = users.find(u => u.id === selectedActivity.user_id)?.name;
+        setActivityUserName(resolved || selectedActivity.user_id);
       }
 
       const contactQuery = selectedActivity.contact_id
@@ -813,6 +816,7 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
                 onBack={handleBackFromInquiry}
                 userDepartment="Business Development"
                 onUpdate={handleUpdateQuotation}
+                onSaveQuotation={handleSaveInquiry}
                 onEdit={handleEditInquiry}
                 onDuplicate={handleDuplicateInquiry}
                 onCreateTicket={onCreateTicket}

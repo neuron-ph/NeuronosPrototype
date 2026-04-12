@@ -30,7 +30,7 @@ export function ExpenseDetailsSheet({ isOpen, onClose, expenseId }: ExpenseDetai
         // Use /evouchers endpoint to support Draft/Pending items as well as Posted ones
         const { data: evData, error: evError } = await supabase
           .from('evouchers')
-          .select('*')
+          .select('*, evoucher_line_items(*)')
           .eq('id', expenseId)
           .maybeSingle();
         
@@ -60,7 +60,7 @@ export function ExpenseDetailsSheet({ isOpen, onClose, expenseId }: ExpenseDetai
           payment_method: data.payment_method,
           due_date: data.due_date,
           requestor_name: data.requestor_name,
-          line_items: data.line_items || [],
+          line_items: data.evoucher_line_items?.length ? data.evoucher_line_items : (data.line_items || []),
           notes: data.notes
         };
 

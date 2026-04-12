@@ -54,7 +54,10 @@
  */
 
 import { useState, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useUser } from "../../../hooks/useUser";
+import { supabase } from "../../../utils/supabase/client";
+import { queryKeys } from "../../../lib/queryKeys";
 import { toast } from "sonner@2.0.3";
 import { X, Save, FileText, Handshake } from "lucide-react";
 import { GeneralDetailsSection } from "./GeneralDetailsSection";
@@ -219,6 +222,7 @@ interface QuotationBuilderV3Props {
 
 export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "create", customerData, contactData, builderMode = "quotation", viewMode = false, hideHeader = false, isAmendment = false, onAmend, initialQuotationType }: QuotationBuilderV3Props) {
   const { user } = useUser();
+  const queryClient = useQueryClient();
   // Check if quotation is locked (converted to project)
   const isLocked = mode === "edit" && !!initialData?.project_id;
   
@@ -263,7 +267,7 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
   );
   const [quotationName, setQuotationName] = useState(initialData?.quotation_name || "");
   const [selectedServices, setSelectedServices] = useState<string[]>(initialData?.services || []);
-  const [date, setDate] = useState(initialData?.created_date || new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(initialData?.quotation_date || initialData?.created_date || new Date().toISOString().split('T')[0]);
   const [creditTerms, setCreditTerms] = useState(initialData?.credit_terms || "");
   // Parse numeric days from stored string — handles legacy "30 days" and plain "30"
   const [validity, setValidity] = useState(() => {
@@ -927,12 +931,12 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
   const handleAddSellingCategory = (categoryName: string = "New Category") => {
     // ✨ VALIDATION: Check if category name already exists (case-insensitive)
     const normalizedName = categoryName.toLowerCase().trim();
-    const duplicateExists = sellingPrice.some(cat => 
+    const duplicateExists = sellingPrice.some(cat =>
       cat.category_name.toLowerCase().trim() === normalizedName
     );
-    
+
     let finalCategoryName = categoryName;
-    
+
     // If duplicate exists, append number to make it unique
     if (duplicateExists) {
       let counter = 1;
@@ -940,24 +944,62 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
         counter++;
       }
       finalCategoryName = `${categoryName} ${counter}`;
-      console.log(`⚠️  Category "${categoryName}" exists, creating as "${finalCategoryName}"`);
     }
-    
-    // Create a new empty category with the provided name
+
+    // Add category to local state immediately — instant UI feedback
+    const localId = generateCategoryId();
     const newCategory: SellingPriceCategory = {
-      id: generateCategoryId(),
+      id: localId,
       category_name: finalCategoryName,
       name: finalCategoryName,
       line_items: [],
-      subtotal: 0
+      subtotal: 0,
     };
-    
     setSellingPrice(prev => [...prev, newCategory]);
-    
-    // Auto-expand the new category
-    setExpandedSellingCategories(prev => new Set(prev).add(newCategory.id));
-    
-    console.log(`✅ Added new selling category: ${newCategory.category_name}`);
+    setExpandedSellingCategories(prev => new Set(prev).add(localId));
+
+    // Background: look up or create the catalog category, then patch catalog_category_id
+    (async () => {
+      try {
+        const { data: existing } = await supabase
+          .from("catalog_categories")
+          .select("id")
+          .ilike("name", finalCategoryName.trim())
+          .in("side", ["revenue", "both"])
+          .maybeSingle();
+
+        let catalogCategoryId: string | undefined;
+        if (existing) {
+          catalogCategoryId = existing.id;
+        } else {
+          const newId = `cat-${Date.now()}`;
+          const { data: created } = await supabase
+            .from("catalog_categories")
+            .insert({
+              id: newId,
+              name: finalCategoryName.trim(),
+              side: "revenue",
+              sort_order: 100,
+              is_default: false,
+            })
+            .select("id")
+            .single();
+          if (created) {
+            catalogCategoryId = created.id;
+            queryClient.invalidateQueries({ queryKey: queryKeys.catalog.all() });
+            toast.success(`"${finalCategoryName}" added to catalog`);
+          }
+        }
+
+        if (catalogCategoryId) {
+          setSellingPrice(prev => prev.map(cat =>
+            cat.id === localId ? { ...cat, catalog_category_id: catalogCategoryId } : cat
+          ));
+        }
+      } catch (err) {
+        console.error("Catalog category sync failed:", err);
+      }
+    })();
   };
 
   const handleAddItemToBuyingCategory = (categoryId: string) => {
@@ -1211,6 +1253,7 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
       console.log("   → Selling Price initialized with 0% markup");
     }
   }, [mode, chargeCategories.length]); // Only run on mount or when these values change
+
 
   /**
    * 🔄 AUTO-SYNC: Buying Price → Selling Price synchronization.
@@ -2147,20 +2190,18 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
           {!isAmendment && (
             <button
               onClick={handleSaveAsDraft}
-              disabled={isLocked}
               style={{
                 padding: "8px 20px",
                 fontSize: "13px",
                 fontWeight: 500,
-                color: isLocked ? "var(--theme-text-muted)" : "var(--neuron-brand-green)",
+                color: "var(--neuron-brand-green)",
                 backgroundColor: "var(--theme-bg-surface)",
                 border: "1px solid var(--neuron-ui-border)",
                 borderRadius: "6px",
-                cursor: isLocked ? "not-allowed" : "pointer",
+                cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
                 gap: "6px",
-                opacity: isLocked ? 0.5 : 1
               }}
             >
               <Save size={16} />

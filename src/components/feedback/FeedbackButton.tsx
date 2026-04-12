@@ -79,17 +79,17 @@ export function FeedbackButton() {
           {/* Header */}
           <div
             className="flex items-center justify-between px-4 py-3 border-b"
-            style={{ borderColor: "#E5E9F0" }}
+            style={{ borderColor: "var(--theme-border-default)" }}
           >
-            <span className="text-[13px] font-semibold" style={{ color: "#12332B" }}>
+            <span className="text-[13px] font-semibold" style={{ color: "var(--theme-text-primary)" }}>
               Send Feedback
             </span>
             <button
               onClick={handleClose}
               className="transition-colors"
-              style={{ color: "#667085" }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "#12332B")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "#667085")}
+              style={{ color: "var(--theme-text-muted)" }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--theme-text-primary)")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--theme-text-muted)")}
             >
               <X size={15} />
             </button>
@@ -107,9 +107,9 @@ export function FeedbackButton() {
                     onClick={() => setType(opt.value)}
                     className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-medium border transition-all"
                     style={{
-                      background: active ? "#0F766E" : "transparent",
-                      color: active ? "#FFFFFF" : "#667085",
-                      borderColor: active ? "#0F766E" : "#E5E9F0",
+                      background: active ? "var(--theme-action-primary-bg)" : "transparent",
+                      color: active ? "var(--theme-action-primary-text)" : "var(--theme-text-muted)",
+                      borderColor: active ? "var(--theme-action-primary-bg)" : "var(--theme-border-default)",
                     }}
                   >
                     {opt.icon}
@@ -121,7 +121,7 @@ export function FeedbackButton() {
 
             {/* Title */}
             <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "#667085" }}>
+              <label className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--theme-text-muted)" }}>
                 Title
               </label>
               <input
@@ -129,15 +129,19 @@ export function FeedbackButton() {
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Short summary..."
                 className="w-full px-3 py-2 rounded-lg border text-[13px] outline-none transition-colors"
-                style={{ borderColor: "#E5E9F0", color: "#12332B" }}
-                onFocus={(e) => (e.currentTarget.style.borderColor = "#0F766E")}
-                onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E9F0")}
+                style={{
+                  borderColor: "var(--theme-border-default)",
+                  color: "var(--theme-text-primary)",
+                  background: "var(--theme-input-subtle-bg, var(--theme-bg-surface))",
+                }}
+                onFocus={(e) => (e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)")}
+                onBlur={(e) => (e.currentTarget.style.borderColor = "var(--theme-border-default)")}
               />
             </div>
 
             {/* Description */}
             <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "#667085" }}>
+              <label className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--theme-text-muted)" }}>
                 Description
               </label>
               <textarea
@@ -146,9 +150,13 @@ export function FeedbackButton() {
                 placeholder="Tell us what happened or what you'd like to see..."
                 rows={4}
                 className="w-full px-3 py-2 rounded-lg border text-[13px] outline-none resize-none transition-colors"
-                style={{ borderColor: "#E5E9F0", color: "#12332B" }}
-                onFocus={(e) => (e.currentTarget.style.borderColor = "#0F766E")}
-                onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E9F0")}
+                style={{
+                  borderColor: "var(--theme-border-default)",
+                  color: "var(--theme-text-primary)",
+                  background: "var(--theme-input-subtle-bg, var(--theme-bg-surface))",
+                }}
+                onFocus={(e) => (e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)")}
+                onBlur={(e) => (e.currentTarget.style.borderColor = "var(--theme-border-default)")}
               />
             </div>
 
@@ -158,8 +166,8 @@ export function FeedbackButton() {
               disabled={!canSubmit}
               className="w-full py-2.5 rounded-xl text-[13px] font-semibold flex items-center justify-center gap-2 transition-all"
               style={{
-                background: canSubmit ? "#0F766E" : "#E5E9F0",
-                color: canSubmit ? "#FFFFFF" : "#667085",
+                background: canSubmit ? "var(--theme-action-primary-bg)" : "var(--theme-border-default)",
+                color: canSubmit ? "var(--theme-action-primary-text)" : "var(--theme-text-muted)",
                 cursor: canSubmit ? "pointer" : "not-allowed",
               }}
             >

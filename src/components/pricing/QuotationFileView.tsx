@@ -32,6 +32,7 @@ interface QuotationFileViewProps {
   onAcceptQuotation?: (quotation: QuotationNew) => void;
   onDelete?: () => void;
   onUpdate: (quotation: QuotationNew) => void;
+  onSaveQuotation?: (quotation: QuotationNew) => Promise<void>;
   onDuplicate?: (quotation: QuotationNew) => void;
   onCreateTicket?: (quotation: QuotationNew) => void;
   onConvertToProject?: (projectId: string) => void;
@@ -41,7 +42,7 @@ interface QuotationFileViewProps {
 
 type TabType = "details" | "comments";
 
-export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, onAcceptQuotation, onDelete, onUpdate, onDuplicate, onCreateTicket, onConvertToProject, onConvertToContract, currentUser }: QuotationFileViewProps) {
+export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, onAcceptQuotation, onDelete, onUpdate, onSaveQuotation, onDuplicate, onCreateTicket, onConvertToProject, onConvertToContract, currentUser }: QuotationFileViewProps) {
   const [activeTab, setActiveTab] = useState<TabType>("details");
   const [viewMode, setViewMode] = useState<"form" | "pdf">("form");
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
@@ -1030,7 +1031,19 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
                     />
                 </div>
              ) : (
-                <QuotationFormView project={adaptedProject} />
+                <QuotationFormView
+                  project={adaptedProject}
+                  onSave={async (data: any) => {
+                    if (onSaveQuotation) {
+                      await onSaveQuotation(data);
+                      toast.success("Quotation saved successfully");
+                    } else {
+                      onUpdate(data);
+                      toast.success("Quotation updated");
+                    }
+                  }}
+                  onAmend={onEdit}
+                />
              )}
            </div>
         ) : (

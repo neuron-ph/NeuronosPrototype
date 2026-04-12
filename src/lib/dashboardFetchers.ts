@@ -69,7 +69,7 @@ export interface DeptQueueData {
 
 export async function fetchMyWork(dept: string, role: string): Promise<MyWorkData> {
   const approvalStatuses: string[] = [];
-  if (role.includes("tl") || role === "team_lead") approvalStatuses.push("pending_tl");
+  if (role.includes("tl") || role === "team_lead" || role === "manager") approvalStatuses.push("pending_manager");
   if (dept === "Executive" || role.includes("executive") || role === "ceo") approvalStatuses.push("pending_ceo");
   if (dept === "Accounting") approvalStatuses.push("pending_accounting");
 
@@ -149,7 +149,7 @@ export async function fetchDeptQueue(dept: string, userId: string): Promise<Dept
       supabase.from("quotations").select("id", { count: "exact", head: true }).in("status", ["Pricing in Progress", "Draft"]),
       supabase.from("bookings").select("id", { count: "exact", head: true }).not("status", "in", '("Completed","Cancelled")'),
       supabase.from("tickets").select("id", { count: "exact", head: true }).eq("status", "open"),
-      supabase.from("evouchers").select("id", { count: "exact", head: true }).in("status", ["pending_tl", "pending_ceo", "pending_accounting"]),
+      supabase.from("evouchers").select("id", { count: "exact", head: true }).in("status", ["pending_manager", "pending_ceo", "pending_accounting"]),
     ]);
     return {
       ...empty,

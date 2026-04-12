@@ -6,8 +6,8 @@ interface BookingPendingEVStripProps {
   bookingId: string;
 }
 
-const IN_FLIGHT_STATUSES = ["draft", "pending_tl", "pending_ceo", "pending_accounting", "disbursed"];
-const POSTED_STATUSES = ["posted", "liquidation_open", "liquidation_pending", "liquidation_closed"];
+const IN_FLIGHT_STATUSES = ["draft", "pending_manager", "pending_ceo", "pending_accounting", "disbursed", "pending_liquidation", "pending_verification"];
+const POSTED_STATUSES = ["posted"];
 
 export function BookingPendingEVStrip({ bookingId }: BookingPendingEVStripProps) {
   const [pendingTotal, setPendingTotal] = useState(0);
