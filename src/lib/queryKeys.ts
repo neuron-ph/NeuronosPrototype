@@ -134,6 +134,10 @@ export const queryKeys = {
     list: () => ["inquiries", "list"] as const,
     detail: (id: string) => ["inquiries", id] as const,
   },
+  companySettings: {
+    all: () => ["companySettings"] as const,
+    default: () => ["companySettings", "default"] as const,
+  },
   calendar: {
     all: () => ["calendar"] as const,
     events: (start: string, end: string) =>

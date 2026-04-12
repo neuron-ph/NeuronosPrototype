@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { Trash2 } from "lucide-react";
 import type { QuotationLineItemNew } from "../../../types/pricing";
-import { ChargeItemDropdown } from "./ChargeItemDropdown";
+import { CatalogItemCombobox } from "../../shared/pricing/CatalogItemCombobox";
 
 interface UnifiedLineItemRowProps {
   item: QuotationLineItemNew;
@@ -58,13 +58,15 @@ export function UnifiedLineItemRow({
     }}>
       {/* Description */}
       <td style={{ padding: "4px", overflow: "visible" }}>
-        <ChargeItemDropdown
-          categoryName={categoryName}
+        <CatalogItemCombobox
           value={item.description}
-          onChange={(value) => handleFieldChange("description", value)}
-          onKeyDown={(e) => handleKeyDown(e, priceRef)}
-          hasStartedEditing={false}
-          inputId={`item-desc-${item.id}`}
+          catalogItemId={item.catalog_item_id}
+          side="revenue"
+          onChange={(desc, catId) => {
+            handleFieldChange("description", desc);
+            if (catId !== undefined) handleFieldChange("catalog_item_id", catId);
+          }}
+          placeholder="Select or type charge..."
         />
       </td>
 

@@ -20,8 +20,9 @@ export function EVoucherStatusBadge({ status, size = "md" }: EVoucherStatusBadge
           label: "Draft"
         };
       // Canonical AP workflow states
-      case "pending_tl":
-        return { bg: "var(--theme-status-warning-bg)", color: "var(--theme-status-warning-fg)", border: "var(--theme-status-warning-border)", icon: Clock, label: "Pending TL Approval" };
+      case "pending_manager":
+      case "pending_tl": // legacy
+        return { bg: "var(--theme-status-warning-bg)", color: "var(--theme-status-warning-fg)", border: "var(--theme-status-warning-border)", icon: Clock, label: "Pending Manager Approval" };
       case "pending_ceo":
         return { bg: "var(--theme-status-warning-bg)", color: "var(--theme-status-warning-fg)", border: "var(--theme-status-warning-border)", icon: Clock, label: "Pending CEO Approval" };
       case "pending_accounting":
@@ -34,12 +35,14 @@ export function EVoucherStatusBadge({ status, size = "md" }: EVoucherStatusBadge
         return { bg: "var(--theme-status-danger-bg)", color: "var(--theme-status-danger-fg)", border: "var(--theme-status-danger-border)", icon: XCircle, label: "Rejected" };
       case "cancelled":
         return { bg: "var(--theme-bg-surface-subtle)", color: "var(--theme-text-muted)", border: "var(--theme-border-default)", icon: Ban, label: "Cancelled" };
-      case "liquidation_open":
-        return { bg: "var(--theme-status-warning-bg)", color: "var(--theme-status-warning-fg)", border: "var(--theme-status-warning-border)", icon: Clock, label: "Liquidation Open" };
-      case "liquidation_pending":
-        return { bg: "var(--theme-status-warning-bg)", color: "var(--theme-status-warning-fg)", border: "var(--theme-status-warning-border)", icon: Clock, label: "Liquidation Pending Review" };
-      case "liquidation_closed":
-        return { bg: "var(--theme-status-success-bg)", color: "var(--theme-status-success-fg)", border: "var(--theme-status-success-border)", icon: CheckCircle, label: "Liquidation Closed" };
+      case "pending_liquidation":
+      case "liquidation_open": // legacy
+        return { bg: "var(--theme-status-warning-bg)", color: "var(--theme-status-warning-fg)", border: "var(--theme-status-warning-border)", icon: Clock, label: "Submit Receipts" };
+      case "pending_verification":
+      case "liquidation_pending": // legacy
+        return { bg: "var(--theme-status-warning-bg)", color: "var(--theme-status-warning-fg)", border: "var(--theme-status-warning-border)", icon: Clock, label: "Pending Verification" };
+      case "liquidation_closed": // legacy — maps to posted
+        return { bg: "var(--theme-status-success-bg)", color: "var(--theme-status-success-fg)", border: "var(--theme-status-success-border)", icon: CheckCircle, label: "Posted" };
       // Legacy statuses — kept for backwards compat with old DB records
       case "pending":
         return { bg: "var(--theme-status-warning-bg)", color: "var(--theme-status-warning-fg)", border: "var(--theme-status-warning-border)", icon: Clock, label: "Pending" };

@@ -22,6 +22,9 @@ function getStorageKey(): string {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storageKey: getStorageKey(),
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
     lock: <R>(_name: string, _acquireTimeout: number, fn: () => Promise<R>) => fn(),
   },
 });

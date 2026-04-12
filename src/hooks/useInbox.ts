@@ -41,6 +41,12 @@ export interface ParticipantSummary {
 
 export type InboxTab = "inbox" | "queue" | "sent" | "drafts";
 
+/** Strip HTML tags and decode entities for plain-text preview */
+function stripHtml(html: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  return doc.body.textContent || "";
+}
+
 export function useInbox() {
   const { user, effectiveDepartment, effectiveRole } = useUser();
   const queryClient = useQueryClient();
@@ -77,9 +83,7 @@ export function useInbox() {
             .filter((t: { id: string }) => deptTicketIds.has(t.id))
             .map((t: { id: string }) => t.id);
         } else {
-          ticketIds = rpcThreads
-            .filter((t: { id: string; created_by: string }) => t.created_by !== user.id)
-            .map((t: { id: string }) => t.id);
+          ticketIds = rpcThreads.map((t: { id: string }) => t.id);
         }
       } else if (activeTab === "sent") {
         const { data } = await supabase
@@ -191,7 +195,7 @@ export function useInbox() {
           linked_record_type: t.linked_record_type ?? null,
           linked_record_id: t.linked_record_id ?? null,
           auto_created: t.auto_created ?? false,
-          last_message_preview: lastMsg?.body ? lastMsg.body.slice(0, 120) : undefined,
+          last_message_preview: lastMsg?.body ? stripHtml(lastMsg.body).slice(0, 120) : undefined,
           last_message_sender: lastMsg?.sender_id ? userMap[lastMsg.sender_id]?.name : undefined,
           participants: tParticipants,
           attachment_count: attachCountMap[t.id] || 0,

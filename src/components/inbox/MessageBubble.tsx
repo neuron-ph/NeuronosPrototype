@@ -190,7 +190,7 @@ export function MessageBubble({ message, onRetract, variant = "default" }: Messa
               style={{
                 fontSize: 14,
                 color: "var(--theme-text-secondary)",
-                lineHeight: 1.8,
+                lineHeight: 1.7,
                 wordBreak: "break-word",
                 margin: 0,
                 marginBottom: (fileAttachments.length > 0 || entityAttachments.length > 0) ? 20 : 0,
@@ -202,7 +202,7 @@ export function MessageBubble({ message, onRetract, variant = "default" }: Messa
               style={{
                 fontSize: 14,
                 color: "var(--theme-text-secondary)",
-                lineHeight: 1.8,
+                lineHeight: 1.7,
                 whiteSpace: "pre-wrap",
                 wordBreak: "break-word",
                 margin: 0,
@@ -306,8 +306,8 @@ export function MessageBubble({ message, onRetract, variant = "default" }: Messa
         <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
           <div
             style={{
-              width: 34,
-              height: 34,
+              width: 36,
+              height: 36,
               borderRadius: "50%",
               backgroundColor: message.sender_avatar_url
                 ? "transparent"
@@ -363,7 +363,7 @@ export function MessageBubble({ message, onRetract, variant = "default" }: Messa
                 backgroundColor: "var(--theme-bg-page)",
                 color: "var(--theme-text-muted)",
                 cursor: "pointer",
-                transition: "all 120ms ease",
+                transition: "color 120ms ease, border-color 120ms ease, background-color 120ms ease",
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.color = "var(--theme-status-danger-fg)";
@@ -389,7 +389,7 @@ export function MessageBubble({ message, onRetract, variant = "default" }: Messa
 
       {/* ── Body ──────────────────────────────────────────────── */}
       {message.body && (
-        <div style={{ paddingLeft: 44 }}>
+        <div style={{ paddingLeft: 46 }}>
           {isHtmlBody(message.body) ? (
             <div
               style={{
@@ -419,7 +419,7 @@ export function MessageBubble({ message, onRetract, variant = "default" }: Messa
 
       {/* ── File attachments ────────────────────────────────────── */}
       {fileAttachments.length > 0 && (
-        <div style={{ paddingLeft: 44, marginTop: 14 }}>
+        <div style={{ paddingLeft: 46, marginTop: 14 }}>
           {/* Section header */}
           <div
             style={{
@@ -480,7 +480,7 @@ export function MessageBubble({ message, onRetract, variant = "default" }: Messa
                     border: "1px solid var(--theme-border-default)",
                     backgroundColor: "var(--theme-bg-page)",
                     cursor: "pointer",
-                    transition: "all 120ms ease",
+                    transition: "color 120ms ease, border-color 120ms ease, background-color 120ms ease",
                     minWidth: 170,
                     maxWidth: 240,
                     textAlign: "left",
@@ -553,7 +553,7 @@ export function MessageBubble({ message, onRetract, variant = "default" }: Messa
       {entityAttachments.length > 0 && (
         <div
           style={{
-            paddingLeft: 44,
+            paddingLeft: 46,
             marginTop: fileAttachments.length > 0 ? 8 : 14,
             display: "flex",
             flexWrap: "wrap",

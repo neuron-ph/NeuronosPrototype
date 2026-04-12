@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import {
   Home,
   Users,
@@ -42,7 +43,7 @@ const prefetchOperations = () => void import("./Operations");
 const prefetchAccounting = () => void import("./accounting/FinancialsModule");
 const prefetchInbox      = () => void import("./InboxPage");
 
-type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" |"pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" |"ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" |"operations" | "acct-transactions" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-coa" | "acct-reports" | "acct-statements" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "calendar" | "inbox" | "ticket-queue" | "settings" | "admin-users" | "admin" | "ticket-testing" | "activity-log" | "design-system";
+type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" |"pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" |"ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" |"operations" | "acct-transactions" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-coa" | "acct-reports" | "acct-statements" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "calendar" | "inbox" | "my-evouchers" | "ticket-queue" | "settings" | "admin-users" | "admin" | "ticket-testing" | "activity-log" | "design-system";
 
 // SVG for Philippine Peso icon
 const Vector = () => (
@@ -55,6 +56,8 @@ interface NeuronSidebarProps {
   currentPage: Page;
   onNavigate: (page: Page) => void;
   currentUser?: { name?: string; email?: string; department?: string; role?: string; avatar_url?: string | null } | null;
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
 }
 
 // Wrapper component for the Philippine Peso icon
@@ -73,20 +76,12 @@ const PesoIcon = ({ size = 20, style }: { size?: number; style?: React.CSSProper
   </div>
 );
 
-export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSidebarProps) {
+export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapsed, onToggleCollapse }: NeuronSidebarProps) {
   const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
   const navRef = useRef<HTMLElement | null>(null);
   const [showTopScrollFade, setShowTopScrollFade] = useState(false);
   const [showBottomScrollFade, setShowBottomScrollFade] = useState(false);
-
-  // Initialize collapsed state from localStorage, default to false (expanded)
-  const [isCollapsed, setIsCollapsed] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('neuron_sidebar_collapsed');
-      return saved === 'true';
-    }
-    return false;
-  });
+  const scrollRestoredRef = useRef(false);
   
   // Initialize dropdown states from localStorage
   const [isBDExpanded, setIsBDExpanded] = useState(() => {
@@ -121,11 +116,6 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
     return false;
   });
   
-  // Persist collapsed state to localStorage whenever it changes
-  useEffect(() => {
-    localStorage.setItem('neuron_sidebar_collapsed', String(isCollapsed));
-  }, [isCollapsed]);
-  
   // Persist dropdown states to localStorage
   useEffect(() => {
     localStorage.setItem('neuron_bd_expanded', String(isBDExpanded));
@@ -158,13 +148,36 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
     setShowBottomScrollFade(canScroll && !isAtBottom);
   }, []);
 
+  // Restore scroll position on mount (sidebar remounts on every route change)
   useEffect(() => {
+    const nav = navRef.current;
+    if (!nav || scrollRestoredRef.current) return;
+    const saved = sessionStorage.getItem("neuron_sidebar_scroll");
+    if (saved) {
+      nav.scrollTop = Number(saved);
+    }
+    scrollRestoredRef.current = true;
+  }, []);
+
+  // Save scroll position on scroll
+  const handleNavScroll = useCallback(() => {
+    const nav = navRef.current;
+    if (nav) {
+      sessionStorage.setItem("neuron_sidebar_scroll", String(nav.scrollTop));
+    }
     updateScrollFade();
+  }, [updateScrollFade]);
+
+  // Re-check scroll fades after layout changes (expand/collapse),
+  // using requestAnimationFrame so the DOM has settled first.
+  useEffect(() => {
+    const raf = requestAnimationFrame(updateScrollFade);
 
     const handleResize = () => updateScrollFade();
     window.addEventListener("resize", handleResize);
 
     return () => {
+      cancelAnimationFrame(raf);
       window.removeEventListener("resize", handleResize);
     };
   }, [
@@ -193,8 +206,8 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
 
   useEffect(() => {
     fetchUnreadCount();
-    // Refresh count every 60s
-    const interval = setInterval(fetchUnreadCount, 60_000);
+    // Refresh count every 15s
+    const interval = setInterval(fetchUnreadCount, 15_000);
     return () => clearInterval(interval);
   }, [fetchUnreadCount]);
   
@@ -259,13 +272,10 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
     { id: "acct-statements" as Page, label: "Financial Statements", icon: TrendingUp },
   ];
   
-  // Check if any BD page is active
+  // Check if any section page is active
   const isBDActive = currentPage.startsWith("bd-");
-  
-  // Check if any Pricing page is active
   const isPricingActive = currentPage.startsWith("pricing-");
-  
-  // Check if any Accounting page is active
+  const isOperationsActive = currentPage.startsWith("ops-");
   const isAcctActive = currentPage.startsWith("acct-");
   
   // Work section (without BD and Accounting, we'll render them separately)
@@ -278,6 +288,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
   const personalItems = [
     { id: "calendar" as Page, label: "My Calendar", icon: Calendar },
     { id: "inbox" as Page, label: "My Inbox", icon: Inbox },
+    { id: "my-evouchers" as Page, label: "My E-Vouchers", icon: FileText },
   ];
   
 
@@ -286,12 +297,12 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
   const renderNavButton = (item: { id: Page; label: string; icon: any }, isSubItem = false) => {
     const Icon = item.icon;
     const isActive = currentPage === item.id;
-    
+
     return (
       <button
         key={item.id}
         onClick={() => onNavigate(item.id)}
-        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150"
+        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuron-ui-active-border)]"
         style={{
           height: isSubItem ? "36px" : "40px",
           backgroundColor: isActive ? "var(--neuron-state-selected)" : "transparent",
@@ -317,15 +328,24 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
         <Icon
           size={isSubItem ? 18 : 20}
           style={{
-            color: isActive ? "var(--neuron-ink-primary)" : "var(--neuron-ink-muted)",
+            color: isActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)",
             flexShrink: 0
           }}
         />
-        {!isCollapsed && (
-          <span style={{ fontSize: "14px", lineHeight: "20px" }}>
-            {item.label}
-          </span>
-        )}
+        <AnimatePresence initial={false}>
+          {!isCollapsed && (
+            <motion.span
+              key="label"
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -6 }}
+              transition={{ duration: 0.18, ease: [0.25, 1, 0.5, 1] }}
+              style={{ fontSize: "14px", lineHeight: "20px" }}
+            >
+              {item.label}
+            </motion.span>
+          )}
+        </AnimatePresence>
       </button>
     );
   };
@@ -341,8 +361,8 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
       }}
     >
       {isCollapsed ? (
-        <div 
-          style={{ 
+        <div
+          style={{
             width: "20px",
             height: "2px",
             backgroundColor: "var(--neuron-ink-muted)",
@@ -351,22 +371,31 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
           }}
         />
       ) : (
-        label
+        <AnimatePresence initial={false}>
+          <motion.span
+            key="section-label"
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -6 }}
+            transition={{ duration: 0.18, ease: [0.25, 1, 0.5, 1] }}
+            style={{ display: "block" }}
+          >
+            {label}
+          </motion.span>
+        </AnimatePresence>
       )}
     </div>
   );
 
   return (
-    <div 
-      className="flex flex-col h-full transition-all duration-300"
+    <div
+      className="flex flex-col h-full"
       style={{
-        width: isCollapsed ? "72px" : "272px",
+        // Width is controlled by the parent grid-template-columns in Layout.tsx
+        minWidth: 0,
         backgroundColor: "var(--neuron-bg-elevated)",
         borderRight: "1px solid var(--neuron-ui-border)",
-        // ⚡ PERFORMANCE: GPU acceleration for smooth animations
-        willChange: "width",
-        transform: "translateZ(0)",
-        // Always above any fixed-position backdrops in main content (e.g. dropdown overlays at z-10)
+        overflow: "hidden",
         position: "relative",
         zIndex: 20,
       }}
@@ -388,8 +417,8 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
         
         {/* Collapse Toggle Button */}
         <button
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="flex items-center justify-center rounded-lg transition-all duration-150"
+          onClick={onToggleCollapse}
+          className="flex items-center justify-center rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuron-ui-active-border)]"
           style={{
             width: "32px",
             height: "32px",
@@ -405,7 +434,31 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
             e.currentTarget.style.backgroundColor = "transparent";
           }}
         >
-          {isCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+          <AnimatePresence initial={false} mode="wait">
+            {isCollapsed ? (
+              <motion.span
+                key="right"
+                initial={{ opacity: 0, rotate: -45 }}
+                animate={{ opacity: 1, rotate: 0 }}
+                exit={{ opacity: 0, rotate: 45 }}
+                transition={{ duration: 0.15, ease: [0.25, 1, 0.5, 1] }}
+                style={{ display: "flex" }}
+              >
+                <ChevronRight size={20} />
+              </motion.span>
+            ) : (
+              <motion.span
+                key="left"
+                initial={{ opacity: 0, rotate: 45 }}
+                animate={{ opacity: 1, rotate: 0 }}
+                exit={{ opacity: 0, rotate: -45 }}
+                transition={{ duration: 0.15, ease: [0.25, 1, 0.5, 1] }}
+                style={{ display: "flex" }}
+              >
+                <ChevronLeft size={20} />
+              </motion.span>
+            )}
+          </AnimatePresence>
         </button>
       </div>
 
@@ -413,7 +466,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
       <div className="relative flex-1 min-h-0">
         <nav
           ref={navRef}
-          onScroll={updateScrollFade}
+          onScroll={handleNavScroll}
           className="scrollbar-hide h-full overflow-y-auto px-4 pt-6 pb-4 space-y-1"
         >
         {/* Dashboard */}
@@ -428,58 +481,79 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
             <button
               onClick={() => {
                 if (isCollapsed) {
-                  // If collapsed, navigate to first BD item
                   onNavigate("bd-contacts");
                 } else {
-                  // If expanded, toggle the dropdown
                   setIsBDExpanded(!isBDExpanded);
                 }
               }}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuron-ui-active-border)]"
               style={{
                 height: "40px",
-                backgroundColor: "transparent",
+                backgroundColor: isBDActive && !isBDExpanded ? "var(--neuron-state-selected)" : "transparent",
                 border: "1.5px solid transparent",
-                color: "var(--neuron-ink-secondary)",
-                fontWeight: 400,
+                color: isBDActive ? "var(--neuron-ink-primary)" : "var(--neuron-ink-secondary)",
+                fontWeight: isBDActive ? 500 : 400,
                 justifyContent: "space-between",
                 paddingLeft: isCollapsed ? "0" : "12px",
                 paddingRight: isCollapsed ? "0" : "12px",
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
+                if (!(isBDActive && !isBDExpanded)) {
+                  e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
+                }
                 prefetchBD();
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "transparent";
+                if (!(isBDActive && !isBDExpanded)) {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                }
               }}
               title={isCollapsed ? "Business Development" : undefined}
             >
               <div className="flex items-center gap-3 flex-1 min-w-0" style={{ justifyContent: isCollapsed ? "center" : "flex-start" }}>
-                <Briefcase 
-                  size={20} 
-                  style={{ 
-                    color: "var(--neuron-ink-muted)",
+                <Briefcase
+                  size={20}
+                  style={{
+                    color: isBDActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)",
                     flexShrink: 0
-                  }} 
+                  }}
                 />
-                {!isCollapsed && (
-                  <span style={{ fontSize: "14px", lineHeight: "20px", whiteSpace: "nowrap" }}>
-                    Business Development
-                  </span>
-                )}
+                <AnimatePresence initial={false}>
+                  {!isCollapsed && (
+                    <motion.span
+                      key="bd-label"
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -6 }}
+                      transition={{ duration: 0.18, ease: [0.25, 1, 0.5, 1] }}
+                      style={{ fontSize: "14px", lineHeight: "20px", whiteSpace: "nowrap" }}
+                    >
+                      Business Development
+                    </motion.span>
+                  )}
+                </AnimatePresence>
               </div>
-              {!isCollapsed && (
-                <ChevronDown 
-                  size={16} 
-                  style={{ 
-                    color: "var(--neuron-ink-muted)",
-                    transform: isBDExpanded ? "rotate(0deg)" : "rotate(-90deg)",
-                    transition: "transform 0.2s",
-                    flexShrink: 0
-                  }} 
-                />
-              )}
+              <AnimatePresence initial={false}>
+                {!isCollapsed && (
+                  <motion.span
+                    key="bd-chevron"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.12 }}
+                    style={{ display: "flex", flexShrink: 0 }}
+                  >
+                    <ChevronDown
+                      size={16}
+                      style={{
+                        color: "var(--neuron-ink-muted)",
+                        transform: isBDExpanded ? "rotate(0deg)" : "rotate(-90deg)",
+                        transition: "transform 0.2s ease-out",
+                      }}
+                    />
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </button>
             
             {/* BD Sub-items */}
@@ -504,58 +578,79 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
             <button
               onClick={() => {
                 if (isCollapsed) {
-                  // If collapsed, navigate to first Pricing item
                   onNavigate("pricing-contacts");
                 } else {
-                  // If expanded, toggle the dropdown
                   setIsPricingExpanded(!isPricingExpanded);
                 }
               }}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuron-ui-active-border)]"
               style={{
                 height: "40px",
-                backgroundColor: "transparent",
+                backgroundColor: isPricingActive && !isPricingExpanded ? "var(--neuron-state-selected)" : "transparent",
                 border: "1.5px solid transparent",
-                color: "var(--neuron-ink-secondary)",
-                fontWeight: 400,
+                color: isPricingActive ? "var(--neuron-ink-primary)" : "var(--neuron-ink-secondary)",
+                fontWeight: isPricingActive ? 500 : 400,
                 justifyContent: "space-between",
                 paddingLeft: isCollapsed ? "0" : "12px",
                 paddingRight: isCollapsed ? "0" : "12px",
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
+                if (!(isPricingActive && !isPricingExpanded)) {
+                  e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
+                }
                 prefetchPricing();
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "transparent";
+                if (!(isPricingActive && !isPricingExpanded)) {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                }
               }}
               title={isCollapsed ? "Pricing" : undefined}
             >
               <div className="flex items-center gap-3 flex-1 min-w-0" style={{ justifyContent: isCollapsed ? "center" : "flex-start" }}>
-                <Banknote 
-                  size={20} 
-                  style={{ 
-                    color: "var(--neuron-ink-muted)",
+                <Banknote
+                  size={20}
+                  style={{
+                    color: isPricingActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)",
                     flexShrink: 0
-                  }} 
+                  }}
                 />
-                {!isCollapsed && (
-                  <span style={{ fontSize: "14px", lineHeight: "20px", whiteSpace: "nowrap" }}>
-                    Pricing
-                  </span>
-                )}
+                <AnimatePresence initial={false}>
+                  {!isCollapsed && (
+                    <motion.span
+                      key="pricing-label"
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -6 }}
+                      transition={{ duration: 0.18, ease: [0.25, 1, 0.5, 1] }}
+                      style={{ fontSize: "14px", lineHeight: "20px", whiteSpace: "nowrap" }}
+                    >
+                      Pricing
+                    </motion.span>
+                  )}
+                </AnimatePresence>
               </div>
-              {!isCollapsed && (
-                <ChevronDown 
-                  size={16} 
-                  style={{ 
-                    color: "var(--neuron-ink-muted)",
-                    transform: isPricingExpanded ? "rotate(0deg)" : "rotate(-90deg)",
-                    transition: "transform 0.2s",
-                    flexShrink: 0
-                  }} 
-                />
-              )}
+              <AnimatePresence initial={false}>
+                {!isCollapsed && (
+                  <motion.span
+                    key="pricing-chevron"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.12 }}
+                    style={{ display: "flex", flexShrink: 0 }}
+                  >
+                    <ChevronDown
+                      size={16}
+                      style={{
+                        color: "var(--neuron-ink-muted)",
+                        transform: isPricingExpanded ? "rotate(0deg)" : "rotate(-90deg)",
+                        transition: "transform 0.2s ease-out",
+                      }}
+                    />
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </button>
             
             {/* Pricing Sub-items */}
@@ -580,58 +675,79 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
             <button
               onClick={() => {
                 if (isCollapsed) {
-                  // If collapsed, navigate to first Operations item
                   onNavigate("ops-forwarding");
                 } else {
-                  // If expanded, toggle the dropdown
                   setIsOperationsExpanded(!isOperationsExpanded);
                 }
               }}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuron-ui-active-border)]"
               style={{
                 height: "40px",
-                backgroundColor: "transparent",
+                backgroundColor: isOperationsActive && !isOperationsExpanded ? "var(--neuron-state-selected)" : "transparent",
                 border: "1.5px solid transparent",
-                color: "var(--neuron-ink-secondary)",
-                fontWeight: 400,
+                color: isOperationsActive ? "var(--neuron-ink-primary)" : "var(--neuron-ink-secondary)",
+                fontWeight: isOperationsActive ? 500 : 400,
                 justifyContent: "space-between",
                 paddingLeft: isCollapsed ? "0" : "12px",
                 paddingRight: isCollapsed ? "0" : "12px",
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
+                if (!(isOperationsActive && !isOperationsExpanded)) {
+                  e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
+                }
                 prefetchOperations();
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "transparent";
+                if (!(isOperationsActive && !isOperationsExpanded)) {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                }
               }}
               title={isCollapsed ? "Operations" : undefined}
             >
               <div className="flex items-center gap-3 flex-1 min-w-0" style={{ justifyContent: isCollapsed ? "center" : "flex-start" }}>
-                <Package 
-                  size={20} 
-                  style={{ 
-                    color: "var(--neuron-ink-muted)",
+                <Package
+                  size={20}
+                  style={{
+                    color: isOperationsActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)",
                     flexShrink: 0
-                  }} 
+                  }}
                 />
-                {!isCollapsed && (
-                  <span style={{ fontSize: "14px", lineHeight: "20px", whiteSpace: "nowrap" }}>
-                    Operations
-                  </span>
-                )}
+                <AnimatePresence initial={false}>
+                  {!isCollapsed && (
+                    <motion.span
+                      key="ops-label"
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -6 }}
+                      transition={{ duration: 0.18, ease: [0.25, 1, 0.5, 1] }}
+                      style={{ fontSize: "14px", lineHeight: "20px", whiteSpace: "nowrap" }}
+                    >
+                      Operations
+                    </motion.span>
+                  )}
+                </AnimatePresence>
               </div>
-              {!isCollapsed && (
-                <ChevronDown 
-                  size={16} 
-                  style={{ 
-                    color: "var(--neuron-ink-muted)",
-                    transform: isOperationsExpanded ? "rotate(0deg)" : "rotate(-90deg)",
-                    transition: "transform 0.2s",
-                    flexShrink: 0
-                  }} 
-                />
-              )}
+              <AnimatePresence initial={false}>
+                {!isCollapsed && (
+                  <motion.span
+                    key="ops-chevron"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.12 }}
+                    style={{ display: "flex", flexShrink: 0 }}
+                  >
+                    <ChevronDown
+                      size={16}
+                      style={{
+                        color: "var(--neuron-ink-muted)",
+                        transform: isOperationsExpanded ? "rotate(0deg)" : "rotate(-90deg)",
+                        transition: "transform 0.2s ease-out",
+                      }}
+                    />
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </button>
             
             {/* Operations Sub-items */}
@@ -661,58 +777,79 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
             <button
               onClick={() => {
                 if (isCollapsed) {
-                  // If collapsed, navigate to first Accounting item
                   onNavigate("acct-evouchers");
                 } else {
-                  // If expanded, toggle the dropdown
                   setIsAcctExpanded(!isAcctExpanded);
                 }
               }}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuron-ui-active-border)]"
               style={{
                 height: "40px",
-                backgroundColor: "transparent",
+                backgroundColor: isAcctActive && !isAcctExpanded ? "var(--neuron-state-selected)" : "transparent",
                 border: "1.5px solid transparent",
-                color: "var(--neuron-ink-secondary)",
-                fontWeight: 400,
+                color: isAcctActive ? "var(--neuron-ink-primary)" : "var(--neuron-ink-secondary)",
+                fontWeight: isAcctActive ? 500 : 400,
                 justifyContent: "space-between",
                 paddingLeft: isCollapsed ? "0" : "12px",
                 paddingRight: isCollapsed ? "0" : "12px",
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
+                if (!(isAcctActive && !isAcctExpanded)) {
+                  e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
+                }
                 prefetchAccounting();
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "transparent";
+                if (!(isAcctActive && !isAcctExpanded)) {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                }
               }}
               title={isCollapsed ? "Accounting" : undefined}
             >
               <div className="flex items-center gap-3 flex-1 min-w-0" style={{ justifyContent: isCollapsed ? "center" : "flex-start" }}>
-                <PesoIcon 
-                  size={20} 
-                  style={{ 
-                    color: "var(--neuron-ink-muted)",
+                <PesoIcon
+                  size={20}
+                  style={{
+                    color: isAcctActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)",
                     flexShrink: 0
-                  }} 
+                  }}
                 />
-                {!isCollapsed && (
-                  <span style={{ fontSize: "14px", lineHeight: "20px", whiteSpace: "nowrap" }}>
-                    Accounting
-                  </span>
-                )}
+                <AnimatePresence initial={false}>
+                  {!isCollapsed && (
+                    <motion.span
+                      key="acct-label"
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -6 }}
+                      transition={{ duration: 0.18, ease: [0.25, 1, 0.5, 1] }}
+                      style={{ fontSize: "14px", lineHeight: "20px", whiteSpace: "nowrap" }}
+                    >
+                      Accounting
+                    </motion.span>
+                  )}
+                </AnimatePresence>
               </div>
-              {!isCollapsed && (
-                <ChevronDown 
-                  size={16} 
-                  style={{ 
-                    color: "var(--neuron-ink-muted)",
-                    transform: isAcctExpanded ? "rotate(0deg)" : "rotate(-90deg)",
-                    transition: "transform 0.2s",
-                    flexShrink: 0
-                  }} 
-                />
-              )}
+              <AnimatePresence initial={false}>
+                {!isCollapsed && (
+                  <motion.span
+                    key="acct-chevron"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.12 }}
+                    style={{ display: "flex", flexShrink: 0 }}
+                  >
+                    <ChevronDown
+                      size={16}
+                      style={{
+                        color: "var(--neuron-ink-muted)",
+                        transform: isAcctExpanded ? "rotate(0deg)" : "rotate(-90deg)",
+                        transition: "transform 0.2s ease-out",
+                      }}
+                    />
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </button>
             
             {/* Accounting Sub-items */}
@@ -740,8 +877,9 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
               <button
                 key="inbox"
                 onClick={() => onNavigate("inbox")}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150"
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuron-ui-active-border)]"
                 style={{
+                  position: "relative",
                   height: "40px",
                   backgroundColor: isActive ? "var(--neuron-state-selected)" : "transparent",
                   border: "1.5px solid transparent",
@@ -763,7 +901,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
                 <div style={{ position: "relative", flexShrink: 0 }}>
                   <Inbox
                     size={20}
-                    style={{ color: isActive ? "var(--neuron-ink-primary)" : "var(--neuron-ink-muted)" }}
+                    style={{ color: isActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)" }}
                   />
                   {inboxUnreadCount > 0 && (
                     <span
@@ -774,7 +912,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
                         minWidth: 14,
                         height: 14,
                         borderRadius: 7,
-                        backgroundColor: "#DC2626",
+                        backgroundColor: "var(--theme-status-danger-fg)",
                         color: "#FFFFFF",
                         fontSize: 9,
                         fontWeight: 700,
@@ -789,27 +927,43 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
                     </span>
                   )}
                 </div>
-                {!isCollapsed && (
-                  <span style={{ fontSize: "14px", lineHeight: "20px", flex: 1, textAlign: "left" }}>
-                    My Inbox
-                  </span>
-                )}
-                {!isCollapsed && inboxUnreadCount > 0 && (
-                  <span
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      padding: "1px 6px",
-                      borderRadius: 10,
-                      backgroundColor: "var(--theme-status-danger-bg)",
-                      color: "var(--theme-status-danger-fg)",
-                      marginLeft: "auto",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {inboxUnreadCount > 99 ? "99+" : inboxUnreadCount}
-                  </span>
-                )}
+                <AnimatePresence initial={false}>
+                  {!isCollapsed && (
+                    <motion.span
+                      key="inbox-label"
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -6 }}
+                      transition={{ duration: 0.18, ease: [0.25, 1, 0.5, 1] }}
+                      style={{ fontSize: "14px", lineHeight: "20px", flex: 1, textAlign: "left" }}
+                    >
+                      My Inbox
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+                <AnimatePresence initial={false}>
+                  {!isCollapsed && inboxUnreadCount > 0 && (
+                    <motion.span
+                      key="inbox-badge"
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      transition={{ duration: 0.15 }}
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        padding: "1px 6px",
+                        borderRadius: 10,
+                        backgroundColor: "var(--theme-status-danger-bg)",
+                        color: "var(--theme-status-danger-fg)",
+                        marginLeft: "auto",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {inboxUnreadCount > 99 ? "99+" : inboxUnreadCount}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
               </button>
             );
           }
@@ -828,8 +982,9 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
               return (
                 <button
                   onClick={() => onNavigate("admin-users")}
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150"
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuron-ui-active-border)]"
                   style={{
+                    position: "relative",
                     height: "40px",
                     backgroundColor: isActive ? "var(--neuron-state-selected)" : "transparent",
                     border: "1.5px solid transparent",
@@ -845,9 +1000,22 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
                 >
                   <Users
                     size={20}
-                    style={{ color: isActive ? "var(--neuron-ink-primary)" : "var(--neuron-ink-muted)", flexShrink: 0 }}
+                    style={{ color: isActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)", flexShrink: 0 }}
                   />
-                  {!isCollapsed && <span style={{ fontSize: "14px", lineHeight: "20px" }}>Users</span>}
+                  <AnimatePresence initial={false}>
+                    {!isCollapsed && (
+                      <motion.span
+                        key="users-label"
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -6 }}
+                        transition={{ duration: 0.18, ease: [0.25, 1, 0.5, 1] }}
+                        style={{ fontSize: "14px", lineHeight: "20px" }}
+                      >
+                        Users
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
                 </button>
               );
             })()}
@@ -882,7 +1050,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
         {currentUser && currentUser.name && (
           <button
             onClick={() => onNavigate("settings")}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150"
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuron-ui-active-border)]"
             style={{
               backgroundColor: currentPage === "settings" ? "var(--neuron-state-selected)" : "var(--theme-bg-surface-subtle)",
               border: "1.5px solid transparent",
@@ -927,8 +1095,16 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
                 currentUser.name.charAt(0).toUpperCase()
               )}
             </div>
+            <AnimatePresence initial={false}>
             {!isCollapsed && (
-              <div className="flex-1 min-w-0">
+              <motion.div
+                key="profile-info"
+                className="flex-1 min-w-0"
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -6 }}
+                transition={{ duration: 0.18, ease: [0.25, 1, 0.5, 1] }}
+              >
                 <div 
                   className="truncate"
                   style={{ 
@@ -963,8 +1139,9 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser }: NeuronSi
                 >
                   {currentUser.department}
                 </div>
-              </div>
+              </motion.div>
             )}
+            </AnimatePresence>
           </button>
         )}
       </div>

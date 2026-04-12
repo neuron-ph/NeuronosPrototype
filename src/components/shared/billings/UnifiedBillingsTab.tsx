@@ -174,7 +174,8 @@ export function UnifiedBillingsTab({
                             is_taxed: item.is_taxed,
                             amount_added: item.amount_added,
                             percentage_added: item.percentage_added,
-                            base_cost: item.base_cost
+                            base_cost: item.base_cost,
+                            catalog_item_id: item.catalog_item_id
                         };
                     }
                     return; 
@@ -201,7 +202,8 @@ export function UnifiedBillingsTab({
                     is_taxed: item.is_taxed,
                     amount_added: item.amount_added,
                     percentage_added: item.percentage_added,
-                    base_cost: item.base_cost
+                    base_cost: item.base_cost,
+                    catalog_item_id: item.catalog_item_id
                 };
 
                 combined.push(virtualItem);

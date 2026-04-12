@@ -23,6 +23,7 @@ interface ComposeBoxProps {
   ticketId: string;
   toChips?: RecipientChip[];
   onSent: () => void;
+  onClose?: () => void;
 }
 
 // ── Sanitize HTML before storage ─────────────────────────────────────────────
@@ -38,7 +39,7 @@ function sanitizeHtml(html: string): string {
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export function ComposeBox({ ticketId, toChips = [], onSent }: ComposeBoxProps) {
+export function ComposeBox({ ticketId, toChips = [], onSent, onClose }: ComposeBoxProps) {
   const { user } = useUser();
   const [isSending, setIsSending] = useState(false);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
@@ -223,6 +224,20 @@ export function ComposeBox({ ticketId, toChips = [], onSent }: ComposeBoxProps) 
           flexShrink: 0,
         }}
       >
+        {/* ── Compose header ───────────────────────────────────── */}
+        {onClose && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 28px 0" }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--theme-text-secondary)" }}>Reply</span>
+            <button
+              onClick={onClose}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--theme-text-muted)", display: "flex", padding: 2 }}
+              title="Close"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
         {/* ── Recipient area ────────────────────────────────────── */}
         <div style={{ padding: "0 28px" }}>
           {/* To row — editable */}
@@ -458,7 +473,7 @@ export function ComposeBox({ ticketId, toChips = [], onSent }: ComposeBoxProps) 
               fontSize: 13,
               fontWeight: 600,
               cursor: canSend ? "pointer" : "not-allowed",
-              transition: "all 150ms ease",
+              transition: "opacity 150ms ease, background-color 150ms ease",
               opacity: canSend ? 1 : 0.45,
             }}
             onMouseEnter={(e) => { if (canSend) e.currentTarget.style.opacity = "0.88"; }}
@@ -508,7 +523,7 @@ function LabeledToolbarButton({
         color: "var(--theme-text-muted)",
         fontSize: 12,
         cursor: "pointer",
-        transition: "all 120ms ease",
+        transition: "color 120ms ease, border-color 120ms ease, background-color 120ms ease",
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";

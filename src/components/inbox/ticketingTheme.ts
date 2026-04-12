@@ -64,7 +64,7 @@ export function ticketToggleStyle(selected: boolean, tone: TicketTone) {
       fontWeight: 600,
       padding: "4px 12px",
       cursor: "pointer",
-      transition: "all 150ms ease",
+      transition: "color 150ms ease, border-color 150ms ease, background-color 150ms ease",
     };
   }
 
@@ -77,6 +77,6 @@ export function ticketToggleStyle(selected: boolean, tone: TicketTone) {
     backgroundColor: "var(--theme-bg-surface)",
     color: "var(--neuron-ink-secondary)",
     cursor: "pointer",
-    transition: "all 150ms ease",
+    transition: "color 150ms ease, border-color 150ms ease, background-color 150ms ease",
   };
 }

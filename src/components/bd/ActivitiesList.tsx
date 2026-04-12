@@ -8,6 +8,7 @@ import { AddActivityPanel } from "./AddActivityPanel";
 import { useCRMActivities } from "../../hooks/useCRMActivities";
 import { useCustomers } from "../../hooks/useCustomers";
 import { useContacts } from "../../hooks/useContacts";
+import { useUsers } from "../../hooks/useUsers";
 
 interface ActivitiesListProps {
   onViewActivity?: (activity: Activity) => void;
@@ -23,6 +24,7 @@ export function ActivitiesList({ onViewActivity }: ActivitiesListProps) {
   const { activities, isLoading, invalidate: invalidateActivities } = useCRMActivities();
   const { customers } = useCustomers();
   const { contacts } = useContacts();
+  const { users } = useUsers();
 
   const handleSaveActivity = async (activityData: Partial<Activity>) => {
     try {
@@ -97,8 +99,8 @@ export function ActivitiesList({ onViewActivity }: ActivitiesListProps) {
   };
 
   const getOwnerName = (userId: string) => {
-    // TODO: Fetch from users API when available
-    return userId || "—";
+    if (!userId) return "—";
+    return users.find(u => u.id === userId)?.name || userId;
   };
 
   const getActivityTypeIcon = (type: ActivityType) => {
@@ -123,10 +125,9 @@ export function ActivitiesList({ onViewActivity }: ActivitiesListProps) {
   const getActivityTypeColor = (type: ActivityType) => {
     // System activities get different styling
     if (type === "System Update" || type === "Note") {
-      return "bg-[#F1F6F4] text-[var(--theme-text-muted)]";
+      return "bg-[var(--theme-bg-surface-subtle)] text-[var(--theme-text-muted)]";
     }
-    // All logged activities get completed/success styling
-    return "bg-[var(--theme-bg-surface-tint)] text-[#2B8A6E]";
+    return "bg-[var(--theme-bg-surface-tint)] text-[var(--theme-action-primary-bg)]";
   };
 
   const formatDate = (dateString: string) => {
@@ -269,7 +270,7 @@ export function ActivitiesList({ onViewActivity }: ActivitiesListProps) {
             options={[
               { value: "All Time", label: "All Time", icon: <Calendar className="w-3.5 h-3.5" style={{ color: "var(--neuron-ink-muted)" }} /> },
               { value: "Today", label: "Today", icon: <Calendar className="w-3.5 h-3.5" style={{ color: "var(--theme-action-primary-bg)" }} /> },
-              { value: "This Week", label: "This Week", icon: <Calendar className="w-3.5 h-3.5" style={{ color: "#C88A2B" }} /> },
+              { value: "This Week", label: "This Week", icon: <Calendar className="w-3.5 h-3.5" style={{ color: "var(--theme-status-warning-fg)" }} /> },
               { value: "This Month", label: "This Month", icon: <Calendar className="w-3.5 h-3.5" style={{ color: "var(--theme-text-muted)" }} /> }
             ]}
           />

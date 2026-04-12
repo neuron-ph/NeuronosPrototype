@@ -1,4 +1,4 @@
-import { Plus, DollarSign } from "lucide-react";
+import { Plus, DollarSign, Trash2 } from "lucide-react";
 import React, { useState, useRef } from "react";
 import type { SellingPriceCategory } from "../../../types/pricing";
 import { CategoryHeader } from "./CategoryHeader";
@@ -6,6 +6,7 @@ import { CategoryPresetDropdown } from "./CategoryPresetDropdown";
 import { PhilippinePeso } from "../../icons/PhilippinePeso";
 import { PricingTableHeader } from "../../shared/pricing/PricingTableHeader";
 import { UniversalPricingRow, PricingItemData } from "../../shared/pricing/UniversalPricingRow";
+import { NeuronModal } from "../../ui/NeuronModal";
 
 interface SellingPriceSectionProps {
   categories: SellingPriceCategory[];
@@ -37,18 +38,21 @@ export function SellingPriceSection({
   
   const [showPresetDropdown, setShowPresetDropdown] = useState(false);
   const addCategoryButtonRef = useRef<HTMLButtonElement>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ categoryId: string; itemId: string } | null>(null);
+  const [pendingCategoryDelete, setPendingCategoryDelete] = useState<string | null>(null);
   
   // Calculate total from all categories (unused variable but kept for logic if needed later)
   // const total = categories.reduce((sum, cat) => sum + cat.subtotal, 0);
   
-  // Handle field changes
+  // Handle field changes — uses functional update to avoid stale-state when multiple
+  // fields are set in the same event (e.g., CatalogItemCombobox sets description + catalog_item_id)
   const handleFieldChange = (categoryId: string, itemId: string, field: string, value: any) => {
-    const updatedCategories = categories.map(cat => {
+    (onChange as any)((prev: SellingPriceCategory[]) => prev.map(cat => {
       if (cat.id !== categoryId) return cat;
-      
+
       const updatedItems = cat.line_items.map(item => {
         if (item.id !== itemId) return item;
-        
+
         // Update the field
         const updatedItem = { ...item, [field]: value };
 
@@ -58,52 +62,44 @@ export function SellingPriceSection({
         } else if (field === 'service_tag') {
           updatedItem.service = value;
         }
-        
+
         // Recalculate if base_cost changed — update final_price from base_cost + markup
         if (field === 'base_cost') {
           const newBaseCost = Math.max(0, value);
           updatedItem.base_cost = newBaseCost;
-          // Recalculate markup amount from percentage (preserve the percentage)
           updatedItem.amount_added = (newBaseCost * updatedItem.percentage_added) / 100;
           updatedItem.final_price = newBaseCost + updatedItem.amount_added;
           updatedItem.price = updatedItem.final_price;
           updatedItem.amount = updatedItem.final_price * updatedItem.quantity * updatedItem.forex_rate;
         }
-        
+
         // Recalculate if quantity, forex_rate, or is_taxed changed
         if (field === 'quantity' || field === 'forex_rate' || field === 'is_taxed') {
           updatedItem.amount = updatedItem.final_price * updatedItem.quantity * updatedItem.forex_rate;
         }
-        
+
         return updatedItem;
       });
-      
-      // Recalculate subtotal
+
       const subtotal = updatedItems.reduce((sum, item) => sum + item.amount, 0);
-      
+
       return {
         ...cat,
         line_items: updatedItems,
         subtotal
       };
-    });
-    
-    onChange(updatedCategories);
+    }));
   };
   
   // Handle amount input change
   const handleAmountChange = (categoryId: string, itemId: string, newAmount: number) => {
     const validAmount = Math.max(0, newAmount);
-    
-    const updatedCategories = categories.map(cat => {
+    (onChange as any)((prev: SellingPriceCategory[]) => prev.map(cat => {
       if (cat.id !== categoryId) return cat;
-      
       const updatedItems = cat.line_items.map(item => {
         if (item.id !== itemId) return item;
-        
         const percentage = item.base_cost > 0 ? (validAmount / item.base_cost) * 100 : 0;
         const finalPrice = item.base_cost + validAmount;
-        
         return {
           ...item,
           amount_added: validAmount,
@@ -113,32 +109,20 @@ export function SellingPriceSection({
           amount: finalPrice * item.quantity * item.forex_rate
         };
       });
-      
       const subtotal = updatedItems.reduce((sum, item) => sum + item.amount, 0);
-      
-      return {
-        ...cat,
-        line_items: updatedItems,
-        subtotal
-      };
-    });
-    
-    onChange(updatedCategories);
+      return { ...cat, line_items: updatedItems, subtotal };
+    }));
   };
-  
+
   // Handle percentage input change
   const handlePercentageChange = (categoryId: string, itemId: string, newPercentage: number) => {
     const validPercentage = Math.max(0, newPercentage);
-    
-    const updatedCategories = categories.map(cat => {
+    (onChange as any)((prev: SellingPriceCategory[]) => prev.map(cat => {
       if (cat.id !== categoryId) return cat;
-      
       const updatedItems = cat.line_items.map(item => {
         if (item.id !== itemId) return item;
-        
         const amount = (item.base_cost * validPercentage) / 100;
         const finalPrice = item.base_cost + amount;
-        
         return {
           ...item,
           amount_added: amount,
@@ -148,35 +132,28 @@ export function SellingPriceSection({
           amount: finalPrice * item.quantity * item.forex_rate
         };
       });
-      
       const subtotal = updatedItems.reduce((sum, item) => sum + item.amount, 0);
-      
-      return {
-        ...cat,
-        line_items: updatedItems,
-        subtotal
-      };
-    });
-    
-    onChange(updatedCategories);
+      return { ...cat, line_items: updatedItems, subtotal };
+    }));
   };
   
-  // Handle remove line item
+  // Handle remove line item — shows confirmation modal first
   const handleRemoveItem = (categoryId: string, itemId: string) => {
-    const updatedCategories = categories.map(cat => {
-      if (cat.id !== categoryId) return cat;
-      
-      const updatedItems = cat.line_items.filter(item => item.id !== itemId);
-      const subtotal = updatedItems.reduce((sum, item) => sum + item.amount, 0);
-      
-      return {
-        ...cat,
-        line_items: updatedItems,
-        subtotal
-      };
-    }).filter(cat => cat.line_items.length > 0); // Remove empty categories
-    
-    onChange(updatedCategories);
+    setPendingDelete({ categoryId, itemId });
+  };
+
+  const confirmRemoveItem = () => {
+    if (!pendingDelete) return;
+    const { categoryId, itemId } = pendingDelete;
+    (onChange as any)((prev: SellingPriceCategory[]) =>
+      prev.map(cat => {
+        if (cat.id !== categoryId) return cat;
+        const updatedItems = cat.line_items.filter(item => item.id !== itemId);
+        const subtotal = updatedItems.reduce((sum, item) => sum + item.amount, 0);
+        return { ...cat, line_items: updatedItems, subtotal };
+      }).filter((cat: SellingPriceCategory) => cat.line_items.length > 0)
+    );
+    setPendingDelete(null);
   };
   
   return (
@@ -326,7 +303,7 @@ export function SellingPriceSection({
             fontSize: "14px",
             margin: 0
           }}>
-            Buying price items will automatically appear here
+            Add categories above to set your selling prices
           </p>
         </div>
       ) : (
@@ -349,7 +326,7 @@ export function SellingPriceSection({
                   onAddItem={() => onAddItemToCategory(category.id)}
                   onRename={(newName) => onRenameCategory(category.id, newName)}
                   onDuplicate={() => onDuplicateCategory(category.id)}
-                  onDelete={() => onDeleteCategory(category.id)}
+                  onDelete={() => setPendingCategoryDelete(category.id)}
                   viewMode={viewMode}
                 />
 
@@ -372,11 +349,12 @@ export function SellingPriceSection({
 
                         {/* Table Body */}
                         {category.line_items.map((item, idx) => (
-                          <UniversalPricingRow 
+                          <UniversalPricingRow
                             key={item.id}
-                            data={item as unknown as PricingItemData} 
+                            data={item as unknown as PricingItemData}
                             mode={viewMode ? "view" : "edit"}
                             serviceType={item.service_tag || item.service || category.category_name}
+                            categoryId={category.catalog_category_id}
                             config={{
                               showCost: true,
                               showMarkup: true,
@@ -424,6 +402,35 @@ export function SellingPriceSection({
         </div>
       )}
       
+      {/* Delete Line Item Confirmation */}
+      <NeuronModal
+        isOpen={pendingDelete !== null}
+        onClose={() => setPendingDelete(null)}
+        title="Remove Line Item"
+        description="This line item will be permanently removed from the selling price. This action cannot be undone."
+        confirmLabel="Remove Item"
+        confirmIcon={<Trash2 size={15} />}
+        onConfirm={confirmRemoveItem}
+        variant="danger"
+      />
+
+      {/* Delete Category Confirmation */}
+      <NeuronModal
+        isOpen={pendingCategoryDelete !== null}
+        onClose={() => setPendingCategoryDelete(null)}
+        title="Remove Category"
+        description="This category and all its line items will be permanently removed from the selling price. This action cannot be undone."
+        confirmLabel="Remove Category"
+        confirmIcon={<Trash2 size={15} />}
+        onConfirm={() => {
+          if (pendingCategoryDelete) {
+            onDeleteCategory(pendingCategoryDelete);
+            setPendingCategoryDelete(null);
+          }
+        }}
+        variant="danger"
+      />
+
       {/* Category Preset Dropdown */}
       <CategoryPresetDropdown
         isOpen={showPresetDropdown}

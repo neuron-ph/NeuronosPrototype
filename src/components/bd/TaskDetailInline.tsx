@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { ArrowLeft, CheckCircle, CheckSquare, CircleCheckBig, Flag, User, Building2, Phone, Mail, Users, Send, MessageCircle, MessageSquare, Linkedin, Upload, Paperclip, Trash2 } from "lucide-react";
 import { CustomDropdown } from "./CustomDropdown";
 import { supabase } from '../../utils/supabase/client';
 import { useUser } from "../../hooks/useUser";
+import { useUsers } from "../../hooks/useUsers";
 import { logActivity, logDeletion, logStatusChange } from "../../utils/activityLog";
 import { toast } from "../ui/toast-utils";
 import type { Task, TaskPriority, TaskStatus, TaskType } from "../../types/bd";
@@ -30,7 +31,36 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
   const [attachments, setAttachments] = useState<string[]>([]);
   const [isEditing, setIsEditing] = useState(false);
 
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [showTopScrollFade, setShowTopScrollFade] = useState(false);
+  const [showBottomScrollFade, setShowBottomScrollFade] = useState(false);
+
+  const updateScrollFade = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) {
+      setShowTopScrollFade(false);
+      setShowBottomScrollFade(false);
+      return;
+    }
+    const canScroll = el.scrollHeight > el.clientHeight + 1;
+    setShowTopScrollFade(canScroll && el.scrollTop > 8);
+    setShowBottomScrollFade(canScroll && el.scrollTop + el.clientHeight < el.scrollHeight - 2);
+  }, []);
+
+  const handleScroll = useCallback(() => updateScrollFade(), [updateScrollFade]);
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(updateScrollFade);
+    const onResize = () => updateScrollFade();
+    window.addEventListener("resize", onResize);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [updateScrollFade]);
+
   const { user } = useUser();
+  const { users } = useUsers();
 
   const isCompleted = editedTask.status === 'Completed';
 
@@ -55,8 +85,8 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
   };
 
   const getOwnerName = (ownerId: string) => {
-    // TODO: Fetch from users API when available
-    return ownerId || "—";
+    if (!ownerId) return "—";
+    return users.find(u => u.id === ownerId)?.name || ownerId;
   };
 
   const getContactInfo = (contactId: string | null) => {
@@ -82,7 +112,7 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
   const getPriorityColor = (priority: TaskPriority) => {
     switch (priority) {
       case "High": return { bg: "var(--theme-status-danger-bg)", text: "#C94F3D" };
-      case "Medium": return { bg: "#FEF3E7", text: "#C88A2B" };
+      case "Medium": return { bg: "var(--theme-status-warning-bg)", text: "var(--theme-status-warning-fg)" };
       case "Low": return { bg: "var(--theme-bg-surface-subtle)", text: "#6B7A76" };
       default: return { bg: "var(--theme-bg-surface-subtle)", text: "#6B7A76" };
     }
@@ -92,7 +122,7 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
     switch (status) {
       case "Completed": return { bg: "var(--theme-bg-surface-tint)", text: "var(--theme-action-primary-bg)" };
       case "Cancelled": return { bg: "var(--theme-status-danger-bg)", text: "#C94F3D" };
-      case "Ongoing": return { bg: "#FEF3E7", text: "#C88A2B" };
+      case "Ongoing": return { bg: "var(--theme-status-warning-bg)", text: "var(--theme-status-warning-fg)" };
       case "Pending": return { bg: "var(--theme-bg-surface-subtle)", text: "#6B7A76" };
       default: return { bg: "var(--theme-bg-surface-subtle)", text: "#6B7A76" };
     }
@@ -193,7 +223,7 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
 
   return (
     <div 
-      className="h-full flex flex-col overflow-auto"
+      className="h-full flex flex-col"
       style={{
         background: "var(--theme-bg-surface)",
       }}
@@ -252,7 +282,13 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-auto" style={{ padding: "0 48px 48px 48px" }}>
+      <div className="relative flex-1 overflow-hidden">
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="absolute inset-0 overflow-y-auto scrollbar-hide"
+          style={{ padding: "0 48px 48px 48px" }}
+        >
         {/* Task Header */}
         <div className="mb-8">
           <h1 
@@ -344,8 +380,8 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
                   className="w-full px-3 py-2.5 rounded-lg text-[13px] focus:outline-none focus:ring-2"
                   style={{
                     border: "1px solid var(--neuron-ui-border)",
-                    backgroundColor: isCompleted ? "#F9FAFB" : "#FFFFFF",
-                    color: isCompleted ? "#9CA3AF" : "#12332B",
+                    backgroundColor: isCompleted ? "var(--theme-bg-page)" : "var(--theme-bg-surface)",
+                    color: isCompleted ? "var(--theme-text-muted)" : "var(--theme-text-primary)",
                     cursor: isCompleted ? "not-allowed" : undefined
                   }}
                 />
@@ -383,8 +419,8 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
                   className="w-full px-3 py-2.5 rounded-lg text-[13px] focus:outline-none focus:ring-2 resize-none"
                   style={{
                     border: "1px solid var(--neuron-ui-border)",
-                    backgroundColor: isCompleted ? "#F9FAFB" : "#FFFFFF",
-                    color: isCompleted ? "#9CA3AF" : "#12332B",
+                    backgroundColor: isCompleted ? "var(--theme-bg-page)" : "var(--theme-bg-surface)",
+                    color: isCompleted ? "var(--theme-text-muted)" : "var(--theme-text-primary)",
                     cursor: isCompleted ? "not-allowed" : undefined
                   }}
                 />
@@ -523,13 +559,13 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
                     className="flex items-center gap-3 p-3 rounded-lg transition-colors"
                     style={{
                       border: "1px solid var(--neuron-ui-border)",
-                      backgroundColor: "#FAFAFA"
+                      backgroundColor: "var(--theme-bg-page)"
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)";
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = "#FAFAFA";
+                      e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
                     }}
                   >
                     <Paperclip size={16} style={{ color: "var(--theme-text-muted)" }} />
@@ -588,7 +624,7 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
                           {formatDateTime(comment.timestamp)}
                         </span>
                       </div>
-                      <p className="text-[13px]" style={{ color: "#475467" }}>
+                      <p className="text-[13px]" style={{ color: "var(--theme-text-secondary)" }}>
                         {comment.text}
                       </p>
                     </div>
@@ -615,8 +651,8 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
                 onClick={handleAddComment}
                 disabled={!newComment.trim()}
                 className="w-full px-4 py-2.5 rounded-lg text-[13px] font-medium text-white transition-colors flex items-center justify-center gap-2"
-                style={{ 
-                  backgroundColor: newComment.trim() ? "#0F766E" : "#D1D5DB",
+                style={{
+                  backgroundColor: newComment.trim() ? "var(--theme-action-primary-bg)" : "var(--neuron-ui-border)",
                   cursor: newComment.trim() ? "pointer" : "not-allowed"
                 }}
                 onMouseEnter={(e) => {
@@ -642,8 +678,8 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
           <div 
             className="rounded-lg p-6"
             style={{
-              border: "1px solid #FFE5E5",
-              backgroundColor: "#FFFBFB"
+              border: "1px solid var(--theme-status-danger-bg)",
+              backgroundColor: "var(--theme-status-danger-bg)"
             }}
           >
             <div className="flex items-start gap-4">
@@ -675,6 +711,25 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
             </div>
           </div>
         </div>
+        </div>
+        {showTopScrollFade && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute top-0 left-0 right-0 h-8"
+            style={{
+              background: "linear-gradient(to top, transparent, var(--theme-bg-surface) 88%)",
+            }}
+          />
+        )}
+        {showBottomScrollFade && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute bottom-0 left-0 right-0 h-12"
+            style={{
+              background: "linear-gradient(to bottom, transparent, var(--theme-bg-surface) 78%)",
+            }}
+          />
+        )}
       </div>
     </div>
   );

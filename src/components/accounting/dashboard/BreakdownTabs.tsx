@@ -108,7 +108,7 @@ function ServiceTab({ billingItems, invoices, expenses }: { billingItems: any[];
     <div className="overflow-auto">
       <table className="w-full">
         <thead>
-          <tr style={{ borderBottom: "1px solid var(--theme-border-default)", background: "#FAFBFC" }}>
+          <tr style={{ borderBottom: "1px solid var(--theme-border-default)", background: "var(--theme-bg-surface-subtle)" }}>
             <th className="px-5 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--theme-text-muted)" }}>Service</th>
             <th className="px-5 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--theme-text-muted)" }}>Revenue</th>
             <th className="px-5 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--theme-text-muted)" }}>Costs</th>
@@ -124,8 +124,8 @@ function ServiceTab({ billingItems, invoices, expenses }: { billingItems: any[];
               <tr key={row.service} style={{ borderBottom: "1px solid var(--theme-border-subtle)" }} className="hover:bg-[var(--theme-bg-surface-subtle)]/50">
                 <td className="px-5 py-2.5 text-[13px] font-medium" style={{ color: "var(--theme-text-primary)" }}>{row.service}</td>
                 <td className="px-5 py-2.5 text-[13px] text-right tabular-nums" style={{ color: "var(--theme-action-primary-bg)" }}>{formatCurrencyCompact(row.revenue)}</td>
-                <td className="px-5 py-2.5 text-[13px] text-right tabular-nums" style={{ color: "#C05621" }}>{formatCurrencyCompact(row.costs)}</td>
-                <td className="px-5 py-2.5 text-[13px] text-right font-semibold tabular-nums" style={{ color: isNegative ? "#EF4444" : "#12332B" }}>
+                <td className="px-5 py-2.5 text-[13px] text-right tabular-nums" style={{ color: "var(--theme-status-warning-fg)" }}>{formatCurrencyCompact(row.costs)}</td>
+                <td className="px-5 py-2.5 text-[13px] text-right font-semibold tabular-nums" style={{ color: isNegative ? "var(--theme-status-danger-fg)" : "var(--theme-text-primary)" }}>
                   {formatCurrencyCompact(row.margin)}
                 </td>
                 <td className="px-5 py-2.5 text-right">
@@ -136,11 +136,11 @@ function ServiceTab({ billingItems, invoices, expenses }: { billingItems: any[];
           })}
         </tbody>
         <tfoot>
-          <tr style={{ borderTop: "2px solid #E5E9F0", background: "#FAFBFC" }}>
+          <tr style={{ borderTop: "2px solid var(--theme-border-default)", background: "var(--theme-bg-surface-subtle)" }}>
             <td className="px-5 py-2.5 text-[12px] font-bold" style={{ color: "var(--theme-text-primary)" }}>Total</td>
             <td className="px-5 py-2.5 text-[12px] text-right font-bold tabular-nums" style={{ color: "var(--theme-action-primary-bg)" }}>{formatCurrencyCompact(totalRevenue)}</td>
-            <td className="px-5 py-2.5 text-[12px] text-right font-bold tabular-nums" style={{ color: "#C05621" }}>{formatCurrencyCompact(totalCosts)}</td>
-            <td className="px-5 py-2.5 text-[12px] text-right font-bold tabular-nums" style={{ color: totalMargin < 0 ? "#EF4444" : "#12332B" }}>
+            <td className="px-5 py-2.5 text-[12px] text-right font-bold tabular-nums" style={{ color: "var(--theme-status-warning-fg)" }}>{formatCurrencyCompact(totalCosts)}</td>
+            <td className="px-5 py-2.5 text-[12px] text-right font-bold tabular-nums" style={{ color: totalMargin < 0 ? "var(--theme-status-danger-fg)" : "var(--theme-text-primary)" }}>
               {formatCurrencyCompact(totalMargin)}
             </td>
             <td className="px-5 py-2.5 text-right">
@@ -225,7 +225,7 @@ function CustomerTab({ billingItems, invoices }: { billingItems: any[]; invoices
               <div className="h-2 rounded-full overflow-hidden flex-1" style={{ backgroundColor: "var(--theme-bg-surface-subtle)" }}>
                 <div
                   className="h-full rounded-full transition-all duration-500"
-                  style={{ width: `${barWidth}%`, backgroundColor: isRisky ? "#D97706" : "#0F766E" }}
+                  style={{ width: `${barWidth}%`, backgroundColor: isRisky ? "var(--theme-status-warning-fg)" : "var(--theme-action-primary-bg)" }}
                 />
               </div>
             </div>
@@ -234,7 +234,7 @@ function CustomerTab({ billingItems, invoices }: { billingItems: any[]; invoices
       })}
 
       {rows.length >= 5 && totalRevenue > 0 && (
-        <div className="pt-2 mt-1 flex items-center justify-between" style={{ borderTop: "1px dashed #E5E9F0" }}>
+        <div className="pt-2 mt-1 flex items-center justify-between" style={{ borderTop: "1px dashed var(--theme-border-default)" }}>
           <span className="text-[11px] pl-6" style={{ color: "var(--theme-text-muted)" }}>Others</span>
           <span className="text-[11px] tabular-nums" style={{ color: "var(--theme-text-muted)" }}>
             {formatCurrencyCompact(totalRevenue - rows.reduce((s, r) => s + r.revenue, 0))}
@@ -297,14 +297,14 @@ function CategoryTab({ invoices, billingItems, expenses }: { invoices: any[]; bi
           <span className="text-[12px] font-medium" style={{ color: "var(--theme-text-muted)" }}>Income vs Cost</span>
           <span
             className="text-[13px] font-bold tabular-nums"
-            style={{ color: margin >= 0 ? "#16A34A" : "#EF4444" }}
+            style={{ color: margin >= 0 ? "var(--theme-status-success-fg)" : "var(--theme-status-danger-fg)" }}
           >
             Margin: {fmt(margin)} ({marginPct.toFixed(1)}%)
           </span>
         </div>
         <div className="flex flex-col gap-2">
           <BarRow label="Income" amount={totalIncome} maxVal={maxVal} color="var(--theme-action-primary-bg)" />
-          <BarRow label="Cost" amount={totalCost} maxVal={maxVal} color="#C05621" />
+          <BarRow label="Cost" amount={totalCost} maxVal={maxVal} color="var(--theme-status-warning-fg)" />
         </div>
       </div>
 
@@ -330,7 +330,7 @@ function CategoryTab({ invoices, billingItems, expenses }: { invoices: any[]; bi
               ))
             )}
             {incomeRows.length > 0 && (
-              <div className="flex items-center justify-between px-4 py-2" style={{ background: "#FAFBFC", borderTop: "1px solid var(--theme-border-default)" }}>
+              <div className="flex items-center justify-between px-4 py-2" style={{ background: "var(--theme-bg-surface-subtle)", borderTop: "1px solid var(--theme-border-default)" }}>
                 <span className="text-[11px] font-bold" style={{ color: "var(--theme-text-primary)" }}>Total</span>
                 <span className="text-[11px] font-bold tabular-nums" style={{ color: "var(--theme-action-primary-bg)" }}>{fmt(totalIncome)}</span>
               </div>
@@ -339,8 +339,8 @@ function CategoryTab({ invoices, billingItems, expenses }: { invoices: any[]; bi
 
           {/* Cost column */}
           <div>
-            <div className="px-4 py-2" style={{ background: "#FFF7ED", borderBottom: "1px solid var(--theme-border-default)" }}>
-              <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "#C05621" }}>Cost</span>
+            <div className="px-4 py-2" style={{ background: "var(--theme-status-warning-bg)", borderBottom: "1px solid var(--theme-border-default)" }}>
+              <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--theme-status-warning-fg)" }}>Cost</span>
             </div>
             {costRows.length === 0 ? (
               <div className="px-4 py-4 text-[12px]" style={{ color: "var(--theme-text-muted)" }}>No data</div>
@@ -349,16 +349,16 @@ function CategoryTab({ invoices, billingItems, expenses }: { invoices: any[]; bi
                 <div key={row.category} className="flex items-center justify-between px-4 py-2 hover:bg-[var(--theme-bg-surface-subtle)]/50" style={{ borderBottom: "1px solid var(--theme-border-subtle)" }}>
                   <span className="text-[12px] font-medium truncate mr-2" style={{ color: "var(--theme-text-primary)" }}>{row.category}</span>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="text-[12px] tabular-nums font-medium" style={{ color: "#C05621" }}>{fmt(row.amount)}</span>
+                    <span className="text-[12px] tabular-nums font-medium" style={{ color: "var(--theme-status-warning-fg)" }}>{fmt(row.amount)}</span>
                     <span className="text-[10px] tabular-nums" style={{ color: "var(--theme-text-muted)" }}>{row.pct.toFixed(0)}%</span>
                   </div>
                 </div>
               ))
             )}
             {costRows.length > 0 && (
-              <div className="flex items-center justify-between px-4 py-2" style={{ background: "#FAFBFC", borderTop: "1px solid var(--theme-border-default)" }}>
+              <div className="flex items-center justify-between px-4 py-2" style={{ background: "var(--theme-bg-surface-subtle)", borderTop: "1px solid var(--theme-border-default)" }}>
                 <span className="text-[11px] font-bold" style={{ color: "var(--theme-text-primary)" }}>Total</span>
-                <span className="text-[11px] font-bold tabular-nums" style={{ color: "#C05621" }}>{fmt(totalCost)}</span>
+                <span className="text-[11px] font-bold tabular-nums" style={{ color: "var(--theme-status-warning-fg)" }}>{fmt(totalCost)}</span>
               </div>
             )}
           </div>
@@ -427,7 +427,7 @@ export function BreakdownTabs({ billingItems, invoices, expenses, onNavigateTab 
       {/* Header with tab pills */}
       <div
         className="px-5 py-3 flex items-center justify-between"
-        style={{ borderBottom: "1px solid var(--theme-border-default)", background: "#F8F9FB" }}
+        style={{ borderBottom: "1px solid var(--theme-border-default)", background: "var(--theme-bg-surface-subtle)" }}
       >
         <div className="flex items-center gap-3">
           <h3
@@ -438,14 +438,14 @@ export function BreakdownTabs({ billingItems, invoices, expenses, onNavigateTab 
           </h3>
 
           {/* Tab pills */}
-          <div className="flex items-center rounded-lg p-0.5" style={{ background: "#E5E9F0" }}>
+          <div className="flex items-center rounded-lg p-0.5" style={{ background: "var(--theme-border-default)" }}>
             {TABS.map((tab) => (
               <button
                 key={tab.key}
                 className="px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all cursor-pointer"
                 style={{
-                  background: activeTab === tab.key ? "white" : "transparent",
-                  color: activeTab === tab.key ? "#12332B" : "#667085",
+                  background: activeTab === tab.key ? "var(--theme-bg-surface)" : "transparent",
+                  color: activeTab === tab.key ? "var(--theme-text-primary)" : "var(--theme-text-muted)",
                   boxShadow: activeTab === tab.key ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
                 }}
                 onClick={() => setActiveTab(tab.key)}

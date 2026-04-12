@@ -1,8 +1,9 @@
 import { X, Plus, Printer, Download, Calendar as CalendarIcon, CreditCard, Clock, Tag, ChevronDown, RefreshCw, FileText, Banknote, Receipt, ArrowRight, CheckSquare, Square, Loader2, Save, Zap, Trash2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import logoImage from "figma:asset/28c84ed117b026fbf800de0882eb478561f37f4f.png";
+import { NeuronLogo } from "../NeuronLogo";
 import { CustomDropdown } from "../bd/CustomDropdown";
+import { CatalogItemCombobox } from "../shared/pricing/CatalogItemCombobox";
 import { GroupedDropdown } from "../bd/GroupedDropdown";
 import type { EVoucher, EVoucherTransactionType, LinkedBilling } from "../../types/evoucher";
 import { useEVoucherSubmit } from "../../hooks/useEVoucherSubmit";
@@ -10,12 +11,14 @@ import { useUser } from "../../hooks/useUser";
 import { supabase } from "../../utils/supabase/client";
 import { getAccounts } from "../../utils/accounting-api";
 import type { Account } from "../../types/accounting-core";
+import { toast } from "sonner@2.0.3";
 
 interface LineItem {
   id: string;
   particular: string;
   description: string;
   amount: number;
+  catalog_item_id?: string;
 }
 
 interface AddRequestForPaymentPanelProps {
@@ -24,7 +27,7 @@ interface AddRequestForPaymentPanelProps {
   onSuccess?: () => void; // Called after successful save to backend
   onSave?: (expenseData: any) => void | Promise<void>; // Alias for onSuccess, used by some callers
   onSaveDraft?: (draftData: any) => void | Promise<void>; // Draft save callback
-  context?: "bd" | "accounting" | "operations" | "collection" | "billing"; // Extended to support all E-Voucher types
+  context?: "bd" | "accounting" | "operations" | "collection" | "billing" | "personal"; // Extended to support all E-Voucher types
   defaultRequestor?: string; // For pre-filling requestor name
   mode?: "create" | "view"; // View mode for displaying existing expense
   existingData?: EVoucher; // Pre-fill data when in view mode
@@ -365,16 +368,21 @@ export function AddRequestForPaymentPanel({
 
   // Fetch Accounts (Assets Only)
   useEffect(() => {
+    let cancelled = false;
     const loadAccounts = async () => {
       try {
         const allAccounts = await getAccounts();
-        const assetAccounts = allAccounts.filter(a => a.type === 'Asset' && !a.is_folder);
-        setAccounts(assetAccounts);
+        if (!cancelled) {
+          const assetAccounts = allAccounts.filter(a => a.type === 'Asset' && !a.is_folder);
+          setAccounts(assetAccounts);
+        }
       } catch (e) {
         console.error("Failed to load accounts", e);
+        if (!cancelled) toast.error("Failed to load bank/cash accounts");
       }
     };
     loadAccounts();
+    return () => { cancelled = true; };
   }, []);
 
   // Initialize Transaction Type based on Context
@@ -382,14 +390,17 @@ export function AddRequestForPaymentPanel({
     if (context === "bd") {
       setTransactionType("budget_request");
     } else if (context === "collection") {
-      setTransactionType("collection");
+      setTransactionType("collection" as any);
     } else if (context === "billing") {
-      setTransactionType("billing");
+      setTransactionType("billing" as any);
     } else if (context === "operations") {
-      // Operations defaults to expense, but allows switching
+      // Operations defaults to expense, but allows switching to cash_advance
       setTransactionType("expense");
     } else if (context === "accounting") {
       setTransactionType("expense");
+    } else if (context === "personal") {
+      // My E-Vouchers: defaults to reimbursement, can switch to direct_expense
+      setTransactionType("reimbursement");
     }
   }, [context]);
 
@@ -421,9 +432,17 @@ export function AddRequestForPaymentPanel({
       if (dataToLoad.gl_sub_category) setSubCategory(dataToLoad.gl_sub_category || "");
       if (dataToLoad.project_number) setProjectNumber(dataToLoad.project_number || "");
       
-      // Handle line items
-      if (dataToLoad.line_items && dataToLoad.line_items.length > 0) {
-        setLineItems(dataToLoad.line_items as LineItem[]);
+      // Handle line items — prefer relational, fall back to JSONB
+      const lineItemsSource = (dataToLoad as any).evoucher_line_items?.length
+        ? (dataToLoad as any).evoucher_line_items
+        : dataToLoad.line_items;
+      if (lineItemsSource && lineItemsSource.length > 0) {
+        setLineItems(lineItemsSource.map((item: any) => ({
+          id: item.id,
+          particular: item.particular || "",
+          description: item.description || "",
+          amount: item.amount || 0,
+        })));
       } else if (dataToLoad.amount) {
         // Create single line item from total amount
         setLineItems([{ 
@@ -782,8 +801,11 @@ export function AddRequestForPaymentPanel({
   const isExpense = transactionType === "expense";
   const isBudgetRequest = transactionType === "budget_request";
   const isCashAdvance = transactionType === "cash_advance";
-  const isCollectionMode = transactionType === "collection";
-  const isBillingMode = transactionType === "billing";
+  const isReimbursement = transactionType === "reimbursement";
+  const isDirectExpense = transactionType === "direct_expense";
+  const isCollectionMode = (transactionType as string) === "collection";
+  const isBillingMode = (transactionType as string) === "billing";
+  const isPersonal = context === "personal";
   
   // Derived state for labels
   let panelTitle = "Request For Payment";
@@ -811,11 +833,21 @@ export function AddRequestForPaymentPanel({
     panelDescription = "Request cash advance for operations/staff";
     vendorLabel = "Payable To (Employee)";
     categoryLabel = "Expense Category";
+  } else if (transactionType === "reimbursement") {
+    panelTitle = "Reimbursement Request";
+    panelDescription = "Request reimbursement for out-of-pocket expenses";
+    vendorLabel = "Paid To (Vendor)";
+    categoryLabel = "Expense Category";
+  } else if (transactionType === "direct_expense") {
+    panelTitle = "Direct Expense Request";
+    panelDescription = "Request a direct purchase (not tied to a booking)";
+    vendorLabel = "Vendor / Payee";
+    categoryLabel = "Expense Category";
   } else {
     // Regular Expense
     panelTitle = transactionSubtype === "billable_expense" ? "New Billable Expense" : "New Expense Voucher";
-    panelDescription = transactionSubtype === "billable_expense" 
-      ? "Record an expense to be charged to the client" 
+    panelDescription = transactionSubtype === "billable_expense"
+      ? "Record an expense to be charged to the client"
       : "Record a direct expense entry";
     vendorLabel = "Vendor / Payee";
     categoryLabel = "Expense Category";
@@ -972,12 +1004,8 @@ export function AddRequestForPaymentPanel({
               paddingBottom: "24px",
               borderBottom: "1px solid var(--theme-border-default)"
             }}>
-              <div>
-                <img 
-                  src={logoImage} 
-                  alt="Neuron" 
-                  style={{ height: "32px", marginBottom: "12px" }}
-                />
+              <div style={{ marginBottom: "12px" }}>
+                <NeuronLogo height={32} />
               </div>
               
               <div style={{ textAlign: "right" }}>
@@ -1132,27 +1160,34 @@ export function AddRequestForPaymentPanel({
                   {/* Left Column: Transaction Type + Category */}
                   <div>
                     {/* Nested Grid to split Transaction Type and Category evenly within the same width as Project/Booking Ref */}
-                    <div style={{ 
-                      display: "grid", 
-                      gridTemplateColumns: (context === "operations" || context === "accounting") ? "1fr 1fr" : "1fr", 
-                      gap: "16px" 
+                    <div style={{
+                      display: "grid",
+                      gridTemplateColumns: (context === "operations" || context === "accounting" || context === "personal") ? "1fr 1fr" : "1fr",
+                      gap: "16px"
                     }}>
-                      {/* Transaction Type */}
-                      {(context === "operations" || context === "accounting") && (
+                      {/* Transaction Type — scoped to context */}
+                      {(context === "operations" || context === "accounting" || context === "personal") && (
                         <div>
-                          <label style={{ 
-                            display: "block", 
-                            fontSize: "12px", 
-                            fontWeight: 500, 
-                            color: "var(--theme-text-secondary)", 
-                            marginBottom: "8px" 
+                          <label style={{
+                            display: "block",
+                            fontSize: "12px",
+                            fontWeight: 500,
+                            color: "var(--theme-text-secondary)",
+                            marginBottom: "8px"
                           }}>
                             Transaction Type <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
                           </label>
                           <CustomDropdown
-                            value={transactionType === "cash_advance" ? "cash_advance" : transactionSubtype === "billable_expense" ? "billable" : "expense"}
+                            value={
+                              context === "personal"
+                                ? transactionType
+                                : transactionType === "cash_advance" ? "cash_advance" : transactionSubtype === "billable_expense" ? "billable" : "expense"
+                            }
                             onChange={(val) => {
-                              if (val === "cash_advance") {
+                              if (context === "personal") {
+                                setTransactionType(val as EVoucherTransactionType);
+                                setTransactionSubtype("regular_expense");
+                              } else if (val === "cash_advance") {
                                 setTransactionType("cash_advance");
                                 setTransactionSubtype("regular_expense");
                               } else if (val === "billable") {
@@ -1163,11 +1198,26 @@ export function AddRequestForPaymentPanel({
                                 setTransactionSubtype("regular_expense");
                               }
                             }}
-                            options={[
-                              { value: "expense", label: "Regular Expense" },
-                              { value: "billable", label: "Billable Expense" },
-                              { value: "cash_advance", label: "Cash Advance" }
-                            ]}
+                            options={
+                              context === "personal"
+                                ? [
+                                    { value: "reimbursement", label: "Reimbursement" },
+                                    { value: "direct_expense", label: "Direct Expense" }
+                                  ]
+                                : context === "operations"
+                                ? [
+                                    { value: "expense", label: "Regular Expense" },
+                                    { value: "billable", label: "Billable Expense" },
+                                    { value: "cash_advance", label: "Cash Advance" }
+                                  ]
+                                : [
+                                    { value: "expense", label: "Regular Expense" },
+                                    { value: "billable", label: "Billable Expense" },
+                                    { value: "cash_advance", label: "Cash Advance" },
+                                    { value: "reimbursement", label: "Reimbursement" },
+                                    { value: "direct_expense", label: "Direct Expense" }
+                                  ]
+                            }
                             placeholder="Select type"
                             disabled={isViewMode}
                           />
@@ -1243,7 +1293,7 @@ export function AddRequestForPaymentPanel({
                       color: "var(--theme-text-secondary)", 
                       marginBottom: "8px" 
                     }}>
-                      Project / Booking Ref (Optional)
+                      {isDirectExpense ? "Reference (Optional)" : "Project / Booking Ref (Optional)"}
                     </label>
                     <input
                       type="text"
@@ -1352,14 +1402,24 @@ export function AddRequestForPaymentPanel({
                     {lineItems.map((item) => (
                       <tr key={item.id} style={{ borderBottom: "1px solid var(--theme-border-subtle)" }}>
                         <td style={{ padding: "10px 16px" }}>
-                          <input
-                            type="text"
-                            readOnly={isViewMode || isCollectionMode}
-                            value={item.particular}
-                            onChange={(e) => handleLineItemChange(item.id, "particular", e.target.value)}
-                            placeholder="Item name"
-                            style={{ width: "100%", border: "none", outline: "none", fontSize: "14px", backgroundColor: "transparent" }}
-                          />
+                          {isViewMode || isCollectionMode ? (
+                            <div style={{ fontSize: "14px" }}>{item.particular}</div>
+                          ) : (
+                            <CatalogItemCombobox
+                              value={item.particular}
+                              catalogItemId={item.catalog_item_id}
+                              side="expense"
+                              onChange={(name, catId) => {
+                                handleLineItemChange(item.id, "particular", name);
+                                if (catId !== undefined) {
+                                  setLineItems(prev => prev.map(li =>
+                                    li.id === item.id ? { ...li, catalog_item_id: catId } : li
+                                  ));
+                                }
+                              }}
+                              placeholder="Select or type item..."
+                            />
+                          )}
                         </td>
                         <td style={{ padding: "10px 16px" }}>
                           <input

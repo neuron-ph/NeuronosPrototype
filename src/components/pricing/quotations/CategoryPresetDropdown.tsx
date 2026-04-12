@@ -1,20 +1,6 @@
 import { Search, X, Plus } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
-
-interface CategoryPreset {
-  id: string;
-  name: string;
-  description?: string;
-}
-
-const PRESET_CATEGORIES: CategoryPreset[] = [
-  { id: "freight", name: "Freight Charges", description: "Ocean/Air freight rates, fuel surcharges" },
-  { id: "origin", name: "Origin Local Charges", description: "Pickup, documentation, export customs" },
-  { id: "destination", name: "Destination Local Charges", description: "Delivery, import customs clearance" },
-  { id: "reimbursable", name: "Reimbursable Charges", description: "Client-reimbursed expenses" },
-  { id: "brokerage", name: "Brokerage Charges", description: "Customs clearance, duties, taxes" },
-  { id: "customs", name: "Customs Duty & VAT", description: "Import duties and value-added tax" },
-];
+import { supabase } from "../../../utils/supabase/client";
 
 interface CategoryPresetDropdownProps {
   isOpen: boolean;
@@ -29,6 +15,18 @@ export function CategoryPresetDropdown({ isOpen, onClose, onSelect, buttonRef, a
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, right: 0 });
+  const [presetCategories, setPresetCategories] = useState<string[]>([]);
+
+  useEffect(() => {
+    supabase
+      .from("catalog_categories")
+      .select("name")
+      .in("side", ["revenue", "both"])
+      .order("sort_order")
+      .then(({ data }) => {
+        if (data) setPresetCategories(data.map((c) => c.name));
+      });
+  }, []);
 
   // Use either buttonRef or anchorRef
   const activeRef = buttonRef || anchorRef;
@@ -77,12 +75,12 @@ export function CategoryPresetDropdown({ isOpen, onClose, onSelect, buttonRef, a
   }, [isOpen]);
 
   // Filter presets based on search query
-  const filteredPresets = PRESET_CATEGORIES.filter(preset =>
-    preset.name.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredPresets = presetCategories.filter(name =>
+    name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // Check if search query exactly matches any preset
-  const exactMatch = PRESET_CATEGORIES.some(p => p.name.toLowerCase() === searchQuery.trim().toLowerCase());
+  const exactMatch = presetCategories.some(name => name.toLowerCase() === searchQuery.trim().toLowerCase());
   
   // Logic for Create Button
   const showCreateOption = !exactMatch; 
@@ -263,11 +261,11 @@ export function CategoryPresetDropdown({ isOpen, onClose, onSelect, buttonRef, a
 
           {/* Category Options */}
           {filteredPresets.length > 0 ? (
-            filteredPresets.map((preset) => (
+            filteredPresets.map((name) => (
               <button
-                key={preset.id}
+                key={name}
                 onClick={() => {
-                  onSelect(preset.name);
+                  onSelect(name);
                   onClose();
                   setSearchQuery("");
                 }}
@@ -293,7 +291,7 @@ export function CategoryPresetDropdown({ isOpen, onClose, onSelect, buttonRef, a
                   e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
                 }}
               >
-                <span>{preset.name}</span>
+                <span>{name}</span>
               </button>
             ))
           ) : (

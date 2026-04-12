@@ -307,7 +307,7 @@ export function RecordBrowser({ isOpen, onClose, onLink, alreadyLinked = [] }: R
           fontSize: 12,
           fontWeight: 600,
           cursor: selected.length > 0 ? "pointer" : "not-allowed",
-          transition: "all 120ms ease",
+          transition: "color 120ms ease, border-color 120ms ease, background-color 120ms ease",
         }}
       >
         <Link2 size={12} />
@@ -472,7 +472,7 @@ export function RecordBrowser({ isOpen, onClose, onLink, alreadyLinked = [] }: R
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      transition: "all 120ms ease",
+                      transition: "color 120ms ease, border-color 120ms ease, background-color 120ms ease",
                     }}
                   >
                     {(rowSelected || linked) && <Check size={10} style={{ color: linked ? "var(--theme-text-muted)" : "#FFFFFF" }} strokeWidth={2.5} />}

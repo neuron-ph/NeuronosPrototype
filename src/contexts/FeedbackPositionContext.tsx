@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useState, useMemo } from "react";
 
 interface FeedbackPositionContextValue {
   hasCommentBar: boolean;
@@ -12,8 +12,9 @@ const FeedbackPositionContext = createContext<FeedbackPositionContextValue>({
 
 export function FeedbackPositionProvider({ children }: { children: React.ReactNode }) {
   const [hasCommentBar, setHasCommentBar] = useState(false);
+  const value = useMemo(() => ({ hasCommentBar, setHasCommentBar }), [hasCommentBar]);
   return (
-    <FeedbackPositionContext.Provider value={{ hasCommentBar, setHasCommentBar }}>
+    <FeedbackPositionContext.Provider value={value}>
       {children}
     </FeedbackPositionContext.Provider>
   );

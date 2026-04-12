@@ -9,6 +9,7 @@ interface QuotationDetailProps {
   userDepartment?: "Business Development" | "Pricing";
   onAcceptQuotation?: (quotation: QuotationNew) => void;
   onUpdate?: (quotation: QuotationNew) => void;
+  onSaveQuotation?: (quotation: QuotationNew) => Promise<void>;
   onDuplicate?: (quotation: QuotationNew) => void;
   onDelete?: () => void;
   onCreateTicket?: (quotation: QuotationNew) => void;
@@ -17,7 +18,7 @@ interface QuotationDetailProps {
   currentUser?: { id: string; name: string; email: string; department: string } | null;
 }
 
-export function QuotationDetail({ quotation, onBack, onEdit, userDepartment, onAcceptQuotation, onUpdate, onDuplicate, onDelete, onCreateTicket, onConvertToProject, onConvertToContract, currentUser }: QuotationDetailProps) {
+export function QuotationDetail({ quotation, onBack, onEdit, userDepartment, onAcceptQuotation, onUpdate, onSaveQuotation, onDuplicate, onDelete, onCreateTicket, onConvertToProject, onConvertToContract, currentUser }: QuotationDetailProps) {
   const handleUpdate = (updatedQuotation: QuotationNew) => {
     if (onUpdate) {
       onUpdate(updatedQuotation);
@@ -32,6 +33,7 @@ export function QuotationDetail({ quotation, onBack, onEdit, userDepartment, onA
       userDepartment={userDepartment} 
       onAcceptQuotation={onAcceptQuotation}
       onUpdate={handleUpdate}
+      onSaveQuotation={onSaveQuotation}
       onDuplicate={onDuplicate}
       onDelete={onDelete}
       onCreateTicket={onCreateTicket}

@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import posthog from 'posthog-js';
 import { supabase } from '../utils/supabase/client';
 import { logActivity } from '../utils/activityLog';
@@ -133,9 +133,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let isMounted = true;
 
-    // Get initial session (with 5s timeout in case token refresh hangs)
+    // Get initial session (with 15s timeout in case token refresh hangs)
     const sessionTimeout = new Promise<{ data: { session: null } }>((resolve) =>
-      setTimeout(() => resolve({ data: { session: null } }), 5000)
+      setTimeout(() => resolve({ data: { session: null } }), 15000)
     );
     Promise.race([supabase.auth.getSession(), sessionTimeout])
     .then(async ({ data: { session: initialSession } }) => {
@@ -416,23 +416,24 @@ export function UserProvider({ children }: { children: ReactNode }) {
     supabase.auth.signOut().catch(() => {});
   };
 
+  const contextValue = useMemo(() => ({
+    user,
+    session,
+    isAuthenticated: !!user && !!session,
+    login,
+    signup,
+    logout,
+    isLoading,
+    effectiveDepartment,
+    effectiveRole,
+    devOverride,
+    setDevOverride,
+    setUser,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [user, session, isLoading, effectiveDepartment, effectiveRole, devOverride]);
+
   return (
-    <UserContext.Provider
-      value={{
-        user,
-        session,
-        isAuthenticated: !!user && !!session,
-        login,
-        signup,
-        logout,
-        isLoading,
-        effectiveDepartment,
-        effectiveRole,
-        devOverride,
-        setDevOverride,
-        setUser,
-      }}
-    >
+    <UserContext.Provider value={contextValue}>
       {children}
     </UserContext.Provider>
   );

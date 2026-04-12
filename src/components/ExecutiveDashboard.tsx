@@ -18,6 +18,7 @@ import {
   AlertTriangle
 } from "lucide-react";
 import { NeuronCard } from "./NeuronCard";
+import { EVoucherApprovalQueue } from "./accounting/evouchers/EVoucherApprovalQueue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { useState, useMemo, memo, useRef, useEffect } from "react";
 
@@ -689,7 +690,15 @@ export function ExecutiveDashboard({ currentUser }: ExecutiveDashboardProps) {
           </div>
 
         </div>
+
+        {/* CEO E-Voucher Approval Queue */}
+        <EVoucherApprovalQueue
+          view="pending-ceo"
+          currentUser={currentUser ? { id: "", name: currentUser.name, email: currentUser.email, department: "Executive", role: "director" } : undefined}
+          title="E-Vouchers Awaiting CEO Approval"
+        />
       </div>
     </div>
   );
+
 }

@@ -11,6 +11,9 @@ import type { Customer } from "./types/bd";
 import { RouteTracker } from "./components/RouteTracker";
 import { NeuronLogo } from "./components/NeuronLogo";
 import { useWorkspaceTheme } from "./theme/useWorkspaceTheme";
+import { getThemeModePreference, setThemeModePreference } from "./theme/themeMode";
+import { resolveThemeMode } from "./theme/themeBootstrap";
+import { Moon, Sun } from "lucide-react";
 import { useReferenceDataPrefetch } from "./hooks/useReferenceDataPrefetch";
 import { BetaWelcomeScreen } from "./components/onboarding/BetaWelcomeScreen";
 import { FeedbackButton } from "./components/feedback/FeedbackButton";
@@ -34,6 +37,8 @@ const TransactionsModule = lazy(() => import("./components/transactions/Transact
 const ChartOfAccounts = lazy(() => import("./components/accounting/coa/ChartOfAccounts").then((module) => ({ default: module.ChartOfAccounts })));
 const HR = lazy(() => import("./components/HR").then((module) => ({ default: module.HR })));
 const InboxPage = lazy(() => import("./components/InboxPage").then((module) => ({ default: module.InboxPage })));
+const MyEVouchersPage = lazy(() => import("./components/MyEVouchersPage").then((module) => ({ default: module.MyEVouchersPage })));
+const EVoucherDetailPage = lazy(() => import("./components/accounting/evouchers/EVoucherDetailPage").then((module) => ({ default: module.EVoucherDetailPage })));
 const ActivityLogPage = lazy(() => import("./components/ActivityLogPage").then((module) => ({ default: module.ActivityLogPage })));
 const EmployeeProfile = lazy(() => import("./components/EmployeeProfile").then((module) => ({ default: module.EmployeeProfile })));
 const CreateBooking = lazy(() => import("./components/operations/CreateBooking").then((module) => ({ default: module.CreateBooking })));
@@ -89,6 +94,9 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [isDark, setIsDark] = useState(() =>
+    resolveThemeMode(getThemeModePreference()) === "dark"
+  );
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,75 +110,90 @@ function LoginPage() {
     } else {
       toast.success('Welcome to Neuron OS!');
     }
-    
+
     setIsLoading(false);
+  };
+
+  const toggleTheme = () => {
+    const next = isDark ? "light" : "dark";
+    setThemeModePreference(next);
+    setIsDark(!isDark);
   };
 
   const isLoginDisabled = !email || !password || isLoading;
 
   return (
-    <div className="min-h-screen w-full bg-[rgb(255,255,255)] flex items-center justify-center p-6">
+    <div className="min-h-screen w-full bg-[var(--theme-bg-page)] flex items-center justify-center p-6 relative">
+      {/* Dark mode toggle */}
+      <button
+        onClick={toggleTheme}
+        className="absolute top-5 right-5 p-2 rounded-lg text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-surface-subtle)] transition-colors"
+        aria-label="Toggle dark mode"
+      >
+        {isDark ? <Sun size={18} /> : <Moon size={18} />}
+      </button>
+
       {/* Login Card */}
-      <div className="w-full max-w-[420px] bg-white rounded-2xl px-12 py-10">
-        {/* Logo and Header */}
+      <div className="w-full max-w-[420px] bg-[var(--theme-bg-surface)] border border-[var(--theme-border-default)] rounded-2xl px-12 py-10">
+        {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <NeuronLogo height={36} />
         </div>
 
         {/* Error Message */}
         {error && (
-          <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200">
-            <p className="text-sm text-red-700">{error}</p>
+          <div className="mb-4 p-3 rounded-lg bg-[var(--theme-status-danger-bg)] border border-[var(--theme-status-danger-border)]">
+            <p className="text-sm text-[var(--theme-status-danger-fg)]">{error}</p>
           </div>
         )}
 
         {/* Login Form */}
         <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-1.5">
-              <label htmlFor="login-email" className="block text-[#0a1d4d] font-['Inter:Medium',sans-serif] font-medium">
-                Email
-              </label>
-              <input
-                id="login-email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@company.com"
-                className="w-full px-3.5 py-2.5 rounded-lg border border-gray-200 bg-gray-50 font-['Inter:Regular',sans-serif] text-[#0a1d4d] placeholder:text-gray-400 focus:outline-none focus:border-[#2f7f6f] focus:bg-white transition-all"
-                disabled={isLoading}
-              />
-            </div>
+          <div className="space-y-1.5">
+            <label htmlFor="login-email" className="block text-[var(--theme-text-primary)] font-['Inter:Medium',sans-serif] font-medium text-[14px]">
+              Email
+            </label>
+            <input
+              id="login-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="name@company.com"
+              className="w-full px-3.5 py-2.5 rounded-lg border border-[var(--theme-border-default)] bg-[var(--theme-input-subtle-bg)] text-[var(--theme-text-primary)] font-['Inter:Regular',sans-serif] placeholder:text-[var(--theme-text-muted)] focus:outline-none focus:border-[var(--theme-border-strong)] transition-all"
+              disabled={isLoading}
+            />
+          </div>
 
-            <div className="space-y-1.5">
-              <label htmlFor="login-password" className="block text-[#0a1d4d] font-['Inter:Medium',sans-serif] font-medium">
-                Password
-              </label>
-              <input
-                id="login-password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                className="w-full px-3.5 py-2.5 rounded-lg border border-gray-200 bg-gray-50 font-['Inter:Regular',sans-serif] text-[#0a1d4d] placeholder:text-gray-400 focus:outline-none focus:border-[#2f7f6f] focus:bg-white transition-all"
-                disabled={isLoading}
-              />
-            </div>
+          <div className="space-y-1.5">
+            <label htmlFor="login-password" className="block text-[var(--theme-text-primary)] font-['Inter:Medium',sans-serif] font-medium text-[14px]">
+              Password
+            </label>
+            <input
+              id="login-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              className="w-full px-3.5 py-2.5 rounded-lg border border-[var(--theme-border-default)] bg-[var(--theme-input-subtle-bg)] text-[var(--theme-text-primary)] font-['Inter:Regular',sans-serif] placeholder:text-[var(--theme-text-muted)] focus:outline-none focus:border-[var(--theme-border-strong)] transition-all"
+              disabled={isLoading}
+            />
+          </div>
 
-            <button
-              type="submit"
-              disabled={isLoginDisabled}
-              className="w-full py-2.5 px-4 bg-[#6b9d94] text-white rounded-lg font-['Inter:Medium',sans-serif] font-medium hover:bg-[#5a8a82] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 transition-all duration-150 mt-6 text-center"
-            >
-              {isLoading ? "Signing in..." : "Sign In"}
-            </button>
-          </form>
+          <button
+            type="submit"
+            disabled={isLoginDisabled}
+            className="w-full py-2.5 px-4 bg-[#6b9d94] text-white rounded-lg font-['Inter:Medium',sans-serif] font-medium hover:bg-[#5a8a82] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 transition-all duration-150 mt-6 text-center"
+          >
+            {isLoading ? "Signing in..." : "Sign In"}
+          </button>
+        </form>
 
         {/* Footer */}
         <div className="mt-6 text-center">
-          <p className="text-gray-400 text-xs">
+          <p className="text-[var(--theme-text-muted)] text-xs">
             Powered by Supabase Auth
           </p>
-          <p className="text-gray-400 text-sm mt-1">
+          <p className="text-[var(--theme-text-muted)] text-sm mt-1">
             &copy; 2025 Neuron. All rights reserved.
           </p>
         </div>
@@ -229,6 +252,7 @@ function RouteWrapper({ children, page }: { children: React.ReactNode; page: str
     if (path.startsWith("/accounting/catalog")) return "acct-catalog";
     if (path.startsWith("/hr")) return "hr";
     if (path.startsWith("/calendar")) return "calendar";
+    if (path.startsWith("/my-evouchers")) return "my-evouchers";
     if (path.startsWith("/inbox")) return "inbox";
     if (path.startsWith("/activity-log")) return "activity-log";
     if (path.startsWith("/settings")) return "settings";
@@ -282,6 +306,7 @@ function RouteWrapper({ children, page }: { children: React.ReactNode; page: str
       "hr": "/hr",
       "calendar": "/calendar",
       "inbox": "/inbox",
+      "my-evouchers": "/my-evouchers",
       "activity-log": "/activity-log",
       "settings": "/settings",
       "admin-users": "/admin/users",
@@ -848,6 +873,14 @@ function InboxPageWrapper() {
   );
 }
 
+function MyEVouchersPageWrapper() {
+  return (
+    <RouteWrapper page="my-evouchers">
+      <MyEVouchersPage />
+    </RouteWrapper>
+  );
+}
+
 function ActivityLogPageWrapper() {
   return (
     <RouteWrapper page="activity-log">
@@ -1033,6 +1066,8 @@ function AppContent() {
         {/* Open to all authenticated users */}
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/inbox" element={<InboxPageWrapper />} />
+        <Route path="/my-evouchers" element={<MyEVouchersPageWrapper />} />
+        <Route path="/evouchers/:id" element={<RouteWrapper page="my-evouchers"><EVoucherDetailPage /></RouteWrapper>} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/design-system" element={<DesignSystemPage />} />
         

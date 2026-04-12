@@ -4,7 +4,7 @@
 
 :root {
   /* ===== WORKSPACE THEME TOKENS ===== */
-  --theme-bg-page: #FFFFFF;
+  --theme-bg-page: #fcfcfd;
   --theme-bg-surface: #FFFFFF;
   --theme-bg-surface-subtle: #FFFFFF;
   --theme-bg-surface-tint: #E8F2EE;
@@ -304,6 +304,16 @@
   --neuron-cal-crm: #2D2305;
   --neuron-cal-crm-text: #FCD34D;
   --neuron-cal-crm-border: #D97706;
+}
+
+/* Autofill override — prevents browser from painting its own bg color over themed inputs */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0px 1000px var(--theme-input-subtle-bg) inset !important;
+  -webkit-text-fill-color: var(--theme-text-primary) !important;
+  transition: background-color 9999s ease-in-out 0s;
 }
 
 @theme inline {

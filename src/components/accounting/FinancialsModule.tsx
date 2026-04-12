@@ -475,7 +475,7 @@ export function FinancialsModule() {
   const BILLINGS_STATUS_OPTIONS: StatusOption[] = [
     { value: "unbilled", label: "Unbilled", color: "var(--theme-status-warning-fg)" },
     { value: "billed", label: "Billed", color: "var(--theme-action-primary-bg)" },
-    { value: "paid", label: "Paid", color: "#16A34A" },
+    { value: "paid", label: "Paid", color: "var(--theme-status-success-fg)" },
     { value: "voided", label: "Voided", color: "var(--theme-status-danger-fg)" },
   ];
 
@@ -529,15 +529,20 @@ export function FinancialsModule() {
           src === "contract_rate" || src === "rate_card" ? "Contract" :
           src === "billable_expense" ? "Expense" :
           "Manual";
-        const color =
-          label === "Quotation" ? "#0F766E" :
+        const fg =
+          label === "Quotation" ? "var(--theme-action-primary-bg)" :
           label === "Contract" ? "#6366F1" :
-          label === "Expense" ? "#D97706" :
-          "#667085";
+          label === "Expense" ? "var(--theme-status-warning-fg)" :
+          "var(--theme-text-muted)";
+        const bg =
+          label === "Quotation" ? "var(--theme-status-success-bg)" :
+          label === "Contract" ? "#6366F120" :
+          label === "Expense" ? "var(--theme-status-warning-bg)" :
+          "var(--theme-bg-surface-subtle)";
         return (
           <span
             className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
-            style={{ backgroundColor: `${color}15`, color }}
+            style={{ backgroundColor: bg, color: fg }}
           >
             {label}
           </span>
@@ -550,15 +555,20 @@ export function FinancialsModule() {
       align: "center" as const,
       cell: (item: BillingItem) => {
         const s = (item.status || "").toLowerCase();
-        const color =
-          s === "paid" ? "#16A34A" :
-          s === "billed" ? "#0F766E" :
-          s === "voided" ? "#DC2626" :
-          "#D97706";
+        const fg =
+          s === "paid" ? "var(--theme-status-success-fg)" :
+          s === "billed" ? "var(--theme-action-primary-bg)" :
+          s === "voided" ? "var(--theme-status-danger-fg)" :
+          "var(--theme-status-warning-fg)";
+        const bg =
+          s === "paid" ? "var(--theme-status-success-bg)" :
+          s === "billed" ? "var(--theme-status-success-bg)" :
+          s === "voided" ? "var(--theme-status-danger-bg)" :
+          "var(--theme-status-warning-bg)";
         return (
           <span
             className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase"
-            style={{ backgroundColor: `${color}15`, color }}
+            style={{ backgroundColor: bg, color: fg }}
           >
             {s || "—"}
           </span>
@@ -763,7 +773,7 @@ export function FinancialsModule() {
     { value: "posted", label: "Posted", color: "var(--theme-action-primary-bg)" },
     { value: "open", label: "Open", color: "#2563EB" },
     { value: "partial", label: "Partial", color: "var(--theme-status-warning-fg)" },
-    { value: "paid", label: "Paid", color: "#16A34A" },
+    { value: "paid", label: "Paid", color: "var(--theme-status-success-fg)" },
   ];
 
   const INVOICES_COLUMNS: AggColumnDef<any>[] = useMemo(() => [
@@ -803,7 +813,7 @@ export function FinancialsModule() {
         const d = new Date(inv.due_date);
         const isOverdue = d < new Date() && (inv.status || "").toLowerCase() !== "paid";
         return (
-          <span style={{ color: isOverdue ? "#EF4444" : "inherit", fontWeight: isOverdue ? 600 : 400 }}>
+          <span style={{ color: isOverdue ? "var(--theme-status-danger-fg)" : "inherit", fontWeight: isOverdue ? 600 : 400 }}>
             {d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
           </span>
         );
@@ -839,12 +849,26 @@ export function FinancialsModule() {
       align: "center" as const,
       cell: (inv: any) => {
         const s = (inv.status || "").toLowerCase();
-        const colorMap: Record<string, string> = { draft: "#6B7A76", posted: "#0F766E", open: "#2563EB", partial: "#D97706", paid: "#16A34A" };
-        const color = colorMap[s] || "#6B7A76";
+        const fgMap: Record<string, string> = {
+          draft: "var(--theme-text-muted)",
+          posted: "var(--theme-action-primary-bg)",
+          open: "#2563EB",
+          partial: "var(--theme-status-warning-fg)",
+          paid: "var(--theme-status-success-fg)",
+        };
+        const bgMap: Record<string, string> = {
+          draft: "var(--theme-bg-surface-subtle)",
+          posted: "var(--theme-status-success-bg)",
+          open: "#2563EB20",
+          partial: "var(--theme-status-warning-bg)",
+          paid: "var(--theme-status-success-bg)",
+        };
+        const fg = fgMap[s] || "var(--theme-text-muted)";
+        const bg = bgMap[s] || "var(--theme-bg-surface-subtle)";
         return (
           <span
             className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase"
-            style={{ backgroundColor: `${color}15`, color }}
+            style={{ backgroundColor: bg, color: fg }}
           >
             {s || "—"}
           </span>
@@ -1006,9 +1030,9 @@ export function FinancialsModule() {
 
   const COLLECTIONS_STATUS_OPTIONS: StatusOption[] = [
     { value: "pending", label: "Pending", color: "var(--theme-status-warning-fg)" },
-    { value: "posted", label: "Posted", color: "#16A34A" },
+    { value: "posted", label: "Posted", color: "var(--theme-status-success-fg)" },
     { value: "credited", label: "Customer Credit", color: "#1D4ED8" },
-    { value: "refunded", label: "Refunded", color: "#475467" },
+    { value: "refunded", label: "Refunded", color: "var(--theme-text-muted)" },
     { value: "voided", label: "Voided", color: "var(--theme-status-danger-fg)" },
   ];
 
@@ -1067,17 +1091,25 @@ export function FinancialsModule() {
       align: "center" as const,
       cell: (c: any) => {
         const s = (c.status || "posted").toLowerCase();
-        const colorMap: Record<string, string> = {
-          posted: "#16A34A",
-          pending: "#D97706",
+        const fgMap: Record<string, string> = {
+          posted: "var(--theme-status-success-fg)",
+          pending: "var(--theme-status-warning-fg)",
           credited: "#1D4ED8",
-          refunded: "#475467",
-          voided: "#EF4444",
+          refunded: "var(--theme-text-muted)",
+          voided: "var(--theme-status-danger-fg)",
         };
-        const color = colorMap[s] || "#16A34A";
+        const bgMap: Record<string, string> = {
+          posted: "var(--theme-status-success-bg)",
+          pending: "var(--theme-status-warning-bg)",
+          credited: "#1D4ED820",
+          refunded: "var(--theme-bg-surface-subtle)",
+          voided: "var(--theme-status-danger-bg)",
+        };
+        const fg = fgMap[s] || "var(--theme-status-success-fg)";
+        const bg = bgMap[s] || "var(--theme-status-success-bg)";
         return (
           <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase"
-            style={{ backgroundColor: `${color}15`, color }}>
+            style={{ backgroundColor: bg, color: fg }}>
             {s}
           </span>
         );
@@ -1220,7 +1252,7 @@ export function FinancialsModule() {
     { value: "draft", label: "Draft", color: "var(--theme-text-muted)" },
     { value: "pending", label: "Pending", color: "var(--theme-status-warning-fg)" },
     { value: "approved", label: "Approved", color: "var(--theme-action-primary-bg)" },
-    { value: "posted", label: "Posted", color: "#16A34A" },
+    { value: "posted", label: "Posted", color: "var(--theme-status-success-fg)" },
     { value: "rejected", label: "Rejected", color: "var(--theme-status-danger-fg)" },
   ];
 
@@ -1273,11 +1305,25 @@ export function FinancialsModule() {
       align: "center" as const,
       cell: (e: any) => {
         const s = (e.status || "").toLowerCase();
-        const colorMap: Record<string, string> = { draft: "#6B7A76", pending: "#D97706", approved: "#0F766E", posted: "#16A34A", rejected: "#EF4444" };
-        const color = colorMap[s] || "#6B7A76";
+        const fgMap: Record<string, string> = {
+          draft: "var(--theme-text-muted)",
+          pending: "var(--theme-status-warning-fg)",
+          approved: "var(--theme-action-primary-bg)",
+          posted: "var(--theme-status-success-fg)",
+          rejected: "var(--theme-status-danger-fg)",
+        };
+        const bgMap: Record<string, string> = {
+          draft: "var(--theme-bg-surface-subtle)",
+          pending: "var(--theme-status-warning-bg)",
+          approved: "var(--theme-status-success-bg)",
+          posted: "var(--theme-status-success-bg)",
+          rejected: "var(--theme-status-danger-bg)",
+        };
+        const fg = fgMap[s] || "var(--theme-text-muted)";
+        const bg = bgMap[s] || "var(--theme-bg-surface-subtle)";
         return (
           <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase"
-            style={{ backgroundColor: `${color}15`, color }}>
+            style={{ backgroundColor: bg, color: fg }}>
             {s || "—"}
           </span>
         );
@@ -1390,7 +1436,7 @@ export function FinancialsModule() {
                 onClick={() => setActiveTab(tab.id)}
                 className="relative flex items-center gap-2 px-5 py-3 text-[13px] font-medium transition-colors"
                 style={{
-                  color: isActive ? "#0F766E" : "#667085",
+                  color: isActive ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)",
                   fontWeight: isActive ? 600 : 500,
                 }}
               >

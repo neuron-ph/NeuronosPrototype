@@ -244,14 +244,14 @@ export function PLTrendCard({
               <div className="flex items-center gap-1.5">
                 <div
                   className="rounded-full"
-                  style={{ width: "8px", height: "8px", background: "#0F766E" }}
+                  style={{ width: "8px", height: "8px", background: "var(--theme-action-primary-bg)" }}
                 />
                 <span style={{ fontSize: "12px", color: "var(--theme-text-muted)" }}>Revenue</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <div
                   className="rounded-full"
-                  style={{ width: "8px", height: "8px", background: "#DC2626" }}
+                  style={{ width: "8px", height: "8px", background: "var(--theme-status-danger-fg)" }}
                 />
                 <span style={{ fontSize: "12px", color: "var(--theme-text-muted)" }}>Expenses</span>
               </div>
@@ -335,7 +335,7 @@ export function PLTrendCard({
                             className="flex-1 transition-opacity duration-200"
                             style={{
                               height: `${Math.max(expPct, item.expenses > 0 ? 1.5 : 0)}%`,
-                              backgroundColor: "#DC2626",
+                              backgroundColor: "var(--theme-status-danger-fg)",
                               borderRadius: `${BAR_RADIUS}px ${BAR_RADIUS}px 0 0`,
                               opacity: isHovered ? 1 : 0.88,
                             }}
@@ -365,7 +365,7 @@ export function PLTrendCard({
                             </div>
                             <div className="flex items-center justify-between" style={{ gap: "16px", marginBottom: "4px" }}>
                               <div className="flex items-center gap-1.5">
-                                <div className="rounded-full" style={{ width: "8px", height: "8px", background: "#0F766E" }} />
+                                <div className="rounded-full" style={{ width: "8px", height: "8px", background: "var(--theme-action-primary-bg)" }} />
                                 <span style={{ fontSize: "12px", color: "var(--theme-text-muted)" }}>Revenue</span>
                               </div>
                               <span className="font-bold tabular-nums" style={{ fontSize: "12px", color: "var(--theme-action-primary-bg)" }}>
@@ -374,7 +374,7 @@ export function PLTrendCard({
                             </div>
                             <div className="flex items-center justify-between" style={{ gap: "16px", marginBottom: "4px" }}>
                               <div className="flex items-center gap-1.5">
-                                <div className="rounded-full" style={{ width: "8px", height: "8px", background: "#DC2626" }} />
+                                <div className="rounded-full" style={{ width: "8px", height: "8px", background: "var(--theme-status-danger-fg)" }} />
                                 <span style={{ fontSize: "12px", color: "var(--theme-text-muted)" }}>Expenses</span>
                               </div>
                               <span className="font-bold tabular-nums" style={{ fontSize: "12px", color: "var(--theme-status-danger-fg)" }}>

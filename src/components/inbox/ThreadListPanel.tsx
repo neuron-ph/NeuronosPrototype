@@ -25,14 +25,13 @@ function ThreadListSkeleton() {
           <div className="flex items-start gap-2.5">
             <div style={{ width: 8, flexShrink: 0 }} />
             <div className="flex-1 space-y-2">
-              <div style={{ height: 13, borderRadius: 4, backgroundColor: "var(--theme-bg-surface-subtle)", width: `${70 + (i % 3) * 10}%`, animation: "pulse 1.5s ease-in-out infinite" }} />
-              <div style={{ height: 11, borderRadius: 4, backgroundColor: "var(--theme-bg-surface-subtle)", width: "50%", animation: "pulse 1.5s ease-in-out infinite" }} />
-              <div style={{ height: 11, borderRadius: 4, backgroundColor: "var(--theme-bg-surface-subtle)", width: "80%", animation: "pulse 1.5s ease-in-out infinite" }} />
+              <div className="animate-pulse" style={{ height: 13, borderRadius: 4, backgroundColor: "var(--theme-bg-surface-subtle)", width: `${70 + (i % 3) * 10}%` }} />
+              <div className="animate-pulse" style={{ height: 11, borderRadius: 4, backgroundColor: "var(--theme-bg-surface-subtle)", width: "50%" }} />
+              <div className="animate-pulse" style={{ height: 11, borderRadius: 4, backgroundColor: "var(--theme-bg-surface-subtle)", width: "80%" }} />
             </div>
           </div>
         </div>
       ))}
-      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }`}</style>
     </div>
   );
 }

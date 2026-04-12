@@ -165,7 +165,8 @@ export interface SellingPriceCategory {
   name?: string;              // Backward compatibility alias
   line_items: SellingPriceLineItem[];
   subtotal: number;           // Auto-calculated sum of final prices
-  
+  catalog_category_id?: string; // FK to catalog_categories.id — set on add/load, used to scope item combobox
+
   // ✨ NEW: Category expansion state (for collapsible UI)
   is_expanded?: boolean;      // true = expanded, false = collapsed (default: true)
   display_order?: number;     // Order in which category appears (for drag-and-drop reordering)

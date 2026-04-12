@@ -30,10 +30,12 @@ startKeepalive();
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000,
-      gcTime: 10 * 60 * 1000, // Keep cache 10 min so stale data can be served during navigation (> staleTime)
+      staleTime: 30 * 1000,           // 30s — data is considered fresh for 30s
+      gcTime: 5 * 60 * 1000,          // 5min — cache kept for background refetch
       retry: 1,
-      refetchOnWindowFocus: false,
+      refetchOnWindowFocus: true,      // Refetch when tab regains focus
+      refetchOnMount: true,            // Refetch when component mounts with stale data
+      refetchOnReconnect: true,        // Refetch after network reconnect
     },
   },
 });

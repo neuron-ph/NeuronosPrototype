@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Plus, Trash2, Loader2, AlertTriangle } from "lucide-react";
 import { supabase } from "../../../utils/supabase/client";
 import { logCreation, logStatusChange } from "../../../utils/activityLog";
+import { createWorkflowTicket } from "../../../utils/workflowTickets";
 import { toast } from "sonner@2.0.3";
 import { SidePanel } from "../../common/SidePanel";
 import type { LiquidationLineItem } from "../../../types/evoucher";
@@ -89,23 +90,23 @@ export function LiquidationForm({
 
       if (submissionError) throw submissionError;
 
-      // 2. If final submission, transition EV to liquidation_pending
+      // 2. If final submission, transition EV to pending_verification
       if (isFinal) {
         const { error: evError } = await supabase
           .from("evouchers")
-          .update({ status: "liquidation_pending", updated_at: new Date().toISOString() })
+          .update({ status: "pending_verification", liquidated_at: new Date().toISOString(), updated_at: new Date().toISOString() })
           .eq("id", evoucherId);
         if (evError) throw evError;
 
         const actor = { id: currentUser.id, name: currentUser.name, department: "" };
-        logStatusChange("evoucher", evoucherId, evoucherNumber, "liquidation_open", "liquidation_pending", actor);
+        logStatusChange("evoucher", evoucherId, evoucherNumber, "pending_liquidation", "pending_verification", actor);
 
         await supabase.from("evoucher_history").insert({
           id: `EH-${Date.now()}`,
           evoucher_id: evoucherId,
-          action: "Liquidation Submitted (Final) — Pending Accounting Review",
-          previous_status: "liquidation_open",
-          new_status: "liquidation_pending",
+          action: "Liquidation Submitted (Final) — Pending Accounting Verification",
+          previous_status: "pending_liquidation",
+          new_status: "pending_verification",
           performed_by: currentUser.id,
           performed_by_name: currentUser.name,
           performed_by_role: "Handler",
@@ -145,14 +146,27 @@ export function LiquidationForm({
           }
         }
 
+        // Notify Accounting: liquidation submitted for verification
+        createWorkflowTicket({
+          subject: `Liquidation Submitted: ${evoucherNumber}`,
+          body: `Liquidation receipts for ${evoucherNumber} have been submitted and are ready for verification. Total spend: ₱${totalSpend.toLocaleString()}.`,
+          type: "request",
+          recipientDept: "Accounting",
+          linkedRecordType: "expense",
+          linkedRecordId: evoucherId,
+          createdBy: currentUser.id,
+          createdByName: currentUser.name,
+          createdByDept: "",
+          autoCreated: true,
+        });
         toast.success("Liquidation submitted for Accounting review");
       } else {
-        // Incremental submission — ensure EV is in liquidation_open
+        // Incremental submission — ensure EV is in pending_liquidation
         await supabase
           .from("evouchers")
-          .update({ status: "liquidation_open", updated_at: new Date().toISOString() })
+          .update({ status: "pending_liquidation", updated_at: new Date().toISOString() })
           .eq("id", evoucherId)
-          .in("status", ["posted", "liquidation_open"]); // safe: only transitions from valid states
+          .in("status", ["disbursed", "pending_liquidation"]); // safe: only transitions from valid states
 
         toast.success("Receipts saved. Add more anytime, or submit as final when done.");
       }

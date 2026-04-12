@@ -238,7 +238,7 @@ export function CustomDropdown({
                     }}
                     onMouseEnter={(e) => {
                       if (!isSelected) {
-                        e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
+                        e.currentTarget.style.backgroundColor = "var(--theme-state-hover)";
                       }
                     }}
                     onMouseLeave={(e) => {
@@ -363,7 +363,7 @@ export function CustomDropdown({
                     }}
                     onMouseEnter={(e) => {
                       if (!isSelected) {
-                        e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
+                        e.currentTarget.style.backgroundColor = "var(--theme-state-hover)";
                       }
                     }}
                     onMouseLeave={(e) => {

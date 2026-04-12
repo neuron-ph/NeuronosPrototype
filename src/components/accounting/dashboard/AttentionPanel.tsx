@@ -253,7 +253,7 @@ function PendingRequestsSection() {
                 }}
                 onClick={isClickable ? () => handleRowClick(ticket) : undefined}
                 onMouseEnter={(e) => {
-                  if (isClickable) e.currentTarget.style.backgroundColor = "#F8FAFB";
+                  if (isClickable) e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)";
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.backgroundColor = "transparent";
@@ -474,7 +474,7 @@ export function AttentionPanel({ items }: AttentionPanelProps) {
                 onClick={isClickable ? item.onAction : undefined}
                 onMouseEnter={(e) => {
                   if (isClickable) {
-                    e.currentTarget.style.backgroundColor = "#F8FAFB";
+                    e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)";
                   }
                 }}
                 onMouseLeave={(e) => {
@@ -545,7 +545,7 @@ export function AttentionPanel({ items }: AttentionPanelProps) {
                 {item.dismissKey && !isSuccess && (
                   <button
                     className="absolute top-2.5 right-2 w-5 h-5 flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 transition-all duration-150 cursor-pointer hover:bg-[var(--theme-state-hover)]"
-                    style={{ color: "#C4C9D4" }}
+                    style={{ color: "var(--theme-text-muted)" }}
                     onClick={(e) => {
                       e.stopPropagation();
                       handleDismiss(item.dismissKey!);
@@ -566,7 +566,7 @@ export function AttentionPanel({ items }: AttentionPanelProps) {
                 className="w-full px-5 py-2 flex items-center gap-2 cursor-pointer hover:bg-[var(--theme-bg-surface-subtle)]/30 transition-colors"
                 onClick={() => setShowDismissed(!showDismissed)}
               >
-                <span className="text-[10px] font-medium" style={{ color: "#B4B9C4" }}>
+                <span className="text-[10px] font-medium" style={{ color: "var(--theme-text-muted)" }}>
                   Dismissed ({dismissedItems.length})
                 </span>
                 <ChevronRight

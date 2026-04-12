@@ -30,11 +30,13 @@ interface EVoucherWorkflowPanelProps {
 
 /**
  * Determines the next status when a requestor submits their EV.
- * Executive-created EVs skip TL + CEO gates and land directly at Accounting.
+ * Executive-created EVs skip Manager + CEO gates and land directly at Accounting.
+ * direct_expense skips Manager and goes straight to CEO.
  */
-function resolveSubmitTarget(requestorDept?: string): string {
+function resolveSubmitTarget(requestorDept?: string, transactionType?: string): string {
   if (requestorDept === "Executive") return "pending_accounting";
-  return "pending_tl";
+  if (transactionType === "direct_expense") return "pending_ceo";
+  return "pending_manager";
 }
 
 export function EVoucherWorkflowPanel({
@@ -49,6 +51,7 @@ export function EVoucherWorkflowPanel({
 }: EVoucherWorkflowPanelProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectingAs, setRejectingAs] = useState<"manager" | "ceo">("manager");
   const [rejectionReason, setRejectionReason] = useState("");
   const [showLiquidationForm, setShowLiquidationForm] = useState(false);
   const [showGLSheet, setShowGLSheet] = useState(false);
@@ -67,27 +70,29 @@ export function EVoucherWorkflowPanel({
   const role       = currentUser?.role       ?? "";
   const department = currentUser?.department ?? "";
 
-  const canApproveAsTL = canPerformEVAction("approve_tl", role, department) && currentStatus === "pending_tl";
-  const canRejectAsTL  = canPerformEVAction("approve_tl", role, department) && currentStatus === "pending_tl";
+  const canApproveAsTL = canPerformEVAction("approve_tl", role, department) && currentStatus === "pending_manager";
+  const canRejectAsTL  = canPerformEVAction("approve_tl", role, department) && currentStatus === "pending_manager";
   const canApproveAsCEO = canPerformEVAction("approve_ceo", role, department) && currentStatus === "pending_ceo";
   const canRejectAsCEO  = canPerformEVAction("approve_ceo", role, department) && currentStatus === "pending_ceo";
 
-  // Accounting processes payment at pending_accounting; Treasury marks disbursed→posted
-  const canAuthorizePayment = canPerformEVAction("post_gl", role, department) && currentStatus === "pending_accounting";
-  const canMarkDisbursed    = canPerformEVAction("approve_accounting", role, department) && currentStatus === "disbursed";
+  // Accounting: two separate actions
+  // 1. Disburse — releases cash to rep (pending_accounting → disbursed)
+  const canDisburse = canPerformEVAction("approve_accounting", role, department) && currentStatus === "pending_accounting";
+  // 2. Verify & Post — reviews receipts, posts GL (pending_verification → posted)
+  const canVerifyAndPost = canPerformEVAction("post_gl", role, department) && currentStatus === "pending_verification";
 
   // Accounting Manager can unlock a posted EV for correction (auto-reverses the journal entry)
   const canUnlockForCorrection = canPerformEVAction("unlock_posted", role, department) && currentStatus === "posted";
 
   // Liquidation: only for cash_advance and budget_request, only the EV owner can liquidate
-  const isAdvanceType = transactionType === "cash_advance" || transactionType === "budget_request";
+  const isAdvanceType = transactionType === "cash_advance" || transactionType === "budget_request" || transactionType === "expense" || transactionType === "direct_expense";
   const canOpenLiquidation =
     isOwner &&
     isAdvanceType &&
-    (currentStatus === "posted" || currentStatus === "liquidation_open");
+    (currentStatus === "disbursed" || currentStatus === "pending_liquidation");
 
-  // Accounting closes the liquidation
-  const canCloseLiquidation = canPerformEVAction("approve_accounting", role, department) && currentStatus === "liquidation_pending";
+  // Accounting verifies the liquidation
+  const canCloseLiquidation = canPerformEVAction("approve_accounting", role, department) && currentStatus === "pending_verification";
 
   const writeHistory = async (action: string, prevStatus: string, newStatus: string, notes?: string) => {
     await supabase.from("evoucher_history").insert({
@@ -116,8 +121,24 @@ export function EVoucherWorkflowPanel({
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      const nextStatus = resolveSubmitTarget(currentUser?.department);
+      const nextStatus = resolveSubmitTarget(currentUser?.department, transactionType);
       await transition(nextStatus, "Submitted for Approval");
+      // Notify the next approver
+      if (currentUser?.id) {
+        const recipientDept = nextStatus === "pending_accounting" ? "Accounting" : nextStatus === "pending_ceo" ? "Executive" : undefined;
+        createWorkflowTicket({
+          subject: `E-Voucher Submitted: ${evoucherNumber}`,
+          body: `A new E-Voucher ${evoucherNumber} has been submitted for your approval. Amount: ${amount ? `₱${amount.toLocaleString()}` : "—"}.`,
+          type: "approval",
+          recipientDept: recipientDept || currentUser.department || "",
+          linkedRecordType: "expense",
+          linkedRecordId: evoucherId,
+          createdBy: currentUser.id,
+          createdByName: currentUser.name,
+          createdByDept: currentUser.department || "",
+          autoCreated: true,
+        });
+      }
       toast.success("E-Voucher submitted for approval");
       onStatusChange?.();
     } catch (error) {
@@ -268,29 +289,63 @@ export function EVoucherWorkflowPanel({
     }
   };
 
-  const handleMarkDisbursed = async () => {
-    if (!confirm("Mark this E-Voucher as fully disbursed? This posts it to the ledger.")) return;
+  const handleDisburse = async () => {
+    if (!confirm("Disburse cash for this E-Voucher? This releases funds to the requestor.")) return;
     setIsSubmitting(true);
     try {
-      await transition("posted", "Disbursed by Treasury / Posted to Ledger");
-      toast.success("E-Voucher posted to ledger");
+      await transition("disbursed", "Cash Disbursed by Accounting");
+      // Notify creator: cash is ready
+      if (currentUser?.id && requestorId) {
+        createWorkflowTicket({
+          subject: `E-Voucher Disbursed: ${evoucherNumber}`,
+          body: `Your E-Voucher ${evoucherNumber} has been disbursed. Cash has been released.`,
+          type: "fyi",
+          recipientUserId: requestorId,
+          linkedRecordType: "expense",
+          linkedRecordId: evoucherId,
+          createdBy: currentUser.id,
+          createdByName: currentUser.name,
+          createdByDept: currentUser.department || "Accounting",
+          autoCreated: true,
+        });
+      }
+      toast.success("E-Voucher disbursed — cash released to requestor");
       onStatusChange?.();
     } catch (error) {
-      console.error("Error marking disbursed:", error);
-      toast.error("Failed to mark as disbursed");
+      console.error("Error disbursing:", error);
+      toast.error("Failed to disburse");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleReject = async () => {
+  const handleReject = async (rejectingRole: "manager" | "ceo") => {
     if (!rejectionReason.trim()) {
       toast.error("Please provide a rejection reason");
       return;
     }
     setIsSubmitting(true);
     try {
-      await transition("rejected", "Rejected", rejectionReason);
+      // CEO rejects → back to pending_manager; Manager rejects → back to draft
+      const targetStatus = rejectingRole === "ceo" ? "pending_manager" : "draft";
+      const action = rejectingRole === "ceo" ? "Rejected by CEO" : "Rejected by Manager";
+      await transition(targetStatus, action, rejectionReason);
+      // Notify creator: rejected with reason
+      if (currentUser?.id && requestorId) {
+        createWorkflowTicket({
+          subject: `E-Voucher Rejected: ${evoucherNumber}`,
+          body: `Your E-Voucher ${evoucherNumber} was rejected by ${rejectingRole === "ceo" ? "the CEO" : "your Manager"}.\n\nReason: ${rejectionReason}`,
+          type: "fyi",
+          priority: "urgent",
+          recipientUserId: requestorId,
+          linkedRecordType: "expense",
+          linkedRecordId: evoucherId,
+          createdBy: currentUser.id,
+          createdByName: currentUser.name,
+          createdByDept: currentUser.department || "",
+          autoCreated: true,
+        });
+      }
       toast.success("E-Voucher rejected");
       setShowRejectModal(false);
       setRejectionReason("");
@@ -337,8 +392,23 @@ export function EVoucherWorkflowPanel({
     if (!confirm("Close this liquidation? This marks the advance as fully accounted for.")) return;
     setIsSubmitting(true);
     try {
-      await transition("liquidation_closed", "Liquidation Closed by Accounting");
-      toast.success("Advance liquidation closed");
+      await transition("posted", "Verified & Posted by Accounting");
+      // Notify creator: EV is complete
+      if (currentUser?.id && requestorId) {
+        createWorkflowTicket({
+          subject: `E-Voucher Posted: ${evoucherNumber}`,
+          body: `Your E-Voucher ${evoucherNumber} has been verified and posted to the general ledger. This transaction is now complete.`,
+          type: "fyi",
+          recipientUserId: requestorId,
+          linkedRecordType: "expense",
+          linkedRecordId: evoucherId,
+          createdBy: currentUser.id,
+          createdByName: currentUser.name,
+          createdByDept: currentUser.department || "Accounting",
+          autoCreated: true,
+        });
+      }
+      toast.success("E-Voucher verified and posted to ledger");
       onStatusChange?.();
     } catch (error) {
       console.error("Error closing liquidation:", error);
@@ -354,8 +424,8 @@ export function EVoucherWorkflowPanel({
     !canRejectAsTL &&
     !canApproveAsCEO &&
     !canRejectAsCEO &&
-    !canAuthorizePayment &&
-    !canMarkDisbursed &&
+    !canDisburse &&
+    !canVerifyAndPost &&
     !canOpenLiquidation &&
     !canCloseLiquidation &&
     !canUnlockForCorrection &&
@@ -389,7 +459,7 @@ export function EVoucherWorkflowPanel({
         )}
         {canRejectAsTL && (
           <button
-            onClick={() => setShowRejectModal(true)}
+            onClick={() => { setRejectingAs("manager"); setShowRejectModal(true); }}
             disabled={isSubmitting}
             style={{ ...btnBase, backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-status-danger-fg)", border: "1px solid var(--theme-status-danger-fg)" }}
           >
@@ -411,7 +481,7 @@ export function EVoucherWorkflowPanel({
         )}
         {canRejectAsCEO && (
           <button
-            onClick={() => setShowRejectModal(true)}
+            onClick={() => { setRejectingAs("ceo"); setShowRejectModal(true); }}
             disabled={isSubmitting}
             style={{ ...btnBase, backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-status-danger-fg)", border: "1px solid var(--theme-status-danger-fg)" }}
           >
@@ -420,27 +490,27 @@ export function EVoucherWorkflowPanel({
           </button>
         )}
 
-        {/* Accounting: open GL Confirmation Sheet to post journal entry */}
-        {canAuthorizePayment && (
+        {/* Accounting: Disburse — release cash (pending_accounting → disbursed) */}
+        {canDisburse && (
+          <button
+            onClick={handleDisburse}
+            disabled={isSubmitting}
+            style={{ ...btnBase, backgroundColor: "var(--theme-action-primary-bg)", color: "#FFFFFF" }}
+          >
+            {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} />}
+            {isSubmitting ? "Disbursing..." : "Disburse"}
+          </button>
+        )}
+
+        {/* Accounting: Verify & Post — review receipts, post GL (pending_verification → posted) */}
+        {canVerifyAndPost && (
           <button
             onClick={() => setShowGLSheet(true)}
             disabled={isSubmitting}
             style={{ ...btnBase, backgroundColor: "var(--theme-status-success-fg)", color: "#FFFFFF" }}
           >
             <CheckCircle size={16} />
-            Post GL Entry & Authorize Payment
-          </button>
-        )}
-
-        {/* Treasury: mark disbursed → posted */}
-        {canMarkDisbursed && (
-          <button
-            onClick={handleMarkDisbursed}
-            disabled={isSubmitting}
-            style={{ ...btnBase, backgroundColor: "var(--theme-action-primary-bg)", color: "#FFFFFF" }}
-          >
-            {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} />}
-            {isSubmitting ? "Posting..." : "Mark Disbursed / Post to Ledger"}
+            Verify & Post
           </button>
         )}
 
@@ -475,7 +545,7 @@ export function EVoucherWorkflowPanel({
             style={{ ...btnBase, backgroundColor: "var(--theme-action-primary-bg)", color: "#FFFFFF" }}
           >
             <ClipboardList size={16} />
-            {currentStatus === "liquidation_open" ? "Add More Receipts" : "Start Liquidation"}
+            {currentStatus === "pending_liquidation" ? "Add More Receipts" : "Submit Liquidation"}
           </button>
         )}
 
@@ -562,7 +632,7 @@ export function EVoucherWorkflowPanel({
                 Cancel
               </button>
               <button
-                onClick={handleReject}
+                onClick={() => handleReject(rejectingAs)}
                 disabled={isSubmitting || !rejectionReason.trim()}
                 style={{ flex: 1, padding: "12px", borderRadius: "8px", border: "none", backgroundColor: "var(--theme-status-danger-fg)", color: "#FFFFFF", fontSize: "14px", fontWeight: 500, cursor: isSubmitting || !rejectionReason.trim() ? "not-allowed" : "pointer", opacity: isSubmitting || !rejectionReason.trim() ? 0.6 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
               >
