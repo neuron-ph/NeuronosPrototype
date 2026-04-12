@@ -546,17 +546,22 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
                         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                           <FileCheck size={20} color="var(--theme-action-primary-bg)" style={{ flexShrink: 0 }} />
                           <div>
-                            <div style={{ 
-                              fontSize: "14px", 
-                              fontWeight: 600, 
+                            <div style={{
+                              fontSize: "14px",
+                              fontWeight: 600,
                               color: "var(--theme-text-primary)",
                               marginBottom: "2px"
                             }}>
-                              {(booking as any).booking_number || booking.bookingId}
+                              {(booking as any).name || (booking as any).booking_number || booking.bookingId}
                             </div>
+                            {(booking as any).name && (
+                              <div style={{ fontSize: "12px", color: "var(--theme-text-muted)" }}>
+                                {(booking as any).booking_number || booking.bookingId}
+                              </div>
+                            )}
                             {booking.projectNumber && (
-                              <div style={{ 
-                                fontSize: "13px", 
+                              <div style={{
+                                fontSize: "13px",
                                 color: "var(--theme-text-muted)"
                               }}>
                                 Project: {booking.projectNumber}

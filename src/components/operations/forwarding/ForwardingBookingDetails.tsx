@@ -276,14 +276,19 @@ export function ForwardingBookingDetails({
             Back to Forwarding Bookings
           </button>
           
-          <h1 style={{ 
+          <h1 style={{
             fontSize: "20px",
             fontWeight: 600,
             color: "var(--neuron-ink-primary)",
             marginBottom: "4px"
           }}>
-            {booking.customerName}
+            {(booking as any).name || booking.customerName}
           </h1>
+          {(booking as any).name && (
+            <p style={{ fontSize: "13px", color: "var(--neuron-ink-primary)", marginBottom: "2px", fontWeight: 500 }}>
+              {booking.customerName}
+            </p>
+          )}
           <p style={{ fontSize: "13px", color: "var(--neuron-ink-muted)", margin: 0 }}>
             {booking.bookingId}
           </p>

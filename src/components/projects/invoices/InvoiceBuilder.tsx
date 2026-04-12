@@ -1015,7 +1015,7 @@ export function InvoiceBuilder({
                                    .map(([category, items]) => (
                                        <div key={category}>
                                            <div className="px-4 py-2 bg-[var(--theme-bg-surface-subtle)] border-b border-[var(--neuron-pill-inactive-bg)] text-[10px] font-bold text-[var(--theme-text-muted)] uppercase tracking-wider flex items-center gap-2 sticky top-0 z-10">
-                                               <div className="w-1 h-1 rounded-full bg-gray-400"></div>
+                                               <div className="w-1 h-1 rounded-full bg-[var(--theme-text-muted)]"></div>
                                                {category}
                                                <span className="text-[9px] ml-auto bg-[var(--theme-bg-surface)] border border-[var(--theme-border-default)] px-1.5 rounded-full text-[var(--theme-text-muted)]">{items.length}</span>
                                            </div>
@@ -1277,7 +1277,7 @@ export function InvoiceBuilder({
                       <button
                           onClick={handleSubmit}
                           disabled={isSubmitting || selectedIds.size === 0}
-                          className="flex items-center justify-center gap-2 w-full px-4 py-3 text-sm font-bold text-white bg-[var(--theme-action-primary-bg)] rounded-lg hover:bg-[#0D625D] hover:shadow-md transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="flex items-center justify-center gap-2 w-full px-4 py-3 text-sm font-bold text-white bg-[var(--theme-action-primary-bg)] rounded-lg hover:opacity-90 hover:shadow-md transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                           {isSubmitting ? (
                               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -1293,7 +1293,7 @@ export function InvoiceBuilder({
                       <button
                           onClick={handleDownloadPDF}
                           disabled={isGeneratingPDF}
-                          className="flex items-center justify-center gap-2 w-full px-4 py-3 text-sm font-bold text-white bg-[var(--theme-action-primary-bg)] rounded-lg hover:bg-[#0D625D] hover:shadow-md transition-all shadow-sm group disabled:opacity-60 disabled:cursor-not-allowed"
+                          className="flex items-center justify-center gap-2 w-full px-4 py-3 text-sm font-bold text-white bg-[var(--theme-action-primary-bg)] rounded-lg hover:opacity-90 hover:shadow-md transition-all shadow-sm group disabled:opacity-60 disabled:cursor-not-allowed"
                       >
                           {isGeneratingPDF ? (
                             <Loader2 size={18} className="animate-spin" />

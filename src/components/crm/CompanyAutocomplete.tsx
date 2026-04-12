@@ -186,6 +186,7 @@ export function CompanyAutocomplete({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search companies..."
                 autoFocus
+                autoComplete="off"
                 style={{
                   width: "100%",
                   padding: "8px 10px 8px 34px",
@@ -193,6 +194,8 @@ export function CompanyAutocomplete({
                   borderRadius: "6px",
                   fontSize: "13px",
                   outline: "none",
+                  backgroundColor: "var(--theme-bg-surface)",
+                  color: "var(--neuron-ink-base)",
                 }}
                 onFocus={(e) => {
                   e.currentTarget.style.borderColor = "var(--neuron-brand-green)";

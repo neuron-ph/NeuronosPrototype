@@ -36,7 +36,7 @@ export function RequestBillingButton({ bookingId, bookingNumber, currentUser }: 
 
       const ticketId = await createWorkflowTicket({
         subject: `Create Billing: ${bookingNumber}`,
-        body: `${userName} has requested billing for booking ${bookingNumber}. Please create the billing documents for this completed booking.`,
+        body: `${userName} requested billing for booking ${bookingNumber}. Please create the billing documents.`,
         type: "request",
         priority: "normal",
         recipientDept: "Accounting",

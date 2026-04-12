@@ -1,4 +1,4 @@
-import { Calculator, DollarSign, Info } from "lucide-react";
+import { Calculator } from "lucide-react";
 import type { FinancialSummary } from "../../../types/pricing";
 import { useState } from "react";
 
@@ -281,50 +281,6 @@ export function FinancialSummaryPanel({
             </div>
             <div style={{ marginTop: "6px", fontSize: "10px", color: "var(--theme-text-muted)" }}>
               * Reference only based on manual rate
-            </div>
-          </div>
-
-          {/* Breakdown Info */}
-          <div style={{
-            padding: "12px",
-            backgroundColor: "var(--theme-bg-surface-subtle)",
-            borderRadius: "6px",
-            fontSize: "11px",
-            color: "var(--neuron-ink-muted)"
-          }}>
-            <div style={{ display: "grid", gap: "4px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span>Non-Taxed:</span>
-                <span>{formatAmount(financialSummary.subtotal_non_taxed)}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span>Taxable:</span>
-                <span>{formatAmount(financialSummary.subtotal_taxed)}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span>Tax ({(taxRate * 100).toFixed(1)}%):</span>
-                <span>{formatAmount(financialSummary.tax_amount)}</span>
-              </div>
-              {otherCharges > 0 && (
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span>Other:</span>
-                  <span>{formatAmount(otherCharges)}</span>
-                </div>
-              )}
-              <div style={{
-                height: "1px",
-                backgroundColor: "var(--neuron-ui-border)",
-                margin: "4px 0"
-              }} />
-              <div style={{
-                display: "flex",
-                justifyContent: "space-between",
-                fontWeight: 600,
-                color: "var(--neuron-ink-primary)"
-              }}>
-                <span>Total:</span>
-                <span>{formatAmount(financialSummary.grand_total)}</span>
-              </div>
             </div>
           </div>
 

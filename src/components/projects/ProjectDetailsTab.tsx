@@ -38,7 +38,7 @@ export function ProjectDetailsTab({ project, currentUser, onUpdate }: ProjectDet
       {/* General Details Section */}
       <div style={{
         backgroundColor: "var(--theme-bg-surface)",
-        border: "1px solid var(--neuron-ui-border)",
+        border: "1px solid var(--theme-border-default)",
         borderRadius: "8px",
         padding: "24px",
         marginBottom: "24px"
@@ -46,7 +46,7 @@ export function ProjectDetailsTab({ project, currentUser, onUpdate }: ProjectDet
         <h2 style={{
           fontSize: "16px",
           fontWeight: 600,
-          color: "var(--neuron-brand-green)",
+          color: "var(--theme-action-primary-bg)",
           marginBottom: "20px"
         }}>
           General Details
@@ -69,10 +69,10 @@ export function ProjectDetailsTab({ project, currentUser, onUpdate }: ProjectDet
               <div style={{
                 padding: "10px 14px",
                 backgroundColor: "var(--theme-bg-page)",
-                border: "1px solid var(--neuron-ui-border)",
+                border: "1px solid var(--theme-border-default)",
                 borderRadius: "6px",
                 fontSize: "14px",
-                color: "var(--neuron-ink-primary)"
+                color: "var(--theme-text-primary)"
               }}>
                 {project.customer_name || "—"}
               </div>
@@ -92,10 +92,10 @@ export function ProjectDetailsTab({ project, currentUser, onUpdate }: ProjectDet
               <div style={{
                 padding: "10px 14px",
                 backgroundColor: "var(--theme-bg-page)",
-                border: "1px solid var(--neuron-ui-border)",
+                border: "1px solid var(--theme-border-default)",
                 borderRadius: "6px",
                 fontSize: "14px",
-                color: project.contact_person_name ? "var(--neuron-ink-primary)" : "var(--theme-text-muted)"
+                color: project.contact_person_name ? "var(--theme-text-primary)" : "var(--theme-text-muted)"
               }}>
                 {project.contact_person_name || "—"}
               </div>
@@ -140,7 +140,7 @@ export function ProjectDetailsTab({ project, currentUser, onUpdate }: ProjectDet
                 <div style={{
                   padding: "10px 14px",
                   backgroundColor: "var(--theme-bg-page)",
-                  border: "1px solid var(--neuron-ui-border)",
+                  border: "1px solid var(--theme-border-default)",
                   borderRadius: "6px",
                   fontSize: "14px",
                   color: "var(--theme-text-muted)",
@@ -167,10 +167,10 @@ export function ProjectDetailsTab({ project, currentUser, onUpdate }: ProjectDet
               <div style={{
                 padding: "10px 14px",
                 backgroundColor: "var(--theme-bg-page)",
-                border: "1px solid var(--neuron-ui-border)",
+                border: "1px solid var(--theme-border-default)",
                 borderRadius: "6px",
                 fontSize: "14px",
-                color: "var(--neuron-ink-primary)"
+                color: "var(--theme-text-primary)"
               }}>
                 {project.project_number || "—"}
               </div>
@@ -189,10 +189,10 @@ export function ProjectDetailsTab({ project, currentUser, onUpdate }: ProjectDet
               <div style={{
                 padding: "10px 14px",
                 backgroundColor: "var(--theme-bg-page)",
-                border: "1px solid var(--neuron-ui-border)",
+                border: "1px solid var(--theme-border-default)",
                 borderRadius: "6px",
                 fontSize: "14px",
-                color: project.quotation_number ? "var(--neuron-ink-primary)" : "var(--theme-text-muted)"
+                color: project.quotation_number ? "var(--theme-text-primary)" : "var(--theme-text-muted)"
               }}>
                 {project.quotation_number || "—"}
               </div>
@@ -214,10 +214,10 @@ export function ProjectDetailsTab({ project, currentUser, onUpdate }: ProjectDet
               <div style={{
                 padding: "10px 14px",
                 backgroundColor: "var(--theme-bg-page)",
-                border: "1px solid var(--neuron-ui-border)",
+                border: "1px solid var(--theme-border-default)",
                 borderRadius: "6px",
                 fontSize: "14px",
-                color: project.bd_owner_user_name ? "var(--neuron-ink-primary)" : "var(--theme-text-muted)"
+                color: project.bd_owner_user_name ? "var(--theme-text-primary)" : "var(--theme-text-muted)"
               }}>
                 {project.bd_owner_user_name || "—"}
               </div>
@@ -236,10 +236,10 @@ export function ProjectDetailsTab({ project, currentUser, onUpdate }: ProjectDet
               <div style={{
                 padding: "10px 14px",
                 backgroundColor: "var(--theme-bg-page)",
-                border: "1px solid var(--neuron-ui-border)",
+                border: "1px solid var(--theme-border-default)",
                 borderRadius: "6px",
                 fontSize: "14px",
-                color: project.ops_assigned_user_name ? "var(--neuron-ink-primary)" : "var(--theme-text-muted)"
+                color: project.ops_assigned_user_name ? "var(--theme-text-primary)" : "var(--theme-text-muted)"
               }}>
                 {project.ops_assigned_user_name || "—"}
               </div>
@@ -261,10 +261,10 @@ export function ProjectDetailsTab({ project, currentUser, onUpdate }: ProjectDet
               <div style={{
                 padding: "10px 14px",
                 backgroundColor: "var(--theme-bg-page)",
-                border: "1px solid var(--neuron-ui-border)",
+                border: "1px solid var(--theme-border-default)",
                 borderRadius: "6px",
                 fontSize: "14px",
-                color: project.movement ? "var(--neuron-ink-primary)" : "var(--theme-text-muted)"
+                color: project.movement ? "var(--theme-text-primary)" : "var(--theme-text-muted)"
               }}>
                 {project.movement || "—"}
               </div>
@@ -283,10 +283,10 @@ export function ProjectDetailsTab({ project, currentUser, onUpdate }: ProjectDet
               <div style={{
                 padding: "10px 14px",
                 backgroundColor: "var(--theme-bg-page)",
-                border: "1px solid var(--neuron-ui-border)",
+                border: "1px solid var(--theme-border-default)",
                 borderRadius: "6px",
                 fontSize: "14px",
-                color: project.category ? "var(--neuron-ink-primary)" : "var(--theme-text-muted)"
+                color: project.category ? "var(--theme-text-primary)" : "var(--theme-text-muted)"
               }}>
                 {project.category || "—"}
               </div>
@@ -305,10 +305,10 @@ export function ProjectDetailsTab({ project, currentUser, onUpdate }: ProjectDet
               <div style={{
                 padding: "10px 14px",
                 backgroundColor: "var(--theme-bg-page)",
-                border: "1px solid var(--neuron-ui-border)",
+                border: "1px solid var(--theme-border-default)",
                 borderRadius: "6px",
                 fontSize: "14px",
-                color: project.shipment_type ? "var(--neuron-ink-primary)" : "var(--theme-text-muted)"
+                color: project.shipment_type ? "var(--theme-text-primary)" : "var(--theme-text-muted)"
               }}>
                 {project.shipment_type || "—"}
               </div>
@@ -330,15 +330,15 @@ export function ProjectDetailsTab({ project, currentUser, onUpdate }: ProjectDet
               <div style={{
                 padding: "10px 14px",
                 backgroundColor: "var(--theme-bg-page)",
-                border: "1px solid var(--neuron-ui-border)",
+                border: "1px solid var(--theme-border-default)",
                 borderRadius: "6px",
                 fontSize: "14px",
-                color: project.pol_aol ? "var(--neuron-ink-primary)" : "var(--theme-text-muted)",
+                color: project.pol_aol ? "var(--theme-text-primary)" : "var(--theme-text-muted)",
                 display: "flex",
                 alignItems: "center",
                 gap: "8px"
               }}>
-                <MapPin size={16} style={{ color: "var(--neuron-brand-green)", flexShrink: 0 }} />
+                <MapPin size={16} style={{ color: "var(--theme-action-primary-bg)", flexShrink: 0 }} />
                 <span>{project.pol_aol || "—"}</span>
               </div>
             </div>
@@ -356,15 +356,15 @@ export function ProjectDetailsTab({ project, currentUser, onUpdate }: ProjectDet
               <div style={{
                 padding: "10px 14px",
                 backgroundColor: "var(--theme-bg-page)",
-                border: "1px solid var(--neuron-ui-border)",
+                border: "1px solid var(--theme-border-default)",
                 borderRadius: "6px",
                 fontSize: "14px",
-                color: project.pod_aod ? "var(--neuron-ink-primary)" : "var(--theme-text-muted)",
+                color: project.pod_aod ? "var(--theme-text-primary)" : "var(--theme-text-muted)",
                 display: "flex",
                 alignItems: "center",
                 gap: "8px"
               }}>
-                <MapPin size={16} style={{ color: "var(--neuron-brand-green)", flexShrink: 0 }} />
+                <MapPin size={16} style={{ color: "var(--theme-action-primary-bg)", flexShrink: 0 }} />
                 <span>{project.pod_aod || "—"}</span>
               </div>
             </div>
@@ -385,10 +385,10 @@ export function ProjectDetailsTab({ project, currentUser, onUpdate }: ProjectDet
               <div style={{
                 padding: "10px 14px",
                 backgroundColor: "var(--theme-bg-page)",
-                border: "1px solid var(--neuron-ui-border)",
+                border: "1px solid var(--theme-border-default)",
                 borderRadius: "6px",
                 fontSize: "14px",
-                color: project.carrier ? "var(--neuron-ink-primary)" : "var(--theme-text-muted)"
+                color: project.carrier ? "var(--theme-text-primary)" : "var(--theme-text-muted)"
               }}>
                 {project.carrier || "—"}
               </div>
@@ -407,10 +407,10 @@ export function ProjectDetailsTab({ project, currentUser, onUpdate }: ProjectDet
               <div style={{
                 padding: "10px 14px",
                 backgroundColor: "var(--theme-bg-page)",
-                border: "1px solid var(--neuron-ui-border)",
+                border: "1px solid var(--theme-border-default)",
                 borderRadius: "6px",
                 fontSize: "14px",
-                color: project.transit_days ? "var(--neuron-ink-primary)" : "var(--theme-text-muted)"
+                color: project.transit_days ? "var(--theme-text-primary)" : "var(--theme-text-muted)"
               }}>
                 {project.transit_days || "—"}
               </div>
@@ -429,10 +429,10 @@ export function ProjectDetailsTab({ project, currentUser, onUpdate }: ProjectDet
               <div style={{
                 padding: "10px 14px",
                 backgroundColor: "var(--theme-bg-page)",
-                border: "1px solid var(--neuron-ui-border)",
+                border: "1px solid var(--theme-border-default)",
                 borderRadius: "6px",
                 fontSize: "14px",
-                color: project.incoterm ? "var(--neuron-ink-primary)" : "var(--theme-text-muted)"
+                color: project.incoterm ? "var(--theme-text-primary)" : "var(--theme-text-muted)"
               }}>
                 {project.incoterm || "—"}
               </div>
@@ -454,15 +454,15 @@ export function ProjectDetailsTab({ project, currentUser, onUpdate }: ProjectDet
               <div style={{
                 padding: "10px 14px",
                 backgroundColor: "var(--theme-bg-page)",
-                border: "1px solid var(--neuron-ui-border)",
+                border: "1px solid var(--theme-border-default)",
                 borderRadius: "6px",
                 fontSize: "14px",
-                color: "var(--neuron-ink-primary)",
+                color: "var(--theme-text-primary)",
                 display: "flex",
                 alignItems: "center",
                 gap: "8px"
               }}>
-                <Calendar size={16} style={{ color: "var(--neuron-ink-muted)" }} />
+                <Calendar size={16} style={{ color: "var(--theme-text-muted)" }} />
                 {formatDate(project.created_at)}
               </div>
             </div>

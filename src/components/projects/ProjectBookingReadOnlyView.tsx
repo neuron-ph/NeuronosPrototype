@@ -125,7 +125,7 @@ export function ProjectBookingReadOnlyView({
             justifyContent: "center",
             height: "100%"
           }}>
-            <p style={{ color: "var(--neuron-ink-muted)" }}>Loading booking details...</p>
+            <p style={{ color: "var(--theme-text-muted)" }}>Loading booking details...</p>
           </div>
         ) : !booking ? (
           <div style={{
@@ -135,12 +135,12 @@ export function ProjectBookingReadOnlyView({
             justifyContent: "center",
             height: "100%"
           }}>
-            <p style={{ color: "var(--neuron-ink-muted)", marginBottom: "16px" }}>Booking not found</p>
+            <p style={{ color: "var(--theme-text-muted)", marginBottom: "16px" }}>Booking not found</p>
             <button
               onClick={onBack}
               style={{
                 padding: "10px 20px",
-                backgroundColor: "var(--neuron-brand-green)",
+                backgroundColor: "var(--theme-action-primary-bg)",
                 color: "white",
                 border: "none",
                 borderRadius: "6px",
@@ -155,7 +155,7 @@ export function ProjectBookingReadOnlyView({
             {/* Header */}
             <div style={{
               padding: "20px 32px",
-              borderBottom: "1px solid var(--neuron-ui-border)",
+              borderBottom: "1px solid var(--theme-border-default)",
               backgroundColor: "var(--theme-bg-page)",
               display: "flex",
               justifyContent: "space-between",
@@ -166,12 +166,12 @@ export function ProjectBookingReadOnlyView({
                 <h1 style={{
                   fontSize: "18px",
                   fontWeight: 600,
-                  color: "var(--neuron-ink-primary)",
+                  color: "var(--theme-text-primary)",
                   marginBottom: "4px"
                 }}>
                   {bookingId}
                 </h1>
-                <p style={{ fontSize: "13px", color: "var(--neuron-ink-muted)", margin: 0 }}>
+                <p style={{ fontSize: "13px", color: "var(--theme-text-muted)", margin: 0 }}>
                   {booking.customerName && booking.customerName !== "—" 
                     ? `${booking.customerName} • ${getBookingTypeName()} Booking`
                     : `${getBookingTypeName()} Booking`
@@ -204,7 +204,7 @@ export function ProjectBookingReadOnlyView({
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)";
-                    e.currentTarget.style.color = "var(--neuron-ink-primary)";
+                    e.currentTarget.style.color = "var(--theme-text-primary)";
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.backgroundColor = "transparent";
@@ -219,7 +219,7 @@ export function ProjectBookingReadOnlyView({
             {/* Tabs */}
             <div style={{
               padding: "0 32px",
-              borderBottom: "1px solid var(--neuron-ui-border)",
+              borderBottom: "1px solid var(--theme-border-default)",
               backgroundColor: "var(--theme-bg-surface)",
               display: "flex",
               gap: "24px",
@@ -366,7 +366,7 @@ function BookingInformationReadOnly({ booking, bookingType }: { booking: any; bo
       {/* General Information Section */}
       <div style={{
         backgroundColor: "var(--theme-bg-surface)",
-        border: "1px solid var(--neuron-ui-border)",
+        border: "1px solid var(--theme-border-default)",
         borderRadius: "8px",
         padding: "24px",
         marginBottom: "20px"
@@ -374,7 +374,7 @@ function BookingInformationReadOnly({ booking, bookingType }: { booking: any; bo
         <h2 style={{
           fontSize: "15px",
           fontWeight: 600,
-          color: "var(--neuron-brand-green)",
+          color: "var(--theme-action-primary-bg)",
           marginBottom: "20px"
         }}>
           General Information
@@ -473,7 +473,7 @@ function BookingInformationReadOnly({ booking, bookingType }: { booking: any; bo
       {booking.notes && (
         <div style={{
           backgroundColor: "var(--theme-bg-surface)",
-          border: "1px solid var(--neuron-ui-border)",
+          border: "1px solid var(--theme-border-default)",
           borderRadius: "8px",
           padding: "24px",
           marginTop: "20px"
@@ -481,7 +481,7 @@ function BookingInformationReadOnly({ booking, bookingType }: { booking: any; bo
           <h2 style={{
             fontSize: "15px",
             fontWeight: 600,
-            color: "var(--neuron-brand-green)",
+            color: "var(--theme-action-primary-bg)",
             marginBottom: "16px"
           }}>
             Additional Notes
@@ -530,7 +530,7 @@ function ForwardingDetails({ booking }: { booking: any }) {
     <>
       <div style={{
         backgroundColor: "var(--theme-bg-surface)",
-        border: "1px solid var(--neuron-ui-border)",
+        border: "1px solid var(--theme-border-default)",
         borderRadius: "8px",
         padding: "24px",
         marginBottom: "20px"
@@ -538,7 +538,7 @@ function ForwardingDetails({ booking }: { booking: any }) {
         <h2 style={{
           fontSize: "15px",
           fontWeight: 600,
-          color: "var(--neuron-brand-green)",
+          color: "var(--theme-action-primary-bg)",
           marginBottom: "20px"
         }}>
           Shipment Information
@@ -591,7 +591,7 @@ function ForwardingDetails({ booking }: { booking: any }) {
       {booking.mode === "FCL" && booking.containerNumbers && booking.containerNumbers.length > 0 && (
         <div style={{
           backgroundColor: "var(--theme-bg-surface)",
-          border: "1px solid var(--neuron-ui-border)",
+          border: "1px solid var(--theme-border-default)",
           borderRadius: "8px",
           padding: "24px",
           marginBottom: "20px"
@@ -599,7 +599,7 @@ function ForwardingDetails({ booking }: { booking: any }) {
           <h2 style={{
             fontSize: "15px",
             fontWeight: 600,
-            color: "var(--neuron-brand-green)",
+            color: "var(--theme-action-primary-bg)",
             marginBottom: "20px"
           }}>
             Container Details
@@ -622,7 +622,7 @@ function BrokerageDetails({ booking }: { booking: any }) {
       {/* Shipment Information Section */}
       <div style={{
         backgroundColor: "var(--theme-bg-surface)",
-        border: "1px solid var(--neuron-ui-border)",
+        border: "1px solid var(--theme-border-default)",
         borderRadius: "8px",
         padding: "24px",
         marginBottom: "20px"
@@ -630,7 +630,7 @@ function BrokerageDetails({ booking }: { booking: any }) {
         <h2 style={{
           fontSize: "15px",
           fontWeight: 600,
-          color: "var(--neuron-brand-green)",
+          color: "var(--theme-action-primary-bg)",
           marginBottom: "20px"
         }}>
           Shipment Information
@@ -688,7 +688,7 @@ function TruckingDetails({ booking }: { booking: any }) {
       {/* Shipment Information Section */}
       <div style={{
         backgroundColor: "var(--theme-bg-surface)",
-        border: "1px solid var(--neuron-ui-border)",
+        border: "1px solid var(--theme-border-default)",
         borderRadius: "8px",
         padding: "24px",
         marginBottom: "20px"
@@ -696,7 +696,7 @@ function TruckingDetails({ booking }: { booking: any }) {
         <h2 style={{
           fontSize: "15px",
           fontWeight: 600,
-          color: "var(--neuron-brand-green)",
+          color: "var(--theme-action-primary-bg)",
           marginBottom: "20px"
         }}>
           Shipment Information
@@ -748,7 +748,7 @@ function TruckingDetails({ booking }: { booking: any }) {
         booking.earlyGateIn || booking.detDemValidity || booking.storageValidity || booking.shippingLine) && (
         <div style={{
           backgroundColor: "var(--theme-bg-surface)",
-          border: "1px solid var(--neuron-ui-border)",
+          border: "1px solid var(--theme-border-default)",
           borderRadius: "8px",
           padding: "24px",
           marginBottom: "20px"
@@ -756,7 +756,7 @@ function TruckingDetails({ booking }: { booking: any }) {
           <h2 style={{
             fontSize: "15px",
             fontWeight: 600,
-            color: "var(--neuron-brand-green)",
+            color: "var(--theme-action-primary-bg)",
             marginBottom: "20px"
           }}>
             FCL Information
@@ -808,7 +808,7 @@ function MarineInsuranceDetails({ booking }: { booking: any }) {
       {/* Policy Information Section */}
       <div style={{
         backgroundColor: "var(--theme-bg-surface)",
-        border: "1px solid var(--neuron-ui-border)",
+        border: "1px solid var(--theme-border-default)",
         borderRadius: "8px",
         padding: "24px",
         marginBottom: "20px"
@@ -816,7 +816,7 @@ function MarineInsuranceDetails({ booking }: { booking: any }) {
         <h2 style={{
           fontSize: "15px",
           fontWeight: 600,
-          color: "var(--neuron-brand-green)",
+          color: "var(--theme-action-primary-bg)",
           marginBottom: "20px"
         }}>
           Policy Information
@@ -854,7 +854,7 @@ function MarineInsuranceDetails({ booking }: { booking: any }) {
       {/* Shipment Information Section */}
       <div style={{
         backgroundColor: "var(--theme-bg-surface)",
-        border: "1px solid var(--neuron-ui-border)",
+        border: "1px solid var(--theme-border-default)",
         borderRadius: "8px",
         padding: "24px",
         marginBottom: "20px"
@@ -862,7 +862,7 @@ function MarineInsuranceDetails({ booking }: { booking: any }) {
         <h2 style={{
           fontSize: "15px",
           fontWeight: 600,
-          color: "var(--neuron-brand-green)",
+          color: "var(--theme-action-primary-bg)",
           marginBottom: "20px"
         }}>
           Shipment Information
@@ -919,7 +919,7 @@ function OthersDetails({ booking }: { booking: any }) {
   return (
     <div style={{
       backgroundColor: "var(--theme-bg-surface)",
-      border: "1px solid var(--neuron-ui-border)",
+      border: "1px solid var(--theme-border-default)",
       borderRadius: "8px",
       padding: "24px",
       marginBottom: "20px"
@@ -927,7 +927,7 @@ function OthersDetails({ booking }: { booking: any }) {
       <h2 style={{
         fontSize: "15px",
         fontWeight: 600,
-        color: "var(--neuron-brand-green)",
+        color: "var(--theme-action-primary-bg)",
         marginBottom: "20px"
       }}>
         Service Details

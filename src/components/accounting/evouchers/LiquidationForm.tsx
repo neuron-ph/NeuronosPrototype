@@ -148,8 +148,8 @@ export function LiquidationForm({
 
         // Notify Accounting: liquidation submitted for verification
         createWorkflowTicket({
-          subject: `Liquidation Submitted: ${evoucherNumber}`,
-          body: `Liquidation receipts for ${evoucherNumber} have been submitted and are ready for verification. Total spend: ₱${totalSpend.toLocaleString()}.`,
+          subject: `Verify Liquidation: ${evoucherNumber}`,
+          body: `Liquidation receipts for ${evoucherNumber} are ready for your verification.\n\nTotal spend: ₱${totalSpend.toLocaleString()}`,
           type: "request",
           recipientDept: "Accounting",
           linkedRecordType: "expense",

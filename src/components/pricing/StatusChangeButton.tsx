@@ -4,6 +4,7 @@ import type { QuotationNew, QuotationStatus } from "../../types/pricing";
 import { FormDropdown } from "./FormDropdown";
 import { getDisplayStatus, getStatusStyle } from "../../utils/statusMapping";
 import { getNormalizedQuotationStatus } from "../../utils/quotationStatus";
+import { SidePanel } from "../common/SidePanel";
 
 interface StatusChangeButtonProps {
   quotation: QuotationNew;
@@ -160,7 +161,7 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment }
         label: "Send to Client",
         sublabel: "Mark as Waiting Approval",
         value: "Sent to Client",
-        icon: <Send size={16} style={{ color: "#C88A2B" }} />,
+        icon: <Send size={16} style={{ color: "var(--theme-status-warning-fg)" }} />,
         action: () => {
           onStatusChange("Sent to Client");
           setShowMenu(false);
@@ -197,12 +198,15 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment }
       {/* Status Indicator Button - Outline Style */}
       <button
         onClick={() => setShowMenu(!showMenu)}
+        aria-haspopup="menu"
+        aria-expanded={showMenu}
+        aria-label={`Status: ${displayStatus}. Click to change.`}
         style={{
           display: "flex",
           alignItems: "center",
           gap: "8px",
           padding: "8px 14px",
-          backgroundColor: "var(--theme-bg-surface)", // White background by default
+          backgroundColor: "var(--theme-bg-surface)",
           border: `1px solid ${statusStyle.borderColor}`,
           borderRadius: "8px",
           fontSize: "13px",
@@ -212,7 +216,6 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment }
           transition: "all 0.2s ease"
         }}
         onMouseEnter={(e) => {
-          // On hover, show the faint background color
           e.currentTarget.style.backgroundColor = statusStyle.bgColor;
         }}
         onMouseLeave={(e) => {
@@ -228,21 +231,26 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment }
 
       {/* Dropdown Menu */}
       {showMenu && (
-        <div style={{
-          position: "absolute",
-          top: "calc(100% + 8px)",
-          right: 0,
-          width: "240px",
-          backgroundColor: "var(--theme-bg-surface)",
-          border: "1px solid var(--neuron-ui-border)",
-          borderRadius: "8px",
-          boxShadow: "0px 4px 6px -2px rgba(16, 24, 40, 0.03), 0px 12px 16px -4px rgba(16, 24, 40, 0.08)",
-          zIndex: 100,
-          overflow: "hidden"
-        }}>
+        <div
+          role="menu"
+          aria-label="Change quotation status"
+          style={{
+            position: "absolute",
+            top: "calc(100% + 8px)",
+            right: 0,
+            width: "240px",
+            backgroundColor: "var(--theme-bg-surface)",
+            border: "1px solid var(--neuron-ui-border)",
+            borderRadius: "8px",
+            boxShadow: "0px 4px 6px -2px rgba(16, 24, 40, 0.03), 0px 12px 16px -4px rgba(16, 24, 40, 0.08)",
+            zIndex: 100,
+            overflow: "hidden"
+          }}
+        >
           {availableActions.map((action, index) => (
             <button
               key={action.value}
+              role="menuitem"
               onClick={action.action}
               style={{
                 width: "100%",
@@ -296,6 +304,7 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment }
                 }} />
               )}
               <button
+                role="menuitem"
                 onClick={handleDisapproveOrCancel}
             style={{
               width: "100%",
@@ -343,192 +352,142 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment }
         </div>
       )}
 
-      {/* Disapprove/Cancel Modal */}
-      {showDisapproveModal && (
-        <div style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: "rgba(0, 0, 0, 0.5)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 1000,
-          padding: "20px"
-        }}>
+      {/* Disapprove/Cancel — SidePanel (replaces centered overlay modal) */}
+      <SidePanel
+        isOpen={showDisapproveModal}
+        onClose={() => { setShowDisapproveModal(false); setReason(""); }}
+        title="Disapprove or Cancel Quotation"
+        size="sm"
+        footer={
           <div style={{
-            backgroundColor: "var(--theme-bg-surface)",
-            borderRadius: "12px",
-            width: "540px",
-            maxHeight: "90vh",
-            overflow: "auto",
-            boxShadow: "0px 20px 25px -5px rgba(0, 0, 0, 0.1), 0px 10px 10px -5px rgba(0, 0, 0, 0.04)"
+            padding: "16px 24px",
+            borderTop: "1px solid var(--theme-border-default)",
+            display: "flex",
+            gap: "12px",
+            justifyContent: "flex-end",
+            backgroundColor: "var(--theme-bg-surface)"
           }}>
-            {/* Modal Header */}
-            <div style={{
-              padding: "32px 32px 24px 32px",
-              borderBottom: "1px solid var(--theme-border-subtle)"
-            }}>
-              <h2 style={{
-                fontSize: "24px",
-                fontWeight: 600,
-                color: "var(--theme-text-primary)",
-                marginBottom: "12px",
-                lineHeight: "1.3"
-              }}>
-                Disapprove or Cancel Quotation
-              </h2>
-              <p style={{
-                fontSize: "15px",
-                color: "var(--theme-text-muted)",
-                lineHeight: "1.6",
-                margin: 0
-              }}>
-                Select the appropriate status and provide a reason. This will automatically notify the Pricing Manager and CEO.
-              </p>
-            </div>
-
-            {/* Modal Body */}
-            <div style={{ padding: "32px" }}>
-              {/* Status Selection */}
-              <div style={{ marginBottom: "24px" }}>
-                <label style={{
-                  fontSize: "13px",
-                  fontWeight: 600,
-                  color: "var(--theme-text-primary)",
-                  marginBottom: "10px",
-                  display: "block",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.5px"
-                }}>
-                  Mark as *
-                </label>
-                <FormDropdown
-                  value={selectedDisapprovalStatus}
-                  onChange={(value) => setSelectedDisapprovalStatus(value as typeof selectedDisapprovalStatus)}
-                  options={[
-                    { value: "Rejected by Client", label: "Rejected by Client" },
-                    { value: "Disapproved", label: "Disapproved (Management)" },
-                    { value: "Cancelled", label: "Cancelled" }
-                  ]}
-                  placeholder="Select status..."
-                />
-              </div>
-
-              {/* Reason Selection */}
-              <div style={{ marginBottom: "24px" }}>
-                <label style={{
-                  fontSize: "13px",
-                  fontWeight: 600,
-                  color: "var(--theme-text-primary)",
-                  marginBottom: "10px",
-                  display: "block",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.5px"
-                }}>
-                  Reason *
-                </label>
-                <FormDropdown
-                  value={reason}
-                  onChange={setReason}
-                  options={reasons.map(r => ({ value: r, label: r }))}
-                  placeholder="Select a reason..."
-                />
-              </div>
-
-              {/* Alert Note */}
-              <div style={{
-                backgroundColor: "var(--theme-status-warning-bg)",
-                border: "1px solid var(--theme-status-warning-border)",
+            <button
+              onClick={() => { setShowDisapproveModal(false); setReason(""); }}
+              style={{
+                padding: "10px 20px",
+                backgroundColor: "var(--theme-bg-surface)",
+                border: "1px solid var(--theme-border-default)",
                 borderRadius: "8px",
-                padding: "16px",
                 fontSize: "14px",
-                color: "#78350F",
-                lineHeight: "1.5"
-              }}>
-                <div style={{ 
-                  fontWeight: 600, 
-                  marginBottom: "4px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px"
-                }}>
-                  <AlertCircle size={16} />
-                  Note:
-                </div>
-                <div>
-                  This action will automatically route a notification ticket to the Pricing Manager and CEO for review.
-                </div>
-              </div>
-            </div>
+                fontWeight: 500,
+                color: "var(--theme-text-secondary)",
+                cursor: "pointer",
+                transition: "background-color 0.15s ease"
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--theme-bg-page)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)"; }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmDisapprove}
+              disabled={!reason}
+              style={{
+                padding: "10px 20px",
+                backgroundColor: !reason ? "var(--theme-status-danger-border)" : "var(--theme-status-danger-fg)",
+                border: "none",
+                borderRadius: "8px",
+                fontSize: "14px",
+                fontWeight: 600,
+                color: "white",
+                cursor: !reason ? "not-allowed" : "pointer",
+                opacity: !reason ? 0.6 : 1,
+                transition: "opacity 0.15s ease"
+              }}
+            >
+              Confirm
+            </button>
+          </div>
+        }
+      >
+        <div style={{ padding: "24px", overflowY: "auto", height: "100%" }}>
+          <p style={{
+            fontSize: "14px",
+            color: "var(--theme-text-muted)",
+            lineHeight: "1.6",
+            marginBottom: "24px"
+          }}>
+            Select the appropriate status and provide a reason. This will automatically notify the Pricing Manager and CEO.
+          </p>
 
-            {/* Modal Footer */}
-            <div style={{
-              padding: "20px 32px 32px 32px",
-              display: "flex",
-              gap: "12px",
-              justifyContent: "flex-end"
+          {/* Status Selection */}
+          <div style={{ marginBottom: "20px" }}>
+            <label htmlFor="disapproval-status" style={{
+              fontSize: "12px",
+              fontWeight: 600,
+              color: "var(--theme-text-primary)",
+              marginBottom: "8px",
+              display: "block",
+              textTransform: "uppercase",
+              letterSpacing: "0.5px"
             }}>
-              <button
-                onClick={() => {
-                  setShowDisapproveModal(false);
-                  setReason("");
-                }}
-                style={{
-                  padding: "12px 24px",
-                  backgroundColor: "var(--theme-bg-surface)",
-                  border: "1px solid var(--theme-border-default)",
-                  borderRadius: "8px",
-                  fontSize: "15px",
-                  fontWeight: 600,
-                  color: "var(--theme-text-secondary)",
-                  cursor: "pointer",
-                  transition: "all 0.2s ease"
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
-                  e.currentTarget.style.borderColor = "var(--theme-text-muted)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
-                  e.currentTarget.style.borderColor = "var(--theme-border-default)";
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDisapprove}
-                disabled={!reason}
-                style={{
-                  padding: "12px 24px",
-                  backgroundColor: !reason ? "var(--theme-status-danger-border)" : "var(--theme-status-danger-fg)",
-                  border: "none",
-                  borderRadius: "8px",
-                  fontSize: "15px",
-                  fontWeight: 600,
-                  color: "white",
-                  cursor: !reason ? "not-allowed" : "pointer",
-                  transition: "all 0.2s ease"
-                }}
-                onMouseEnter={(e) => {
-                  if (reason) {
-                    e.currentTarget.style.backgroundColor = "var(--theme-status-danger-fg)";
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (reason) {
-                    e.currentTarget.style.backgroundColor = "var(--theme-status-danger-fg)";
-                  }
-                }}
-              >
-                Confirm
-              </button>
+              Mark as *
+            </label>
+            <FormDropdown
+              value={selectedDisapprovalStatus}
+              onChange={(value) => setSelectedDisapprovalStatus(value as typeof selectedDisapprovalStatus)}
+              options={[
+                { value: "Rejected by Client", label: "Rejected by Client" },
+                { value: "Disapproved", label: "Disapproved (Management)" },
+                { value: "Cancelled", label: "Cancelled" }
+              ]}
+              placeholder="Select status..."
+            />
+          </div>
+
+          {/* Reason Selection */}
+          <div style={{ marginBottom: "24px" }}>
+            <label htmlFor="disapproval-reason" style={{
+              fontSize: "12px",
+              fontWeight: 600,
+              color: "var(--theme-text-primary)",
+              marginBottom: "8px",
+              display: "block",
+              textTransform: "uppercase",
+              letterSpacing: "0.5px"
+            }}>
+              Reason *
+            </label>
+            <FormDropdown
+              value={reason}
+              onChange={setReason}
+              options={reasons.map(r => ({ value: r, label: r }))}
+              placeholder="Select a reason..."
+            />
+          </div>
+
+          {/* Warning Note */}
+          <div style={{
+            backgroundColor: "var(--theme-status-warning-bg)",
+            border: "1px solid var(--theme-status-warning-border)",
+            borderRadius: "8px",
+            padding: "14px 16px",
+            fontSize: "13px",
+            color: "var(--theme-status-warning-fg)",
+            lineHeight: "1.5"
+          }}>
+            <div style={{
+              fontWeight: 600,
+              marginBottom: "4px",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px"
+            }}>
+              <AlertCircle size={15} />
+              Note:
+            </div>
+            <div>
+              This action will automatically route a notification ticket to the Pricing Manager and CEO for review.
             </div>
           </div>
         </div>
-      )}
+      </SidePanel>
     </div>
   );
 }

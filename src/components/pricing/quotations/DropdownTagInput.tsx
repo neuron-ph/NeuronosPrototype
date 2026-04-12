@@ -140,7 +140,7 @@ export function DropdownTagInput({
                   fontWeight: 500,
                   color: "var(--neuron-brand-green)",
                   backgroundColor: "var(--theme-bg-surface-tint)",
-                  border: "1px solid #CCFBF1",
+                  border: "1px solid var(--neuron-ui-border)",
                   borderRadius: "14px",
                 }}
               >
@@ -196,7 +196,7 @@ export function DropdownTagInput({
               fontWeight: 500,
               color: "var(--neuron-brand-green)",
               backgroundColor: "var(--theme-bg-surface-tint)",
-              border: "1px solid #CCFBF1",
+              border: "1px solid var(--neuron-ui-border)",
               borderRadius: "14px",
               whiteSpace: "nowrap",
             }}
@@ -382,7 +382,7 @@ export function DropdownTagInput({
                   fontWeight: 500,
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "#F0FAF8";
+                  e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)";
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";

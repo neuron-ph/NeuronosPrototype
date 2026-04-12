@@ -12,19 +12,54 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? publicAnonKey;
 
 // In dev/preview: give each tab its own auth slot using window.name as a stable
 // tab ID (persists across refreshes within the same tab, empty for new tabs).
-// This prevents session bleed-through when opening a new tab from an existing one.
+// This keeps both persisted auth storage and BroadcastChannel isolation per tab.
 function getStorageKey(): string {
+  if (typeof window === 'undefined') return 'sb-auth';
   if (import.meta.env.VITE_SESSION_STORAGE_AUTH !== 'true') return 'sb-auth';
   if (!window.name) window.name = crypto.randomUUID();
   return `sb-auth-${window.name}`;
 }
 
+function getAuthStorage(): Storage | undefined {
+  if (typeof window === 'undefined') return undefined;
+
+  try {
+    return import.meta.env.VITE_SESSION_STORAGE_AUTH === 'true'
+      ? window.sessionStorage
+      : window.localStorage;
+  } catch {
+    return undefined;
+  }
+}
+
+// Wrap fetch with a 20-second timeout so a hung auth token-refresh never
+// blocks the Supabase client's internal refreshingDeferred indefinitely.
+// Without this, one stalled /auth/v1/token request causes every subsequent
+// supabase.from() call to queue behind it and appear to hang forever.
+function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  // Respect any AbortSignal the caller already passed in
+  const callerSignal = (init as RequestInit | undefined)?.signal;
+  if (callerSignal) {
+    if ((callerSignal as AbortSignal).aborted) {
+      controller.abort();
+    } else {
+      (callerSignal as AbortSignal).addEventListener('abort', () => controller.abort(), { once: true });
+    }
+  }
+  const tid = setTimeout(() => controller.abort(), 20_000);
+  return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(tid));
+}
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
+    storage: getAuthStorage(),
     storageKey: getStorageKey(),
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true,
+    // This app uses password auth, not OAuth callback URLs.
+    detectSessionInUrl: false,
     lock: <R>(_name: string, _acquireTimeout: number, fn: () => Promise<R>) => fn(),
   },
+  global: { fetch: fetchWithTimeout },
 });

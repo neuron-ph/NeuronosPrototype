@@ -231,7 +231,7 @@ export function InvoicePDFScreen({ project, invoice, onClose, currentUser, isEmb
                   
                   <button 
                     onClick={handlePrint}
-                    className="flex items-center justify-center gap-2 w-full px-4 py-3 text-sm font-bold text-white bg-[var(--theme-action-primary-bg)] rounded-lg hover:bg-[#0D625D] hover:shadow-md transition-all shadow-sm"
+                    className="flex items-center justify-center gap-2 w-full px-4 py-3 text-sm font-bold text-white bg-[var(--theme-action-primary-bg)] rounded-lg hover:opacity-90 hover:shadow-md transition-all shadow-sm"
                   >
                     <Printer size={18} />
                     Print / Download PDF

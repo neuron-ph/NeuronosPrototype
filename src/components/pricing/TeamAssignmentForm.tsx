@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../../utils/supabase/client";
-import type { ServiceType } from "../../types/operations";
-import type { User } from "../../hooks/useUser";
 import { CustomDropdown } from "../bd/CustomDropdown";
+import { Users } from "lucide-react";
 
 export interface TeamAssignment {
+  team: { id: string; name: string };
   manager: { id: string; name: string };
   supervisor: { id: string; name: string } | null;
   handler: { id: string; name: string } | null;
@@ -13,184 +12,294 @@ export interface TeamAssignment {
 }
 
 interface TeamAssignmentFormProps {
-  serviceType: ServiceType;
   customerId: string;
   onChange: (assignments: TeamAssignment) => void;
   initialAssignments?: TeamAssignment;
 }
 
-export function TeamAssignmentForm({ 
-  serviceType, 
-  customerId, 
-  onChange, 
-  initialAssignments 
+interface TeamMember {
+  id: string;
+  name: string;
+  role: string;
+}
+
+interface Team {
+  id: string;
+  name: string;
+}
+
+export function TeamAssignmentForm({
+  customerId,
+  onChange,
+  initialAssignments,
 }: TeamAssignmentFormProps) {
-  const [selectedSupervisor, setSelectedSupervisor] = useState<string>("");
-  const [selectedHandler, setSelectedHandler] = useState<string>("");
-  const [saveAsDefault, setSaveAsDefault] = useState(false);
+  const [selectedTeamId, setSelectedTeamId] = useState(initialAssignments?.team?.id ?? "");
+  const [selectedSupervisorId, setSelectedSupervisorId] = useState(initialAssignments?.supervisor?.id ?? "");
+  const [selectedHandlerId, setSelectedHandlerId] = useState(initialAssignments?.handler?.id ?? "");
+  const [saveAsDefault, setSaveAsDefault] = useState(initialAssignments?.saveAsDefault ?? false);
   const [hasSavedPreference, setHasSavedPreference] = useState(false);
 
-  const { data: managerData, isLoading: isLoadingManager } = useQuery({
-    queryKey: ["client_handler_preferences", "manager", serviceType],
-    queryFn: async () => {
-      const { data } = await supabase.from('users').select('*').eq('department', 'Operations').eq('service_type', serviceType).eq('role', 'manager');
-      return data && data.length > 0 ? { id: data[0].id, name: data[0].name } : null;
-    },
-    staleTime: 5 * 60 * 1000,
-  });
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [manager, setManager] = useState<{ id: string; name: string } | null>(
+    initialAssignments?.manager ?? null
+  );
+  const [supervisors, setSupervisors] = useState<TeamMember[]>([]);
+  const [handlers, setHandlers] = useState<TeamMember[]>([]);
 
-  const manager = managerData ?? null;
+  const [isLoadingTeams, setIsLoadingTeams] = useState(true);
+  const [isLoadingMembers, setIsLoadingMembers] = useState(false);
 
-  const { data: supervisors = [], isLoading: isLoadingSupervisors } = useQuery({
-    queryKey: ["client_handler_preferences", "supervisors", serviceType],
-    queryFn: async () => {
-      const { data } = await supabase.from('users').select('*').eq('department', 'Operations').eq('service_type', serviceType).eq('role', 'team_leader');
-      return (data || []) as User[];
-    },
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const { data: handlers = [], isLoading: isLoadingHandlers } = useQuery({
-    queryKey: ["client_handler_preferences", "handlers", serviceType],
-    queryFn: async () => {
-      const { data } = await supabase.from('users').select('*').eq('department', 'Operations').eq('service_type', serviceType).eq('role', 'staff');
-      return (data || []) as User[];
-    },
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const { isLoading: isLoadingPreference } = useQuery({
-    queryKey: ["client_handler_preferences", customerId, serviceType],
-    queryFn: async () => {
-      const { data: pref } = await supabase.from('client_handler_preferences').select('*').eq('client_id', customerId).eq('service_type', serviceType).maybeSingle();
-      if (pref) {
-        setSelectedSupervisor(pref.preferred_supervisor_id);
-        setSelectedHandler(pref.preferred_handler_id);
-        setHasSavedPreference(true);
-      }
-      return pref ?? null;
-    },
-    enabled: !!(customerId && serviceType),
-    staleTime: 30_000,
-  });
-
-  // Use initial assignments if provided
+  // Fetch all Operations teams on mount
   useEffect(() => {
-    if (initialAssignments) {
-      if (initialAssignments.manager) {
-        setManager(initialAssignments.manager);
-      }
-      if (initialAssignments.supervisor) {
-        setSelectedSupervisor(initialAssignments.supervisor.id);
-      }
-      if (initialAssignments.handler) {
-        setSelectedHandler(initialAssignments.handler.id);
-      }
-      setSaveAsDefault(initialAssignments.saveAsDefault);
-    }
-  }, [initialAssignments]);
+    supabase
+      .from("teams")
+      .select("id, name")
+      .eq("department", "Operations")
+      .order("name")
+      .then(({ data }) => {
+        setTeams(data ?? []);
+        setIsLoadingTeams(false);
+      });
+  }, []);
 
-  // Trigger onChange when selections change
+  // Fetch team members when team selection changes
   useEffect(() => {
-    if (manager && selectedSupervisor && selectedHandler) {
-      const supervisorUser = supervisors.find(s => s.id === selectedSupervisor);
-      const handlerUser = handlers.find(h => h.id === selectedHandler);
-
-      if (supervisorUser && handlerUser) {
-        onChange({
-          manager,
-          supervisor: { id: supervisorUser.id, name: supervisorUser.name },
-          handler: { id: handlerUser.id, name: handlerUser.name },
-          saveAsDefault,
-        });
-      }
+    if (!selectedTeamId) {
+      setManager(null);
+      setSupervisors([]);
+      setHandlers([]);
+      setSelectedSupervisorId("");
+      setSelectedHandlerId("");
+      return;
     }
-  }, [manager, selectedSupervisor, selectedHandler, saveAsDefault, supervisors, handlers, onChange]);
 
-  const isLoading = isLoadingManager || isLoadingSupervisors || isLoadingHandlers || isLoadingPreference;
+    setIsLoadingMembers(true);
+    supabase
+      .from("users")
+      .select("id, name, role")
+      .eq("department", "Operations")
+      .eq("team_id", selectedTeamId)
+      .then(({ data }) => {
+        const members = data ?? [];
+        const mgr = members.find((m) => m.role === "manager");
+        const svs = members.filter((m) => m.role === "team_leader");
+        const hds = members.filter((m) => m.role === "staff");
+        setManager(mgr ? { id: mgr.id, name: mgr.name } : null);
+        setSupervisors(svs);
+        setHandlers(hds);
+        setIsLoadingMembers(false);
+      });
+  }, [selectedTeamId]);
+
+  // Load saved preference when team changes
+  useEffect(() => {
+    if (!customerId || !selectedTeamId) return;
+
+    supabase
+      .from("client_handler_preferences")
+      .select("preferred_supervisor_id, preferred_handler_id")
+      .eq("customer_id", customerId)
+      .eq("preferred_team_id", selectedTeamId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          if (data.preferred_supervisor_id) setSelectedSupervisorId(data.preferred_supervisor_id);
+          if (data.preferred_handler_id) setSelectedHandlerId(data.preferred_handler_id);
+          setHasSavedPreference(true);
+        } else {
+          setHasSavedPreference(false);
+        }
+      });
+  }, [customerId, selectedTeamId]);
+
+  // Fire onChange once team + manager are set; supervisor/handler are optional
+  useEffect(() => {
+    if (!selectedTeamId || !manager) return;
+
+    const team = teams.find((t) => t.id === selectedTeamId);
+    if (!team) return;
+
+    const supervisor = supervisors.find((s) => s.id === selectedSupervisorId);
+    const handler = handlers.find((h) => h.id === selectedHandlerId);
+
+    onChange({
+      team: { id: team.id, name: team.name },
+      manager,
+      supervisor: supervisor ? { id: supervisor.id, name: supervisor.name } : null,
+      handler: handler ? { id: handler.id, name: handler.name } : null,
+      saveAsDefault,
+    });
+  }, [selectedTeamId, manager, selectedSupervisorId, selectedHandlerId, saveAsDefault, teams, supervisors, handlers, onChange]);
 
   return (
     <div className="space-y-4">
-      {/* Manager (auto-filled, disabled) */}
-      <div>
-        <label className="block text-sm font-['Inter:Medium',sans-serif] font-medium text-[#0a1d4d] mb-1.5">
-          Manager <span className="text-[var(--theme-action-primary-bg)]">(Auto-assigned)</span>
-        </label>
-        <input
-          type="text"
-          value={isLoadingManager ? "Loading..." : manager?.name || "No manager available"}
-          disabled
-          className="w-full px-3.5 py-2.5 rounded-lg border border-[var(--theme-border-default)] bg-[var(--theme-bg-surface-subtle)] font-['Inter:Regular',sans-serif] text-[#0a1d4d] cursor-not-allowed"
-        />
-      </div>
-
-      {/* Supervisor dropdown */}
-      <CustomDropdown
-        label="Supervisor"
-        value={selectedSupervisor}
-        onChange={setSelectedSupervisor}
-        options={supervisors.map(s => ({ value: s.id, label: s.name }))}
-        placeholder={isLoadingSupervisors ? "Loading..." : "Select supervisor..."}
-        disabled={isLoadingSupervisors}
-        required
-        helperText={
-          hasSavedPreference ? (
-            <span className="text-xs text-[var(--theme-action-primary-bg)]">(Saved preference)</span>
-          ) : undefined
-        }
-        fullWidth
-      />
-
-      {/* Handler dropdown */}
-      <CustomDropdown
-        label="Handler"
-        value={selectedHandler}
-        onChange={setSelectedHandler}
-        options={handlers.map(h => ({ value: h.id, label: h.name }))}
-        placeholder={isLoadingHandlers ? "Loading..." : "Select handler..."}
-        disabled={isLoadingHandlers}
-        required
-        helperText={
-          hasSavedPreference ? (
-            <span className="text-xs text-[var(--theme-action-primary-bg)]">(Saved preference)</span>
-          ) : undefined
-        }
-        fullWidth
-      />
-
-      {/* Save as default checkbox */}
-      <div className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          id="save-as-default"
-          checked={saveAsDefault}
-          onChange={(e) => setSaveAsDefault(e.target.checked)}
-          className="w-4 h-4 rounded cursor-pointer appearance-none"
+      <div className="flex items-center gap-2 mb-2">
+        <Users size={16} color="var(--theme-action-primary-bg)" />
+        <span
           style={{
-            backgroundColor: saveAsDefault ? "var(--theme-action-primary-bg)" : "var(--theme-bg-surface)",
-            border: "1px solid",
-            borderColor: saveAsDefault ? "var(--theme-action-primary-bg)" : "var(--neuron-ui-muted)",
-            backgroundImage: saveAsDefault 
-              ? `url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3E%3C/svg%3E")` 
-              : "none",
-            backgroundSize: "100% 100%",
-            backgroundPosition: "center",
-            backgroundRepeat: "no-repeat",
+            fontSize: "12px",
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: "0.5px",
+            color: "var(--theme-action-primary-bg)",
           }}
-        />
-        <label
-          htmlFor="save-as-default"
-          className="text-sm font-['Inter:Regular',sans-serif] text-[#0a1d4d] cursor-pointer"
         >
-          Save as default handler preference for this customer
-        </label>
+          Team Assignment
+        </span>
       </div>
 
-      {/* Loading indicator */}
-      {isLoading && (
-        <div className="text-sm text-[var(--theme-text-muted)] italic">
-          Loading team members...
-        </div>
+      {/* Team picker */}
+      <CustomDropdown
+        label="Team"
+        value={selectedTeamId}
+        onChange={(val) => {
+          setSelectedTeamId(val);
+          setSelectedSupervisorId("");
+          setSelectedHandlerId("");
+        }}
+        options={teams.map((t) => ({ value: t.id, label: t.name }))}
+        placeholder={isLoadingTeams ? "Loading teams..." : "Select team..."}
+        disabled={isLoadingTeams}
+        required
+        fullWidth
+      />
+
+      {/* Members — only shown after a team is selected */}
+      {selectedTeamId && (
+        <>
+          {/* Manager (auto-assigned, read-only) */}
+          <div>
+            <label
+              style={{
+                display: "block",
+                fontSize: "13px",
+                fontWeight: 500,
+                color: "var(--theme-text-primary)",
+                marginBottom: "6px",
+              }}
+            >
+              Manager{" "}
+              <span style={{ color: "var(--theme-action-primary-bg)", fontWeight: 400 }}>
+                (Auto-assigned)
+              </span>
+            </label>
+            <input
+              type="text"
+              value={
+                isLoadingMembers
+                  ? "Loading..."
+                  : manager?.name ?? "No manager in this team"
+              }
+              disabled
+              style={{
+                width: "100%",
+                padding: "10px 14px",
+                borderRadius: "8px",
+                border: "1px solid var(--theme-border-default)",
+                background: "var(--theme-bg-page)",
+                fontSize: "13px",
+                color: manager ? "var(--theme-text-primary)" : "var(--theme-text-muted)",
+                cursor: "not-allowed",
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+
+          {/* Supervisor */}
+          <CustomDropdown
+            label="Supervisor (Optional)"
+            value={selectedSupervisorId}
+            onChange={setSelectedSupervisorId}
+            options={[
+              { value: "", label: "None" },
+              ...supervisors.map((s) => ({ value: s.id, label: s.name })),
+            ]}
+            placeholder={
+              isLoadingMembers
+                ? "Loading..."
+                : supervisors.length === 0
+                ? "No supervisors in this team"
+                : "Select supervisor..."
+            }
+            disabled={isLoadingMembers || supervisors.length === 0}
+            helperText={
+              hasSavedPreference ? (
+                <span style={{ fontSize: "11px", color: "var(--theme-action-primary-bg)" }}>
+                  Saved preference
+                </span>
+              ) : undefined
+            }
+            fullWidth
+          />
+
+          {/* Handler */}
+          <CustomDropdown
+            label="Handler (Optional)"
+            value={selectedHandlerId}
+            onChange={setSelectedHandlerId}
+            options={[
+              { value: "", label: "None" },
+              ...handlers.map((h) => ({ value: h.id, label: h.name })),
+            ]}
+            placeholder={
+              isLoadingMembers
+                ? "Loading..."
+                : handlers.length === 0
+                ? "No handlers in this team"
+                : "Select handler..."
+            }
+            disabled={isLoadingMembers || handlers.length === 0}
+            helperText={
+              hasSavedPreference ? (
+                <span style={{ fontSize: "11px", color: "var(--theme-action-primary-bg)" }}>
+                  Saved preference
+                </span>
+              ) : undefined
+            }
+            fullWidth
+          />
+
+          {/* Save as default */}
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="save-as-default"
+              checked={saveAsDefault}
+              onChange={(e) => setSaveAsDefault(e.target.checked)}
+              style={{
+                width: "16px",
+                height: "16px",
+                borderRadius: "4px",
+                cursor: "pointer",
+                appearance: "none",
+                backgroundColor: saveAsDefault
+                  ? "var(--theme-action-primary-bg)"
+                  : "var(--theme-bg-surface)",
+                border: "1px solid",
+                borderColor: saveAsDefault
+                  ? "var(--theme-action-primary-bg)"
+                  : "var(--neuron-ui-muted)",
+                backgroundImage: saveAsDefault
+                  ? `url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3E%3C/svg%3E")`
+                  : "none",
+                backgroundSize: "100% 100%",
+                backgroundPosition: "center",
+                backgroundRepeat: "no-repeat",
+                flexShrink: 0,
+              }}
+            />
+            <label
+              htmlFor="save-as-default"
+              style={{
+                fontSize: "13px",
+                color: "var(--theme-text-secondary)",
+                cursor: "pointer",
+              }}
+            >
+              Save as default handler preference for this customer
+            </label>
+          </div>
+        </>
       )}
     </div>
   );

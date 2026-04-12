@@ -2,8 +2,10 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import { supabase } from '../../utils/supabase/client';
 import { logCreation } from "../../utils/activityLog";
+import { fireProjectCreationTickets } from "../../utils/workflowTickets";
 import { toast } from "../ui/toast-utils";
 import type { QuotationNew } from "../../types/pricing";
+import { buildProjectInsertFromQuotation } from "../../utils/projectHydration";
 
 interface CreateProjectModalProps {
   quotation: QuotationNew;
@@ -39,25 +41,40 @@ export function CreateProjectModal({ quotation, onClose, onSuccess, currentUser 
 
     setIsCreating(true);
     try {
-      const projectData = {
+      const projectData = buildProjectInsertFromQuotation(quotation, currentUser, {
         id: `proj-${Date.now()}`,
-        quotation_id: quotation.id,
-        ...formData,
-        created_by: currentUser?.id,
-        created_by_name: currentUser?.name,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        details: {
-          bd_owner_user_id: currentUser?.id,
-          bd_owner_user_name: currentUser?.name,
-          ops_assigned_user_id: formData.ops_assigned_user_name ? "user-ops-rep-001" : null,
+        projectNumber: `PRJ-${Date.now().toString().slice(-6)}`,
+        overrides: {
+          client_po_number: formData.client_po_number,
+          shipment_ready_date: formData.shipment_ready_date,
+          requested_etd: formData.requested_etd,
+          special_instructions: formData.special_instructions,
+          ops_assigned_user_name: formData.ops_assigned_user_name,
         },
-      };
+        extraDetails: {
+          ops_assigned_user_id: formData.ops_assigned_user_name ? "user-ops-rep-001" : null,
+          ops_assigned_user_name: formData.ops_assigned_user_name || null,
+          client_po_number: formData.client_po_number,
+          shipment_ready_date: formData.shipment_ready_date,
+          requested_etd: formData.requested_etd,
+          special_instructions: formData.special_instructions,
+        },
+      });
 
       const { data, error } = await supabase.from('projects').insert(projectData).select().single();
       if (error) throw error;
       const _actor = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
       logCreation("project", data.id, data.project_number ?? data.id, _actor);
+
+      void fireProjectCreationTickets({
+        projectId: data.id,
+        projectNumber: data.project_number ?? data.id,
+        quotationNumber: quotation.quote_number,
+        customerName: quotation.customer_name ?? "",
+        userId: currentUser?.id ?? "",
+        userName: currentUser?.name ?? "",
+        userDept: currentUser?.department ?? "",
+      });
 
       toast.success("Project created successfully!");
       onSuccess(data.id);

@@ -18,6 +18,7 @@ import { BookingCreationPanel } from "../shared/BookingCreationPanel";
 import { useCustomerOptions } from "../shared/useCustomerOptions";
 import { ConsigneePicker } from "../../shared/ConsigneePicker";
 import { logCreation } from "../../../utils/activityLog";
+import { fireBookingAssignmentTickets } from "../../../utils/workflowTickets";
 
 interface CreateForwardingBookingPanelProps {
   isOpen: boolean;
@@ -42,6 +43,7 @@ export function CreateForwardingBookingPanel({
   serviceType = "Forwarding",
 }: CreateForwardingBookingPanelProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [bookingName, setBookingName] = useState("");
   const [bookingNumber, setBookingNumber] = useState("");
   const [projectNumber, setProjectNumber] = useState("");
   const [fetchedProject, setFetchedProject] = useState<Project | null>(null);
@@ -292,6 +294,7 @@ export function CreateForwardingBookingPanel({
       const insertPayload: Record<string, any> = {
         id: crypto.randomUUID(),
         booking_number: autoBookingNumber,
+        name: bookingName.trim() || null,
         service_type: 'Forwarding',
         customer_name: customerName,
         movement_type: movement,
@@ -305,6 +308,8 @@ export function CreateForwardingBookingPanel({
       if (source === "pricing" && teamAssignment) {
         insertPayload.manager_id = teamAssignment.manager.id;
         insertPayload.manager_name = teamAssignment.manager.name;
+        insertPayload.team_id = teamAssignment.team.id;
+        insertPayload.team_name = teamAssignment.team.name;
         if (teamAssignment.supervisor) {
           insertPayload.supervisor_id = teamAssignment.supervisor.id;
           insertPayload.supervisor_name = teamAssignment.supervisor.name;
@@ -336,10 +341,15 @@ export function CreateForwardingBookingPanel({
       if (source === "pricing" && teamAssignment?.saveAsDefault && customerId) {
         try {
           await supabase.from('client_handler_preferences').upsert({
-            client_id: customerId,
-            service_type: serviceType,
+            customer_id: customerId,
+            preferred_team_id: teamAssignment.team.id,
+            preferred_team_name: teamAssignment.team.name,
+            preferred_manager_id: teamAssignment.manager.id,
+            preferred_manager_name: teamAssignment.manager.name,
             preferred_supervisor_id: teamAssignment.supervisor?.id,
+            preferred_supervisor_name: teamAssignment.supervisor?.name,
             preferred_handler_id: teamAssignment.handler?.id,
+            preferred_handler_name: teamAssignment.handler?.name,
           });
         } catch (prefError) {
           console.error("Error saving team preference:", prefError);
@@ -347,6 +357,22 @@ export function CreateForwardingBookingPanel({
       }
 
       logCreation("booking", createdBooking.id, createdBooking.booking_number ?? createdBooking.id, { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
+
+      if (source === "pricing" && teamAssignment) {
+        void fireBookingAssignmentTickets({
+          bookingId: createdBooking.id,
+          bookingNumber: createdBooking.booking_number,
+          serviceType: "Forwarding",
+          customerName,
+          createdBy: currentUser?.id ?? "",
+          createdByName: currentUser?.name ?? "",
+          createdByDept: currentUser?.department ?? "",
+          manager: teamAssignment.manager,
+          supervisor: teamAssignment.supervisor,
+          handler: teamAssignment.handler,
+        });
+      }
+
       toast.success(`Forwarding booking ${createdBooking.booking_number} created successfully`);
       onBookingCreated(createdBooking);
       onClose();
@@ -457,6 +483,27 @@ export function CreateForwardingBookingPanel({
                     serviceType="Forwarding"
                     onContractDetected={setDetectedContractId}
                   />
+                </div>
+
+                <div>
+                  <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
+                    Booking Name <span style={{ color: "var(--theme-text-muted)", fontWeight: 400 }}>(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={bookingName}
+                    onChange={(e) => setBookingName(e.target.value)}
+                    placeholder="e.g. BSFI Steel Import BL1, Split Shipment Leg 2"
+                    className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
+                    style={{
+                      border: "1px solid var(--theme-border-default)",
+                      backgroundColor: "var(--theme-bg-surface)",
+                      color: "var(--theme-text-primary)",
+                    }}
+                  />
+                  <p className="text-xs mt-1" style={{ color: "var(--theme-text-muted)" }}>
+                    A short label to identify this booking, especially useful when a project has multiple bookings of the same type.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -958,7 +1005,7 @@ export function CreateForwardingBookingPanel({
                       className="block mb-1.5"
                       style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
                     >
-                      Consignee
+                      Consignee <span style={{ color: "var(--theme-action-primary-bg)" }}>*</span>
                     </label>
                     <ConsigneePicker
                       value={consignee}
@@ -1083,7 +1130,7 @@ export function CreateForwardingBookingPanel({
                       className="block mb-1.5"
                       style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
                     >
-                      AOL/POL
+                      AOL/POL <span style={{ color: "var(--theme-action-primary-bg)" }}>*</span>
                     </label>
                     <input
                       type="text"
@@ -1104,7 +1151,7 @@ export function CreateForwardingBookingPanel({
                       className="block mb-1.5"
                       style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
                     >
-                      AOD/POD
+                      AOD/POD <span style={{ color: "var(--theme-action-primary-bg)" }}>*</span>
                     </label>
                     <input
                       type="text"
@@ -1787,7 +1834,6 @@ export function CreateForwardingBookingPanel({
                   borderRadius: "8px"
                 }}>
                   <TeamAssignmentForm
-                    serviceType={serviceType as any}
                     customerId={customerId}
                     onChange={setTeamAssignment}
                   />

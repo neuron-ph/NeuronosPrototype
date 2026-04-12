@@ -54,11 +54,11 @@ export function FinalizedPriceSection({
         borderBottom: "2px solid var(--theme-bg-surface-tint)"
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <PhilippinePeso size={18} style={{ color: "var(--neuron-brand-green)" }} />
+          <PhilippinePeso size={18} style={{ color: "var(--theme-action-primary-bg)" }} />
           <h2 style={{
             fontSize: "17px",
             fontWeight: 600,
-            color: "var(--neuron-brand-green)",
+            color: "var(--theme-action-primary-bg)",
             margin: 0,
             letterSpacing: "-0.01em"
           }}>
@@ -75,21 +75,21 @@ export function FinalizedPriceSection({
           padding: "48px 24px",
           textAlign: "center",
           backgroundColor: "var(--theme-bg-surface)",
-          border: "1px solid var(--neuron-ui-border)",
+          border: "1px solid var(--theme-border-default)",
           borderRadius: "10px"
         }}>
           <DollarSign 
             size={48} 
             strokeWidth={1.2}
             style={{ 
-              color: "var(--neuron-ink-muted)",
+              color: "var(--theme-text-muted)",
               margin: "0 auto 12px auto",
               display: "block",
               opacity: 0.75
             }} 
           />
           <h3 style={{ 
-            color: "var(--neuron-ink-primary)",
+            color: "var(--theme-text-primary)",
             fontSize: "16px",
             fontWeight: 500,
             marginBottom: "4px"
@@ -175,7 +175,7 @@ export function FinalizedPriceSection({
                      <div style={{
                       fontSize: "14px",
                       fontWeight: 700,
-                      color: "var(--neuron-brand-green)",
+                      color: "var(--theme-action-primary-bg)",
                       fontFamily: "monospace"
                     }}>
                       {currency} {category.subtotal?.toFixed(2) || "0.00"}
@@ -318,7 +318,7 @@ export function FinalizedPriceSection({
                               <div style={{ 
                                 textAlign: "right", 
                                 fontWeight: 700, 
-                                color: "var(--neuron-brand-green)",
+                                color: "var(--theme-action-primary-bg)",
                                 fontSize: "14px"
                               }}>
                                 {item.currency} {item.final_price?.toFixed(2) || item.price?.toFixed(2)}

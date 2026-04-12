@@ -14,9 +14,11 @@ import type { TruckingLineItem } from "../../types/pricing";
 import { normalizeTruckingLineItems, extractContractDestinations } from "../../utils/contractQuantityExtractor";
 import { fetchFullContract } from "../../utils/contractLookup";
 import { logCreation } from "../../utils/activityLog";
+import { fireBookingAssignmentTickets } from "../../utils/workflowTickets";
 import { useUser } from "../../hooks/useUser";
 import { FormComboBox } from "../pricing/quotations/FormComboBox";
 import { ConsigneePicker } from "../shared/ConsigneePicker";
+import { TeamAssignmentForm, type TeamAssignment } from "../pricing/TeamAssignmentForm";
 
 interface CreateTruckingBookingPanelProps {
   isOpen: boolean;
@@ -34,9 +36,12 @@ export function CreateTruckingBookingPanel({
   isOpen,
   onClose,
   onSuccess,
+  source = "operations",
+  customerId,
 }: CreateTruckingBookingPanelProps) {
   const { user } = useUser();
   const [loading, setLoading] = useState(false);
+  const [teamAssignment, setTeamAssignment] = useState<TeamAssignment | null>(null);
   // ✨ CONTRACT: Detected contract ID for auto-linking
   const [detectedContractId, setDetectedContractId] = useState<string | null>(null);
 
@@ -66,6 +71,7 @@ export function CreateTruckingBookingPanel({
   ]);
   const [formData, setFormData] = useState({
     customerName: "",
+    name: "",
     movement: "IMPORT",
     accountOwner: "",
     accountHandler: "",
@@ -126,11 +132,60 @@ export function CreateTruckingBookingPanel({
         deliveryAddress: truckingLineItems[0]?.destination || formData.deliveryAddress,
         ...(detectedContractId && { contract_id: detectedContractId }),
       };
-      const { data, error } = await supabase.from('trucking_bookings').insert(insertPayload).select().single();
+      if (source === "pricing" && teamAssignment) {
+        (insertPayload as any).manager_id = teamAssignment.manager.id;
+        (insertPayload as any).manager_name = teamAssignment.manager.name;
+        (insertPayload as any).team_id = teamAssignment.team.id;
+        (insertPayload as any).team_name = teamAssignment.team.name;
+        if (teamAssignment.supervisor) {
+          (insertPayload as any).supervisor_id = teamAssignment.supervisor.id;
+          (insertPayload as any).supervisor_name = teamAssignment.supervisor.name;
+        }
+        if (teamAssignment.handler) {
+          (insertPayload as any).handler_id = teamAssignment.handler.id;
+          (insertPayload as any).handler_name = teamAssignment.handler.name;
+        }
+      }
+
+      const { data, error } = await supabase.from('bookings').insert(insertPayload).select().single();
 
       if (error) throw new Error(error.message);
 
+      if (source === "pricing" && teamAssignment?.saveAsDefault && customerId) {
+        try {
+          await supabase.from('client_handler_preferences').upsert({
+            customer_id: customerId,
+            preferred_team_id: teamAssignment.team.id,
+            preferred_team_name: teamAssignment.team.name,
+            preferred_manager_id: teamAssignment.manager.id,
+            preferred_manager_name: teamAssignment.manager.name,
+            preferred_supervisor_id: teamAssignment.supervisor?.id,
+            preferred_supervisor_name: teamAssignment.supervisor?.name,
+            preferred_handler_id: teamAssignment.handler?.id,
+            preferred_handler_name: teamAssignment.handler?.name,
+          });
+        } catch (prefError) {
+          console.error("Error saving team preference:", prefError);
+        }
+      }
+
       logCreation("booking", data.id, data.booking_number ?? data.id, { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" });
+
+      if (source === "pricing" && teamAssignment) {
+        void fireBookingAssignmentTickets({
+          bookingId: data.id,
+          bookingNumber: data.booking_number,
+          serviceType: "Trucking",
+          customerName: formData.customerName,
+          createdBy: user?.id ?? "",
+          createdByName: user?.name ?? "",
+          createdByDept: user?.department ?? "",
+          manager: teamAssignment.manager,
+          supervisor: teamAssignment.supervisor,
+          handler: teamAssignment.handler,
+        });
+      }
+
       toast.success("Trucking booking created successfully");
       onSuccess?.(data);
       onClose();
@@ -200,6 +255,28 @@ export function CreateTruckingBookingPanel({
                     serviceType="Trucking"
                     onContractDetected={setDetectedContractId}
                   />
+                </div>
+
+                <div>
+                  <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
+                    Booking Name <span style={{ color: "var(--theme-text-muted)", fontWeight: 400 }}>(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleChange}
+                    placeholder="e.g. BSFI Delivery Run, Outbound Leg 1"
+                    className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
+                    style={{
+                      border: "1px solid var(--neuron-ui-border)",
+                      backgroundColor: "var(--theme-bg-surface)",
+                      color: "var(--neuron-ink-primary)",
+                    }}
+                  />
+                  <p className="text-xs mt-1" style={{ color: "var(--theme-text-muted)" }}>
+                    A short label to identify this booking, especially useful when a project has multiple bookings of the same type.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -788,6 +865,25 @@ export function CreateTruckingBookingPanel({
                 </div>
               </div>
             </div>
+
+            {/* Team Assignment — only shown when opened from Pricing */}
+            {source === "pricing" && customerId && (
+              <div className="mb-8">
+                <div
+                  style={{
+                    background: "var(--theme-bg-page)",
+                    border: "1px solid var(--theme-border-default)",
+                    borderRadius: "12px",
+                    padding: "20px",
+                  }}
+                >
+                  <TeamAssignmentForm
+                    customerId={customerId}
+                    onChange={setTeamAssignment}
+                  />
+                </div>
+              </div>
+            )}
     </BookingCreationPanel>
   );
 }

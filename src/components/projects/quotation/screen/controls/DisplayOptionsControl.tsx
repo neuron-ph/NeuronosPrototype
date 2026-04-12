@@ -10,6 +10,8 @@ interface DisplayOptionsControlProps {
 export function DisplayOptionsControl({ options, onToggle }: DisplayOptionsControlProps) {
   const ToggleItem = ({ label, checked, onClick }: { label: string, checked: boolean, onClick: () => void }) => (
     <button
+      role="checkbox"
+      aria-checked={checked}
       onClick={onClick}
       className="group flex items-center justify-between w-full p-3 bg-[var(--theme-bg-surface)] border border-[var(--theme-border-subtle)] rounded-lg hover:border-[var(--theme-action-primary-bg)]/30 hover:shadow-sm transition-all text-left"
     >
@@ -22,7 +24,7 @@ export function DisplayOptionsControl({ options, onToggle }: DisplayOptionsContr
   );
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" role="group" aria-label="Display options">
       <ToggleItem
           label="Show Bank Details"
           checked={options.show_bank_details}

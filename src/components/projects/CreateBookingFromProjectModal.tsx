@@ -280,7 +280,7 @@ export function CreateBookingFromProjectModal({
         {/* Header */}
         <div style={{
           padding: "24px 32px",
-          borderBottom: "1px solid var(--neuron-ui-border)",
+          borderBottom: "1px solid var(--theme-border-default)",
           flexShrink: 0
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -290,7 +290,7 @@ export function CreateBookingFromProjectModal({
                 <h2 style={{
                   fontSize: "18px",
                   fontWeight: 600,
-                  color: "var(--neuron-ink-primary)",
+                  color: "var(--theme-text-primary)",
                   margin: 0
                 }}>
                   Create {service.service_type} Booking
@@ -298,7 +298,7 @@ export function CreateBookingFromProjectModal({
               </div>
               <p style={{
                 fontSize: "13px",
-                color: "var(--neuron-ink-muted)",
+                color: "var(--theme-text-muted)",
                 margin: 0
               }}>
                 From Project {project.project_number}
@@ -382,7 +382,7 @@ export function CreateBookingFromProjectModal({
             
             <div style={{
               background: "var(--theme-bg-page)",
-              border: "1px solid var(--neuron-ui-border)",
+              border: "1px solid var(--theme-border-default)",
               borderRadius: "8px",
               padding: "20px"
             }}>
@@ -451,7 +451,7 @@ export function CreateBookingFromProjectModal({
         {/* Footer - Fixed */}
         <div style={{
           padding: "20px 32px",
-          borderTop: "1px solid var(--neuron-ui-border)",
+          borderTop: "1px solid var(--theme-border-default)",
           background: "var(--theme-bg-surface)",
           display: "flex",
           justifyContent: "flex-end",
@@ -538,7 +538,7 @@ function PreviewField({ label, value }: { label: string; value?: string }) {
       </div>
       <div style={{
         fontSize: "14px",
-        color: "var(--neuron-ink-primary)",
+        color: "var(--theme-text-primary)",
         fontWeight: 500
       }}>
         {value || "—"}

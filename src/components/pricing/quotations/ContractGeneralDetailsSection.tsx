@@ -166,14 +166,14 @@ export function ContractGeneralDetailsSection({
                   const isSelected = data.type_of_entry === entry;
                   const isHovered = hoveredEntry === `entry-${entry}`;
 
-                  let bg = "white";
+                  let bg = "var(--theme-bg-surface)";
                   let border = "var(--neuron-ui-border)";
                   let color = "var(--neuron-ink-base)";
 
                   if (isSelected) {
                     bg = "var(--theme-action-primary-bg)";
                     border = "var(--theme-action-primary-bg)";
-                    color = "white";
+                    color = "var(--theme-action-primary-text)";
                   } else if (isHovered) {
                     bg = "var(--theme-bg-surface-tint)";
                     border = "var(--theme-action-primary-bg)";

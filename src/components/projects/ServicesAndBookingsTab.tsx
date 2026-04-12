@@ -29,7 +29,7 @@ export function ServicesAndBookingsTab({ project, currentUser, onUpdate }: Servi
         {/* Shipment Details Section */}
         <div style={{
           backgroundColor: "var(--theme-bg-surface)",
-          border: "1px solid var(--neuron-ui-border)",
+          border: "1px solid var(--theme-border-default)",
           borderRadius: "8px",
           padding: "24px",
           marginBottom: "24px"
@@ -37,7 +37,7 @@ export function ServicesAndBookingsTab({ project, currentUser, onUpdate }: Servi
           <h2 style={{
             fontSize: "16px",
             fontWeight: 600,
-            color: "var(--neuron-brand-green)",
+            color: "var(--theme-action-primary-bg)",
             marginBottom: "20px",
             display: "flex",
             alignItems: "center",
@@ -106,7 +106,7 @@ export function ServicesAndBookingsTab({ project, currentUser, onUpdate }: Servi
                   <div style={{
                     padding: "10px 14px",
                     backgroundColor: "var(--theme-bg-page)",
-                    border: "1px solid var(--neuron-ui-border)",
+                    border: "1px solid var(--theme-border-default)",
                     borderRadius: "6px",
                     fontSize: "14px",
                     color: "var(--theme-text-muted)",
@@ -158,12 +158,12 @@ function Field({
         gap: "8px",
         padding: "10px 14px",
         backgroundColor: "var(--theme-bg-page)",
-        border: "1px solid var(--neuron-ui-border)",
+        border: "1px solid var(--theme-border-default)",
         borderRadius: "6px",
         fontSize: "14px",
-        color: value ? "var(--neuron-ink-primary)" : "var(--theme-text-muted)"
+        color: value ? "var(--theme-text-primary)" : "var(--theme-text-muted)"
       }}>
-        {icon && <span style={{ color: "var(--neuron-brand-green)", flexShrink: 0 }}>{icon}</span>}
+        {icon && <span style={{ color: "var(--theme-action-primary-bg)", flexShrink: 0 }}>{icon}</span>}
         <span>{value || "—"}</span>
       </div>
     </div>

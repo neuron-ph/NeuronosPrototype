@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { motion } from "motion/react";
 import { Edit3, FileText, Handshake, Link2, AlertTriangle } from "lucide-react";
 import { FormSelect } from "./FormSelect";
@@ -141,8 +140,6 @@ export function GeneralDetailsSection({
   isEditMode = false,
   contractDetection,
 }: GeneralDetailsSectionProps) {
-  const [hoveredService, setHoveredService] = useState<string | null>(null);
-
   const handleServiceToggle = (service: string) => {
     if (selectedServices.includes(service)) {
       setSelectedServices(selectedServices.filter(s => s !== service));
@@ -250,7 +247,7 @@ export function GeneralDetailsSection({
                     padding: "6px 16px",
                     fontSize: "13px",
                     fontWeight: 500,
-                    color: movement === option ? "white" : "var(--neuron-ink-secondary)",
+                    color: movement === option ? "var(--theme-action-primary-text)" : "var(--neuron-ink-secondary)",
                     backgroundColor: "transparent",
                     border: "none",
                     borderRadius: "6px",
@@ -344,7 +341,7 @@ export function GeneralDetailsSection({
           <DisplayField label={quotationType === "contract" ? "Contract Name" : "Quotation Name"} value={quotationName} />
         ) : (
           <div>
-            <label style={{
+            <label htmlFor="general-quotation-name" style={{
               display: "block",
               fontSize: "13px",
               fontWeight: 500,
@@ -354,10 +351,12 @@ export function GeneralDetailsSection({
               {quotationType === "contract" ? "Contract Name *" : "Quotation Name *"}
             </label>
             <input
+              id="general-quotation-name"
               type="text"
               value={quotationName}
               onChange={(e) => setQuotationName(e.target.value)}
               placeholder={quotationType === "contract" ? "Enter contract name..." : "Enter quotation name..."}
+              autoComplete="off"
               style={{
                 width: "100%",
                 padding: "10px 12px",
@@ -381,7 +380,7 @@ export function GeneralDetailsSection({
 
         {/* Services Selection (Multi-select with chips) */}
         <div>
-          <label style={{
+          <label htmlFor="general-services" style={{
             display: "block",
             fontSize: "13px",
             fontWeight: 500,
@@ -405,7 +404,7 @@ export function GeneralDetailsSection({
                       padding: "8px 16px",
                       fontSize: "13px",
                       fontWeight: 500,
-                      color: "white",
+                      color: "var(--theme-action-primary-text)",
                       backgroundColor: "var(--theme-action-primary-bg)",
                       border: "1px solid var(--theme-action-primary-bg)",
                       borderRadius: "6px"
@@ -421,36 +420,30 @@ export function GeneralDetailsSection({
               // Edit mode: show all services as toggleable buttons
               (quotationType === "contract" ? CONTRACT_SERVICES : AVAILABLE_SERVICES).map(service => {
                 const isSelected = selectedServices.includes(service);
-                const isHovered = hoveredService === service;
-                
-                // Compute styles based on state
-                let backgroundColor = "var(--theme-bg-surface)";
-                let borderColor = "var(--neuron-ui-border)";
-                let textColor = "var(--neuron-ink-base)";
-
-                if (isSelected) {
-                  backgroundColor = "var(--theme-action-primary-bg)";
-                  borderColor = "var(--theme-action-primary-bg)";
-                  textColor = "white";
-                } else if (isHovered) {
-                  backgroundColor = "var(--theme-bg-surface-tint)";
-                  borderColor = "var(--theme-action-primary-bg)";
-                }
-                
                 return (
                   <button
                     key={service}
                     type="button"
                     onClick={() => handleServiceToggle(service)}
-                    onMouseEnter={() => setHoveredService(service)}
-                    onMouseLeave={() => setHoveredService(null)}
+                    onMouseEnter={(e) => {
+                      if (!isSelected) {
+                        e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)";
+                        e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isSelected) {
+                        e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
+                        e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
+                      }
+                    }}
                     style={{
                       padding: "8px 16px",
                       fontSize: "13px",
                       fontWeight: 500,
-                      color: textColor,
-                      backgroundColor: backgroundColor,
-                      border: `1px solid ${borderColor}`,
+                      color: isSelected ? "var(--theme-action-primary-text)" : "var(--neuron-ink-base)",
+                      backgroundColor: isSelected ? "var(--theme-action-primary-bg)" : "var(--theme-bg-surface)",
+                      border: `1px solid ${isSelected ? "var(--theme-action-primary-bg)" : "var(--neuron-ui-border)"}`,
                       borderRadius: "6px",
                       cursor: "pointer",
                       transition: "all 0.15s ease"
@@ -476,10 +469,10 @@ export function GeneralDetailsSection({
             ) : (
               <>
                 <div>
-                  <label style={{ display: "block", fontSize: "13px", fontWeight: 500, color: "var(--neuron-ink-base)", marginBottom: "8px" }}>
+                  <label htmlFor="general-contract-date" style={{ display: "block", fontSize: "13px", fontWeight: 500, color: "var(--neuron-ink-base)", marginBottom: "8px" }}>
                     Date Created *
                   </label>
-                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+                  <input id="general-contract-date" type="date" value={date} onChange={(e) => setDate(e.target.value)}
                     style={{ width: "100%", padding: "10px 12px", fontSize: "13px", color: "var(--neuron-ink-base)", backgroundColor: "var(--theme-bg-surface)", border: "1px solid var(--neuron-ui-border)", borderRadius: "6px", outline: "none" }}
                     onFocus={(e) => { e.currentTarget.style.borderColor = "var(--neuron-brand-teal)"; }}
                     onBlur={(e) => { e.currentTarget.style.borderColor = "var(--neuron-ui-border)"; }}
@@ -515,7 +508,7 @@ export function GeneralDetailsSection({
           ) : (
             <>
               <div>
-                <label style={{
+                <label htmlFor="general-date" style={{
                   display: "block",
                   fontSize: "13px",
                   fontWeight: 500,
@@ -525,6 +518,7 @@ export function GeneralDetailsSection({
                   Date *
                 </label>
                 <input
+                  id="general-date"
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
@@ -549,7 +543,7 @@ export function GeneralDetailsSection({
               </div>
 
               <div>
-                <label style={{
+                <label htmlFor="general-credit-terms" style={{
                   display: "block",
                   fontSize: "13px",
                   fontWeight: 500,
@@ -577,7 +571,7 @@ export function GeneralDetailsSection({
               </div>
 
               <div>
-                <label style={{
+                <label htmlFor="general-validity" style={{
                   display: "block",
                   fontSize: "13px",
                   fontWeight: 500,
@@ -588,6 +582,7 @@ export function GeneralDetailsSection({
                 </label>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <input
+                    id="general-validity"
                     type="number"
                     min="1"
                     value={validity}

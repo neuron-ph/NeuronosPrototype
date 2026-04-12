@@ -100,7 +100,7 @@ export function ProjectBookingsTabBD({ project, currentUser, onUpdate }: Project
         {/* Header Section */}
         <div style={{
           backgroundColor: "var(--theme-bg-surface)",
-          border: "1px solid var(--neuron-ui-border)",
+          border: "1px solid var(--theme-border-default)",
           borderRadius: "8px",
           padding: "24px",
           marginBottom: "24px"
@@ -108,7 +108,7 @@ export function ProjectBookingsTabBD({ project, currentUser, onUpdate }: Project
           <h2 style={{
             fontSize: "16px",
             fontWeight: 600,
-            color: "var(--neuron-brand-green)",
+            color: "var(--theme-action-primary-bg)",
             marginBottom: "8px",
             display: "flex",
             alignItems: "center",
@@ -119,7 +119,7 @@ export function ProjectBookingsTabBD({ project, currentUser, onUpdate }: Project
           </h2>
           <p style={{
             fontSize: "13px",
-            color: "var(--neuron-ink-muted)",
+            color: "var(--theme-text-muted)",
             margin: 0
           }}>
             View operational bookings created from this project. Click on any booking to view details and add comments.
@@ -150,7 +150,7 @@ export function ProjectBookingsTabBD({ project, currentUser, onUpdate }: Project
                   key={idx}
                   style={{
                     backgroundColor: "var(--theme-bg-surface)",
-                    border: "1px solid var(--neuron-ui-border)",
+                    border: "1px solid var(--theme-border-default)",
                     borderRadius: "8px",
                     overflow: "hidden",
                     display: "flex",
@@ -162,7 +162,7 @@ export function ProjectBookingsTabBD({ project, currentUser, onUpdate }: Project
                     style={{
                       padding: "16px 20px",
                       backgroundColor: "var(--theme-bg-page)",
-                      borderBottom: "1px solid var(--neuron-ui-border)",
+                      borderBottom: "1px solid var(--theme-border-default)",
                     }}
                   >
                     <div
@@ -178,7 +178,7 @@ export function ProjectBookingsTabBD({ project, currentUser, onUpdate }: Project
                           style={{
                             fontSize: "15px",
                             fontWeight: 600,
-                            color: "var(--neuron-brand-green)",
+                            color: "var(--theme-action-primary-bg)",
                             marginBottom: "4px",
                           }}
                         >
@@ -187,7 +187,7 @@ export function ProjectBookingsTabBD({ project, currentUser, onUpdate }: Project
                         <div
                           style={{
                             fontSize: "12px",
-                            color: "var(--neuron-ink-muted)",
+                            color: "var(--theme-text-muted)",
                           }}
                         >
                           {service.service_type === "Forwarding" && (
@@ -226,13 +226,13 @@ export function ProjectBookingsTabBD({ project, currentUser, onUpdate }: Project
                           padding: "4px 10px",
                           backgroundColor: hasBookings ? "var(--theme-bg-surface-tint)" : "var(--neuron-pill-inactive-bg)",
                           border: `1px solid ${
-                            hasBookings ? "var(--neuron-brand-green)" : "var(--neuron-ui-muted)"
+                            hasBookings ? "var(--theme-action-primary-bg)" : "var(--theme-border-default)"
                           }`,
                           borderRadius: "12px",
                           fontSize: "12px",
                           fontWeight: 600,
                           color: hasBookings
-                            ? "var(--neuron-brand-green)"
+                            ? "var(--theme-action-primary-bg)"
                             : "var(--theme-text-muted)",
                         }}
                       >
@@ -247,14 +247,14 @@ export function ProjectBookingsTabBD({ project, currentUser, onUpdate }: Project
                     style={{
                       padding: "12px 20px",
                       backgroundColor: "var(--theme-bg-page)",
-                      borderBottom: "1px solid var(--neuron-ui-border)",
+                      borderBottom: "1px solid var(--theme-border-default)",
                       cursor: "pointer",
                       display: "flex",
                       alignItems: "center",
                       gap: "8px",
                       fontSize: "13px",
                       fontWeight: 500,
-                      color: "var(--neuron-brand-green)",
+                      color: "var(--theme-action-primary-bg)",
                       transition: "background-color 0.2s ease",
                     }}
                     onMouseEnter={(e) => {
@@ -273,7 +273,7 @@ export function ProjectBookingsTabBD({ project, currentUser, onUpdate }: Project
                       style={{
                         padding: "16px 20px",
                         backgroundColor: "var(--theme-bg-page)",
-                        borderBottom: "1px solid var(--neuron-ui-border)",
+                        borderBottom: "1px solid var(--theme-border-default)",
                       }}
                     >
                       <ServiceSpecificationDisplay service={service} />
@@ -295,7 +295,7 @@ export function ProjectBookingsTabBD({ project, currentUser, onUpdate }: Project
                         style={{
                           fontSize: "13px",
                           fontWeight: 600,
-                          color: "var(--neuron-ink-muted)",
+                          color: "var(--theme-text-muted)",
                           textTransform: "uppercase",
                           letterSpacing: "0.5px",
                         }}
@@ -310,7 +310,7 @@ export function ProjectBookingsTabBD({ project, currentUser, onUpdate }: Project
                           }}
                           style={{
                             padding: "6px 12px",
-                            background: "var(--neuron-brand-green)",
+                            background: "var(--theme-action-primary-bg)",
                             color: "white",
                             border: "none",
                             borderRadius: "6px",
@@ -323,11 +323,11 @@ export function ProjectBookingsTabBD({ project, currentUser, onUpdate }: Project
                             transition: "all 0.2s ease",
                           }}
                           onMouseEnter={(e) => {
-                            e.currentTarget.style.background = "#0D5F58";
+                            e.currentTarget.style.background = "var(--theme-action-primary-bg-dark, #0D5F58)";
                           }}
                           onMouseLeave={(e) => {
                             e.currentTarget.style.background =
-                              "var(--neuron-brand-green)";
+                              "var(--theme-action-primary-bg)";
                           }}
                         >
                           <Plus size={14} />
@@ -364,7 +364,7 @@ export function ProjectBookingsTabBD({ project, currentUser, onUpdate }: Project
                             }}
                             onMouseEnter={(e) => {
                               e.currentTarget.style.borderColor =
-                                "var(--neuron-brand-green)";
+                                "var(--theme-action-primary-bg)";
                               e.currentTarget.style.boxShadow =
                                 "0 0 0 2px rgba(15, 118, 110, 0.1)";
                             }}
@@ -377,7 +377,7 @@ export function ProjectBookingsTabBD({ project, currentUser, onUpdate }: Project
                               style={{
                                 fontSize: "14px",
                                 fontWeight: 600,
-                                color: "var(--neuron-ink-primary)",
+                                color: "var(--theme-text-primary)",
                                 marginBottom: "4px",
                               }}
                             >
@@ -386,7 +386,7 @@ export function ProjectBookingsTabBD({ project, currentUser, onUpdate }: Project
                             <div
                               style={{
                                 fontSize: "12px",
-                                color: "var(--neuron-ink-muted)",
+                                color: "var(--theme-text-muted)",
                               }}
                             >
                               Created:{" "}
@@ -405,7 +405,7 @@ export function ProjectBookingsTabBD({ project, currentUser, onUpdate }: Project
                           padding: "24px 16px",
                           textAlign: "center",
                           backgroundColor: "var(--theme-bg-page)",
-                          border: "1px dashed var(--neuron-ui-border)",
+                          border: "1px dashed var(--theme-border-default)",
                           borderRadius: "6px",
                           marginTop: "12px",
                         }}
@@ -429,14 +429,14 @@ export function ProjectBookingsTabBD({ project, currentUser, onUpdate }: Project
         ) : (
           <div style={{
             backgroundColor: "var(--theme-bg-surface)",
-            border: "1px solid var(--neuron-ui-border)",
+            border: "1px solid var(--theme-border-default)",
             borderRadius: "8px",
             padding: "48px 24px",
             textAlign: "center"
           }}>
             <p style={{
               fontSize: "14px",
-              color: "var(--neuron-ink-muted)",
+              color: "var(--theme-text-muted)",
               marginBottom: "8px"
             }}>
               No service specifications available

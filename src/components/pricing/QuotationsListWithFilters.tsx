@@ -95,13 +95,18 @@ function QuotationTableRow({ item, index, totalItems, onItemClick, gridTemplateC
     }
   };
 
-  // Calculate total (sum of all line items)
-  const total = item.charge_categories?.reduce((sum, category) => {
-    const categoryTotal = category.line_items?.reduce((lineSum, lineItem) => {
-      return lineSum + (lineItem.amount || 0);
+  // Calculate total — prefer financial_summary.grand_total (set by builder for both pricing formats),
+  // fall back to summing charge_categories line items (legacy format).
+  const total = (() => {
+    const fsTotal = item.financial_summary?.grand_total;
+    if (fsTotal && fsTotal > 0) return fsTotal;
+    return item.charge_categories?.reduce((sum, category) => {
+      const categoryTotal = category.line_items?.reduce((lineSum, lineItem) => {
+        return lineSum + (lineItem.amount || 0);
+      }, 0) || 0;
+      return sum + categoryTotal;
     }, 0) || 0;
-    return sum + categoryTotal;
-  }, 0) || 0;
+  })();
 
   return (
     <div
@@ -388,10 +393,11 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
 
     // Search filter
     if (searchQuery) {
+      const normalizedQuery = searchQuery.toLowerCase();
       filtered = filtered.filter(item =>
-        item.quote_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.services.some(s => s.toLowerCase().includes(searchQuery.toLowerCase()))
+        (item.quote_number || item.quotation_number || "").toLowerCase().includes(normalizedQuery) ||
+        item.customer_name?.toLowerCase().includes(normalizedQuery) ||
+        item.services.some(s => s.toLowerCase().includes(normalizedQuery))
       );
     }
 
@@ -428,7 +434,7 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
         QUOTATION_INQUIRY_STATUSES.includes(getNormalizedQuotationStatus(item))
       );
       // Pricing staff see only their assigned inquiries
-      if (userRole === "staff" && currentUserId) {
+      if (userRole?.toLowerCase() === "staff" && currentUserId) {
         filtered = filtered.filter(item => (item as any).assigned_to === currentUserId);
       }
     } else if (workflowTab === "Quotations") {
@@ -450,7 +456,7 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
   const tabCounts = useMemo(() => {
     const all = quotations || [];
     const inquiryItems = all.filter(q => QUOTATION_INQUIRY_STATUSES.includes(getNormalizedQuotationStatus(q)));
-    const inquiryCount = (userRole === "staff" && currentUserId)
+    const inquiryCount = (userRole?.toLowerCase() === "staff" && currentUserId)
       ? inquiryItems.filter(q => (q as any).assigned_to === currentUserId).length
       : inquiryItems.length;
     return {
@@ -459,6 +465,21 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
       Completed: all.filter(q => QUOTATION_COMPLETED_STATUSES.includes(getNormalizedQuotationStatus(q))).length
     };
   }, [quotations, userRole, currentUserId]);
+
+  // Keyboard resize: ArrowLeft/Right adjusts column width by 10px
+  const handleResizeKeyDown = (column: string) => (e: React.KeyboardEvent) => {
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      const delta = e.key === "ArrowRight" ? 10 : -10;
+      setColumnWidths(prev => {
+        const current = prev[column as keyof typeof prev];
+        const min = MIN_COLUMN_WIDTHS[column as keyof typeof MIN_COLUMN_WIDTHS];
+        const updated = { ...prev, [column]: Math.max(min, current + delta) };
+        saveColumnWidths(updated);
+        return updated;
+      });
+    }
+  };
 
   // Conditional text based on department
   const headerTitle = showStatus ? "Inquiries" : "Quotations";
@@ -479,8 +500,8 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
       backgroundColor: "var(--theme-bg-surface)"
     }}>
       {/* Header Section */}
-      <div style={{ 
-        padding: "32px 48px 24px 48px",
+      <div style={{
+        padding: "32px clamp(20px, 4vw, 48px) 24px",
         borderBottom: "1px solid var(--neuron-ui-border)"
       }}>
         {/* Title and Create Button */}
@@ -546,10 +567,11 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
           />
         </div>
 
-        {/* Filters Row - All Filters on One Line */}
-        <div style={{ 
+        {/* Filters Row */}
+        <div style={{
           display: "flex",
-          gap: "4px",
+          flexWrap: "wrap",
+          gap: "6px",
           alignItems: "center",
           marginBottom: "20px"
         }}>
@@ -635,13 +657,17 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
         </div>
 
         {/* Workflow Tabs */}
-        <div style={{ 
-          display: "flex", 
+        <div role="tablist" aria-label="Quotation workflow stages" style={{
+          display: "flex",
           gap: "24px"
         }}>
           {(["Inquiries", "Quotations", "Completed"] as const).map((tab) => (
             <button
               key={tab}
+              role="tab"
+              aria-selected={workflowTab === tab}
+              aria-controls={`workflow-panel-${tab.toLowerCase()}`}
+              id={`workflow-tab-${tab.toLowerCase()}`}
               onClick={() => setWorkflowTab(tab)}
               style={{
                 display: "flex",
@@ -694,30 +720,142 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
       </div>
 
       {/* Table Section */}
-      <div style={{ flex: 1, overflow: "auto", padding: "24px 48px" }}>
+      <div
+        role="tabpanel"
+        id={`workflow-panel-${workflowTab.toLowerCase()}`}
+        aria-labelledby={`workflow-tab-${workflowTab.toLowerCase()}`}
+        style={{ flex: 1, overflow: "auto", padding: "24px clamp(20px, 4vw, 48px)" }}
+      >
         {isLoading ? (
-          <div style={{ 
-            display: "flex", 
-            alignItems: "center", 
-            justifyContent: "center",
-            padding: "60px 20px",
-            color: "var(--neuron-ink-muted)"
+          /* Skeleton rows — match table column layout */
+          <div style={{
+            border: "1px solid var(--theme-border-default)",
+            borderRadius: "12px",
+            overflow: "hidden",
+            backgroundColor: "var(--theme-bg-surface)"
           }}>
-            Loading quotations...
+            {[...Array(6)].map((_, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: gridTemplateColumns,
+                  gap: "12px",
+                  padding: "0 16px",
+                  borderBottom: i < 5 ? "1px solid var(--theme-border-default)" : "none",
+                  alignItems: "center",
+                  height: "56px",
+                  opacity: 1 - i * 0.12
+                }}
+              >
+                {/* Icon */}
+                <div style={{ display: "flex", justifyContent: "center" }}>
+                  <div style={{ width: 20, height: 20, borderRadius: "50%", backgroundColor: "var(--theme-bg-surface-subtle)", animation: "pulse 1.5s ease-in-out infinite" }} />
+                </div>
+                {/* Name */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ height: 11, width: `${60 + (i % 3) * 15}%`, borderRadius: 4, backgroundColor: "var(--theme-bg-surface-subtle)" }} />
+                  <div style={{ height: 9, width: "45%", borderRadius: 4, backgroundColor: "var(--theme-bg-surface-subtle)", opacity: 0.6 }} />
+                </div>
+                {/* Customer */}
+                <div style={{ height: 11, width: `${50 + (i % 4) * 10}%`, borderRadius: 4, backgroundColor: "var(--theme-bg-surface-subtle)" }} />
+                {/* Services */}
+                <div style={{ display: "flex", gap: 4 }}>
+                  <div style={{ height: 20, width: 52, borderRadius: 10, backgroundColor: "var(--theme-bg-surface-subtle)" }} />
+                </div>
+                {/* Total */}
+                <div style={{ height: 11, width: "70%", borderRadius: 4, backgroundColor: "var(--theme-bg-surface-subtle)", marginLeft: "auto" }} />
+                {/* Date */}
+                <div style={{ height: 11, width: "80%", borderRadius: 4, backgroundColor: "var(--theme-bg-surface-subtle)" }} />
+                {/* Status */}
+                <div style={{ height: 22, width: "85%", borderRadius: 10, backgroundColor: "var(--theme-bg-surface-subtle)" }} />
+                {showAssigneeCol && (
+                  <div style={{ height: 11, width: "60%", borderRadius: 4, backgroundColor: "var(--theme-bg-surface-subtle)" }} />
+                )}
+              </div>
+            ))}
+            <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
           </div>
         ) : filteredQuotations.length === 0 ? (
-          <div style={{ 
-            display: "flex", 
-            flexDirection: "column",
-            alignItems: "center", 
-            justifyContent: "center",
-            padding: "60px 20px",
-            color: "var(--neuron-ink-muted)"
-          }}>
-            <FileText size={48} style={{ marginBottom: "16px", opacity: 0.3 }} />
-            <p style={{ fontSize: "16px", fontWeight: 500 }}>No quotations found</p>
-            <p style={{ fontSize: "14px", marginTop: "8px" }}>Try adjusting your filters</p>
-          </div>
+          (() => {
+            const hasActiveFilters = searchQuery || dateFrom || dateTo ||
+              statusFilter !== "All Statuses" || serviceFilter !== "All Services" ||
+              customerFilter !== "All Customers" || typeFilter !== "All";
+
+            if (hasActiveFilters) {
+              return (
+                <div style={{
+                  display: "flex", flexDirection: "column", alignItems: "center",
+                  justifyContent: "center", padding: "60px 20px", gap: "12px"
+                }}>
+                  <SlidersHorizontal size={36} style={{ color: "var(--neuron-ink-muted)", opacity: 0.4 }} />
+                  <p style={{ fontSize: "15px", fontWeight: 600, color: "var(--neuron-ink-primary)", margin: 0 }}>
+                    No results match your filters
+                  </p>
+                  <p style={{ fontSize: "13px", color: "var(--neuron-ink-muted)", margin: 0 }}>
+                    Try broadening your search or clearing filters
+                  </p>
+                  <button
+                    onClick={() => {
+                      setSearchQuery("");
+                      setDateFrom("");
+                      setDateTo("");
+                      setStatusFilter("All Statuses");
+                      setServiceFilter("All Services");
+                      setCustomerFilter("All Customers");
+                      setTypeFilter("All");
+                    }}
+                    style={{
+                      marginTop: "4px",
+                      padding: "7px 16px",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      borderRadius: "6px",
+                      border: "1px solid var(--neuron-ui-border)",
+                      backgroundColor: "var(--theme-bg-surface)",
+                      color: "var(--neuron-ink-primary)",
+                      cursor: "pointer"
+                    }}
+                  >
+                    Clear all filters
+                  </button>
+                </div>
+              );
+            }
+
+            const emptyConfig = {
+              Inquiries: {
+                icon: <Search size={36} style={{ color: "var(--neuron-ink-muted)", opacity: 0.4 }} />,
+                heading: "No inquiries yet",
+                sub: "Incoming requests from BD will appear here once assigned to Pricing.",
+              },
+              Quotations: {
+                icon: <FileText size={36} style={{ color: "var(--neuron-ink-muted)", opacity: 0.4 }} />,
+                heading: "No active quotations",
+                sub: "Priced inquiries move here when sent to the client for review.",
+              },
+              Completed: {
+                icon: <Briefcase size={36} style={{ color: "var(--neuron-ink-muted)", opacity: 0.4 }} />,
+                heading: "No completed quotations",
+                sub: "Accepted and disapproved quotations will be recorded here.",
+              },
+            };
+            const cfg = emptyConfig[workflowTab];
+            return (
+              <div style={{
+                display: "flex", flexDirection: "column", alignItems: "center",
+                justifyContent: "center", padding: "60px 20px", gap: "12px"
+              }}>
+                {cfg.icon}
+                <p style={{ fontSize: "15px", fontWeight: 600, color: "var(--neuron-ink-primary)", margin: 0 }}>
+                  {cfg.heading}
+                </p>
+                <p style={{ fontSize: "13px", color: "var(--neuron-ink-muted)", margin: 0, textAlign: "center", maxWidth: "320px" }}>
+                  {cfg.sub}
+                </p>
+              </div>
+            );
+          })()
         ) : (
           <div style={{ 
             border: "1px solid var(--theme-border-default)",
@@ -748,7 +886,12 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
               <div style={{ padding: "10px 0", display: "flex", alignItems: "center", position: "relative" }}>
                 NAME
                 <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize Name column"
+                  tabIndex={0}
                   onMouseDown={(e) => handleResizeStart('name', e)}
+                  onKeyDown={handleResizeKeyDown('name')}
                   style={{
                     position: "absolute",
                     right: "-6px",
@@ -762,7 +905,7 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
                     justifyContent: "center"
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = "rgba(15, 118, 110, 0.1)";
+                    e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)";
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.backgroundColor = "transparent";
@@ -778,7 +921,12 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
               <div style={{ padding: "10px 0", display: "flex", alignItems: "center", position: "relative" }}>
                 CUSTOMER
                 <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize Customer column"
+                  tabIndex={0}
                   onMouseDown={(e) => handleResizeStart('customer', e)}
+                  onKeyDown={handleResizeKeyDown('customer')}
                   style={{
                     position: "absolute",
                     right: "-6px",
@@ -792,7 +940,7 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
                     justifyContent: "center"
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = "rgba(15, 118, 110, 0.1)";
+                    e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)";
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.backgroundColor = "transparent";
@@ -808,7 +956,12 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
               <div style={{ padding: "10px 0", display: "flex", alignItems: "center", position: "relative" }}>
                 SERVICE TYPES
                 <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize Service Types column"
+                  tabIndex={0}
                   onMouseDown={(e) => handleResizeStart('services', e)}
+                  onKeyDown={handleResizeKeyDown('services')}
                   style={{
                     position: "absolute",
                     right: "-6px",
@@ -822,7 +975,7 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
                     justifyContent: "center"
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = "rgba(15, 118, 110, 0.1)";
+                    e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)";
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.backgroundColor = "transparent";
@@ -838,7 +991,12 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
               <div style={{ padding: "10px 0", display: "flex", alignItems: "center", position: "relative" }}>
                 TOTAL
                 <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize Total column"
+                  tabIndex={0}
                   onMouseDown={(e) => handleResizeStart('total', e)}
+                  onKeyDown={handleResizeKeyDown('total')}
                   style={{
                     position: "absolute",
                     right: "-6px",
@@ -852,7 +1010,7 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
                     justifyContent: "center"
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = "rgba(15, 118, 110, 0.1)";
+                    e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)";
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.backgroundColor = "transparent";

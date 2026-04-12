@@ -372,7 +372,7 @@ export function ProjectsList({
                 borderRadius: "12px",
                 fontSize: "11px",
                 fontWeight: 700,
-                background: activeTab === "active" ? "var(--theme-status-warning-fg)" : "rgba(245,158,11,0.08)",
+                background: activeTab === "active" ? "var(--theme-status-warning-fg)" : "var(--theme-status-warning-bg)",
                 color: activeTab === "active" ? "#FFFFFF" : "var(--theme-status-warning-fg)",
                 minWidth: "20px",
                 textAlign: "center"
@@ -408,7 +408,7 @@ export function ProjectsList({
                 borderRadius: "12px",
                 fontSize: "11px",
                 fontWeight: 700,
-                background: activeTab === "completed" ? "var(--theme-status-success-fg)" : "rgba(16,185,129,0.08)",
+                background: activeTab === "completed" ? "var(--theme-status-success-fg)" : "var(--theme-status-success-bg)",
                 color: activeTab === "completed" ? "#FFFFFF" : "var(--theme-status-success-fg)",
                 minWidth: "20px",
                 textAlign: "center"

@@ -281,7 +281,14 @@ export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, curre
             onMouseLeave={(e) => { e.currentTarget.style.color = "var(--neuron-ink-secondary)"; }}>
             <ArrowLeft size={16} /> Back to Marine Insurance Bookings
           </button>
-          <h1 style={{ fontSize: "20px", fontWeight: 600, color: "var(--neuron-ink-primary)", marginBottom: "4px" }}>{booking.customerName}</h1>
+          <h1 style={{ fontSize: "20px", fontWeight: 600, color: "var(--neuron-ink-primary)", marginBottom: "4px" }}>
+            {(booking as any).name || booking.customerName}
+          </h1>
+          {(booking as any).name && (
+            <p style={{ fontSize: "13px", color: "var(--neuron-ink-primary)", marginBottom: "2px", fontWeight: 500 }}>
+              {booking.customerName}
+            </p>
+          )}
           <p style={{ fontSize: "13px", color: "var(--neuron-ink-muted)", margin: 0 }}>{booking.bookingId}</p>
           <div style={{ marginTop: 8 }}>
             <LinkedTicketBadge recordType="booking" recordId={booking.bookingId} />

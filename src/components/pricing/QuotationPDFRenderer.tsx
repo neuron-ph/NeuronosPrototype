@@ -262,6 +262,12 @@ function fmtAddress(addr: string | AddressStruct | undefined): string {
   return [addr.address, addr.city, addr.province, addr.country, addr.postal_code].filter(Boolean).join(", ");
 }
 
+function effectiveItemAmt(item: any): number {
+  if (item.amount !== undefined && item.amount !== null && item.amount !== 0) return Number(item.amount);
+  const unitPrice = item.final_price ?? item.price ?? 0;
+  return Number(unitPrice) * Number(item.quantity || 1) * Number(item.forex_rate || 1);
+}
+
 function calcSummary(categories: QuotationChargeCategory[], existing?: FinancialSummary): FinancialSummary {
   if (existing && existing.grand_total > 0) return existing;
 
@@ -269,7 +275,7 @@ function calcSummary(categories: QuotationChargeCategory[], existing?: Financial
   let nonTaxable = 0;
   categories.forEach((cat) => {
     cat.line_items?.forEach((item) => {
-      const amt = typeof item.amount === "number" ? item.amount : Number(item.price || 0) * Number(item.quantity || 1) * Number(item.forex_rate || 1);
+      const amt = effectiveItemAmt(item);
       if (item.is_taxed) taxable += amt;
       else nonTaxable += amt;
     });
@@ -290,19 +296,24 @@ function calcSummary(categories: QuotationChargeCategory[], existing?: Financial
 export function QuotationPDFDocument({ quotation, options, companySettings }: QuotationPDFDocumentProps) {
   const cs = companySettings;
   const q = quotation;
-  const categories = q.charge_categories || [];
+  const legacy = q as any;
+  // Prefer selling_price (dual-section pricing) over legacy charge_categories
+  const categories: QuotationChargeCategory[] =
+    ((q as any).selling_price?.length ? (q as any).selling_price : null) ??
+    (q.charge_categories?.length ? q.charge_categories : null) ??
+    [];
   const summary = calcSummary(categories, q.financial_summary);
   const currency = q.currency || "PHP";
 
-  // Resolved signatory values
-  const preparedBy = options.signatories.prepared_by.name || q.prepared_by || q.created_by || "System User";
-  const preparedByTitle = options.signatories.prepared_by.title || q.prepared_by_title || "Sales Representative";
-  const approvedBy = options.signatories.approved_by.name || q.approved_by || "Management";
-  const approvedByTitle = options.signatories.approved_by.title || q.approved_by_title || "Authorized Signatory";
+  // Resolved signatory values — never fall back to created_by (it is a raw auth UUID)
+  const preparedBy = options.signatories.prepared_by.name || q.prepared_by || legacy?.pdf_prepared_by || "System User";
+  const preparedByTitle = options.signatories.prepared_by.title || q.prepared_by_title || legacy?.pdf_prepared_by_title || "Sales Representative";
+  const approvedBy = options.signatories.approved_by.name || q.approved_by || legacy?.pdf_approved_by || "Management";
+  const approvedByTitle = options.signatories.approved_by.title || q.approved_by_title || legacy?.pdf_approved_by_title || "Authorized Signatory";
 
   // Resolved addressed-to
-  const addressedName = options.addressed_to.name || q.contact_person_name || "";
-  const addressedTitle = options.addressed_to.title || "";
+  const addressedName = options.addressed_to.name || legacy?.pdf_addressed_to_name || q.contact_person_name || "";
+  const addressedTitle = options.addressed_to.title || legacy?.pdf_addressed_to_title || "";
 
   // Resolved validity
   const validUntil = options.validity_override || q.valid_until;
@@ -386,7 +397,7 @@ export function QuotationPDFDocument({ quotation, options, companySettings }: Qu
           <View style={s.customerCol}>
             <View style={s.custRow}>
               <Text style={s.custLabel}>Company:</Text>
-              <Text style={s.custVal}>{t(q.customer_company || q.customer_organization)}</Text>
+              <Text style={s.custVal}>{t(q.customer_company || q.customer_organization || q.customer_name)}</Text>
             </View>
           </View>
         </View>
@@ -423,7 +434,13 @@ export function QuotationPDFDocument({ quotation, options, companySettings }: Qu
           </View>
           <View style={s.shipCell}>
             <Text style={s.shipLabel}>Transit & Routing</Text>
-            <Text style={s.shipValue}>{t(q.transit_time ? `${q.transit_time} ${q.routing_info || ""}` : q.routing_info)}</Text>
+            <Text style={s.shipValue}>{t(
+              q.transit_time
+                ? `${q.transit_time} ${q.routing_info || ""}`.trim()
+                : (q as any).transit_days
+                  ? `${(q as any).transit_days} days ${q.routing_info || ""}`.trim()
+                  : q.routing_info
+            )}</Text>
           </View>
           <View style={s.shipCell}>
             <Text style={s.shipLabel}>Commodity</Text>
@@ -479,34 +496,40 @@ export function QuotationPDFDocument({ quotation, options, companySettings }: Qu
           </View>
 
           {categories.length > 0 ? (
-            categories.map((cat, catIdx) => (
-              <View key={cat.id || catIdx} wrap={false}>
-                {/* Category Header */}
-                <Text style={s.catHeader}>{cat.category_name}</Text>
+            categories.map((cat, catIdx) => {
+              // Recompute subtotal when stored value is 0 or missing
+              const catSubtotal = (cat.subtotal && cat.subtotal > 0)
+                ? cat.subtotal
+                : (cat.line_items || []).reduce((sum, item) => sum + effectiveItemAmt(item), 0);
+              return (
+                <View key={cat.id || catIdx}>
+                  {/* Category Header */}
+                  <Text style={s.catHeader}>{cat.category_name}</Text>
 
-                {/* Line Items */}
-                {cat.line_items?.map((item, itemIdx) => (
-                  <View key={item.id || itemIdx} style={s.tableRow}>
-                    <Text style={[s.colDesc, s.tdText]}>{item.description}</Text>
-                    <Text style={[s.colPrice, s.tdText, { textAlign: "right" }]}>
-                      {val(item.price)}
-                    </Text>
-                    <Text style={[s.colCur, s.tdText, { textAlign: "center" }]}>{item.currency}</Text>
-                    <Text style={[s.colQty, s.tdText, { textAlign: "center" }]}>{item.quantity}</Text>
-                    <Text style={[s.colRemarks, s.tdText]}>{item.remarks || item.unit || ""}</Text>
-                    <Text style={[s.colAmt, s.tdText, { textAlign: "right", fontFamily: "Helvetica-Bold" }]}>
-                      {val(item.amount)}
-                    </Text>
+                  {/* Line Items */}
+                  {cat.line_items?.map((item, itemIdx) => (
+                    <View key={(item as any).id || itemIdx} style={s.tableRow} wrap={false}>
+                      <Text style={[s.colDesc, s.tdText]}>{(item as any).description}</Text>
+                      <Text style={[s.colPrice, s.tdText, { textAlign: "right" }]}>
+                        {val((item as any).final_price ?? item.price)}
+                      </Text>
+                      <Text style={[s.colCur, s.tdText, { textAlign: "center" }]}>{item.currency}</Text>
+                      <Text style={[s.colQty, s.tdText, { textAlign: "center" }]}>{item.quantity}</Text>
+                      <Text style={[s.colRemarks, s.tdText]}>{(item as any).remarks || (item as any).unit || ""}</Text>
+                      <Text style={[s.colAmt, s.tdText, { textAlign: "right", fontFamily: "Helvetica-Bold" }]}>
+                        {val(effectiveItemAmt(item))}
+                      </Text>
+                    </View>
+                  ))}
+
+                  {/* Category Subtotal */}
+                  <View style={s.subtotalRow}>
+                    <Text style={[{ width: "82%" }, s.subtotalLabel]}>Subtotal</Text>
+                    <Text style={[{ width: "18%" }, s.subtotalVal, s.tdText]}>{val(catSubtotal)}</Text>
                   </View>
-                ))}
-
-                {/* Category Subtotal */}
-                <View style={s.subtotalRow}>
-                  <Text style={[{ width: "82%" }, s.subtotalLabel]}>Subtotal</Text>
-                  <Text style={[{ width: "18%" }, s.subtotalVal, s.tdText]}>{val(cat.subtotal)}</Text>
                 </View>
-              </View>
-            ))
+              );
+            })
           ) : (
             <View style={s.emptyRow}>
               <Text style={s.emptyText}>No charges added to this quotation.</Text>

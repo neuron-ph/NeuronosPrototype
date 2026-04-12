@@ -45,8 +45,8 @@ interface BillingsTableProps {
   onRenameCategory?: (oldName: string, newName: string) => void;
   onDeleteCategory?: (name: string) => void;
   onAddItem?: (category: string) => void;
-  // ✨ Booking Grouping (Contract Billings)
-  groupBy?: "category" | "booking";
+  // ✨ Booking / Service Grouping
+  groupBy?: "category" | "booking" | "service";
   linkedBookings?: any[];
   /** Deep-link: highlight a specific billing item row */
   highlightId?: string | null;
@@ -238,7 +238,7 @@ export function BillingsTable({
     );
   };
 
-  if (displayedCategories.length === 0 && groupBy === "category" && !onAddCategory) {
+  if (displayedCategories.length === 0 && groupBy === "category" && data.length === 0 && !onAddCategory) {
      // Only show empty state if we can't add categories (view mode or no handler)
      return (
       <div className="rounded-[10px] overflow-hidden" style={{ 
@@ -440,7 +440,7 @@ export function BillingsTable({
                                 style={{
                                   padding: "6px 16px 6px 44px",
                                   backgroundColor: "var(--theme-bg-page)",
-                                  borderBottom: "1px solid #F0F0F0",
+                                  borderBottom: "1px solid var(--theme-border-default)",
                                 }}
                               >
                                 <span style={{
@@ -463,7 +463,7 @@ export function BillingsTable({
                               </div>
                             )}
                             {/* Billing item rows — directly rendered, sharing the unified column grid */}
-                            <div className="divide-y divide-[#F0F0F0]">
+                            <div className="divide-y divide-[var(--theme-border-default)]">
                               {catItems.map(item => {
                                 const isBilled = ["billed", "paid", "invoiced", "voided", "cancelled", "void"].includes((item.status || "").toLowerCase());
                                 const isHighlighted = highlightId === item.id;
@@ -522,6 +522,242 @@ export function BillingsTable({
         </div>
 
         {/* Footer Summaries — same as category view */}
+        {(footerSummary || grossSummary) && (
+          <div className="mt-4 bg-[var(--theme-bg-surface)] border border-[var(--theme-border-default)] rounded-lg px-6 py-4 flex items-center justify-end gap-8">
+            {grossSummary && (
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] font-semibold text-[var(--theme-text-muted)] uppercase tracking-wider">
+                  {grossSummary.label}
+                </span>
+                <span className="text-[14px] font-bold text-[var(--theme-text-secondary)]">
+                  {formatCurrency(grossSummary.amount, grossSummary.currency)}
+                </span>
+              </div>
+            )}
+            {footerSummary && (
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] font-bold text-[var(--theme-text-muted)] uppercase tracking-wider">
+                  {footerSummary.label}
+                </span>
+                <span className="text-[14px] font-bold text-[var(--theme-action-primary-bg)]">
+                  {formatCurrency(footerSummary.amount, footerSummary.currency)}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ✨ SERVICE-GROUPED RENDERING
+  if (groupBy === "service") {
+    // Group items by serviceType
+    const serviceGroups: Record<string, BillingTableItem[]> = {};
+    data.forEach(item => {
+      const svc = item.serviceType || "General";
+      if (!serviceGroups[svc]) serviceGroups[svc] = [];
+      serviceGroups[svc].push(item);
+    });
+    const serviceKeys = Object.keys(serviceGroups).sort();
+
+    // Build a service→bookingId map from linkedBookings for badge display
+    // linkedBookings shape: { bookingId, serviceType, bookingNumber?, status? }
+    const serviceToBookingId = new Map<string, string>();
+    (linkedBookings || []).forEach((b: any) => {
+      const svc = (b.serviceType || b.service_type || "").toLowerCase();
+      const bid = b.bookingId || b.id || "";
+      if (svc && bid) serviceToBookingId.set(svc, bid);
+    });
+
+    if (serviceKeys.length === 0) {
+      return (
+        <div className="rounded-[10px] overflow-hidden" style={{
+          backgroundColor: "var(--theme-bg-surface)",
+          border: "1px solid var(--neuron-ui-border)"
+        }}>
+          <div className="px-6 py-12 text-center">
+            <Receipt className="w-12 h-12 mx-auto mb-3" style={{ color: "var(--neuron-ink-muted)" }} />
+            <h3 style={{ color: "var(--neuron-ink-primary)" }} className="mb-1">No billings found</h3>
+            <p style={{ color: "var(--neuron-ink-muted)" }}>{emptyMessage}</p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col gap-0">
+        <div className="bg-[var(--theme-bg-surface)] border border-[var(--theme-border-default)] rounded-xl overflow-hidden">
+          <PricingTableHeader
+            showCost={false}
+            showMarkup={false}
+            showForex={true}
+            showTax={true}
+            firstCellContent={
+              <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)" }}>
+                Item
+              </span>
+            }
+          />
+
+          {serviceKeys.map((svcKey, svcIdx) => {
+            const items = serviceGroups[svcKey] || [];
+            const subtotal = items.reduce((sum, i) => sum + i.amount, 0);
+            const isExpanded = expandedCategories.has(svcKey);
+            const linkedBookingId = serviceToBookingId.get(svcKey.toLowerCase());
+
+            // Sub-group by category within this service
+            const catGroups: Record<string, BillingTableItem[]> = {};
+            items.forEach(item => {
+              const cat = item.category || "General";
+              if (!catGroups[cat]) catGroups[cat] = [];
+              catGroups[cat].push(item);
+            });
+            const catNames = Object.keys(catGroups).sort();
+
+            return (
+              <div key={svcKey}>
+                {/* Service Group Header */}
+                <button
+                  onClick={() => toggleCategory(svcKey)}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "10px 16px",
+                    background: isExpanded ? "var(--theme-bg-surface-tint)" : "var(--theme-bg-page)",
+                    border: "none",
+                    borderTop: svcIdx > 0 ? "1px solid var(--theme-border-default)" : "none",
+                    borderBottom: isExpanded ? "1px solid var(--theme-border-default)" : "none",
+                    cursor: "pointer",
+                    transition: "background 0.15s ease",
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div style={{ color: "var(--theme-text-muted)", transition: "transform 0.15s ease", transform: isExpanded ? "rotate(0deg)" : "rotate(-90deg)" }}>
+                      <ChevronDown size={14} />
+                    </div>
+                    {getServiceIcon(svcKey, { size: 14, color: "var(--theme-action-primary-bg)" })}
+                    <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
+                      {svcKey}
+                    </span>
+                    <span style={{
+                      fontSize: "10px", fontWeight: 600,
+                      color: "var(--theme-text-muted)",
+                      padding: "1px 6px", borderRadius: "3px",
+                      backgroundColor: "var(--theme-bg-surface-subtle)",
+                      border: "1px solid var(--theme-border-default)",
+                    }}>
+                      {items.length} item{items.length !== 1 ? "s" : ""}
+                    </span>
+                    {/* Booking link badge */}
+                    {linkedBookingId ? (
+                      <span style={{
+                        fontSize: "10px", fontWeight: 600,
+                        color: "var(--theme-status-success-fg)",
+                        backgroundColor: "var(--theme-status-success-bg)",
+                        border: "1px solid var(--theme-status-success-border)",
+                        padding: "1px 6px", borderRadius: "3px",
+                      }}>
+                        → {linkedBookingId}
+                      </span>
+                    ) : (
+                      <span style={{
+                        fontSize: "10px", fontWeight: 600,
+                        color: "var(--theme-status-warning-fg)",
+                        backgroundColor: "var(--theme-status-warning-bg)",
+                        border: "1px solid var(--theme-status-warning-border)",
+                        padding: "1px 6px", borderRadius: "3px",
+                      }}>
+                        No booking yet
+                      </span>
+                    )}
+                  </div>
+                  <span style={{
+                    fontSize: "13px", fontWeight: 600,
+                    color: "var(--theme-text-primary)", fontFamily: "monospace",
+                  }}>
+                    {formatCurrency(subtotal)}
+                  </span>
+                </button>
+
+                {/* Expanded: items sub-grouped by category */}
+                {isExpanded && (
+                  <>
+                    {catNames.map((catName, catIdx) => {
+                      const catItems = catGroups[catName];
+                      const catSubtotal = catItems.reduce((sum, i) => sum + i.amount, 0);
+                      return (
+                        <div key={catName}>
+                          {catNames.length > 1 && (
+                            <div
+                              className="flex items-center justify-between"
+                              style={{
+                                padding: "6px 16px 6px 44px",
+                                backgroundColor: "var(--theme-bg-page)",
+                                borderBottom: "1px solid var(--theme-border-default)",
+                              }}
+                            >
+                              <span style={{
+                                fontSize: "10px", fontWeight: 700,
+                                color: "var(--theme-text-muted)",
+                                textTransform: "uppercase", letterSpacing: "0.05em",
+                              }}>
+                                {catName}
+                              </span>
+                              <div className="flex items-center gap-3">
+                                <span style={{ fontSize: "10px", color: "var(--theme-text-muted)" }}>
+                                  {catItems.length} item{catItems.length !== 1 ? "s" : ""}
+                                </span>
+                                <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", fontFamily: "monospace" }}>
+                                  {formatCurrency(catSubtotal)}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                          <div className="divide-y divide-[var(--theme-border-default)]">
+                            {catItems.map(item => {
+                              const isBilled = ["billed", "paid", "invoiced", "voided", "cancelled", "void"].includes((item.status || "").toLowerCase());
+                              const isHighlighted = highlightId === item.id;
+                              return (
+                                <div
+                                  key={item.id}
+                                  ref={isHighlighted ? highlightRef : undefined}
+                                  className={isHighlighted ? "ring-2 ring-[var(--theme-action-primary-bg)] bg-[var(--theme-action-primary-bg)]/5 rounded-md transition-all duration-700" : ""}
+                                >
+                                  <UniversalPricingRow
+                                    data={mapToPricingData(item)}
+                                    mode={viewMode || isBilled ? "view" : "edit"}
+                                    serviceType={item.serviceType}
+                                    config={{
+                                      showCost: false,
+                                      showMarkup: false,
+                                      showForex: true,
+                                      showTax: true,
+                                      simpleMode: true,
+                                      priceEditable: true,
+                                    }}
+                                    handlers={{
+                                      onFieldChange: isBilled ? (_f: string, _v: any) => {} : (field, value) => { onItemChange?.(item.id, field, value); },
+                                      onPriceChange: isBilled ? undefined : (value) => onItemChange?.(item.id, "amount", value),
+                                    }}
+                                    customActions={buildRowActions(item)}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
         {(footerSummary || grossSummary) && (
           <div className="mt-4 bg-[var(--theme-bg-surface)] border border-[var(--theme-border-default)] rounded-lg px-6 py-4 flex items-center justify-end gap-8">
             {grossSummary && (

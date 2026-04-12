@@ -37,7 +37,7 @@ export function CreateBooking({ onBack, onSubmit }: CreateBookingProps) {
       title: "Brokerage",
       description: "Customs clearance and documentation",
       icon: FileText,
-      color: "#B45309",
+      color: "var(--neuron-semantic-warn)",
       bgColor: "var(--theme-status-warning-bg)"
     },
     {
@@ -53,8 +53,8 @@ export function CreateBooking({ onBack, onSubmit }: CreateBookingProps) {
       title: "Marine Insurance",
       description: "Cargo protection and insurance",
       icon: Shield,
-      color: "#BE185D",
-      bgColor: "#FDF2F8"
+      color: "var(--neuron-semantic-danger)",
+      bgColor: "var(--theme-status-danger-bg)"
     },
     {
       id: "Others",

@@ -15,7 +15,7 @@ interface QuotationDetailProps {
   onCreateTicket?: (quotation: QuotationNew) => void;
   onConvertToProject?: (projectId: string) => void;
   onConvertToContract?: (quotationId: string) => void;
-  currentUser?: { id: string; name: string; email: string; department: string } | null;
+  currentUser?: { id: string; name: string; email: string; department: string; role?: string } | null;
 }
 
 export function QuotationDetail({ quotation, onBack, onEdit, userDepartment, onAcceptQuotation, onUpdate, onSaveQuotation, onDuplicate, onDelete, onCreateTicket, onConvertToProject, onConvertToContract, currentUser }: QuotationDetailProps) {

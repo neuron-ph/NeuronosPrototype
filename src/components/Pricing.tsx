@@ -32,7 +32,7 @@ interface PricingProps {
   view?: PricingView;
   onViewInquiry?: (inquiryId: string) => void;
   inquiryId?: string | null;
-  currentUser?: { id?: string; name: string; email: string; department: string } | null;
+  currentUser?: { id?: string; name: string; email: string; department: string; role?: string } | null;
   onCreateTicket?: (quotation: QuotationNew) => void;
 }
 
@@ -48,6 +48,7 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
 
   const queryClient = useQueryClient();
   const { effectiveRole } = useUser();
+  const activeUserRole = currentUser?.role || effectiveRole;
 
   // Hook for Network Partners (Lifting State Up)
   const { partners, isLoading: isPartnersLoading, savePartner } = useNetworkPartners();
@@ -70,6 +71,11 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
         // Spread details first, then pricing JSONB (so credit_terms, validity_period etc. are top-level),
         // then the raw row last so real columns always win.
         const m = { ...(row?.details ?? {}), ...(row?.pricing ?? {}), ...row };
+        if (!m.quote_number && row.quotation_number) m.quote_number = row.quotation_number;
+        if (!m.contact_person_name && (row.contact_person_name || row.contact_name)) {
+          m.contact_person_name = row.contact_person_name || row.contact_name;
+        }
+        if (!m.created_date) m.created_date = row.quotation_date || row.created_at;
         if (!m.contract_validity_start && m.contract_start_date) m.contract_validity_start = m.contract_start_date;
         if (!m.contract_validity_end && m.contract_end_date) m.contract_validity_end = m.contract_end_date;
         return m;
@@ -277,8 +283,8 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
         // Pricing → BD handoff: fire ticket when builder saves with status "Priced"
         if (d.status === "Priced" && currentUser?.id) {
           await createWorkflowTicket({
-            subject: `Ready to Send: ${d.quote_number || d.quotation_name}`,
-            body: `Pricing for "${d.quotation_name}" (${d.quote_number}) is complete. Please review and send the quotation to ${d.customer_name}.`,
+            subject: `Ready to Send: ${d.quotation_name}${d.quote_number ? ` (${d.quote_number})` : ""}`,
+            body: `Pricing is complete. Please review and send this quotation to ${d.customer_name}.`,
             type: "fyi",
             priority: "normal",
             recipientDept: "Business Development",
@@ -536,7 +542,7 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
                 userDepartment="Pricing"
                 onRefresh={fetchQuotations}
                 currentUserId={currentUser?.id}
-                userRole={effectiveRole}
+                userRole={activeUserRole}
               />
             )}
             {subView === "detail" && selectedQuotation && (
