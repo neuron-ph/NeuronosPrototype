@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
+import { motion, AnimatePresence } from "motion/react";
 import { supabase } from "../../utils/supabase/client";
 import { queryKeys } from "../../lib/queryKeys";
 import { useUser } from "../../hooks/useUser";
@@ -8,7 +9,7 @@ import { logCreation, logDeletion, logActivity } from "../../utils/activityLog";
 import { toast } from "sonner@2.0.3";
 import {
   Plus, Users, Shield, UsersRound,
-  ChevronDown, ChevronRight, Edit, Trash2, Search, X,
+  ChevronRight, Edit, Trash2, Search, X,
 } from "lucide-react";
 import { DataTable, ColumnDef } from "../common/DataTable";
 import { CreateUserPanel } from "./CreateUserPanel";
@@ -16,9 +17,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Button } from "../ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "../ui/select";
 import { PermissionsMatrix } from "./PermissionsMatrix";
-import type { UserRow } from "./EditUserPanel";
+import type { UserRow } from "./userFormShared";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -83,8 +84,14 @@ const ROLE_COLORS: Record<Role, { bg: string; text: string }> = {
   staff:       { bg: "var(--neuron-bg-surface-subtle)", text: "var(--theme-text-secondary)" },
 };
 
+const TEAM_ROLE_COLORS: Record<string, { bg: string; text: string }> = {
+  "Team Leader":    { bg: "var(--neuron-semantic-info-bg)",   text: "var(--neuron-semantic-info)" },
+  "Supervisor":     { bg: "var(--theme-status-warning-bg)",   text: "var(--theme-status-warning-fg)" },
+  "Representative": { bg: "var(--neuron-bg-surface-subtle)",  text: "var(--theme-text-secondary)" },
+};
+
 const STATUS_BADGE: Record<UserStatus, { bg: string; text: string; dot: string }> = {
-  active:    { bg: "var(--theme-status-success-bg)", text: "#166534", dot: "var(--theme-status-success-fg)" },
+  active:    { bg: "var(--theme-status-success-bg)", text: "var(--theme-status-success-fg)", dot: "var(--theme-status-success-fg)" },
   inactive:  { bg: "var(--neuron-pill-inactive-bg)", text: "var(--theme-text-muted)", dot: "var(--neuron-ui-muted)" },
   suspended: { bg: "var(--theme-status-warning-bg)", text: "var(--theme-status-warning-fg)", dot: "var(--theme-status-warning-fg)" },
 };
@@ -92,7 +99,7 @@ const STATUS_BADGE: Record<UserStatus, { bg: string; text: string; dot: string }
 const SCOPE_LABELS: Record<OverrideScope, { label: string; description: string; bg: string; text: string }> = {
   full:             { label: "Full Access",        description: "Sees everything across all departments.", bg: "var(--neuron-status-accent-bg)", text: "var(--neuron-status-accent-fg)" },
   department_wide:  { label: "Department Wide",    description: "Sees all records in their own department.", bg: "var(--theme-status-warning-bg)", text: "var(--theme-status-warning-fg)" },
-  cross_department: { label: "Cross Department",   description: "Sees records in selected departments.", bg: "var(--neuron-semantic-info-bg)", text: "#3730A3" },
+  cross_department: { label: "Cross Department",   description: "Sees records in selected departments.", bg: "var(--neuron-semantic-info-bg)", text: "var(--neuron-semantic-info)" },
 };
 
 // ─── Shared cell components ───────────────────────────────────────────────────
@@ -139,6 +146,42 @@ function formatRole(role: string) {
   return "Staff";
 }
 
+// ─── Custom checkbox ──────────────────────────────────────────────────────────
+
+function MemberCheckbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      onClick={e => { e.stopPropagation(); onChange(); }}
+      style={{
+        width: 16,
+        height: 16,
+        borderRadius: 4,
+        border: checked ? "none" : "1.5px solid var(--neuron-ui-border)",
+        backgroundColor: checked ? "var(--neuron-action-primary)" : "transparent",
+        flexShrink: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        cursor: "pointer",
+        padding: 0,
+        transition: "background-color 0.12s cubic-bezier(0.16,1,0.3,1), border-color 0.12s cubic-bezier(0.16,1,0.3,1)",
+        outline: "none",
+      }}
+      onMouseEnter={e => { if (!checked) e.currentTarget.style.borderColor = "var(--neuron-action-primary)"; }}
+      onMouseLeave={e => { if (!checked) e.currentTarget.style.borderColor = "var(--neuron-ui-border)"; }}
+    >
+      {checked && (
+        <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
+          <path d="M1 3.5L3.5 6L8 1" stroke="var(--neuron-action-primary-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
 // ─── Filter bar ───────────────────────────────────────────────────────────────
 
 interface FiltersState {
@@ -166,7 +209,9 @@ function FilterBar({
           value={filters.search}
           onChange={e => onChange({ ...filters, search: e.target.value })}
           placeholder="Search name or email…"
-          style={{ width: "100%", height: 34, paddingLeft: 32, paddingRight: 10, border: "1px solid var(--neuron-ui-border)", borderRadius: 8, fontSize: 13, outline: "none", backgroundColor: "var(--neuron-bg-elevated)", color: "var(--neuron-ink-primary)", boxSizing: "border-box" }}
+          style={{ width: "100%", height: 34, paddingLeft: 32, paddingRight: 10, border: "1px solid var(--neuron-ui-border)", borderRadius: 8, fontSize: 13, outline: "none", backgroundColor: "var(--neuron-bg-elevated)", color: "var(--neuron-ink-primary)", boxSizing: "border-box", transition: "border-color 0.12s cubic-bezier(0.16,1,0.3,1)" }}
+          onFocus={e => { e.currentTarget.style.borderColor = "var(--neuron-action-primary)"; }}
+          onBlur={e => { e.currentTarget.style.borderColor = "var(--neuron-ui-border)"; }}
         />
       </div>
 
@@ -174,7 +219,9 @@ function FilterBar({
       <select
         value={filters.dept}
         onChange={e => onChange({ ...filters, dept: e.target.value })}
-        style={{ height: 34, padding: "0 10px", border: "1px solid var(--neuron-ui-border)", borderRadius: 8, fontSize: 13, outline: "none", backgroundColor: "var(--neuron-bg-elevated)", color: filters.dept ? "var(--neuron-ink-primary)" : "var(--neuron-ink-muted)", cursor: "pointer" }}
+        style={{ height: 34, padding: "0 10px", border: "1px solid var(--neuron-ui-border)", borderRadius: 8, fontSize: 13, outline: "none", backgroundColor: "var(--neuron-bg-elevated)", color: filters.dept ? "var(--neuron-ink-primary)" : "var(--neuron-ink-muted)", cursor: "pointer", transition: "border-color 0.12s cubic-bezier(0.16,1,0.3,1)" }}
+        onFocus={e => { e.currentTarget.style.borderColor = "var(--neuron-action-primary)"; e.currentTarget.style.boxShadow = "0 0 0 3px color-mix(in srgb, var(--neuron-action-primary) 15%, transparent)"; }}
+        onBlur={e => { e.currentTarget.style.borderColor = "var(--neuron-ui-border)"; e.currentTarget.style.boxShadow = "none"; }}
       >
         <option value="">All Departments</option>
         {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
@@ -184,7 +231,9 @@ function FilterBar({
       <select
         value={filters.role}
         onChange={e => onChange({ ...filters, role: e.target.value })}
-        style={{ height: 34, padding: "0 10px", border: "1px solid var(--neuron-ui-border)", borderRadius: 8, fontSize: 13, outline: "none", backgroundColor: "var(--neuron-bg-elevated)", color: filters.role ? "var(--neuron-ink-primary)" : "var(--neuron-ink-muted)", cursor: "pointer" }}
+        style={{ height: 34, padding: "0 10px", border: "1px solid var(--neuron-ui-border)", borderRadius: 8, fontSize: 13, outline: "none", backgroundColor: "var(--neuron-bg-elevated)", color: filters.role ? "var(--neuron-ink-primary)" : "var(--neuron-ink-muted)", cursor: "pointer", transition: "border-color 0.12s cubic-bezier(0.16,1,0.3,1)" }}
+        onFocus={e => { e.currentTarget.style.borderColor = "var(--neuron-action-primary)"; e.currentTarget.style.boxShadow = "0 0 0 3px color-mix(in srgb, var(--neuron-action-primary) 15%, transparent)"; }}
+        onBlur={e => { e.currentTarget.style.borderColor = "var(--neuron-ui-border)"; e.currentTarget.style.boxShadow = "none"; }}
       >
         <option value="">All Roles</option>
         {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
@@ -194,7 +243,9 @@ function FilterBar({
       <select
         value={filters.status}
         onChange={e => onChange({ ...filters, status: e.target.value })}
-        style={{ height: 34, padding: "0 10px", border: "1px solid var(--neuron-ui-border)", borderRadius: 8, fontSize: 13, outline: "none", backgroundColor: "var(--neuron-bg-elevated)", color: filters.status ? "var(--neuron-ink-primary)" : "var(--neuron-ink-muted)", cursor: "pointer" }}
+        style={{ height: 34, padding: "0 10px", border: "1px solid var(--neuron-ui-border)", borderRadius: 8, fontSize: 13, outline: "none", backgroundColor: "var(--neuron-bg-elevated)", color: filters.status ? "var(--neuron-ink-primary)" : "var(--neuron-ink-muted)", cursor: "pointer", transition: "border-color 0.12s cubic-bezier(0.16,1,0.3,1)" }}
+        onFocus={e => { e.currentTarget.style.borderColor = "var(--neuron-action-primary)"; e.currentTarget.style.boxShadow = "0 0 0 3px color-mix(in srgb, var(--neuron-action-primary) 15%, transparent)"; }}
+        onBlur={e => { e.currentTarget.style.borderColor = "var(--neuron-ui-border)"; e.currentTarget.style.boxShadow = "none"; }}
       >
         <option value="">All Statuses</option>
         {STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
@@ -204,7 +255,9 @@ function FilterBar({
       <select
         value={filters.overrides}
         onChange={e => onChange({ ...filters, overrides: e.target.value as FiltersState["overrides"] })}
-        style={{ height: 34, padding: "0 10px", border: "1px solid var(--neuron-ui-border)", borderRadius: 8, fontSize: 13, outline: "none", backgroundColor: "var(--neuron-bg-elevated)", color: filters.overrides !== "all" ? "var(--neuron-ink-primary)" : "var(--neuron-ink-muted)", cursor: "pointer" }}
+        style={{ height: 34, padding: "0 10px", border: "1px solid var(--neuron-ui-border)", borderRadius: 8, fontSize: 13, outline: "none", backgroundColor: "var(--neuron-bg-elevated)", color: filters.overrides !== "all" ? "var(--neuron-ink-primary)" : "var(--neuron-ink-muted)", cursor: "pointer", transition: "border-color 0.12s cubic-bezier(0.16,1,0.3,1)" }}
+        onFocus={e => { e.currentTarget.style.borderColor = "var(--neuron-action-primary)"; e.currentTarget.style.boxShadow = "0 0 0 3px color-mix(in srgb, var(--neuron-action-primary) 15%, transparent)"; }}
+        onBlur={e => { e.currentTarget.style.borderColor = "var(--neuron-ui-border)"; e.currentTarget.style.boxShadow = "none"; }}
       >
         <option value="all">All Users</option>
         <option value="yes">Has Overrides</option>
@@ -248,7 +301,7 @@ function UsersTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
     queryFn: async () => {
       const { data, error } = await supabase
         .from("users")
-        .select("id, email, name, department, role, team_id, is_active, status, avatar_url, teams!users_team_id_fkey(name)")
+        .select("id, email, name, department, role, team_role, team_id, is_active, status, avatar_url, teams!users_team_id_fkey(name)")
         .order("name", { ascending: true });
       if (error) throw error;
       return (data ?? []) as unknown as (UserRow & { status?: UserStatus; teams?: { name: string } | null })[];
@@ -259,9 +312,6 @@ function UsersTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
   useEffect(() => {
     onCountUpdate(users.length);
   }, [users.length, onCountUpdate]);
-
-  // DEBUG: surface query errors
-  if (isError) console.error("[UsersTab] query error:", JSON.stringify(queryError, Object.getOwnPropertyNames(queryError ?? {})));
 
   const { data: overrideUserIds = new Set<string>() } = useQuery({
     queryKey: ["permission_overrides", "user-ids"],
@@ -288,7 +338,7 @@ function UsersTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
     });
   }, [users, filters, overrideUserIds]);
 
-  const columns: ColumnDef<UserRow & { status?: UserStatus; teams?: { name: string } | null }>[] = [
+  const columns = useMemo<ColumnDef<UserRow & { status?: UserStatus; teams?: { name: string } | null }>[]>(() => [
     {
       header: "Name",
       width: "240px",
@@ -317,6 +367,20 @@ function UsersTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
       },
     },
     {
+      header: "Team Role",
+      width: "130px",
+      cell: (u) => {
+        const tr = (u as UserRow & { team_role?: string | null }).team_role;
+        if (!tr) return <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>—</span>;
+        const tc = TEAM_ROLE_COLORS[tr] ?? { bg: "var(--neuron-bg-surface-subtle)", text: "var(--theme-text-secondary)" };
+        return (
+          <span style={{ fontSize: 12, fontWeight: 500, padding: "2px 8px", borderRadius: 999, backgroundColor: tc.bg, color: tc.text }}>
+            {tr}
+          </span>
+        );
+      },
+    },
+    {
       header: "Status",
       width: "110px",
       cell: (u) => <StatusBadge status={u.status || (u.is_active ? "active" : "inactive")} />,
@@ -335,7 +399,16 @@ function UsersTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
           : <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>Default</span>;
       },
     },
-  ];
+  ], [overrideUserIds]);
+
+  if (isError) {
+    return (
+      <div style={{ padding: "48px 0", textAlign: "center" }}>
+        <p style={{ fontSize: 14, fontWeight: 500, color: "var(--theme-status-danger-fg)", marginBottom: 6 }}>Failed to load users</p>
+        <p style={{ fontSize: 13, color: "var(--neuron-ink-muted)" }}>Check your connection and try refreshing the page.</p>
+      </div>
+    );
+  }
 
   const emptyMessage = (
     <div style={{ textAlign: "center", padding: "64px 0" }}>
@@ -421,38 +494,23 @@ function InlineTeamCreateRow({
   onCancel: () => void;
 }) {
   const { user: currentUser } = useUser();
-  const [name, setName]           = useState("");
-  const [leaderId, setLeaderId]   = useState("__none__");
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [saving, setSaving]       = useState(false);
-
-  useEffect(() => {
-    if (leaderId && leaderId !== "__none__") {
-      setSelectedIds(prev => prev.includes(leaderId) ? prev : [...prev, leaderId]);
-    }
-  }, [leaderId]);
-
-  const toggle = (id: string) =>
-    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const [name, setName]             = useState("");
+  const [memberRoles, setMemberRoles] = useState<Record<string, string>>({});
+  const [saving, setSaving]         = useState(false);
 
   const handleCreate = async () => {
     if (!name.trim()) { toast.error("Team name is required."); return; }
     setSaving(true);
-    const finalLeaderId = leaderId !== "__none__" ? leaderId : null;
     const { data: newTeam, error } = await supabase
       .from("teams")
-      .insert({ name: name.trim(), department: dept, leader_id: finalLeaderId })
+      .insert({ name: name.trim(), department: dept, leader_id: null })
       .select()
       .single();
     if (error) { setSaving(false); toast.error("Failed to create team."); return; }
 
-    // Ensure leader is always included in members, regardless of effect timing
-    const memberIds = finalLeaderId
-      ? Array.from(new Set([...selectedIds, finalLeaderId]))
-      : selectedIds;
-    if (memberIds.length > 0) {
-      const { error: memberError } = await supabase.from("users").update({ team_id: newTeam.id }).in("id", memberIds);
-      if (memberError) console.error("[TeamsTab] member assignment failed:", memberError);
+    const memberEntries = Object.entries(memberRoles).filter(([, r]) => r);
+    for (const [userId, role] of memberEntries) {
+      await supabase.from("users").update({ team_id: newTeam.id, team_role: role }).eq("id", userId);
     }
     const actor = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
     logCreation("team", newTeam.id, newTeam.name ?? newTeam.id, actor);
@@ -461,44 +519,72 @@ function InlineTeamCreateRow({
     onSaved(newTeam.id);
   };
 
+  const assignedIds = Object.keys(memberRoles).filter(id => memberRoles[id]);
+  const availableToAdd = users.filter(u => !assignedIds.includes(u.id));
+
+  const addMember = (userId: string) => {
+    setMemberRoles(prev => ({ ...prev, [userId]: "Representative" }));
+  };
+
+  const removeMember = (userId: string) => {
+    setMemberRoles(prev => { const next = { ...prev }; delete next[userId]; return next; });
+  };
+
   return (
     <div style={{ padding: "14px 20px", borderTop: "1px solid var(--neuron-ui-border)", background: "var(--neuron-bg-page)", display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "flex", gap: 10 }}>
-        <div style={{ flex: 1 }}>
-          <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>Team Name</Label>
-          <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g., North Luzon BD Team" autoFocus style={{ height: 34, fontSize: 13 }} />
-        </div>
-        <div style={{ flex: 1 }}>
-          <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>Team Leader <span style={{ fontWeight: 400 }}>(optional)</span></Label>
-          <Select value={leaderId} onValueChange={v => setLeaderId(v)}>
-            <SelectTrigger style={{ height: 34, fontSize: 13 }}><SelectValue placeholder="No leader yet" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">No leader yet</SelectItem>
-              {users.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
+      <div>
+        <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>Team Name</Label>
+        <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g., North Luzon BD Team" autoFocus style={{ height: 34, fontSize: 13 }} />
       </div>
       <div>
-        <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>
-          Members <span style={{ fontWeight: 400 }}>({selectedIds.length} selected)</span>
-        </Label>
-        <div style={{ border: "1px solid var(--neuron-ui-border)", borderRadius: 8, maxHeight: 160, overflowY: "auto" }}>
-          {users.length === 0
-            ? <p style={{ padding: "10px 14px", fontSize: 13, color: "var(--neuron-ink-muted)" }}>No users in this department.</p>
-            : users.map((u, idx) => (
-              <label key={u.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 14px", cursor: "pointer", borderTop: idx > 0 ? "1px solid var(--neuron-ui-border)" : undefined, background: selectedIds.includes(u.id) ? "var(--neuron-bg-elevated)" : undefined }}>
-                <input type="checkbox" checked={selectedIds.includes(u.id)} onChange={() => toggle(u.id)} style={{ accentColor: "var(--neuron-action-primary)", flexShrink: 0 }} />
+        <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>Members</Label>
+        <div style={{ border: "1px solid var(--neuron-ui-border)", borderRadius: 8, overflow: "hidden" }}>
+          {assignedIds.length === 0 && (
+            <p style={{ padding: "10px 14px", fontSize: 13, color: "var(--neuron-ink-muted)" }}>No members added yet.</p>
+          )}
+          {assignedIds.map((uid, idx) => {
+            const u = users.find(x => x.id === uid);
+            if (!u) return null;
+            return (
+              <div key={uid} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", borderTop: idx > 0 ? "1px solid var(--neuron-ui-border)" : undefined }}>
                 <span style={{ fontSize: 13, color: "var(--neuron-ink-primary)", flex: 1 }}>{u.name}</span>
-                {u.id === leaderId && leaderId !== "__none__" && <span style={{ fontSize: 11, color: "var(--theme-action-primary-bg)", background: "var(--theme-status-success-bg)", padding: "1px 8px", borderRadius: 999 }}>Leader</span>}
-              </label>
-            ))
-          }
+                <Select value={memberRoles[uid]} onValueChange={v => setMemberRoles(prev => ({ ...prev, [uid]: v }))}>
+                  <SelectTrigger style={{ height: 28, fontSize: 12, width: 148 }}><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Team Leader">Team Leader</SelectItem>
+                    <SelectItem value="Supervisor">Supervisor</SelectItem>
+                    <SelectItem value="Representative">Representative</SelectItem>
+                  </SelectContent>
+                </Select>
+                <button
+                  onClick={() => removeMember(uid)}
+                  style={{ padding: 4, background: "none", border: "none", cursor: "pointer", color: "var(--neuron-ink-muted)", display: "flex", alignItems: "center", borderRadius: 4, flexShrink: 0 }}
+                  title="Remove from team"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            );
+          })}
+          {availableToAdd.length > 0 && (
+            <div style={{ padding: "8px 14px", borderTop: assignedIds.length > 0 ? "1px solid var(--neuron-ui-border)" : undefined, background: "var(--neuron-bg-page)" }}>
+              <Select value="" onValueChange={addMember}>
+                <SelectTrigger style={{ height: 28, fontSize: 12, color: "var(--neuron-ink-muted)" }}>
+                  <SelectValue placeholder="Add a member…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableToAdd.map(u => (
+                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
       </div>
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <Button variant="outline" onClick={onCancel} disabled={saving} style={{ height: 32, fontSize: 13 }}>Cancel</Button>
-        <Button onClick={handleCreate} disabled={saving} style={{ height: 32, fontSize: 13, background: "var(--neuron-action-primary)", color: "white", border: "none" }}>
+        <Button onClick={handleCreate} disabled={saving} style={{ height: 32, fontSize: 13, background: "var(--neuron-action-primary)", color: "var(--neuron-action-primary-text)", border: "none" }}>
           {saving ? "Creating…" : "Create Team"}
         </Button>
       </div>
@@ -513,51 +599,38 @@ function InlineTeamEditRow({
   onCancel,
 }: {
   team: Team;
-  users: { id: string; name: string; department: string; team_id: string | null }[];
+  users: { id: string; name: string; department: string; team_id: string | null; team_role?: string | null }[];
   onSaved: () => void;
   onCancel: () => void;
 }) {
-  const [name, setName]           = useState(team.name);
-  const [dept, setDept]           = useState<Department>(team.department as Department);
-  const [leaderId, setLeaderId]   = useState(team.leader_id ?? "__none__");
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [saving, setSaving]       = useState(false);
+  const [name, setName]               = useState(team.name);
+  const [memberRoles, setMemberRoles] = useState<Record<string, string>>({});
+  const [saving, setSaving]           = useState(false);
 
-  // Init members from current DB state
-  useEffect(() => {
-    setSelectedIds(users.filter(u => u.team_id === team.id).map(u => u.id));
-  }, [team.id, users.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  const deptUsers = users.filter(u => u.department === team.department);
 
-  // Auto-include leader as member
+  // Init member roles from current DB state
   useEffect(() => {
-    if (leaderId && leaderId !== "__none__") {
-      setSelectedIds(prev => prev.includes(leaderId) ? prev : [...prev, leaderId]);
+    const initial: Record<string, string> = {};
+    for (const u of users) {
+      if (u.team_id === team.id) {
+        initial[u.id] = u.team_role ?? "Representative";
+      }
     }
-  }, [leaderId]);
-
-  const deptUsers = users.filter(u => u.department === dept);
-
-  const toggle = (id: string) =>
-    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    setMemberRoles(initial);
+  }, [team.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSave = async () => {
     if (!name.trim()) { toast.error("Team name is required."); return; }
     setSaving(true);
-    const finalLeaderId = (leaderId === "__none__" || !leaderId) ? null : leaderId;
-    const { error } = await supabase
-      .from("teams")
-      .update({ name: name.trim(), department: dept, leader_id: finalLeaderId })
-      .eq("id", team.id);
+    const { error } = await supabase.from("teams").update({ name: name.trim() }).eq("id", team.id);
     if (error) { setSaving(false); toast.error("Failed to update team."); return; }
 
-    await supabase.from("users").update({ team_id: null }).eq("team_id", team.id);
-    // Ensure leader is always included in members
-    const memberIds = finalLeaderId
-      ? Array.from(new Set([...selectedIds, finalLeaderId]))
-      : selectedIds;
-    if (memberIds.length > 0) {
-      const { error: memberError } = await supabase.from("users").update({ team_id: team.id }).in("id", memberIds);
-      if (memberError) console.error("[TeamsTab] member assignment failed:", memberError);
+    // Clear all current members, then re-assign with roles
+    await supabase.from("users").update({ team_id: null, team_role: null }).eq("team_id", team.id);
+    const memberEntries = Object.entries(memberRoles).filter(([, r]) => r);
+    for (const [userId, role] of memberEntries) {
+      await supabase.from("users").update({ team_id: team.id, team_role: role }).eq("id", userId);
     }
 
     setSaving(false);
@@ -565,51 +638,72 @@ function InlineTeamEditRow({
     onSaved();
   };
 
+  const assignedIds = Object.keys(memberRoles).filter(id => memberRoles[id]);
+  const availableToAdd = deptUsers.filter(u => !assignedIds.includes(u.id));
+
+  const addMember = (userId: string) => {
+    setMemberRoles(prev => ({ ...prev, [userId]: "Representative" }));
+  };
+
+  const removeMember = (userId: string) => {
+    setMemberRoles(prev => { const next = { ...prev }; delete next[userId]; return next; });
+  };
+
   return (
     <div style={{ padding: "14px 20px", borderTop: "1px solid var(--neuron-ui-border)", background: "var(--neuron-bg-page)", display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "flex", gap: 10 }}>
-        <div style={{ flex: 1 }}>
-          <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>Team Name</Label>
-          <Input value={name} onChange={e => setName(e.target.value)} autoFocus style={{ height: 34, fontSize: 13 }} />
-        </div>
-        <div style={{ flex: 1 }}>
-          <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>Department</Label>
-          <Select value={dept} onValueChange={v => { setDept(v as Department); setLeaderId("__none__"); setSelectedIds([]); }}>
-            <SelectTrigger style={{ height: 34, fontSize: 13 }}><SelectValue /></SelectTrigger>
-            <SelectContent>{DEPARTMENTS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-        <div style={{ flex: 1 }}>
-          <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>Team Leader</Label>
-          <Select value={leaderId} onValueChange={v => setLeaderId(v)}>
-            <SelectTrigger style={{ height: 34, fontSize: 13 }}><SelectValue placeholder="No leader" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">No leader</SelectItem>
-              {deptUsers.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
+      <div>
+        <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>Team Name</Label>
+        <Input value={name} onChange={e => setName(e.target.value)} autoFocus style={{ height: 34, fontSize: 13 }} />
       </div>
       <div>
-        <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>
-          Members <span style={{ fontWeight: 400 }}>({selectedIds.length} selected)</span>
-        </Label>
-        <div style={{ border: "1px solid var(--neuron-ui-border)", borderRadius: 8, maxHeight: 160, overflowY: "auto" }}>
-          {deptUsers.length === 0
-            ? <p style={{ padding: "10px 14px", fontSize: 13, color: "var(--neuron-ink-muted)" }}>No users in this department.</p>
-            : deptUsers.map((u, idx) => (
-              <label key={u.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 14px", cursor: "pointer", borderTop: idx > 0 ? "1px solid var(--neuron-ui-border)" : undefined, background: selectedIds.includes(u.id) ? "var(--neuron-bg-elevated)" : undefined }}>
-                <input type="checkbox" checked={selectedIds.includes(u.id)} onChange={() => toggle(u.id)} style={{ accentColor: "var(--neuron-action-primary)", flexShrink: 0 }} />
+        <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>Members</Label>
+        <div style={{ border: "1px solid var(--neuron-ui-border)", borderRadius: 8, overflow: "hidden" }}>
+          {assignedIds.length === 0 && (
+            <p style={{ padding: "10px 14px", fontSize: 13, color: "var(--neuron-ink-muted)" }}>No members assigned yet.</p>
+          )}
+          {assignedIds.map((uid, idx) => {
+            const u = deptUsers.find(x => x.id === uid);
+            if (!u) return null;
+            return (
+              <div key={uid} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", borderTop: idx > 0 ? "1px solid var(--neuron-ui-border)" : undefined }}>
                 <span style={{ fontSize: 13, color: "var(--neuron-ink-primary)", flex: 1 }}>{u.name}</span>
-                {u.id === leaderId && leaderId !== "__none__" && <span style={{ fontSize: 11, color: "var(--theme-action-primary-bg)", background: "var(--theme-status-success-bg)", padding: "1px 8px", borderRadius: 999 }}>Leader</span>}
-              </label>
-            ))
-          }
+                <Select value={memberRoles[uid]} onValueChange={v => setMemberRoles(prev => ({ ...prev, [uid]: v }))}>
+                  <SelectTrigger style={{ height: 28, fontSize: 12, width: 148 }}><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Team Leader">Team Leader</SelectItem>
+                    <SelectItem value="Supervisor">Supervisor</SelectItem>
+                    <SelectItem value="Representative">Representative</SelectItem>
+                  </SelectContent>
+                </Select>
+                <button
+                  onClick={() => removeMember(uid)}
+                  style={{ padding: 4, background: "none", border: "none", cursor: "pointer", color: "var(--neuron-ink-muted)", display: "flex", alignItems: "center", borderRadius: 4, flexShrink: 0 }}
+                  title="Remove from team"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            );
+          })}
+          {availableToAdd.length > 0 && (
+            <div style={{ padding: "8px 14px", borderTop: assignedIds.length > 0 ? "1px solid var(--neuron-ui-border)" : undefined, background: "var(--neuron-bg-page)" }}>
+              <Select value="" onValueChange={addMember}>
+                <SelectTrigger style={{ height: 28, fontSize: 12, color: "var(--neuron-ink-muted)" }}>
+                  <SelectValue placeholder="Add a member…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableToAdd.map(u => (
+                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
       </div>
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <Button variant="outline" onClick={onCancel} disabled={saving} style={{ height: 32, fontSize: 13 }}>Cancel</Button>
-        <Button onClick={handleSave} disabled={saving} style={{ height: 32, fontSize: 13, background: "var(--neuron-action-primary)", color: "white", border: "none" }}>
+        <Button onClick={handleSave} disabled={saving} style={{ height: 32, fontSize: 13, background: "var(--neuron-action-primary)", color: "var(--neuron-action-primary-text)", border: "none" }}>
           {saving ? "Saving…" : "Save Changes"}
         </Button>
       </div>
@@ -621,9 +715,10 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
   const queryClient = useQueryClient();
   const { user: currentUser } = useUser();
   const [expanded, setExpanded]           = useState<string | null>(null);
-  const [creatingInDept, setCreatingInDept] = useState<string | null>(null);
-  const [editingTeamId, setEditingTeamId]   = useState<string | null>(null);
-  const [deletingId, setDeletingId]         = useState<string | null>(null);
+  const [creatingInDept, setCreatingInDept]   = useState<string | null>(null);
+  const [editingTeamId, setEditingTeamId]     = useState<string | null>(null);
+  const [deletingId, setDeletingId]           = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const { data: teams = [], refetch: fetchTeams } = useQuery({
     queryKey: ["teams"],
@@ -637,31 +732,31 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
   const { data: allUsers = [] } = useQuery({
     queryKey: ["users", "active-list"],
     queryFn: async () => {
-      const { data } = await supabase.from("users").select("id, name, role, department, email, team_id, avatar_url").eq("is_active", true).order("name");
-      return (data ?? []) as { id: string; name: string; role: Role; department: string; email: string; team_id: string | null; avatar_url?: string | null }[];
+      const { data } = await supabase.from("users").select("id, name, role, department, email, team_id, team_role, avatar_url").eq("is_active", true).order("name");
+      return (data ?? []) as { id: string; name: string; role: Role; department: string; email: string; team_id: string | null; team_role?: string | null; avatar_url?: string | null }[];
     },
     staleTime: 5 * 60 * 1000,
   });
 
-  const teamsWithMembers: TeamWithMembers[] = teams.map(t => ({
+  const teamsWithMembers = useMemo<TeamWithMembers[]>(() => teams.map(t => ({
     ...t,
     members: allUsers.filter(u => u.team_id === t.id).map(u => ({ id: u.id, name: u.name, role: u.role, email: u.email, avatar_url: u.avatar_url })),
-  }));
+  })), [teams, allUsers]);
 
   // Update parent with teams count
   useEffect(() => {
     onCountUpdate(teams.length);
   }, [teams.length, onCountUpdate]);
 
-  const byDept = DEPARTMENTS.reduce<Record<string, TeamWithMembers[]>>((acc, dept) => {
+  const byDept = useMemo(() => DEPARTMENTS.reduce<Record<string, TeamWithMembers[]>>((acc, dept) => {
     acc[dept] = teamsWithMembers.filter(t => t.department === dept);
     return acc;
-  }, {});
+  }, {}), [teamsWithMembers]);
 
-  const deptUsersFor = (dept: Department) => allUsers.filter(u => u.department === dept);
+  const deptUsersFor = useCallback((dept: Department) => allUsers.filter(u => u.department === dept), [allUsers]);
 
-  const handleDelete = async (teamId: string, teamName: string) => {
-    if (!confirm(`Delete team "${teamName}"? Members will be unassigned.`)) return;
+  const handleDeleteConfirmed = async (teamId: string, teamName: string) => {
+    setConfirmDeleteId(null);
     setDeletingId(teamId);
     await supabase.from("users").update({ team_id: null }).eq("team_id", teamId);
     const { error } = await supabase.from("teams").delete().eq("id", teamId);
@@ -728,25 +823,50 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
               return (
                 <div key={team.id} style={{ borderTop: idx > 0 || deptTeams.length > 0 ? "1px solid var(--neuron-ui-border)" : undefined }}>
                   {isEditing ? (
-                    <InlineTeamEditRow
-                      team={team}
-                      users={allUsers}
-                      onSaved={() => { setEditingTeamId(null); fetchTeams(); queryClient.invalidateQueries({ queryKey: queryKeys.users.list() }); }}
-                      onCancel={() => setEditingTeamId(null)}
-                    />
+                    <motion.div
+                      key={`edit-${team.id}`}
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                    >
+                      <InlineTeamEditRow
+                        team={team}
+                        users={allUsers}
+                        onSaved={() => { setEditingTeamId(null); fetchTeams(); queryClient.invalidateQueries({ queryKey: queryKeys.users.list() }); }}
+                        onCancel={() => setEditingTeamId(null)}
+                      />
+                    </motion.div>
                   ) : (
                     <>
                       {/* Team header row */}
-                      <div
-                        style={{ padding: "11px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", transition: "background 0.1s" }}
+                      <button
+                        aria-expanded={isExpanded}
+                        aria-controls={`team-members-${team.id}`}
                         onClick={() => setExpanded(isExpanded ? null : team.id)}
                         onMouseEnter={e => { e.currentTarget.style.background = "var(--neuron-bg-page)"; }}
                         onMouseLeave={e => { e.currentTarget.style.background = ""; }}
+                        style={{
+                          width: "100%",
+                          padding: "11px 20px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          cursor: "pointer",
+                          background: "none",
+                          border: "none",
+                          textAlign: "left",
+                          transition: "background-color 0.12s cubic-bezier(0.16,1,0.3,1)",
+                        }}
+
                       >
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          {isExpanded
-                            ? <ChevronDown size={13} style={{ color: "var(--neuron-ink-muted)", flexShrink: 0 }} />
-                            : <ChevronRight size={13} style={{ color: "var(--neuron-ink-muted)", flexShrink: 0 }} />}
+                          <motion.div
+                            animate={{ rotate: isExpanded ? 90 : 0 }}
+                            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                            style={{ display: "flex", alignItems: "center", flexShrink: 0 }}
+                          >
+                            <ChevronRight size={13} style={{ color: "var(--neuron-ink-muted)" }} />
+                          </motion.div>
                           <span style={{ fontSize: 13, fontWeight: 600, color: "var(--neuron-ink-primary)" }}>{team.name}</span>
                           <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>
                             {team.members.length} {team.members.length === 1 ? "member" : "members"}
@@ -760,25 +880,69 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
                         <div style={{ display: "flex", gap: 2 }} onClick={e => e.stopPropagation()}>
                           <button
                             onClick={() => { setEditingTeamId(team.id); setExpanded(null); }}
-                            style={{ padding: "5px 7px", background: "transparent", border: "none", cursor: "pointer", color: "var(--neuron-ink-muted)", borderRadius: 6, display: "flex", alignItems: "center" }}
+                            aria-label={`Edit ${team.name}`}
+                            style={{ padding: "8px 10px", background: "transparent", border: "none", cursor: "pointer", color: "var(--neuron-ink-muted)", borderRadius: 6, display: "flex", alignItems: "center" }}
                             title="Edit team"
                           >
                             <Edit size={13} />
                           </button>
-                          <button
-                            onClick={() => handleDelete(team.id, team.name)}
-                            disabled={deletingId === team.id}
-                            style={{ padding: "5px 7px", background: "transparent", border: "none", cursor: "pointer", color: "var(--theme-status-danger-fg)", borderRadius: 6, display: "flex", alignItems: "center" }}
-                            title="Delete team"
-                          >
-                            <Trash2 size={13} />
-                          </button>
+                          <AnimatePresence mode="wait" initial={false}>
+                            {confirmDeleteId === team.id ? (
+                              <motion.div
+                                key="confirm"
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.9 }}
+                                transition={{ duration: 0.12, ease: [0.16, 1, 0.3, 1] }}
+                                style={{ display: "flex", alignItems: "center", gap: 4 }}
+                              >
+                                <button
+                                  onClick={() => handleDeleteConfirmed(team.id, team.name)}
+                                  disabled={deletingId === team.id}
+                                  style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--theme-status-danger-fg)", background: "var(--theme-status-danger-bg, #fef2f2)", color: "var(--theme-status-danger-fg)", fontSize: 11, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}
+                                >
+                                  {deletingId === team.id ? "Deleting…" : "Delete"}
+                                </button>
+                                <button
+                                  onClick={() => setConfirmDeleteId(null)}
+                                  style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid var(--neuron-ui-border)", background: "none", color: "var(--neuron-ink-muted)", fontSize: 11, cursor: "pointer" }}
+                                  aria-label="Cancel delete"
+                                >
+                                  Cancel
+                                </button>
+                              </motion.div>
+                            ) : (
+                              <motion.button
+                                key="icon"
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.9 }}
+                                transition={{ duration: 0.12, ease: [0.16, 1, 0.3, 1] }}
+                                onClick={() => setConfirmDeleteId(team.id)}
+                                disabled={deletingId === team.id}
+                                aria-label={`Delete ${team.name}`}
+                                title="Delete team"
+                                style={{ padding: "8px 10px", background: "transparent", border: "none", cursor: "pointer", color: "var(--theme-status-danger-fg)", borderRadius: 6, display: "flex", alignItems: "center" }}
+                              >
+                                <Trash2 size={13} />
+                              </motion.button>
+                            )}
+                          </AnimatePresence>
                         </div>
-                      </div>
+                      </button>
 
                       {/* Expanded member table */}
+                      <AnimatePresence initial={false}>
                       {isExpanded && (
-                        <div style={{ borderTop: "1px solid var(--neuron-ui-border)" }}>
+                        <motion.div
+                          key="members"
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                          style={{ overflow: "hidden" }}
+                        >
+                        <div id={`team-members-${team.id}`} style={{ borderTop: "1px solid var(--neuron-ui-border)" }}>
                           {/* Table header */}
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 140px", padding: "8px 20px 8px 44px", background: "var(--neuron-bg-page)" }}>
                             <span style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Name</span>
@@ -833,7 +997,9 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
                             })
                           )}
                         </div>
+                        </motion.div>
                       )}
+                      </AnimatePresence>
                     </>
                   )}
                 </div>
@@ -841,16 +1007,25 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
             })}
 
             {/* Inline create row (per dept) */}
+            <AnimatePresence>
             {creatingInDept === dept && (
-              <div style={{ borderTop: deptTeams.length > 0 ? "1px solid var(--neuron-ui-border)" : undefined }}>
+              <motion.div
+                key={`create-${dept}`}
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                style={{ overflow: "hidden", borderTop: deptTeams.length > 0 ? "1px solid var(--neuron-ui-border)" : undefined }}
+              >
                 <InlineTeamCreateRow
                   dept={dept as Department}
                   users={deptUsersFor(dept as Department)}
                   onSaved={() => { setCreatingInDept(null); fetchTeams(); queryClient.invalidateQueries({ queryKey: queryKeys.users.list() }); }}
                   onCancel={() => setCreatingInDept(null)}
                 />
-              </div>
+              </motion.div>
             )}
+            </AnimatePresence>
           </div>
         );
       })}
@@ -866,7 +1041,8 @@ function AccessOverridesTab({ onCountUpdate }: { onCountUpdate: (count: number) 
   const [search, setSearch]     = useState("");
   const [adding, setAdding]     = useState(false);
   const [saving, setSaving]     = useState(false);
-  const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [revokingId, setRevokingId]       = useState<string | null>(null);
+  const [confirmRevokeId, setConfirmRevokeId] = useState<string | null>(null);
   const [matrixUser, setMatrixUser] = useState<{ id: string; name: string; role: string; department: string } | null>(null);
 
   const [formUserId, setFormUserId]   = useState("");
@@ -932,8 +1108,8 @@ function AccessOverridesTab({ onCountUpdate }: { onCountUpdate: (count: number) 
     queryClient.invalidateQueries({ queryKey: ["permission_overrides", "user-ids"] });
   };
 
-  const handleRevoke = async (ov: PermissionOverride) => {
-    if (!confirm(`Revoke override for ${ov.user?.name ?? "this user"}?`)) return;
+  const handleRevokeConfirmed = async (ov: PermissionOverride) => {
+    setConfirmRevokeId(null);
     setRevokingId(ov.id);
     const { error } = await supabase.from("permission_overrides").delete().eq("id", ov.id);
     setRevokingId(null);
@@ -964,7 +1140,7 @@ function AccessOverridesTab({ onCountUpdate }: { onCountUpdate: (count: number) 
         </div>
         <button
           onClick={() => setAdding(true)}
-          style={{ height: 36, padding: "0 14px", borderRadius: 8, background: "var(--neuron-action-primary)", border: "none", color: "white", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", marginLeft: 16 }}
+          style={{ height: 36, padding: "0 14px", borderRadius: 8, background: "var(--neuron-action-primary)", border: "none", color: "var(--neuron-action-primary-text)", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", marginLeft: 16 }}
         >
           <Plus size={14} /> Grant Override
         </button>
@@ -977,7 +1153,9 @@ function AccessOverridesTab({ onCountUpdate }: { onCountUpdate: (count: number) 
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search by name or email…"
-          style={{ width: "100%", height: 34, paddingLeft: 32, paddingRight: 10, border: "1px solid var(--neuron-ui-border)", borderRadius: 8, fontSize: 13, outline: "none", backgroundColor: "var(--neuron-bg-elevated)", color: "var(--neuron-ink-primary)", boxSizing: "border-box" }}
+          style={{ width: "100%", height: 34, paddingLeft: 32, paddingRight: 10, border: "1px solid var(--neuron-ui-border)", borderRadius: 8, fontSize: 13, outline: "none", backgroundColor: "var(--neuron-bg-elevated)", color: "var(--neuron-ink-primary)", boxSizing: "border-box", transition: "border-color 0.12s cubic-bezier(0.16,1,0.3,1)" }}
+          onFocus={e => { e.currentTarget.style.borderColor = "var(--neuron-action-primary)"; }}
+          onBlur={e => { e.currentTarget.style.borderColor = "var(--neuron-ui-border)"; }}
         />
       </div>
 
@@ -1027,7 +1205,7 @@ function AccessOverridesTab({ onCountUpdate }: { onCountUpdate: (count: number) 
                   </span>
                   <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>{ov.grantor?.name ?? "—"}</span>
                   <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>{ov.notes ?? "—"}</span>
-                  <div style={{ display: "flex", gap: 6 }} onClick={e => e.stopPropagation()}>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }} onClick={e => e.stopPropagation()}>
                     <button
                       onClick={() => ov.user && setMatrixUser({ id: ov.user_id, name: ov.user.name, role: ov.user.role, department: ov.user.department })}
                       style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--neuron-ui-border)", background: "none", color: "var(--neuron-ink-muted)", fontSize: 11, cursor: "pointer" }}
@@ -1035,13 +1213,45 @@ function AccessOverridesTab({ onCountUpdate }: { onCountUpdate: (count: number) 
                     >
                       <Shield size={12} />
                     </button>
-                    <button
-                      onClick={() => handleRevoke(ov)}
-                      disabled={revokingId === ov.id}
-                      style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--theme-status-danger-border)", background: "none", color: "var(--theme-status-danger-fg)", fontSize: 11, cursor: revokingId === ov.id ? "not-allowed" : "pointer" }}
-                    >
-                      {revokingId === ov.id ? "…" : "Revoke"}
-                    </button>
+                    <AnimatePresence mode="wait" initial={false}>
+                      {confirmRevokeId === ov.id ? (
+                        <motion.div
+                          key="confirm"
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.9 }}
+                          transition={{ duration: 0.12, ease: [0.16, 1, 0.3, 1] }}
+                          style={{ display: "flex", alignItems: "center", gap: 4 }}
+                        >
+                          <button
+                            onClick={() => handleRevokeConfirmed(ov)}
+                            disabled={revokingId === ov.id}
+                            style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--theme-status-danger-fg)", background: "var(--theme-status-danger-bg, #fef2f2)", color: "var(--theme-status-danger-fg)", fontSize: 11, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}
+                          >
+                            {revokingId === ov.id ? "Revoking…" : "Confirm Revoke"}
+                          </button>
+                          <button
+                            onClick={() => setConfirmRevokeId(null)}
+                            style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid var(--neuron-ui-border)", background: "none", color: "var(--neuron-ink-muted)", fontSize: 11, cursor: "pointer" }}
+                          >
+                            Cancel
+                          </button>
+                        </motion.div>
+                      ) : (
+                        <motion.button
+                          key="revoke"
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.9 }}
+                          transition={{ duration: 0.12, ease: [0.16, 1, 0.3, 1] }}
+                          onClick={() => setConfirmRevokeId(ov.id)}
+                          disabled={revokingId === ov.id}
+                          style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--theme-status-danger-border)", background: "none", color: "var(--theme-status-danger-fg)", fontSize: 11, cursor: "pointer" }}
+                        >
+                          Revoke
+                        </motion.button>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </div>
               );
@@ -1184,11 +1394,8 @@ export function UserManagement() {
           </p>
         </div>
 
-        {/* Tab nav — Quotations style with underline and badges */}
-        <div style={{
-          display: "flex",
-          gap: "24px"
-        }}>
+        {/* Tab nav — sliding underline via layoutId */}
+        <div style={{ display: "flex", gap: "24px" }}>
           {TABS.map(({ id, label, icon: Icon }) => {
             const isActive = activeTab === id;
             const count = tabCounts[id as keyof TabCounts];
@@ -1197,29 +1404,25 @@ export function UserManagement() {
                 key={id}
                 onClick={() => setActiveTab(id)}
                 style={{
+                  position: "relative",
                   display: "flex",
                   alignItems: "center",
                   gap: "8px",
-                  padding: "12px 4px",
+                  padding: "12px 4px 14px",
                   background: "none",
                   border: "none",
-                  borderBottom: isActive ? "2px solid var(--neuron-action-primary)" : "2px solid transparent",
+                  borderBottom: "2px solid transparent",
                   fontSize: "14px",
                   fontWeight: 600,
                   color: isActive ? "var(--neuron-action-primary)" : "var(--neuron-ink-secondary)",
                   cursor: "pointer",
-                  transition: "all 0.2s ease",
-                  marginBottom: 0
+                  transition: "color 0.15s cubic-bezier(0.16,1,0.3,1)",
                 }}
                 onMouseEnter={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.color = "var(--neuron-ink-primary)";
-                  }
+                  if (!isActive) e.currentTarget.style.color = "var(--neuron-ink-primary)";
                 }}
                 onMouseLeave={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.color = "var(--neuron-ink-secondary)";
-                  }
+                  if (!isActive) e.currentTarget.style.color = "var(--neuron-ink-secondary)";
                 }}
               >
                 <Icon size={16} />
@@ -1234,22 +1437,48 @@ export function UserManagement() {
                     backgroundColor: isActive ? "var(--theme-bg-surface-tint)" : "var(--neuron-pill-inactive-bg)",
                     fontSize: "12px",
                     fontWeight: 600,
-                    color: isActive ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)"
+                    color: isActive ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
+                    transition: "background-color 0.15s cubic-bezier(0.16,1,0.3,1), color 0.15s cubic-bezier(0.16,1,0.3,1)",
                   }}
                 >
                   {count}
                 </span>
+                {isActive && (
+                  <motion.div
+                    layoutId="tab-underline"
+                    style={{
+                      position: "absolute",
+                      bottom: -2,
+                      left: 0,
+                      right: 0,
+                      height: 2,
+                      backgroundColor: "var(--neuron-action-primary)",
+                      borderRadius: "1px 1px 0 0",
+                    }}
+                    transition={{ type: "spring", stiffness: 480, damping: 38 }}
+                  />
+                )}
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* Tab content */}
+      {/* Tab content — fades on switch */}
       <div style={{ flex: 1, overflow: "auto", padding: "28px 48px" }}>
-        {activeTab === "users"    && <UsersTab onCountUpdate={handleUsersCount} />}
-        {activeTab === "teams"    && <TeamsTab onCountUpdate={handleTeamsCount} />}
-        {activeTab === "overrides" && <AccessOverridesTab onCountUpdate={handleOverridesCount} />}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
+          >
+            {activeTab === "users"     && <UsersTab onCountUpdate={handleUsersCount} />}
+            {activeTab === "teams"     && <TeamsTab onCountUpdate={handleTeamsCount} />}
+            {activeTab === "overrides" && <AccessOverridesTab onCountUpdate={handleOverridesCount} />}
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   );

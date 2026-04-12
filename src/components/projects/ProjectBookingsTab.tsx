@@ -143,7 +143,7 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
               style={{
                 fontSize: "18px",
                 fontWeight: 600,
-                color: "var(--neuron-brand-green)",
+                color: "var(--theme-action-primary-bg)",
                 marginBottom: "8px",
               }}
             >
@@ -152,7 +152,7 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
             <p
               style={{
                 fontSize: "13px",
-                color: "var(--neuron-ink-muted)",
+                color: "var(--theme-text-muted)",
                 margin: 0,
               }}
             >
@@ -168,8 +168,8 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
                   onClick={() => setCreateBookingService(servicesMetadata[0])}
                   style={{
                     padding: "10px 20px",
-                    backgroundColor: "var(--neuron-brand-green)",
-                    border: "1px solid var(--neuron-brand-green)",
+                    backgroundColor: "var(--theme-action-primary-bg)",
+                    border: "1px solid var(--theme-action-primary-bg)",
                     borderRadius: "6px",
                     cursor: "pointer",
                     transition: "all 0.2s ease",
@@ -181,10 +181,10 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
                     color: "white",
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = "#0D5B57";
+                    e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg-dark, #0D5B57)";
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = "var(--neuron-brand-green)";
+                    e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
                   }}
                 >
                   <Plus size={16} />
@@ -196,8 +196,8 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
                     onClick={() => setShowServiceDropdown(!showServiceDropdown)}
                     style={{
                       padding: "10px 20px",
-                      backgroundColor: "var(--neuron-brand-green)",
-                      border: "1px solid var(--neuron-brand-green)",
+                      backgroundColor: "var(--theme-action-primary-bg)",
+                      border: "1px solid var(--theme-action-primary-bg)",
                       borderRadius: "6px",
                       cursor: "pointer",
                       transition: "all 0.2s ease",
@@ -209,10 +209,10 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
                       color: "white",
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = "#0D5B57";
+                      e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg-dark, #0D5B57)";
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = "var(--neuron-brand-green)";
+                      e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
                     }}
                   >
                     <Plus size={16} />
@@ -228,7 +228,7 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
                       <div style={{
                         position: "absolute", top: "100%", right: 0, marginTop: "4px",
                         backgroundColor: "var(--theme-bg-surface)", borderRadius: "8px",
-                        border: "1px solid var(--neuron-ui-border)",
+                        border: "1px solid var(--theme-border-default)",
                         boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 20,
                         minWidth: "200px", overflow: "hidden",
                       }}>
@@ -246,8 +246,8 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
                               border: "none", borderBottom: "1px solid var(--theme-border-subtle)",
                               cursor: "pointer", textAlign: "left",
                             }}
-                            onMouseEnter={e => e.currentTarget.style.backgroundColor = "#F0FAFA"}
-                            onMouseLeave={e => e.currentTarget.style.backgroundColor = "white"}
+                            onMouseEnter={e => e.currentTarget.style.backgroundColor = "var(--theme-bg-page)"}
+                            onMouseLeave={e => e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)"}
                           >
                             {getServiceIcon(svc.service_type, { size: 15, color: "var(--theme-action-primary-bg)" })}
                             {svc.service_type}
@@ -273,10 +273,10 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
             servicesMetadata.length > 0 ? (
               <div style={{ padding: "48px 24px", textAlign: "center" }}>
                 <FileText size={40} style={{ margin: "0 auto 12px", opacity: 0.3 }} />
-                <p style={{ fontSize: "14px", fontWeight: 500, color: "var(--neuron-ink-primary)", margin: "0 0 4px" }}>
+                <p style={{ fontSize: "14px", fontWeight: 500, color: "var(--theme-text-primary)", margin: "0 0 4px" }}>
                   No bookings yet
                 </p>
-                <p style={{ fontSize: "13px", color: "var(--neuron-ink-muted)", margin: "0 0 16px" }}>
+                <p style={{ fontSize: "13px", color: "var(--theme-text-muted)", margin: "0 0 16px" }}>
                   Create bookings to start tracking operational execution for this project.
                 </p>
                 {canPerformBookingAction("create_booking", (currentUser?.department ?? "") as any) && (
@@ -284,8 +284,8 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
                     onClick={() => setCreateBookingService(servicesMetadata[0])}
                     style={{
                       padding: "10px 20px",
-                      backgroundColor: "var(--neuron-brand-green)",
-                      border: "1px solid var(--neuron-brand-green)",
+                      backgroundColor: "var(--theme-action-primary-bg)",
+                      border: "1px solid var(--theme-action-primary-bg)",
                       borderRadius: "6px",
                       cursor: "pointer",
                       display: "inline-flex",
@@ -303,7 +303,7 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
               </div>
             ) : (
               <div style={{ padding: "48px 24px", textAlign: "center" }}>
-                <p style={{ fontSize: "14px", color: "var(--neuron-ink-muted)", marginBottom: "8px" }}>
+                <p style={{ fontSize: "14px", color: "var(--theme-text-muted)", marginBottom: "8px" }}>
                   No services available
                 </p>
                 <p style={{ fontSize: "13px", color: "var(--theme-text-muted)", margin: 0 }}>

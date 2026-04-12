@@ -14,6 +14,7 @@ import {
   linkBookingToProject
 } from "../../utils/projectAutofill";
 import { toast } from "../ui/toast-utils";
+import { supabase } from "../../utils/supabase/client";
 
 interface CreateBookingFromProjectPanelProps {
   isOpen: boolean;
@@ -125,6 +126,21 @@ export function CreateBookingFromProjectPanel({
         );
       } else {
         console.log(`✓ Successfully linked booking to project`);
+
+        // Auto-link billing_line_items for this service type that have no booking yet
+        const { error: billingLinkError } = await supabase
+          .from('billing_line_items')
+          .update({ booking_id: bookingData.id })
+          .eq('project_number', project.project_number)
+          .eq('service_type', serviceType)
+          .is('booking_id', null);
+
+        if (billingLinkError) {
+          console.warn("Warning: Could not auto-link billing items to booking:", billingLinkError.message);
+        } else {
+          console.log(`✓ Auto-linked billing items for ${serviceType} → ${bookingData.id}`);
+        }
+
         toast.success(
           `${serviceType} booking created!`,
           `Booking ${bookingRef} has been created and linked to project ${project.project_number}`

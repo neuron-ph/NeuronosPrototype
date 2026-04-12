@@ -7,6 +7,16 @@ import { useUser } from "../../hooks/useUser";
 import { logCreation } from "../../utils/activityLog";
 import { SidePanel } from "../common/SidePanel";
 import { CustomDropdown } from "../bd/CustomDropdown";
+import {
+  DEPARTMENTS,
+  ROLES,
+  TEAM_ROLES,
+  SERVICE_TYPE_OPTIONS,
+  FieldLabel,
+  FieldError,
+  INPUT_BASE,
+  INPUT_ERROR,
+} from "./userFormShared";
 
 interface CreatedUser {
   id: string;
@@ -22,46 +32,6 @@ interface Props {
   onCreated: (user: CreatedUser) => void;
 }
 
-const DEPARTMENTS = [
-  "Business Development",
-  "Pricing",
-  "Operations",
-  "Accounting",
-  "HR",
-  "Executive",
-];
-
-const ROLES = [
-  { value: "staff", label: "Staff" },
-  { value: "team_leader", label: "Team Leader" },
-  { value: "manager", label: "Manager" },
-];
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  height: "40px",
-  border: "1px solid var(--neuron-ui-border)",
-  borderRadius: "8px",
-  padding: "0 12px",
-  fontSize: "13px",
-  color: "var(--neuron-ink-primary)",
-  backgroundColor: "var(--neuron-bg-elevated)",
-  outline: "none",
-  boxSizing: "border-box",
-};
-
-function FieldLabel({ children, required }: { children: string; required?: boolean }) {
-  return (
-    <label style={{ display: "block", fontSize: "13px", fontWeight: 500, color: "var(--neuron-ink-primary)", marginBottom: "6px" }}>
-      {children}{required && <span style={{ color: "var(--neuron-semantic-danger)" }}> *</span>}
-    </label>
-  );
-}
-
-function FieldError({ message }: { message: string }) {
-  return message ? <p style={{ fontSize: "12px", color: "var(--neuron-semantic-danger)", marginTop: "4px" }}>{message}</p> : null;
-}
-
 export function CreateUserPanel({ isOpen, onClose, onCreated }: Props) {
   const { user } = useUser();
   const [name, setName] = useState("");
@@ -71,21 +41,22 @@ export function CreateUserPanel({ isOpen, onClose, onCreated }: Props) {
   const [position, setPosition] = useState("");
   const [teamId, setTeamId] = useState("");
   const [serviceType, setServiceType] = useState("");
+  const [teamRole, setTeamRole] = useState("");
   const [status, setStatus] = useState<"active" | "inactive">("active");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Teams list (all teams — filtered to Operations in the UI)
-  const { teams: allTeams } = useTeams();
-  const teams = department === "Operations" ? allTeams : [];
+  // Only fetch teams when Operations is selected
+  const { teams } = useTeams(department === "Operations");
 
   // Reset Operations-specific fields when department changes away from Operations
   useEffect(() => {
     if (department !== "Operations") {
       setTeamId("");
       setServiceType("");
+      setTeamRole("");
     }
   }, [department]);
 
@@ -93,11 +64,13 @@ export function CreateUserPanel({ isOpen, onClose, onCreated }: Props) {
     const errs: Record<string, string> = {};
     if (!name.trim()) errs.name = "Name is required";
     if (!email.trim()) errs.email = "Email is required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.email = "Enter a valid email address";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      errs.email = "Enter a valid email address";
     if (!department) errs.department = "Department is required";
     if (!role) errs.role = "Role is required";
     if (!password) errs.password = "Password is required";
-    else if (password.length < 8) errs.password = "Password must be at least 8 characters";
+    else if (password.length < 8)
+      errs.password = "Password must be at least 8 characters";
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -123,20 +96,26 @@ export function CreateUserPanel({ isOpen, onClose, onCreated }: Props) {
       }
 
       // Edge Function sets name/dept/role/team_id. Apply remaining fields via follow-up update.
-      if (data.user?.id && (position.trim() || serviceType || status !== "active")) {
+      if (data.user?.id && (position.trim() || serviceType || teamRole || status !== "active")) {
         await supabase
           .from("users")
           .update({
             position: position.trim() || null,
             service_type: serviceType || null,
+            team_role: teamRole || null,
             status,
             is_active: status === "active",
           })
           .eq("id", data.user.id);
       }
 
-      const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
-      logCreation("user", data.user.id, name.trim() ?? data.user.email ?? data.user.id, actor);
+      const actor = {
+        id: user?.id ?? "",
+        name: user?.name ?? "",
+        department: user?.department ?? "",
+      };
+      // Use || not ?? — trim() always returns a string, so ?? fallback is unreachable
+      logCreation("user", data.user.id, name.trim() || data.user.email || data.user.id, actor);
       toast.success(`Account created for ${name.trim()}`);
       onCreated({ ...data.user, status } as CreatedUser & { status: string });
     } catch (err: unknown) {
@@ -192,7 +171,9 @@ export function CreateUserPanel({ isOpen, onClose, onCreated }: Props) {
           opacity: submitting ? 0.8 : 1,
         }}
       >
-        {submitting && <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} />}
+        {submitting && (
+          <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} />
+        )}
         {submitting ? "Creating\u2026" : "Create Account \u2192"}
       </button>
     </div>
@@ -206,36 +187,44 @@ export function CreateUserPanel({ isOpen, onClose, onCreated }: Props) {
       footer={footer}
       width="480px"
     >
-      <div style={{ padding: "24px", overflowY: "auto", height: "100%" }}>
+      <div className="p-6 overflow-y-auto h-full">
 
-        <div style={{ marginBottom: "20px" }}>
-          <FieldLabel required>Full name</FieldLabel>
+        {/* ── Identity ─────────────────────────────────────────────── */}
+        <div className="mb-5">
+          <FieldLabel htmlFor="new-user-name" required>Full name</FieldLabel>
           <input
+            id="new-user-name"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            style={{ ...inputStyle, ...(errors.name ? { border: "1px solid var(--neuron-semantic-danger)" } : {}) }}
+            className={errors.name ? INPUT_ERROR : INPUT_BASE}
           />
           <FieldError message={errors.name ?? ""} />
         </div>
 
-        <div style={{ marginBottom: "20px" }}>
-          <FieldLabel required>Email address</FieldLabel>
+        <div className="mb-5">
+          <FieldLabel htmlFor="new-user-email" required>Email address</FieldLabel>
           <input
+            id="new-user-email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            style={{ ...inputStyle, ...(errors.email ? { border: "1px solid var(--neuron-semantic-danger)" } : {}) }}
+            className={errors.email ? INPUT_ERROR : INPUT_BASE}
           />
           <FieldError message={errors.email ?? ""} />
         </div>
 
-        <div style={{ marginBottom: "20px" }}>
+        <div className="border-t border-[var(--neuron-ui-border)] my-6" />
+
+        {/* ── Account Access ───────────────────────────────────────── */}
+        <div className="mb-5">
           <FieldLabel required>Department</FieldLabel>
           <CustomDropdown
             label=""
             value={department}
             onChange={setDepartment}
+            fullWidth
+            triggerAriaLabel="Department"
             options={[
               { value: "", label: "Select department" },
               ...DEPARTMENTS.map((d) => ({ value: d, label: d })),
@@ -244,78 +233,129 @@ export function CreateUserPanel({ isOpen, onClose, onCreated }: Props) {
           <FieldError message={errors.department ?? ""} />
         </div>
 
-        <div style={{ marginBottom: "20px" }}>
-          <FieldLabel required>Role</FieldLabel>
+        <div className="mb-5">
+          <FieldLabel required>Access Level</FieldLabel>
+          <p className="text-[12px] text-[var(--neuron-ink-muted)] mb-2">
+            Controls what this user can see and do in Neuron
+          </p>
           <CustomDropdown
             label=""
             value={role}
             onChange={setRole}
-            options={[
-              { value: "", label: "Select role" },
-              ...ROLES,
-            ]}
+            fullWidth
+            triggerAriaLabel="Access Level"
+            options={[{ value: "", label: "Select access level" }, ...ROLES]}
           />
           <FieldError message={errors.role ?? ""} />
         </div>
 
-        <div style={{ marginBottom: "20px" }}>
-          <FieldLabel>Position / Job Title</FieldLabel>
+        <div className="mb-5">
+          <FieldLabel htmlFor="new-user-position">Position / Job Title</FieldLabel>
           <input
+            id="new-user-position"
             type="text"
             value={position}
             onChange={(e) => setPosition(e.target.value)}
             placeholder="e.g. Import Supervisor"
-            style={inputStyle}
+            className={INPUT_BASE}
           />
         </div>
 
+        {/* Operations-only: grouped into a card so Team, Team Title, and Service Type
+            read as one cohesive assignment rather than three unrelated fields. */}
         {department === "Operations" && (
-          <>
-            <div style={{ marginBottom: "20px" }}>
-              <FieldLabel>Team</FieldLabel>
-              <CustomDropdown
-                label=""
-                value={teamId}
-                onChange={setTeamId}
-                options={[
-                  { value: "", label: "No team" },
-                  ...teams.map((t) => ({ value: t.id, label: t.name })),
-                ]}
-              />
+          <div className="mb-5 rounded-xl border border-[var(--neuron-ui-border)] overflow-hidden">
+            {/* Card header */}
+            <div
+              className="px-4 py-3 border-b border-[var(--neuron-ui-border)]"
+              style={{ backgroundColor: "var(--neuron-bg-subtle)" }}
+            >
+              <p className="text-[13px] font-medium text-[var(--neuron-ink-primary)]">
+                Team Assignment
+              </p>
+              <p className="text-[12px] text-[var(--neuron-ink-muted)]">
+                Operations team, position, and service lane
+              </p>
             </div>
 
-            <div style={{ marginBottom: "20px" }}>
-              <FieldLabel>Service Type</FieldLabel>
-              <CustomDropdown
-                label=""
-                value={serviceType}
-                onChange={setServiceType}
-                options={[
-                  { value: "", label: "Select service type" },
-                  { value: "Forwarding", label: "Forwarding" },
-                  { value: "Brokerage", label: "Brokerage" },
-                  { value: "Trucking", label: "Trucking" },
-                  { value: "Marine Insurance", label: "Marine Insurance" },
-                  { value: "Others", label: "Others" },
-                ]}
-              />
-            </div>
+            {/* Card body */}
+            <div
+              className="p-4 flex flex-col gap-4"
+              style={{ backgroundColor: "var(--neuron-bg-elevated)" }}
+            >
+              <div>
+                <FieldLabel>Team</FieldLabel>
+                <CustomDropdown
+                  label=""
+                  value={teamId}
+                  onChange={setTeamId}
+                  fullWidth
+                  triggerAriaLabel="Team"
+                  options={[
+                    { value: "", label: "No team" },
+                    ...teams.map((t) => ({ value: t.id, label: t.name })),
+                  ]}
+                />
+              </div>
 
-          </>
+              <div>
+                <FieldLabel>Team Title</FieldLabel>
+                <p className="text-[12px] text-[var(--neuron-ink-muted)] mb-2">
+                  Display label only — doesn't affect permissions
+                </p>
+                <CustomDropdown
+                  label=""
+                  value={teamRole}
+                  onChange={setTeamRole}
+                  fullWidth
+                  triggerAriaLabel="Team Title"
+                  options={TEAM_ROLES}
+                />
+              </div>
+
+              <div>
+                <FieldLabel>Service Type</FieldLabel>
+                <CustomDropdown
+                  label=""
+                  value={serviceType}
+                  onChange={setServiceType}
+                  fullWidth
+                  triggerAriaLabel="Service Type"
+                  options={SERVICE_TYPE_OPTIONS}
+                />
+              </div>
+            </div>
+          </div>
         )}
 
-        <div style={{ marginBottom: "20px" }}>
+        <div className="mb-5">
           <FieldLabel>Status</FieldLabel>
-          <div style={{ display: "flex", gap: 8 }}>
-            {(["active", "inactive"] as const).map(s => (
+          <div role="group" aria-label="Account status" className="flex gap-2">
+            {(["active", "inactive"] as const).map((s) => (
               <button
                 key={s}
+                type="button"
                 onClick={() => setStatus(s)}
+                aria-pressed={status === s}
                 style={{
-                  height: 36, padding: "0 16px", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer",
-                  border: status === s ? "1px solid var(--neuron-action-primary)" : "1px solid var(--neuron-ui-border)",
-                  background: status === s ? "var(--theme-status-success-bg)" : "var(--neuron-bg-elevated)",
-                  color: status === s ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
+                  height: 36,
+                  padding: "0 16px",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  border:
+                    status === s
+                      ? "1px solid var(--neuron-action-primary)"
+                      : "1px solid var(--neuron-ui-border)",
+                  background:
+                    status === s
+                      ? "var(--theme-status-success-bg)"
+                      : "var(--neuron-bg-elevated)",
+                  color:
+                    status === s
+                      ? "var(--neuron-action-primary)"
+                      : "var(--neuron-ink-muted)",
                 }}
               >
                 {s.charAt(0).toUpperCase() + s.slice(1)}
@@ -324,21 +364,23 @@ export function CreateUserPanel({ isOpen, onClose, onCreated }: Props) {
           </div>
         </div>
 
-        <div style={{ marginBottom: "8px" }}>
-          <FieldLabel required>Initial password</FieldLabel>
-          <div style={{ position: "relative" }}>
+        <div className="border-t border-[var(--neuron-ui-border)] my-6" />
+
+        {/* ── Security ─────────────────────────────────────────────── */}
+        <div className="mb-5">
+          <FieldLabel htmlFor="new-user-password" required>Initial password</FieldLabel>
+          <div className="relative">
             <input
+              id="new-user-password"
               type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              style={{
-                ...inputStyle,
-                paddingRight: "44px",
-                ...(errors.password ? { border: "1px solid var(--neuron-semantic-danger)" } : {}),
-              }}
+              className={`${errors.password ? INPUT_ERROR : INPUT_BASE} pr-11`}
             />
             <button
+              type="button"
               onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
               style={{
                 position: "absolute",
                 right: "12px",
@@ -357,10 +399,18 @@ export function CreateUserPanel({ isOpen, onClose, onCreated }: Props) {
           <FieldError message={errors.password ?? ""} />
         </div>
 
-        <div style={{ display: "flex", alignItems: "flex-start", gap: "6px", marginBottom: "8px" }}>
-          <AlertCircle size={14} style={{ color: "var(--neuron-semantic-warn)", flexShrink: 0, marginTop: "2px" }} />
-          <p style={{ fontSize: "12px", color: "var(--neuron-semantic-warn)" }}>
-            Share this password securely. The employee can update it from their Settings.
+        <div className="flex items-start gap-1.5">
+          <AlertCircle
+            size={14}
+            style={{
+              color: "var(--neuron-semantic-warn)",
+              flexShrink: 0,
+              marginTop: "2px",
+            }}
+          />
+          <p className="text-[12px] text-[var(--neuron-semantic-warn)]">
+            Share this password securely. The employee can update it from their
+            Settings.
           </p>
         </div>
 

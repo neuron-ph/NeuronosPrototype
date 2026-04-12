@@ -100,8 +100,11 @@ export function UnifiedBillingsTab({
   // Removed isImporting state as import button is gone
   // Removed isEditing state - now derived from readOnly
   const [pendingChanges, setPendingChanges] = useState(false);
-  // groupBy is always "booking" for contract billings, "category" otherwise
-  const groupBy = enableGroupByToggle ? "booking" : "category";
+  // groupBy derivation:
+  //   contract billings (enableGroupByToggle) → "booking"
+  //   booking-level view (bookingId set)      → "category"
+  //   project-level view (default)            → "service"
+  const groupBy = enableGroupByToggle ? "booking" : bookingId ? "category" : "service";
 
   // Category Dropdown State
   const [showAddCategoryDropdown, setShowAddCategoryDropdown] = useState(false);

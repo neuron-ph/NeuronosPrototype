@@ -196,6 +196,7 @@ export function ContactPersonAutocomplete({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search contacts..."
                 autoFocus
+                autoComplete="off"
                 style={{
                   width: "100%",
                   padding: "8px 10px 8px 34px",
@@ -203,6 +204,8 @@ export function ContactPersonAutocomplete({
                   borderRadius: "6px",
                   fontSize: "13px",
                   outline: "none",
+                  backgroundColor: "var(--theme-bg-surface)",
+                  color: "var(--neuron-ink-base)",
                 }}
                 onFocus={(e) => {
                   e.currentTarget.style.borderColor = "var(--neuron-brand-green)";

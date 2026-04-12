@@ -127,8 +127,8 @@ export function EVoucherWorkflowPanel({
       if (currentUser?.id) {
         const recipientDept = nextStatus === "pending_accounting" ? "Accounting" : nextStatus === "pending_ceo" ? "Executive" : undefined;
         createWorkflowTicket({
-          subject: `E-Voucher Submitted: ${evoucherNumber}`,
-          body: `A new E-Voucher ${evoucherNumber} has been submitted for your approval. Amount: ${amount ? `₱${amount.toLocaleString()}` : "—"}.`,
+          subject: `Approve E-Voucher: ${evoucherNumber}`,
+          body: `${evoucherNumber} needs your approval.\n\nAmount: ${amount ? `₱${amount.toLocaleString()}` : "—"}`,
           type: "approval",
           recipientDept: recipientDept || currentUser.department || "",
           linkedRecordType: "expense",
@@ -167,8 +167,8 @@ export function EVoucherWorkflowPanel({
       );
       if (nextStatus === "pending_accounting" && currentUser?.id) {
         createWorkflowTicket({
-          subject: `E-Voucher Approved: ${evoucherNumber}`,
-          body: `E-Voucher ${evoucherNumber} has been approved and is ready for disbursement. Please process the payment and post the journal entry.`,
+          subject: `Disburse E-Voucher: ${evoucherNumber}`,
+          body: `${evoucherNumber} has been approved and is ready for disbursement. Please process the payment.`,
           type: "request",
           priority: "normal",
           recipientDept: "Accounting",
@@ -198,8 +198,8 @@ export function EVoucherWorkflowPanel({
       toast.success("Approved — forwarded to Accounting");
       if (currentUser?.id) {
         createWorkflowTicket({
-          subject: `E-Voucher Approved: ${evoucherNumber}`,
-          body: `E-Voucher ${evoucherNumber} has been approved by the CEO and is ready for disbursement. Please process the payment and post the journal entry.`,
+          subject: `Disburse E-Voucher: ${evoucherNumber}`,
+          body: `${evoucherNumber} has been approved by the CEO and is ready for disbursement. Please process the payment.`,
           type: "request",
           priority: "normal",
           recipientDept: "Accounting",
@@ -297,7 +297,7 @@ export function EVoucherWorkflowPanel({
       // Notify creator: cash is ready
       if (currentUser?.id && requestorId) {
         createWorkflowTicket({
-          subject: `E-Voucher Disbursed: ${evoucherNumber}`,
+          subject: `Disbursed: ${evoucherNumber}`,
           body: `Your E-Voucher ${evoucherNumber} has been disbursed. Cash has been released.`,
           type: "fyi",
           recipientUserId: requestorId,
@@ -333,8 +333,8 @@ export function EVoucherWorkflowPanel({
       // Notify creator: rejected with reason
       if (currentUser?.id && requestorId) {
         createWorkflowTicket({
-          subject: `E-Voucher Rejected: ${evoucherNumber}`,
-          body: `Your E-Voucher ${evoucherNumber} was rejected by ${rejectingRole === "ceo" ? "the CEO" : "your Manager"}.\n\nReason: ${rejectionReason}`,
+          subject: `Rejected: ${evoucherNumber}`,
+          body: `Your E-Voucher ${evoucherNumber} was not approved by ${rejectingRole === "ceo" ? "the CEO" : "your Manager"}.\n\nReason: ${rejectionReason}`,
           type: "fyi",
           priority: "urgent",
           recipientUserId: requestorId,
@@ -396,8 +396,8 @@ export function EVoucherWorkflowPanel({
       // Notify creator: EV is complete
       if (currentUser?.id && requestorId) {
         createWorkflowTicket({
-          subject: `E-Voucher Posted: ${evoucherNumber}`,
-          body: `Your E-Voucher ${evoucherNumber} has been verified and posted to the general ledger. This transaction is now complete.`,
+          subject: `Complete: ${evoucherNumber}`,
+          body: `Your E-Voucher ${evoucherNumber} has been verified and posted. This transaction is complete.`,
           type: "fyi",
           recipientUserId: requestorId,
           linkedRecordType: "expense",

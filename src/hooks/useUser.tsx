@@ -5,6 +5,8 @@ import { supabase } from '../utils/supabase/client';
 import { logActivity } from '../utils/activityLog';
 import type { Session } from '@supabase/supabase-js';
 
+export type TeamRole = 'Team Leader' | 'Supervisor' | 'Representative';
+
 export interface User {
   id: string;
   email: string;
@@ -18,6 +20,8 @@ export interface User {
   phone?: string | null;         // contact phone number
   // Operations-specific: controls which Ops module tabs are visible (separate from RBAC role)
   service_type?: 'Forwarding' | 'Brokerage' | 'Trucking' | 'Marine Insurance' | 'Others' | null;
+  // Display-only hierarchy label — not RBAC, applies to all departments
+  team_role?: TeamRole | null;
 }
 
 interface SignupOptions {
@@ -79,6 +83,7 @@ async function fetchUserProfile(authUid: string): Promise<User | null> {
       avatar_url: data.avatar_url || null,
       phone: data.phone || null,
       service_type: data.service_type || null,
+      team_role: data.team_role || null,
     };
   } catch (error) {
     console.error('Error fetching user profile:', error);
@@ -133,6 +138,23 @@ export function UserProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let isMounted = true;
 
+    const applyProfile = (profile: User) => {
+      setUser(profile);
+      localStorage.setItem('neuron_user', JSON.stringify(profile));
+      posthog.identify(profile.id, {
+        email: profile.email,
+        name: profile.name,
+        department: profile.department,
+        role: profile.role,
+      });
+    };
+
+    const hydrateUserFromSession = async (authUid: string) => {
+      const profile = await fetchUserProfile(authUid);
+      if (!isMounted || !profile) return;
+      applyProfile(profile);
+    };
+
     // Get initial session (with 15s timeout in case token refresh hangs)
     const sessionTimeout = new Promise<{ data: { session: null } }>((resolve) =>
       setTimeout(() => resolve({ data: { session: null } }), 15000)
@@ -162,17 +184,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         if (hasCache && isMounted) setIsLoading(false);
 
         // Fetch fresh profile (background if cache existed, blocking if not)
-        const profile = await fetchUserProfile(initialSession.user.id);
-        if (isMounted && profile) {
-          setUser(profile);
-          localStorage.setItem('neuron_user', JSON.stringify(profile));
-          posthog.identify(profile.id, {
-            email: profile.email,
-            name: profile.name,
-            department: profile.department,
-            role: profile.role,
-          });
-        }
+        await hydrateUserFromSession(initialSession.user.id);
       } else {
         // No session — check for legacy localStorage user (pre-auth)
         const cached = localStorage.getItem('neuron_user');
@@ -194,23 +206,17 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     // Listen for auth state changes (login, logout, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, newSession) => {
+      (event, newSession) => {
         if (!isMounted) return;
 
         setSession(newSession);
 
         if (event === 'SIGNED_IN' && newSession) {
-          const profile = await fetchUserProfile(newSession.user.id);
-          if (isMounted && profile) {
-            setUser(profile);
-            localStorage.setItem('neuron_user', JSON.stringify(profile));
-            posthog.identify(profile.id, {
-              email: profile.email,
-              name: profile.name,
-              department: profile.department,
-              role: profile.role,
-            });
-          }
+          // Supabase awaits auth subscribers internally; kicking off another
+          // Supabase query inside this callback can deadlock client init/refresh.
+          window.setTimeout(() => {
+            void hydrateUserFromSession(newSession.user.id);
+          }, 0);
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
           localStorage.removeItem('neuron_user');

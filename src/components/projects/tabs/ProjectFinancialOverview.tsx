@@ -86,7 +86,7 @@ export function ProjectFinancialOverview({ financials }: ProjectFinancialOvervie
                         style={{ width: `${incomeWidth}%` }}
                       ></div>
                       {/* Tooltip for unbilled */}
-                      <div className="absolute top-[-25px] left-0 hidden group-hover:block bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap z-10">
+                      <div className="absolute top-[-25px] left-0 hidden group-hover:block bg-[var(--theme-text-primary)] text-[var(--theme-bg-surface)] text-xs px-2 py-1 rounded whitespace-nowrap z-10">
                         Invoiced: {fmt(invoicedAmount)} | Unbilled: {fmt(unbilledCharges)}
                       </div>
                   </div>
@@ -100,7 +100,7 @@ export function ProjectFinancialOverview({ financials }: ProjectFinancialOvervie
                   <div className="w-16 text-[13px] font-medium text-[var(--theme-text-muted)]">Costs</div>
                   <div className="flex-1 h-3 bg-[var(--theme-bg-surface-subtle)] rounded-full overflow-hidden">
                       <div 
-                          className="h-full bg-[#C05621] rounded-full transition-all duration-500 ease-out" 
+                          className="h-full bg-[var(--theme-status-warning-fg)] rounded-full transition-all duration-500 ease-out"
                           style={{ width: `${costWidth}%` }}
                       ></div>
                   </div>
@@ -112,7 +112,7 @@ export function ProjectFinancialOverview({ financials }: ProjectFinancialOvervie
                   <div className="w-16 text-[13px] font-medium text-[var(--theme-text-muted)]">Collected</div>
                   <div className="flex-1 h-3 bg-[var(--theme-bg-surface-subtle)] rounded-full overflow-hidden relative" title={`Invoiced: ${fmt(invoicedAmount)}`}>
                       <div 
-                          className="h-full bg-[#10B981] rounded-full transition-all duration-500 ease-out" 
+                          className="h-full bg-[var(--theme-status-success-fg)] rounded-full transition-all duration-500 ease-out"
                           style={{ width: `${collectedWidth}%` }}
                           title={`Collected: ${fmt(collectedAmount)}`}
                       ></div>

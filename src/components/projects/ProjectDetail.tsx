@@ -42,6 +42,74 @@ interface ProjectDetailProps {
   highlightId?: string | null;
 }
 
+function buildQuotationUpdatePayload(data: any): Record<string, unknown> {
+  const pricingFields: Record<string, unknown> = {};
+  const pricingKeys = [
+    'selling_price', 'buying_price', 'financial_summary',
+    'movement', 'category', 'shipment_freight',
+    'incoterm', 'carrier', 'transit_days', 'commodity',
+    'pol_aol', 'pod_aod', 'charge_categories', 'currency',
+    'credit_terms', 'validity_period',
+  ];
+
+  for (const key of pricingKeys) {
+    if (data[key] !== undefined) pricingFields[key] = data[key];
+  }
+
+  const existingPricing = data.pricing && typeof data.pricing === 'object' ? data.pricing : {};
+  const mergedPricing = { ...existingPricing, ...pricingFields };
+
+  const payload: Record<string, unknown> = {
+    quotation_name: data.quotation_name,
+    quotation_number: data.quotation_number,
+    customer_id: data.customer_id,
+    customer_name: data.customer_name,
+    contact_id: data.contact_id,
+    contact_name: data.contact_name ?? data.contact_person_name,
+    contact_person_id: data.contact_person_id,
+    services: data.services,
+    services_metadata: data.services_metadata,
+    status: data.status,
+    quotation_type: data.quotation_type,
+    quotation_date: data.quotation_date ?? data.created_date,
+    expiry_date: (() => {
+      const raw = data.expiry_date ?? data.valid_until;
+      if (!raw) return undefined;
+      const days = Number(raw);
+      if (!isNaN(days) && String(raw).trim() === String(days)) {
+        const base = data.quotation_date ?? data.created_date;
+        if (!base) return undefined;
+        const dt = new Date(base);
+        dt.setDate(dt.getDate() + days);
+        return dt.toISOString();
+      }
+      return raw;
+    })(),
+    validity_date: data.validity_date,
+    contract_start_date: data.contract_validity_start ?? data.contract_start_date,
+    contract_end_date: data.contract_validity_end ?? data.contract_end_date,
+    project_id: data.project_id,
+    pricing: Object.keys(mergedPricing).length > 0 ? mergedPricing : undefined,
+    details: data.rate_matrices !== undefined
+      ? { ...(data.details ?? {}), rate_matrices: data.rate_matrices }
+      : data.details ?? undefined,
+  };
+
+  const dateColumns = ['quotation_date', 'expiry_date', 'validity_date', 'contract_start_date', 'contract_end_date'];
+  for (const col of dateColumns) {
+    const value = payload[col];
+    if (value === '' || (typeof value === 'string' && isNaN(Date.parse(value)))) {
+      payload[col] = null;
+    }
+  }
+
+  delete payload.project_id;
+
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined)
+  );
+}
+
 export function ProjectDetail({ 
   project, 
   onBack, 
@@ -80,10 +148,18 @@ export function ProjectDetail({
 
   const handleSaveQuotation = async (updates: any) => {
     try {
-      // Use the server API instead of direct table access
-      // FIX: Prioritize project.quotation_id (FK) over project.quotation.id (embedded) to ensure we update the linked record
       const quotationId = project.quotation_id || project.quotation?.id;
-      const { error } = await supabase.from('quotations').update(updates).eq('id', quotationId);
+      const payload = buildQuotationUpdatePayload(updates);
+
+      delete payload.quote_number;
+      delete payload.created_by;
+      delete payload.created_by_name;
+
+      const { error } = await supabase
+        .from('quotations')
+        .update({ ...payload, updated_at: new Date().toISOString() })
+        .eq('id', quotationId);
+
       if (error) throw new Error(error.message);
       
       toast.success("Quotation updated successfully");
@@ -206,7 +282,7 @@ export function ProjectDetail({
       {/* Header Bar */}
       <div style={{
         padding: "20px 48px",
-        borderBottom: "1px solid var(--neuron-ui-border)",
+        borderBottom: "1px solid var(--theme-border-default)",
         backgroundColor: "var(--theme-bg-surface)",
         display: "flex",
         justifyContent: "space-between",
@@ -228,7 +304,7 @@ export function ProjectDetail({
               padding: "0"
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.color = "var(--neuron-brand-green)";
+              e.currentTarget.style.color = "var(--theme-action-primary-bg)";
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.color = "var(--neuron-ink-secondary)";
@@ -241,14 +317,14 @@ export function ProjectDetail({
           <h1 style={{ 
             fontSize: "20px",
             fontWeight: 600,
-            color: "var(--neuron-ink-primary)",
+            color: "var(--theme-text-primary)",
             marginBottom: "4px"
           }}>
             {project.quotation_name || project.project_number}
           </h1>
-          <p style={{ fontSize: "13px", color: "var(--neuron-ink-muted, #6B7280)", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
+          <p style={{ fontSize: "13px", color: "var(--theme-text-muted)", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
             <span className="font-mono">{project.project_number}</span>
-            <span className="text-[var(--neuron-ui-muted)]">•</span>
+            <span className="text-[var(--theme-text-muted)]">•</span>
             <span>{project.customer_name}</span>
           </p>
         </div>
@@ -272,13 +348,13 @@ export function ProjectDetail({
                 justifyContent: "center",
                 padding: "10px",
                 backgroundColor: "var(--theme-bg-surface)",
-                border: "1.5px solid var(--neuron-ui-muted)",
+                border: "1.5px solid var(--theme-border-default)",
                 borderRadius: "8px",
                 cursor: "pointer",
                 transition: "all 0.2s ease"
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = "var(--neuron-brand-green)";
+                e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.borderColor = "var(--theme-border-default)";
@@ -327,7 +403,7 @@ export function ProjectDetail({
                       background: "none",
                       cursor: "pointer",
                       fontSize: "14px",
-                      color: "var(--neuron-ink-primary)",
+                      color: "var(--theme-text-primary)",
                       transition: "background-color 0.15s ease"
                     }}
                     onMouseEnter={(e) => {
@@ -349,7 +425,7 @@ export function ProjectDetail({
                       border: "none",
                       background: "none",
                       fontSize: "14px",
-                      color: "var(--neuron-ink-primary)",
+                      color: "var(--theme-text-primary)",
                       cursor: "pointer",
                       transition: "background-color 0.2s ease"
                     }}
@@ -372,7 +448,7 @@ export function ProjectDetail({
                       border: "none",
                       background: "none",
                       fontSize: "14px",
-                      color: "var(--neuron-ink-primary)",
+                      color: "var(--theme-text-primary)",
                       cursor: "pointer",
                       transition: "background-color 0.2s ease"
                     }}

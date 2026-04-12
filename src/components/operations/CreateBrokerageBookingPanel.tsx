@@ -13,13 +13,17 @@ import { BookingCreationPanel } from "./shared/BookingCreationPanel";
 import { useCustomerOptions } from "./shared/useCustomerOptions";
 import { ConsigneePicker } from "../shared/ConsigneePicker";
 import { logCreation } from "../../utils/activityLog";
+import { fireBookingAssignmentTickets } from "../../utils/workflowTickets";
 
 // Brokerage Booking Form Data Interface
 interface BrokerageBookingFormData {
   // New: Brokerage Type
   brokerageType: "Standard" | "All-Inclusive" | "Non-Regular" | "";
   movement: "IMPORT" | "EXPORT";
-  
+
+  // Booking name (optional user-defined label)
+  name: string;
+
   // General Information
   customerName: string;
   accountOwner: string;
@@ -111,6 +115,7 @@ export function CreateBrokerageBookingPanel({
   const [formData, setFormData] = useState<BrokerageBookingFormData>({
     brokerageType: "",
     movement: "IMPORT",
+    name: "",
     customerName: "",
     accountOwner: "",
     accountHandler: "",
@@ -210,25 +215,48 @@ export function CreateBrokerageBookingPanel({
         submissionData.assigned_supervisor_name = teamAssignment.supervisor?.name;
         submissionData.assigned_handler_id = teamAssignment.handler?.id;
         submissionData.assigned_handler_name = teamAssignment.handler?.name;
+        (submissionData as any).team_id = teamAssignment.team.id;
+        (submissionData as any).team_name = teamAssignment.team.name;
       }
 
-      const { data, error } = await supabase.from('brokerage_bookings').insert(submissionData).select().single();
+      const { data, error } = await supabase.from('bookings').insert(submissionData).select().single();
 
       if (error) {
         throw new Error(error.message);
       }
 
       logCreation("booking", data.id, data.booking_number ?? data.id, { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
+
+      if (source === "pricing" && teamAssignment) {
+        void fireBookingAssignmentTickets({
+          bookingId: data.id,
+          bookingNumber: data.booking_number,
+          serviceType: "Brokerage",
+          customerName: formData.customerName,
+          createdBy: currentUser?.id ?? "",
+          createdByName: currentUser?.name ?? "",
+          createdByDept: currentUser?.department ?? "",
+          manager: teamAssignment.manager,
+          supervisor: teamAssignment.supervisor,
+          handler: teamAssignment.handler,
+        });
+      }
+
       toast.success("Brokerage booking created successfully");
 
       // Save team preference if requested and from Pricing
       if (source === "pricing" && teamAssignment?.saveAsDefault && customerId) {
         try {
           await supabase.from('client_handler_preferences').upsert({
-            client_id: customerId,
-            service_type: serviceType,
+            customer_id: customerId,
+            preferred_team_id: teamAssignment.team.id,
+            preferred_team_name: teamAssignment.team.name,
+            preferred_manager_id: teamAssignment.manager.id,
+            preferred_manager_name: teamAssignment.manager.name,
             preferred_supervisor_id: teamAssignment.supervisor?.id,
+            preferred_supervisor_name: teamAssignment.supervisor?.name,
             preferred_handler_id: teamAssignment.handler?.id,
+            preferred_handler_name: teamAssignment.handler?.name,
           });
         } catch (error) {
           console.error("Error saving team preference:", error);
@@ -317,6 +345,24 @@ export function CreateBrokerageBookingPanel({
                     onContractDetected={setDetectedContractId}
                   />
 
+                </div>
+
+                <div>
+                  <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
+                    Booking Name <span style={{ color: "var(--theme-text-muted)", fontWeight: 400 }}>(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleChange}
+                    placeholder="e.g. Q2 Import Entry, Split Shipment BL1"
+                    className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
+                    style={getInputStyle("name")}
+                  />
+                  <p className="text-xs mt-1" style={{ color: "var(--theme-text-muted)" }}>
+                    A short label to identify this booking, especially useful when a project has multiple bookings of the same type.
+                  </p>
                 </div>
 
                 {formData.projectNumber && (
@@ -1054,7 +1100,6 @@ export function CreateBrokerageBookingPanel({
                   borderRadius: "8px"
                 }}>
                   <TeamAssignmentForm
-                    serviceType={serviceType as any}
                     customerId={customerId}
                     onChange={setTeamAssignment}
                   />

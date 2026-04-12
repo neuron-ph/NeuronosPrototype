@@ -140,7 +140,7 @@ export function ProjectServiceCard({ service, project, currentUser, onUpdate, on
     <>
       <div style={{
         backgroundColor: "var(--theme-bg-surface)",
-        border: "1px solid var(--neuron-ui-border)",
+        border: "1px solid var(--theme-border-default)",
         borderRadius: "8px",
         overflow: "hidden",
         marginBottom: "24px"
@@ -150,7 +150,7 @@ export function ProjectServiceCard({ service, project, currentUser, onUpdate, on
           style={{
             padding: "20px 24px",
             backgroundColor: "var(--theme-bg-page)",
-            borderBottom: isExpanded ? "1px solid var(--neuron-ui-border)" : "none",
+            borderBottom: isExpanded ? "1px solid var(--theme-border-default)" : "none",
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
@@ -165,14 +165,14 @@ export function ProjectServiceCard({ service, project, currentUser, onUpdate, on
               <div style={{
                 fontSize: "15px",
                 fontWeight: 600,
-                color: "var(--neuron-brand-green)",
+                color: "var(--theme-action-primary-bg)",
                 marginBottom: "4px"
               }}>
                 {service.service_type} Service Details
               </div>
               <div style={{
                 fontSize: "13px",
-                color: "var(--neuron-ink-muted)"
+                color: "var(--theme-text-muted)"
               }}>
                 {getServiceSummary()}
               </div>
@@ -182,11 +182,11 @@ export function ProjectServiceCard({ service, project, currentUser, onUpdate, on
             <div style={{
               padding: "4px 12px",
               backgroundColor: hasBookings ? "var(--theme-bg-surface-tint)" : "var(--neuron-pill-inactive-bg)",
-              border: `1px solid ${hasBookings ? "var(--neuron-brand-green)" : "var(--neuron-ui-muted)"}`,
+              border: `1px solid ${hasBookings ? "var(--theme-action-primary-bg)" : "var(--theme-border-default)"}`,
               borderRadius: "12px",
               fontSize: "12px",
               fontWeight: 600,
-              color: hasBookings ? "var(--neuron-brand-green)" : "var(--theme-text-muted)"
+              color: hasBookings ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)"
             }}>
               {bookingsForService.length} {bookingsForService.length === 1 ? "Booking" : "Bookings"}
             </div>
@@ -197,11 +197,11 @@ export function ProjectServiceCard({ service, project, currentUser, onUpdate, on
         {isExpanded && (
           <div>
             {/* Service Specification Details */}
-            <div style={{ padding: "24px", borderBottom: "1px solid var(--neuron-ui-border)" }}>
+            <div style={{ padding: "24px", borderBottom: "1px solid var(--theme-border-default)" }}>
               <div style={{
                 fontSize: "13px",
                 fontWeight: 600,
-                color: "var(--neuron-ink-muted)",
+                color: "var(--theme-text-muted)",
                 textTransform: "uppercase",
                 letterSpacing: "0.5px",
                 marginBottom: "16px"
@@ -222,7 +222,7 @@ export function ProjectServiceCard({ service, project, currentUser, onUpdate, on
                 <div style={{
                   fontSize: "13px",
                   fontWeight: 600,
-                  color: "var(--neuron-ink-muted)",
+                  color: "var(--theme-text-muted)",
                   textTransform: "uppercase",
                   letterSpacing: "0.5px"
                 }}>
@@ -240,7 +240,7 @@ export function ProjectServiceCard({ service, project, currentUser, onUpdate, on
                       alignItems: "center",
                       gap: "6px",
                       padding: "8px 16px",
-                      backgroundColor: "var(--neuron-brand-green)",
+                      backgroundColor: "var(--theme-action-primary-bg)",
                       border: "none",
                       borderRadius: "6px",
                       fontSize: "13px",
@@ -250,10 +250,10 @@ export function ProjectServiceCard({ service, project, currentUser, onUpdate, on
                       transition: "all 0.2s ease"
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = "#0D5F58";
+                      e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg-dark, #0D5F58)";
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = "var(--neuron-brand-green)";
+                      e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
                     }}
                   >
                     <Plus size={16} />
@@ -275,7 +275,7 @@ export function ProjectServiceCard({ service, project, currentUser, onUpdate, on
                       style={{
                         padding: "16px",
                         backgroundColor: "var(--theme-bg-page)",
-                        border: "1px solid var(--neuron-ui-border)",
+                        border: "1px solid var(--theme-border-default)",
                         borderRadius: "8px",
                         display: "flex",
                         justifyContent: "space-between",
@@ -285,31 +285,31 @@ export function ProjectServiceCard({ service, project, currentUser, onUpdate, on
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)";
-                        e.currentTarget.style.borderColor = "var(--neuron-brand-green)";
+                        e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
-                        e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
+                        e.currentTarget.style.borderColor = "var(--theme-border-default)";
                       }}
                     >
                       <div>
                         <div style={{
                           fontSize: "14px",
                           fontWeight: 600,
-                          color: "var(--neuron-ink-primary)",
+                          color: "var(--theme-text-primary)",
                           marginBottom: "4px"
                         }}>
                           {booking.bookingId}
                         </div>
                         <div style={{
                           fontSize: "13px",
-                          color: "var(--neuron-ink-muted)"
+                          color: "var(--theme-text-muted)"
                         }}>
                           {booking.serviceType.charAt(0).toUpperCase() + booking.serviceType.slice(1).replace('-', ' ')} Booking
                         </div>
                       </div>
 
-                      <Eye size={16} style={{ color: "var(--neuron-ink-muted)" }} />
+                      <Eye size={16} style={{ color: "var(--theme-text-muted)" }} />
                     </div>
                   ))}
                 </div>
@@ -318,12 +318,12 @@ export function ProjectServiceCard({ service, project, currentUser, onUpdate, on
                   padding: "32px",
                   textAlign: "center",
                   backgroundColor: "var(--theme-bg-page)",
-                  border: "1px dashed var(--neuron-ui-border)",
+                  border: "1px dashed var(--theme-border-default)",
                   borderRadius: "8px"
                 }}>
                   <p style={{
                     fontSize: "14px",
-                    color: "var(--neuron-ink-muted)",
+                    color: "var(--theme-text-muted)",
                     margin: 0
                   }}>
                     No bookings created yet for this service

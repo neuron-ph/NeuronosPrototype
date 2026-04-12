@@ -20,7 +20,7 @@ export function ProjectBillings({ financials, project, highlightId }: ProjectBil
           bookingId={undefined} // Project level view
           onRefresh={refresh}
           isLoading={isLoading}
-          enableGroupByToggle={true}
+          enableGroupByToggle={false}
           linkedBookings={project.linkedBookings || []}
           highlightId={highlightId}
       />

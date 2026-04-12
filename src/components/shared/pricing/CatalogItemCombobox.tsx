@@ -3,11 +3,9 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { supabase } from "../../../utils/supabase/client";
-import { queryKeys } from "../../../lib/queryKeys";
 
 // ==================== TYPES ====================
 
@@ -78,20 +76,48 @@ function levenshtein(a: string, b: string): number {
 // Module-level cache so all combobox instances share one fetch
 let cachedItems: CatalogItem[] | null = null;
 let cacheTimestamp = 0;
-const CACHE_TTL = 60_000; // 60 seconds
+const CACHE_TTL = 5 * 60_000; // 5 minutes — matches React Query default gcTime
 
 // Cache also stores category side info for filtering
 let cachedCategorySides: Record<string, string> = {};
+
+// Singleton in-flight promise — deduplicates concurrent calls so N combobox
+// instances opening at the same time share a single pair of HTTP requests
+// instead of each firing their own (which exhausts the connection pool).
+let inflight: Promise<CatalogItem[]> | null = null;
 
 async function fetchCatalogItems(forceRefresh = false): Promise<CatalogItem[]> {
   if (!forceRefresh && cachedItems && Date.now() - cacheTimestamp < CACHE_TTL) {
     return cachedItems;
   }
+  // Return existing in-flight request if one is already running
+  if (inflight) return inflight;
+
+  // CRITICAL: Promise.race guarantees this resolves within 8s even if
+  // supabase.from() hangs at the auth layer BEFORE fetch() is called.
+  // AbortController only works once fetch starts — if the Supabase client
+  // blocks on session/token refresh internally, the abort signal goes
+  // unheard and the promise hangs forever. Promise.race is the outer safety net.
+  inflight = Promise.race([
+    doFetchCatalogItems(),
+    new Promise<CatalogItem[]>((resolve) =>
+      setTimeout(() => {
+        console.warn('fetchCatalogItems: hard timeout — returning cached data');
+        resolve(cachedItems || []);
+      }, 8_000)
+    ),
+  ]).finally(() => { inflight = null; });
+
+  return inflight;
+}
+
+async function doFetchCatalogItems(): Promise<CatalogItem[]> {
   try {
     const [itemsRes, catsRes] = await Promise.all([
       supabase.from('catalog_items').select('id, name, category_id, created_at, updated_at').order('name'),
       supabase.from('catalog_categories').select('id, side'),
     ]);
+
     if (!itemsRes.error && itemsRes.data) {
       cachedItems = itemsRes.data;
       cacheTimestamp = Date.now();
@@ -103,8 +129,8 @@ async function fetchCatalogItems(forceRefresh = false): Promise<CatalogItem[]> {
       }
     }
     return cachedItems || [];
-  } catch (err) {
-    console.error("Error fetching catalog items:", err);
+  } catch (err: any) {
+    console.error('fetchCatalogItems failed:', err?.message ?? err);
   }
   return cachedItems || [];
 }
@@ -136,7 +162,6 @@ export function CatalogItemCombobox({
   disabled = false,
   placeholder = "Item description",
 }: CatalogItemComboboxProps) {
-  const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
   const [searchText, setSearchText] = useState(value || "");
   const [items, setItems] = useState<CatalogItem[]>([]);
@@ -158,13 +183,18 @@ export function CatalogItemCombobox({
 
   // Load items when opening
   useEffect(() => {
-    if (isOpen) {
-      setIsLoading(true);
-      fetchCatalogItems().then((data) => {
+    if (!isOpen) return;
+    let cancelled = false;
+    setIsLoading(true);
+    fetchCatalogItems().then((data) => {
+      if (!cancelled) {
         setItems(filterBySide(data, side));
         setIsLoading(false);
-      });
-    }
+      }
+    }).catch(() => {
+      if (!cancelled) setIsLoading(false);
+    });
+    return () => { cancelled = true; };
   }, [isOpen, side]);
 
   // Compute position when opening
@@ -267,20 +297,41 @@ export function CatalogItemCombobox({
     setIsCreating(true);
 
     try {
-      const { data, error } = await supabase
-        .from('catalog_items')
-        .insert({ id: `ci-${Date.now()}`, name, ...(categoryId ? { category_id: categoryId } : {}) })
-        .select('id, name, category_id, created_at, updated_at')
-        .single();
+      // Promise.race provides a hard timeout that works even if supabase.from()
+      // hangs at the auth layer before fetch() is called (where AbortController
+      // can't help). This prevents the "Adding..." state from lasting forever.
+      const result = await Promise.race([
+        supabase
+          .from('catalog_items')
+          .insert({ id: `ci-${Date.now()}`, name, ...(categoryId ? { category_id: categoryId } : {}) })
+          .select('id, name, category_id, created_at, updated_at')
+          .single(),
+        new Promise<{ data: null; error: { message: string } }>((resolve) =>
+          setTimeout(() => resolve({ data: null, error: { message: 'Request timed out' } }), 10_000)
+        ),
+      ]);
+      const data = result.data as CatalogItem | null;
+      const error = result.error;
 
       if (!error && data) {
-        invalidateCache();
-        queryClient.invalidateQueries({ queryKey: queryKeys.catalog.all() });
+        // Update cache in-place so the new item is available immediately
+        // without triggering a re-fetch (which can race with a background auth refresh).
+        // NOTE: We intentionally do NOT call queryClient.invalidateQueries here.
+        // That would invalidate all catalog keys (items, categories, usageCounts, matrix),
+        // triggering a cascade of refetches across the app that exhausts the Supabase
+        // connection pool on the dev instance. The module cache update is sufficient for
+        // combobox UX; CatalogManagementPage will pick up the new item on its own staleTime.
+        if (cachedItems) {
+          cachedItems = [...cachedItems, data].sort((a, b) => a.name.localeCompare(b.name));
+          cacheTimestamp = Date.now();
+        } else {
+          invalidateCache();
+        }
         handleSelect(data);
         toast.success(`"${data.name}" added to catalog`);
       } else {
         console.error("Error creating catalog item:", error);
-        toast.error(`Failed to add item: ${error?.message ?? error?.code ?? "unknown error"}`);
+        toast.error(`Failed to add item: ${error?.message ?? (error as any)?.code ?? "unknown error"}`);
       }
     } catch (err: any) {
       console.error("Error creating catalog item:", err);

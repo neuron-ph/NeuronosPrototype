@@ -193,21 +193,31 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
   // Use effectiveDepartment from context for dev role override support
   const { user, effectiveDepartment, effectiveRole } = useUser();
 
-  // Fetch inbox unread count
+  // Fetch inbox unread count — with hard timeout so a hung Supabase client
+  // doesn't block the main thread or accumulate zombie requests.
   const fetchUnreadCount = useCallback(async () => {
     if (!user) return;
-    const { data } = await supabase.rpc("get_unread_count", {
-      p_user_id: user.id,
-      p_dept: effectiveDepartment || "",
-      p_role: effectiveRole || "staff",
-    });
-    setInboxUnreadCount(data || 0);
+    try {
+      const { data } = await Promise.race([
+        supabase.rpc("get_unread_count", {
+          p_user_id: user.id,
+          p_dept: effectiveDepartment || "",
+          p_role: effectiveRole || "staff",
+        }),
+        new Promise<{ data: null }>((resolve) =>
+          setTimeout(() => resolve({ data: null }), 8_000)
+        ),
+      ]);
+      if (data !== null) setInboxUnreadCount(data || 0);
+    } catch {
+      // Silently ignore — sidebar badge is non-critical
+    }
   }, [user, effectiveDepartment, effectiveRole]);
 
   useEffect(() => {
     fetchUnreadCount();
-    // Refresh count every 15s
-    const interval = setInterval(fetchUnreadCount, 15_000);
+    // Refresh count every 60s (was 15s — too aggressive for dev connection pool)
+    const interval = setInterval(fetchUnreadCount, 60_000);
     return () => clearInterval(interval);
   }, [fetchUnreadCount]);
   

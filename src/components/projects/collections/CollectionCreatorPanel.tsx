@@ -410,7 +410,7 @@ export function CollectionCreatorPanel({
                         type="text" 
                         value={referenceNo}
                         onChange={(e) => setReferenceNo(e.target.value)}
-                        className="w-full px-3.5 py-2.5 bg-[var(--theme-bg-surface)] border border-[var(--theme-border-default)] rounded-lg text-[var(--theme-text-primary)] text-sm focus:outline-none focus:ring-1 focus:ring-[#0F766E] focus:border-[var(--theme-action-primary-bg)]"
+                        className="w-full px-3.5 py-2.5 bg-[var(--theme-bg-surface)] border border-[var(--theme-border-default)] rounded-lg text-[var(--theme-text-primary)] text-sm focus:outline-none focus:ring-1 focus:ring-[var(--theme-action-primary-bg)] focus:border-[var(--theme-action-primary-bg)]"
                         placeholder="e.g. 12345"
                       />
                    </div>
@@ -439,7 +439,7 @@ export function CollectionCreatorPanel({
                         type="number"
                         value={amountReceived || ""}
                         onChange={(e) => handleAmountReceivedChange(e.target.value)}
-                        className="w-full pl-10 pr-4 py-4 bg-[var(--theme-bg-surface)] border border-[var(--theme-border-default)] rounded-lg text-2xl font-bold text-[var(--theme-action-primary-bg)] placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-[#0F766E] focus:border-transparent"
+                        className="w-full pl-10 pr-4 py-4 bg-[var(--theme-bg-surface)] border border-[var(--theme-border-default)] rounded-lg text-2xl font-bold text-[var(--theme-action-primary-bg)] placeholder-[var(--theme-border-default)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-action-primary-bg)] focus:border-transparent"
                         placeholder="0.00"
                       />
                    </div>
@@ -588,7 +588,7 @@ export function CollectionCreatorPanel({
                    <textarea
                      value={notes}
                      onChange={(e) => setNotes(e.target.value)}
-                     className="w-full px-3.5 py-2.5 bg-[var(--theme-bg-surface)] border border-[var(--theme-border-default)] rounded-lg text-[var(--theme-text-primary)] text-sm focus:outline-none focus:ring-1 focus:ring-[#0F766E]"
+                     className="w-full px-3.5 py-2.5 bg-[var(--theme-bg-surface)] border border-[var(--theme-border-default)] rounded-lg text-[var(--theme-text-primary)] text-sm focus:outline-none focus:ring-1 focus:ring-[var(--theme-action-primary-bg)]"
                      placeholder="Notes..."
                      rows={3}
                    />
@@ -629,8 +629,8 @@ export function CollectionCreatorPanel({
                disabled={isSaving || amountReceived <= 0}
                className={`px-6 py-2 text-sm font-bold text-white rounded-lg shadow-sm flex items-center gap-2 transition-all ${
                  isSaving || amountReceived <= 0 
-                   ? "bg-gray-400 cursor-not-allowed" 
-                   : "bg-[var(--theme-action-primary-bg)] hover:bg-[#0D655E] hover:shadow-md"
+                   ? "bg-[var(--theme-text-muted)] cursor-not-allowed opacity-60"
+                   : "bg-[var(--theme-action-primary-bg)] hover:opacity-90 hover:shadow-md"
                }`}
              >
                {isSaving ? (

@@ -43,9 +43,9 @@ export function ProjectFinancialsTab({ project, currentUser }: ProjectFinancials
   const profitMargin = financials.totals.grossMargin;
 
   const chartData = [
-    { name: "Revenue", amount: totalRevenue, fill: "#0F766E" },
-    { name: "Cost", amount: totalCost, fill: "#C05621" },
-    { name: "Profit", amount: grossProfit, fill: "#059669" },
+    { name: "Revenue", amount: totalRevenue, fill: "var(--theme-action-primary-bg)" },
+    { name: "Cost", amount: totalCost, fill: "var(--theme-status-warning-fg)" },
+    { name: "Profit", amount: grossProfit, fill: "var(--theme-status-success-fg)" },
   ];
 
   const timelineItems = [
@@ -122,12 +122,12 @@ export function ProjectFinancialsTab({ project, currentUser }: ProjectFinancials
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
-                <div style={{ padding: "8px", borderRadius: "8px", backgroundColor: "var(--theme-status-warning-bg)", color: "#C05621" }}>
+                <div style={{ padding: "8px", borderRadius: "8px", backgroundColor: "var(--theme-status-warning-bg)", color: "var(--theme-status-warning-fg)" }}>
                   <TrendingDown size={20} />
                 </div>
                 <span style={{ fontSize: "14px", fontWeight: 500, color: "var(--theme-text-muted)" }}>Total Cost</span>
               </div>
-              <div style={{ fontSize: "28px", fontWeight: 700, color: "#C05621" }}>{formatCurrency(totalCost)}</div>
+              <div style={{ fontSize: "28px", fontWeight: 700, color: "var(--theme-status-warning-fg)" }}>{formatCurrency(totalCost)}</div>
               <div style={{ fontSize: "13px", color: "var(--theme-text-muted)", marginTop: "4px" }}>
                 From {expenses.length} expenses
               </div>
@@ -217,7 +217,7 @@ export function ProjectFinancialsTab({ project, currentUser }: ProjectFinancials
                               padding: "4px 8px",
                               borderRadius: "4px",
                               backgroundColor: item.type === "Revenue" ? "var(--theme-bg-surface-tint)" : "var(--theme-status-warning-bg)",
-                              color: item.type === "Revenue" ? "var(--theme-action-primary-bg)" : "#C05621",
+                              color: item.type === "Revenue" ? "var(--theme-action-primary-bg)" : "var(--theme-status-warning-fg)",
                             }}
                           >
                             {item.type}

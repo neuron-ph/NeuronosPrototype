@@ -26,6 +26,7 @@ import { useUser } from "../hooks/useUser";
 import { useUsers } from "../hooks/useUsers";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../lib/queryKeys";
+import { fetchProjectsWithQuotation, fetchProjectWithQuotation } from "../utils/projectHydration";
 
 type BDView = "contacts" | "customers" | "inquiries" | "projects" | "tasks" | "activities" | "budget-requests" | "reports";
 type SubView = "list" | "detail" | "builder";
@@ -82,28 +83,22 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
       if (error) throw new Error(error.message);
       // Spread details + pricing JSONB so fields like credit_terms, validity_period, services_metadata
       // are accessible as top-level props (same pattern as Pricing.tsx fetch).
-      return (data || []).map((row: any) => ({
-        ...(row?.details ?? {}),
-        ...(row?.pricing ?? {}),
-        ...row,
-        // DB column is `quotation_number`; QuotationNew type uses `quote_number`
-        quote_number: row.quotation_number,
-        contact_person_name: row.contact_person_name || row.contact_name || null,
-      }));
+      return (data || []).map((row: any) => {
+        const m: any = { ...(row?.details ?? {}), ...(row?.pricing ?? {}), ...row };
+        m.quote_number = row.quotation_number;
+        m.contact_person_name = row.contact_person_name || row.contact_name || null;
+        if (!m.created_date) m.created_date = row.quotation_date || row.created_at;
+        if (!m.contract_validity_start && m.contract_start_date) m.contract_validity_start = m.contract_start_date;
+        if (!m.contract_validity_end && m.contract_end_date) m.contract_validity_end = m.contract_end_date;
+        return m;
+      });
     },
     // Inherits 5-minute staleTime from global QueryClient config
   });
 
   const { data: projects = [], isLoading: projectsLoading } = useQuery<Project[]>({
     queryKey: queryKeys.projects.list(),
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('projects')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (error) throw new Error(error.message);
-      return data || [];
-    },
+    queryFn: fetchProjectsWithQuotation,
     // Inherits 5-minute staleTime from global QueryClient config
   });
 
@@ -473,8 +468,8 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
           const hasTicket = await getOpenWorkflowTicket("quotation", newId);
           if (!hasTicket) {
             createWorkflowTicket({
-              subject: `New Inquiry: ${dbPayload.customer_name || 'Unknown'} – ${(dbPayload.services as string[] || []).join(', ') || 'N/A'}`,
-              body: `${user?.name} has submitted a new inquiry for pricing.\n\nCustomer: ${dbPayload.customer_name || 'Unknown'}\nServices: ${(dbPayload.services as string[] || []).join(', ') || 'N/A'}`,
+              subject: `New Inquiry: ${dbPayload.customer_name || 'Unknown'}`,
+              body: `${user?.name} submitted an inquiry for ${dbPayload.customer_name || 'Unknown'}.\n\nServices: ${(dbPayload.services as string[] || []).join(', ') || 'N/A'}`,
               type: "request",
               priority: "normal",
               recipientDept: "Pricing",
@@ -709,8 +704,8 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
                         const hasTicket = await getOpenWorkflowTicket("quotation", newId);
                         if (!hasTicket) {
                           createWorkflowTicket({
-                            subject: `New Inquiry: ${data.customer_name || 'Unknown'} – ${(data.services || []).join(', ') || 'N/A'}`,
-                            body: `${user?.name} has submitted a new inquiry for pricing.\n\nCustomer: ${data.customer_name || 'Unknown'}\nServices: ${(data.services || []).join(', ') || 'N/A'}`,
+                            subject: `New Inquiry: ${data.customer_name || 'Unknown'}`,
+                            body: `${user?.name} submitted an inquiry for ${data.customer_name || 'Unknown'}.\n\nServices: ${(data.services || []).join(', ') || 'N/A'}`,
                             type: "request",
                             priority: "normal",
                             recipientDept: "Pricing",
@@ -822,20 +817,16 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
                 onCreateTicket={onCreateTicket}
                 onConvertToProject={async (projectId) => {
                   try {
-                    const { data: projectData, error: fetchErr } = await supabase
-                      .from('projects')
-                      .select('*')
-                      .eq('id', projectId)
-                      .maybeSingle();
+                    const projectData = await fetchProjectWithQuotation(projectId);
 
-                    if (!fetchErr && projectData) {
+                    if (projectData) {
                       console.log(`Project ${projectData.project_number} has ${projectData.services_metadata?.length || 0} service specifications`);
                       
                       setSelectedProject(projectData);
                       setView("projects");
                       setSubView("detail");
                       
-                      fetchProjects();
+                      await fetchProjects();
                     } else {
                       await fetchProjects();
                       setView("projects");

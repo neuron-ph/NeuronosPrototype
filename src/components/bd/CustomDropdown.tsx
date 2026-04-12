@@ -23,17 +23,20 @@ interface CustomDropdownProps {
   size?: DropdownSize;
   buttonClassName?: string;
   buttonStyle?: React.CSSProperties;
+  /** Accessible label for the trigger button when no visible label is rendered above the dropdown.
+   *  Maps to aria-label on the trigger button so screen readers can identify the field. */
+  triggerAriaLabel?: string;
   // Multi-select support
   multiSelect?: boolean;
   multiValue?: string[];
   onMultiChange?: (values: string[]) => void;
 }
 
-export function CustomDropdown({ 
-  label, 
-  value, 
-  options, 
-  onChange, 
+export function CustomDropdown({
+  label,
+  value,
+  options,
+  onChange,
   placeholder,
   disabled = false,
   required = false,
@@ -42,6 +45,7 @@ export function CustomDropdown({
   size = "md",
   buttonClassName,
   buttonStyle,
+  triggerAriaLabel,
   multiSelect = false,
   multiValue = [],
   onMultiChange,
@@ -145,6 +149,7 @@ export function CustomDropdown({
           onClick={() => !disabled && setIsOpen(!isOpen)}
           disabled={disabled}
           type="button"
+          aria-label={triggerAriaLabel}
           className={`${currentSize.padding} rounded-lg ${currentSize.fontSize} transition-all flex items-center ${currentSize.gap} ${fullWidth ? "w-full" : currentSize.minWidth} ${buttonClassName || ""}`}
           style={{
             border: "1px solid var(--neuron-ui-border)",

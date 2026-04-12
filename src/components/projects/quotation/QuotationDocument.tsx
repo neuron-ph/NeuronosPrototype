@@ -5,28 +5,39 @@ import logoImage from "figma:asset/28c84ed117b026fbf800de0882eb478561f37f4f.png"
 
 interface QuotationDocumentProps {
   project: Project;
+  quotation?: QuotationNew;
   mode?: "print" | "preview";
   currentUser?: { name: string; email: string; } | null;
   options?: QuotationPrintOptions;
 }
 
 export const QuotationDocument = React.forwardRef<HTMLDivElement, QuotationDocumentProps>(
-  ({ project, mode = "print", currentUser, options }, ref) => {
-    // Fallback to quotation data if project fields are missing
-    const quote = project.quotation || (project as any) as QuotationNew;
-    
-    // Determine effective signatories
-    const preparedBy = options?.signatories.prepared_by.name || quote?.prepared_by || quote?.created_by || currentUser?.name || "System User";
-    const preparedByTitle = options?.signatories.prepared_by.title || quote?.prepared_by_title || "Sales Representative";
-    
-    const approvedBy = options?.signatories.approved_by.name || quote?.approved_by || "Management";
-    const approvedByTitle = options?.signatories.approved_by.title || quote?.prepared_by_title || "Authorized Signatory";
-    
-    // Determine display toggles (default to true if options not provided)
+  ({ project, quotation: quotationProp, mode = "print", currentUser, options }, ref) => {
+    // Prefer the direct quotation prop, then project.quotation, then project itself.
+    const quote = quotationProp ?? (project as any).quotation ?? (project as any) as QuotationNew;
+    // Backward-compat: old saves stored PDF fields in details JSONB with pdf_ prefix.
+    const legacy = quote as any;
+
+    // Signatories — never fall back to created_by (it is a raw auth UUID)
+    const preparedBy = options?.signatories.prepared_by.name || quote?.prepared_by || legacy?.pdf_prepared_by || currentUser?.name || "System User";
+    const preparedByTitle = options?.signatories.prepared_by.title || quote?.prepared_by_title || legacy?.pdf_prepared_by_title || "Sales Representative";
+    const approvedBy = options?.signatories.approved_by.name || quote?.approved_by || legacy?.pdf_approved_by || "Management";
+    // NOTE: old data used prepared_by_title here by mistake — now reads the correct field
+    const approvedByTitle = options?.signatories.approved_by.title || quote?.approved_by_title || legacy?.pdf_approved_by_title || "Authorized Signatory";
+
+    // Addressed-to (Conforme signatory)
+    const addressedName = options?.addressed_to?.name || quote?.addressed_to_name || legacy?.pdf_addressed_to_name || quote?.contact_person_name || "";
+    const addressedTitle = options?.addressed_to?.title || quote?.addressed_to_title || legacy?.pdf_addressed_to_title || "";
+
+    // Validity & payment terms
+    const validUntil = options?.validity_override || quote?.valid_until || quote?.expiry_date;
+    const paymentTerms = options?.payment_terms || quote?.payment_terms || legacy?.pdf_payment_terms || "";
+
+    // Display toggles (default to true if options not provided)
     const showBankDetails = options ? options.display.show_bank_details : true;
-    const showNotes = true; // Always show notes section
+    const showNotes = options ? options.display.show_notes : true;
     const showTax = options ? options.display.show_tax_summary : true;
-    const customNotes = options?.custom_notes ?? quote?.notes;
+    const customNotes = options?.custom_notes || legacy?.pdf_custom_notes || quote?.notes || "";
 
     // Helper to safe render
     const t = (val: any, fallback = "-") => {
@@ -50,47 +61,38 @@ export const QuotationDocument = React.forwardRef<HTMLDivElement, QuotationDocum
         return [addr.address, addr.city, addr.province, addr.country, addr.postal_code].filter(Boolean).join(", ");
     };
     
-    // Helper to calculate totals if not present
-    const categories = project.charge_categories || quote?.charge_categories || [];
-    let summary = (project as any).financial_summary || quote?.financial_summary || {
-        subtotal_non_taxed: 0,
-        subtotal_taxed: 0,
-        tax_rate: 0.12,
-        tax_amount: 0,
-        other_charges: 0,
-        grand_total: 0
+    // Helper: effective amount for one line item.
+    // Prefers stored amount when non-zero; falls back to final_price (selling items) or
+    // price × qty × forex (legacy items).
+    const effectiveAmt = (item: any): number => {
+        if (item.amount !== undefined && item.amount !== null && item.amount !== 0) return item.amount;
+        const unitPrice = item.final_price ?? item.price ?? 0;
+        return Number(unitPrice) * Number(item.quantity || 1) * Number(item.forex_rate || 1);
     };
 
-    // SAFETY CALCULATOR: If grand_total is 0, calculate from line items
-    if (summary.grand_total === 0 && categories.length > 0) {
+    // Prefer selling_price (dual-section pricing with margins) over legacy charge_categories.
+    // Both share the same { id, category_name, line_items, subtotal } shape.
+    const categories: QuotationChargeCategory[] =
+        (quote?.selling_price?.length ? quote.selling_price : null) ??
+        (project.charge_categories?.length ? project.charge_categories : null) ??
+        (quote?.charge_categories?.length ? quote.charge_categories : null) ??
+        [];
+
+    const storedSummary = (project as any).financial_summary || quote?.financial_summary;
+    let summary = storedSummary && storedSummary.grand_total > 0 ? storedSummary : (() => {
         let taxable = 0;
         let nonTaxable = 0;
-        
         categories.forEach(cat => {
             cat.line_items?.forEach(item => {
-                // Ensure we have a valid numeric amount
-                const amt = typeof item.amount === 'number' ? item.amount : 
-                           (Number(item.price || 0) * Number(item.quantity || 1) * Number(item.forex_rate || 1));
-                
-                if (item.is_taxed) {
-                    taxable += amt;
-                } else {
-                    nonTaxable += amt;
-                }
+                const amt = effectiveAmt(item);
+                if (item.is_taxed) taxable += amt;
+                else nonTaxable += amt;
             });
         });
-
-        const taxAmt = taxable * 0.12;
-        
-        summary = {
-            subtotal_non_taxed: nonTaxable,
-            subtotal_taxed: taxable,
-            tax_rate: 0.12,
-            tax_amount: taxAmt,
-            other_charges: 0,
-            grand_total: nonTaxable + taxable + taxAmt
-        };
-    }
+        const taxRate = storedSummary?.tax_rate ?? 0.12;
+        const taxAmt = taxable * taxRate;
+        return { subtotal_non_taxed: nonTaxable, subtotal_taxed: taxable, tax_rate: taxRate, tax_amount: taxAmt, other_charges: 0, grand_total: nonTaxable + taxable + taxAmt };
+    })();
 
     return (
       <div 
@@ -498,7 +500,7 @@ export const QuotationDocument = React.forwardRef<HTMLDivElement, QuotationDocum
                     </div>
                     <div className="p-ref-item">
                         <span className="p-ref-label">Valid Until</span>
-                        <span className="p-ref-value">{quote?.valid_until ? new Date(quote.valid_until).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "30 Days"}</span>
+                        <span className="p-ref-value">{validUntil ? new Date(validUntil).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "30 Days"}</span>
                     </div>
                 </div>
             </div>
@@ -525,7 +527,7 @@ export const QuotationDocument = React.forwardRef<HTMLDivElement, QuotationDocum
             <div>
                  <div className="p-cust-row">
                     <span className="p-cust-label">Company:</span>
-                    <span className="p-cust-val">{t(quote?.customer_company || quote?.customer_organization)}</span>
+                    <span className="p-cust-val">{t(quote?.customer_company || quote?.customer_organization || project.customer_name)}</span>
                 </div>
             </div>
         </div>
@@ -563,7 +565,13 @@ export const QuotationDocument = React.forwardRef<HTMLDivElement, QuotationDocum
             </div>
             <div className="p-shipment-cell">
                 <span className="p-shipment-label">TRANSIT & ROUTING</span>
-                <span className="p-shipment-value">{t(project.transit_time ? `${project.transit_time} ${project.routing_info || ''}` : project.routing_info)}</span>
+                <span className="p-shipment-value">{t(
+                    project.transit_time
+                        ? `${project.transit_time}${project.routing_info ? ` · ${project.routing_info}` : ""}`
+                        : (quote as any)?.transit_days
+                            ? `${(quote as any).transit_days} day(s)${project.routing_info ? ` · ${project.routing_info}` : ""}`
+                            : project.routing_info
+                )}</span>
             </div>
             <div className="p-shipment-cell">
                 <span className="p-shipment-label">COMMODITY</span>
@@ -637,27 +645,32 @@ export const QuotationDocument = React.forwardRef<HTMLDivElement, QuotationDocum
                         
                         // Line Items
                         if (cat.line_items) {
-                            cat.line_items.forEach((item, itemIdx) => {
+                            cat.line_items.forEach((item: any, itemIdx: number) => {
+                                // SellingPriceLineItem has final_price (base_cost + markup).
+                                const displayPrice = item.final_price ?? item.price;
                                 rows.push(
                                     <tr key={`cat-${categoryKey}-item-${item.id || itemIdx}`} className="p-rate-row">
                                         <td>{item.description}</td>
-                                        <td className="p-rate-price">{fmtMoney(item.price)}</td>
+                                        <td className="p-rate-price">{fmtMoney(displayPrice)}</td>
                                         <td className="p-rate-cur">{item.currency}</td>
                                         <td className="p-rate-qty">{item.quantity}</td>
                                         <td className="p-rate-forex">{item.forex_rate}</td>
                                         <td className="p-rate-tax">{item.is_taxed ? "x" : ""}</td>
                                         <td>{item.remarks || item.unit}</td>
-                                        <td className="p-rate-amount">{fmtMoney(item.amount)}</td>
+                                        <td className="p-rate-amount">{fmtMoney(effectiveAmt(item))}</td>
                                     </tr>
                                 );
                             });
                         }
-                        
-                        // Category Subtotal
+
+                        // Category Subtotal — recompute from line items when stored subtotal is 0
+                        const catSubtotal = (cat.subtotal && cat.subtotal !== 0)
+                            ? cat.subtotal
+                            : cat.line_items?.reduce((s: number, i: any) => s + effectiveAmt(i), 0) ?? 0;
                         rows.push(
                             <tr key={`cat-${categoryKey}-subtotal`} className="p-subtotal-row">
                                 <td colSpan={7} className="p-subtotal-label">SUBTOTAL</td>
-                                <td className="p-subtotal-val">{fmtMoney(cat.subtotal)}</td>
+                                <td className="p-subtotal-val">{fmtMoney(catSubtotal)}</td>
                             </tr>
                         );
 
@@ -767,8 +780,8 @@ export const QuotationDocument = React.forwardRef<HTMLDivElement, QuotationDocum
             <div className="p-sig-box">
                 <span className="p-sig-action">Conforme:</span>
                 <div className="p-sig-line"></div>
-                <span className="p-sig-name">{quote.contact_person_name || ""}</span>
-                <span className="p-sig-title">Date: _________________</span>
+                <span className="p-sig-name">{addressedName}</span>
+                <span className="p-sig-title">{addressedTitle || "Date: _________________"}</span>
             </div>
         </div>
 

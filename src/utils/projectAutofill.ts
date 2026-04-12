@@ -1,5 +1,6 @@
 import type { Project } from "../types/pricing";
 import type { BillingChargeCategory, ExpenseChargeCategory } from "../types/operations";
+import { fetchProjectByNumberWithQuotation } from "./projectHydration";
 
 /**
  * Project Autofill Utilities
@@ -12,14 +13,7 @@ export async function fetchProjectByNumber(
   projectNumber: string,
 ): Promise<{ success: boolean; data?: Project; error?: string }> {
   try {
-    const { supabase } = await import("./supabase/client");
-    const { data, error } = await supabase
-      .from('projects')
-      .select('*')
-      .eq('project_number', projectNumber)
-      .maybeSingle();
-    
-    if (error) return { success: false, error: error.message };
+    const data = await fetchProjectByNumberWithQuotation(projectNumber);
     if (!data) return { success: false, error: 'Project not found' };
     return { success: true, data };
   } catch (error) {

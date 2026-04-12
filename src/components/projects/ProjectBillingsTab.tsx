@@ -229,7 +229,7 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
         {/* Header Bar */}
         <div style={{
           backgroundColor: "var(--theme-bg-surface)",
-          border: "1px solid var(--neuron-ui-border, #E5E7EB)",
+          border: "1px solid var(--theme-border-default)",
           borderRadius: "8px",
           marginBottom: "24px"
         }}>
@@ -239,18 +239,18 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
             display: "flex",
             alignItems: "center",
             gap: "16px",
-            borderBottom: "1px solid var(--neuron-ui-border, #E5E7EB)"
+            borderBottom: "1px solid var(--theme-border-default)"
           }}>
             <div style={{
               display: "flex",
               alignItems: "center",
               gap: "8px"
             }}>
-              <FileText size={18} style={{ color: "var(--neuron-brand-green, #0F766E)" }} />
+              <FileText size={18} style={{ color: "var(--theme-action-primary-bg)" }} />
               <h2 style={{
                 fontSize: "16px",
                 fontWeight: 600,
-                color: "var(--neuron-brand-green, #0F766E)",
+                color: "var(--theme-action-primary-bg)",
                 margin: 0
               }}>
                 Project Billings
@@ -258,7 +258,7 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
             </div>
             <p style={{
               fontSize: "13px",
-              color: "var(--neuron-ink-muted, #6B7280)",
+              color: "var(--theme-text-muted)",
               margin: 0,
               flex: 1
             }}>
@@ -281,7 +281,7 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
                 gap: "6px",
                 fontSize: "11px",
                 fontWeight: 600,
-                color: "var(--neuron-ink-muted, #6B7280)",
+                color: "var(--theme-text-muted)",
                 textTransform: "uppercase",
                 letterSpacing: "0.5px"
               }}>
@@ -321,7 +321,7 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
           {/* Top: Unbilled Charges */}
           <div style={{ 
             backgroundColor: "var(--theme-bg-surface)", 
-            border: "1px solid var(--neuron-ui-border, #E5E7EB)", 
+            border: "1px solid var(--theme-border-default)", 
             borderRadius: "8px",
             overflow: "hidden",
             display: "flex",
@@ -330,7 +330,7 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
           }}>
             <div style={{ 
               padding: "20px 24px", 
-              borderBottom: "1px solid var(--neuron-ui-border, #E5E7EB)",
+              borderBottom: "1px solid var(--theme-border-default)",
               backgroundColor: "var(--theme-bg-page)",
               display: "flex",
               justifyContent: "space-between",
@@ -339,7 +339,7 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
               <h3 style={{ 
                 fontSize: "14px", 
                 fontWeight: 600, 
-                color: "var(--neuron-brand-green, #0F766E)",
+                color: "var(--theme-action-primary-bg)",
                 textTransform: "uppercase",
                 letterSpacing: "0.5px",
                 margin: 0
@@ -370,9 +370,9 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
                       gap: "8px",
                       padding: "8px 16px",
                       backgroundColor: "var(--theme-bg-surface)",
-                      border: "1px solid var(--neuron-brand-green, #0F766E)",
+                      border: "1px solid var(--theme-action-primary-bg)",
                       borderRadius: "6px",
-                      color: "var(--neuron-brand-green, #0F766E)",
+                      color: "var(--theme-action-primary-bg)",
                       fontSize: "13px",
                       fontWeight: 600,
                       cursor: isImporting ? "not-allowed" : "pointer",
@@ -401,8 +401,8 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
                           )}
                         </button>
                       </th>
-                      <th style={{ textAlign: "left", padding: "12px 16px", fontSize: "11px", fontWeight: 600, color: "var(--neuron-ink-muted, #6B7280)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Particulars</th>
-                      <th style={{ textAlign: "right", padding: "12px 16px", fontSize: "11px", fontWeight: 600, color: "var(--neuron-ink-muted, #6B7280)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Amount</th>
+                      <th style={{ textAlign: "left", padding: "12px 16px", fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Particulars</th>
+                      <th style={{ textAlign: "right", padding: "12px 16px", fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Amount</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -411,7 +411,7 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
                         <td style={{ padding: "12px 16px" }}>
                           <button 
                             onClick={() => handleToggleSelect(item.id)}
-                            style={{ background: "none", border: "none", cursor: "pointer", color: selectedIds.has(item.id) ? "var(--theme-action-primary-bg)" : "var(--neuron-ui-muted)" }}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: selectedIds.has(item.id) ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)" }}
                           >
                             {selectedIds.has(item.id) ? <CheckSquare size={18} /> : <Square size={18} />}
                           </button>
@@ -434,13 +434,13 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
           {/* Bottom: Billing Statements */}
           <div style={{ 
             backgroundColor: "var(--theme-bg-surface)", 
-            border: "1px solid var(--neuron-ui-border, #E5E7EB)", 
+            border: "1px solid var(--theme-border-default)", 
             borderRadius: "8px",
             overflow: "hidden"
           }}>
             <div style={{ 
               padding: "20px 24px", 
-              borderBottom: "1px solid var(--neuron-ui-border, #E5E7EB)",
+              borderBottom: "1px solid var(--theme-border-default)",
               backgroundColor: "var(--theme-bg-page)",
               display: "flex",
               justifyContent: "space-between",
@@ -449,7 +449,7 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
                <h3 style={{ 
                 fontSize: "14px", 
                 fontWeight: 600, 
-                color: "var(--neuron-brand-green, #0F766E)",
+                color: "var(--theme-action-primary-bg)",
                 textTransform: "uppercase",
                 letterSpacing: "0.5px",
                 margin: 0
@@ -609,7 +609,7 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
           {/* Project Billings Total */}
           <div style={{
             backgroundColor: "var(--theme-bg-surface)",
-            border: "1px solid var(--neuron-ui-border, #E5E7EB)",
+            border: "1px solid var(--theme-border-default)",
             borderRadius: "8px",
             padding: "24px"
           }}>
@@ -622,7 +622,7 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
                 <div style={{
                   fontSize: "11px",
                   fontWeight: 600,
-                  color: "var(--neuron-ink-muted, #6B7280)",
+                  color: "var(--theme-text-muted)",
                   textTransform: "uppercase",
                   letterSpacing: "0.5px",
                   marginBottom: "4px"
@@ -631,7 +631,7 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
                 </div>
                 <div style={{
                   fontSize: "13px",
-                  color: "var(--neuron-ink-muted, #6B7280)"
+                  color: "var(--theme-text-muted)"
                 }}>
                   Combined total of all billed and unbilled charges
                 </div>

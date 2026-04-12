@@ -94,7 +94,7 @@ export function CreateQuotationMenu({ onSelect, buttonText, entityWord = "Quotat
             right: 0,
             width: "340px",
             backgroundColor: "var(--theme-bg-surface)",
-            border: "0.8px solid #E5ECE9",
+            border: "0.8px solid var(--theme-border)",
             borderRadius: "10px",
             boxShadow:
               "0px 4px 6px -2px rgba(16, 24, 40, 0.03), 0px 12px 16px -4px rgba(16, 24, 40, 0.08)",
@@ -127,10 +127,10 @@ export function CreateQuotationMenu({ onSelect, buttonText, entityWord = "Quotat
                 textAlign: "left",
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "#F0FAF8";
+                e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)";
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "white";
+                e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
               }}
             >
               {/* Icon */}

@@ -267,7 +267,11 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
   );
   const [quotationName, setQuotationName] = useState(initialData?.quotation_name || "");
   const [selectedServices, setSelectedServices] = useState<string[]>(initialData?.services || []);
-  const [date, setDate] = useState(initialData?.quotation_date || initialData?.created_date || new Date().toISOString().split('T')[0]);
+  // Always strip the time portion — Supabase returns full ISO timestamps but <input type="date"> requires yyyy-MM-dd
+  const [date, setDate] = useState(() => {
+    const raw = initialData?.quotation_date || initialData?.created_date || "";
+    return raw ? raw.split('T')[0] : new Date().toISOString().split('T')[0];
+  });
   const [creditTerms, setCreditTerms] = useState(initialData?.credit_terms || "");
   // Parse numeric days from stored string — handles legacy "30 days" and plain "30"
   const [validity, setValidity] = useState(() => {
@@ -389,8 +393,16 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
   }, [isContractMode]);
 
   // ✨ NEW: Initial Data Sync for View Mode
-  // When running in view mode (e.g., QuotationFormView), we need to ensure the state 
+  // When running in view mode (e.g., QuotationFormView), we need to ensure the state
   // stays in sync with initialData prop updates, since the component instance persists.
+  //
+  // ⚠️  IMPORTANT: Depend on stable DB identifiers (id + updated_at), NOT the initialData
+  // object reference. QuotationFormView constructs initialData inline, so the reference
+  // changes on every parent re-render even when the data is identical. Using the full object
+  // as a dep would reset the user's unsaved edits (selling price, categories, line items)
+  // on every re-render. The key-based remount in QuotationFormView already handles post-save
+  // refresh; this effect only needs to fire when the DB record actually changed.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (viewMode && initialData) {
       console.log("🔄 QuotationBuilderV3: Syncing state with new initialData (View Mode)");
@@ -417,7 +429,8 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
         });
       }
     }
-  }, [viewMode, initialData]);
+  // Depend on stable DB fields, not the object reference — see comment above.
+  }, [viewMode, initialData?.id, initialData?.updated_at]);
 
   // When Marine Insurance is added AFTER Forwarding is already filled, carry over the route fields
   const prevSelectedServicesRef = useRef<string[]>(selectedServices);
@@ -986,7 +999,9 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
             .single();
           if (created) {
             catalogCategoryId = created.id;
-            queryClient.invalidateQueries({ queryKey: queryKeys.catalog.all() });
+            // Only invalidate categories — not catalog.all() which triggers a cascade
+            // of refetches (items, usageCounts, matrix) that exhausts the connection pool
+            queryClient.invalidateQueries({ queryKey: queryKeys.catalog.categories() });
             toast.success(`"${finalCategoryName}" added to catalog`);
           }
         }

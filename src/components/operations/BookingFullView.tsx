@@ -75,7 +75,7 @@ export function BookingFullView({ booking, onBack }: BookingFullViewProps) {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-xl font-semibold text-[var(--neuron-ink-primary)]">
-                {booking.bookingId || booking.id || "New Booking"}
+                {booking.name || booking.bookingId || booking.id || "New Booking"}
               </h1>
               <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100`}>
                 {booking.status || "Draft"}

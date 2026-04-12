@@ -1,4 +1,4 @@
-import { ArrowLeft, Edit3, FileText, FolderPlus, Layout, UserCircle } from "lucide-react";
+import { ArrowLeft, Download, Edit3, FileText, FolderPlus, Layout, UserCircle } from "lucide-react";
 import { CustomDatePicker } from "../common/CustomDatePicker";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -14,9 +14,13 @@ import { CommentsTab } from "../shared/CommentsTab";
 import { SegmentedToggle } from "../ui/SegmentedToggle";
 import { QuotationPDFScreen } from "../projects/quotation/screen/QuotationPDFScreen";
 import { QuotationFormView } from "../projects/quotation/QuotationFormView";
+import { downloadQuotationPDF } from "./QuotationPDFRenderer";
+import type { QuotationPrintOptions } from "../projects/quotation/screen/useQuotationDocumentState";
+import { useCompanySettings } from "../../hooks/useCompanySettings";
 import { supabase } from "../../utils/supabase/client";
 import { createWorkflowTicket, getOpenWorkflowTicket } from "../../utils/workflowTickets";
 import { logActivity, logCreation, logStatusChange } from "../../utils/activityLog";
+import { buildProjectInsertFromQuotation, normalizeProjectRow } from "../../utils/projectHydration";
 import {
   getNormalizedContractStatus,
   getNormalizedQuotationStatus,
@@ -37,7 +41,7 @@ interface QuotationFileViewProps {
   onCreateTicket?: (quotation: QuotationNew) => void;
   onConvertToProject?: (projectId: string) => void;
   onConvertToContract?: (quotationId: string) => void;
-  currentUser?: { id: string; name: string; email: string; department: string } | null;
+  currentUser?: { id: string; name: string; email: string; department: string; role?: string } | null;
 }
 
 type TabType = "details" | "comments";
@@ -61,6 +65,9 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
   useEffect(() => {
     setLocalDeadline((quotation as any).details?.pricing_deadline || "");
   }, [(quotation as any).details?.pricing_deadline]);
+  const [isQuickDownloading, setIsQuickDownloading] = useState(false);
+  const { settings: companySettings } = useCompanySettings();
+
   const normalizedStatus = getNormalizedQuotationStatus(quotation);
   const normalizedContractStatus = getNormalizedContractStatus(quotation);
   const isLocked = isQuotationLocked(quotation);
@@ -71,9 +78,10 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
   const currentUserId = currentUser?.id || "user-123";
   const currentUserName = currentUser?.name || "John Doe";
   const currentUserDepartment = currentUser?.department || userDepartment || "BD";
+  const activeUserRole = currentUser?.role || effectiveRole;
 
   // Can assign if user is a Pricing Manager only (handles both old "manager" and new "Manager" role values)
-  const canAssign = userDepartment === "Pricing" && effectiveRole?.toLowerCase() === "manager";
+  const canAssign = userDepartment === "Pricing" && activeUserRole?.toLowerCase() === "manager";
 
   // Fetch all Pricing users for the assignment dropdown, filter out managers/above in JS
   // No 'enabled' guard — query always runs; the UI is already gated by canAssign
@@ -127,8 +135,8 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
           ? `\nDue: ${new Date(deadline + "T00:00:00").toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" })}`
           : "";
         createWorkflowTicket({
-          subject: `Pricing request: ${quotationLabel}`,
-          body: `You have a new pricing assignment.\n\nCustomer: ${customerLabel}\nServices: ${servicesLabel}${deadlineLine}\nAssigned by: ${currentUserName}`,
+          subject: `Assigned to You: ${quotationLabel}`,
+          body: `${currentUserName} assigned you to price this quotation.\n\nCustomer: ${customerLabel}\nServices: ${servicesLabel}${deadlineLine}`,
           type: "request",
           priority: "normal",
           recipientUserId: newUserId,
@@ -147,8 +155,8 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
       const bdRepId = (quotation as any).created_by as string | undefined;
       if (bdRepId && bdRepId !== currentUserId) {
         createWorkflowTicket({
-          subject: `Inquiry assigned to pricing: ${customerLabel} – ${servicesLabel}`,
-          body: `Your inquiry for ${customerLabel} has been assigned to ${newAssignee?.name || "a pricing staff member"} for pricing.\n\nQuotation: ${quotationLabel}`,
+          subject: `Pricing Started: ${customerLabel}`,
+          body: `${newAssignee?.name || "A pricing staff member"} is now working on pricing for your inquiry.\n\nQuotation: ${quotationLabel}`,
           type: "fyi",
           priority: "normal",
           recipientUserId: bdRepId,
@@ -164,8 +172,8 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
       // Notify previous assignee they've been unassigned
       if (previousAssigneeId && previousAssigneeId !== newUserId) {
         createWorkflowTicket({
-          subject: `Unassigned: ${customerLabel} – ${servicesLabel}`,
-          body: `You have been unassigned from the following inquiry.\n\nCustomer: ${customerLabel}\nServices: ${servicesLabel}\nQuotation: ${quotationLabel}`,
+          subject: `Reassigned: ${quotationLabel}`,
+          body: `You've been unassigned from this quotation. No further action needed.\n\nCustomer: ${customerLabel}`,
           type: "fyi",
           priority: "normal",
           recipientUserId: previousAssigneeId,
@@ -225,15 +233,24 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
     }
   };
 
-  // Adapter function to convert QuotationNew to Project for compatibility with Project components
+  // Adapter function to convert QuotationNew to Project for compatibility with Project components.
+  // IMPORTANT: Merge JSONB details first so any fields stored there (prepared_by_title,
+  // addressed_to_name, custom_notes, etc.) are surfaced before explicit overrides replace them.
   const adaptQuotationToProject = (quotation: QuotationNew): Project => {
+    const details = typeof quotation.details === 'object' && quotation.details !== null
+      ? (quotation.details as Record<string, any>)
+      : {};
+
     return {
-      id: quotation.project_id || "temp-project-id", // Use project ID if exists, otherwise placeholder
-      project_number: quotation.project_number || quotation.quote_number, // Fallback to quote number
+      // Spread JSONB details first — explicit fields below take precedence
+      ...details,
+
+      id: quotation.project_id || "temp-project-id",
+      project_number: quotation.project_number || quotation.quote_number,
       quotation_id: quotation.id,
       quotation_number: quotation.quote_number,
       quotation_name: quotation.quotation_name,
-      
+
       // Customer
       customer_id: quotation.customer_id,
       customer_name: quotation.customer_name,
@@ -241,7 +258,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
       customer_role: quotation.customer_role,
       contact_person_id: quotation.contact_person_id,
       contact_person_name: quotation.contact_person_name,
-      
+
       // Shipment
       movement: quotation.movement,
       services: quotation.services,
@@ -250,7 +267,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
       charge_categories: quotation.charge_categories,
       currency: quotation.currency,
       total: quotation.financial_summary?.grand_total,
-      
+
       category: quotation.category,
       pol_aol: quotation.pol_aol,
       pod_aod: quotation.pod_aod,
@@ -266,17 +283,17 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
       routing_info: quotation.routing_info,
       collection_address: quotation.collection_address,
       pickup_address: quotation.pickup_address,
-      
+
       // Status & Meta
       status: "Active",
       booking_status: "No Bookings Yet",
       created_at: quotation.created_at,
       updated_at: quotation.updated_at,
-      
-      // Owner
-      bd_owner_user_name: quotation.prepared_by, // Best guess for display
-      
-      quotation: quotation // Important: Nest the original quotation
+
+      // Owner — prefer display-name fields over raw IDs
+      bd_owner_user_name: quotation.prepared_by,
+
+      quotation: quotation, // Nest the original quotation for the PDF renderer
     } as Project;
   };
 
@@ -332,16 +349,12 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
   };
 
   const handleDuplicate = () => {
-    console.log("Duplicating quotation:", quotation.quote_number);
     if (onDuplicate) {
       onDuplicate(quotation);
-    } else {
-      alert(`📋 Quotation ${quotation.quote_number} has been duplicated! (Preview only)`);
     }
   };
 
   const handleDelete = () => {
-    console.log("Deleting quotation:", quotation.quote_number);
     if (onDelete) {
       onDelete();
     } else {
@@ -374,8 +387,8 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
       const existing = await getOpenWorkflowTicket("quotation", quotation.id);
       if (!existing) {
         await createWorkflowTicket({
-          subject: `Price Quotation: ${quotation.quote_number || quotation.quotation_name}`,
-          body: `${currentUser.name} has submitted quotation "${quotation.quotation_name}" (${quotation.quote_number}) for pricing. Please review and add pricing.`,
+          subject: `Price This: ${quotation.quotation_name}${quotation.quote_number ? ` (${quotation.quote_number})` : ""}`,
+          body: `${currentUser.name} submitted a quotation for pricing.\n\nCustomer: ${quotation.customer_name}`,
           type: "request",
           priority: "normal",
           recipientDept: "Pricing",
@@ -393,8 +406,8 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
     if (normalizeQuotationStatus(newStatus, quotation) === "Priced" && currentUser) {
       const bdRepId = (quotation as any).created_by as string | undefined;
       await createWorkflowTicket({
-        subject: `Ready to Send: ${quotation.quote_number || quotation.quotation_name}`,
-        body: `Pricing for "${quotation.quotation_name}" (${quotation.quote_number}) is complete. Please review and send the quotation to ${quotation.customer_name}.`,
+        subject: `Ready to Send: ${quotation.quotation_name}${quotation.quote_number ? ` (${quotation.quote_number})` : ""}`,
+        body: `Pricing is complete. Please review and send this quotation to ${quotation.customer_name}.`,
         type: "request",
         priority: "normal",
         ...(bdRepId ? { recipientUserId: bdRepId } : { recipientDept: "Business Development" }),
@@ -417,8 +430,6 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
         .eq('id', quotation.project_id);
       if (projectError) {
         console.error("Failed to cancel linked project:", projectError.message);
-      } else {
-        console.log(`Project ${quotation.project_id} cancelled due to quotation status: ${normalizedNew}`);
       }
     }
   };
@@ -447,8 +458,8 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
     // Notify Operations that a new project is ready for execution
     if (currentUser) {
       await createWorkflowTicket({
-        subject: `New Project: ${quotation.quote_number || quotation.quotation_name}`,
-        body: `A new project has been created for ${quotation.customer_name} from quotation "${quotation.quotation_name}" (${quotation.quote_number}). Please review and begin execution planning.`,
+        subject: `New Project: ${quotation.customer_name}`,
+        body: `A project has been created from quotation ${quotation.quotation_name}${quotation.quote_number ? ` (${quotation.quote_number})` : ""}.\n\nCustomer: ${quotation.customer_name}`,
         type: "fyi",
         priority: "normal",
         recipientDept: "Operations",
@@ -479,21 +490,10 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
     try {
       // Create the project first, then persist the conversion markers on the quotation.
       const projectNumber = `PRJ-${Date.now().toString().slice(-6)}`;
-      const projectData = {
+      const projectData = buildProjectInsertFromQuotation(quotation, currentUser, {
         id: `proj-${Date.now()}`,
-        project_number: projectNumber,
-        quotation_id: quotation.id,
-        customer_id: quotation.customer_id,
-        customer_name: quotation.customer_name || quotation.customer_company,
-        status: 'Active',
-        created_by: currentUser.id,
-        created_by_name: currentUser.name,
-        created_at: new Date().toISOString(),
-        details: {
-          bd_owner_user_id: currentUser.id,
-          bd_owner_user_name: currentUser.name,
-        },
-      };
+        projectNumber,
+      });
       const { data: project, error: pError } = await supabase.from('projects').insert(projectData).select().single();
       if (pError) throw new Error(pError.message);
       const _actorProj = { id: currentUser.id, name: currentUser.name, department: currentUser.department };
@@ -522,7 +522,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
 
       toast.success(`✓ Project ${project.project_number} created successfully!`);
 
-      setCreatedProject(project);
+      setCreatedProject(normalizeProjectRow(project));
 
       if (userDepartment === "Pricing") {
         setShowCreateBookingsModal(true);
@@ -582,24 +582,74 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
     }
   };
 
-  // Handle saving from PDF View
+  // Quick-download with default options — bypasses the PDF editor for one-click export
+  const handleQuickDownload = async () => {
+    if (isQuickDownloading) return;
+    setIsQuickDownloading(true);
+    try {
+      const defaultOptions: QuotationPrintOptions = {
+        signatories: {
+          prepared_by: {
+            name: currentUser?.name || quotation.prepared_by || "System User",
+            title: "Sales Representative",
+          },
+          approved_by: { name: "Management", title: "Authorized Signatory" },
+        },
+        addressed_to: {
+          name: quotation.contact_person_name || "",
+          title: "",
+        },
+        validity_override: quotation.valid_until || "",
+        payment_terms: "",
+        custom_notes: "",
+        display: { show_bank_details: true, show_tax_summary: true },
+      };
+      await downloadQuotationPDF(quotation, defaultOptions, companySettings);
+    } catch (err: any) {
+      toast.error("Download failed: " + (err?.message ?? "Unknown error"));
+    } finally {
+      setIsQuickDownloading(false);
+    }
+  };
+
+  // Handle saving PDF document settings — persists all signatory, validity, payment and notes
+  // fields directly as explicit DB columns (migration 028 added them all).
   const handlePDFSave = async (data: any) => {
-    // TODO: Implement update logic if needed
-    // For now, we might just toast or update local state
-    // But since QuotationNew structure might be different from what PDF saves...
-    // PDF saves signatory names and notes.
-    
-    // We can map this back to QuotationNew update
-    const updatedQuotation = {
-      ...quotation,
-      prepared_by: data.prepared_by,
-      prepared_by_title: data.prepared_by_title,
-      approved_by: data.approved_by,
-      notes: data.notes
-    };
-    
-    onUpdate(updatedQuotation);
-    toast.success("Quotation updated");
+    try {
+      const { error } = await supabase
+        .from('quotations')
+        .update({
+          prepared_by: data.prepared_by || null,
+          prepared_by_title: data.prepared_by_title || null,
+          approved_by: data.approved_by || null,
+          approved_by_title: data.approved_by_title || null,
+          addressed_to_name: data.addressed_to_name || null,
+          addressed_to_title: data.addressed_to_title || null,
+          payment_terms: data.payment_terms || null,
+          custom_notes: data.custom_notes || null,
+          valid_until: data.valid_until || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', quotation.id);
+
+      if (error) throw error;
+
+      onUpdate({
+        ...quotation,
+        prepared_by: data.prepared_by ?? quotation.prepared_by,
+        prepared_by_title: data.prepared_by_title ?? quotation.prepared_by_title,
+        approved_by: data.approved_by ?? quotation.approved_by,
+        approved_by_title: data.approved_by_title ?? quotation.approved_by_title,
+        addressed_to_name: data.addressed_to_name ?? quotation.addressed_to_name,
+        addressed_to_title: data.addressed_to_title ?? quotation.addressed_to_title,
+        payment_terms: data.payment_terms ?? quotation.payment_terms,
+        custom_notes: data.custom_notes ?? quotation.custom_notes,
+        valid_until: data.valid_until ?? quotation.valid_until,
+      });
+      toast.success("PDF settings saved");
+    } catch (err: any) {
+      toast.error("Failed to save: " + (err?.message ?? "Unknown error"));
+    }
   };
 
   return (
@@ -609,14 +659,16 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
       flexDirection: "column",
       height: "100vh"
     }}>
-      {/* Header Bar - Cleaned Up (Concept 2) */}
+      {/* Header Bar */}
       <div style={{
-        padding: "20px 48px",
+        padding: "20px clamp(20px, 4vw, 48px)",
         borderBottom: "1px solid var(--neuron-ui-border)",
         backgroundColor: "var(--theme-bg-surface)",
         display: "flex",
         justifyContent: "space-between",
-        alignItems: "center"
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: "12px"
       }}>
         <div>
           <button
@@ -683,17 +735,23 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
       </div>
 
       {/* Merged Toolbar: Tabs + Actions */}
-      <div style={{ 
-        padding: "0 48px", 
+      <div style={{
+        padding: "0 clamp(20px, 4vw, 48px)",
         borderBottom: "1px solid var(--neuron-ui-border)",
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
-        height: "56px"
+        minHeight: "56px",
+        flexWrap: "wrap",
+        gap: "8px"
       }}>
         {/* Tabs - Left Side */}
-        <div style={{ display: "flex", gap: "24px", height: "100%" }}>
+        <div role="tablist" aria-label="Quotation sections" style={{ display: "flex", gap: "24px", height: "100%" }}>
           <button
+            role="tab"
+            aria-selected={activeTab === "details"}
+            aria-controls="tab-panel-details"
+            id="tab-details"
             onClick={() => setActiveTab("details")}
             style={{
               padding: "0 4px",
@@ -713,6 +771,10 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
             Details
           </button>
           <button
+            role="tab"
+            aria-selected={activeTab === "comments"}
+            aria-controls="tab-panel-comments"
+            id="tab-comments"
             onClick={() => setActiveTab("comments")}
             style={{
               padding: "0 4px",
@@ -832,8 +894,8 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
               </>
             );
           })()}
-          {/* Edit Button (Ghost Style) — hidden when locked (converted to project or contract) */}
-          {!isLocked && (
+          {/* Edit Button (Ghost Style) — hidden when locked, or when "Add Pricing" is shown (same action, better label) */}
+          {!isLocked && !(userDepartment === "Pricing" && normalizedStatus === "Pending Pricing") && (
             <button
               onClick={onEdit}
               style={{
@@ -842,7 +904,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
                 gap: "8px",
                 padding: "8px 16px",
                 backgroundColor: "transparent",
-                border: "1px solid #F2F4F7", // Very faint outline
+                border: "1px solid var(--theme-border-default)",
                 borderRadius: "6px",
                 fontSize: "13px",
                 fontWeight: 500,
@@ -856,7 +918,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = "transparent";
-                e.currentTarget.style.borderColor = "#F2F4F7";
+                e.currentTarget.style.borderColor = "var(--theme-border-default)";
               }}
             >
               <Edit3 size={14} />
@@ -889,7 +951,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
                 transition: "all 0.2s ease"
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "#0D5F58";
+                e.currentTarget.style.backgroundColor = "var(--neuron-brand-green-dark, #0D5F58)";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = "var(--neuron-brand-green)";
@@ -910,7 +972,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
                 alignItems: "center",
                 gap: "8px",
                 padding: "8px 16px",
-                backgroundColor: isCreatingProject ? "#E0E0E0" : "var(--neuron-brand-green)",
+                backgroundColor: isCreatingProject ? "var(--theme-border-default)" : "var(--neuron-brand-green)",
                 border: "none",
                 borderRadius: "6px",
                 fontSize: "13px",
@@ -922,7 +984,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
               }}
               onMouseEnter={(e) => {
                 if (!isCreatingProject) {
-                  e.currentTarget.style.backgroundColor = "#0D5F58";
+                  e.currentTarget.style.backgroundColor = "var(--neuron-brand-green-dark, #0D5F58)";
                 }
               }}
               onMouseLeave={(e) => {
@@ -946,7 +1008,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
                 alignItems: "center",
                 gap: "8px",
                 padding: "8px 16px",
-                backgroundColor: isActivatingContract ? "#E0E0E0" : "var(--neuron-brand-green)",
+                backgroundColor: isActivatingContract ? "var(--theme-border-default)" : "var(--neuron-brand-green)",
                 border: "none",
                 borderRadius: "6px",
                 fontSize: "13px",
@@ -958,7 +1020,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
               }}
               onMouseEnter={(e) => {
                 if (!isActivatingContract) {
-                  e.currentTarget.style.backgroundColor = "#0D5F58";
+                  e.currentTarget.style.backgroundColor = "var(--neuron-brand-green-dark, #0D5F58)";
                 }
               }}
               onMouseLeave={(e) => {
@@ -990,6 +1052,45 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
             </div>
           )}
           
+          {/* Quick Download PDF — one-click export with default settings */}
+          <button
+            onClick={handleQuickDownload}
+            disabled={isQuickDownloading}
+            title="Download PDF"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "8px 14px",
+              backgroundColor: "transparent",
+              border: "1px solid var(--theme-border-default)",
+              borderRadius: "6px",
+              fontSize: "13px",
+              fontWeight: 500,
+              color: isQuickDownloading ? "var(--neuron-ink-muted)" : "var(--neuron-ink-secondary)",
+              cursor: isQuickDownloading ? "not-allowed" : "pointer",
+              opacity: isQuickDownloading ? 0.6 : 1,
+              transition: "all 0.15s ease",
+            }}
+            onMouseEnter={(e) => {
+              if (!isQuickDownloading) {
+                e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
+                e.currentTarget.style.borderColor = "var(--theme-border-default)";
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "transparent";
+              e.currentTarget.style.borderColor = "var(--theme-border-default)";
+            }}
+          >
+            {isQuickDownloading ? (
+              <div style={{ width: 14, height: 14, border: "2px solid currentColor", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+            ) : (
+              <Download size={14} />
+            )}
+            PDF
+          </button>
+
           <QuotationActionMenu
             quotation={quotation}
             onEdit={onEdit}
@@ -1001,53 +1102,80 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
       </div>
 
       {/* Main Content Area */}
-      <div style={{ 
-        flex: 1,
-        overflow: "auto"
-      }}>
+      <div
+        role="tabpanel"
+        id={activeTab === "details" ? "tab-panel-details" : "tab-panel-comments"}
+        aria-labelledby={activeTab === "details" ? "tab-details" : "tab-comments"}
+        style={{
+          flex: 1,
+          overflow: "auto",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
         {activeTab === "details" ? (
-           <div style={{ padding: "32px 48px", maxWidth: "1400px", margin: "0 auto" }}>
-             
-             {/* View Switcher */}
-             <div className="flex items-center justify-between mb-8">
-               <SegmentedToggle
-                   value={viewMode}
-                   onChange={setViewMode}
-                   options={[
-                       { value: "form", label: "Form View", icon: <Layout size={16} /> },
-                       { value: "pdf", label: "PDF View", icon: <FileText size={16} /> }
-                   ]}
-               />
-             </div>
-
-             {viewMode === "pdf" ? (
-                <div className="h-[800px] border border-[var(--theme-border-default)] rounded-xl overflow-hidden bg-[var(--theme-bg-surface)]">
-                    <QuotationPDFScreen 
-                        project={adaptedProject}
-                        onClose={() => setViewMode("form")}
-                        onSave={handlePDFSave}
-                        currentUser={currentUser}
-                        isEmbedded={true}
-                    />
-                </div>
-             ) : (
-                <QuotationFormView
+          viewMode === "pdf" ? (
+            // PDF mode: same container as form view
+            <div style={{ padding: "32px 48px", maxWidth: "1400px", margin: "0 auto", width: "100%" }}>
+              {/* View Switcher */}
+              <div className="flex items-center justify-between mb-8">
+                <SegmentedToggle
+                  value={viewMode}
+                  onChange={setViewMode}
+                  options={[
+                    { value: "form", label: "Form View", icon: <Layout size={16} /> },
+                    { value: "pdf", label: "PDF View", icon: <FileText size={16} /> },
+                  ]}
+                />
+              </div>
+              {/* PDF screen in a bounded card */}
+              <div style={{ height: "calc(100vh - 260px)", borderRadius: "12px", overflow: "hidden", border: "1px solid var(--neuron-ui-border)" }}>
+                <QuotationPDFScreen
                   project={adaptedProject}
-                  onSave={async (data: any) => {
-                    if (onSaveQuotation) {
+                  quotation={quotation}
+                  onClose={() => setViewMode("form")}
+                  onSave={handlePDFSave}
+                  currentUser={currentUser}
+                  isEmbedded={true}
+                />
+              </div>
+            </div>
+          ) : (
+            // Form mode: padded, max-width constrained, scrollable
+            <div style={{ padding: "32px 48px", maxWidth: "1400px", margin: "0 auto", width: "100%" }}>
+              {/* View Switcher */}
+              <div className="flex items-center justify-between mb-8">
+                <SegmentedToggle
+                  value={viewMode}
+                  onChange={setViewMode}
+                  options={[
+                    { value: "form", label: "Form View", icon: <Layout size={16} /> },
+                    { value: "pdf", label: "PDF View", icon: <FileText size={16} /> },
+                  ]}
+                />
+              </div>
+
+              <QuotationFormView
+                project={adaptedProject}
+                onSave={async (data: any) => {
+                  if (onSaveQuotation) {
+                    try {
                       await onSaveQuotation(data);
                       toast.success("Quotation saved successfully");
-                    } else {
-                      onUpdate(data);
-                      toast.success("Quotation updated");
+                    } catch (err: any) {
+                      toast.error(err?.message || 'Save failed');
                     }
-                  }}
-                  onAmend={onEdit}
-                />
-             )}
-           </div>
+                  } else {
+                    onUpdate(data);
+                    toast.success("Quotation updated");
+                  }
+                }}
+                onAmend={onEdit}
+              />
+            </div>
+          )
         ) : (
-          <div style={{ height: "100%" }}>
+          <div style={{ flex: 1 }}>
             <CommentsTab
               inquiryId={quotation.id}
               currentUserId={currentUserId}

@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router";
-import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../../lib/queryKeys";
 import type { Project } from "../../types/pricing";
 import { ProjectsList } from "./ProjectsList";
 import { ProjectDetail } from "./ProjectDetail";
+import { fetchProjectsWithQuotation, fetchProjectWithQuotation } from "../../utils/projectHydration";
 
 export type ProjectsView = "list" | "detail";
 
@@ -41,24 +41,19 @@ export function ProjectsModule({ currentUser, onCreateTicket, initialProject, de
   // ── Projects fetch ────────────────────────────────────────
   const { data: projects = [], isLoading, refetch } = useQuery<Project[]>({
     queryKey: queryKeys.projects.list(),
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('projects')
-        .select('*, quotations(services_metadata, services)')
-        .order('created_at', { ascending: false });
-      if (error) throw new Error(error.message);
-      return (data || []).map((p: any) => {
-        const { quotations, ...rest } = p;
-        return {
-          ...rest,
-          services_metadata: quotations?.services_metadata || rest.services_metadata || [],
-          linkedBookings: rest.linked_bookings || [],
-        };
-      });
-    },
+    queryFn: fetchProjectsWithQuotation,
     // Inherits 5-minute staleTime from global QueryClient config
   });
   const refreshProjects = () => { refetch(); };
+
+  useEffect(() => {
+    if (!selectedProject || projects.length === 0) return;
+
+    const hydratedProject = projects.find((project) => project.id === selectedProject.id);
+    if (hydratedProject) {
+      setSelectedProject(hydratedProject);
+    }
+  }, [projects, selectedProject?.id]);
 
   // Deep-link: auto-select project from ?project=PROJECT_NUMBER query param
   useEffect(() => {
@@ -98,21 +93,12 @@ export function ProjectsModule({ currentUser, onCreateTicket, initialProject, de
     // If viewing a specific project, fetch fresh detail (includes linkedBookings)
     if (selectedProject) {
       try {
-        const { data, error } = await supabase
-          .from('projects')
-          .select('*, quotations(services_metadata, services, charge_categories)')
-          .eq('id', selectedProject.id)
-          .single();
+        const data = await fetchProjectWithQuotation(selectedProject.id);
 
-        if (!error && data) {
-          const { quotations, ...rest } = data as any;
-          setSelectedProject({
-            ...rest,
-            services_metadata: quotations?.services_metadata || rest.services_metadata || [],
-            linkedBookings: rest.linked_bookings || [],
-          });
+        if (data) {
+          setSelectedProject(data);
         } else {
-          console.error('Failed to fetch project:', error?.message);
+          console.error('Failed to fetch project:', selectedProject.id);
         }
       } catch (error) {
         console.error('Error refreshing selected project:', error);
