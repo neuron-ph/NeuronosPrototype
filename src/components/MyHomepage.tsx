@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, KeyboardEvent } from "react";
 import { useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
+import { motion } from "motion/react";
 import { useUser } from "../hooks/useUser";
 import { supabase } from "../utils/supabase/client";
 import {
@@ -15,7 +16,6 @@ import {
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-// TicketItem, EVoucherItem, BookingItem, QuotationItem imported from dashboardFetchers
 
 interface TodoItem {
   id: string;
@@ -25,6 +25,18 @@ interface TodoItem {
   done_at: string | null;
 }
 
+// ─── Motion ───────────────────────────────────────────────────────────────────
+
+const EASE_OUT_QUINT: [number, number, number, number] = [0.22, 1, 0.36, 1];
+
+const panelVariants = {
+  hidden: { opacity: 0, y: 10 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: { delay: i * 0.07, duration: 0.28, ease: EASE_OUT_QUINT },
+  }),
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -64,8 +76,96 @@ function bookingRoute(serviceType: string): string {
   return map[serviceType] ?? "/operations";
 }
 
-// ─── Recently viewed ──────────────────────────────────────────────────────────
-// trackRecent / getRecents / RecentItem imported from ../lib/recents
+const MOTIVATIONAL_MESSAGES = {
+  morning: [
+    "Let's start the day strong.",
+    "Fresh day, fresh chance to move things forward.",
+    "Let's get an early win today.",
+    "A strong start changes everything.",
+    "Let's build momentum.",
+  ],
+  afternoon: [
+    "Let's finish the day stronger than we started.",
+    "Still time to make today productive.",
+    "Let's get a few more wins in.",
+    "The day's not over — let's make it count.",
+  ],
+  evening: [
+    "Let's wrap up the day.",
+    "One last solid push for the day.",
+    "Finish strong — even small progress counts.",
+    "Let's close the day well.",
+    "A little more progress before we call it.",
+  ],
+};
+
+function getMessagePool(): string[] {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 12) return MOTIVATIONAL_MESSAGES.morning;
+  if (h >= 12 && h < 18) return MOTIVATIONAL_MESSAGES.afternoon;
+  return MOTIVATIONAL_MESSAGES.evening;
+}
+
+// ─── Count-up hook ────────────────────────────────────────────────────────────
+
+function useCountUp(target: number, durationMs = 480, delayMs = 0) {
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    if (target === 0) { setVal(0); return; }
+    let raf: number;
+    const startAt = Date.now() + delayMs;
+    const tick = () => {
+      const elapsed = Date.now() - startAt;
+      if (elapsed < 0) { raf = requestAnimationFrame(tick); return; }
+      const t = Math.min(elapsed / durationMs, 1);
+      const ease = 1 - Math.pow(1 - t, 3);
+      setVal(Math.round(ease * target));
+      if (t < 1) raf = requestAnimationFrame(tick);
+      else setVal(target);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, durationMs, delayMs]);
+  return val;
+}
+
+// ─── Dept colors ──────────────────────────────────────────────────────────────
+
+function getDeptColors(dept: string): { bg: string; text: string } {
+  const map: Record<string, { bg: string; text: string }> = {
+    "Business Development": { bg: "var(--neuron-dept-bd-bg)",        text: "var(--neuron-dept-bd-text)" },
+    "Pricing":              { bg: "var(--neuron-dept-pricing-bg)",    text: "var(--neuron-dept-pricing-text)" },
+    "Operations":           { bg: "var(--neuron-dept-ops-bg)",        text: "var(--neuron-dept-ops-text)" },
+    "Accounting":           { bg: "var(--neuron-dept-accounting-bg)", text: "var(--neuron-dept-accounting-text)" },
+    "HR":                   { bg: "var(--neuron-dept-hr-bg)",         text: "var(--neuron-dept-hr-text)" },
+    "Executive":            { bg: "var(--neuron-dept-executive-bg)",  text: "var(--neuron-dept-executive-text)" },
+  };
+  return map[dept] ?? { bg: "var(--neuron-dept-default-bg)", text: "var(--neuron-dept-default-text)" };
+}
+
+// ─── Recent type registry ─────────────────────────────────────────────────────
+
+const RECENT_TYPE_COLOR: Record<RecentType, string> = {
+  booking:   "var(--neuron-brand-green)",
+  quotation: "var(--neuron-semantic-info)",
+  inquiry:   "var(--neuron-status-accent-fg)",
+  ticket:    "var(--neuron-semantic-warn)",
+  evoucher:  "var(--neuron-dept-accounting-text)",
+  project:   "var(--neuron-semantic-success)",
+  contact:   "#0891B2",
+  customer:  "#16A34A",
+};
+
+const RECENT_TYPE_LABEL: Record<RecentType, string> = {
+  booking:   "Booking",
+  quotation: "Quotation",
+  inquiry:   "Inquiry",
+  ticket:    "Ticket",
+  evoucher:  "E-Voucher",
+  project:   "Project",
+  contact:   "Contact",
+  customer:  "Customer",
+};
 
 function recentTypeIcon(type: RecentType) {
   const cls = "w-4 h-4";
@@ -79,28 +179,6 @@ function recentTypeIcon(type: RecentType) {
   if (type === "project")   return <FolderOpen    className={cls} />;
   return <FileText className={cls} />;
 }
-
-const RECENT_TYPE_COLOR: Record<RecentType, string> = {
-  booking:   "#0F766E", // teal — Operations
-  quotation: "#2563EB", // blue — Pricing
-  inquiry:   "#7C3AED", // violet — BD inquiry
-  ticket:    "#D97706", // amber — Inbox
-  evoucher:  "#EA580C", // orange — Accounting
-  project:   "#059669", // emerald — Projects
-  contact:   "#0891B2", // cyan — BD contact
-  customer:  "#16A34A", // green — BD customer
-};
-
-const RECENT_TYPE_LABEL: Record<RecentType, string> = {
-  booking:   "Booking",
-  quotation: "Quotation",
-  inquiry:   "Inquiry",
-  ticket:    "Ticket",
-  evoucher:  "E-Voucher",
-  project:   "Project",
-  contact:   "Contact",
-  customer:  "Customer",
-};
 
 // ─── Atoms ────────────────────────────────────────────────────────────────────
 
@@ -125,10 +203,11 @@ function SectionLabel({
         {count !== undefined && (
           <span
             className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 text-[10px] font-semibold rounded-full leading-none"
+            aria-label={`${count} ${label.toLowerCase()} items`}
             style={{
-              background: count > 0 ? "var(--neuron-semantic-success-bg)" : "var(--theme-bg-surface-subtle)",
-              color: count > 0 ? "var(--neuron-semantic-success)" : "var(--neuron-ink-muted)",
-              border: `1px solid ${count > 0 ? "var(--neuron-semantic-success-border)" : "var(--neuron-ui-border)"}`,
+              background: count > 0 ? "var(--neuron-semantic-success-bg)" : "var(--neuron-bg-page)",
+              color:      count > 0 ? "var(--neuron-semantic-success)"    : "var(--neuron-ink-muted)",
+              border:     `1px solid ${count > 0 ? "var(--neuron-semantic-success-border)" : "var(--neuron-ui-border)"}`,
             }}
           >
             {count}
@@ -138,10 +217,8 @@ function SectionLabel({
       {onViewAll && (
         <button
           onClick={onViewAll}
-          className="flex items-center gap-0.5 text-[11px] font-medium transition-colors"
+          className="flex items-center gap-0.5 text-[11px] font-medium transition-opacity hover:opacity-60"
           style={{ color: "var(--neuron-brand-green)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--neuron-brand-green-600)")}
-          onMouseLeave={(e) => (e.currentTarget.style.color = "var(--neuron-brand-green)")}
         >
           All <ArrowRight className="w-3 h-3" />
         </button>
@@ -150,11 +227,34 @@ function SectionLabel({
   );
 }
 
-function EmptyRow({ message, icon }: { message: string; icon?: React.ReactNode }) {
+function EmptyRow({
+  message,
+  icon,
+  cta,
+  onCta,
+}: {
+  message: string;
+  icon?: React.ReactNode;
+  cta?: string;
+  onCta?: () => void;
+}) {
   return (
-    <div className="px-4 py-5 flex flex-col items-center gap-2 text-center">
-      {icon && <div style={{ color: "var(--neuron-ui-muted)" }}>{icon}</div>}
+    <div className="px-4 py-6 flex flex-col items-center gap-2.5 text-center">
+      {icon && (
+        <div className="opacity-40" style={{ color: "var(--neuron-ui-muted)" }}>
+          {icon}
+        </div>
+      )}
       <p className="text-[12px]" style={{ color: "var(--neuron-ink-muted)" }}>{message}</p>
+      {cta && onCta && (
+        <button
+          onClick={onCta}
+          className="flex items-center gap-1 text-[11.5px] font-medium transition-opacity hover:opacity-70"
+          style={{ color: "var(--neuron-brand-green)" }}
+        >
+          {cta} <ArrowRight className="w-3 h-3" />
+        </button>
+      )}
     </div>
   );
 }
@@ -165,9 +265,9 @@ function SkeletonRow() {
       <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: "var(--neuron-ui-border)" }} />
       <div className="flex-1 space-y-1.5">
         <div className="h-3 rounded w-3/4" style={{ background: "var(--neuron-ui-border)" }} />
-        <div className="h-2.5 rounded w-1/2" style={{ background: "var(--theme-bg-surface-tint)" }} />
+        <div className="h-2.5 rounded w-1/2" style={{ background: "var(--neuron-bg-page)" }} />
       </div>
-      <div className="h-2.5 rounded w-7" style={{ background: "var(--theme-bg-surface-tint)" }} />
+      <div className="h-2.5 rounded w-7" style={{ background: "var(--neuron-bg-page)" }} />
     </div>
   );
 }
@@ -195,35 +295,45 @@ function ItemRow({
   sub,
   meta,
   onClick,
+  urgent = false,
 }: {
   dotColor: "green" | "amber" | "red" | "blue" | "muted";
   label: string;
   sub?: string;
   meta?: string;
   onClick: () => void;
+  urgent?: boolean;
 }) {
   return (
-    <div
+    <button
+      type="button"
       onClick={onClick}
-      className="px-4 py-2.5 flex items-start gap-3 cursor-pointer transition-colors"
-      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--neuron-state-hover)")}
-      onMouseLeave={(e) => (e.currentTarget.style.background = "")}
+      className="w-full px-4 py-2.5 flex items-start gap-3 text-left transition-colors hover:bg-[var(--neuron-state-hover)] focus-visible:outline-none focus-visible:bg-[var(--neuron-state-selected)]"
+      style={urgent ? { background: "var(--neuron-semantic-danger-bg)" } : undefined}
     >
       <StatusDot color={dotColor} />
       <div className="flex-1 min-w-0">
-        <p className="text-[13px] font-medium leading-snug truncate" style={{ color: "var(--neuron-ink-primary)" }}>
+        <p
+          className="text-[13px] font-medium leading-snug truncate"
+          style={{ color: "var(--neuron-ink-primary)" }}
+        >
           {label}
         </p>
         {sub && (
-          <p className="text-[11.5px] truncate mt-[2px]" style={{ color: "var(--neuron-ink-muted)" }}>{sub}</p>
+          <p className="text-[11.5px] truncate mt-[2px]" style={{ color: "var(--neuron-ink-muted)" }}>
+            {sub}
+          </p>
         )}
       </div>
       {meta && (
-        <span className="text-[11px] flex-shrink-0 ml-2 pt-0.5" style={{ color: "var(--neuron-ink-muted)" }}>
+        <span
+          className="text-[11px] flex-shrink-0 ml-2 pt-0.5"
+          style={{ color: urgent ? "var(--neuron-semantic-danger)" : "var(--neuron-ink-muted)" }}
+        >
           {meta}
         </span>
       )}
-    </div>
+    </button>
   );
 }
 
@@ -246,9 +356,9 @@ function Panel({
     <div
       className={`rounded-[var(--neuron-radius-l)] overflow-hidden ${className}`}
       style={{
-        background: "var(--neuron-bg-elevated)",
-        border: "1px solid var(--neuron-ui-border)",
-        boxShadow: "var(--elevation-1)",
+        background:  "var(--neuron-bg-elevated)",
+        border:      "1px solid var(--neuron-ui-border)",
+        boxShadow:   "var(--elevation-1)",
         ...style,
       }}
     >
@@ -263,117 +373,14 @@ function PanelHeader({ title, action }: { title: string; action?: React.ReactNod
       className="px-4 py-3 flex items-center justify-between"
       style={{ borderBottom: "1px solid var(--neuron-ui-border)" }}
     >
-      <h2 className="text-[13px] font-semibold tracking-tight" style={{ color: "var(--neuron-ink-primary)" }}>
+      <h2
+        className="text-[13px] font-semibold tracking-tight"
+        style={{ color: "var(--neuron-ink-primary)" }}
+      >
         {title}
       </h2>
       {action}
     </div>
-  );
-}
-
-// ─── Greeting Panel ───────────────────────────────────────────────────────────
-
-const MOTIVATIONAL_MESSAGES = {
-  morning: [
-    "Let's start the day strong.",
-    "Fresh day, fresh chance to move things forward.",
-    "Let's get an early win today.",
-    "A strong start changes everything.",
-    "Let's build momentum.",
-  ],
-  afternoon: [
-    "Let's finish the day stronger than we started.",
-    "Still time to make today productive.",
-    "Let's get a few more wins in.",
-    "The day's not over — let's make it count.",
-    "You've got this!",
-  ],
-  evening: [
-    "Let's wrap up the day.",
-    "One last solid push for the day.",
-    "Let's wrap up with progress.",
-    "Finish strong — even small progress counts.",
-    "Let's close the day well.",
-    "A little more progress before we call it.",
-  ],
-};
-
-function getMessagePool(): string[] {
-  const h = new Date().getHours();
-  if (h >= 5 && h < 12) return MOTIVATIONAL_MESSAGES.morning;
-  if (h >= 12 && h < 18) return MOTIVATIONAL_MESSAGES.afternoon;
-  return MOTIVATIONAL_MESSAGES.evening;
-}
-
-function GreetingPanel({
-  firstName,
-  dept,
-  role,
-  attentionCount,
-  loading,
-}: {
-  firstName: string;
-  dept: string;
-  role: string;
-  attentionCount: number;
-  loading: boolean;
-}) {
-  const [msgIndex] = useState(() => {
-    const pool = getMessagePool();
-    return Math.floor(Math.random() * pool.length);
-  });
-
-  const deptRoleLabel = [dept, role ? role.charAt(0).toUpperCase() + role.slice(1) : ""]
-    .filter(Boolean)
-    .join(" · ");
-
-  return (
-    <Panel>
-      {/* Teal accent strip */}
-      <div className="h-1 w-full" style={{ background: "var(--neuron-brand-green)" }} />
-      <div className="px-5 py-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[12px] mb-1" style={{ color: "var(--neuron-ink-muted)" }}>
-              {getMessagePool()[msgIndex]}
-            </p>
-            <h1 className="text-[26px] font-semibold tracking-tight leading-tight" style={{ color: "var(--neuron-ink-primary)" }}>
-              {getGreeting()}, {firstName}.
-            </h1>
-          </div>
-          {deptRoleLabel && (
-            <span
-              className="text-[11px] font-medium px-2.5 py-1 rounded-full whitespace-nowrap mt-1 flex-shrink-0"
-              style={{
-                background: "var(--neuron-brand-green-100)",
-                color: "var(--neuron-brand-green)",
-                border: "1px solid var(--theme-border-strong)",
-              }}
-            >
-              {deptRoleLabel}
-            </span>
-          )}
-        </div>
-
-        <div className="mt-4 pt-4" style={{ borderTop: "1px solid var(--neuron-ui-divider)" }}>
-          {loading ? (
-            <div className="h-4 rounded w-48 animate-pulse" style={{ background: "var(--neuron-ui-border)" }} />
-          ) : attentionCount > 0 ? (
-            <p className="text-[13px]" style={{ color: "var(--neuron-ink-muted)" }}>
-              You have{" "}
-              <span className="font-semibold" style={{ color: "var(--neuron-brand-green)" }}>
-                {attentionCount} item{attentionCount !== 1 ? "s" : ""}
-              </span>{" "}
-              waiting for your attention.
-            </p>
-          ) : (
-            <p className="text-[13px]" style={{ color: "var(--neuron-ink-muted)" }}>
-              You're all caught up — great work.
-            </p>
-          )}
-        </div>
-      </div>
-    </Panel>
   );
 }
 
@@ -460,11 +467,10 @@ function TodoPanel({ userId }: { userId: string }) {
         title="My Tasks"
         action={
           <button
+            type="button"
             onClick={() => setShowInput((v) => !v)}
-            className="w-6 h-6 rounded-md flex items-center justify-center transition-colors"
+            className="w-6 h-6 rounded-md flex items-center justify-center transition-colors hover:bg-[var(--neuron-brand-green-100)]"
             style={{ color: "var(--neuron-brand-green)" }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--neuron-brand-green-100)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "")}
             title="Add task"
           >
             <Plus className="w-4 h-4" />
@@ -472,7 +478,6 @@ function TodoPanel({ userId }: { userId: string }) {
         }
       />
 
-      {/* Add input */}
       {showInput && (
         <div className="px-4 py-3" style={{ borderBottom: "1px solid var(--neuron-ui-divider)" }}>
           <input
@@ -501,29 +506,21 @@ function TodoPanel({ userId }: { userId: string }) {
         ) : (
           <>
             {open.map((todo) => (
-              <TodoRow
-                key={todo.id}
-                todo={todo}
-                onToggle={toggleTodo}
-                onDelete={deleteTodo}
-              />
+              <TodoRow key={todo.id} todo={todo} onToggle={toggleTodo} onDelete={deleteTodo} />
             ))}
-
             {done.length > 0 && (
               <>
                 {open.length > 0 && <Divider />}
                 <div className="px-4 py-2">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--neuron-ui-muted)" }}>
+                  <span
+                    className="text-[10px] font-semibold uppercase tracking-widest"
+                    style={{ color: "var(--neuron-ui-muted)" }}
+                  >
                     Completed · {done.length}
                   </span>
                 </div>
                 {done.map((todo) => (
-                  <TodoRow
-                    key={todo.id}
-                    todo={todo}
-                    onToggle={toggleTodo}
-                    onDelete={deleteTodo}
-                  />
+                  <TodoRow key={todo.id} todo={todo} onToggle={toggleTodo} onDelete={deleteTodo} />
                 ))}
               </>
             )}
@@ -547,19 +544,20 @@ function TodoRow({
 
   return (
     <div
-      className="px-4 py-2.5 flex items-start gap-3 group transition-colors"
+      className="px-4 py-2.5 flex items-start gap-3 transition-colors"
       style={{ background: hovered ? "var(--neuron-state-hover)" : "" }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Checkbox */}
       <button
+        type="button"
         onClick={() => onToggle(todo.id, todo.done)}
         className="w-4 h-4 mt-[1px] rounded flex-shrink-0 border flex items-center justify-center transition-all"
         style={{
-          background: todo.done ? "var(--neuron-brand-green)" : "transparent",
-          borderColor: todo.done ? "var(--neuron-brand-green)" : "var(--neuron-ui-muted)",
+          background:   todo.done ? "var(--neuron-brand-green)" : "transparent",
+          borderColor:  todo.done ? "var(--neuron-brand-green)" : "var(--neuron-ui-muted)",
         }}
+        aria-label={todo.done ? "Mark incomplete" : "Mark complete"}
       >
         {todo.done && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
       </button>
@@ -567,9 +565,9 @@ function TodoRow({
       <p
         className="flex-1 text-[13px] leading-snug min-w-0"
         style={{
-          color: todo.done ? "var(--neuron-ink-muted)" : "var(--neuron-ink-primary)",
+          color:          todo.done ? "var(--neuron-ink-muted)" : "var(--neuron-ink-primary)",
           textDecoration: todo.done ? "line-through" : "none",
-          opacity: todo.done ? 0.6 : 1,
+          opacity:        todo.done ? 0.6 : 1,
         }}
       >
         {todo.text}
@@ -577,116 +575,16 @@ function TodoRow({
 
       {hovered && (
         <button
+          type="button"
           onClick={() => onDelete(todo.id)}
-          className="w-4 h-4 flex-shrink-0 flex items-center justify-center rounded transition-colors"
+          className="w-4 h-4 flex-shrink-0 flex items-center justify-center rounded transition-colors hover:text-[var(--neuron-semantic-danger)]"
           style={{ color: "var(--neuron-ink-muted)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--neuron-semantic-danger)")}
-          onMouseLeave={(e) => (e.currentTarget.style.color = "var(--neuron-ink-muted)")}
+          aria-label="Delete task"
         >
           <X className="w-3 h-3" />
         </button>
       )}
     </div>
-  );
-}
-
-// ─── Dept Quick Counts ────────────────────────────────────────────────────────
-
-function DeptQuickCounts({
-  dept,
-  openInquiries,
-  awaitingClient,
-  pricingRequests,
-  pricingInProgress,
-  activeBookings,
-  acctTickets,
-  pendingEVs,
-  execCounts,
-  loading,
-  onNavigate,
-}: {
-  dept: string;
-  openInquiries: number;
-  awaitingClient: number;
-  pricingRequests: number;
-  pricingInProgress: number;
-  activeBookings: number;
-  acctTickets: number;
-  pendingEVs: number;
-  execCounts: { openInquiries: number; inProgressQuotations: number; activeBookings: number; openTickets: number; pendingEVs: number };
-  loading: boolean;
-  onNavigate: (path: string) => void;
-}) {
-  type StatEntry = { label: string; value: number; path: string; highlight?: boolean };
-  let stats: StatEntry[] = [];
-
-  if (dept === "Business Development") {
-    stats = [
-      { label: "Open Inquiries",  value: openInquiries, path: "/bd/inquiries",  highlight: openInquiries > 0 },
-      { label: "Awaiting Client", value: awaitingClient, path: "/bd/inquiries" },
-    ];
-  } else if (dept === "Pricing") {
-    stats = [
-      { label: "New Requests",  value: pricingRequests,   path: "/pricing/quotations", highlight: pricingRequests > 0 },
-      { label: "In Progress",   value: pricingInProgress, path: "/pricing/quotations" },
-    ];
-  } else if (dept === "Operations") {
-    stats = [
-      { label: "Active Bookings", value: activeBookings, path: "/operations", highlight: activeBookings > 0 },
-    ];
-  } else if (dept === "Accounting") {
-    stats = [
-      { label: "Pending Tickets",    value: acctTickets, path: "/inbox",                highlight: acctTickets > 0 },
-      { label: "Pending E-Vouchers", value: pendingEVs,  path: "/accounting/evouchers", highlight: pendingEVs > 0 },
-    ];
-  } else if (dept === "Executive") {
-    stats = [
-      { label: "Open Inquiries",       value: execCounts.openInquiries,        path: "/bd/inquiries" },
-      { label: "Quotations in Progress", value: execCounts.inProgressQuotations, path: "/pricing/quotations" },
-      { label: "Active Bookings",      value: execCounts.activeBookings,       path: "/operations" },
-      { label: "Open Tickets",         value: execCounts.openTickets,          path: "/inbox", highlight: execCounts.openTickets > 0 },
-      { label: "Pending E-Vouchers",   value: execCounts.pendingEVs,           path: "/accounting/evouchers", highlight: execCounts.pendingEVs > 0 },
-    ];
-  }
-
-  return (
-    <Panel>
-      <PanelHeader title="Department" />
-      {loading ? (
-        <div className="p-4 space-y-2">
-          {[1, 2].map((i) => (
-            <div key={i} className="animate-pulse flex items-center justify-between py-2">
-              <div className="h-3 rounded w-28" style={{ background: "var(--neuron-ui-border)" }} />
-              <div className="h-6 rounded w-8"  style={{ background: "var(--neuron-ui-border)" }} />
-            </div>
-          ))}
-        </div>
-      ) : stats.length === 0 ? (
-        <EmptyRow message="No stats configured." />
-      ) : (
-        <div className="p-2">
-          {stats.map((s) => (
-            <button
-              key={s.label}
-              onClick={() => onNavigate(s.path)}
-              className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors text-left"
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--neuron-state-hover)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "")}
-            >
-              <span className="text-[12.5px]" style={{ color: "var(--neuron-ink-muted)" }}>
-                {s.label}
-              </span>
-              <span
-                className="text-[22px] font-semibold tabular-nums leading-none"
-                style={{ color: s.highlight && s.value > 0 ? "var(--neuron-brand-green)" : "var(--neuron-ink-primary)" }}
-              >
-                {s.value}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-    </Panel>
   );
 }
 
@@ -708,38 +606,38 @@ function JumpBackIn({ onNavigate }: { onNavigate: (path: string) => void }) {
       ) : (
         <div className="py-1">
           {recents.map((r, i) => (
-            <div
+            <button
               key={i}
+              type="button"
               onClick={() => onNavigate(r.path)}
-              className="px-5 py-2 flex items-center gap-3 cursor-pointer transition-colors"
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--neuron-state-hover)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "")}
+              className="w-full px-5 py-2 flex items-center gap-3 text-left transition-colors hover:bg-[var(--neuron-state-hover)] focus-visible:outline-none focus-visible:bg-[var(--neuron-state-selected)]"
             >
-              {/* Icon */}
               <span className="flex-shrink-0" style={{ color: RECENT_TYPE_COLOR[r.type] }}>
                 {recentTypeIcon(r.type)}
               </span>
-
-              {/* Name + type */}
               <div className="flex-1 min-w-0">
-                <p className="text-[12.5px] font-medium truncate leading-tight" style={{ color: "var(--neuron-ink-primary)" }}>
+                <p
+                  className="text-[12.5px] font-medium truncate leading-tight"
+                  style={{ color: "var(--neuron-ink-primary)" }}
+                >
                   {r.label}
                 </p>
                 <p className="text-[11px] leading-tight mt-0.5" style={{ color: "var(--neuron-ink-muted)" }}>
                   {RECENT_TYPE_LABEL[r.type]}
                 </p>
               </div>
-
-              {/* Right meta */}
               <div className="flex-shrink-0 text-right">
                 <p className="text-[11px] leading-tight" style={{ color: "var(--neuron-ink-muted)" }}>
                   {r.sub.split(" · ")[0]}
                 </p>
-                <p className="text-[10.5px] leading-tight mt-0.5 tabular-nums" style={{ color: "var(--neuron-ui-muted)" }}>
+                <p
+                  className="text-[10.5px] leading-tight mt-0.5 tabular-nums"
+                  style={{ color: "var(--neuron-ui-muted)" }}
+                >
                   {timeAgo(r.time)}
                 </p>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -751,12 +649,12 @@ function JumpBackIn({ onNavigate }: { onNavigate: (path: string) => void }) {
 
 function MyWorkPanel({
   tickets,
-  approvals,
+  approvals: _approvals,
   loading,
   onTicket,
-  onEVoucher,
+  onEVoucher: _onEVoucher,
   onViewInbox,
-  onViewEVouchers,
+  onViewEVouchers: _onViewEVouchers,
 }: {
   tickets: TicketItem[];
   approvals: EVoucherItem[];
@@ -776,17 +674,22 @@ function MyWorkPanel({
     <Panel>
       <PanelHeader title="My Work" />
       <div style={{ minHeight: "160px" }}>
-        {/* Inbox */}
         <SectionLabel label="Inbox" count={tickets.length} onViewAll={onViewInbox} />
         {loading ? (
           <><SkeletonRow /><SkeletonRow /></>
         ) : tickets.length === 0 ? (
-          <EmptyRow message="Inbox is clear." icon={<Inbox className="w-5 h-5" />} />
+          <EmptyRow
+            message="Inbox is clear — no items waiting."
+            icon={<Inbox className="w-5 h-5" />}
+            cta="Go to inbox"
+            onCta={onViewInbox}
+          />
         ) : (
           tickets.map((t) => (
             <ItemRow
               key={t.id}
               dotColor={ticketDotColor(t.type, t.priority)}
+              urgent={t.priority === "urgent"}
               label={t.subject}
               sub={`${t.type} · ${t.linked_record_type.replace(/_/g, " ")}`}
               meta={timeAgo(t.created_at)}
@@ -830,7 +733,6 @@ function DeptQueuePanel({
   onTicket: (id: string) => void;
   onBooking: (b: BookingItem) => void;
 }) {
-  // Build tabs per department
   type TabKey = string;
   type Tab = { key: TabKey; label: string; count: number };
   let tabs: Tab[] = [];
@@ -849,7 +751,7 @@ function DeptQueuePanel({
     tabs = [{ key: "bookings", label: "Active Bookings", count: activeBookings.length }];
   } else if (dept === "Accounting") {
     tabs = [
-      { key: "tickets",   label: "Pending Tickets",          count: acctTickets.length },
+      { key: "tickets",   label: "Pending Tickets",             count: acctTickets.length },
       { key: "evouchers", label: "E-Vouchers for Disbursement", count: pendingEVs.length },
     ];
   } else if (dept === "Executive") {
@@ -859,7 +761,6 @@ function DeptQueuePanel({
   const [activeTab, setActiveTab] = useState<TabKey>(tabs[0]?.key ?? "");
   const { user } = useUser();
 
-  // Reset active tab when dept changes
   useEffect(() => {
     setActiveTab(tabs[0]?.key ?? "");
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -878,13 +779,30 @@ function DeptQueuePanel({
     return null;
   }
 
+  // ── Dept-specific empty state CTAs ────────────────────────────────────────
+  function getEmptyState(key: TabKey): { message: string; cta?: string; path?: string } {
+    switch (key) {
+      case "inquiries":   return { message: "No open inquiries right now.",            cta: "View all inquiries",     path: "/bd/inquiries" };
+      case "awaiting":    return { message: "No quotations waiting on client response.", cta: "View inquiries",        path: "/bd/inquiries" };
+      case "requests":    return { message: "No new requests from BD.",                 cta: "View all quotations",   path: "/pricing/quotations" };
+      case "inprogress":  return { message: "No quotations currently in progress.",     cta: "View all quotations",   path: "/pricing/quotations" };
+      case "bookings":    return { message: "No active bookings assigned to you.",      cta: "View all bookings",     path: "/operations" };
+      case "tickets":     return { message: "No pending billing tickets.",              cta: "View inbox",            path: "/inbox" };
+      case "evouchers":   return { message: "No e-vouchers pending disbursement.",      cta: "View e-vouchers",       path: "/accounting/evouchers" };
+      default:            return { message: "Nothing here right now." };
+    }
+  }
+
   return (
     <Panel>
       <div
         className="flex items-center justify-between px-4"
         style={{ borderBottom: "1px solid var(--neuron-ui-border)" }}
       >
-        <h2 className="text-[13px] font-semibold tracking-tight py-3" style={{ color: "var(--neuron-ink-primary)" }}>
+        <h2
+          className="text-[13px] font-semibold tracking-tight py-3"
+          style={{ color: "var(--neuron-ink-primary)" }}
+        >
           {queueLabel}
         </h2>
         {tabs.length > 1 && (
@@ -892,24 +810,21 @@ function DeptQueuePanel({
             {tabs.map((tab) => (
               <button
                 key={tab.key}
+                type="button"
                 onClick={() => setActiveTab(tab.key)}
-                className="flex items-center gap-1.5 px-3 py-3 text-[12px] font-medium transition-colors border-b-2"
+                className="flex items-center gap-1.5 px-3 py-3 text-[12px] font-medium transition-colors border-b-2 focus-visible:outline-none"
                 style={{
-                  color: activeTab === tab.key ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)",
+                  color:            activeTab === tab.key ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)",
                   borderBottomColor: activeTab === tab.key ? "var(--neuron-brand-green)" : "transparent",
-                  marginBottom: "-1px",
+                  marginBottom:     "-1px",
                 }}
               >
                 {tab.label}
                 <span
                   className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[10px] font-semibold rounded-full leading-none"
                   style={{
-                    background: activeTab === tab.key
-                      ? "var(--neuron-brand-green-100)"
-                      : "var(--theme-bg-surface-subtle)",
-                    color: activeTab === tab.key
-                      ? "var(--neuron-brand-green)"
-                      : "var(--neuron-ink-muted)",
+                    background: activeTab === tab.key ? "var(--neuron-brand-green-100)" : "var(--neuron-bg-page)",
+                    color:      activeTab === tab.key ? "var(--neuron-brand-green)"     : "var(--neuron-ink-muted)",
                   }}
                 >
                   {tab.count}
@@ -921,15 +836,13 @@ function DeptQueuePanel({
       </div>
 
       {loading ? (
-        <div>
-          <SkeletonRow /><SkeletonRow /><SkeletonRow />
-        </div>
+        <div><SkeletonRow /><SkeletonRow /><SkeletonRow /></div>
       ) : (
         <div>
           {/* BD */}
           {dept === "Business Development" && activeTab === "inquiries" && (
             openInquiries.length === 0
-              ? <EmptyRow message="No open inquiries." />
+              ? (() => { const e = getEmptyState("inquiries"); return <EmptyRow message={e.message} cta={e.cta} onCta={e.path ? () => onNavigate(e.path!) : undefined} />; })()
               : openInquiries.map((q) => (
                   <ItemRow
                     key={q.id}
@@ -946,7 +859,7 @@ function DeptQueuePanel({
           )}
           {dept === "Business Development" && activeTab === "awaiting" && (
             awaitingClient.length === 0
-              ? <EmptyRow message="No quotations awaiting client response." />
+              ? (() => { const e = getEmptyState("awaiting"); return <EmptyRow message={e.message} cta={e.cta} onCta={e.path ? () => onNavigate(e.path!) : undefined} />; })()
               : awaitingClient.map((q) => (
                   <ItemRow
                     key={q.id}
@@ -965,7 +878,7 @@ function DeptQueuePanel({
           {/* Pricing */}
           {dept === "Pricing" && activeTab === "requests" && (
             pricingRequests.length === 0
-              ? <EmptyRow message="No new requests from BD." />
+              ? (() => { const e = getEmptyState("requests"); return <EmptyRow message={e.message} cta={e.cta} onCta={e.path ? () => onNavigate(e.path!) : undefined} />; })()
               : pricingRequests.map((q) => (
                   <ItemRow
                     key={q.id}
@@ -982,7 +895,7 @@ function DeptQueuePanel({
           )}
           {dept === "Pricing" && activeTab === "inprogress" && (
             pricingInProgress.length === 0
-              ? <EmptyRow message="No quotations in progress." />
+              ? (() => { const e = getEmptyState("inprogress"); return <EmptyRow message={e.message} cta={e.cta} onCta={e.path ? () => onNavigate(e.path!) : undefined} />; })()
               : pricingInProgress.map((q) => (
                   <ItemRow
                     key={q.id}
@@ -1001,7 +914,7 @@ function DeptQueuePanel({
           {/* Operations */}
           {dept === "Operations" && (
             activeBookings.length === 0
-              ? <EmptyRow message="No active bookings assigned to you." />
+              ? (() => { const e = getEmptyState("bookings"); return <EmptyRow message={e.message} cta={e.cta} onCta={e.path ? () => onNavigate(e.path!) : undefined} />; })()
               : activeBookings.map((b) => (
                   <ItemRow
                     key={b.id}
@@ -1020,11 +933,12 @@ function DeptQueuePanel({
           {/* Accounting */}
           {dept === "Accounting" && activeTab === "tickets" && (
             acctTickets.length === 0
-              ? <EmptyRow message="No pending billing tickets." />
+              ? (() => { const e = getEmptyState("tickets"); return <EmptyRow message={e.message} cta={e.cta} onCta={e.path ? () => onNavigate(e.path!) : undefined} />; })()
               : acctTickets.map((t) => (
                   <ItemRow
                     key={t.id}
                     dotColor={t.priority === "urgent" ? "red" : "green"}
+                    urgent={t.priority === "urgent"}
                     label={t.subject}
                     sub={t.linked_record_type.replace(/_/g, " ")}
                     meta={timeAgo(t.created_at)}
@@ -1037,7 +951,7 @@ function DeptQueuePanel({
           )}
           {dept === "Accounting" && activeTab === "evouchers" && (
             pendingEVs.length === 0
-              ? <EmptyRow message="No e-vouchers pending accounting review." />
+              ? (() => { const e = getEmptyState("evouchers"); return <EmptyRow message={e.message} cta={e.cta} onCta={e.path ? () => onNavigate(e.path!) : undefined} />; })()
               : pendingEVs.map((ev) => (
                   <ItemRow
                     key={ev.id}
@@ -1057,24 +971,20 @@ function DeptQueuePanel({
           {dept === "Executive" && (
             <div className="p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {[
-                { label: "Open Inquiries",        value: execCounts.openInquiries,        path: "/bd/inquiries",             highlight: false },
-                { label: "Quotations In Progress", value: execCounts.inProgressQuotations, path: "/pricing/quotations",       highlight: false },
-                { label: "Active Bookings",        value: execCounts.activeBookings,       path: "/operations",               highlight: false },
-                { label: "Open Tickets",           value: execCounts.openTickets,          path: "/inbox",                    highlight: execCounts.openTickets > 0 },
-                { label: "Pending E-Vouchers",     value: execCounts.pendingEVs,           path: "/accounting/evouchers",     highlight: execCounts.pendingEVs > 0 },
+                { label: "Open Inquiries",          value: execCounts.openInquiries,        path: "/bd/inquiries",            highlight: false },
+                { label: "Quotations In Progress",  value: execCounts.inProgressQuotations, path: "/pricing/quotations",      highlight: false },
+                { label: "Active Bookings",         value: execCounts.activeBookings,       path: "/operations",              highlight: false },
+                { label: "Open Tickets",            value: execCounts.openTickets,          path: "/inbox",                   highlight: execCounts.openTickets > 0 },
+                { label: "Pending E-Vouchers",      value: execCounts.pendingEVs,           path: "/accounting/evouchers",    highlight: execCounts.pendingEVs > 0 },
               ].map((s) => (
                 <button
                   key={s.label}
+                  type="button"
                   onClick={() => onNavigate(s.path)}
-                  className="text-left p-4 rounded-[var(--neuron-radius-m)] transition-all"
-                  style={{ border: "1px solid var(--neuron-ui-border)", background: "var(--theme-bg-surface-subtle)" }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLElement).style.borderColor = "var(--neuron-brand-green)";
-                    (e.currentTarget as HTMLElement).style.background = "var(--neuron-brand-green-100)";
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLElement).style.borderColor = "var(--neuron-ui-border)";
-                    (e.currentTarget as HTMLElement).style.background = "var(--theme-bg-surface-subtle)";
+                  className="text-left p-4 rounded-[var(--neuron-radius-m)] transition-all hover:border-[var(--neuron-brand-green)] hover:bg-[var(--neuron-brand-green-100)] focus-visible:outline-none focus-visible:bg-[var(--neuron-state-selected)]"
+                  style={{
+                    border:     "1px solid var(--neuron-ui-border)",
+                    background: "var(--neuron-bg-page)",
                   }}
                 >
                   <p
@@ -1106,33 +1016,36 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
   const navigate = useNavigate();
   const { user, effectiveDepartment, effectiveRole } = useUser();
 
-  const dept   = effectiveDepartment || currentUser?.department || "";
-  const role   = (effectiveRole || currentUser?.role || "").toLowerCase();
-  const userId = user?.id ?? "";
+  const dept      = effectiveDepartment || currentUser?.department || "";
+  const role      = (effectiveRole || currentUser?.role || "").toLowerCase();
+  const userId    = user?.id ?? "";
   const firstName = (currentUser?.name || (user as any)?.name || "there").split(" ")[0];
 
-  // ── Motivational message ─────────────────────────────────────────────────
   const [msgIndex] = useState(() => {
     const pool = getMessagePool();
     return Math.floor(Math.random() * pool.length);
   });
 
-  // ── My Work (cached 2 min via TanStack Query) ─────────────────────────────
+  const deptColors   = getDeptColors(dept);
+  const deptRoleLabel = [dept, role ? role.charAt(0).toUpperCase() + role.slice(1) : ""]
+    .filter(Boolean)
+    .join(" · ");
+
+  // ── Data ────────────────────────────────────────────────────────────────────
   const { data: myWorkData, isLoading: loadingMyWork } = useQuery({
     queryKey: ["myWork", dept, role],
-    queryFn: () => fetchMyWork(dept, role),
-    enabled: !!dept,
+    queryFn:  () => fetchMyWork(dept, role),
+    enabled:  !!dept,
     staleTime: 2 * 60 * 1000,
   });
 
   const myTickets   = myWorkData?.tickets   ?? [];
   const myApprovals = myWorkData?.approvals ?? [];
 
-  // ── Dept queue (cached 2 min via TanStack Query) ──────────────────────────
   const { data: deptQueueData, isLoading: loadingDept } = useQuery({
     queryKey: ["deptQueue", dept, userId],
-    queryFn: () => fetchDeptQueue(dept, userId),
-    enabled: !!dept,
+    queryFn:  () => fetchDeptQueue(dept, userId),
+    enabled:  !!dept,
     staleTime: 2 * 60 * 1000,
   });
 
@@ -1147,102 +1060,181 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
     openInquiries: 0, inProgressQuotations: 0, activeBookings: 0, openTickets: 0, pendingEVs: 0,
   };
 
-  // ── Derived attention count ───────────────────────────────────────────────
   const attentionCount = myTickets.length + myApprovals.length;
+  const urgentCount    = myTickets.filter((t) => t.priority === "urgent").length;
+  const displayCount   = useCountUp(attentionCount, 480, 200);
 
-  // ── Nav helpers — RouteTracker handles all recent recording automatically ──
+  // ── Nav ─────────────────────────────────────────────────────────────────────
   const goTo       = (path: string) => navigate(path);
-  const goTicket   = (id: string) => navigate(`/inbox?ticketId=${id}`);
-  const goEVoucher = () => navigate("/accounting/evouchers");
+  const goTicket   = (id: string)   => navigate(`/inbox?ticketId=${id}`);
+  const goEVoucher = ()              => navigate("/accounting/evouchers");
   const goBooking  = (b: BookingItem) => navigate(bookingRoute(b.service_type));
+
+  const hasDeptQueue = ["Business Development", "Pricing", "Operations", "Accounting", "Executive"].includes(dept);
 
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--theme-bg-surface)" }}>
 
-      {/* ── Header ── */}
-      <div className="px-12 pt-8 pb-0">
-        <div className="flex items-start justify-between mb-8">
+      {/* ── Mission briefing header ── */}
+      <motion.div
+        className="px-10 pt-8 pb-6 flex-shrink-0"
+        initial={{ opacity: 0, y: -6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: EASE_OUT_QUINT }}
+      >
+        <div className="flex items-start justify-between gap-8">
+
+          {/* Identity block */}
           <div>
-            <h1 style={{ fontSize: "32px", fontWeight: 600, color: "var(--theme-text-primary)", marginBottom: "4px", letterSpacing: "-1.2px" }}>
-              {getGreeting()}, {firstName}.
-            </h1>
-            <p style={{ fontSize: "14px", color: "var(--theme-text-muted)" }}>
+            <p className="text-[13px] mb-1.5" style={{ color: "var(--neuron-ink-muted)" }}>
               {getMessagePool()[msgIndex]}
             </p>
+            <h1
+              className="text-[34px] font-semibold tracking-tight leading-tight"
+              style={{ color: "var(--neuron-ink-primary)", letterSpacing: "-0.03em" }}
+            >
+              {getGreeting()}, {firstName}.
+            </h1>
+            {deptRoleLabel && (
+              <span
+                className="mt-2.5 inline-flex items-center text-[11px] font-medium px-2.5 py-1 rounded-full"
+                style={{
+                  background: deptColors.bg,
+                  color:      deptColors.text,
+                }}
+              >
+                {deptRoleLabel}
+              </span>
+            )}
           </div>
+
+          {/* Attention count — commanding, appears when data loads */}
+          {!loadingMyWork && attentionCount > 0 && (
+            <motion.button
+              type="button"
+              onClick={() => navigate("/inbox")}
+              className="flex-shrink-0 text-right group"
+              initial={{ opacity: 0, x: 12 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.16, duration: 0.28, ease: EASE_OUT_QUINT }}
+              aria-label={`${attentionCount} items need attention — go to inbox`}
+            >
+              <p
+                className="text-[52px] font-semibold tabular-nums leading-none transition-opacity group-hover:opacity-70"
+                style={{
+                  color:          urgentCount > 0 ? "var(--neuron-semantic-danger)" : "var(--neuron-brand-green)",
+                  letterSpacing:  "-0.04em",
+                }}
+              >
+                {displayCount}
+              </p>
+              <p
+                className="text-[12px] mt-1 flex items-center gap-1 justify-end"
+                style={{ color: "var(--neuron-ink-muted)" }}
+              >
+                item{attentionCount !== 1 ? "s" : ""} waiting
+                <ArrowRight
+                  className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5"
+                  style={{ color: "var(--neuron-brand-green)" }}
+                />
+              </p>
+            </motion.button>
+          )}
         </div>
-      </div>
+
+        {/* Header rule */}
+        <div className="mt-6" style={{ borderBottom: "1px solid var(--neuron-ui-divider)" }} />
+      </motion.div>
 
       {/* ── Content ── */}
       <div className="flex-1 relative overflow-hidden">
         {/* Scroll fade top */}
         <div
           className="absolute top-0 left-0 right-0 z-10 pointer-events-none"
-          style={{ height: "40px", background: "linear-gradient(to bottom, var(--theme-bg-surface), transparent)" }}
+          style={{ height: "32px", background: "linear-gradient(to bottom, var(--theme-bg-surface), transparent)" }}
         />
         {/* Scroll fade bottom */}
         <div
           className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none"
           style={{ height: "40px", background: "linear-gradient(to top, var(--theme-bg-surface), transparent)" }}
         />
-        <div className="h-full overflow-auto scrollbar-hide px-12 pt-6 pb-12">
-        <div
-          className="grid gap-4"
-          style={{
-            gridTemplateColumns: "2fr 1fr",
-            gridTemplateRows: "auto auto auto",
-          }}
-        >
-          {/* Row 1, Col 1 — My Work */}
-          <div style={{ gridColumn: "1", gridRow: "1" }}>
-            <MyWorkPanel
-              tickets={myTickets}
-              approvals={myApprovals}
-              loading={loadingMyWork}
-              onTicket={goTicket}
-              onEVoucher={goEVoucher}
-              onViewInbox={() => navigate("/inbox")}
-              onViewEVouchers={() => navigate("/accounting/evouchers")}
-            />
-          </div>
 
-          {/* Col 2, Rows 1-2 — My Tasks (tall card) */}
-          <div
-            className="flex flex-col h-full min-h-0"
-            style={{ gridColumn: "2", gridRow: "1 / 3" }}
-          >
-            {userId && <TodoPanel userId={userId} />}
-          </div>
+        <div className="h-full overflow-auto scrollbar-hide px-10 pt-4 pb-12">
 
-          {/* Row 2, Col 1 — Continue Work */}
-          <div style={{ gridColumn: "1", gridRow: "2" }}>
-            <JumpBackIn onNavigate={goTo} />
-          </div>
+          {/* Responsive grid: single column → 2fr/1fr at lg */}
+          <div className="grid gap-4 grid-cols-1 lg:grid-cols-[2fr_1fr]">
 
-          {/* Row 3, full width — Dept Queue */}
-          {["Business Development", "Pricing", "Operations", "Accounting", "Executive"].includes(dept) && (
-            <div style={{ gridColumn: "1 / 3", gridRow: "3" }}>
-              <DeptQueuePanel
-                dept={dept}
-                openInquiries={openInquiries}
-                awaitingClient={awaitingClient}
-                pricingRequests={pricingRequests}
-                pricingInProgress={pricingInProgress}
-                activeBookings={activeBookings}
-                acctTickets={acctTickets}
-                pendingEVs={pendingEVs}
-                execCounts={execCounts}
-                loading={loadingDept}
-                onNavigate={goTo}
+            {/* My Work — col 1, row 1 */}
+            <motion.div
+              custom={0}
+              variants={panelVariants}
+              initial="hidden"
+              animate="visible"
+              className="lg:col-start-1 lg:row-start-1"
+            >
+              <MyWorkPanel
+                tickets={myTickets}
+                approvals={myApprovals}
+                loading={loadingMyWork}
                 onTicket={goTicket}
-                onBooking={goBooking}
+                onEVoucher={goEVoucher}
+                onViewInbox={() => navigate("/inbox")}
+                onViewEVouchers={() => navigate("/accounting/evouchers")}
               />
-            </div>
-          )}
-        </div>
+            </motion.div>
+
+            {/* My Tasks — col 2, rows 1–2 (tall) */}
+            <motion.div
+              custom={1}
+              variants={panelVariants}
+              initial="hidden"
+              animate="visible"
+              className="flex flex-col min-h-0 lg:col-start-2 lg:row-start-1 lg:row-span-2"
+              style={{ height: "100%" }}
+            >
+              {userId && <TodoPanel userId={userId} />}
+            </motion.div>
+
+            {/* Continue Work — col 1, row 2 */}
+            <motion.div
+              custom={2}
+              variants={panelVariants}
+              initial="hidden"
+              animate="visible"
+              className="lg:col-start-1 lg:row-start-2"
+            >
+              <JumpBackIn onNavigate={goTo} />
+            </motion.div>
+
+            {/* Dept Queue — full width, row 3 */}
+            {hasDeptQueue && (
+              <motion.div
+                custom={3}
+                variants={panelVariants}
+                initial="hidden"
+                animate="visible"
+                className="col-span-full lg:row-start-3"
+              >
+                <DeptQueuePanel
+                  dept={dept}
+                  openInquiries={openInquiries}
+                  awaitingClient={awaitingClient}
+                  pricingRequests={pricingRequests}
+                  pricingInProgress={pricingInProgress}
+                  activeBookings={activeBookings}
+                  acctTickets={acctTickets}
+                  pendingEVs={pendingEVs}
+                  execCounts={execCounts}
+                  loading={loadingDept}
+                  onNavigate={goTo}
+                  onTicket={goTicket}
+                  onBooking={goBooking}
+                />
+              </motion.div>
+            )}
+          </div>
         </div>
       </div>
-
     </div>
   );
 }

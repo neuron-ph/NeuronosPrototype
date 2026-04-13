@@ -117,33 +117,62 @@ export function CreateTruckingBookingPanel({
       toast.error("Customer Name is required");
       return;
     }
-    if (!formData.consignee) {
-      toast.error("Consignee is required");
-      return;
-    }
-    
     setLoading(true);
 
     try {
-      const insertPayload = {
-        ...formData,
-        trucking_line_items: truckingLineItems.filter(li => li.destination || li.truckType || li.quantity > 0),
-        truckType: truckingLineItems[0]?.truckType || formData.truckType,
-        deliveryAddress: truckingLineItems[0]?.destination || formData.deliveryAddress,
+      const lineItems = truckingLineItems.filter(li => li.destination || li.truckType || li.quantity > 0);
+      const insertPayload: Record<string, any> = {
+        id: crypto.randomUUID(),
+        service_type: "Trucking",
+        name: formData.name.trim() || null,
+        customer_name: formData.customerName,
+        consignee_id: formData.consignee_id || null,
+        status: formData.status || "Draft",
+        movement_type: formData.movement,
+        mode: formData.mode || null,
         ...(detectedContractId && { contract_id: detectedContractId }),
+        details: {
+          accountOwner: formData.accountOwner,
+          accountHandler: formData.accountHandler,
+          service: formData.service,
+          truckType: lineItems[0]?.truckType || formData.truckType,
+          preferredDeliveryDate: formData.preferredDeliveryDate,
+          quotationReferenceNumber: formData.quotationReferenceNumber,
+          consignee: formData.consignee,
+          driver: formData.driver,
+          helper: formData.helper,
+          vehicleReferenceNumber: formData.vehicleReferenceNumber,
+          pullOut: formData.pullOut,
+          deliveryAddress: lineItems[0]?.destination || formData.deliveryAddress,
+          deliveryInstructions: formData.deliveryInstructions,
+          dateDelivered: formData.dateDelivered,
+          tabsBooking: formData.tabsBooking,
+          emptyReturn: formData.emptyReturn,
+          cyFee: formData.cyFee,
+          eirAvailability: formData.eirAvailability,
+          earlyGateIn: formData.earlyGateIn,
+          detDemValidity: formData.detDemValidity,
+          storageValidity: formData.storageValidity,
+          shippingLine: formData.shippingLine,
+          warehouseAddress: formData.warehouseAddress,
+          withGps: formData.withGps,
+          gateIn: formData.gateIn,
+          truckingLineItems: lineItems,
+        },
       };
+
       if (source === "pricing" && teamAssignment) {
-        (insertPayload as any).manager_id = teamAssignment.manager.id;
-        (insertPayload as any).manager_name = teamAssignment.manager.name;
-        (insertPayload as any).team_id = teamAssignment.team.id;
-        (insertPayload as any).team_name = teamAssignment.team.name;
+        insertPayload.manager_id = teamAssignment.manager.id;
+        insertPayload.manager_name = teamAssignment.manager.name;
+        insertPayload.team_id = teamAssignment.team.id;
+        insertPayload.team_name = teamAssignment.team.name;
         if (teamAssignment.supervisor) {
-          (insertPayload as any).supervisor_id = teamAssignment.supervisor.id;
-          (insertPayload as any).supervisor_name = teamAssignment.supervisor.name;
+          insertPayload.supervisor_id = teamAssignment.supervisor.id;
+          insertPayload.supervisor_name = teamAssignment.supervisor.name;
         }
         if (teamAssignment.handler) {
-          (insertPayload as any).handler_id = teamAssignment.handler.id;
-          (insertPayload as any).handler_name = teamAssignment.handler.name;
+          insertPayload.handler_id = teamAssignment.handler.id;
+          insertPayload.handler_name = teamAssignment.handler.name;
         }
       }
 
@@ -199,7 +228,7 @@ export function CreateTruckingBookingPanel({
 
   if (!isOpen) return null;
 
-  const isFormValid = formData.customerName.trim() !== "" && formData.consignee.trim() !== "";
+  const isFormValid = formData.customerName.trim() !== "";
 
   return (
     <BookingCreationPanel

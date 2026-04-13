@@ -393,17 +393,19 @@ export async function fireBookingAssignmentTickets(params: {
     if (params.supervisor?.id) recipients.push(params.supervisor as { id: string; name: string });
     if (params.handler?.id) recipients.push(params.handler as { id: string; name: string });
 
+    const bookingRef = params.bookingNumber ? ` (${params.bookingNumber})` : "";
+
     await Promise.all(
       recipients.map((recipient) =>
         createWorkflowTicket({
-          subject: `Booking Assigned: ${params.bookingNumber}`,
-          body: `You have been assigned to ${params.serviceType} Booking ${params.bookingNumber} for ${params.customerName}.`,
+          subject: `New ${params.serviceType} Booking — ${params.customerName}`,
+          body: `You've been assigned to the ${params.serviceType} booking for ${params.customerName}${bookingRef}. Open the booking below to review the details and begin coordination.`,
           type: "fyi",
           priority: "normal",
           recipientUserId: recipient.id,
           linkedRecordType: "booking",
           linkedRecordId: params.bookingId,
-          linkedRecordLabel: params.bookingNumber,
+          linkedRecordLabel: params.bookingNumber ?? `${params.serviceType} Booking`,
           createdBy: params.createdBy,
           createdByName: params.createdByName,
           createdByDept: params.createdByDept,
