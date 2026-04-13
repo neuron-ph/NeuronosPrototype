@@ -77,9 +77,30 @@ export function CreateOthersBookingPanel({
     setLoading(true);
 
     try {
-      const insertPayload: any = {
-        ...formData,
+      const insertPayload: Record<string, any> = {
+        id: crypto.randomUUID(),
+        service_type: "Others",
+        name: formData.name.trim() || null,
+        customer_name: formData.customerName,
+        status: formData.status || "Draft",
+        movement_type: formData.movement,
         ...(detectedContractId && { contract_id: detectedContractId }),
+        details: {
+          accountOwner: formData.accountOwner,
+          accountHandler: formData.accountHandler,
+          serviceType: formData.serviceType,
+          serviceDescription: formData.serviceDescription,
+          quotationReferenceNumber: formData.quotationReferenceNumber,
+          deliveryLocation: formData.deliveryLocation,
+          scheduleDate: formData.scheduleDate,
+          completionDate: formData.completionDate,
+          contactPerson: formData.contactPerson,
+          contactNumber: formData.contactNumber,
+          specialInstructions: formData.specialInstructions,
+          estimatedCost: formData.estimatedCost,
+          actualCost: formData.actualCost,
+          remarks: formData.remarks,
+        },
       };
 
       if (source === "pricing" && teamAssignment) {

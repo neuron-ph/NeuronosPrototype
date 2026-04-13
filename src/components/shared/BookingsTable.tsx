@@ -118,7 +118,7 @@ export function BookingsTable({
         borderBottom: "1px solid var(--neuron-ui-border)",
         backgroundColor: "var(--theme-bg-page)",
       }}>
-        <div>Booking ID</div>
+        <div>Booking</div>
         <div>Service</div>
         <div>Date</div>
         <div>Status</div>
@@ -128,7 +128,7 @@ export function BookingsTable({
       {/* Table rows */}
       {bookings.map((booking, idx) => {
         const bookingId = booking.bookingId || (booking as any).id;
-        const displayId = (booking as any).bookingNumber || (booking as any).booking_number || bookingId;
+        const displayId = (booking as any).name || (booking as any).bookingNumber || (booking as any).booking_number || bookingId;
         const serviceType = resolveServiceType(booking);
         const isGenerating = generatingBillingId === bookingId;
 

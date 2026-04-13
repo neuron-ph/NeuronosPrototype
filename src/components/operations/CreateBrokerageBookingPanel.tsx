@@ -185,41 +185,86 @@ export function CreateBrokerageBookingPanel({
       toast.error("Customer Name is required");
       return;
     }
-    if (!formData.consignee) {
-      toast.error("Consignee is required");
-      return;
-    }
-
     // If from Pricing module, require team assignments
     if (source === "pricing" && !teamAssignment) {
       toast.error("Please complete team assignments");
       return;
     }
-    
+
     setLoading(true);
 
     try {
-      // Prepare submission data
-      const submissionData = { ...formData };
-      
-      // ✨ CONTRACT: Include contract_id if detected
-      if (detectedContractId) {
-        (submissionData as any).contract_id = detectedContractId;
-      }
-      
+      // Build explicit payload — only valid bookings columns at top level;
+      // all brokerage-specific fields go into details JSONB
+      const insertPayload: Record<string, any> = {
+        id: crypto.randomUUID(),
+        service_type: "Brokerage",
+        name: formData.name.trim() || null,
+        customer_name: formData.customerName,
+        consignee_id: formData.consignee_id || null,
+        status: formData.status || "Draft",
+        movement_type: formData.movement,
+        mode: formData.mode || null,
+        ...(detectedContractId && { contract_id: detectedContractId }),
+        details: {
+          brokerageType: formData.brokerageType,
+          accountOwner: formData.accountOwner,
+          accountHandler: formData.accountHandler,
+          customsEntryType: formData.customsEntryType,
+          assessmentType: formData.assessmentType,
+          releaseType: formData.releaseType,
+          declarationType: formData.declarationType,
+          quotationReferenceNumber: formData.quotationReferenceNumber,
+          projectNumber: formData.projectNumber,
+          consignee: formData.consignee,
+          accountNumber: formData.accountNumber,
+          registryNumber: formData.registryNumber,
+          mblMawb: formData.mblMawb,
+          bookingConfirmationNumber: formData.bookingConfirmationNumber,
+          hblHawb: formData.hblHawb,
+          invoiceNumber: formData.invoiceNumber,
+          invoiceValue: formData.invoiceValue,
+          shipmentOrigin: formData.shipmentOrigin,
+          entryNumber: formData.entryNumber,
+          releaseDate: formData.releaseDate,
+          lct: formData.lct,
+          deliveryAddress: formData.deliveryAddress,
+          broker: formData.broker,
+          commodityDescription: formData.commodityDescription,
+          hsCode: formData.hsCode,
+          dutyRate: formData.dutyRate,
+          vatRate: formData.vatRate,
+          otherCharges: formData.otherCharges,
+          remarks: formData.remarks,
+          pod: formData.pod,
+          cargoType: formData.cargoType,
+          countryOfOrigin: formData.countryOfOrigin,
+          preferentialTreatment: formData.preferentialTreatment,
+          tareWeight: formData.tareWeight,
+          vgm: formData.vgm,
+          truckingName: formData.truckingName,
+          plateNumber: formData.plateNumber,
+          pickupLocation: formData.pickupLocation,
+        },
+      };
+
       // Add team assignments if from Pricing
       if (source === "pricing" && teamAssignment) {
-        submissionData.assigned_manager_id = teamAssignment.manager.id;
-        submissionData.assigned_manager_name = teamAssignment.manager.name;
-        submissionData.assigned_supervisor_id = teamAssignment.supervisor?.id;
-        submissionData.assigned_supervisor_name = teamAssignment.supervisor?.name;
-        submissionData.assigned_handler_id = teamAssignment.handler?.id;
-        submissionData.assigned_handler_name = teamAssignment.handler?.name;
-        (submissionData as any).team_id = teamAssignment.team.id;
-        (submissionData as any).team_name = teamAssignment.team.name;
+        insertPayload.manager_id = teamAssignment.manager.id;
+        insertPayload.manager_name = teamAssignment.manager.name;
+        insertPayload.team_id = teamAssignment.team.id;
+        insertPayload.team_name = teamAssignment.team.name;
+        if (teamAssignment.supervisor) {
+          insertPayload.supervisor_id = teamAssignment.supervisor.id;
+          insertPayload.supervisor_name = teamAssignment.supervisor.name;
+        }
+        if (teamAssignment.handler) {
+          insertPayload.handler_id = teamAssignment.handler.id;
+          insertPayload.handler_name = teamAssignment.handler.name;
+        }
       }
 
-      const { data, error } = await supabase.from('bookings').insert(submissionData).select().single();
+      const { data, error } = await supabase.from('bookings').insert(insertPayload).select().single();
 
       if (error) {
         throw new Error(error.message);
@@ -276,7 +321,6 @@ export function CreateBrokerageBookingPanel({
   if (!isOpen) return null;
 
   const isFormValid = formData.customerName.trim() !== "" &&
-    formData.consignee.trim() !== "" &&
     (source === "operations" || (source === "pricing" && teamAssignment !== null));
   
   // Helper function to get input style

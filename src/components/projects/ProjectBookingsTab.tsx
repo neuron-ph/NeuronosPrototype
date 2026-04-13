@@ -53,7 +53,7 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
         try {
           const { data: bookingData } = await supabase
             .from('bookings')
-            .select('id, status, service_type, booking_number')
+            .select('id, status, service_type, booking_number, name')
             .eq('id', booking.bookingId)
             .maybeSingle();
 
@@ -61,6 +61,8 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
             verified.push({
               ...booking,
               status: bookingData.status || booking.status,
+              bookingNumber: bookingData.booking_number || booking.bookingNumber,
+              name: bookingData.name ?? undefined,
             });
           } else {
             console.warn(`Booking ${booking.bookingId} not found in bookings table`);
@@ -124,8 +126,6 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
     <>
       <div
         style={{
-          flex: 1,
-          overflow: "auto",
           padding: "32px 48px",
         }}
       >

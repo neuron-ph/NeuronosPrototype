@@ -92,9 +92,37 @@ export function CreateMarineInsuranceBookingPanel({
     setLoading(true);
 
     try {
-      const insertPayload: any = {
-        ...formData,
+      const insertPayload: Record<string, any> = {
+        id: crypto.randomUUID(),
+        service_type: "Marine Insurance",
+        name: formData.name.trim() || null,
+        customer_name: formData.customerName,
+        status: formData.status || "Draft",
+        movement_type: formData.movement,
         ...(detectedContractId && { contract_id: detectedContractId }),
+        details: {
+          accountOwner: formData.accountOwner,
+          accountHandler: formData.accountHandler,
+          policyNumber: formData.policyNumber,
+          insuranceProvider: formData.insuranceProvider,
+          coverageType: formData.coverageType,
+          sumInsured: formData.sumInsured,
+          premium: formData.premium,
+          quotationReferenceNumber: formData.quotationReferenceNumber,
+          insuredParty: formData.insuredParty,
+          commodityDescription: formData.commodityDescription,
+          invoiceValue: formData.invoiceValue,
+          voyage: formData.voyage,
+          vesselName: formData.vesselName,
+          departurePort: formData.departurePort,
+          arrivalPort: formData.arrivalPort,
+          departureDate: formData.departureDate,
+          arrivalDate: formData.arrivalDate,
+          policyStartDate: formData.policyStartDate,
+          policyEndDate: formData.policyEndDate,
+          claimStatus: formData.claimStatus,
+          remarks: formData.remarks,
+        },
       };
 
       if (source === "pricing" && teamAssignment) {
