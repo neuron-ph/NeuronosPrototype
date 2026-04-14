@@ -14,24 +14,27 @@ interface FileAttachment {
 
 interface Comment {
   id: string;
-  inquiry_id: string;
+  entity_id: string;
+  entity_type: string;
   user_id: string;
   user_name: string;
-  department: string;
-  message: string;
+  user_department: string;
+  content: string;
   attachments?: FileAttachment[];
   created_at: string;
 }
 
 interface CommentsTabProps {
-  inquiryId: string;
+  entityId: string;
+  entityType: string;
   currentUserId: string;
   currentUserName: string;
   currentUserDepartment: string;
 }
 
 export function CommentsTab({
-  inquiryId,
+  entityId,
+  entityType,
   currentUserId,
   currentUserName,
   currentUserDepartment,
@@ -51,12 +54,13 @@ export function CommentsTab({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: comments = [], isLoading } = useQuery({
-    queryKey: ["comments", "inquiry", inquiryId],
+    queryKey: ["comments", entityType, entityId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('comments')
         .select('*')
-        .eq('inquiry_id', inquiryId)
+        .eq('entity_type', entityType)
+        .eq('entity_id', entityId)
         .order('created_at', { ascending: true });
       if (error) return [] as Comment[];
       return (data || []) as Comment[];
@@ -88,7 +92,7 @@ export function CommentsTab({
         setIsUploadingFiles(true);
         
         for (const file of attachedFiles) {
-          const filePath = `comments/${inquiryId}/${Date.now()}-${file.name}`;
+          const filePath = `comments/${entityType}/${entityId}/${Date.now()}-${file.name}`;
           const { error: uploadError } = await supabase.storage
             .from('attachments')
             .upload(filePath, file);
@@ -111,19 +115,19 @@ export function CommentsTab({
 
       // Create comment with attachments
       const { error: insertError } = await supabase.from('comments').insert({
-        inquiry_id: inquiryId,
+        entity_type: entityType,
+        entity_id: entityId,
         user_id: currentUserId,
         user_name: currentUserName,
-        department: currentUserDepartment,
-        message: newComment.trim() || "",
+        user_department: currentUserDepartment,
+        content: newComment.trim() || "",
         attachments: uploadedAttachments,
-        created_at: new Date().toISOString(),
       });
 
       if (!insertError) {
         setNewComment("");
         setAttachedFiles([]);
-        queryClient.invalidateQueries({ queryKey: ["comments", "inquiry", inquiryId] });
+        queryClient.invalidateQueries({ queryKey: ["comments", entityType, entityId] });
         toast.success("Comment added");
       } else {
         toast.error(insertError.message || "Failed to add comment");
@@ -273,15 +277,15 @@ export function CommentsTab({
                       {comment.user_name}
                     </span>
                     <span className="text-[10px] text-[var(--theme-text-muted)] uppercase font-bold tracking-wide">
-                      {comment.department}
+                      {comment.user_department}
                     </span>
                     <span className="text-xs text-[var(--theme-text-muted)]">
                       {formatDateTime(comment.created_at)}
                     </span>
                   </div>
-                  {comment.message && (
+                  {comment.content && (
                     <p className="text-sm text-[var(--theme-text-secondary)] leading-relaxed whitespace-pre-wrap break-words">
-                      {comment.message}
+                      {comment.content}
                     </p>
                   )}
                   

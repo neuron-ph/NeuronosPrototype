@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Search, X, CheckCircle2, Clock, User, Layers, Plus } from "lucide-react";
+import { Search, X, Plus } from "lucide-react";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { CustomDatePicker } from "../common/CustomDatePicker";
 import { ExpensesTable } from "./ExpensesTable";
@@ -30,24 +30,6 @@ interface UnifiedExpensesTabProps {
   /** Called whenever the pending billable count changes — lets parent show a badge on the Billings tab */
   onPendingCountChange?: (count: number) => void;
 }
-
-const formatCurrency = (amount: number, currency: string = "PHP") => {
-  return new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: currency,
-    minimumFractionDigits: 2,
-  }).format(amount);
-};
-
-const formatDate = (dateStr: string) => {
-  if (!dateStr) return "—";
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-  });
-};
 
 export function UnifiedExpensesTab({
   expenses,
@@ -216,7 +198,7 @@ export function UnifiedExpensesTab({
 
       return true;
     });
-  }, [expenses, searchQuery, selectedStatus, dateFrom, dateTo, selectedCategory, selectedBooking]);
+  }, [expenses, searchQuery, selectedStatus, dateFrom, dateTo, selectedCategory, selectedBooking, showBillablePending, convertibleIds]);
 
   const hasActiveFilters = dateFrom || dateTo || selectedCategory || selectedBooking || selectedStatus || searchQuery || showBillablePending;
 
@@ -257,11 +239,11 @@ export function UnifiedExpensesTab({
             <h1 className="text-[32px] font-semibold text-[var(--theme-text-primary)] mb-1 tracking-tight">
               {title || (context === 'booking' ? 'Booking Expenses' : 'Project Expenses')}
             </h1>
-            <p className="text-[14px] text-[var(--theme-text-muted)]">
-              {subtitle || (context === 'booking' 
-                ? 'Manage, track, and approve expenses for this booking.' 
-                : 'Manage, track, and approve expenses across all linked bookings.')}
-            </p>
+            {(subtitle || context !== 'booking') && (
+              <p className="text-[14px] text-[var(--theme-text-muted)]">
+                {subtitle || 'Manage, track, and approve expenses across all linked bookings.'}
+              </p>
+            )}
           </div>
           
           <div className="flex flex-col items-end">
@@ -283,7 +265,9 @@ export function UnifiedExpensesTab({
         {/* Search */}
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--neuron-ink-muted)]" />
+          <label htmlFor="expense-search" className="sr-only">Search expenses</label>
           <input
+            id="expense-search"
             type="text"
             placeholder="Search by Ref #, Vendor, or Description..."
             value={searchQuery}
@@ -328,25 +312,19 @@ export function UnifiedExpensesTab({
         {existingBillingItems.length >= 0 && convertibleIds.size > 0 && (
           <button
             onClick={() => setShowBillablePending(v => !v)}
-            style={{
-              display: "flex", alignItems: "center", gap: "5px",
-              padding: "7px 12px", fontSize: "12px", fontWeight: 600,
-              border: `1px solid ${showBillablePending ? "var(--theme-status-warning-border)" : "var(--theme-border-default)"}`,
-              borderRadius: "8px", cursor: "pointer", whiteSpace: "nowrap",
-              backgroundColor: showBillablePending ? "var(--theme-status-warning-bg)" : "var(--theme-bg-surface)",
-              color: showBillablePending ? "var(--theme-status-warning-fg)" : "var(--neuron-pill-inactive-text)",
-            }}
             title="Show only billable expenses not yet converted to billing items"
+            className={`flex items-center gap-1.5 px-3 py-[7px] text-[12px] font-semibold rounded-lg border whitespace-nowrap transition-colors ${
+              showBillablePending
+                ? "border-[var(--theme-status-warning-border)] bg-[var(--theme-status-warning-bg)] text-[var(--theme-status-warning-fg)]"
+                : "border-[var(--theme-border-default)] bg-[var(--theme-bg-surface)] text-[var(--neuron-pill-inactive-text)]"
+            }`}
           >
             Billable: Pending
-            <span
-              style={{
-                fontSize: "10px", fontWeight: 700,
-                padding: "1px 5px", borderRadius: "9999px",
-                backgroundColor: showBillablePending ? "var(--theme-status-warning-border)" : "var(--neuron-pill-inactive-bg)",
-                color: showBillablePending ? "var(--theme-status-warning-fg)" : "var(--neuron-pill-inactive-text)",
-              }}
-            >
+            <span className={`text-[10px] font-bold px-[5px] py-px rounded-full ${
+              showBillablePending
+                ? "bg-[var(--theme-status-warning-border)] text-[var(--theme-status-warning-fg)]"
+                : "bg-[var(--neuron-pill-inactive-bg)] text-[var(--neuron-pill-inactive-text)]"
+            }`}>
               {convertibleIds.size}
             </span>
           </button>

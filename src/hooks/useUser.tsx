@@ -336,7 +336,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       } else {
         // Trigger may not have fired yet, create a temp profile from what we know
         const tempUser: User = {
-          id: 'user-' + (data.user?.id?.substring(0, 8) || 'new'),
+          id: data.user?.id || '',
           email,
           name,
           department: (options?.department as User['department']) || 'Executive',
@@ -378,7 +378,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       } else {
         // Fallback: build user from session
         const tempUser: User = {
-          id: 'user-' + (data.user?.id?.substring(0, 8) || 'unknown'),
+          id: data.user?.id || '',
           email: data.user.email || email,
           name: data.user.user_metadata?.name || email,
           department: 'Executive',

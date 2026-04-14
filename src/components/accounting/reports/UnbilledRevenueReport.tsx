@@ -31,7 +31,7 @@ function AtRiskBadge({ isAtRisk }: { isAtRisk: boolean }) {
     <span
       style={{
         display: "inline-block",
-        backgroundColor: "rgba(185,28,28,0.1)",
+        backgroundColor: "var(--neuron-semantic-danger-bg)",
         color: "var(--neuron-semantic-danger)",
         fontSize: "10px",
         fontWeight: 700,

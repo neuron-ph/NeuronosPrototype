@@ -33,7 +33,7 @@ const labelStyle: React.CSSProperties = {
 
 const viewValueStyle = (isEmpty: boolean, required: boolean, isTextarea: boolean): React.CSSProperties => ({
   padding: "8px 12px",
-  backgroundColor: isEmpty ? "white" : "var(--theme-bg-page)",
+  backgroundColor: isEmpty ? "var(--theme-bg-surface)" : "var(--theme-bg-page)",
   border: `1px solid ${isEmpty && required ? "var(--theme-status-warning-border)" : "var(--theme-border-default)"}`,
   borderRadius: "6px",
   fontSize: "13px",
@@ -57,7 +57,7 @@ const inputBaseStyle: React.CSSProperties = {
 const handleFocus = (e: React.FocusEvent<HTMLElement>) => {
   (e.currentTarget as HTMLElement).style.borderColor = "var(--theme-action-primary-bg)";
   (e.currentTarget as HTMLElement).style.boxShadow =
-    "0 0 0 2px rgba(15, 118, 110, 0.15)";
+    "var(--neuron-state-focus-ring)";
 };
 
 const handleBlur = (e: React.FocusEvent<HTMLElement>) => {

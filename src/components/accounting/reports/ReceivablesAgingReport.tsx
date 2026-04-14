@@ -29,10 +29,10 @@ import type { ReportColumnDef, ReportSummaryCardDef } from "./ReportTemplate";
 // ── Bucket Pill ────────────────────────────────────────────────────────────────
 
 const BUCKET_COLORS: Record<AgingBucket, { bg: string; text: string }> = {
-  "current": { bg: "rgba(15,118,110,0.1)",  text: "var(--neuron-brand-green)" },
-  "31-60":   { bg: "rgba(217,119,6,0.1)",   text: "var(--neuron-semantic-warn)" },
-  "61-90":   { bg: "rgba(220,80,40,0.12)",  text: "#DC5028" },
-  "91+":     { bg: "rgba(185,28,28,0.1)",   text: "var(--neuron-semantic-danger)" },
+  "current": { bg: "var(--neuron-semantic-success-bg)",  text: "var(--neuron-brand-green)" },
+  "31-60":   { bg: "var(--neuron-semantic-warn-bg)",     text: "var(--neuron-semantic-warn)" },
+  "61-90":   { bg: "var(--neuron-semantic-danger-bg)",   text: "var(--neuron-semantic-danger)" },
+  "91+":     { bg: "var(--neuron-semantic-danger-bg)",   text: "var(--neuron-semantic-danger)" },
 };
 
 function BucketPill({ bucket }: { bucket: AgingBucket }) {
@@ -143,7 +143,7 @@ export function ReceivablesAgingReport({ scope }: ReceivablesAgingReportProps) {
     rows: [
       { label: "Current (0 – 30 days)", value: reportPhp(summary.current),    color: R.teal,    numericValue: summary.current },
       { label: "Past Due 31 – 60 days", value: reportPhp(summary.days31_60),  color: R.amber,   numericValue: summary.days31_60 },
-      { label: "Past Due 61 – 90 days", value: reportPhp(summary.days61_90),  color: "#DC5028", numericValue: summary.days61_90 },
+      { label: "Past Due 61 – 90 days", value: reportPhp(summary.days61_90),  color: "var(--neuron-semantic-danger)", numericValue: summary.days61_90 },
       { label: "Critical 91+ days",     value: reportPhp(summary.days91plus), color: R.red,     numericValue: summary.days91plus },
     ],
     footerLabel: "Total Outstanding",

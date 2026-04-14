@@ -233,11 +233,24 @@ export function ChartOfAccounts() {
       )
     },
     {
-      header: "Balance",
-      width: "18%",
+      header: "Starting Balance",
+      width: "15%",
       align: "right",
       cell: (item) => {
-        // Display native currency balance (or PHP default)
+        if (item.is_folder) return <span className="text-[var(--theme-text-muted)] text-[12px]">—</span>;
+        const currency = item.currency || "PHP";
+        return (
+          <span className="font-mono text-[var(--theme-text-muted)] text-[12px]">
+            {formatCurrency(item.starting_amount ?? 0, currency)}
+          </span>
+        );
+      }
+    },
+    {
+      header: "Balance",
+      width: "15%",
+      align: "right",
+      cell: (item) => {
         const currency = item.currency || "PHP";
         return (
           <span className="font-mono font-medium text-[var(--theme-text-primary)] text-[12px]">

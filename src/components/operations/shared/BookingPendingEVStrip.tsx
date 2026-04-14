@@ -71,11 +71,11 @@ export function BookingPendingEVStrip({ bookingId }: BookingPendingEVStripProps)
               width: "6px",
               height: "6px",
               borderRadius: "50%",
-              backgroundColor: "#B45309",
+              backgroundColor: "var(--theme-status-warning-fg)",
             }}
           />
           <span style={{ color: "var(--theme-text-muted)" }}>Pending Expenses:</span>
-          <span style={{ fontWeight: 600, color: "#B45309" }}>{fmt(pendingTotal)}</span>
+          <span style={{ fontWeight: 600, color: "var(--theme-status-warning-fg)" }}>{fmt(pendingTotal)}</span>
         </div>
       )}
       {postedTotal > 0 && (

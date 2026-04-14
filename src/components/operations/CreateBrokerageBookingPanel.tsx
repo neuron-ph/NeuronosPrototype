@@ -14,6 +14,7 @@ import { useCustomerOptions } from "./shared/useCustomerOptions";
 import { ConsigneePicker } from "../shared/ConsigneePicker";
 import { logCreation } from "../../utils/activityLog";
 import { fireBookingAssignmentTickets } from "../../utils/workflowTickets";
+import { generateBookingNumber } from "../../utils/bookingNumberUtils";
 
 // Brokerage Booking Form Data Interface
 interface BrokerageBookingFormData {
@@ -181,25 +182,27 @@ export function CreateBrokerageBookingPanel({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!formData.name.trim()) {
+      toast.error("Booking Name is required");
+      return;
+    }
     if (!formData.customerName) {
       toast.error("Customer Name is required");
       return;
     }
-    // If from Pricing module, require team assignments
-    if (source === "pricing" && !teamAssignment) {
-      toast.error("Please complete team assignments");
-      return;
-    }
+    // Team assignment is optional — no gate needed
 
     setLoading(true);
 
     try {
       // Build explicit payload — only valid bookings columns at top level;
       // all brokerage-specific fields go into details JSONB
+      const bookingNumber = await generateBookingNumber("Brokerage");
       const insertPayload: Record<string, any> = {
         id: crypto.randomUUID(),
         service_type: "Brokerage",
-        name: formData.name.trim() || null,
+        booking_number: bookingNumber,
+        name: formData.name.trim(),
         customer_name: formData.customerName,
         consignee_id: formData.consignee_id || null,
         status: formData.status || "Draft",
@@ -248,8 +251,8 @@ export function CreateBrokerageBookingPanel({
         },
       };
 
-      // Add team assignments if from Pricing
-      if (source === "pricing" && teamAssignment) {
+      // Add team assignments if provided (regardless of source)
+      if (teamAssignment) {
         insertPayload.manager_id = teamAssignment.manager.id;
         insertPayload.manager_name = teamAssignment.manager.name;
         insertPayload.team_id = teamAssignment.team.id;
@@ -272,7 +275,7 @@ export function CreateBrokerageBookingPanel({
 
       logCreation("booking", data.id, data.booking_number ?? data.id, { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
 
-      if (source === "pricing" && teamAssignment) {
+      if (teamAssignment) {
         void fireBookingAssignmentTickets({
           bookingId: data.id,
           bookingNumber: data.booking_number,
@@ -290,7 +293,7 @@ export function CreateBrokerageBookingPanel({
       toast.success("Brokerage booking created successfully");
 
       // Save team preference if requested and from Pricing
-      if (source === "pricing" && teamAssignment?.saveAsDefault && customerId) {
+      if (teamAssignment?.saveAsDefault && customerId) {
         try {
           await supabase.from('client_handler_preferences').upsert({
             customer_id: customerId,
@@ -320,8 +323,7 @@ export function CreateBrokerageBookingPanel({
 
   if (!isOpen) return null;
 
-  const isFormValid = formData.customerName.trim() !== "" &&
-    (source === "operations" || (source === "pricing" && teamAssignment !== null));
+  const isFormValid = formData.customerName.trim() !== "" && formData.name.trim() !== "";
   
   // Helper function to get input style
   const getInputStyle = (_fieldName: keyof BrokerageBookingFormData) => {
@@ -393,7 +395,7 @@ export function CreateBrokerageBookingPanel({
 
                 <div>
                   <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                    Booking Name <span style={{ color: "var(--theme-text-muted)", fontWeight: 400 }}>(Optional)</span>
+                    Booking Name <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
                   </label>
                   <input
                     type="text"
@@ -589,7 +591,7 @@ export function CreateBrokerageBookingPanel({
                   if (isSelected) {
                     backgroundColor = "var(--theme-action-primary-bg)";
                     borderColor = "var(--theme-action-primary-bg)";
-                    textColor = "white";
+                    textColor = "var(--theme-action-primary-text)";
                   } else if (isHovered) {
                     backgroundColor = "var(--theme-bg-surface-tint)";
                     borderColor = "var(--theme-action-primary-bg)";
@@ -1127,8 +1129,8 @@ export function CreateBrokerageBookingPanel({
               </div>
             </div>
 
-            {/* Team Assignment - Only show when from Pricing */}
-            {source === "pricing" && customerId && (
+            {/* Team Assignment */}
+            {formData.customerName && (
               <div className="mb-8">
                 <div className="flex items-center gap-2 mb-4">
                   <Users size={16} style={{ color: "var(--theme-action-primary-bg)" }} />

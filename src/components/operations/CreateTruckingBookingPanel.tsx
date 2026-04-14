@@ -2,7 +2,7 @@ import { supabase } from "../../utils/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "../ui/toast-utils";
 import { Plus, X, Truck, MapPin, Package } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { SearchableDropdown } from "../shared/SearchableDropdown";
 import { MovementToggle } from "./shared/MovementToggle";
@@ -15,6 +15,7 @@ import { normalizeTruckingLineItems, extractContractDestinations } from "../../u
 import { fetchFullContract } from "../../utils/contractLookup";
 import { logCreation } from "../../utils/activityLog";
 import { fireBookingAssignmentTickets } from "../../utils/workflowTickets";
+import { generateBookingNumber } from "../../utils/bookingNumberUtils";
 import { useUser } from "../../hooks/useUser";
 import { FormComboBox } from "../pricing/quotations/FormComboBox";
 import { ConsigneePicker } from "../shared/ConsigneePicker";
@@ -38,6 +39,8 @@ export function CreateTruckingBookingPanel({
   onSuccess,
   source = "operations",
   customerId,
+  prefillData,
+  currentUser,
 }: CreateTruckingBookingPanelProps) {
   const { user } = useUser();
   const [loading, setLoading] = useState(false);
@@ -110,9 +113,37 @@ export function CreateTruckingBookingPanel({
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  useEffect(() => {
+    if (!prefillData) return;
+    setFormData((prev) => ({
+      ...prev,
+      name: prev.name || prefillData.name || "",
+      customerName: prefillData.customerName || prev.customerName,
+      movement: prefillData.movement || prev.movement,
+      quotationReferenceNumber: prefillData.quotationReferenceNumber || prev.quotationReferenceNumber,
+      accountOwner: prefillData.accountOwner || currentUser?.name || prev.accountOwner,
+      accountHandler: prefillData.accountHandler || currentUser?.name || prev.accountHandler,
+      pullOut: prefillData.pullOutLocation || prev.pullOut,
+      deliveryInstructions: prefillData.deliveryInstructions || prev.deliveryInstructions,
+    }));
+    // Seed first trucking line item if delivery address or truck type is available
+    if (prefillData.deliveryAddress || prefillData.truckType) {
+      setTruckingLineItems([{
+        id: `li-init-${Date.now()}`,
+        destination: prefillData.deliveryAddress || "",
+        truckType: prefillData.truckType || "",
+        quantity: 1,
+      }]);
+    }
+  }, [prefillData]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!formData.name.trim()) {
+      toast.error("Booking Name is required");
+      return;
+    }
     if (!formData.customerName) {
       toast.error("Customer Name is required");
       return;
@@ -121,10 +152,12 @@ export function CreateTruckingBookingPanel({
 
     try {
       const lineItems = truckingLineItems.filter(li => li.destination || li.truckType || li.quantity > 0);
+      const bookingNumber = await generateBookingNumber("Trucking");
       const insertPayload: Record<string, any> = {
         id: crypto.randomUUID(),
         service_type: "Trucking",
-        name: formData.name.trim() || null,
+        booking_number: bookingNumber,
+        name: formData.name.trim(),
         customer_name: formData.customerName,
         consignee_id: formData.consignee_id || null,
         status: formData.status || "Draft",
@@ -161,7 +194,7 @@ export function CreateTruckingBookingPanel({
         },
       };
 
-      if (source === "pricing" && teamAssignment) {
+      if (teamAssignment) {
         insertPayload.manager_id = teamAssignment.manager.id;
         insertPayload.manager_name = teamAssignment.manager.name;
         insertPayload.team_id = teamAssignment.team.id;
@@ -180,7 +213,7 @@ export function CreateTruckingBookingPanel({
 
       if (error) throw new Error(error.message);
 
-      if (source === "pricing" && teamAssignment?.saveAsDefault && customerId) {
+      if (teamAssignment?.saveAsDefault && customerId) {
         try {
           await supabase.from('client_handler_preferences').upsert({
             customer_id: customerId,
@@ -200,7 +233,7 @@ export function CreateTruckingBookingPanel({
 
       logCreation("booking", data.id, data.booking_number ?? data.id, { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" });
 
-      if (source === "pricing" && teamAssignment) {
+      if (teamAssignment) {
         void fireBookingAssignmentTickets({
           bookingId: data.id,
           bookingNumber: data.booking_number,
@@ -288,7 +321,7 @@ export function CreateTruckingBookingPanel({
 
                 <div>
                   <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                    Booking Name <span style={{ color: "var(--theme-text-muted)", fontWeight: 400 }}>(Optional)</span>
+                    Booking Name <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
                   </label>
                   <input
                     type="text"
@@ -895,8 +928,8 @@ export function CreateTruckingBookingPanel({
               </div>
             </div>
 
-            {/* Team Assignment — only shown when opened from Pricing */}
-            {source === "pricing" && customerId && (
+            {/* Team Assignment */}
+            {formData.customerName && (
               <div className="mb-8">
                 <div
                   style={{

@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router";
-import { ArrowLeft, FileText, User, Calendar, Building2, CheckCircle, Clock, ClipboardList } from "lucide-react";
+import { ArrowLeft, User, Building2, ClipboardList } from "lucide-react";
 import { supabase } from "../../../utils/supabase/client";
 import { useUser } from "../../../hooks/useUser";
 import { EVoucherStatusBadge } from "./EVoucherStatusBadge";
 import { EVoucherWorkflowPanel } from "./EVoucherWorkflowPanel";
+import { EVoucherHistoryTimeline } from "./EVoucherHistoryTimeline";
 import { LiquidationForm } from "./LiquidationForm";
 import type { EVoucher } from "../../../types/evoucher";
 
@@ -31,7 +32,6 @@ export function EVoucherDetailPage() {
 
   const [evoucher, setEvoucher] = useState<EVoucher | null>(null);
   const [loading, setLoading] = useState(true);
-  const [history, setHistory] = useState<any[]>([]);
   const [showLiquidation, setShowLiquidation] = useState(false);
 
   const from = searchParams.get("from") || "my";
@@ -43,25 +43,17 @@ export function EVoucherDetailPage() {
 
     const fetchEV = async () => {
       setLoading(true);
-      const [{ data, error }, { data: historyData }] = await Promise.all([
-        supabase
-          .from("evouchers")
-          .select("*, evoucher_line_items(*)")
-          .eq("id", id)
-          .maybeSingle(),
-        supabase
-          .from("evoucher_history")
-          .select("*")
-          .eq("evoucher_id", id)
-          .order("created_at", { ascending: true }),
-      ]);
+      const { data, error } = await supabase
+        .from("evouchers")
+        .select("*, evoucher_line_items(*)")
+        .eq("id", id)
+        .maybeSingle();
 
       if (cancelled) return;
 
       if (!error && data) {
         setEvoucher({ ...data?.details, ...data } as EVoucher);
       }
-      setHistory(historyData || []);
       setLoading(false);
     };
 
@@ -117,7 +109,7 @@ export function EVoucherDetailPage() {
     evoucher.transaction_type !== "reimbursement" && isOwner;
 
   return (
-    <div style={{ padding: "32px 48px", maxWidth: "1200px" }}>
+    <div style={{ padding: "32px 48px", maxWidth: "1200px", margin: "0 auto" }}>
       {/* Back Button */}
       <button
         onClick={() => navigate(backRoute)}
@@ -134,7 +126,7 @@ export function EVoucherDetailPage() {
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "32px" }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
-            <h1 style={{ fontSize: "28px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
+            <h1 style={{ fontSize: "32px", fontWeight: 600, color: "var(--theme-text-primary)", letterSpacing: "-0.02em" }}>
               {evoucher.voucher_number}
             </h1>
             <EVoucherStatusBadge status={evoucher.status} size="md" />
@@ -243,48 +235,8 @@ export function EVoucherDetailPage() {
           )}
 
           {/* Approval Timeline */}
-          <div style={{ padding: "24px", border: "1px solid var(--theme-border-default)", borderRadius: "12px" }}>
-            <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--theme-text-primary)", marginBottom: "16px" }}>
-              Approval Timeline
-            </h3>
-            {history.length === 0 ? (
-              <p style={{ fontSize: "13px", color: "var(--theme-text-muted)", textAlign: "center", padding: "16px" }}>
-                No workflow history yet
-              </p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                {history.map((item, index) => {
-                  const isLast = index === history.length - 1;
-                  return (
-                    <div key={item.id} style={{ display: "flex", gap: "12px" }}>
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                        <div style={{
-                          width: "8px", height: "8px", borderRadius: "50%",
-                          backgroundColor: isLast ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)",
-                        }} />
-                        {!isLast && <div style={{ width: "2px", flex: 1, backgroundColor: "var(--theme-border-default)", minHeight: "24px" }} />}
-                      </div>
-                      <div style={{ flex: 1, paddingBottom: isLast ? 0 : "8px" }}>
-                        <div style={{ fontSize: "14px", fontWeight: 500, color: "var(--theme-text-secondary)", marginBottom: "2px" }}>
-                          {item.action}
-                        </div>
-                        <div style={{ fontSize: "13px", color: "var(--theme-text-muted)" }}>
-                          {item.performed_by_name} ({item.performed_by_role || "—"})
-                        </div>
-                        <div style={{ fontSize: "12px", color: "var(--theme-text-muted)" }}>
-                          {new Date(item.created_at).toLocaleString("en-PH", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-                        </div>
-                        {item.notes && (
-                          <div style={{ fontSize: "13px", color: "var(--theme-text-muted)", marginTop: "4px", fontStyle: "italic" }}>
-                            "{item.notes}"
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+          <div style={{ border: "1px solid var(--theme-border-default)", borderRadius: "12px", overflow: "hidden" }}>
+            <EVoucherHistoryTimeline evoucherId={evoucher.id} />
           </div>
         </div>
 
@@ -323,6 +275,53 @@ export function EVoucherDetailPage() {
             </button>
           )}
 
+          {/* Disbursement Details — visible once status ≥ disbursed */}
+          {evoucher.disbursement_date && (
+            <div style={{ padding: "20px", border: "1px solid var(--theme-border-default)", borderRadius: "12px" }}>
+              <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--theme-text-primary)", marginBottom: "16px" }}>
+                Disbursement Details
+              </h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: "13px", color: "var(--theme-text-muted)" }}>Date</span>
+                  <span style={{ fontSize: "13px", color: "var(--theme-text-secondary)" }}>
+                    {new Date(evoucher.disbursement_date).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
+                  </span>
+                </div>
+                {evoucher.disbursement_method && (
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: "13px", color: "var(--theme-text-muted)" }}>Method</span>
+                    <span style={{ fontSize: "13px", color: "var(--theme-text-secondary)" }}>{evoucher.disbursement_method}</span>
+                  </div>
+                )}
+                {evoucher.disbursement_source_account_name && (
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
+                    <span style={{ fontSize: "13px", color: "var(--theme-text-muted)", flexShrink: 0 }}>Source Account</span>
+                    <span style={{ fontSize: "13px", color: "var(--theme-text-secondary)", textAlign: "right" }}>{evoucher.disbursement_source_account_name}</span>
+                  </div>
+                )}
+                {evoucher.disbursement_reference && (
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
+                    <span style={{ fontSize: "13px", color: "var(--theme-text-muted)", flexShrink: 0 }}>Reference</span>
+                    <span style={{ fontSize: "13px", color: "var(--theme-text-secondary)", fontVariantNumeric: "tabular-nums" }}>{evoucher.disbursement_reference}</span>
+                  </div>
+                )}
+                {evoucher.disbursed_by_name && (
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: "13px", color: "var(--theme-text-muted)" }}>Released By</span>
+                    <span style={{ fontSize: "13px", color: "var(--theme-text-secondary)" }}>{evoucher.disbursed_by_name}</span>
+                  </div>
+                )}
+                {evoucher.disbursement_remarks && (
+                  <div style={{ paddingTop: "8px", borderTop: "1px solid var(--theme-border-default)" }}>
+                    <div style={{ fontSize: "12px", color: "var(--theme-text-muted)", marginBottom: "4px" }}>Remarks</div>
+                    <div style={{ fontSize: "13px", color: "var(--theme-text-secondary)" }}>{evoucher.disbursement_remarks}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Key Dates */}
           <div style={{ padding: "20px", border: "1px solid var(--theme-border-default)", borderRadius: "12px" }}>
             <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--theme-text-primary)", marginBottom: "16px" }}>
@@ -335,11 +334,11 @@ export function EVoucherDetailPage() {
                   {new Date(evoucher.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
                 </span>
               </div>
-              {(evoucher as any).disbursed_at && (
+              {evoucher.disbursement_date && (
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
                   <span style={{ fontSize: "13px", color: "var(--theme-text-muted)" }}>Disbursed</span>
                   <span style={{ fontSize: "13px", color: "var(--theme-text-secondary)" }}>
-                    {new Date((evoucher as any).disbursed_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
+                    {new Date(evoucher.disbursement_date).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
                   </span>
                 </div>
               )}

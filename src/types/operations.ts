@@ -185,6 +185,7 @@ export interface ForwardingBooking {
 
 export interface BrokerageBooking {
   bookingId: string;
+  booking_number?: string;
   projectNumber?: string; // Optional reference for autofill
   createdAt: string;
   updatedAt: string;
@@ -258,6 +259,7 @@ export interface BrokerageBooking {
 
 export interface TruckingBooking {
   bookingId: string;
+  booking_number?: string;
   projectNumber?: string;
   createdAt: string;
   updatedAt: string;
@@ -318,6 +320,7 @@ export interface TruckingBooking {
 
 export interface MarineInsuranceBooking {
   bookingId: string;
+  booking_number?: string;
   projectNumber?: string;
   createdAt: string;
   updatedAt: string;
@@ -379,6 +382,7 @@ export interface MarineInsuranceBooking {
 
 export interface OthersBooking {
   bookingId: string;
+  booking_number?: string;
   projectNumber?: string;
   createdAt: string;
   updatedAt: string;

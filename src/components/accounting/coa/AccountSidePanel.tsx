@@ -18,12 +18,13 @@ const CURRENCIES = ["USD", "PHP"] as const;
 export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSidePanelProps) {
   const [formData, setFormData] = useState<Partial<Account>>({
     name: "",
-    code: "", // Added code field
+    code: "",
     type: "Asset",
     currency: "USD",
     is_folder: false,
     parent_id: undefined,
     balance: 0,
+    starting_amount: 0,
     subtype: ""
   });
   
@@ -58,6 +59,7 @@ export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSi
         is_folder: false,
         parent_id: undefined,
         balance: 0,
+        starting_amount: 0,
         subtype: ""
       });
     }
@@ -74,6 +76,11 @@ export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSi
     try {
       setLoading(true);
       
+      const startingAmount = formData.starting_amount ?? 0;
+      // On create, balance starts at starting_amount.
+      // On edit, preserve existing balance (don't overwrite transaction activity).
+      const balance = account ? (formData.balance ?? 0) : startingAmount;
+
       const newAccount: Account = {
         id: account?.id || Math.random().toString(36).substring(2, 15),
         created_at: account?.created_at || new Date().toISOString(),
@@ -84,7 +91,8 @@ export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSi
         currency: formData.currency as "USD" | "PHP",
         is_folder: formData.is_folder || false,
         parent_id: formData.parent_id,
-        balance: formData.balance || 0,
+        starting_amount: startingAmount,
+        balance,
         subtype: formData.subtype || "",
         is_system: account?.is_system || false,
         is_active: true
@@ -222,6 +230,38 @@ export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSi
                   placeholder="e.g. Bank, Accounts Receivable, etc."
                 />
               </div>
+
+              {/* Starting Amount — leaf accounts only */}
+              {!formData.is_folder && (
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-[var(--theme-text-primary)]">
+                    Starting Amount
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[var(--theme-text-muted)] font-medium select-none">
+                      {formData.currency === "PHP" ? "₱" : "$"}
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formData.starting_amount ?? 0}
+                      onChange={e => setFormData(prev => ({ ...prev, starting_amount: parseFloat(e.target.value) || 0 }))}
+                      className="w-full pl-7 pr-3 py-2.5 rounded-lg border border-[var(--theme-border-default)] focus:outline-none focus:border-[var(--theme-action-primary-bg)] text-sm font-mono"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  {account && (
+                    <p className="text-xs text-[var(--theme-text-muted)]">
+                      Editing the starting amount updates the opening balance. Current balance is{" "}
+                      <span className="font-mono font-medium text-[var(--theme-text-secondary)]">
+                        {new Intl.NumberFormat("en-PH", { style: "currency", currency: formData.currency === "USD" ? "USD" : "PHP" }).format(formData.balance ?? 0)}
+                      </span>
+                      .
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Currency */}
               <div className="space-y-1.5">

@@ -1,10 +1,21 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from '../utils/supabase/client';
-import { toast } from '../components/ui/toast-utils';
+import { supabase } from "../utils/supabase/client";
+import { toast } from "../components/ui/toast-utils";
 import { queryKeys } from "../lib/queryKeys";
-import { logCreation, logStatusChange, logDeletion, type ActivityActor } from '../utils/activityLog';
+import {
+  logCreation,
+  logStatusChange,
+  logDeletion,
+  type ActivityActor,
+} from "../utils/activityLog";
 
-type EVoucherContext = "bd" | "accounting" | "operations" | "collection" | "billing" | "personal";
+type EVoucherContext =
+  | "bd"
+  | "accounting"
+  | "operations"
+  | "collection"
+  | "billing"
+  | "personal";
 
 interface LineItem {
   id: string;
@@ -30,18 +41,40 @@ interface EVoucherData {
   requestor: string;
   bookingId?: string;
   transactionType?: string;
+  transaction_type?: string;
   isBillable?: boolean;
   sourceAccountId?: string;
   linkedBillings?: { id: string; amount: number }[];
+  parentVoucherId?: string;
+  parent_voucher_id?: string;
 }
 
-export function useEVoucherSubmit(context: EVoucherContext = "bd", actor?: ActivityActor) {
+type CreatedVoucher = {
+  id: string;
+  evoucher_number?: string | null;
+  voucher_number?: string | null;
+  status?: string;
+  details?: Record<string, unknown> | null;
+  [key: string]: unknown;
+};
+
+export function useEVoucherSubmit(
+  context: EVoucherContext = "bd",
+  actor?: ActivityActor,
+) {
   const queryClient = useQueryClient();
 
+  const createId = (prefix: string) =>
+    `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
   const getTransactionType = (data?: EVoucherData) => {
-    if (data?.transactionType) {
-      return data.transactionType;
+    const explicitTransactionType =
+      data?.transactionType || data?.transaction_type;
+
+    if (explicitTransactionType) {
+      return explicitTransactionType;
     }
+
     switch (context) {
       case "bd":
         return "budget_request";
@@ -60,7 +93,8 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd", actor?: Activ
     }
   };
 
-  const getSourceModule = () => context === "personal" ? "accounting" : context;
+  const getSourceModule = () =>
+    context === "personal" ? "accounting" : context;
 
   const assertBookingLinkedWhenRequired = (data: EVoucherData) => {
     const transactionType = getTransactionType(data);
@@ -77,11 +111,148 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd", actor?: Activ
     queryClient.invalidateQueries({ queryKey: queryKeys.evouchers.all() });
   };
 
-  /** Insert line items into the relational evoucher_line_items table */
+  const cleanupVoucherOnFailure = async (evoucherId: string) => {
+    const { error } = await supabase.from("evouchers").delete().eq("id", evoucherId);
+
+    if (error) {
+      console.error("Failed to clean up partially-created E-Voucher:", {
+        evoucherId,
+        error,
+      });
+    }
+  };
+
+  const buildVoucherDetails = (data: EVoucherData) => ({
+    invoice_id: data.invoiceId || null,
+    requestor_name: data.requestor || null,
+    requestor_id: actor?.id || data.requestor || null,
+    requestor_department: actor?.department || context,
+    parent_voucher_id: data.parentVoucherId || data.parent_voucher_id || null,
+    due_date: data.paymentSchedule || null,
+    is_billable: data.isBillable ?? false,
+    source_account_id: data.sourceAccountId || null,
+    linked_billings:
+      data.transactionType === "collection" ? data.linkedBillings || [] : [],
+    line_items: data.lineItems || [],
+  });
+
+  const buildVoucherInsert = (data: EVoucherData, status: string) => {
+    const now = new Date().toISOString();
+    const descriptionPrefix = data.isBillable ? "[BILLABLE] " : "";
+
+    return {
+      id: createId("evoucher"),
+      evoucher_number: `EV-${Date.now()}`,
+      transaction_type: getTransactionType(data),
+      source_module: getSourceModule(),
+      booking_id: data.bookingId || null,
+      project_number: data.projectNumber || null,
+      vendor_name: data.vendor || null,
+      amount: data.totalAmount,
+      currency: "PHP",
+      payment_method: data.preferredPayment || null,
+      credit_terms: data.creditTerms || null,
+      description: descriptionPrefix + data.requestName,
+      purpose: data.requestName,
+      status,
+      gl_category: data.expenseCategory,
+      gl_sub_category: data.subCategory || "",
+      notes: data.notes || null,
+      created_by: actor?.id || null,
+      created_by_name: actor?.name || data.requestor || null,
+      details: buildVoucherDetails(data),
+      created_at: now,
+      updated_at: now,
+    };
+  };
+
+  const normalizeCreatedVoucher = (created: CreatedVoucher) => {
+    const details = created.details || {};
+
+    return {
+      ...created,
+      voucher_number: created.voucher_number ?? created.evoucher_number ?? null,
+      requestor_name:
+        created.requestor_name ??
+        (typeof details.requestor_name === "string"
+          ? details.requestor_name
+          : null),
+      requestor_id:
+        created.requestor_id ??
+        (typeof details.requestor_id === "string"
+          ? details.requestor_id
+          : null),
+      requestor_department:
+        created.requestor_department ??
+        (typeof details.requestor_department === "string"
+          ? details.requestor_department
+          : null),
+      due_date:
+        created.due_date ??
+        (typeof details.due_date === "string" ? details.due_date : null),
+      is_billable:
+        created.is_billable ??
+        (typeof details.is_billable === "boolean"
+          ? details.is_billable
+          : false),
+      source_account_id:
+        created.source_account_id ??
+        (typeof details.source_account_id === "string"
+          ? details.source_account_id
+          : null),
+      invoice_id:
+        created.invoice_id ??
+        (typeof details.invoice_id === "string" ? details.invoice_id : null),
+      linked_billings:
+        created.linked_billings ??
+        (Array.isArray(details.linked_billings) ? details.linked_billings : []),
+      line_items:
+        created.line_items ??
+        (Array.isArray(details.line_items) ? details.line_items : []),
+    };
+  };
+
+  const buildHistoryEntry = (
+    evoucherId: string,
+    action: string,
+    newStatus: string,
+    previousStatus?: string,
+    notes?: string,
+  ) => ({
+    id: createId("EH"),
+    evoucher_id: evoucherId,
+    action,
+    status: newStatus,
+    user_id: actor?.id || null,
+    user_name: actor?.name || null,
+    user_role: actor?.department || context,
+    remarks: notes || null,
+    metadata: {
+      previous_status: previousStatus || null,
+      new_status: newStatus,
+      notes: notes || null,
+    },
+    created_at: new Date().toISOString(),
+  });
+
+  const insertHistoryEntries = async (
+    entries: ReturnType<typeof buildHistoryEntry>[],
+  ) => {
+    const { error } = await supabase.from("evoucher_history").insert(entries);
+
+    if (error) {
+      console.warn("Voucher history logging failed:", error);
+      toast.warning(`Voucher created, but history logging failed: ${error.message}`);
+      return false;
+    }
+
+    return true;
+  };
+
   const insertLineItems = async (evoucherId: string, lineItems: LineItem[]) => {
     if (!lineItems || lineItems.length === 0) return;
+
     const rows = lineItems.map((item, index) => ({
-      id: item.id || `${evoucherId}-li-${index}`,
       evoucher_id: evoucherId,
       particular: item.particular,
       description: item.description,
@@ -89,7 +260,8 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd", actor?: Activ
       catalog_item_id: item.catalog_item_id || null,
       sort_order: index,
     }));
-    const { error } = await supabase.from('evoucher_line_items').insert(rows);
+
+    const { error } = await supabase.from("evoucher_line_items").insert(rows);
     if (error) throw new Error(`Line items failed: ${error.message}`);
   };
 
@@ -97,66 +269,45 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd", actor?: Activ
     mutationFn: async (data: EVoucherData) => {
       assertBookingLinkedWhenRequired(data);
 
-      const descriptionPrefix = data.isBillable ? "[BILLABLE] " : "";
+      const payload = buildVoucherInsert(data, "draft");
 
-      const payload = {
-        transaction_type: getTransactionType(data),
-        source_module: getSourceModule(),
-        purpose: data.requestName,
-        description: descriptionPrefix + data.requestName,
-        expense_category: data.expenseCategory,
-        sub_category: data.subCategory,
-        project_number: data.projectNumber || null,
-        invoice_id: data.invoiceId || null,
-        booking_id: data.bookingId || null,
-        line_items: data.lineItems, // Legacy JSONB — kept during transition, relational is primary
-        linked_billings: data.transactionType === "collection" ? (data as any).linkedBillings : undefined,
-        total_amount: data.totalAmount,
-        payment_method: data.preferredPayment,
-        vendor_name: data.vendor,
-        credit_terms: data.creditTerms,
-        due_date: data.paymentSchedule || null,
-        notes: data.notes || null,
-        requestor_name: data.requestor,
-        is_billable: data.isBillable,
-        source_account_id: data.sourceAccountId,
-        status: "draft",
-      };
-
-      console.log('Creating E-Voucher draft:', payload);
-
-      const voucherNumber = `EV-${Date.now()}`;
-      const evoucherId = `evoucher-${Date.now()}`;
-      const newEVoucher = {
-        ...payload,
-        id: evoucherId,
-        voucher_number: voucherNumber,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
+      console.log("Creating E-Voucher draft:", payload);
 
       const { data: created, error: insertErr } = await supabase
-        .from('evouchers')
-        .insert(newEVoucher)
+        .from("evouchers")
+        .insert(payload)
         .select()
         .single();
 
       if (insertErr) throw new Error(insertErr.message);
+      try {
+        await insertLineItems(created.id, data.lineItems);
+      } catch (lineItemError) {
+        await cleanupVoucherOnFailure(created.id);
+        throw lineItemError;
+      }
 
-      // Insert line items into relational table
-      await insertLineItems(created.id, data.lineItems);
+      const normalized = normalizeCreatedVoucher(created);
+      if (actor) {
+        logCreation(
+          "evoucher",
+          normalized.id,
+          normalized.voucher_number ?? normalized.id,
+          actor,
+        );
+      }
 
-      if (actor) logCreation("evoucher", created.id, created.voucher_number ?? created.id, actor);
-      console.log('E-Voucher draft created:', created);
-      return created;
+      console.log("E-Voucher draft created:", normalized);
+      return normalized;
     },
     onSuccess: (created) => {
       toast.success(`Draft saved successfully! Ref: ${created.voucher_number}`);
       invalidate();
     },
     onError: (err) => {
-      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
-      console.error('Error creating E-Voucher draft:', err);
+      const errorMessage =
+        err instanceof Error ? err.message : "An unexpected error occurred";
+      console.error("Error creating E-Voucher draft:", err);
       toast.error(`Failed to save draft: ${errorMessage}`);
     },
   });
@@ -165,113 +316,100 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd", actor?: Activ
     mutationFn: async (data: EVoucherData) => {
       assertBookingLinkedWhenRequired(data);
 
-      if (!data.requestName || data.requestName.trim() === '') {
-        throw new Error('Request name is required');
+      if (!data.requestName || data.requestName.trim() === "") {
+        throw new Error("Request name is required");
       }
       if (!data.expenseCategory) {
-        throw new Error('Expense category is required');
+        throw new Error("Expense category is required");
       }
       if (!data.lineItems || data.lineItems.length === 0) {
-        throw new Error('At least one line item is required');
+        throw new Error("At least one line item is required");
       }
-      if (!data.vendor || data.vendor.trim() === '') {
-        throw new Error('Vendor is required');
+      if (!data.vendor || data.vendor.trim() === "") {
+        throw new Error("Vendor is required");
       }
 
-      const descriptionPrefix = data.isBillable ? "[BILLABLE] " : "";
+      const payload = buildVoucherInsert(data, "draft");
 
-      const payload = {
-        transaction_type: getTransactionType(data),
-        source_module: getSourceModule(),
-        purpose: data.requestName,
-        description: descriptionPrefix + data.requestName,
-        expense_category: data.expenseCategory,
-        sub_category: data.subCategory || '',
-        project_number: data.projectNumber || null,
-        invoice_id: data.invoiceId || null,
-        booking_id: data.bookingId || null,
-        line_items: data.lineItems, // Legacy JSONB — kept during transition, relational is primary
-        linked_billings: data.transactionType === "collection" ? (data as any).linkedBillings : undefined,
-        total_amount: data.totalAmount,
-        amount: data.totalAmount,
-        payment_method: data.preferredPayment,
-        vendor_name: data.vendor,
-        credit_terms: data.creditTerms,
-        due_date: data.paymentSchedule || null,
-        notes: data.notes || '',
-        requestor_name: data.requestor,
-        requestor_id: data.requestor,
-        requestor_department: context,
-        is_billable: data.isBillable,
-        source_account_id: data.sourceAccountId,
-        status: "draft",
-      };
-
-      console.log('📤 Creating E-Voucher for submission:', JSON.stringify(payload, null, 2));
-
-      const voucherNumber = `EV-${Date.now()}`;
-      const evoucherId = `evoucher-${Date.now()}`;
-      const newEVoucher = {
-        ...payload,
-        id: evoucherId,
-        voucher_number: voucherNumber,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
+      console.log(
+        "Creating E-Voucher for submission:",
+        JSON.stringify(payload, null, 2),
+      );
 
       const { data: created, error: insertErr } = await supabase
-        .from('evouchers')
-        .insert(newEVoucher)
+        .from("evouchers")
+        .insert(payload)
         .select()
         .single();
 
       if (insertErr) throw new Error(insertErr.message);
+      try {
+        await insertLineItems(created.id, data.lineItems);
+      } catch (lineItemError) {
+        await cleanupVoucherOnFailure(created.id);
+        throw lineItemError;
+      }
 
-      // Insert line items into relational table
-      await insertLineItems(created.id, data.lineItems);
+      const normalized = normalizeCreatedVoucher(created);
+      const createdId = normalized.id;
+      const createdVoucherNumber =
+        normalized.voucher_number ?? normalized.evoucher_number;
 
-      const createdId = created.id;
-      const createdVoucherNumber = created.voucher_number;
+      if (actor) {
+        logCreation(
+          "evoucher",
+          createdId,
+          createdVoucherNumber ?? createdId,
+          actor,
+        );
+      }
 
-      if (actor) logCreation("evoucher", createdId, createdVoucherNumber ?? createdId, actor);
-      console.log('E-Voucher created:', createdVoucherNumber);
-      console.log('Submitting E-Voucher for approval...');
+      // Accounting-created e-vouchers skip the approval chain — they go straight to
+      // the disbursement queue. All other departments (ops, bd, etc.) need manager
+      // and CEO sign-off first.
+      const submittedStatus = context === "accounting" ? "pending_accounting" : "pending_manager";
 
       const { error: submitErr } = await supabase
-        .from('evouchers')
-        .update({ status: 'pending', updated_at: new Date().toISOString() })
-        .eq('id', createdId);
+        .from("evouchers")
+        .update({ status: submittedStatus, updated_at: new Date().toISOString() })
+        .eq("id", createdId);
 
       if (submitErr) throw new Error(submitErr.message);
-      if (actor) logStatusChange("evoucher", createdId, createdVoucherNumber ?? createdId, "draft", "pending", actor);
 
-      await supabase.from('evoucher_history').insert({
-        id: `EH-${Date.now()}`,
-        evoucher_id: createdId,
-        action: 'Submitted for Approval',
-        previous_status: 'draft',
-        new_status: 'pending',
-        performed_by: data.requestor,
-        performed_by_name: data.requestor,
-        performed_by_role: 'User',
-        created_at: new Date().toISOString()
-      });
+      if (actor) {
+        logStatusChange(
+          "evoucher",
+          createdId,
+          createdVoucherNumber ?? createdId,
+          "draft",
+          submittedStatus,
+          actor,
+        );
+      }
 
-      console.log('E-Voucher submitted for approval');
-      return { ...created, status: 'pending' };
+      await insertHistoryEntries([
+        buildHistoryEntry(createdId, "Submitted for Approval", submittedStatus, "draft"),
+      ]);
+
+      console.log("E-Voucher submitted for approval");
+      return { ...normalized, status: submittedStatus };
     },
     onSuccess: (created) => {
       const successMessage =
-        context === "bd" ? `Budget Request ${created.voucher_number} submitted successfully!` :
-        context === "collection" ? `Collection ${created.voucher_number} recorded successfully!` :
-        context === "billing" ? `Invoice ${created.voucher_number} created successfully!` :
-        `Expense ${created.voucher_number} submitted successfully!`;
+        context === "bd"
+          ? `Budget Request ${created.voucher_number} submitted successfully!`
+          : context === "collection"
+            ? `Collection ${created.voucher_number} recorded successfully!`
+            : context === "billing"
+              ? `Invoice ${created.voucher_number} created successfully!`
+              : `Expense ${created.voucher_number} submitted successfully!`;
       toast.success(successMessage);
       invalidate();
     },
     onError: (err) => {
-      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
-      console.error('Error submitting E-Voucher:', err);
+      const errorMessage =
+        err instanceof Error ? err.message : "An unexpected error occurred";
+      console.error("Error submitting E-Voucher:", err);
       toast.error(`Failed to submit: ${errorMessage}`);
     },
   });
@@ -280,122 +418,86 @@ export function useEVoucherSubmit(context: EVoucherContext = "bd", actor?: Activ
     mutationFn: async (data: EVoucherData) => {
       assertBookingLinkedWhenRequired(data);
 
-      const descriptionPrefix = data.isBillable ? "[BILLABLE] " : "";
+      const payload = buildVoucherInsert(data, "Approved");
 
-      const payload = {
-        transaction_type: getTransactionType(data),
-        source_module: getSourceModule(),
-        purpose: data.requestName,
-        description: descriptionPrefix + data.requestName,
-        expense_category: data.expenseCategory,
-        sub_category: data.subCategory || '',
-        project_number: data.projectNumber || null,
-        invoice_id: data.invoiceId || null,
-        booking_id: data.bookingId || null,
-        line_items: data.lineItems, // Legacy JSONB — kept during transition, relational is primary
-        linked_billings: data.transactionType === "collection" ? (data as any).linkedBillings : undefined,
-        total_amount: data.totalAmount,
-        amount: data.totalAmount,
-        payment_method: data.preferredPayment,
-        vendor_name: data.vendor,
-        credit_terms: data.creditTerms,
-        due_date: data.paymentSchedule || null,
-        notes: data.notes || '',
-        requestor_name: data.requestor,
-        requestor_id: data.requestor,
-        requestor_department: context,
-        is_billable: data.isBillable,
-        source_account_id: data.sourceAccountId,
-        user_id: data.requestor,
-        user_name: data.requestor,
-        user_role: context
-      };
-
-      console.log('⚡ Auto-approving E-Voucher:', payload);
-
-      const voucherNumber = `EV-${Date.now()}`;
-      const evoucherId = `evoucher-${Date.now()}`;
-      const newEVoucher = {
-        ...payload,
-        id: evoucherId,
-        voucher_number: voucherNumber,
-        status: 'Approved',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
+      console.log("Auto-approving E-Voucher:", payload);
 
       const { data: created, error: insertErr } = await supabase
-        .from('evouchers')
-        .insert(newEVoucher)
+        .from("evouchers")
+        .insert(payload)
         .select()
         .single();
 
       if (insertErr) throw new Error(insertErr.message);
+      try {
+        await insertLineItems(created.id, data.lineItems);
+      } catch (lineItemError) {
+        await cleanupVoucherOnFailure(created.id);
+        throw lineItemError;
+      }
 
-      // Insert line items into relational table
-      await insertLineItems(created.id, data.lineItems);
+      const normalized = normalizeCreatedVoucher(created);
+      if (actor) {
+        logCreation(
+          "evoucher",
+          normalized.id,
+          normalized.voucher_number ?? normalized.id,
+          actor,
+        );
+      }
 
-      if (actor) logCreation("evoucher", created.id, created.voucher_number ?? created.id, actor);
-      await supabase.from('evoucher_history').insert([
-        {
-          id: `EH-${Date.now()}-1`,
-          evoucher_id: created.id,
-          action: 'Created',
-          new_status: 'draft',
-          performed_by: data.requestor,
-          performed_by_name: data.requestor,
-          performed_by_role: context,
-          created_at: new Date().toISOString()
-        },
-        {
-          id: `EH-${Date.now()}-2`,
-          evoucher_id: created.id,
-          action: 'Auto-Approved',
-          previous_status: 'draft',
-          new_status: 'Approved',
-          performed_by: data.requestor,
-          performed_by_name: data.requestor,
-          performed_by_role: context,
-          created_at: new Date().toISOString()
-        }
+      await insertHistoryEntries([
+        buildHistoryEntry(normalized.id, "Created", "draft"),
+        buildHistoryEntry(normalized.id, "Auto-Approved", "Approved", "draft"),
       ]);
 
-      console.log('E-Voucher auto-approved:', created);
-      return created;
+      console.log("E-Voucher auto-approved:", normalized);
+      return normalized;
     },
     onSuccess: (created) => {
       toast.success(`Voucher ${created.voucher_number} posted successfully!`);
       invalidate();
     },
     onError: (err) => {
-      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
-      console.error('Error auto-approving E-Voucher:', err);
+      const errorMessage =
+        err instanceof Error ? err.message : "An unexpected error occurred";
+      console.error("Error auto-approving E-Voucher:", err);
       toast.error(`Failed to auto-approve: ${errorMessage}`);
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      console.log('🗑️ Deleting E-Voucher:', id);
+      console.log("Deleting E-Voucher:", id);
 
-      const { error: deleteErr } = await supabase
-        .from('evouchers')
-        .delete()
-        .eq('id', id);
+      // Clear dependent rows first — avoids FK violations if CASCADE is not set
+      await supabase.from("evoucher_line_items").delete().eq("evoucher_id", id);
+      await supabase.from("evoucher_history").delete().eq("evoucher_id", id);
+
+      const { error: deleteErr, count } = await supabase
+        .from("evouchers")
+        .delete({ count: "exact" })
+        .eq("id", id);
 
       if (deleteErr) throw new Error(deleteErr.message);
 
+      // Supabase returns no error but count=0 when RLS silently blocks the delete
+      if (!count || count === 0) {
+        throw new Error("Delete failed — the record could not be removed. Check database permissions.");
+      }
+
       if (actor) logDeletion("evoucher", id, id, actor);
-      console.log('E-Voucher deleted:', id);
+      console.log("E-Voucher deleted:", id);
       return true;
     },
     onSuccess: () => {
-      toast.success(`Expense deleted successfully`);
+      toast.success("Expense deleted successfully");
       invalidate();
     },
     onError: (err) => {
-      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
-      console.error('Error deleting expense:', err);
+      const errorMessage =
+        err instanceof Error ? err.message : "An unexpected error occurred";
+      console.error("Error deleting expense:", err);
       toast.error(`Failed to delete: ${errorMessage}`);
     },
   });

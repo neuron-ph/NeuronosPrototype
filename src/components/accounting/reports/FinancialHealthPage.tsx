@@ -167,7 +167,7 @@ export function FinancialHealthPage() {
       cell: (row) => (
         <span
           className="text-[13px] font-semibold tabular-nums"
-          style={{ color: row.grossProfit >= 0 ? "#0F766E" : "#DC2626" }}
+          style={{ color: row.grossProfit >= 0 ? "var(--neuron-brand-green)" : "var(--neuron-semantic-danger)" }}
         >
           {formatCurrency(row.grossProfit)}
         </span>
@@ -182,28 +182,28 @@ export function FinancialHealthPage() {
       value: formatCurrency(summary.totalBillings),
       icon: DollarSign,
       color: "var(--theme-action-primary-bg)",
-      bgColor: "#F0FDF9",
+      bgColor: "var(--neuron-semantic-success-bg)",
     },
     {
       label: "Total Expenses",
       value: formatCurrency(summary.totalExpenses),
       icon: Receipt,
       color: "var(--theme-status-danger-fg)",
-      bgColor: "#FEF2F2",
+      bgColor: "var(--neuron-semantic-danger-bg)",
     },
     {
       label: "Collected",
       value: formatCurrency(summary.totalCollected),
       icon: TrendingUp,
-      color: "#0369A1",
-      bgColor: "#F0F9FF",
+      color: "var(--neuron-semantic-info)",
+      bgColor: "var(--neuron-semantic-info-bg)",
     },
     {
       label: "Gross Profit",
       value: formatCurrency(summary.totalGrossProfit),
       icon: summary.totalGrossProfit >= 0 ? TrendingUp : TrendingDown,
-      color: summary.totalGrossProfit >= 0 ? "#0F766E" : "#DC2626",
-      bgColor: summary.totalGrossProfit >= 0 ? "#F0FDF9" : "#FEF2F2",
+      color: summary.totalGrossProfit >= 0 ? "var(--neuron-brand-green)" : "var(--neuron-semantic-danger)",
+      bgColor: summary.totalGrossProfit >= 0 ? "var(--neuron-semantic-success-bg)" : "var(--neuron-semantic-danger-bg)",
     },
   ];
 
@@ -256,7 +256,7 @@ export function FinancialHealthPage() {
         {
           label: "Gross Profit",
           value: (
-            <span style={{ color: filteredTotals.grossProfit >= 0 ? "#0F766E" : "#DC2626", fontWeight: 700 }}>
+            <span style={{ color: filteredTotals.grossProfit >= 0 ? "var(--neuron-brand-green)" : "var(--neuron-semantic-danger)", fontWeight: 700 }}>
               {formatCurrency(filteredTotals.grossProfit)}
             </span>
           ) as React.ReactNode,
@@ -310,7 +310,7 @@ export function FinancialHealthPage() {
           {/* Export */}
           <button
             onClick={handleExport}
-            className="flex items-center gap-2 px-4 py-2 bg-[var(--theme-action-primary-bg)] text-white rounded-lg hover:bg-[#0D6559] transition-colors font-medium text-[14px]"
+            className="flex items-center gap-2 px-4 py-2 bg-[var(--theme-action-primary-bg)] text-white rounded-lg hover:bg-[var(--neuron-action-primary-hover)] transition-colors font-medium text-[14px]"
           >
             <Download size={16} />
             Export CSV
@@ -356,7 +356,7 @@ export function FinancialHealthPage() {
             placeholder="Search by file ref, company, or invoice #..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F766E] text-[13px] border border-[var(--theme-border-default)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-primary)] placeholder-[#98A2B3]"
+            className="w-full pl-10 pr-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--theme-state-focus-ring)] text-[13px] border border-[var(--theme-border-default)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-primary)] placeholder-[var(--theme-text-muted)]"
           />
         </div>
       </div>

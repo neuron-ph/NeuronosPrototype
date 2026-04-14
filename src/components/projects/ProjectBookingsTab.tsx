@@ -9,6 +9,8 @@ import { getServiceIcon } from "../../utils/quotation-helpers";
 import type { Project } from "../../types/pricing";
 import { ProjectBookingReadOnlyView } from "./ProjectBookingReadOnlyView";
 import { canPerformBookingAction } from "../../utils/permissions";
+import { BookingCancelDeletePanel } from "../operations/shared/BookingCancelDeletePanel";
+import type { ExecutionStatus } from "../../types/operations";
 
 interface ProjectBookingsTabProps {
   project: Project;
@@ -26,7 +28,10 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
   const [selectedBooking, setSelectedBooking] = useState<{
     bookingId: string;
     bookingType: string;
+    bookingLabel?: string;
+    bookingStatus?: ExecutionStatus;
   } | null>(null);
+  const [cancelPanelOpen, setCancelPanelOpen] = useState(false);
   const [hasCleanedUp, setHasCleanedUp] = useState(false);
   const [createBookingService, setCreateBookingService] = useState<any>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -115,7 +120,9 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
         const type = booking.bookingType || booking.serviceType || booking.service || "others";
         setSelectedBooking({
           bookingId: selectedBookingId,
-          bookingType: type.toLowerCase().replace(' ', '-')
+          bookingType: type.toLowerCase().replace(' ', '-'),
+          bookingLabel: booking.name || booking.bookingNumber || selectedBookingId,
+          bookingStatus: booking.status as ExecutionStatus,
         });
       }
     }
@@ -266,9 +273,15 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
         <BookingsTable
           bookings={verifiedBookings}
           isLoading={isVerifying}
-          onViewBooking={(bookingId, bookingType) =>
-            setSelectedBooking({ bookingId, bookingType })
-          }
+          onViewBooking={(bookingId, bookingType) => {
+            const b = verifiedBookings.find((x: any) => x.bookingId === bookingId);
+            setSelectedBooking({
+              bookingId,
+              bookingType,
+              bookingLabel: b?.name || b?.bookingNumber || bookingId,
+              bookingStatus: b?.status as ExecutionStatus,
+            });
+          }}
           emptyState={
             servicesMetadata.length > 0 ? (
               <div style={{ padding: "48px 24px", textAlign: "center" }}>
@@ -320,8 +333,30 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
         <ProjectBookingReadOnlyView
           bookingId={selectedBooking.bookingId}
           bookingType={selectedBooking.bookingType as any}
-          onBack={() => setSelectedBooking(null)}
+          onBack={() => { setSelectedBooking(null); setCancelPanelOpen(false); }}
           currentUser={currentUser}
+          onOpenCancelDelete={() => setCancelPanelOpen(true)}
+          onBookingUpdated={() => {
+            setSelectedBooking(null);
+            setRefreshTrigger(prev => prev + 1);
+          }}
+        />
+      )}
+
+      {/* Cancel / Delete Panel — rendered outside the drawer so z-index is not blocked */}
+      {selectedBooking && (
+        <BookingCancelDeletePanel
+          isOpen={cancelPanelOpen}
+          onClose={() => setCancelPanelOpen(false)}
+          bookingId={selectedBooking.bookingId}
+          bookingLabel={selectedBooking.bookingLabel || selectedBooking.bookingId}
+          currentStatus={selectedBooking.bookingStatus || "Draft"}
+          currentUser={currentUser}
+          onSuccess={(action) => {
+            setCancelPanelOpen(false);
+            setSelectedBooking(null);
+            setRefreshTrigger(prev => prev + 1);
+          }}
         />
       )}
 

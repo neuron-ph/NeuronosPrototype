@@ -17,7 +17,7 @@ interface ProjectInvoicesProps {
 export function ProjectInvoices({ financials, project, currentUser, highlightId }: ProjectInvoicesProps) {
   // Logic is now delegated to the UnifiedInvoicesTab for DRY compliance
   return (
-    <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]">
+    <div className="flex flex-col bg-[var(--theme-bg-surface)] min-h-[600px]">
       <UnifiedInvoicesTab 
         financials={financials}
         project={project}

@@ -1,5 +1,5 @@
 import { Shield, Package, FileText } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
 import { CustomDropdown } from "../bd/CustomDropdown";
@@ -10,6 +10,7 @@ import { BookingCreationPanel } from "./shared/BookingCreationPanel";
 import { useCustomerOptions } from "./shared/useCustomerOptions";
 import { logCreation } from "../../utils/activityLog";
 import { fireBookingAssignmentTickets } from "../../utils/workflowTickets";
+import { generateBookingNumber } from "../../utils/bookingNumberUtils";
 import { useUser } from "../../hooks/useUser";
 import { TeamAssignmentForm, type TeamAssignment } from "../pricing/TeamAssignmentForm";
 
@@ -31,6 +32,8 @@ export function CreateMarineInsuranceBookingPanel({
   onSuccess,
   source = "operations",
   customerId,
+  prefillData,
+  currentUser,
 }: CreateMarineInsuranceBookingPanelProps) {
   const { user } = useUser();
   const [loading, setLoading] = useState(false);
@@ -73,9 +76,36 @@ export function CreateMarineInsuranceBookingPanel({
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  useEffect(() => {
+    if (!prefillData) return;
+    setFormData((prev) => ({
+      ...prev,
+      name: prev.name || prefillData.name || "",
+      customerName: prefillData.customerName || prev.customerName,
+      movement: prefillData.movement || prev.movement,
+      quotationReferenceNumber: prefillData.quotationReferenceNumber || prev.quotationReferenceNumber,
+      accountOwner: prefillData.accountOwner || currentUser?.name || prev.accountOwner,
+      accountHandler: prefillData.accountHandler || currentUser?.name || prev.accountHandler,
+      commodityDescription: prefillData.commodityDescription || prev.commodityDescription,
+      invoiceValue: prefillData.invoiceValue || prev.invoiceValue,
+      departurePort: prefillData.departurePort || prev.departurePort,
+      arrivalPort: prefillData.arrivalPort || prev.arrivalPort,
+      vesselName: prefillData.vesselName || prev.vesselName,
+      // Field name mappings: autofill key → form field name
+      voyage: prefillData.voyageNumber || prev.voyage,
+      coverageType: prefillData.insuranceType || prev.coverageType,
+      departureDate: prefillData.estimatedDeparture || prev.departureDate,
+      arrivalDate: prefillData.estimatedArrival || prev.arrivalDate,
+    }));
+  }, [prefillData]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!formData.name.trim()) {
+      toast.error("Booking Name is required");
+      return;
+    }
     if (!formData.customerName) {
       toast.error("Customer Name is required");
       return;
@@ -92,10 +122,12 @@ export function CreateMarineInsuranceBookingPanel({
     setLoading(true);
 
     try {
+      const bookingNumber = await generateBookingNumber("Marine Insurance");
       const insertPayload: Record<string, any> = {
         id: crypto.randomUUID(),
         service_type: "Marine Insurance",
-        name: formData.name.trim() || null,
+        booking_number: bookingNumber,
+        name: formData.name.trim(),
         customer_name: formData.customerName,
         status: formData.status || "Draft",
         movement_type: formData.movement,
@@ -125,7 +157,7 @@ export function CreateMarineInsuranceBookingPanel({
         },
       };
 
-      if (source === "pricing" && teamAssignment) {
+      if (teamAssignment) {
         insertPayload.manager_id = teamAssignment.manager.id;
         insertPayload.manager_name = teamAssignment.manager.name;
         insertPayload.team_id = teamAssignment.team.id;
@@ -144,7 +176,7 @@ export function CreateMarineInsuranceBookingPanel({
 
       if (error) throw new Error(error.message);
 
-      if (source === "pricing" && teamAssignment?.saveAsDefault && customerId) {
+      if (teamAssignment?.saveAsDefault && customerId) {
         try {
           await supabase.from('client_handler_preferences').upsert({
             customer_id: customerId,
@@ -164,7 +196,7 @@ export function CreateMarineInsuranceBookingPanel({
 
       logCreation("booking", data.id, data.booking_number ?? data.id, { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" });
 
-      if (source === "pricing" && teamAssignment) {
+      if (teamAssignment) {
         void fireBookingAssignmentTickets({
           bookingId: data.id,
           bookingNumber: data.booking_number,
@@ -252,7 +284,7 @@ export function CreateMarineInsuranceBookingPanel({
 
                 <div>
                   <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                    Booking Name <span style={{ color: "var(--theme-text-muted)", fontWeight: 400 }}>(Optional)</span>
+                    Booking Name <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
                   </label>
                   <input
                     type="text"
@@ -730,8 +762,8 @@ export function CreateMarineInsuranceBookingPanel({
               </div>
             </div>
 
-            {/* Team Assignment — only shown when opened from Pricing */}
-            {source === "pricing" && customerId && (
+            {/* Team Assignment */}
+            {formData.customerName && (
               <div className="mb-8">
                 <div
                   style={{

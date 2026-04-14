@@ -454,18 +454,16 @@ export function ContractDetailView({
   const renderInvoicesTab = () => {
     const currentUserWithId = currentUser ? { id: "current-user", ...currentUser } : null;
     return (
-      <div style={{ padding: "24px 0" }}>
-        <UnifiedInvoicesTab
-          financials={contractFinancials}
-          project={financialContainer}
-          currentUser={currentUserWithId}
-          onRefresh={contractFinancials.refresh}
-          linkedBookings={linkedBookings}
-          title="Contract Invoices"
-          subtitle={`Generate, track, and manage official invoices — ${quotation.quote_number} · ${quotation.customer_name}`}
-          highlightId={activeTab === "invoices" ? highlightId : undefined}
-        />
-      </div>
+      <UnifiedInvoicesTab
+        financials={contractFinancials}
+        project={financialContainer}
+        currentUser={currentUserWithId}
+        onRefresh={contractFinancials.refresh}
+        linkedBookings={linkedBookings}
+        title="Contract Invoices"
+        subtitle={`Generate, track, and manage official invoices — ${quotation.quote_number} · ${quotation.customer_name}`}
+        highlightId={activeTab === "invoices" ? highlightId : undefined}
+      />
     );
   };
 
@@ -935,9 +933,7 @@ export function ContractDetailView({
         {activeTab === "billings" && (
           <div className="max-w-7xl mx-auto" style={{ padding: "0 48px" }}>{renderBillingsTab()}</div>
         )}
-        {activeTab === "invoices" && (
-          <div className="max-w-7xl mx-auto" style={{ padding: "0 48px" }}>{renderInvoicesTab()}</div>
-        )}
+        {activeTab === "invoices" && renderInvoicesTab()}
         {activeTab === "collections" && (
           <div className="max-w-7xl mx-auto" style={{ padding: "0 48px" }}>{renderCollectionsTab()}</div>
         )}
@@ -956,7 +952,8 @@ export function ContractDetailView({
         {activeTab === "comments" && (
           <div className="max-w-7xl mx-auto" style={{ padding: "32px 48px" }}>
             <CommentsTab
-              inquiryId={quotation.id}
+              entityId={quotation.id}
+              entityType="contract"
               currentUserId={currentUser?.email || "unknown"}
               currentUserName={currentUser?.name || "Unknown User"}
               currentUserDepartment={currentUser?.department || ""}

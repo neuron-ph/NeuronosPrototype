@@ -33,26 +33,32 @@ interface Attachment {
   file_size: number;
   file_type: string;
   file_url: string;
-  uploaded_by: string;
-  uploaded_at: string;
+  uploaded_by_name: string;
+  created_at: string;
   isUploading?: boolean;
-  storage_path?: string;
 }
+
+// Map entityType to the actual DB table name and FK column
+const TABLE_MAP: Record<string, { table: string; fkColumn: string }> = {
+  projects: { table: "project_attachments", fkColumn: "project_id" },
+  contracts: { table: "contract_attachments", fkColumn: "contract_id" },
+};
 
 export function EntityAttachmentsTab({ entityId, entityType, currentUser }: EntityAttachmentsTabProps) {
   const queryClient = useQueryClient();
   const [isUploading, setIsUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
+  const { table, fkColumn } = TABLE_MAP[entityType] ?? { table: "project_attachments", fkColumn: "project_id" };
+
   const { data: attachments = [], isLoading } = useQuery({
     queryKey: queryKeys.attachments.forEntity(entityType, entityId),
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('entity_attachments')
+        .from(table)
         .select('*')
-        .eq('entity_type', entityType)
-        .eq('entity_id', entityId)
-        .order('uploaded_at', { ascending: false });
+        .eq(fkColumn, entityId)
+        .order('created_at', { ascending: false });
       if (error) {
         toast.error("Failed to load attachments");
         return [] as Attachment[];
@@ -91,16 +97,14 @@ export function EntityAttachmentsTab({ entityId, entityType, currentUser }: Enti
           const { data: urlData } = supabase.storage.from('attachments').getPublicUrl(filePath);
 
           // Save attachment record
-          await supabase.from('entity_attachments').insert({
-            entity_type: entityType,
-            entity_id: entityId,
+          await supabase.from(table).insert({
+            id: crypto.randomUUID(),
+            [fkColumn]: entityId,
             file_name: file.name,
             file_size: file.size,
             file_type: file.type,
             file_url: urlData.publicUrl,
-            storage_path: filePath,
-            uploaded_by: currentUser.name,
-            uploaded_at: new Date().toISOString(),
+            uploaded_by_name: currentUser.name,
           });
         } catch (error) {
           throw error;
@@ -128,15 +132,11 @@ export function EntityAttachmentsTab({ entityId, entityType, currentUser }: Enti
       const attachment = attachments.find(a => a.id === attachmentId);
       
       const { error: deleteError } = await supabase
-        .from('entity_attachments')
+        .from(table)
         .delete()
         .eq('id', attachmentId);
 
       if (!deleteError) {
-        // Also delete from storage if we have the path
-        if ((attachment as any)?.storage_path) {
-          await supabase.storage.from('attachments').remove([(attachment as any).storage_path]);
-        }
         toast.success("File deleted successfully");
         refetchAttachments();
       } else {
@@ -416,7 +416,7 @@ export function EntityAttachmentsTab({ entityId, entityType, currentUser }: Enti
                     {attachment.isUploading ? (
                       "Uploading..."
                     ) : (
-                      <>{formatFileSize(attachment.file_size)} · {formatDate(attachment.uploaded_at)}</>
+                      <>{formatFileSize(attachment.file_size)} · {formatDate(attachment.created_at)}</>
                     )}
                   </div>
                 </div>
@@ -431,7 +431,7 @@ export function EntityAttachmentsTab({ entityId, entityType, currentUser }: Enti
                   borderTop: "1px solid var(--theme-border-subtle)",
                 }}
               >
-                {attachment.uploaded_by}
+                {attachment.uploaded_by_name}
               </div>
 
               <div style={{ display: "flex", gap: "6px" }}>

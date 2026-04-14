@@ -598,9 +598,7 @@ export function ProjectDetail({
         )}
         
         {activeTab === "invoices" && (
-          <div className="max-w-7xl mx-auto">
-            <ProjectInvoices financials={financials} project={project} currentUser={currentUser} highlightId={highlightId} />
-          </div>
+          <ProjectInvoices financials={financials} project={project} currentUser={currentUser} highlightId={highlightId} />
         )}
         
         {activeTab === "collections" && (
@@ -622,8 +620,9 @@ export function ProjectDetail({
         )}
         
         {activeTab === "comments" && (
-          <CommentsTab 
-            inquiryId={project.quotation_id}
+          <CommentsTab
+            entityId={project.id}
+            entityType="project"
             currentUserId={currentUserId}
             currentUserName={currentUserName}
             currentUserDepartment={currentUserDepartment}

@@ -1,12 +1,11 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Search, Plus, Filter, ArrowLeft, Loader2, X, FileText } from "lucide-react";
+import { Search, Plus, FileText } from "lucide-react";
 import type { FinancialData } from "../../../hooks/useProjectFinancials";
 import type { FinancialContainer } from "../../../types/financials";
 import { Invoice } from "../../../types/accounting";
-import { InvoiceBuilder } from "../../../components/projects/invoices/InvoiceBuilder";
+import { InvoiceCreatorPage } from "../../../components/projects/invoices/InvoiceCreatorPage";
 import { CustomDropdown } from "../../bd/CustomDropdown";
 import { CustomDatePicker } from "../../common/CustomDatePicker";
-import { SidePanel } from "../../common/SidePanel";
 import { DataTable, ColumnDef } from "../../common/DataTable";
 import { calculateInvoiceBalance } from "../../../utils/accounting-math";
 import { getInvoiceLifecycleStatus, isInvoiceFinanciallyActive } from "../../../utils/invoiceReversal";
@@ -320,31 +319,24 @@ export function UnifiedInvoicesTab({
       setSelectedInvoice(null);
   };
 
-  // SidePanel Header
-  const PanelHeader = (
-    <div className="flex items-center justify-between w-full">
-         <div>
-            <h2 className="text-xl font-bold text-[var(--theme-text-primary)]">
-                {interfaceMode === 'create' ? "Invoice Creator" : "Invoice Viewer"}
-            </h2>
-            <p className="text-[13px] text-[var(--theme-text-muted)]">
-                {interfaceMode === 'create' 
-                    ? `Drafting for ${project.customer_name}` 
-                    : selectedInvoice?.invoice_number || "Viewing Invoice"
-                }
-            </p>
-         </div>
-         <button
-            onClick={handleClose}
-            className="w-10 h-10 rounded-lg flex items-center justify-center text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-surface-subtle)] transition-colors"
-         >
-            <X size={20} />
-         </button>
-    </div>
-  );
+  // -- Invoice Creator / Viewer: full-page replacement (Disbursement-style) --
+  if (interfaceMode !== 'none') {
+    return (
+      <InvoiceCreatorPage
+        mode={interfaceMode === 'create' ? 'create' : 'view'}
+        project={project}
+        billingItems={billingItems as any[]}
+        linkedBookings={resolvedLinkedBookings}
+        invoice={selectedInvoice}
+        onClose={handleClose}
+        onSuccess={handleCreateSuccess}
+        onRefreshData={refresh}
+      />
+    );
+  }
 
   return (
-    <div className="flex flex-col bg-[var(--theme-bg-surface)]">
+    <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12">
       {/* Header Section */}
       <div className="flex items-start justify-between mb-8">
         <div>
@@ -434,29 +426,6 @@ export function UnifiedInvoicesTab({
         ]}
       />
 
-      {/* Invoice Interface Side Panel (Unified) */}
-      <SidePanel
-        isOpen={interfaceMode !== 'none'}
-        onClose={handleClose}
-        width="85vw"
-        title={PanelHeader}
-        showCloseButton={false}
-      >
-        <div className="h-full bg-[var(--theme-bg-surface)]">
-             {interfaceMode !== 'none' && (
-                 <InvoiceBuilder 
-                    mode={interfaceMode === 'create' ? 'create' : 'view'}
-                    project={project}
-                    billingItems={billingItems as any[]}
-                    linkedBookings={resolvedLinkedBookings}
-                    invoice={selectedInvoice || undefined}
-                    onSuccess={handleCreateSuccess}
-                    onRefreshData={refresh}
-                    onBack={handleClose}
-                 />
-             )}
-        </div>
-      </SidePanel>
     </div>
   );
 }

@@ -1,5 +1,4 @@
 import { supabase } from "../../../utils/supabase/client";
-import { BookingPendingEVStrip } from "../shared/BookingPendingEVStrip";
 import { toast } from "../../ui/toast-utils";
 import { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -15,13 +14,14 @@ import { EditableMultiInputField } from "../../shared/EditableMultiInputField";
 import { EditableSectionCard, useSectionEdit } from "../../shared/EditableSectionCard";
 import { EditableField } from "../../shared/EditableField";
 import { ConsigneeInfoBadge } from "../../shared/ConsigneeInfoBadge";
-import { assessBookingFinancialState, canTransitionBookingToCancelled, getBookingCancellationStatusMessage, voidBookingUnbilledCharges, canHardDeleteBooking, getBookingCancellationMessage } from "../../../utils/bookingCancellation";
-import { LinkedTicketBadge } from "../../common/LinkedTicketBadge";
+import { assessBookingFinancialState, canTransitionBookingToCancelled, getBookingCancellationStatusMessage } from "../../../utils/bookingCancellation";
+import { BookingCancelDeletePanel } from "../shared/BookingCancelDeletePanel";
 import { RequestBillingButton } from "../../common/RequestBillingButton";
 import { loadBookingActivityLog, appendBookingActivity } from "../../../utils/bookingActivityLog";
+import { BookingTeamSection } from "../shared/BookingTeamSection";
 import { useUser } from "../../../hooks/useUser";
 import { fireBillingTicketOnCompletion } from "../../../utils/workflowTickets";
-import { logStatusChange, logDeletion } from "../../../utils/activityLog";
+import { logStatusChange } from "../../../utils/activityLog";
 
 interface ForwardingBookingDetailsProps {
   booking: ForwardingBooking;
@@ -111,6 +111,7 @@ export function ForwardingBookingDetails({
   // Local state to track edited booking values
   const [editedBooking, setEditedBooking] = useState<ForwardingBooking>(booking);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showCancelDeletePanel, setShowCancelDeletePanel] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -123,25 +124,6 @@ export function ForwardingBookingDetails({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [showMoreMenu]);
-
-  const handleDeleteFromDetail = async () => {
-    setShowMoreMenu(false);
-    try {
-      const financialState = await assessBookingFinancialState(booking.bookingId);
-      if (!canHardDeleteBooking(financialState)) {
-        toast.error(getBookingCancellationMessage(financialState));
-        return;
-      }
-      if (!window.confirm(`Delete booking ${booking.bookingId}? This cannot be undone.`)) return;
-      const { error } = await supabase.from('bookings').delete().eq('id', booking.bookingId);
-      if (error) throw error;
-      logDeletion("booking", booking.bookingId, (booking as any).booking_number ?? booking.bookingId, { id: user?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
-      toast.success('Booking deleted');
-      onBack();
-    } catch (err) {
-      toast.error('Unable to delete booking');
-    }
-  };
 
   // Function to add new activity
   const addActivity = (
@@ -168,23 +150,10 @@ export function ForwardingBookingDetails({
     if (oldStatus === newStatus) return;
 
     if (newStatus === "Cancelled") {
-      let financialState = await assessBookingFinancialState(booking.bookingId);
-      if (financialState.recommendedAction === "cancel-and-void-unbilled") {
-        const shouldProceed = window.confirm(
-          `Cancel booking ${booking.bookingId} and void ${financialState.unbilledChargeCount} unbilled charge line(s)?`
-        );
-        if (!shouldProceed) return;
-
-        await voidBookingUnbilledCharges(booking.bookingId);
-        toast.info("Unbilled booking charges were voided before cancellation.");
-        financialState = await assessBookingFinancialState(booking.bookingId);
-      }
-      if (!canTransitionBookingToCancelled(financialState)) {
-        toast.error(getBookingCancellationStatusMessage(financialState));
+      const financialState = await assessBookingFinancialState(booking.bookingId);
+      if (!canTransitionBookingToCancelled(oldStatus, financialState)) {
+        toast.error(getBookingCancellationStatusMessage(oldStatus, financialState));
         return;
-      }
-      if (financialState.recommendedAction === "cancel-preserve-costs") {
-        toast.info(getBookingCancellationStatusMessage(financialState));
       }
     }
 
@@ -230,7 +199,7 @@ export function ForwardingBookingDetails({
     }
   };
 
-  const financials = useProjectFinancials(booking.projectNumber || "");
+  const financials = useProjectFinancials(booking.projectNumber || "", [{ bookingId: booking.bookingId }]);
   const bookingBillingItems = financials.billingItems.filter(item => item.booking_id === booking.bookingId);
   const [pendingBillableCount, setPendingBillableCount] = useState(0);
 
@@ -290,11 +259,8 @@ export function ForwardingBookingDetails({
             </p>
           )}
           <p style={{ fontSize: "13px", color: "var(--neuron-ink-muted)", margin: 0 }}>
-            {booking.bookingId}
+            {(booking as any).booking_number || booking.bookingId}
           </p>
-          <div style={{ marginTop: 8 }}>
-            <LinkedTicketBadge recordType="booking" recordId={booking.bookingId} />
-          </div>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -302,7 +268,7 @@ export function ForwardingBookingDetails({
           {(editedBooking.status === "Completed" || (editedBooking.status === "Cancelled" && bookingBillingItems.some(item => item.status === "unbilled"))) && (
             <RequestBillingButton
               bookingId={booking.bookingId}
-              bookingNumber={booking.bookingId}
+              bookingNumber={(booking as any).booking_number || booking.bookingId}
               currentUser={currentUser}
             />
           )}
@@ -445,7 +411,7 @@ export function ForwardingBookingDetails({
             fontSize: "13px",
             fontWeight: 600,
             backgroundColor: booking.movement === "EXPORT" ? "var(--theme-status-warning-bg)" : "var(--theme-status-success-bg)",
-            color: booking.movement === "EXPORT" ? "#C2410C" : "var(--theme-action-primary-bg)",
+            color: booking.movement === "EXPORT" ? "var(--theme-status-warning-fg)" : "var(--theme-action-primary-bg)",
             border: `1px solid ${booking.movement === "EXPORT" ? "var(--theme-status-warning-border)" : "var(--theme-status-success-border)"}`
           }}>
             {booking.movement || "IMPORT"}
@@ -460,23 +426,14 @@ export function ForwardingBookingDetails({
               <MoreVertical size={18} />
             </button>
             {showMoreMenu && (
-              <div style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", width: "180px", backgroundColor: "var(--theme-bg-surface)", border: "1px solid var(--theme-border-default)", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)", zIndex: 100, overflow: "hidden" }}>
+              <div style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", width: "200px", backgroundColor: "var(--theme-bg-surface)", border: "1px solid var(--theme-border-default)", borderRadius: "8px", boxShadow: "var(--elevation-2)", zIndex: 100, overflow: "hidden" }}>
                 <button
-                  onClick={() => { setShowMoreMenu(false); handleStatusUpdate("Cancelled"); }}
+                  onClick={() => { setShowMoreMenu(false); setShowCancelDeletePanel(true); }}
                   style={{ width: "100%", display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", backgroundColor: "transparent", border: "none", cursor: "pointer", fontSize: "13px", color: "var(--theme-text-secondary)", textAlign: "left" }}
                   onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--theme-bg-page)")}
                   onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
                 >
-                  Cancel Booking
-                </button>
-                <div style={{ height: "1px", backgroundColor: "var(--theme-bg-surface-subtle)" }} />
-                <button
-                  onClick={handleDeleteFromDetail}
-                  style={{ width: "100%", display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", backgroundColor: "transparent", border: "none", cursor: "pointer", fontSize: "13px", color: "var(--theme-status-danger-fg)", textAlign: "left" }}
-                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--theme-status-danger-bg)")}
-                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
-                >
-                  Delete Booking
+                  Cancel / Delete Booking
                 </button>
               </div>
             )}
@@ -484,7 +441,23 @@ export function ForwardingBookingDetails({
         </div>
       </div>
 
-      <BookingPendingEVStrip bookingId={booking.bookingId} />
+      <BookingCancelDeletePanel
+        isOpen={showCancelDeletePanel}
+        onClose={() => setShowCancelDeletePanel(false)}
+        bookingId={booking.bookingId}
+        bookingLabel={(booking as any).name || (booking as any).booking_number || "Unnamed Booking"}
+        currentStatus={editedBooking.status}
+        currentUser={currentUser}
+        onSuccess={(action) => {
+          if (action === "deleted") {
+            onBack();
+          } else {
+            setEditedBooking(prev => ({ ...prev, status: "Cancelled" }));
+            onBookingUpdated();
+          }
+        }}
+      />
+
 
       {/* Content with Timeline Sidebar */}
       <div style={{
@@ -504,6 +477,7 @@ export function ForwardingBookingDetails({
               onBookingUpdated={onBookingUpdated}
               addActivity={addActivity}
               setEditedBooking={setEditedBooking}
+              currentUser={currentUser}
             />
           )}
           {activeTab === "billings" && (
@@ -521,6 +495,7 @@ export function ForwardingBookingDetails({
           {activeTab === "expenses" && (
             <ExpensesTab
               bookingId={booking.bookingId}
+              bookingNumber={(booking as any).booking_number || booking.bookingId}
               bookingType="forwarding"
               currentUser={currentUser}
               highlightId={activeTab === "expenses" ? highlightId : undefined}
@@ -529,12 +504,7 @@ export function ForwardingBookingDetails({
             />
           )}
           {activeTab === "comments" && (
-            <BookingCommentsTab
-              bookingId={booking.bookingId}
-              currentUserId={currentUser?.email || "unknown"}
-              currentUserName={currentUser?.name || "Unknown User"}
-              currentUserDepartment={currentUser?.department || "Operations"}
-            />
+            <BookingCommentsTab bookingId={booking.bookingId} />
           )}
         </div>
 
@@ -816,13 +786,16 @@ const FIELD_LABELS: Record<string, string> = {
   plateNumber: "Plate Number",
   pickupLocation: "Pickup Location",
   warehouseAddress: "Warehouse Address",
+  assigned_manager_name: "Assigned Manager",
+  assigned_supervisor_name: "Assigned Supervisor",
+  assigned_handler_name: "Assigned Handler",
 };
 
 /**
  * Diffs a draft against the original booking for the given fields,
  * logs activity for each changed field, and merges updates into editedBooking.
  */
-function diffAndApply(
+async function diffAndApply(
   original: ForwardingBooking,
   draft: ForwardingBooking,
   fields: string[],
@@ -840,6 +813,15 @@ function diffAndApply(
     }
   });
   if (Object.keys(updates).length > 0) {
+    const existingDetails = (original as any).details || {};
+    const { error } = await supabase
+      .from('bookings')
+      .update({ details: { ...existingDetails, ...updates } })
+      .eq('id', (original as any).id || original.bookingId);
+    if (error) {
+      toast.error("Failed to save changes");
+      return;
+    }
     setEditedBooking((prev: ForwardingBooking) => ({ ...prev, ...updates }));
     onBookingUpdated();
     toast.success("Changes saved");
@@ -852,11 +834,13 @@ function BookingInformationTab({
   onBookingUpdated,
   addActivity,
   setEditedBooking,
+  currentUser,
 }: {
   booking: ForwardingBooking;
   onBookingUpdated: () => void;
   addActivity: (fieldName: string, oldValue: string, newValue: string) => void;
   setEditedBooking: (fn: any) => void;
+  currentUser?: { name: string; email: string; department: string } | null;
 }) {
   // Per-section edit state via shared hook
   const generalSection = useSectionEdit(booking);
@@ -885,12 +869,32 @@ function BookingInformationTab({
   const wMode = warehouseSection.isEditing ? "edit" : "view";
 
   return (
-    <div style={{ 
+    <div style={{
       padding: "32px 48px",
       maxWidth: "1400px",
       margin: "0 auto"
     }}>
-      
+
+      {/* ── Team Assignment ── */}
+      <BookingTeamSection
+        bookingId={(booking as any).id || booking.bookingId}
+        bookingNumber={(booking as any).booking_number || booking.bookingId}
+        serviceType="Forwarding"
+        customerName={booking.customerName}
+        customerId={(booking as any).customer_id}
+        teamId={(booking as any).team_id}
+        teamName={(booking as any).team_name}
+        managerId={(booking as any).manager_id}
+        managerName={(booking as any).manager_name}
+        supervisorId={(booking as any).supervisor_id}
+        supervisorName={(booking as any).supervisor_name}
+        handlerId={(booking as any).handler_id}
+        handlerName={(booking as any).handler_name}
+        currentUser={currentUser}
+        onUpdate={onBookingUpdated}
+        addActivity={addActivity}
+      />
+
       {/* ── General Information ── */}
       <EditableSectionCard
         title="General Information"

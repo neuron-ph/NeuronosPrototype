@@ -46,7 +46,7 @@ export function BudgetRequestDetailPanel({
     request.status === "Processing"
   );
   
-  const canPostToLedger = showAccountingControls && isAccountingStaff && request.status === "Approved" && !request.posted_to_ledger;
+  const canPostToLedger = showAccountingControls && isAccountingStaff && request.status === "Approved" && !(request as any).journal_entry_id;
 
   const handleApprove = async () => {
     if (!canApprove) return;
@@ -76,10 +76,14 @@ export function BudgetRequestDetailPanel({
         id: `EH-${Date.now()}`,
         evoucher_id: request.id,
         action: 'Approved',
-        previous_status: request.status,
-        new_status: 'Approved',
-        performed_by: 'current-user',
-        performed_by_name: 'Current User',
+        status: 'Approved',
+        user_id: currentUser?.id ?? null,
+        user_name: currentUser?.name ?? null,
+        user_role: currentUser?.department ?? null,
+        metadata: {
+          previous_status: request.status,
+          new_status: 'Approved',
+        },
         created_at: new Date().toISOString()
       });
 

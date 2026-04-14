@@ -48,8 +48,9 @@ export function PostToLedgerPanel({ evoucher, isOpen, onClose, onSuccess, curren
     try {
       setLoading(true);
       // Update evoucher status to posted
+      const postedAt = new Date().toISOString();
       const { error: updateErr } = await supabase.from('evouchers')
-        .update({ status: 'posted', posted_to_ledger: true, updated_at: new Date().toISOString() })
+        .update({ status: 'posted', posted_at: postedAt, updated_at: postedAt })
         .eq('id', evoucher.id);
       
       if (updateErr) throw new Error(updateErr.message);
@@ -62,12 +63,15 @@ export function PostToLedgerPanel({ evoucher, isOpen, onClose, onSuccess, curren
         id: `EH-${Date.now()}`,
         evoucher_id: evoucher.id,
         action: 'Posted to Ledger',
-        previous_status: evoucher.status,
-        new_status: 'posted',
-        performed_by: currentUser?.id,
-        performed_by_name: currentUser?.name,
-        performed_by_role: currentUser?.department,
-        created_at: new Date().toISOString()
+        status: 'posted',
+        user_id: currentUser?.id,
+        user_name: currentUser?.name,
+        user_role: currentUser?.department,
+        metadata: {
+          previous_status: evoucher.status,
+          new_status: 'posted',
+        },
+        created_at: postedAt
       });
 
       // --- AUTO-POST TRANSACTION TO LEDGER ---

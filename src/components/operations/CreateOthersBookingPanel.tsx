@@ -1,5 +1,5 @@
 import { Briefcase, Package, FileText } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
 import { CustomDropdown } from "../bd/CustomDropdown";
@@ -10,6 +10,7 @@ import { BookingCreationPanel } from "./shared/BookingCreationPanel";
 import { useCustomerOptions } from "./shared/useCustomerOptions";
 import { logCreation } from "../../utils/activityLog";
 import { fireBookingAssignmentTickets } from "../../utils/workflowTickets";
+import { generateBookingNumber } from "../../utils/bookingNumberUtils";
 import { useUser } from "../../hooks/useUser";
 import { TeamAssignmentForm, type TeamAssignment } from "../pricing/TeamAssignmentForm";
 
@@ -31,6 +32,8 @@ export function CreateOthersBookingPanel({
   onSuccess,
   source = "operations",
   customerId,
+  prefillData,
+  currentUser,
 }: CreateOthersBookingPanelProps) {
   const { user } = useUser();
   const [loading, setLoading] = useState(false);
@@ -66,21 +69,47 @@ export function CreateOthersBookingPanel({
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  useEffect(() => {
+    if (!prefillData) return;
+    setFormData((prev) => ({
+      ...prev,
+      name: prev.name || prefillData.name || "",
+      customerName: prefillData.customerName || prev.customerName,
+      movement: prefillData.movement || prev.movement,
+      quotationReferenceNumber: prefillData.quotationReferenceNumber || prev.quotationReferenceNumber,
+      accountOwner: prefillData.accountOwner || currentUser?.name || prev.accountOwner,
+      accountHandler: prefillData.accountHandler || currentUser?.name || prev.accountHandler,
+      serviceType: prefillData.serviceType || prev.serviceType,
+      serviceDescription: prefillData.serviceDescription || prev.serviceDescription,
+      // Field name mapping: autofill key `deliveryAddress` → form field `deliveryLocation`
+      deliveryLocation: prefillData.deliveryAddress || prev.deliveryLocation,
+      specialInstructions: prefillData.specialInstructions || prev.specialInstructions,
+      contactPerson: prefillData.contactPerson || prev.contactPerson,
+      contactNumber: prefillData.contactNumber || prev.contactNumber,
+    }));
+  }, [prefillData]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!formData.name.trim()) {
+      toast.error("Booking Name is required");
+      return;
+    }
     if (!formData.customerName) {
       toast.error("Customer Name is required");
       return;
     }
-    
+
     setLoading(true);
 
     try {
+      const bookingNumber = await generateBookingNumber("Others");
       const insertPayload: Record<string, any> = {
         id: crypto.randomUUID(),
         service_type: "Others",
-        name: formData.name.trim() || null,
+        booking_number: bookingNumber,
+        name: formData.name.trim(),
         customer_name: formData.customerName,
         status: formData.status || "Draft",
         movement_type: formData.movement,
@@ -103,7 +132,7 @@ export function CreateOthersBookingPanel({
         },
       };
 
-      if (source === "pricing" && teamAssignment) {
+      if (teamAssignment) {
         insertPayload.manager_id = teamAssignment.manager.id;
         insertPayload.manager_name = teamAssignment.manager.name;
         insertPayload.team_id = teamAssignment.team.id;
@@ -122,7 +151,7 @@ export function CreateOthersBookingPanel({
 
       if (error) throw new Error(error.message);
 
-      if (source === "pricing" && teamAssignment?.saveAsDefault && customerId) {
+      if (teamAssignment?.saveAsDefault && customerId) {
         try {
           await supabase.from('client_handler_preferences').upsert({
             customer_id: customerId,
@@ -142,7 +171,7 @@ export function CreateOthersBookingPanel({
 
       logCreation("booking", data.id, data.booking_number ?? data.id, { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" });
 
-      if (source === "pricing" && teamAssignment) {
+      if (teamAssignment) {
         void fireBookingAssignmentTickets({
           bookingId: data.id,
           bookingNumber: data.booking_number,
@@ -229,7 +258,7 @@ export function CreateOthersBookingPanel({
 
                 <div>
                   <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                    Booking Name <span style={{ color: "var(--theme-text-muted)", fontWeight: 400 }}>(Optional)</span>
+                    Booking Name <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
                   </label>
                   <input
                     type="text"
@@ -566,8 +595,8 @@ export function CreateOthersBookingPanel({
               </div>
             </div>
 
-            {/* Team Assignment — only shown when opened from Pricing */}
-            {source === "pricing" && customerId && (
+            {/* Team Assignment */}
+            {formData.customerName && (
               <div className="mb-8">
                 <div
                   style={{

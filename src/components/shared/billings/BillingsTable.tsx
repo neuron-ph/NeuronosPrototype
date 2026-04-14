@@ -1,4 +1,4 @@
-import { Receipt, Plus, DollarSign, ChevronDown, ChevronRight, Briefcase, Ship, Truck, Shield, Package, Ban, Trash2 } from "lucide-react";
+import { Receipt, Plus, DollarSign, ChevronDown, ChevronRight, Briefcase, Ship, Truck, Shield, Package, Ban, Trash2, Check, Loader2, Send } from "lucide-react";
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 // Shared Components
 import { SkeletonTable } from "../NeuronSkeleton";
@@ -19,6 +19,7 @@ export interface BillingTableItem {
   amount: number;
   currency: string;
   date: string;
+  booking_id?: string | null;
   originalData?: any;
 }
 
@@ -52,6 +53,8 @@ interface BillingsTableProps {
   highlightId?: string | null;
   /** Void an unbilled billing item (sets status=voided, preserves record) */
   onVoidItem?: (itemId: string) => void;
+  /** Send all unbilled items in a service group to their booking */
+  onSendServiceToBooking?: (itemIds: string[], bookingId: string) => Promise<void>;
 }
 
 const formatCurrency = (amount: number, currency: string = "PHP") => {
@@ -98,6 +101,7 @@ export function BillingsTable({
   linkedBookings,
   highlightId = null,
   onVoidItem,
+  onSendServiceToBooking,
 }: BillingsTableProps) {
   // Ref for scrolling to highlighted item
   const highlightRef = useRef<HTMLDivElement>(null);
@@ -113,6 +117,8 @@ export function BillingsTable({
 
   // State for collapsible sections
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  // Track which service groups are mid-send
+  const [sendingServices, setSendingServices] = useState<Set<string>>(new Set());
 
   // ✨ Booking grouping via shared hook
   const getBookingId = useCallback((item: BillingTableItem) => item.originalData?.booking_id || "unassigned", []);
@@ -561,13 +567,17 @@ export function BillingsTable({
     });
     const serviceKeys = Object.keys(serviceGroups).sort();
 
-    // Build a service→bookingId map from linkedBookings for badge display
-    // linkedBookings shape: { bookingId, serviceType, bookingNumber?, status? }
+    // Build service→bookingId and service→bookingNumber maps from linkedBookings
     const serviceToBookingId = new Map<string, string>();
+    const serviceToBookingNumber = new Map<string, string>();
     (linkedBookings || []).forEach((b: any) => {
       const svc = (b.serviceType || b.service_type || "").toLowerCase();
       const bid = b.bookingId || b.id || "";
-      if (svc && bid) serviceToBookingId.set(svc, bid);
+      const bnum = b.bookingNumber || b.booking_number || "";
+      if (svc && bid) {
+        serviceToBookingId.set(svc, bid);
+        if (bnum) serviceToBookingNumber.set(svc, bnum);
+      }
     });
 
     if (serviceKeys.length === 0) {
@@ -605,6 +615,30 @@ export function BillingsTable({
             const subtotal = items.reduce((sum, i) => sum + i.amount, 0);
             const isExpanded = expandedCategories.has(svcKey);
             const linkedBookingId = serviceToBookingId.get(svcKey.toLowerCase());
+            const linkedBookingNumber = serviceToBookingNumber.get(svcKey.toLowerCase());
+            const isSending = sendingServices.has(svcKey);
+            const isPersistedLinked = (item: BillingTableItem) => {
+              const original = item.originalData || {};
+              const isVirtual =
+                !!original.is_virtual ||
+                item.id.startsWith("virtual-") ||
+                item.id.startsWith("temp-");
+
+              if (isVirtual || !linkedBookingId) {
+                return false;
+              }
+
+              return (item.booking_id || original.booking_id) === linkedBookingId;
+            };
+
+            // All items in this group are already persisted against this booking
+            const allSent = !!linkedBookingId && items.length > 0 && items.every(isPersistedLinked);
+            // Items not yet linked / persisted
+            const unsentItemIds = linkedBookingId
+              ? items
+                  .filter(i => !isPersistedLinked(i))
+                  .map(i => i.id)
+              : [];
 
             // Sub-group by category within this service
             const catGroups: Record<string, BillingTableItem[]> = {};
@@ -618,8 +652,7 @@ export function BillingsTable({
             return (
               <div key={svcKey}>
                 {/* Service Group Header */}
-                <button
-                  onClick={() => toggleCategory(svcKey)}
+                <div
                   style={{
                     width: "100%",
                     display: "flex",
@@ -627,14 +660,19 @@ export function BillingsTable({
                     justifyContent: "space-between",
                     padding: "10px 16px",
                     background: isExpanded ? "var(--theme-bg-surface-tint)" : "var(--theme-bg-page)",
-                    border: "none",
                     borderTop: svcIdx > 0 ? "1px solid var(--theme-border-default)" : "none",
                     borderBottom: isExpanded ? "1px solid var(--theme-border-default)" : "none",
-                    cursor: "pointer",
                     transition: "background 0.15s ease",
                   }}
                 >
-                  <div className="flex items-center gap-3">
+                  {/* Left: collapse toggle + service info */}
+                  <button
+                    onClick={() => toggleCategory(svcKey)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: "8px",
+                      background: "none", border: "none", cursor: "pointer", padding: 0, flexShrink: 0,
+                    }}
+                  >
                     <div style={{ color: "var(--theme-text-muted)", transition: "transform 0.15s ease", transform: isExpanded ? "rotate(0deg)" : "rotate(-90deg)" }}>
                       <ChevronDown size={14} />
                     </div>
@@ -651,36 +689,74 @@ export function BillingsTable({
                     }}>
                       {items.length} item{items.length !== 1 ? "s" : ""}
                     </span>
-                    {/* Booking link badge */}
-                    {linkedBookingId ? (
+                  </button>
+
+                  {/* Right: send action + subtotal */}
+                  <div className="flex items-center gap-3">
+                    {/* Send to Booking / Sent badge */}
+                    {linkedBookingId && !viewMode && onSendServiceToBooking && (
+                      allSent ? (
+                        <span style={{
+                          display: "inline-flex", alignItems: "center", gap: "5px",
+                          fontSize: "11px", fontWeight: 600,
+                          padding: "3px 8px", borderRadius: "5px",
+                          backgroundColor: "var(--theme-status-success-bg)",
+                          color: "var(--theme-status-success-fg)",
+                          border: "1px solid var(--theme-status-success-border)",
+                        }}>
+                          <Check size={11} />
+                          {`Linked to ${linkedBookingNumber || "Booking"}`}
+                        </span>
+                      ) : (
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (!unsentItemIds.length) return;
+                            setSendingServices(prev => new Set(prev).add(svcKey));
+                            try {
+                              await onSendServiceToBooking(unsentItemIds, linkedBookingId);
+                            } finally {
+                              setSendingServices(prev => { const s = new Set(prev); s.delete(svcKey); return s; });
+                            }
+                          }}
+                          disabled={isSending}
+                          style={{
+                            display: "inline-flex", alignItems: "center", gap: "5px",
+                            fontSize: "11px", fontWeight: 600,
+                            padding: "3px 8px", borderRadius: "5px", cursor: isSending ? "not-allowed" : "pointer",
+                            backgroundColor: "var(--theme-action-primary-bg)",
+                            color: "#fff",
+                            border: "none",
+                            opacity: isSending ? 0.7 : 1,
+                            transition: "opacity 0.15s",
+                          }}
+                          title={`Send ${items.length} billing item${items.length !== 1 ? "s" : ""} to ${linkedBookingNumber || "booking"}`}
+                        >
+                          {isSending ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />}
+                          {isSending ? "Sending…" : "Send Billings to Booking"}
+                        </button>
+                      )
+                    )}
+                    {/* No matching booking: unlinked label */}
+                    {!linkedBookingId && (
                       <span style={{
-                        fontSize: "10px", fontWeight: 600,
-                        color: "var(--theme-status-success-fg)",
-                        backgroundColor: "var(--theme-status-success-bg)",
-                        border: "1px solid var(--theme-status-success-border)",
-                        padding: "1px 6px", borderRadius: "3px",
+                        fontSize: "10px",
+                        color: "var(--theme-text-muted)",
+                        letterSpacing: "0.01em",
+                        fontStyle: "italic",
+                        opacity: 0.6,
                       }}>
-                        → {linkedBookingId}
-                      </span>
-                    ) : (
-                      <span style={{
-                        fontSize: "10px", fontWeight: 600,
-                        color: "var(--theme-status-warning-fg)",
-                        backgroundColor: "var(--theme-status-warning-bg)",
-                        border: "1px solid var(--theme-status-warning-border)",
-                        padding: "1px 6px", borderRadius: "3px",
-                      }}>
-                        No booking yet
+                        — no booking yet
                       </span>
                     )}
+                    <span style={{
+                      fontSize: "13px", fontWeight: 600,
+                      color: "var(--theme-text-primary)", fontFamily: "monospace",
+                    }}>
+                      {formatCurrency(subtotal)}
+                    </span>
                   </div>
-                  <span style={{
-                    fontSize: "13px", fontWeight: 600,
-                    color: "var(--theme-text-primary)", fontFamily: "monospace",
-                  }}>
-                    {formatCurrency(subtotal)}
-                  </span>
-                </button>
+                </div>
 
                 {/* Expanded: items sub-grouped by category */}
                 {isExpanded && (

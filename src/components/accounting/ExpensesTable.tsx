@@ -1,5 +1,5 @@
 import { Receipt, FileText, ArrowRightLeft, CheckCircle } from "lucide-react";
-import { useRef, useEffect } from "react";
+import React, { useRef, useEffect } from "react";
 import { SkeletonTable } from "../shared/NeuronSkeleton";
 
 export interface ExpenseTableItem {
@@ -92,7 +92,7 @@ export function ExpensesTable({
     else if (s === "pending" || s === "draft") styles = "bg-[var(--theme-status-warning-bg)] text-[var(--theme-status-warning-fg)]"; // Amber
 
     return (
-      <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${styles}`}>
+      <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-[0.06em] ${styles}`}>
         {status}
       </span>
     );
@@ -107,9 +107,10 @@ export function ExpensesTable({
   const hasConvertCol = !!(convertibleIds && onConvertItem);
 
   // Layout: Icon | Category/Date | Reference | Description | Payee | [Booking] | Status | Amount | [Action]
-  const gridClass = showBookingColumn
-    ? `grid grid-cols-[32px_140px_120px_minmax(200px,1fr)_150px_120px_100px_120px${hasConvertCol ? "_100px" : ""}]`
-    : `grid grid-cols-[32px_140px_120px_minmax(200px,1fr)_150px_100px_120px${hasConvertCol ? "_100px" : ""}]`;
+  const gridTemplateColumns = showBookingColumn
+    ? `32px 140px 120px minmax(200px,1fr) 150px 120px 100px 120px${hasConvertCol ? " 100px" : ""}`
+    : `32px 140px 120px minmax(200px,1fr) 150px 100px 120px${hasConvertCol ? " 100px" : ""}`;
+  const gridStyle: React.CSSProperties = { display: "grid", gridTemplateColumns, gap: "12px" };
 
   if (isLoading) {
     return <SkeletonTable rows={8} cols={7} />;
@@ -131,9 +132,9 @@ export function ExpensesTable({
   }
 
   return (
-    <div className="rounded-[10px] overflow-hidden bg-[var(--theme-bg-surface)] border border-[var(--theme-border-default)]">
+    <div className="rounded-[10px] overflow-hidden bg-[var(--theme-bg-surface)] border border-[var(--theme-border-default)] overflow-x-auto">
       {/* Header - Matches var(--neuron-bg-page) which is #F7FAF8 */}
-      <div className={`${gridClass} gap-3 px-4 py-2 border-b border-[var(--theme-border-default)] bg-[var(--theme-bg-page)]`}>
+      <div style={gridStyle} className="px-4 py-2 border-b border-[var(--theme-border-default)] bg-[var(--theme-bg-page)]">
         <div></div> {/* Icon Placeholder */}
         <div className="text-[11px] font-semibold uppercase tracking-[0.002em] text-[var(--theme-text-muted)]">Category / Date</div>
         <div className="text-[11px] font-semibold uppercase tracking-[0.002em] text-[var(--theme-text-muted)]">Reference</div>
@@ -154,8 +155,12 @@ export function ExpensesTable({
           return (
           <div
             key={item.id || index}
-            className={`${gridClass} gap-3 px-4 py-3 transition-colors ${onRowClick ? "cursor-pointer hover:bg-[var(--theme-state-hover)]" : ""} ${isHighlighted ? "ring-2 ring-[var(--theme-action-primary-bg)] bg-[var(--theme-action-primary-bg)]/5 rounded-md" : ""}`}
+            role={onRowClick ? "button" : undefined}
+            tabIndex={onRowClick ? 0 : undefined}
+            style={gridStyle}
+            className={`px-4 py-3 transition-colors ${onRowClick ? "cursor-pointer hover:bg-[var(--theme-state-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-action-primary-bg)] focus:ring-inset" : ""} ${isHighlighted ? "ring-2 ring-[var(--theme-action-primary-bg)] bg-[var(--theme-action-primary-bg)]/5 rounded-md" : ""}`}
             onClick={() => onRowClick && onRowClick(item.originalData || item)}
+            onKeyDown={(e) => { if (onRowClick && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onRowClick(item.originalData || item); } }}
             ref={isHighlighted ? highlightRef : undefined}
           >
             {/* Icon - Muted gray to match phone icon */}
@@ -210,7 +215,7 @@ export function ExpensesTable({
 
             {/* Amount - Bold right aligned */}
             <div className="flex items-center justify-end">
-              <span className="text-[12px] font-bold text-[#111827]">
+              <span className="text-[12px] font-bold text-[var(--theme-text-primary)]">
                 {formatCurrency(item.amount, item.currency)}
               </span>
             </div>
@@ -270,7 +275,7 @@ export function ExpensesTable({
               <span className="text-[11px] font-semibold text-[var(--theme-text-muted)] uppercase tracking-[0.002em]">
                 {footerSummary.label}
               </span>
-              <span className="text-[13px] font-bold text-[#991B1B]">
+              <span className="text-[13px] font-bold text-[var(--theme-text-primary)]">
                 {formatCurrency(footerSummary.amount, footerSummary.currency)}
               </span>
             </div>

@@ -27,7 +27,7 @@ export const R = {
   white:     "var(--neuron-bg-elevated)",
   subtleBg:  "var(--neuron-bg-page)",
   tealTint:  "var(--neuron-brand-green-100)",
-  amberTint: "#FEF3E2",
+  amberTint: "var(--neuron-semantic-warn-bg)",
   amber:     "var(--neuron-semantic-warn)",
   red:       "var(--neuron-semantic-danger)",
   success:   "var(--neuron-semantic-success)",
@@ -215,7 +215,7 @@ export function ReportTable<T>({
       <div className="overflow-x-auto">
         <table className="w-full border-collapse" style={{ minWidth }}>
           <thead>
-            <tr style={{ backgroundColor: "#F1F5F3" }}>
+            <tr style={{ backgroundColor: R.tealTint }}>
               {columns.map((col, i) => (
                 <th
                   key={i}

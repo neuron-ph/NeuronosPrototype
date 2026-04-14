@@ -175,6 +175,7 @@ export interface EVoucher {
   gl_category?: GLCategory;
   gl_sub_category?: string; // Varies based on gl_category
   expense_category?: string;
+  sub_category?: string;
   
   // Linking
   project_number?: string; // Booking ID
@@ -214,8 +215,19 @@ export interface EVoucher {
   disbursement_officer_id?: string;
   disbursement_officer_name?: string;
   disbursement_date?: string;
+  disbursement_method?: string;
+  disbursement_reference?: string;
+  disbursement_source_account_id?: string;
+  disbursement_source_account_name?: string;
+  disbursement_journal_entry_id?: string;
+  disbursed_by_user_id?: string;
+  disbursed_by_name?: string;
+  disbursement_remarks?: string;
   liquidation_status?: LiquidationStatus;
   source_of_funds?: string;
+
+  // GL Journal Entries
+  closing_journal_entry_id?: string;   // Closing / Verify & Post entry (renamed from journal_entry_id)
   
   // Accounting
   recorded_by_id?: string;

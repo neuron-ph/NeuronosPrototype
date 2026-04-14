@@ -101,7 +101,8 @@ export const queryKeys = {
       ["financials", "unbilledRevenue", filters] as const,
   },
   dataScope: {
-    user: (userId: string) => ["dataScope", userId] as const,
+    user: (userId: string, resource?: string) =>
+      resource ? ["dataScope", userId, resource] as const : ["dataScope", userId] as const,
   },
   tasks: {
     all: () => ["tasks"] as const,

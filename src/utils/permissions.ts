@@ -193,6 +193,33 @@ export type EVAction =
   | "post_gl"
   | "unlock_posted";
 
+export function canDeleteEVoucher(
+  status: string | undefined,
+  createdBy: string | undefined,
+  currentUserId: string | undefined,
+  userRole: string,
+  userDepartment: string,
+): boolean {
+  const normalizedStatus = (status || "").toLowerCase();
+  const isOwner = !!createdBy && !!currentUserId && createdBy === currentUserId;
+  const isAccountingManager =
+    userDepartment === "Accounting" && userRole === "manager";
+  const isExecutive = userDepartment === "Executive";
+
+  if (isAccountingManager || isExecutive) {
+    return true;
+  }
+
+  if (!isOwner) {
+    return false;
+  }
+
+  return (
+    ["draft", "rejected", "cancelled"].includes(normalizedStatus) ||
+    ["manager", "team_leader"].includes(userRole)
+  );
+}
+
 /**
  * Check whether a user may perform a specific E-Voucher workflow action.
  *
