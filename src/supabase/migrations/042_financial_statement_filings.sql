@@ -5,9 +5,9 @@ CREATE TABLE IF NOT EXISTS financial_statement_filings (
   period_year       INTEGER NOT NULL,
   period_month      INTEGER NOT NULL, -- 0-indexed (0 = January)
   status            TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'reviewed', 'approved', 'filed')),
-  prepared_by       UUID REFERENCES users(id),
-  reviewed_by       UUID REFERENCES users(id),
-  approved_by       UUID REFERENCES users(id),
+  prepared_by       TEXT REFERENCES users(id),
+  reviewed_by       TEXT REFERENCES users(id),
+  approved_by       TEXT REFERENCES users(id),
   prepared_at       TIMESTAMPTZ,
   reviewed_at       TIMESTAMPTZ,
   approved_at       TIMESTAMPTZ,
