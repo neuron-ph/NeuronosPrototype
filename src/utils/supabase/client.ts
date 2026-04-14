@@ -1,8 +1,36 @@
 import { createClient } from '@supabase/supabase-js';
 import { projectId, publicAnonKey } from './info';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? `https://${projectId}.supabase.co`;
+const PROD_SUPABASE_URL = `https://${projectId}.supabase.co`;
+
+// In production builds (any Vercel deployment), missing env vars must be fatal —
+// the fallback silently connects to PROD, causing FK violations when data only
+// exists on the dev database.
+if (import.meta.env.PROD) {
+  if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    throw new Error(
+      '[Neuron] VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY must be set on all deployed ' +
+      'environments. Set them in the Vercel dashboard (separately for Preview and Production).'
+    );
+  }
+}
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? PROD_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? publicAnonKey;
+
+// Warn in dev console if a non-production URL is running against the prod database.
+// This catches the "Preview env pointing at prod" misconfiguration.
+if (import.meta.env.DEV || (import.meta.env.PROD && supabaseUrl !== PROD_SUPABASE_URL)) {
+  // Always log so the developer can verify which DB the app is hitting.
+  console.info(`[Neuron] Supabase: ${supabaseUrl}`);
+}
+if (import.meta.env.PROD && supabaseUrl === PROD_SUPABASE_URL) {
+  console.warn(
+    '[Neuron] ⚠ This deployment is connected to the PRODUCTION Supabase database. ' +
+    'If this is a preview/staging build, update VITE_SUPABASE_URL in the Vercel dashboard ' +
+    '(Preview environment) to point to the dev project (oqermaidggvanahumjmj).'
+  );
+}
 
 // Use a no-op lock to prevent the Web Locks API from deadlocking after
 // page reloads. Supabase v2 acquires an exclusive navigator lock for token
