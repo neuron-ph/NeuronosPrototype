@@ -25,16 +25,16 @@ import type { ReportColumnDef, ReportSummaryCardDef } from "./ReportTemplate";
 // ── Payment Method Pill ────────────────────────────────────────────────────────
 
 const METHOD_COLORS: Record<string, { bg: string; text: string }> = {
-  "Cash":            { bg: "rgba(15,118,110,0.1)",  text: "var(--neuron-brand-green)" },
-  "Check":           { bg: "rgba(59,130,246,0.1)",  text: "#2563EB" },
-  "Cheque":          { bg: "rgba(59,130,246,0.1)",  text: "#2563EB" },
-  "Bank Transfer":   { bg: "rgba(139,92,246,0.1)",  text: "#7C3AED" },
-  "Online Transfer": { bg: "rgba(139,92,246,0.1)",  text: "#7C3AED" },
-  "Credit Card":     { bg: "rgba(217,119,6,0.1)",   text: "var(--neuron-semantic-warn)" },
+  "Cash":            { bg: "var(--neuron-semantic-success-bg)",  text: "var(--neuron-brand-green)" },
+  "Check":           { bg: "var(--neuron-semantic-info-bg)",     text: "var(--neuron-semantic-info)" },
+  "Cheque":          { bg: "var(--neuron-semantic-info-bg)",     text: "var(--neuron-semantic-info)" },
+  "Bank Transfer":   { bg: "var(--neuron-status-accent-bg)",     text: "var(--neuron-status-accent-fg)" },
+  "Online Transfer": { bg: "var(--neuron-status-accent-bg)",     text: "var(--neuron-status-accent-fg)" },
+  "Credit Card":     { bg: "var(--neuron-semantic-warn-bg)",     text: "var(--neuron-semantic-warn)" },
 };
 
 function MethodPill({ method }: { method: string }) {
-  const colors = METHOD_COLORS[method] ?? { bg: "rgba(102,112,133,0.1)", text: "var(--neuron-ink-muted)" };
+  const colors = METHOD_COLORS[method] ?? { bg: "var(--neuron-pill-inactive-bg)", text: "var(--neuron-ink-muted)" };
   return (
     <span
       style={{

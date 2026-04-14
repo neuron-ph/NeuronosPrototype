@@ -128,7 +128,7 @@ export function EditableSectionCard({
                 fontSize: "11px",
                 fontWeight: 500,
                 padding: "2px 8px",
-                backgroundColor: "rgba(15, 118, 110, 0.08)",
+                backgroundColor: "var(--theme-state-selected)",
                 color: "var(--theme-action-primary-bg)",
                 borderRadius: "4px",
               }}

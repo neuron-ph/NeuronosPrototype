@@ -37,6 +37,7 @@ export interface ManualJournalEntryPanelProps {
 
 const PHP = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" });
 
+
 function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -130,6 +131,7 @@ export function ManualJournalEntryPanel({
 
   // Submit state
   const [submitting, setSubmitting] = useState(false);
+  const [showPostConfirm, setShowPostConfirm] = useState(false);
 
   // Reset form when panel opens
   useEffect(() => {
@@ -137,6 +139,7 @@ export function ManualJournalEntryPanel({
       setEntryDate(today());
       setMemo("");
       setLines([makeLineItem(), makeLineItem()]);
+      setShowPostConfirm(false);
     }
   }, [isOpen]);
 
@@ -203,67 +206,75 @@ export function ManualJournalEntryPanel({
   // Submit
   // ---------------------------------------------------------------------------
 
-  const handleSubmit = async () => {
-    if (!isBalanced) return;
-    if (!user?.id) {
-      toast.error("Cannot determine current user");
-      return;
-    }
+  const buildJsonbLines = () => {
+    const activeLines = lines.filter((l) => parseAmount(l.debit) > 0 || parseAmount(l.credit) > 0);
+    return activeLines.map((l) => {
+      const acct = accounts.find((a) => a.id === l.account_id);
+      return {
+        account_id: l.account_id,
+        account_code: acct?.code ?? "",
+        account_name: acct?.name ?? "",
+        debit: parseAmount(l.debit),
+        credit: parseAmount(l.credit),
+        description: l.description.trim() || memo.trim() || "",
+      };
+    });
+  };
 
-    // Basic validation: every line must have an account selected
-    const hasBlankAccounts = lines.some((l) => !l.account_id);
-    if (hasBlankAccounts) {
-      toast.error("All line items must have an account selected");
-      return;
-    }
+  const validateBeforeSubmit = () => {
+    if (!user?.id) { toast.error("Cannot determine current user"); return false; }
+    if (!isBalanced) { toast.error("Entry is out of balance"); return false; }
+    if (lines.some((l) => !l.account_id)) { toast.error("All line items must have an account selected"); return false; }
+    return true;
+  };
 
+  const handleSaveDraft = async () => {
+    if (!validateBeforeSubmit()) return;
     setSubmitting(true);
     try {
       const entryId = `JE-MAN-${Date.now()}`;
-      const activeLines = lines.filter(
-        (l) => parseAmount(l.debit) > 0 || parseAmount(l.credit) > 0
-      );
-
-      // Build JSONB lines — resolve account code/name from loaded accounts list
-      const jsonbLines = activeLines.map((l) => {
-        const acct = accounts.find((a) => a.id === l.account_id);
-        return {
-          account_id: l.account_id,
-          account_code: acct?.code ?? "",
-          account_name: acct?.name ?? "",
-          debit: parseAmount(l.debit),
-          credit: parseAmount(l.credit),
-          description: l.description.trim() || memo.trim() || "",
-        };
+      const { error } = await supabase.from("journal_entries").insert({
+        id: entryId, entry_number: entryId, entry_date: entryDate,
+        description: memo.trim() || null, lines: buildJsonbLines(),
+        total_debit: totalDebits, total_credit: totalCredits,
+        status: "draft", created_by: user!.id,
+        created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       });
-
-      const { error: jeError } = await supabase
-        .from("journal_entries")
-        .insert({
-          id: entryId,
-          entry_number: entryId,
-          entry_date: entryDate,
-          description: memo.trim() || null,
-          lines: jsonbLines,
-          total_debit: totalDebits,
-          total_credit: totalCredits,
-          status: "posted",
-          created_by: user.id,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
-
-      if (jeError) throw jeError;
-
-      const actor = { id: user.id, name: user.name, department: user.department ?? "" };
+      if (error) throw error;
+      const actor = { id: user!.id, name: user!.name, department: user!.department ?? "" };
       logCreation("journal_entry", entryId, memo.trim() || entryId, actor);
-      toast.success("Journal entry created");
+      toast.success("Draft saved — entry not yet posted to the ledger");
+      onCreated?.();
+      onClose();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to save draft");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!validateBeforeSubmit()) return;
+    setSubmitting(true);
+    try {
+      const entryId = `JE-MAN-${Date.now()}`;
+      const { error: jeError } = await supabase.from("journal_entries").insert({
+        id: entryId, entry_number: entryId, entry_date: entryDate,
+        description: memo.trim() || null, lines: buildJsonbLines(),
+        total_debit: totalDebits, total_credit: totalCredits,
+        status: "posted", created_by: user!.id,
+        created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      });
+      if (jeError) throw jeError;
+      const actor = { id: user!.id, name: user!.name, department: user!.department ?? "" };
+      logCreation("journal_entry", entryId, memo.trim() || entryId, actor);
+      toast.success("Journal entry posted to the general ledger");
+      setShowPostConfirm(false);
       onCreated?.();
       onClose();
     } catch (err: unknown) {
       console.error("ManualJournalEntryPanel submit error:", err);
-      const msg = err instanceof Error ? err.message : "Failed to create journal entry";
-      toast.error(msg);
+      toast.error(err instanceof Error ? err.message : "Failed to post journal entry");
     } finally {
       setSubmitting(false);
     }
@@ -274,56 +285,66 @@ export function ManualJournalEntryPanel({
   // ---------------------------------------------------------------------------
 
   const footer = (
-    <div
-      style={{
-        padding: "16px 24px",
-        borderTop: "1px solid #E5E9F0",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        backgroundColor: "#FFFFFF",
-        gap: "12px",
-      }}
-    >
-      <button
-        onClick={onClose}
-        style={{
-          height: "36px",
-          padding: "0 16px",
-          background: "none",
-          border: "none",
-          color: "#667085",
-          fontSize: "13px",
-          fontWeight: 500,
-          cursor: "pointer",
-        }}
-      >
-        Cancel
-      </button>
+    <div style={{ borderTop: "1px solid #E5E9F0", backgroundColor: "#FFFFFF" }}>
+      {/* Post confirmation banner */}
+      {showPostConfirm && (
+        <div style={{
+          padding: "14px 24px",
+          backgroundColor: "#F0FDF4",
+          borderBottom: "1px solid #BBF7D0",
+          display: "flex", flexDirection: "column", gap: "10px",
+        }}>
+          <p style={{ margin: 0, fontSize: "12px", color: "#15803D", fontWeight: 500, lineHeight: 1.5 }}>
+            Post to General Ledger? This entry is balanced — Debits equal Credits ({PHP.format(totalDebits)}).
+            Once posted, this entry is <strong>permanent and cannot be edited or deleted</strong>.
+          </p>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
+              onClick={() => setShowPostConfirm(false)}
+              disabled={submitting}
+              style={{ flex: 1, height: "32px", border: "1px solid #BBF7D0", borderRadius: "6px", backgroundColor: "#FFFFFF", color: "#667085", fontSize: "12px", fontWeight: 500, cursor: "pointer" }}
+            >
+              Back
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              style={{ flex: 1, height: "32px", border: "none", borderRadius: "6px", backgroundColor: "#0F766E", color: "#FFFFFF", fontSize: "12px", fontWeight: 600, cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+            >
+              {submitting && <Loader2 size={12} style={{ animation: "spin 1s linear infinite" }} />}
+              {submitting ? "Posting…" : "Confirm & Post"}
+            </button>
+          </div>
+        </div>
+      )}
 
-      <button
-        onClick={handleSubmit}
-        disabled={!isBalanced || submitting}
-        style={{
-          height: "36px",
-          padding: "0 20px",
-          borderRadius: "8px",
-          backgroundColor: "#0F766E",
-          border: "none",
-          color: "#FFFFFF",
-          fontSize: "13px",
-          fontWeight: 600,
-          cursor: !isBalanced || submitting ? "not-allowed" : "pointer",
-          opacity: !isBalanced || submitting ? 0.55 : 1,
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          transition: "opacity 150ms",
-        }}
-      >
-        {submitting && <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} />}
-        {submitting ? "Creating…" : "Create Entry"}
-      </button>
+      {/* Footer buttons */}
+      {!showPostConfirm && (
+        <div style={{ padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+          <button
+            onClick={onClose}
+            style={{ height: "36px", padding: "0 16px", background: "none", border: "none", color: "#667085", fontSize: "13px", fontWeight: 500, cursor: "pointer" }}
+          >
+            Cancel
+          </button>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
+              onClick={handleSaveDraft}
+              disabled={!isBalanced || submitting}
+              style={{ height: "36px", padding: "0 16px", borderRadius: "8px", backgroundColor: "#F9FAFB", border: "1px solid #E5E9F0", color: "#12332B", fontSize: "13px", fontWeight: 500, cursor: !isBalanced || submitting ? "not-allowed" : "pointer", opacity: !isBalanced || submitting ? 0.55 : 1 }}
+            >
+              Save as Draft
+            </button>
+            <button
+              onClick={() => { if (isBalanced) setShowPostConfirm(true); }}
+              disabled={!isBalanced || submitting}
+              style={{ height: "36px", padding: "0 20px", borderRadius: "8px", backgroundColor: "#0F766E", border: "none", color: "#FFFFFF", fontSize: "13px", fontWeight: 600, cursor: !isBalanced || submitting ? "not-allowed" : "pointer", opacity: !isBalanced || submitting ? 0.55 : 1, display: "flex", alignItems: "center", gap: "8px", transition: "opacity 150ms" }}
+            >
+              Post Entry
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 

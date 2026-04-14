@@ -1177,7 +1177,8 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
         ) : (
           <div style={{ flex: 1 }}>
             <CommentsTab
-              inquiryId={quotation.id}
+              entityId={quotation.id}
+              entityType="quotation"
               currentUserId={currentUserId}
               currentUserName={currentUserName}
               currentUserDepartment={currentUserDepartment}

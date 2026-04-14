@@ -227,7 +227,7 @@ export function EditableMultiInputField({
                 }}
                 onFocus={(e) => {
                   e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
-                  e.currentTarget.style.boxShadow = "0 0 0 2px rgba(15, 118, 110, 0.15)";
+                  e.currentTarget.style.boxShadow = "var(--neuron-state-focus-ring)";
                 }}
                 onBlur={(e) => {
                   e.currentTarget.style.borderColor = "var(--theme-border-default)";
@@ -252,7 +252,7 @@ export function EditableMultiInputField({
                     flexShrink: 0,
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = "rgba(15, 118, 110, 0.08)";
+                    e.currentTarget.style.backgroundColor = "var(--theme-state-selected)";
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.backgroundColor = "transparent";

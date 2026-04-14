@@ -77,6 +77,8 @@ export interface ResolvedWorkspaceThemeCache {
   resolved: ResolvedWorkspaceTheme;
 }
 
+export const DARK_MODE_BASE = "#191a1c";
+
 const STATUS_SEEDS = {
   success: "#2B8A6E",
   warning: "#C88A2B",
@@ -269,8 +271,8 @@ function generateDarkTokens(seeds: WorkspaceThemeSeeds): ThemeTokenMap {
   const accent = tint(seeds.accent, 0.02);
   const neutral = seeds.neutralBase;
   const surfaceTint = seeds.surfaceTint;
-  const pageBase = "#1f2023";
-  const surfaceBase = "#1f2023";
+  const pageBase = DARK_MODE_BASE;
+  const surfaceBase = DARK_MODE_BASE;
   const surfaceSubtle = "#25262a";
   const borderDefault = "#2e2f33";
   const borderSubtle = "#272830";

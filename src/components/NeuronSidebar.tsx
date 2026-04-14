@@ -27,8 +27,8 @@ import {
   Handshake,
   ClipboardCheck,
   Receipt,
-  ArrowLeftRight,
   BookOpen,
+  ScrollText,
   TrendingUp
 } from "lucide-react";
 import { NeuronLogo } from "./NeuronLogo";
@@ -43,7 +43,7 @@ const prefetchOperations = () => void import("./Operations");
 const prefetchAccounting = () => void import("./accounting/FinancialsModule");
 const prefetchInbox      = () => void import("./InboxPage");
 
-type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" |"pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" |"ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" |"operations" | "acct-transactions" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-coa" | "acct-reports" | "acct-statements" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "calendar" | "inbox" | "my-evouchers" | "ticket-queue" | "settings" | "admin-users" | "admin" | "ticket-testing" | "activity-log" | "design-system";
+type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" |"pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" |"ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" |"operations" | "acct-transactions" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-journal" | "acct-coa" | "acct-reports" | "acct-statements" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "calendar" | "inbox" | "my-evouchers" | "ticket-queue" | "settings" | "admin-users" | "admin" | "ticket-testing" | "activity-log" | "design-system";
 
 // SVG for Philippine Peso icon
 const Vector = () => (
@@ -190,6 +190,9 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
     inboxUnreadCount,
   ]);
   
+  // Role level map — mirrors RouteGuard so sidebar visibility matches route access
+  const ROLE_LEVEL: Record<string, number> = { staff: 0, team_leader: 1, manager: 2 };
+
   // Use effectiveDepartment from context for dev role override support
   const { user, effectiveDepartment, effectiveRole } = useUser();
 
@@ -229,7 +232,6 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
   const showPricing = isExecutive || userDepartment === "Pricing";
   const showOperations = isExecutive || userDepartment === "Operations";
   const showAccounting = isExecutive || userDepartment === "Accounting";
-  const showTransactions = isExecutive || userDepartment === "Accounting" || userDepartment === "Operations";
   const showHR = !import.meta.env.PROD && (isExecutive || userDepartment === "HR");
   
   // Dashboard - standalone
@@ -267,11 +269,11 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
     { id: "ops-others" as Page, label: "Others", icon: FileText },
   ];
 
-  // Accounting sub-items
-  const acctSubItems = [
-    { id: "acct-financials" as Page, label: "Finance Overview", icon: CreditCard },
+  // Accounting sub-items — minRole hides items the user's role can't access (mirrors RouteGuard)
+  const acctSubItems: { id: Page; label: string; icon: any; minRole?: string }[] = [
+    { id: "acct-financials" as Page, label: "Finance Overview", icon: CreditCard, minRole: "manager" },
     { id: "acct-evouchers" as Page, label: "E-Vouchers", icon: Receipt },
-    { id: "acct-transactions" as Page, label: "Transactions", icon: ArrowLeftRight },
+    { id: "acct-journal" as Page, label: "General Journal", icon: ScrollText },
     { id: "acct-coa" as Page, label: "Chart of Accounts", icon: BookOpen },
     { id: "acct-projects" as Page, label: "Projects", icon: Briefcase },
     { id: "acct-contracts" as Page, label: "Contracts", icon: Handshake },
@@ -296,9 +298,9 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
   
   // Personal section
   const personalItems = [
-    { id: "calendar" as Page, label: "My Calendar", icon: Calendar },
-    { id: "inbox" as Page, label: "My Inbox", icon: Inbox },
-    { id: "my-evouchers" as Page, label: "My E-Vouchers", icon: FileText },
+    { id: "calendar" as Page, label: "Calendar", icon: Calendar },
+    { id: "inbox" as Page, label: "Inbox", icon: Inbox },
+    { id: "my-evouchers" as Page, label: "E-Vouchers", icon: FileText },
   ];
   
 
@@ -865,14 +867,20 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
             {/* Accounting Sub-items */}
             <div 
               style={{
-                maxHeight: isAcctExpanded ? "400px" : "0px",
+                maxHeight: isAcctExpanded ? "600px" : "0px",
                 opacity: isAcctExpanded ? 1 : 0,
                 overflow: "hidden",
                 transition: "max-height 0.3s ease-in-out, opacity 0.25s ease-in-out",
               }}
             >
               <div className="space-y-1 mt-1">
-                {acctSubItems.map(item => renderNavButton(item, true))}
+                {acctSubItems
+                  .filter(item => {
+                    if (!item.minRole || isExecutive) return true;
+                    const userLevel = ROLE_LEVEL[effectiveRole || "staff"] ?? 0;
+                    return userLevel >= (ROLE_LEVEL[item.minRole] ?? 0);
+                  })
+                  .map(item => renderNavButton(item, true))}
               </div>
             </div>
           </div>
@@ -906,7 +914,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
                 onMouseLeave={(e) => {
                   if (!isActive) e.currentTarget.style.backgroundColor = "transparent";
                 }}
-                title={isCollapsed ? "My Inbox" : undefined}
+                title={isCollapsed ? "Inbox" : undefined}
               >
                 <div style={{ position: "relative", flexShrink: 0 }}>
                   <Inbox
@@ -947,7 +955,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
                       transition={{ duration: 0.18, ease: [0.25, 1, 0.5, 1] }}
                       style={{ fontSize: "14px", lineHeight: "20px", flex: 1, textAlign: "left" }}
                     >
-                      My Inbox
+                      Inbox
                     </motion.span>
                   )}
                 </AnimatePresence>

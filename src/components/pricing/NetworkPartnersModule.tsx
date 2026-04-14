@@ -628,8 +628,8 @@ export function NetworkPartnersModule({
                                       key={partner.id}
                                       onClick={() => onViewVendor?.(partner.id)}
                                       className="cursor-pointer hover:bg-[var(--theme-state-hover)] transition-colors"
-                                      style={{ 
-                                        borderBottom: "1px solid #EAECF0",
+                                      style={{
+                                        borderBottom: "1px solid var(--neuron-ui-border)",
                                         backgroundColor: "var(--theme-bg-surface)"
                                       }}
                                     >

@@ -3,6 +3,7 @@ import { useFeedbackPosition } from "../../contexts/FeedbackPositionContext";
 import { Send, Paperclip, X, Download, FileText } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../utils/supabase/client";
+import { useUser } from "../../hooks/useUser";
 import { toast } from "sonner@2.0.3";
 
 interface FileAttachment {
@@ -25,17 +26,16 @@ interface BookingComment {
 
 interface BookingCommentsTabProps {
   bookingId: string;
-  currentUserId: string;
-  currentUserName: string;
-  currentUserDepartment: string;
 }
 
-export function BookingCommentsTab({
-  bookingId,
-  currentUserId,
-  currentUserName,
-  currentUserDepartment,
-}: BookingCommentsTabProps) {
+export function BookingCommentsTab({ bookingId }: BookingCommentsTabProps) {
+  const { user, session } = useUser();
+  const currentUserName =
+    user?.name ||
+    session?.user?.user_metadata?.name ||
+    session?.user?.email ||
+    "Unknown User";
+  const currentUserDepartment = user?.department || "Operations";
   const { setHasCommentBar } = useFeedbackPosition();
   useEffect(() => {
     setHasCommentBar(true);
@@ -112,7 +112,7 @@ export function BookingCommentsTab({
       // Create comment with attachments
       const { error: insertError } = await supabase.from('booking_comments').insert({
         booking_id: bookingId,
-        user_id: currentUserId,
+        user_id: session?.user?.id,
         user_name: currentUserName,
         department: currentUserDepartment,
         message: newComment.trim() || "",

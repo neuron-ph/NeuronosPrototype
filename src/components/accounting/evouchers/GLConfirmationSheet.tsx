@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Loader2, ChevronDown } from "lucide-react";
+import { Loader2, ChevronDown, CheckCircle } from "lucide-react";
 import { supabase } from "../../../utils/supabase/client";
 import { logActivity } from "../../../utils/activityLog";
 import { toast } from "sonner@2.0.3";
@@ -39,34 +39,45 @@ interface GLConfirmationSheetProps {
  * Returns the suggested GL account name to query for based on EV type.
  * These are searched by name substring in the accounts table.
  */
+/**
+ * Suggests GL accounts for the CLOSING journal entry (Verify & Post step).
+ * By this point, a disbursement JE has already credited the source bank account
+ * and debited Employee Cash Advances Receivable. The closing entry retires that
+ * receivable and replaces it with the actual expense account(s).
+ */
 function getSuggestedAccounts(type: EVoucherAPType): { debitHint: string; creditHint: string } {
   switch (type) {
     case "expense":
-      return { debitHint: "Expense", creditHint: "Accounts Payable" };
     case "cash_advance":
     case "budget_request":
-      return { debitHint: "Advances to Employees", creditHint: "Cash" };
+    case "direct_expense":
+      return { debitHint: "Expense", creditHint: "Employee Cash Advances Receivable" };
     case "reimbursement":
+      // Reimbursements are closed at disbursement — this sheet should not be
+      // reached for reimbursement, but keep a fallback.
       return { debitHint: "Expense", creditHint: "Cash" };
   }
 }
 
 function AccountSelect({
   label,
+  id,
   accounts,
   value,
   onChange,
 }: {
   label: string;
+  id: string;
   accounts: GLAccount[];
   value: string;
   onChange: (id: string, account: GLAccount) => void;
 }) {
   return (
     <div>
-      <p style={{ fontSize: "12px", fontWeight: 500, color: "var(--theme-text-muted)", marginBottom: "6px" }}>{label}</p>
+      <label htmlFor={id} style={{ display: "block", fontSize: "12px", fontWeight: 500, color: "var(--theme-text-muted)", marginBottom: "6px" }}>{label}</label>
       <div style={{ position: "relative" }}>
         <select
+          id={id}
           value={value}
           onChange={(e) => {
             const acct = accounts.find((a) => a.id === e.target.value);
@@ -75,7 +86,7 @@ function AccountSelect({
           style={{
             width: "100%",
             height: "36px",
-            border: "1px solid var(--neuron-ui-border)",
+            border: "1px solid var(--theme-border-default)",
             borderRadius: "6px",
             padding: "0 32px 0 10px",
             fontSize: "13px",
@@ -213,7 +224,7 @@ export function GLConfirmationSheet({
         lines,
         total_debit: amount,
         total_credit: amount,
-        status: "posted",
+        status: "draft",
         created_by: currentUser.id,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -221,12 +232,12 @@ export function GLConfirmationSheet({
 
       if (jeError) throw jeError;
 
-      // Transition EV to disbursed + link journal entry
+      // Transition EV to posted + link closing journal entry
       const { error: evError } = await supabase
         .from("evouchers")
         .update({
-          status: "disbursed",
-          journal_entry_id: entryId,
+          status: "posted",
+          closing_journal_entry_id: entryId,
           updated_at: new Date().toISOString(),
         })
         .eq("id", evoucherId);
@@ -240,16 +251,19 @@ export function GLConfirmationSheet({
       await supabase.from("evoucher_history").insert({
         id: `EH-${Date.now()}`,
         evoucher_id: evoucherId,
-        action: `GL Entry Posted — DR ${debitAccountName} / CR ${creditAccountName}`,
-        previous_status: "pending_accounting",
-        new_status: "disbursed",
-        performed_by: currentUser.id,
-        performed_by_name: currentUser.name,
-        performed_by_role: currentUser.department,
+        action: `Closing GL Entry Posted — DR ${debitAccountName} / CR ${creditAccountName}`,
+        status: "posted",
+        user_id: currentUser.id,
+        user_name: currentUser.name,
+        user_role: currentUser.department,
+        metadata: {
+          previous_status: "pending_verification",
+          new_status: "posted",
+        },
         created_at: new Date().toISOString(),
       });
 
-      toast.success("Journal entry posted — awaiting Treasury disbursement");
+      toast.success("Closing journal entry posted — E-Voucher complete");
       onPosted?.();
       onClose();
     } catch (error) {
@@ -261,10 +275,10 @@ export function GLConfirmationSheet({
   };
 
   const footer = (
-    <div style={{ padding: "16px 24px", borderTop: "1px solid var(--neuron-ui-border)", display: "flex", justifyContent: "space-between", backgroundColor: "var(--neuron-bg-elevated)" }}>
+    <div style={{ padding: "16px 24px", borderTop: "1px solid var(--theme-border-default)", display: "flex", justifyContent: "space-between", backgroundColor: "var(--theme-bg-surface)" }}>
       <button
         onClick={onClose}
-        style={{ height: "40px", padding: "0 20px", background: "none", border: "none", color: "var(--neuron-ink-muted)", fontSize: "13px", fontWeight: 500, cursor: "pointer" }}
+        style={{ height: "40px", padding: "0 20px", background: "none", border: "none", color: "var(--theme-text-muted)", fontSize: "13px", fontWeight: 500, cursor: "pointer" }}
       >
         Cancel
       </button>
@@ -276,9 +290,9 @@ export function GLConfirmationSheet({
         <button
           onClick={handlePost}
           disabled={posting || !debitAccountId || !creditAccountId}
-          style={{ height: "40px", padding: "0 24px", borderRadius: "8px", backgroundColor: "var(--neuron-action-primary)", border: "none", color: "var(--neuron-action-primary-text)", fontSize: "13px", fontWeight: 600, cursor: posting || !debitAccountId || !creditAccountId ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "8px", opacity: posting || !debitAccountId || !creditAccountId ? 0.6 : 1 }}
+          style={{ height: "40px", padding: "0 24px", borderRadius: "8px", backgroundColor: "var(--theme-action-primary-bg)", border: "none", color: "var(--theme-action-primary-text)", fontSize: "13px", fontWeight: 600, cursor: posting || !debitAccountId || !creditAccountId ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "8px", opacity: posting || !debitAccountId || !creditAccountId ? 0.6 : 1 }}
         >
-          {posting && <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} />}
+          {posting && <Loader2 size={16} className="animate-spin" />}
           {posting ? "Posting…" : "Confirm & Post to Ledger"}
         </button>
       )}
@@ -290,7 +304,7 @@ export function GLConfirmationSheet({
       <div style={{ padding: "24px", overflowY: "auto", height: "100%" }}>
 
         {/* EV summary */}
-        <div style={{ padding: "12px 16px", borderRadius: "8px", backgroundColor: "var(--theme-bg-surface-subtle)", border: "1px solid var(--neuron-ui-border)", marginBottom: "24px" }}>
+        <div style={{ padding: "12px 16px", borderRadius: "8px", backgroundColor: "var(--theme-bg-surface-subtle)", border: "1px solid var(--theme-border-default)", marginBottom: "24px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
             <span style={{ fontSize: "13px", color: "var(--theme-text-muted)" }}>Voucher</span>
             <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--theme-text-primary)" }}>{evoucherNumber}</span>
@@ -332,7 +346,7 @@ export function GLConfirmationSheet({
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
             {/* Debit row */}
-            <div style={{ padding: "16px", borderRadius: "8px", border: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--theme-bg-surface)" }}>
+            <div style={{ padding: "16px", borderRadius: "8px", border: "1px solid var(--theme-border-default)", backgroundColor: "var(--theme-bg-surface)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
                 <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Debit (DR)</span>
                 <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--theme-text-primary)" }}>
@@ -341,6 +355,7 @@ export function GLConfirmationSheet({
               </div>
               <AccountSelect
                 label="Account"
+                id="gl-debit-account"
                 accounts={accounts}
                 value={debitAccountId}
                 onChange={(id, acct) => {
@@ -352,7 +367,7 @@ export function GLConfirmationSheet({
             </div>
 
             {/* Credit row */}
-            <div style={{ padding: "16px", borderRadius: "8px", border: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--theme-bg-surface)" }}>
+            <div style={{ padding: "16px", borderRadius: "8px", border: "1px solid var(--theme-border-default)", backgroundColor: "var(--theme-bg-surface)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
                 <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Credit (CR)</span>
                 <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--theme-text-primary)" }}>
@@ -361,6 +376,7 @@ export function GLConfirmationSheet({
               </div>
               <AccountSelect
                 label="Account"
+                id="gl-credit-account"
                 accounts={accounts}
                 value={creditAccountId}
                 onChange={(id, acct) => {
@@ -373,19 +389,21 @@ export function GLConfirmationSheet({
 
             {/* Description */}
             <div>
-              <p style={{ fontSize: "12px", fontWeight: 500, color: "var(--theme-text-muted)", marginBottom: "6px" }}>Journal Entry Description</p>
+              <label htmlFor="gl-je-description" style={{ display: "block", fontSize: "12px", fontWeight: 500, color: "var(--theme-text-muted)", marginBottom: "6px" }}>Journal Entry Description</label>
               <input
+                id="gl-je-description"
                 type="text"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                style={{ width: "100%", height: "36px", border: "1px solid var(--neuron-ui-border)", borderRadius: "6px", padding: "0 10px", fontSize: "13px", outline: "none", boxSizing: "border-box" }}
+                style={{ width: "100%", height: "36px", border: "1px solid var(--theme-border-default)", borderRadius: "6px", padding: "0 10px", fontSize: "13px", outline: "none", boxSizing: "border-box", backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-primary)" }}
               />
             </div>
 
             {/* Balance check */}
-            <div style={{ padding: "10px 14px", borderRadius: "6px", backgroundColor: "var(--theme-status-success-bg)", border: "1px solid var(--theme-status-success-border)" }}>
-              <p style={{ fontSize: "12px", color: "var(--theme-status-success-fg)", fontWeight: 500 }}>
-                ✓ Balanced — DR {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(amount)} = CR {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(amount)}
+            <div style={{ padding: "10px 14px", borderRadius: "6px", backgroundColor: "var(--theme-status-success-bg)", border: "1px solid var(--theme-status-success-border)", display: "flex", alignItems: "center", gap: "8px" }}>
+              <CheckCircle size={13} style={{ color: "var(--theme-status-success-fg)", flexShrink: 0 }} />
+              <p style={{ fontSize: "12px", color: "var(--theme-status-success-fg)", fontWeight: 500, margin: 0 }}>
+                Balanced — DR {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(amount)} = CR {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(amount)}
               </p>
             </div>
           </div>

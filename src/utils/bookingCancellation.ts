@@ -1,248 +1,139 @@
+import type { ExecutionStatus } from "../types/operations";
+
 import { supabase } from "./supabase/client";
-import { NON_APPLIED_COLLECTION_STATUSES } from "./collectionResolution";
-import { isInvoiceFinanciallyActive } from "./invoiceReversal";
-import { logActivity, type ActivityActor } from "./activityLog";
 
-export type BookingCancellationAction =
-  | "safe-delete"
-  | "cancel-and-void-unbilled"
-  | "cancel-preserve-costs"
-  | "reversal-required"
-  | "credit-review-required";
+export const CANCELLABLE_STATUSES: ExecutionStatus[] = ["Draft", "Pending", "Confirmed", "In Progress", "On Hold"];
+export const DELETABLE_STATUS: ExecutionStatus = "Draft";
 
-export interface BookingFinancialState {
-  bookingId: string;
-  unbilledChargeCount: number;
-  billedChargeCount: number;
-  expenseCount: number;
-  invoiceCount: number;
-  collectionCount: number;
-  recommendedAction: BookingCancellationAction;
-}
-
-export interface VoidBookingChargesResult {
-  billingLineItemsVoided: number;
-  evoucherBillingsVoided: number;
-}
-
-const BILLING_FINAL_STATUSES = new Set(["invoiced", "paid"]);
-const EXPENSE_IGNORED_STATUSES = new Set(["cancelled", "rejected", "voided", "void"]);
 const hasBookingArrayMatch = (value: unknown, bookingId: string): boolean => (
   Array.isArray(value) &&
   value.some((entry) => typeof entry === "string" && entry.trim() === bookingId)
 );
 
+const countFinancialTypes = (state: BookingFinancialState) => (
+  [
+    state.invoiceCount ? `${state.invoiceCount} invoice${state.invoiceCount === 1 ? "" : "s"}` : null,
+    state.collectionCount ? `${state.collectionCount} collection${state.collectionCount === 1 ? "" : "s"}` : null,
+    state.expenseCount ? `${state.expenseCount} expense${state.expenseCount === 1 ? "" : "s"}` : null,
+    state.evoucherCount ? `${state.evoucherCount} e-voucher${state.evoucherCount === 1 ? "" : "s"}` : null,
+  ].filter(Boolean).join(", ")
+);
+
+const getStatusBlockMessage = (status: ExecutionStatus, actionLabel: "cancelled" | "deleted"): string => {
+  switch (status) {
+    case "Delivered":
+      return `Booking is already delivered and can no longer be ${actionLabel}.`;
+    case "Completed":
+      return `Booking is already completed and can no longer be ${actionLabel}.`;
+    case "Cancelled":
+      return `Booking is already cancelled.`;
+    case "Closed":
+      return `Booking is already closed and cannot be changed.`;
+    default:
+      return `Booking status ${status} does not allow this action.`;
+  }
+};
+
+export interface BookingFinancialState {
+  bookingId: string;
+  invoiceCount: number;
+  collectionCount: number;
+  expenseCount: number;
+  evoucherCount: number;
+  hasFinancialRecords: boolean;
+}
+
 export async function assessBookingFinancialState(bookingId: string): Promise<BookingFinancialState> {
+  const invoiceFilter = `booking_id.eq.${bookingId},booking_ids.cs.{${bookingId}}`;
+  const collectionFilter = `booking_id.eq.${bookingId},booking_ids.cs.{${bookingId}}`;
+
   const [
-    { data: billingRows, error: billingError },
-    { data: evoucherRows, error: evoucherError },
     { data: invoiceRows, error: invoiceError },
     { data: collectionRows, error: collectionError },
     { data: expenseRows, error: expenseError },
+    { data: evoucherRows, error: evoucherError },
   ] = await Promise.all([
     supabase
-      .from("billing_line_items")
-      .select("id,status,invoice_id,booking_id")
+      .from("invoices")
+      .select("id,booking_id,booking_ids")
+      .or(invoiceFilter),
+    supabase
+      .from("collections")
+      .select("id,booking_id,booking_ids")
+      .or(collectionFilter),
+    supabase
+      .from("expenses")
+      .select("id")
       .eq("booking_id", bookingId),
     supabase
       .from("evouchers")
-      .select("id,status,transaction_type,invoice_id,booking_id")
-      .eq("booking_id", bookingId),
-    supabase
-      .from("invoices")
-      .select("id,status,payment_status,metadata,booking_id,booking_ids"),
-    supabase
-      .from("collections")
-      .select("id,invoice_id,linked_billings,status"),
-    supabase
-      .from("expenses")
-      .select("id,status,booking_id")
+      .select("id")
       .eq("booking_id", bookingId),
   ]);
 
-  if (billingError) throw billingError;
-  if (evoucherError) throw evoucherError;
   if (invoiceError) throw invoiceError;
   if (collectionError) throw collectionError;
   if (expenseError) throw expenseError;
+  if (evoucherError) throw evoucherError;
 
-  const bookingBillings = (billingRows || []).map((row: any) => ({
-    status: String(row.status || "").toLowerCase(),
-    invoiceId: row.invoice_id || null,
-  }));
-
-  const bookingEvouchers = (evoucherRows || []).filter((row: any) => row.booking_id === bookingId);
-  const bookingBillingEvouchers = bookingEvouchers
-    .filter((row: any) => String(row.transaction_type || "").toLowerCase() === "billing")
-    .map((row: any) => ({
-      status: String(row.status || "").toLowerCase(),
-      invoiceId: row.invoice_id || null,
-    }));
-
-  const allChargeRows = [...bookingBillings, ...bookingBillingEvouchers];
-
-  const bookingExpensesFromEvouchers = bookingEvouchers.filter((row: any) => {
-    const transactionType = String(row.transaction_type || "").toLowerCase();
-    const status = String(row.status || "").toLowerCase();
-    if (!["expense", "budget_request"].includes(transactionType)) return false;
-    return !EXPENSE_IGNORED_STATUSES.has(status);
-  });
-
-  const bookingExpensesFromLegacyTable = (expenseRows || []).filter((row: any) => {
-    const status = String(row.status || "").toLowerCase();
-    return !EXPENSE_IGNORED_STATUSES.has(status);
-  });
-
-  const expenseCount = bookingExpensesFromEvouchers.length + bookingExpensesFromLegacyTable.length;
-
-  const linkedInvoices = (invoiceRows || []).filter((row: any) => (
+  const invoiceCount = (invoiceRows || []).filter((row: any) => (
     row.booking_id === bookingId || hasBookingArrayMatch(row.booking_ids, bookingId)
-  ));
-  const activeLinkedInvoices = linkedInvoices.filter((row: any) => isInvoiceFinanciallyActive(row));
-  const activeInvoiceIds = new Set(activeLinkedInvoices.map((row: any) => row.id).filter(Boolean));
-  const inactiveInvoiceIds = new Set(
-    linkedInvoices
-      .filter((row: any) => !isInvoiceFinanciallyActive(row))
-      .map((row: any) => row.id)
-      .filter(Boolean),
-  );
-  const invoiceCount = activeInvoiceIds.size;
+  )).length;
 
-  const unbilledChargeCount = allChargeRows.filter((row) => !BILLING_FINAL_STATUSES.has(row.status) && !row.invoiceId).length;
-  const billedChargeCount = allChargeRows.filter((row) => {
-    if (!BILLING_FINAL_STATUSES.has(row.status) && !row.invoiceId) return false;
-    if (!row.invoiceId) return true;
-    if (activeInvoiceIds.has(row.invoiceId)) return true;
-    if (inactiveInvoiceIds.has(row.invoiceId)) return false;
-    return true;
-  }).length;
+  const collectionCount = (collectionRows || []).filter((row: any) => (
+    row.booking_id === bookingId || hasBookingArrayMatch(row.booking_ids, bookingId)
+  )).length;
 
-  const collectionCount = (collectionRows || []).filter((row: any) => {
-    const status = String(row.status || "").toLowerCase();
-    if (NON_APPLIED_COLLECTION_STATUSES.has(status)) return false;
-
-    if (row.invoice_id && activeInvoiceIds.has(row.invoice_id)) return true;
-
-    const linkedBillings = Array.isArray(row.linked_billings) ? row.linked_billings : [];
-    return linkedBillings.some((entry: any) => {
-      const invoiceId = entry?.id || entry?.invoice_id || entry?.invoiceId;
-      return typeof invoiceId === "string" && activeInvoiceIds.has(invoiceId);
-    });
-  }).length;
-
-  let recommendedAction: BookingCancellationAction = "safe-delete";
-  if (collectionCount > 0) {
-    recommendedAction = "credit-review-required";
-  } else if (invoiceCount > 0 || billedChargeCount > 0) {
-    recommendedAction = "reversal-required";
-  } else if (expenseCount > 0) {
-    recommendedAction = "cancel-preserve-costs";
-  } else if (unbilledChargeCount > 0) {
-    recommendedAction = "cancel-and-void-unbilled";
-  }
+  const expenseCount = (expenseRows || []).length;
+  const evoucherCount = (evoucherRows || []).length;
+  const hasFinancialRecords = invoiceCount + collectionCount + expenseCount + evoucherCount > 0;
 
   return {
     bookingId,
-    unbilledChargeCount,
-    billedChargeCount,
-    expenseCount,
     invoiceCount,
     collectionCount,
-    recommendedAction,
+    expenseCount,
+    evoucherCount,
+    hasFinancialRecords,
   };
 }
 
-export const canHardDeleteBooking = (state: BookingFinancialState): boolean => (
-  state.recommendedAction === "safe-delete"
-);
+export const canHardDeleteBooking = (
+  currentStatus: ExecutionStatus,
+  state: BookingFinancialState,
+): boolean => currentStatus === DELETABLE_STATUS && !state.hasFinancialRecords;
 
-export const getBookingCancellationMessage = (state: BookingFinancialState): string => {
-  switch (state.recommendedAction) {
-    case "cancel-and-void-unbilled":
-      return `Booking ${state.bookingId} has ${state.unbilledChargeCount} unbilled charge line(s). Cancel the booking and void those lines instead of deleting it.`;
-    case "cancel-preserve-costs":
-      return `Booking ${state.bookingId} has recorded cost entries. Cancel it and preserve the costs; do not hard-delete the booking.`;
-    case "reversal-required":
-      return `Booking ${state.bookingId} already has billed or invoiced financial history. Use a cancellation with reversal or credit handling instead of deletion.`;
-    case "credit-review-required":
-      return `Booking ${state.bookingId} already has collected cash. Preserve the cash history and handle cancellation through credit or refund review instead of deletion.`;
-    default:
-      return `Booking ${state.bookingId} has no linked financial history and can be deleted safely.`;
+export const canTransitionBookingToCancelled = (
+  currentStatus: ExecutionStatus,
+  state: BookingFinancialState,
+): boolean => CANCELLABLE_STATUSES.includes(currentStatus) && !state.hasFinancialRecords;
+
+export const getBookingCancellationMessage = (
+  currentStatus: ExecutionStatus,
+  state: BookingFinancialState,
+): string => {
+  if (state.hasFinancialRecords) {
+    return `Booking ${state.bookingId} already has linked financial records (${countFinancialTypes(state)}) and can no longer be deleted.`;
   }
+
+  if (currentStatus !== DELETABLE_STATUS) {
+    return `Only Draft bookings can be permanently deleted. Current status is ${currentStatus}.`;
+  }
+
+  return `Booking ${state.bookingId} has no linked financial records and can be deleted safely.`;
 };
 
-export const canTransitionBookingToCancelled = (state: BookingFinancialState): boolean => (
-  state.recommendedAction === "safe-delete" ||
-  state.recommendedAction === "cancel-preserve-costs"
-);
-
-export const getBookingCancellationStatusMessage = (state: BookingFinancialState): string => {
-  switch (state.recommendedAction) {
-    case "cancel-and-void-unbilled":
-      return `Booking ${state.bookingId} still has ${state.unbilledChargeCount} unbilled charge line(s). Void those charges before setting the booking to Cancelled.`;
-    case "cancel-preserve-costs":
-      return `Booking ${state.bookingId} can be cancelled. Recorded costs will remain for profitability tracking.`;
-    case "reversal-required":
-      return `Booking ${state.bookingId} already has billed or invoiced financial history. Create the reversal or credit handling first, then cancel the booking.`;
-    case "credit-review-required":
-      return `Booking ${state.bookingId} already has collected cash. Resolve the customer credit or refund handling before cancelling the booking.`;
-    default:
-      return `Booking ${state.bookingId} has no blocking financial history and can be cancelled.`;
+export const getBookingCancellationStatusMessage = (
+  currentStatus: ExecutionStatus,
+  state: BookingFinancialState,
+): string => {
+  if (state.hasFinancialRecords) {
+    return `Booking ${state.bookingId} already has linked financial records (${countFinancialTypes(state)}) and can no longer be cancelled or deleted.`;
   }
+
+  if (!CANCELLABLE_STATUSES.includes(currentStatus)) {
+    return getStatusBlockMessage(currentStatus, "cancelled");
+  }
+
+  return `Booking ${state.bookingId} has no linked financial records and can be cancelled.`;
 };
-
-export async function voidBookingUnbilledCharges(bookingId: string, actor?: ActivityActor): Promise<VoidBookingChargesResult> {
-  const [
-    { data: billingRows, error: billingFetchError },
-    { data: evoucherRows, error: evoucherFetchError },
-  ] = await Promise.all([
-    supabase
-      .from("billing_line_items")
-      .select("id,status")
-      .eq("booking_id", bookingId),
-    supabase
-      .from("evouchers")
-      .select("id,status,transaction_type")
-      .eq("booking_id", bookingId),
-  ]);
-
-  if (billingFetchError) throw billingFetchError;
-  if (evoucherFetchError) throw evoucherFetchError;
-
-  const billingIdsToVoid = (billingRows || [])
-    .filter((row: any) => String(row.status || "").toLowerCase() === "unbilled")
-    .map((row: any) => row.id);
-
-  const evoucherIdsToVoid = (evoucherRows || [])
-    .filter((row: any) => {
-      const status = String(row.status || "").toLowerCase();
-      const transactionType = String(row.transaction_type || "").toLowerCase();
-      return transactionType === "billing" && status === "unbilled";
-    })
-    .map((row: any) => row.id);
-
-  if (billingIdsToVoid.length > 0) {
-    const { error } = await supabase
-      .from("billing_line_items")
-      .update({ status: "voided" })
-      .in("id", billingIdsToVoid);
-    if (error) throw error;
-  }
-
-  if (evoucherIdsToVoid.length > 0) {
-    const { error } = await supabase
-      .from("evouchers")
-      .update({ status: "voided", updated_at: new Date().toISOString() })
-      .in("id", evoucherIdsToVoid);
-    if (error) throw error;
-  }
-
-  if (actor) {
-    logActivity("booking", bookingId, bookingId, "cancelled", actor);
-  }
-
-  return {
-    billingLineItemsVoided: billingIdsToVoid.length,
-    evoucherBillingsVoided: evoucherIdsToVoid.length,
-  };
-}

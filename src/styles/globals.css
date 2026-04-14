@@ -46,6 +46,7 @@
   --neuron-bg-elevated: var(--theme-bg-surface);
   
   /* Ink (Text Colors) */
+  --neuron-ink-base: var(--theme-text-primary);
   --neuron-ink-primary: var(--theme-text-primary);
   --neuron-ink-secondary: var(--theme-text-secondary);
   --neuron-ink-muted: var(--theme-text-muted);
@@ -151,6 +152,10 @@
   /* Elevations (Shadows) */
   --elevation-1: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
   --elevation-2: 0 2px 8px 0 rgba(0, 0, 0, 0.06);
+  --elevation-3: 0 8px 32px rgba(0, 0, 0, 0.12);
+
+  /* Overlay backdrop */
+  --theme-overlay-backdrop: rgba(18, 51, 43, 0.4);
   
   /* Radius */
   --neuron-radius-s: 6px;
@@ -208,8 +213,8 @@
 }
 
 .dark {
-  --theme-bg-page: #1f2023;
-  --theme-bg-surface: #1f2023;
+  --theme-bg-page: #191a1c;
+  --theme-bg-surface: #191a1c;
   --theme-bg-surface-subtle: #25262a;
   --theme-bg-surface-tint: #1c1d1f;
   --theme-text-primary: #f0f0f0;
@@ -238,6 +243,14 @@
   --theme-status-danger-fg: #F0AAA1;
   --theme-status-danger-border: #C94F3D;
   --neuron-state-focus-ring: 0 0 0 3px rgba(95, 196, 161, 0.22);
+
+  /* Elevations (Shadows) -- dark mode */
+  --elevation-1: 0 1px 2px 0 rgba(0, 0, 0, 0.2);
+  --elevation-2: 0 2px 8px 0 rgba(0, 0, 0, 0.3);
+  --elevation-3: 0 8px 32px rgba(0, 0, 0, 0.5);
+
+  /* Overlay backdrop -- dark mode */
+  --theme-overlay-backdrop: rgba(0, 0, 0, 0.6);
 
   /* UI Muted (disabled states) -- dark mode */
   --neuron-ui-muted: #3a3b3f;

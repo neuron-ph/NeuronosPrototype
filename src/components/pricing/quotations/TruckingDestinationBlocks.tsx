@@ -195,7 +195,7 @@ export function TruckingDestinationBlocks({
             size={36}
             strokeWidth={1.2}
             style={{
-              color: "#B0BAB6",
+              color: "var(--neuron-ink-muted)",
               margin: "0 auto 12px auto",
               display: "block",
             }}
@@ -332,7 +332,7 @@ function DestinationBlockCard({
       style={{
         borderWidth: "1px",
         borderStyle: "solid",
-        borderColor: isHovered && !viewMode ? "#C8D8D4" : "#E5E9E8",
+        borderColor: isHovered && !viewMode ? "var(--neuron-brand-green)" : "var(--neuron-ui-border)",
         borderRadius: "10px",
         backgroundColor: "var(--theme-bg-surface)",
         overflow: "hidden",
@@ -359,7 +359,7 @@ function DestinationBlockCard({
             background: "none",
             border: "none",
             cursor: "pointer",
-            color: "#8A9490",
+            color: "var(--neuron-ink-muted)",
             lineHeight: 0,
             flexShrink: 0,
             transition: "color 0.15s ease",
@@ -395,7 +395,7 @@ function DestinationBlockCard({
               fontWeight: 600,
               color: "var(--theme-text-primary)",
               backgroundColor: "var(--theme-bg-surface)",
-              border: "1px solid #0F766E",
+              border: "1px solid var(--neuron-brand-green)",
               borderRadius: "4px",
               outline: "none",
               fontFamily: "inherit",
@@ -429,7 +429,7 @@ function DestinationBlockCard({
             style={{
               fontSize: "11px",
               fontWeight: 500,
-              color: "#8A9490",
+              color: "var(--neuron-ink-muted)",
               flexShrink: 0,
             }}
           >
@@ -457,7 +457,7 @@ function DestinationBlockCard({
                 fontWeight: 500,
                 color: "var(--theme-text-muted)",
                 backgroundColor: "transparent",
-                border: "1px solid #D9E1DE",
+                border: "1px solid var(--neuron-ui-border)",
                 borderRadius: "4px",
                 cursor: "pointer",
                 display: "flex",
@@ -471,8 +471,8 @@ function DestinationBlockCard({
                 e.currentTarget.style.color = "var(--theme-action-primary-bg)";
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = "#D9E1DE";
-                e.currentTarget.style.color = "#6B7A76";
+                e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
+                e.currentTarget.style.color = "var(--neuron-ink-muted)";
               }}
               title="Duplicate this destination"
             >
@@ -556,7 +556,7 @@ function ConfigRow({
         alignItems: "center",
         gap: "0",
         padding: "5px 16px",
-        borderBottom: isLast ? "none" : "1px solid #F0F2F1",
+        borderBottom: isLast ? "none" : "1px solid var(--neuron-ui-border)",
         transition: "opacity 0.15s ease",
         opacity: isNA ? 0.45 : 1,
       }}
@@ -577,8 +577,8 @@ function ConfigRow({
                 width: "14px",
                 height: "14px",
                 borderRadius: "3px",
-                border: config.enabled ? "1.5px solid #0F766E" : "1.5px solid var(--neuron-ui-border)",
-                backgroundColor: config.enabled ? "#0F766E" : "var(--theme-bg-surface)",
+                border: config.enabled ? "1.5px solid var(--neuron-brand-green)" : "1.5px solid var(--neuron-ui-border)",
+                backgroundColor: config.enabled ? "var(--neuron-brand-green)" : "var(--theme-bg-surface)",
                 position: "relative",
                 flexShrink: 0,
                 transition: "all 0.15s ease",
@@ -612,7 +612,7 @@ function ConfigRow({
         style={{
           fontSize: "13px",
           fontWeight: 500,
-          color: isNA ? "#B0BAB6" : "#2C3E38",
+          color: isNA ? "var(--neuron-ink-muted)" : "var(--neuron-ink-primary)",
           padding: "4px 8px",
           textDecoration: isNA ? "line-through" : "none",
           transition: "color 0.15s ease",
@@ -620,7 +620,7 @@ function ConfigRow({
       >
         {config.preset.label}
         {isNA && viewMode && (
-          <span style={{ marginLeft: "8px", fontSize: "11px", color: "#B0BAB6", fontStyle: "italic", textDecoration: "none", display: "inline-block" }}>
+          <span style={{ marginLeft: "8px", fontSize: "11px", color: "var(--neuron-ink-muted)", fontStyle: "italic", textDecoration: "none", display: "inline-block" }}>
             N/A
           </span>
         )}
@@ -632,7 +632,7 @@ function ConfigRow({
           <div
             style={{
               fontSize: "13px",
-              color: "#C8D0CD",
+              color: "var(--neuron-ink-muted)",
               textAlign: "right",
               padding: "6px 8px",
               fontStyle: "italic",
@@ -644,7 +644,7 @@ function ConfigRow({
           <div
             style={{
               fontSize: "13px",
-              color: "#2C3E38",
+              color: "var(--neuron-ink-primary)",
               textAlign: "right",
               fontVariantNumeric: "tabular-nums",
               padding: "6px 8px",
@@ -666,9 +666,9 @@ function ConfigRow({
               padding: "6px 8px",
               fontSize: "13px",
               fontWeight: 500,
-              color: "#2C3E38",
+              color: "var(--neuron-ink-primary)",
               backgroundColor: "var(--theme-bg-surface)",
-              border: "1px solid #E0E6E4",
+              border: "1px solid var(--neuron-ui-border)",
               borderRadius: "6px",
               outline: "none",
               fontFamily: "inherit",

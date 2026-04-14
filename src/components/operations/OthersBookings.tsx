@@ -12,6 +12,7 @@ import { useDataScope } from "../../hooks/useDataScope";
 import { SkeletonTable } from "../shared/NeuronSkeleton";
 import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
 import { logDeletion } from "../../utils/activityLog";
+import type { ExecutionStatus } from "../../types/operations";
 
 interface OthersBooking {
   bookingId: string;
@@ -41,9 +42,10 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
   const [activeTab, setActiveTab] = useState<"all" | "my" | "draft" | "in-progress" | "completed">("all");
   const [timePeriodFilter, setTimePeriodFilter] = useState<string>("all");
   const [ownerFilter, setOwnerFilter] = useState<string>("all");
+  const [handlerFilter, setHandlerFilter] = useState<string>("all");
   const [selectedBooking, setSelectedBooking] = useState<OthersBooking | null>(null);
 
-  const { scope, isLoaded: scopeLoaded } = useDataScope();
+  const { scope, isLoaded: scopeLoaded } = useDataScope('bookings');
 
   // ── Bookings fetch ────────────────────────────────────────
   const { data: rawBookings = [], isLoading, refetch } = useQuery<OthersBooking[]>({
@@ -58,6 +60,7 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
       return (data || []).map((row) => {
         const d = row.details || {};
         return {
+          ...d,
           ...row,
           bookingId: row.id,
           booking_number: row.booking_number,
@@ -79,8 +82,18 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
   const bookings = useMemo(() => {
     if (!scopeLoaded) return [];
     if (scope.type === 'all') return rawBookings;
-    if (scope.type === 'userIds') return rawBookings.filter(b => scope.ids.includes((b as any).created_by || ''));
-    return rawBookings.filter(b => (b as any).created_by === scope.userId);
+    if (scope.type === 'userIds') return rawBookings.filter(b =>
+      scope.ids.includes((b as any).created_by || '') ||
+      scope.ids.includes((b as any).manager_id || '') ||
+      scope.ids.includes((b as any).supervisor_id || '') ||
+      scope.ids.includes((b as any).handler_id || '')
+    );
+    return rawBookings.filter(b =>
+      (b as any).created_by === scope.userId ||
+      (b as any).manager_id === scope.userId ||
+      (b as any).supervisor_id === scope.userId ||
+      (b as any).handler_id === scope.userId
+    );
   }, [rawBookings, scope, scopeLoaded]);
 
   // Deep-link: auto-select booking from pendingBookingId
@@ -97,24 +110,24 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
     fetchBookings();
   };
 
-  const handleDeleteBooking = async (bookingId: string, e: React.MouseEvent) => {
+  const handleDeleteBooking = async (bookingId: string, bookingLabel: string, currentStatus: ExecutionStatus, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent row click
 
     try {
       const financialState = await assessBookingFinancialState(bookingId);
-      if (!canHardDeleteBooking(financialState)) {
-        toast.error(getBookingCancellationMessage(financialState));
+      if (!canHardDeleteBooking(currentStatus, financialState)) {
+        toast.error(getBookingCancellationMessage(currentStatus, financialState));
         return;
       }
 
-      if (!window.confirm(`Delete booking ${bookingId}? No linked charges, costs, invoices, or collections were found.`)) {
+      if (!window.confirm(`Delete booking ${bookingLabel}? No linked invoices, collections, expenses, or e-vouchers were found.`)) {
         return;
       }
 
       const { error } = await supabase.from('bookings').delete().eq('id', bookingId);
       if (error) throw error;
 
-      logDeletion("booking", bookingId, bookingId, { id: "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
+      logDeletion("booking", bookingId, bookingLabel, { id: "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
       toast.success('Booking deleted successfully');
       fetchBookings(); // Refresh list
     } catch (error) {
@@ -125,6 +138,7 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
 
   // Get unique values for filters
   const uniqueOwners = Array.from(new Set(bookings.map(b => b.accountOwner).filter(Boolean)));
+  const uniqueHandlers = Array.from(new Set(bookings.map(b => b.accountHandler).filter(Boolean)));
 
   // Filter bookings by tab first
   const getFilteredByTab = () => {
@@ -178,6 +192,10 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
 
     // Owner filter
     if (ownerFilter !== "all" && booking.accountOwner !== ownerFilter) return false;
+
+    // Handler filter
+    if (handlerFilter === "unassigned" && booking.accountHandler) return false;
+    if (handlerFilter !== "all" && handlerFilter !== "unassigned" && booking.accountHandler !== handlerFilter) return false;
 
     return true;
   });
@@ -252,7 +270,7 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
                   border: "none",
                   borderRadius: "8px",
                   background: "var(--theme-action-primary-bg)",
-                  color: "white",
+                  color: "var(--theme-action-primary-text)",
                   cursor: "pointer",
                 }}
               >
@@ -385,6 +403,28 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
                 <option key={owner} value={owner}>{owner}</option>
               ))}
             </select>
+
+            {/* Handler Filter */}
+            <select
+              value={handlerFilter}
+              onChange={(e) => setHandlerFilter(e.target.value)}
+              style={{
+                padding: "10px 12px",
+                border: "1px solid var(--theme-border-default)",
+                borderRadius: "8px",
+                fontSize: "14px",
+                color: "var(--theme-text-primary)",
+                backgroundColor: "var(--theme-bg-surface)",
+                outline: "none",
+                cursor: "pointer",
+              }}
+            >
+              <option value="all">All Handlers</option>
+              <option value="unassigned">Unassigned</option>
+              {uniqueHandlers.map(handler => (
+                <option key={handler} value={handler}>{handler}</option>
+              ))}
+            </select>
           </div>
 
           {/* Tabs */}
@@ -407,7 +447,7 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
               label="Assigned to Me"
               count={myCount}
               isActive={activeTab === "my"}
-              color="#8B5CF6"
+              color="var(--neuron-status-accent-fg)"
               onClick={() => setActiveTab("my")}
             />
             <TabButton
@@ -477,6 +517,9 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
                       Service Description
                     </th>
                     <th className="text-left py-3 px-4 text-[var(--theme-text-muted)] font-semibold text-xs uppercase tracking-wide">
+                      Handler
+                    </th>
+                    <th className="text-left py-3 px-4 text-[var(--theme-text-muted)] font-semibold text-xs uppercase tracking-wide">
                       Status
                     </th>
                     <th className="text-left py-3 px-4 text-[var(--theme-text-muted)] font-semibold text-xs uppercase tracking-wide">
@@ -504,11 +547,11 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
                               color: "var(--theme-text-primary)",
                               marginBottom: "2px"
                             }}>
-                              {(booking as any).name || (booking as any).booking_number || booking.bookingId}
+                              {(booking as any).name || (booking as any).booking_number || "Unnamed Booking"}
                             </div>
-                            {(booking as any).name && (
+                            {(booking as any).name && (booking as any).booking_number && (
                               <div style={{ fontSize: "12px", color: "var(--theme-text-muted)" }}>
-                                {(booking as any).booking_number || booking.bookingId}
+                                {(booking as any).booking_number}
                               </div>
                             )}
                             {booking.projectNumber && (
@@ -533,6 +576,15 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
                         </div>
                       </td>
                       <td className="py-4 px-4">
+                        {booking.accountHandler ? (
+                          <div style={{ fontSize: "13px", color: "var(--theme-text-primary)" }}>
+                            {booking.accountHandler}
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: "13px", color: "var(--theme-text-muted)" }}>—</span>
+                        )}
+                      </td>
+                      <td className="py-4 px-4">
                         <NeuronStatusPill status={booking.status} />
                       </td>
                       <td className="py-4 px-4">
@@ -542,7 +594,7 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
                       </td>
                       <td className="py-4 px-4 text-center">
                         <button
-                          onClick={(e) => handleDeleteBooking(booking.bookingId, e)}
+                          onClick={(e) => handleDeleteBooking(booking.bookingId, (booking as any).booking_number || booking.bookingId, booking.status as ExecutionStatus, e)}
                           style={{
                             display: "inline-flex",
                             alignItems: "center",
@@ -560,7 +612,7 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
                           }}
                           onMouseEnter={(e) => {
                             e.currentTarget.style.background = "var(--theme-status-danger-fg)";
-                            e.currentTarget.style.color = "white";
+                            e.currentTarget.style.color = "var(--theme-text-inverse)";
                           }}
                           onMouseLeave={(e) => {
                             e.currentTarget.style.background = "var(--theme-bg-surface)";

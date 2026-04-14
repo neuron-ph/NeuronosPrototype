@@ -32,7 +32,7 @@ export function logActivity(
     action_type: actionType,
     old_value: details?.oldValue ?? null,
     new_value: details?.newValue ?? null,
-    user_id: actor.id,
+    user_id: actor.id || null,
     user_name: actor.name,
     user_department: actor.department,
     metadata: details?.description ? { description: details.description } : {},

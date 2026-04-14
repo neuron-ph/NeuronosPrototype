@@ -11,6 +11,7 @@ import { useUser } from "../../hooks/useUser";
 import { supabase } from "../../utils/supabase/client";
 import { getAccounts } from "../../utils/accounting-api";
 import type { Account } from "../../types/accounting-core";
+import { canDeleteEVoucher } from "../../utils/permissions";
 import { toast } from "sonner@2.0.3";
 
 interface LineItem {
@@ -335,8 +336,26 @@ export function AddRequestForPaymentPanel({
   // Get current user for requestor name
   const { user } = useUser();
   
+  const currentActor = user
+    ? {
+        id: user.id,
+        name: user.name,
+        department: user.department,
+      }
+    : undefined;
+  const existingCreatorId =
+    (existingData as (EVoucher & { created_by?: string }) | undefined)?.created_by ??
+    existingData?.requestor_id;
+  const canDeleteExistingVoucher = canDeleteEVoucher(
+    existingData?.status,
+    existingCreatorId,
+    user?.id,
+    user?.role ?? "",
+    user?.department ?? "",
+  );
+
   // Use the custom hook for E-Voucher submission
-  const { createDraft, submitForApproval, autoApprove, deleteEVoucher, isSaving } = useEVoucherSubmit(context);
+  const { createDraft, submitForApproval, autoApprove, deleteEVoucher, isSaving } = useEVoucherSubmit(context, currentActor);
   
   // Form state
   const [transactionType, setTransactionType] = useState<EVoucherTransactionType>("expense");
@@ -423,13 +442,13 @@ export function AddRequestForPaymentPanel({
       
       setRequestName(dataToLoad.purpose || dataToLoad.description || "");
       // Only set category if provided, otherwise let defaults logic handle it
-      if (dataToLoad.expense_category) {
-        setExpenseCategory(dataToLoad.expense_category);
-      } else if (dataToLoad.gl_category && dataToLoad.transaction_type === "billing") {
-        // Map GL Category back if needed (simplified)
+      if (dataToLoad.expense_category || dataToLoad.gl_category) {
+        setExpenseCategory(dataToLoad.expense_category || dataToLoad.gl_category || "");
       }
       
-      if (dataToLoad.gl_sub_category) setSubCategory(dataToLoad.gl_sub_category || "");
+      if (dataToLoad.sub_category || dataToLoad.gl_sub_category) {
+        setSubCategory(dataToLoad.sub_category || dataToLoad.gl_sub_category || "");
+      }
       if (dataToLoad.project_number) setProjectNumber(dataToLoad.project_number || "");
       
       // Handle line items — prefer relational, fall back to JSONB
@@ -1743,30 +1762,32 @@ export function AddRequestForPaymentPanel({
           }}>
              {/* Left Action: Delete & Custom Actions */}
              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  disabled={isSaving}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    padding: "10px 16px",
-                    fontSize: "13px",
-                    fontWeight: 500,
-                    color: "var(--theme-status-danger-fg)",
-                    backgroundColor: "transparent",
-                    border: "1px solid var(--theme-status-danger-border)",
-                    borderRadius: "6px",
-                    cursor: isSaving ? "not-allowed" : "pointer",
-                    transition: "all 0.2s"
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "var(--theme-status-danger-bg)"}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-                >
-                  {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                  Delete
-                </button>
+                {canDeleteExistingVoucher && (
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={isSaving}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      padding: "10px 16px",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "var(--theme-status-danger-fg)",
+                      backgroundColor: "transparent",
+                      border: "1px solid var(--theme-status-danger-border)",
+                      borderRadius: "6px",
+                      cursor: isSaving ? "not-allowed" : "pointer",
+                      transition: "all 0.2s"
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "var(--theme-status-danger-bg)"}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                  >
+                    {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                    Delete
+                  </button>
+                )}
                 
                 {footerActions}
              </div>

@@ -12,14 +12,14 @@ import { toast } from "../ui/toast-utils";
 import { EditableSectionCard, useSectionEdit } from "../shared/EditableSectionCard";
 import { EditableField } from "../shared/EditableField";
 import { supabase } from "../../utils/supabase/client";
-import { BookingPendingEVStrip } from "./shared/BookingPendingEVStrip";
-import { assessBookingFinancialState, canTransitionBookingToCancelled, getBookingCancellationStatusMessage, voidBookingUnbilledCharges, canHardDeleteBooking, getBookingCancellationMessage } from "../../utils/bookingCancellation";
-import { LinkedTicketBadge } from "../common/LinkedTicketBadge";
+import { assessBookingFinancialState, canTransitionBookingToCancelled, getBookingCancellationStatusMessage } from "../../utils/bookingCancellation";
+import { BookingCancelDeletePanel } from "./shared/BookingCancelDeletePanel";
 import { RequestBillingButton } from "../common/RequestBillingButton";
 import { loadBookingActivityLog, appendBookingActivity } from "../../utils/bookingActivityLog";
+import { BookingTeamSection } from "./shared/BookingTeamSection";
 import { useUser } from "../../hooks/useUser";
 import { fireBillingTicketOnCompletion } from "../../utils/workflowTickets";
-import { logStatusChange, logDeletion } from "../../utils/activityLog";
+import { logStatusChange } from "../../utils/activityLog";
 
 interface OthersBookingDetailsProps {
   booking: OthersBooking;
@@ -56,9 +56,12 @@ const FIELD_LABELS: Record<string, string> = {
   requestedDate: "Requested Date",
   completionDate: "Completion Date",
   notes: "Notes",
+  assigned_manager_name: "Assigned Manager",
+  assigned_supervisor_name: "Assigned Supervisor",
+  assigned_handler_name: "Assigned Handler",
 };
 
-function diffAndApply(
+async function diffAndApply(
   original: OthersBooking,
   draft: OthersBooking,
   fields: string[],
@@ -76,6 +79,15 @@ function diffAndApply(
     }
   });
   if (Object.keys(updates).length > 0) {
+    const existingDetails = (original as any).details || {};
+    const { error } = await supabase
+      .from('bookings')
+      .update({ details: { ...existingDetails, ...updates } })
+      .eq('id', original.bookingId || (original as any).id);
+    if (error) {
+      toast.error("Failed to save changes");
+      return;
+    }
     setEditedBooking((prev: OthersBooking) => ({ ...prev, ...updates }));
     onBookingUpdated();
     toast.success("Changes saved");
@@ -140,6 +152,7 @@ export function OthersBookingDetails({ booking, onBack, onUpdate, currentUser, i
   const { user } = useUser();
   const [editedBooking, setEditedBooking] = useState<OthersBooking>(booking);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showCancelDeletePanel, setShowCancelDeletePanel] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
 
   const { data: fetchedActivityLog } = useQuery({
@@ -169,25 +182,6 @@ export function OthersBookingDetails({ booking, onBack, onUpdate, currentUser, i
     return () => document.removeEventListener("mousedown", handler);
   }, [showMoreMenu]);
 
-  const handleDeleteFromDetail = async () => {
-    setShowMoreMenu(false);
-    try {
-      const financialState = await assessBookingFinancialState(booking.bookingId);
-      if (!canHardDeleteBooking(financialState)) {
-        toast.error(getBookingCancellationMessage(financialState));
-        return;
-      }
-      if (!window.confirm(`Delete booking ${booking.bookingId}? This cannot be undone.`)) return;
-      const { error } = await supabase.from('bookings').delete().eq('id', booking.bookingId);
-      if (error) throw error;
-      logDeletion("booking", booking.bookingId, (booking as any).booking_number ?? booking.bookingId, { id: user?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
-      toast.success('Booking deleted');
-      onBack();
-    } catch (err) {
-      toast.error('Unable to delete booking');
-    }
-  };
-
   const addActivity = (fieldName: string, oldValue: string, newValue: string) => {
     setActivityLog(prev => [{ id: `activity-${Date.now()}-${Math.random()}`, timestamp: new Date(), user: currentUser?.name || "Current User", action: "field_updated", fieldName, oldValue, newValue }, ...prev]);
     appendBookingActivity(booking.bookingId, { action: "field_updated", fieldName, oldValue, newValue, user: currentUser?.name || "Current User" }, { name: currentUser?.name || "Current User", department: currentUser?.department || "Operations" });
@@ -198,23 +192,10 @@ export function OthersBookingDetails({ booking, onBack, onUpdate, currentUser, i
     if (oldStatus === newStatus) return;
 
     if (newStatus === "Cancelled") {
-      let financialState = await assessBookingFinancialState(booking.bookingId);
-      if (financialState.recommendedAction === "cancel-and-void-unbilled") {
-        const shouldProceed = window.confirm(
-          `Cancel booking ${booking.bookingId} and void ${financialState.unbilledChargeCount} unbilled charge line(s)?`
-        );
-        if (!shouldProceed) return;
-
-        await voidBookingUnbilledCharges(booking.bookingId);
-        toast.info("Unbilled booking charges were voided before cancellation.");
-        financialState = await assessBookingFinancialState(booking.bookingId);
-      }
-      if (!canTransitionBookingToCancelled(financialState)) {
-        toast.error(getBookingCancellationStatusMessage(financialState));
+      const financialState = await assessBookingFinancialState(booking.bookingId);
+      if (!canTransitionBookingToCancelled(oldStatus, financialState)) {
+        toast.error(getBookingCancellationStatusMessage(oldStatus, financialState));
         return;
-      }
-      if (financialState.recommendedAction === "cancel-preserve-costs") {
-        toast.info(getBookingCancellationStatusMessage(financialState));
       }
     }
 
@@ -222,7 +203,7 @@ export function OthersBookingDetails({ booking, onBack, onUpdate, currentUser, i
     setActivityLog(prev => [{ id: `activity-${Date.now()}`, timestamp: new Date(), user: currentUser?.name || "Current User", action: "status_changed", statusFrom: oldStatus, statusTo: newStatus }, ...prev]);
     appendBookingActivity(booking.bookingId, { action: "status_changed", statusFrom: oldStatus, statusTo: newStatus, user: currentUser?.name || "Current User" }, { name: currentUser?.name || "Current User", department: currentUser?.department || "Operations" });
     try {
-      const { error } = await supabase.from('others_bookings').update({ status: newStatus }).eq('bookingId', booking.bookingId);
+      const { error } = await supabase.from('bookings').update({ status: newStatus }).eq('id', booking.bookingId);
       if (error) throw error;
       logStatusChange("booking", booking.bookingId, (booking as any).booking_number ?? booking.bookingId, oldStatus, newStatus, { id: user?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
       toast.success(`Status updated to ${newStatus}`);
@@ -243,7 +224,7 @@ export function OthersBookingDetails({ booking, onBack, onUpdate, currentUser, i
     }
   };
 
-  const financials = useProjectFinancials(booking.projectNumber || "");
+  const financials = useProjectFinancials(booking.projectNumber || "", [{ bookingId: booking.bookingId }]);
   const bookingBillingItems = financials.billingItems.filter(item => item.booking_id === booking.bookingId);
   const [pendingBillableCount, setPendingBillableCount] = useState(0);
 
@@ -272,16 +253,13 @@ export function OthersBookingDetails({ booking, onBack, onUpdate, currentUser, i
               {booking.customerName}
             </p>
           )}
-          <p style={{ fontSize: "13px", color: "var(--neuron-ink-muted)", margin: 0 }}>{booking.bookingId}</p>
-          <div style={{ marginTop: 8 }}>
-            <LinkedTicketBadge recordType="booking" recordId={booking.bookingId} />
-          </div>
+          <p style={{ fontSize: "13px", color: "var(--neuron-ink-muted)", margin: 0 }}>{(booking as any).booking_number || booking.bookingId}</p>
         </div>
         <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
           {(editedBooking.status === "Completed" || (editedBooking.status === "Cancelled" && bookingBillingItems.some(item => item.status === "unbilled"))) && (
             <RequestBillingButton
               bookingId={booking.bookingId}
-              bookingNumber={booking.bookingId}
+              bookingNumber={(booking as any).booking_number || booking.bookingId}
               currentUser={currentUser}
             />
           )}
@@ -308,23 +286,14 @@ export function OthersBookingDetails({ booking, onBack, onUpdate, currentUser, i
               <MoreVertical size={18} />
             </button>
             {showMoreMenu && (
-              <div style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", width: "180px", backgroundColor: "var(--theme-bg-surface)", border: "1px solid var(--theme-border-default)", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)", zIndex: 100, overflow: "hidden" }}>
+              <div style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", width: "180px", backgroundColor: "var(--theme-bg-surface)", border: "1px solid var(--theme-border-default)", borderRadius: "8px", boxShadow: "var(--elevation-2)", zIndex: 100, overflow: "hidden" }}>
                 <button
-                  onClick={() => { setShowMoreMenu(false); handleStatusUpdate("Cancelled"); }}
+                  onClick={() => { setShowMoreMenu(false); setShowCancelDeletePanel(true); }}
                   style={{ width: "100%", display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", backgroundColor: "transparent", border: "none", cursor: "pointer", fontSize: "13px", color: "var(--theme-text-secondary)", textAlign: "left" }}
                   onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--theme-bg-page)")}
                   onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
                 >
-                  Cancel Booking
-                </button>
-                <div style={{ height: "1px", backgroundColor: "var(--theme-bg-surface-subtle)" }} />
-                <button
-                  onClick={handleDeleteFromDetail}
-                  style={{ width: "100%", display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", backgroundColor: "transparent", border: "none", cursor: "pointer", fontSize: "13px", color: "var(--theme-status-danger-fg)", textAlign: "left" }}
-                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--theme-status-danger-bg)")}
-                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
-                >
-                  Delete Booking
+                  Cancel / Delete Booking
                 </button>
               </div>
             )}
@@ -332,14 +301,30 @@ export function OthersBookingDetails({ booking, onBack, onUpdate, currentUser, i
         </div>
       </div>
 
-      <BookingPendingEVStrip bookingId={booking.bookingId} />
+      <BookingCancelDeletePanel
+        isOpen={showCancelDeletePanel}
+        onClose={() => setShowCancelDeletePanel(false)}
+        bookingId={booking.bookingId}
+        bookingLabel={(booking as any).name || (booking as any).booking_number || "Unnamed Booking"}
+        currentStatus={editedBooking.status}
+        currentUser={currentUser}
+        onSuccess={(action) => {
+          if (action === "deleted") {
+            onBack();
+          } else {
+            setEditedBooking(prev => ({ ...prev, status: "Cancelled" }));
+            onUpdate();
+          }
+        }}
+      />
+
 
       <div style={{ flex: 1, overflow: "hidden", display: "flex" }}>
         <div style={{ flex: showTimeline ? "0 0 65%" : "1", overflow: "auto", transition: "flex 0.3s ease" }}>
-          {activeTab === "booking-info" && <BookingInformationTab booking={editedBooking} onBookingUpdated={onUpdate} addActivity={addActivity} setEditedBooking={setEditedBooking} />}
+          {activeTab === "booking-info" && <BookingInformationTab booking={editedBooking} onBookingUpdated={onUpdate} addActivity={addActivity} setEditedBooking={setEditedBooking} currentUser={currentUser} />}
           {activeTab === "billings" && <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]"><UnifiedBillingsTab items={bookingBillingItems} projectId={booking.projectNumber || ""} bookingId={booking.bookingId} onRefresh={financials.refresh} isLoading={financials.isLoading} pendingBillableCount={pendingBillableCount} extraActions={<BookingRateCardButton booking={booking} serviceType="Others" existingBillingItems={bookingBillingItems} onRefresh={financials.refresh} />} /></div>}
-          {activeTab === "expenses" && <ExpensesTab bookingId={booking.bookingId} bookingType="others" currentUser={currentUser} highlightId={activeTab === "expenses" ? highlightId : undefined} existingBillingItems={bookingBillingItems} onPendingCountChange={setPendingBillableCount} />}
-          {activeTab === "comments" && <BookingCommentsTab bookingId={booking.bookingId} currentUserId={currentUser?.email || "unknown"} currentUserName={currentUser?.name || "Unknown User"} currentUserDepartment={currentUser?.department || "Operations"} />}
+          {activeTab === "expenses" && <ExpensesTab bookingId={booking.bookingId} bookingNumber={(booking as any).booking_number || booking.bookingId} bookingType="others" currentUser={currentUser} highlightId={activeTab === "expenses" ? highlightId : undefined} existingBillingItems={bookingBillingItems} onPendingCountChange={setPendingBillableCount} />}
+          {activeTab === "comments" && <BookingCommentsTab bookingId={booking.bookingId} />}
         </div>
         {showTimeline && <div style={{ flex: "0 0 35%", borderLeft: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--neuron-pill-inactive-bg)", overflow: "auto" }}><ActivityTimeline activities={activityLog} /></div>}
       </div>
@@ -347,9 +332,10 @@ export function OthersBookingDetails({ booking, onBack, onUpdate, currentUser, i
   );
 }
 
-function BookingInformationTab({ booking, onBookingUpdated, addActivity, setEditedBooking }: {
+function BookingInformationTab({ booking, onBookingUpdated, addActivity, setEditedBooking, currentUser }: {
   booking: OthersBooking; onBookingUpdated: () => void;
   addActivity: (fieldName: string, oldValue: string, newValue: string) => void; setEditedBooking: any;
+  currentUser?: { name: string; email: string; department: string } | null;
 }) {
   const generalSection = useSectionEdit(booking);
   const serviceSection = useSectionEdit(booking);
@@ -365,6 +351,26 @@ function BookingInformationTab({ booking, onBookingUpdated, addActivity, setEdit
 
   return (
     <div style={{ padding: "32px 48px", maxWidth: "1400px", margin: "0 auto" }}>
+
+      {/* ── Team Assignment ── */}
+      <BookingTeamSection
+        bookingId={(booking as any).id || booking.bookingId}
+        bookingNumber={(booking as any).booking_number || booking.bookingId}
+        serviceType="Others"
+        customerName={booking.customerName}
+        customerId={(booking as any).customer_id}
+        teamId={(booking as any).team_id}
+        teamName={(booking as any).team_name}
+        managerId={(booking as any).manager_id}
+        managerName={(booking as any).manager_name}
+        supervisorId={(booking as any).supervisor_id}
+        supervisorName={(booking as any).supervisor_name}
+        handlerId={(booking as any).handler_id}
+        handlerName={(booking as any).handler_name}
+        currentUser={currentUser}
+        onUpdate={onBookingUpdated}
+        addActivity={addActivity}
+      />
 
       {/* ── General Information ── */}
       <EditableSectionCard

@@ -39,61 +39,64 @@ export function extractServiceDetails(project: Project, serviceType: string) {
 
 export function autofillForwardingFromProject(project: Project) {
   const serviceDetails = extractServiceDetails(project, "Forwarding");
-  
+
   // Also check brokerage for cross-service fields
   const brokerageDetails = extractServiceDetails(project, "Brokerage");
-  
+
+  // Consignee/Shipper: map from customer name (import → consignee; export → shipper)
+  const isImport = (project.movement || "").toUpperCase() === "IMPORT";
+
   return {
     // From Project - Basic Info
+    name: project.quotation_name || "",
     projectNumber: project.project_number,
     customerName: project.customer_name,
     movement: project.movement,
     quotationReferenceNumber: project.quotation_number,
-    
+    // Consignee/Shipper from customer name based on movement
+    consignee: isImport ? (project.customer_name || "") : "",
+    shipper: !isImport ? (project.customer_name || "") : "",
+
     // From Service Details (if available)
     ...(serviceDetails && {
       cargoType: (serviceDetails as any).cargo_type || "",
       commodityDescription: (serviceDetails as any).commodity || project.commodity || "",
       deliveryAddress: (serviceDetails as any).delivery_address || project.collection_address || "",
-      aolPol: (serviceDetails as any).pol || project.pol_aol || "",
-      aodPod: (serviceDetails as any).pod || project.pod_aod || "",
+      // Check compound aolPol string first, then individual pol, then project-level pol_aol
+      aolPol: (serviceDetails as any).aolPol || (serviceDetails as any).pol || project.pol_aol || "",
+      aodPod: (serviceDetails as any).aodPod || (serviceDetails as any).pod || project.pod_aod || "",
       mode: (serviceDetails as any).mode || "",
-      
-      // NEW: Additional forwarding fields from quotation
-      carrier: (serviceDetails as any).carrierAirline || (serviceDetails as any).carrier_airline || project.carrier || "",
+      carrier: (serviceDetails as any).carrier_airline || (serviceDetails as any).carrierAirline || project.carrier || "",
       stackability: (serviceDetails as any).stackable || (serviceDetails as any).stackability || "",
-      
-      // NEW: Volume/Weight specifications
-      grossWeight: (serviceDetails as any).lclGwt || (serviceDetails as any).lcl_gross_weight || 
-                   (serviceDetails as any).airGwt || (serviceDetails as any).air_gross_weight || 
+
+      // Volume/Weight — use the exact key names saved by QuotationBuilderV3
+      grossWeight: (serviceDetails as any).lcl_gwt || (serviceDetails as any).air_gwt ||
                    project.gross_weight?.toString() || "",
-      dimensions: (serviceDetails as any).lclDims || (serviceDetails as any).lcl_dimensions || 
-                  project.dimensions || "",
-      
-      // NEW: Container quantities (for expected volume display)
+      dimensions: (serviceDetails as any).lcl_dims || project.dimensions || "",
+
+      // Container quantities
       qty20ft: (serviceDetails as any).fcl20ft?.toString() || (serviceDetails as any).fcl_20ft?.toString() || "",
       qty40ft: (serviceDetails as any).fcl40ft?.toString() || (serviceDetails as any).fcl_40ft?.toString() || "",
       qty45ft: (serviceDetails as any).fcl45ft?.toString() || (serviceDetails as any).fcl_45ft?.toString() || "",
-      
-      // NEW: LCL/AIR specific
-      volumeGrossWeight: (serviceDetails as any).lclGwt || (serviceDetails as any).lcl_gross_weight || "",
-      volumeDimensions: (serviceDetails as any).lclDims || (serviceDetails as any).lcl_dimensions || "",
-      volumeChargeableWeight: (serviceDetails as any).airCwt || (serviceDetails as any).air_chargeable_weight || "",
-      
-      // NEW: Additional routing/logistics info
+
+      // LCL/AIR specific — exact key names from QuotationBuilderV3 save
+      volumeGrossWeight: (serviceDetails as any).lcl_gwt || "",
+      volumeDimensions: (serviceDetails as any).lcl_dims || "",
+      volumeChargeableWeight: (serviceDetails as any).air_cwt || "",
+
       typeOfEntry: (serviceDetails as any).typeOfEntry || (serviceDetails as any).type_of_entry || "",
     }),
-    
+
     // Cross-service fields (from Brokerage if not in Forwarding)
-    countryOfOrigin: (serviceDetails as any)?.countryOfOrigin || 
+    countryOfOrigin: (serviceDetails as any)?.countryOfOrigin ||
                      (serviceDetails as any)?.country_of_origin ||
-                     (brokerageDetails as any)?.countryOfOrigin || 
+                     (brokerageDetails as any)?.countryOfOrigin ||
                      (brokerageDetails as any)?.country_of_origin || "",
-    preferentialTreatment: (serviceDetails as any)?.preferentialTreatment || 
+    preferentialTreatment: (serviceDetails as any)?.preferentialTreatment ||
                           (serviceDetails as any)?.preferential_treatment ||
-                          (brokerageDetails as any)?.preferentialTreatment || 
+                          (brokerageDetails as any)?.preferentialTreatment ||
                           (brokerageDetails as any)?.preferential_treatment || "",
-    
+
     // Fallback to project level (if no service details)
     ...(!serviceDetails && {
       commodityDescription: project.commodity || "",
@@ -114,11 +117,12 @@ export function autofillBrokerageFromProject(project: Project) {
   
   return {
     // From Project - Basic Info
+    name: project.quotation_name || "",
     projectNumber: project.project_number,
     customerName: project.customer_name,
     movement: project.movement,
     quotationReferenceNumber: project.quotation_number,
-    
+
     // From Service Details (if available)
     ...(serviceDetails && {
       // Brokerage Type from subtype
@@ -155,11 +159,12 @@ export function autofillTruckingFromProject(project: Project) {
   
   return {
     // From Project
+    name: project.quotation_name || "",
     projectNumber: project.project_number,
     customerName: project.customer_name,
     movement: project.movement,
     quotationReferenceNumber: project.quotation_number,
-    
+
     // From Service Details (if available)
     ...(serviceDetails && {
       pullOutLocation: (serviceDetails as any).pull_out || "",
@@ -177,14 +182,15 @@ export function autofillMarineInsuranceFromProject(project: Project) {
   
   return {
     // From Project
+    name: project.quotation_name || "",
     projectNumber: project.project_number,
     customerName: project.customer_name,
     movement: project.movement,
     quotationReferenceNumber: project.quotation_number,
-    
+
     // From Service Details (if available)
     ...(serviceDetails && {
-      commodityDescription: (serviceDetails as any).commodity_description || 
+      commodityDescription: (serviceDetails as any).commodity_description ||
                            (serviceDetails as any).commodity || 
                            project.commodity || "",
       hsCode: (serviceDetails as any).hs_code || 
@@ -233,14 +239,15 @@ export function autofillOthersFromProject(project: Project) {
   
   return {
     // From Project
+    name: project.quotation_name || "",
     projectNumber: project.project_number,
     customerName: project.customer_name,
     movement: project.movement,
     quotationReferenceNumber: project.quotation_number,
-    
+
     // From Service Details (if available)
     ...(serviceDetails && {
-      serviceDescription: (serviceDetails as any).service_description || 
+      serviceDescription: (serviceDetails as any).service_description ||
                          (serviceDetails as any).serviceDescription || "",
       serviceType: (serviceDetails as any).service_type || 
                   (serviceDetails as any).serviceType || "",

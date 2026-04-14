@@ -12,7 +12,8 @@ export interface Account {
   parent_account_id?: string | null;
   is_system: boolean; // Cannot be deleted
   is_active: boolean;
-  balance: number; // Current balance (calculated)
+  starting_amount?: number; // Opening balance set by the user
+  balance: number; // Current balance (starting_amount + net transaction activity)
   created_at: string;
   updated_at: string;
   

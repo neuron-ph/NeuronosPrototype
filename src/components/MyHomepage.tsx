@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, KeyboardEvent } from "react";
 import { useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
-import { motion } from "motion/react";
+import { motion, AnimatePresence, useAnimation } from "motion/react";
 import { useUser } from "../hooks/useUser";
 import { supabase } from "../utils/supabase/client";
 import {
@@ -11,7 +11,7 @@ import {
 import { getRecents, trackRecent, type RecentItem, type RecentType } from "../lib/recents";
 import {
   ArrowRight, Plus, Check, X,
-  Clock, Inbox,
+  Clock, Inbox, ListChecks,
   User, Building2, FileText, FileQuestion, Truck, MessageSquare, Receipt, FolderOpen,
 } from "lucide-react";
 
@@ -261,13 +261,9 @@ function EmptyRow({
 
 function SkeletonRow() {
   return (
-    <div className="px-4 py-3 flex items-center gap-3 animate-pulse">
-      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: "var(--neuron-ui-border)" }} />
-      <div className="flex-1 space-y-1.5">
-        <div className="h-3 rounded w-3/4" style={{ background: "var(--neuron-ui-border)" }} />
-        <div className="h-2.5 rounded w-1/2" style={{ background: "var(--neuron-bg-page)" }} />
-      </div>
-      <div className="h-2.5 rounded w-7" style={{ background: "var(--neuron-bg-page)" }} />
+    <div className="px-4 py-2.5 flex items-center gap-3 animate-pulse">
+      <div className="w-4 h-4 rounded-[3px] flex-shrink-0" style={{ background: "var(--neuron-ui-border)" }} />
+      <div className="h-3 rounded flex-1" style={{ background: "var(--neuron-ui-border)", maxWidth: "70%" }} />
     </div>
   );
 }
@@ -392,6 +388,7 @@ function TodoPanel({ userId }: { userId: string }) {
   const [inputValue, setInputValue] = useState("");
   const [adding, setAdding] = useState(false);
   const [showInput, setShowInput] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -422,8 +419,12 @@ function TodoPanel({ userId }: { userId: string }) {
       created_at: new Date().toISOString(),
       done_at: null,
     };
+    // Task appears in list first, then input flashes confirmation and collapses
     setTodos((prev) => [optimistic, ...prev]);
     setInputValue("");
+    setSubmitted(true);
+    await new Promise<void>((r) => setTimeout(r, 180));
+    setSubmitted(false);
     setShowInput(false);
     const { data } = await supabase
       .from("todos")
@@ -469,59 +470,111 @@ function TodoPanel({ userId }: { userId: string }) {
           <button
             type="button"
             onClick={() => setShowInput((v) => !v)}
-            className="w-6 h-6 rounded-md flex items-center justify-center transition-colors hover:bg-[var(--neuron-brand-green-100)]"
-            style={{ color: "var(--neuron-brand-green)" }}
-            title="Add task"
+            className="w-6 h-6 rounded-md flex items-center justify-center transition-all duration-200 hover:bg-[var(--neuron-brand-green-100)]"
+            style={{
+              color: "var(--neuron-brand-green)",
+              transform: showInput ? "rotate(45deg)" : "rotate(0deg)",
+            }}
+            title={showInput ? "Cancel" : "Add task"}
           >
             <Plus className="w-4 h-4" />
           </button>
         }
       />
 
-      {showInput && (
-        <div className="px-4 py-3" style={{ borderBottom: "1px solid var(--neuron-ui-divider)" }}>
-          <input
-            ref={inputRef}
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder="Add a task and press Enter…"
-            className="w-full text-[13px] bg-transparent outline-none"
-            style={{ color: "var(--neuron-ink-primary)" }}
-          />
-          <p className="text-[10.5px] mt-1" style={{ color: "var(--neuron-ink-muted)" }}>
-            Enter to save · Esc to cancel
-          </p>
-        </div>
-      )}
+      <AnimatePresence>
+        {showInput && (
+          <motion.div
+            key="task-input"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            style={{ overflow: "hidden" }}
+          >
+            <div
+              className="compose-panel px-4 py-2.5"
+              style={{ borderBottom: "1px solid var(--neuron-ui-divider)" }}
+            >
+              <input
+                ref={inputRef}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder="What needs doing?"
+                className="w-full text-[13px] bg-transparent outline-none leading-snug"
+                style={{
+                  color: "var(--neuron-ink-primary)",
+                  background: submitted ? "var(--neuron-brand-green-100)" : "transparent",
+                  transition: "background 0.15s ease",
+                  border: "none",
+                  boxShadow: "none",
+                }}
+              />
+              <div className="flex items-center justify-between mt-2.5">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={addTodo}
+                    className="h-6 px-2.5 rounded text-[11.5px] font-medium transition-colors"
+                    style={{
+                      background: "var(--neuron-brand-green)",
+                      color: "var(--neuron-action-primary-text)",
+                    }}
+                  >
+                    Add
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowInput(false); setInputValue(""); }}
+                    className="h-6 px-2.5 rounded text-[11.5px] transition-colors hover:bg-[var(--neuron-state-hover)]"
+                    style={{ color: "var(--neuron-ink-muted)" }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <span className="text-[10.5px]" style={{ color: "var(--neuron-ui-muted)" }}>
+                  ↵ to save
+                </span>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="overflow-y-auto flex-1" style={{ minHeight: 0 }}>
         {loading ? (
           <><SkeletonRow /><SkeletonRow /><SkeletonRow /></>
         ) : open.length === 0 && done.length === 0 ? (
           <EmptyRow
-            message="No tasks yet. Hit + to add your first one."
-            icon={<Clock className="w-5 h-5" />}
+            message="No tasks yet."
+            icon={<ListChecks className="w-5 h-5" />}
+            cta="Add a task"
+            onCta={() => setShowInput(true)}
           />
         ) : (
           <>
-            {open.map((todo) => (
-              <TodoRow key={todo.id} todo={todo} onToggle={toggleTodo} onDelete={deleteTodo} />
-            ))}
+            <AnimatePresence initial={false}>
+              {open.map((todo) => (
+                <TodoRow key={todo.id} todo={todo} onToggle={toggleTodo} onDelete={deleteTodo} />
+              ))}
+            </AnimatePresence>
             {done.length > 0 && (
               <>
                 {open.length > 0 && <Divider />}
                 <div className="px-4 py-2">
                   <span
-                    className="text-[10px] font-semibold uppercase tracking-widest"
+                    className="text-[10px] font-semibold uppercase tracking-[0.07em]"
                     style={{ color: "var(--neuron-ui-muted)" }}
                   >
                     Completed · {done.length}
                   </span>
                 </div>
-                {done.map((todo) => (
-                  <TodoRow key={todo.id} todo={todo} onToggle={toggleTodo} onDelete={deleteTodo} />
-                ))}
+                <AnimatePresence initial={false}>
+                  {done.map((todo) => (
+                    <TodoRow key={todo.id} todo={todo} onToggle={toggleTodo} onDelete={deleteTodo} />
+                  ))}
+                </AnimatePresence>
               </>
             )}
           </>
@@ -541,50 +594,91 @@ function TodoRow({
   onDelete: (id: string) => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  const [completing, setCompleting] = useState(false);
+  const checkboxControls = useAnimation();
+
+  async function handleToggle() {
+    const becomingDone = !todo.done;
+    if (becomingDone) {
+      // Tactile press → overshoot pop → settle
+      await checkboxControls.start({ scale: 0.82, transition: { duration: 0.07 } });
+      setCompleting(true);
+      onToggle(todo.id, todo.done);
+      await checkboxControls.start({ scale: 1.18, transition: { duration: 0.12, ease: [0.22, 1, 0.36, 1] } });
+      await checkboxControls.start({ scale: 1,    transition: { duration: 0.1,  ease: [0.22, 1, 0.36, 1] } });
+      setTimeout(() => setCompleting(false), 350);
+    } else {
+      await checkboxControls.start({ scale: 0.85, transition: { duration: 0.08 } });
+      onToggle(todo.id, todo.done);
+      checkboxControls.start({ scale: 1, transition: { duration: 0.12, ease: [0.22, 1, 0.36, 1] } });
+    }
+  }
 
   return (
-    <div
-      className="px-4 py-2.5 flex items-start gap-3 transition-colors"
-      style={{ background: hovered ? "var(--neuron-state-hover)" : "" }}
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -4 }}
+      transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+      className="px-4 py-2.5 flex items-start gap-3 transition-colors duration-200"
+      style={{
+        background: completing
+          ? "var(--neuron-semantic-success-bg)"
+          : hovered ? "var(--neuron-state-hover)" : "",
+      }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <button
+      <motion.button
         type="button"
-        onClick={() => onToggle(todo.id, todo.done)}
-        className="w-4 h-4 mt-[1px] rounded flex-shrink-0 border flex items-center justify-center transition-all"
+        animate={checkboxControls}
+        whileTap={{ scale: 0.82 }}
+        onClick={handleToggle}
+        className="w-4 h-4 mt-[1px] rounded-[3px] flex-shrink-0 border flex items-center justify-center"
         style={{
-          background:   todo.done ? "var(--neuron-brand-green)" : "transparent",
-          borderColor:  todo.done ? "var(--neuron-brand-green)" : "var(--neuron-ui-muted)",
+          background:  todo.done ? "var(--neuron-brand-green)" : "transparent",
+          borderColor: todo.done ? "var(--neuron-brand-green)" : "var(--neuron-ui-muted)",
+          transition:  "background 0.15s ease, border-color 0.15s ease",
         }}
         aria-label={todo.done ? "Mark incomplete" : "Mark complete"}
       >
-        {todo.done && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
-      </button>
+        {todo.done && (
+          <motion.div
+            initial={{ scale: 0, rotate: -15 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
+          </motion.div>
+        )}
+      </motion.button>
 
       <p
-        className="flex-1 text-[13px] leading-snug min-w-0"
+        className="flex-1 text-[13px] leading-snug min-w-0 transition-colors duration-200"
         style={{
           color:          todo.done ? "var(--neuron-ink-muted)" : "var(--neuron-ink-primary)",
           textDecoration: todo.done ? "line-through" : "none",
-          opacity:        todo.done ? 0.6 : 1,
         }}
       >
         {todo.text}
       </p>
 
-      {hovered && (
-        <button
-          type="button"
-          onClick={() => onDelete(todo.id)}
-          className="w-4 h-4 flex-shrink-0 flex items-center justify-center rounded transition-colors hover:text-[var(--neuron-semantic-danger)]"
-          style={{ color: "var(--neuron-ink-muted)" }}
-          aria-label="Delete task"
-        >
-          <X className="w-3 h-3" />
-        </button>
-      )}
-    </div>
+      <button
+        type="button"
+        onClick={() => onDelete(todo.id)}
+        className="w-4 h-4 flex-shrink-0 flex items-center justify-center rounded transition-all duration-150 hover:text-[var(--neuron-semantic-danger)]"
+        style={{
+          color: "var(--neuron-ink-muted)",
+          opacity: hovered ? 1 : 0,
+          pointerEvents: hovered ? "auto" : "none",
+        }}
+        aria-label="Delete task"
+        tabIndex={hovered ? 0 : -1}
+      >
+        <X className="w-3 h-3" />
+      </button>
+    </motion.div>
   );
 }
 

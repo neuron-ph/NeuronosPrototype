@@ -1,17 +1,39 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../../../utils/supabase/client";
-import { Clock, User, CheckCircle, XCircle, FileText, Send, Ban } from "lucide-react";
+import {
+  Clock,
+  Loader2,
+  CheckCircle,
+  XCircle,
+  FileText,
+  Send,
+  Ban,
+} from "lucide-react";
 
 interface HistoryEntry {
   id: string;
   evoucher_id: string;
   action: string;
+  status?: string;
   previous_status?: string;
   new_status?: string;
-  performed_by: string;
-  performed_by_name: string;
-  performed_by_role: string;
+  performed_by?: string;
+  performed_by_name?: string;
+  performed_by_role?: string;
+  user_id?: string;
+  user_name?: string;
+  user_role?: string;
   notes?: string;
+  remarks?: string;
+  metadata?: {
+    previous_status?: string;
+    new_status?: string;
+    notes?: string;
+    disbursement_method?: string;
+    disbursement_reference?: string;
+    disbursement_source?: string;
+    disbursement_date?: string;
+  };
   created_at: string;
 }
 
@@ -19,7 +41,9 @@ interface EVoucherHistoryTimelineProps {
   evoucherId: string;
 }
 
-export function EVoucherHistoryTimeline({ evoucherId }: EVoucherHistoryTimelineProps) {
+export function EVoucherHistoryTimeline({
+  evoucherId,
+}: EVoucherHistoryTimelineProps) {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -31,18 +55,16 @@ export function EVoucherHistoryTimeline({ evoucherId }: EVoucherHistoryTimelineP
     setIsLoading(true);
     try {
       const { data, error } = await supabase
-        .from('evoucher_history')
-        .select('*')
-        .eq('evoucher_id', evoucherId)
-        .order('created_at', { ascending: false });
+        .from("evoucher_history")
+        .select("*")
+        .eq("evoucher_id", evoucherId)
+        .order("created_at", { ascending: false });
 
-      if (error) {
-        console.error("Error fetching history:", error.message);
-      } else {
-        setHistory(data || []);
+      if (!error) {
+        setHistory((data || []) as HistoryEntry[]);
       }
-    } catch (error) {
-      console.error("Error fetching history:", error);
+    } catch {
+      // silently fail — history is non-critical
     } finally {
       setIsLoading(false);
     }
@@ -50,22 +72,26 @@ export function EVoucherHistoryTimeline({ evoucherId }: EVoucherHistoryTimelineP
 
   const getActionIcon = (action: string) => {
     const actionLower = action.toLowerCase();
-    
+
     if (actionLower.includes("created")) return FileText;
     if (actionLower.includes("submitted")) return Send;
     if (actionLower.includes("approved")) return CheckCircle;
     if (actionLower.includes("rejected")) return XCircle;
     if (actionLower.includes("cancelled")) return Ban;
-    
+
     return Clock;
   };
 
   const getActionColor = (action: string) => {
     const actionLower = action.toLowerCase();
-    
+
     if (actionLower.includes("created")) return "var(--theme-text-muted)";
-    if (actionLower.includes("submitted")) return "var(--theme-status-warning-fg)";
-    if (actionLower.includes("approved") || actionLower.includes("posted")) return "var(--theme-status-success-fg)";
+    if (actionLower.includes("submitted")) {
+      return "var(--theme-status-warning-fg)";
+    }
+    if (actionLower.includes("approved") || actionLower.includes("posted")) {
+      return "var(--theme-status-success-fg)";
+    }
     if (actionLower.includes("rejected")) return "var(--theme-status-danger-fg)";
     if (actionLower.includes("cancelled")) return "var(--theme-text-muted)";
 
@@ -80,10 +106,10 @@ export function EVoucherHistoryTimeline({ evoucherId }: EVoucherHistoryTimelineP
           alignItems: "center",
           justifyContent: "center",
           padding: "24px",
-          color: "var(--theme-text-muted)"
+          color: "var(--theme-text-muted)",
         }}
       >
-        <Clock size={20} className="animate-spin" style={{ marginRight: "8px" }} />
+        <Loader2 size={16} className="animate-spin" style={{ marginRight: "8px" }} />
         Loading history...
       </div>
     );
@@ -96,7 +122,7 @@ export function EVoucherHistoryTimeline({ evoucherId }: EVoucherHistoryTimelineP
           padding: "24px",
           textAlign: "center",
           color: "var(--theme-text-muted)",
-          fontSize: "14px"
+          fontSize: "14px",
         }}
       >
         No history available
@@ -106,180 +132,172 @@ export function EVoucherHistoryTimeline({ evoucherId }: EVoucherHistoryTimelineP
 
   return (
     <div style={{ padding: "20px" }}>
-      <h3
+      <div
         style={{
-          fontSize: "16px",
-          fontWeight: 600,
-          color: "var(--theme-text-primary)",
-          marginBottom: "20px",
-          display: "flex",
-          alignItems: "center",
-          gap: "8px"
+          fontSize: "11px",
+          fontWeight: 700,
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+          color: "var(--theme-text-muted)",
+          marginBottom: "16px",
         }}
       >
-        <Clock size={18} />
         Workflow History
-      </h3>
+      </div>
 
       <div style={{ position: "relative" }}>
-        {/* Vertical Line */}
+        {/* Subtle vertical line */}
         <div
           style={{
             position: "absolute",
-            left: "19px",
-            top: "12px",
-            bottom: "12px",
-            width: "2px",
-            backgroundColor: "var(--theme-border-default)"
+            left: "6px",
+            top: "10px",
+            bottom: "10px",
+            width: "1px",
+            backgroundColor: "var(--theme-border-default)",
           }}
         />
 
-        {/* Timeline Items */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          {history.map((entry, index) => {
+        <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+          {history.map((entry) => {
             const ActionIcon = getActionIcon(entry.action);
             const actionColor = getActionColor(entry.action);
-            const isLast = index === history.length - 1;
+            const previousStatus =
+              entry.previous_status ?? entry.metadata?.previous_status;
+            const nextStatus =
+              entry.new_status ?? entry.metadata?.new_status ?? entry.status;
+            const performedByName =
+              entry.performed_by_name ??
+              entry.user_name ??
+              entry.performed_by ??
+              entry.user_id ??
+              "Unknown User";
+            const performedByRole =
+              entry.performed_by_role ?? entry.user_role ?? "";
+            const entryNotes =
+              entry.notes ?? entry.remarks ?? entry.metadata?.notes;
 
             return (
               <div
                 key={entry.id}
-                style={{
-                  position: "relative",
-                  paddingLeft: "48px",
-                  paddingBottom: isLast ? "0" : "8px"
-                }}
+                style={{ position: "relative", paddingLeft: "24px" }}
               >
-                {/* Icon Circle */}
+                {/* Small dot node */}
                 <div
                   style={{
                     position: "absolute",
                     left: "0",
-                    top: "0",
-                    width: "40px",
-                    height: "40px",
+                    top: "4px",
+                    width: "13px",
+                    height: "13px",
                     borderRadius: "50%",
-                    backgroundColor: "var(--theme-bg-surface)",
-                    border: `2px solid ${actionColor}`,
+                    backgroundColor: "var(--theme-bg-page, var(--theme-bg-surface))",
+                    border: `1px solid ${actionColor}`,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    zIndex: 1
+                    zIndex: 1,
                   }}
                 >
-                  <ActionIcon size={18} style={{ color: actionColor }} />
+                  <ActionIcon size={8} style={{ color: actionColor }} />
                 </div>
 
-                {/* Content */}
-                <div
-                  style={{
-                    padding: "16px",
-                    backgroundColor: isLast ? "var(--neuron-pill-inactive-bg)" : "var(--theme-bg-surface)",
-                    border: `1px solid ${isLast ? actionColor + "40" : "var(--neuron-ui-border)"}`,
-                    borderRadius: "12px"
-                  }}
-                >
-                  {/* Action Title */}
+                {/* Content — no card, just structured text */}
+                <div>
                   <div
                     style={{
-                      fontSize: "14px",
-                      fontWeight: 600,
+                      fontSize: "13px",
+                      fontWeight: 500,
                       color: "var(--theme-text-secondary)",
-                      marginBottom: "4px"
+                      marginBottom: "3px",
+                      lineHeight: 1.4,
                     }}
                   >
                     {entry.action}
                   </div>
 
-                  {/* Status Change */}
-                  {entry.previous_status && entry.new_status && (
+                  {previousStatus && nextStatus && (
                     <div
                       style={{
-                        fontSize: "13px",
+                        fontSize: "11px",
                         color: "var(--theme-text-muted)",
-                        marginBottom: "8px"
+                        marginBottom: "4px",
                       }}
                     >
-                      <span
-                        style={{
-                          padding: "2px 8px",
-                          borderRadius: "4px",
-                          backgroundColor: "var(--theme-bg-surface-subtle)",
-                          fontSize: "12px",
-                          textTransform: "capitalize"
-                        }}
-                      >
-                        {entry.previous_status}
+                      <span style={{ textTransform: "capitalize" }}>
+                        {previousStatus.replace(/_/g, " ")}
                       </span>
-                      <span style={{ margin: "0 8px" }}>→</span>
+                      <span style={{ margin: "0 5px", opacity: 0.4 }}>→</span>
                       <span
                         style={{
-                          padding: "2px 8px",
-                          borderRadius: "4px",
-                          backgroundColor: actionColor + "20",
                           color: actionColor,
-                          fontSize: "12px",
+                          textTransform: "capitalize",
                           fontWeight: 500,
-                          textTransform: "capitalize"
                         }}
                       >
-                        {entry.new_status}
+                        {nextStatus.replace(/_/g, " ")}
                       </span>
                     </div>
                   )}
 
-                  {/* User Info */}
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      fontSize: "13px",
-                      color: "var(--theme-text-muted)",
-                      marginBottom: entry.notes ? "8px" : "0"
-                    }}
-                  >
-                    <User size={14} />
-                    <span>
-                      <strong style={{ color: "var(--theme-text-secondary)" }}>{entry.performed_by_name}</strong>
-                      {entry.performed_by_role && (
-                        <span style={{ color: "var(--theme-text-muted)" }}> • {entry.performed_by_role}</span>
-                      )}
-                    </span>
-                  </div>
-
-                  {/* Timestamp */}
                   <div
                     style={{
                       fontSize: "12px",
                       color: "var(--theme-text-muted)",
-                      marginBottom: entry.notes ? "8px" : "0"
                     }}
                   >
-                    {new Date(entry.created_at).toLocaleString("en-PH", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit"
-                    })}
+                    <span style={{ fontWeight: 500, color: "var(--theme-text-secondary)" }}>
+                      {performedByName}
+                    </span>
+                    {performedByRole && (
+                      <span> · {performedByRole}</span>
+                    )}
+                    <span>
+                      {" "}· {new Date(entry.created_at).toLocaleString("en-PH", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
                   </div>
 
-                  {/* Notes */}
-                  {entry.notes && (
+                  {entryNotes && (
                     <div
                       style={{
-                        marginTop: "8px",
-                        padding: "12px",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        border: "1px solid var(--theme-border-default)",
-                        borderRadius: "8px",
-                        fontSize: "13px",
-                        color: "var(--theme-text-secondary)",
-                        fontStyle: "italic"
+                        marginTop: "6px",
+                        fontSize: "12px",
+                        color: "var(--theme-text-muted)",
+                        fontStyle: "italic",
+                        lineHeight: 1.5,
                       }}
                     >
-                      "{entry.notes}"
+                      "{entryNotes}"
+                    </div>
+                  )}
+
+                  {/* Disbursement metadata — shown when action contains "Disbursed" */}
+                  {entry.action.toLowerCase().includes("disbursed") && entry.metadata?.disbursement_source && (
+                    <div style={{
+                      marginTop: "6px",
+                      padding: "6px 10px",
+                      borderRadius: "6px",
+                      backgroundColor: "var(--theme-bg-surface-subtle)",
+                      border: "1px solid var(--theme-border-default)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "3px",
+                    }}>
+                      {entry.metadata.disbursement_method && (
+                        <span style={{ fontSize: "11px", color: "var(--theme-text-muted)" }}>
+                          <strong style={{ color: "var(--theme-text-secondary)" }}>{entry.metadata.disbursement_method}</strong>
+                          {entry.metadata.disbursement_reference && ` · ${entry.metadata.disbursement_reference}`}
+                        </span>
+                      )}
+                      <span style={{ fontSize: "11px", color: "var(--theme-text-muted)" }}>
+                        From: <strong style={{ color: "var(--theme-text-secondary)" }}>{entry.metadata.disbursement_source}</strong>
+                      </span>
                     </div>
                   )}
                 </div>

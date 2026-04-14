@@ -177,14 +177,14 @@ export function LiquidationPanel({ isOpen, onClose, originalVoucher, onSuccess }
               <h3 className="font-semibold text-[var(--theme-text-primary)] text-sm">Actual Expenses</h3>
               <button 
                 onClick={handleAddItem}
-                className="text-xs font-medium text-[var(--theme-action-primary-bg)] hover:text-[#0D6560] flex items-center gap-1"
+                className="text-xs font-medium text-[var(--theme-action-primary-bg)] hover:text-[var(--theme-action-primary-border)] flex items-center gap-1"
               >
                 <Plus className="w-3 h-3" />
                 Add Item
               </button>
             </div>
             
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-[var(--theme-border-default)]">
               {items.map((item, index) => (
                 <div key={item.id} className="p-3 grid grid-cols-[1fr_auto_auto] gap-3 items-start group">
                   <div className="space-y-2">
@@ -230,28 +230,28 @@ export function LiquidationPanel({ isOpen, onClose, originalVoucher, onSuccess }
 
           {/* Result Card */}
           <div className={`p-4 rounded-xl border ${
-            isRefund ? "bg-emerald-50 border-emerald-200" :
-            isReimbursement ? "bg-[var(--theme-status-warning-bg)] border-amber-200" :
+            isRefund ? "bg-[var(--theme-status-success-bg)] border-[var(--theme-status-success-border)]" :
+            isReimbursement ? "bg-[var(--theme-status-warning-bg)] border-[var(--theme-status-warning-border)]" :
             "bg-[var(--theme-bg-surface-subtle)] border-[var(--theme-border-default)]"
           }`}>
             <div className="flex gap-3">
               <div className={`p-2 rounded-full ${
-                isRefund ? "bg-emerald-100 text-emerald-600" :
-                isReimbursement ? "bg-amber-100 text-amber-600" :
+                isRefund ? "bg-[var(--theme-status-success-bg)] text-[var(--theme-status-success-fg)]" :
+                isReimbursement ? "bg-[var(--theme-status-warning-bg)] text-[var(--theme-status-warning-fg)]" :
                 "bg-[var(--theme-bg-surface-tint)] text-[var(--theme-text-muted)]"
               }`}>
                 <AlertCircle className="w-5 h-5" />
               </div>
               <div>
                 <h4 className={`font-semibold ${
-                  isRefund ? "text-emerald-800" :
-                  isReimbursement ? "text-amber-800" :
+                  isRefund ? "text-[var(--theme-status-success-fg)]" :
+                  isReimbursement ? "text-[var(--theme-status-warning-fg)]" :
                   "text-[var(--theme-text-secondary)]"
                 }`}>
                   {isRefund ? "Funds to Return" : isReimbursement ? "Reimbursement Needed" : "Budget Balanced"}
                 </h4>
                 <p className={`text-sm mt-1 ${
-                  isRefund ? "text-emerald-700" :
+                  isRefund ? "text-[var(--theme-status-success-fg)]" :
                   isReimbursement ? "text-[var(--theme-status-warning-fg)]" :
                   "text-[var(--theme-text-secondary)]"
                 }`}>

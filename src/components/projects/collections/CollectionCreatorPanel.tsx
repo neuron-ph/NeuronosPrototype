@@ -313,6 +313,25 @@ export function CollectionCreatorPanel({
 
       if (insertErr) throw new Error(insertErr.message);
 
+      // Create draft journal entry for Accounting to review and post
+      const jeId = `JE-COL-${Date.now()}`;
+      await supabase.from("journal_entries").insert({
+        id: jeId,
+        entry_number: jeId,
+        entry_date: new Date().toISOString(),
+        collection_id: created.id,
+        description: `Collection ${collectionNumber} — ${project.customer_name}`,
+        reference: referenceNo || collectionNumber,
+        customer_name: project.customer_name || null,
+        lines: [],
+        total_debit: amountReceived,
+        total_credit: amountReceived,
+        status: "draft",
+        created_by: user?.id ?? null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
       const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
       logCreation("collection", created.id, created.collection_number ?? created.id, actor);
 

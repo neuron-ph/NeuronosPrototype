@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import { Search, X, Plus, Filter, Download, Loader2, Pencil, Check } from "lucide-react";
+import { Search, X, Plus, Filter, Download, Loader2, Pencil, Check, Link2 } from "lucide-react";
 import { useUser } from "../../../hooks/useUser";
 import { logActivity } from "../../../utils/activityLog";
 import { CustomDropdown } from "../../bd/CustomDropdown";
@@ -100,6 +100,7 @@ export function UnifiedBillingsTab({
   // Removed isImporting state as import button is gone
   // Removed isEditing state - now derived from readOnly
   const [pendingChanges, setPendingChanges] = useState(false);
+  const [isLinkingAll, setIsLinkingAll] = useState(false);
   // groupBy derivation:
   //   contract billings (enableGroupByToggle) → "booking"
   //   booking-level view (bookingId set)      → "category"
@@ -116,8 +117,10 @@ export function UnifiedBillingsTab({
   // -- MERGE LOGIC --
   // Merges Real Billing Items with Virtual Quotation Items
   const mergedItems = useMemo(() => {
-    // Build service-to-booking map from linkedBookings for auto-routing
-    // Maps e.g. "Brokerage" → "BRK-20260301-1234"
+    // Build service-to-booking map from linkedBookings.
+    // We only use this for UI actions such as "Send Billings to Booking".
+    // Project-level billings should not be auto-marked as linked before the user
+    // explicitly sends them, otherwise the header shows a false-positive linked state.
     const serviceToBookingMap = buildServiceToBookingMap(stableLinkedBookings);
 
     // Helper: resolve booking_id from a service type
@@ -169,8 +172,9 @@ export function UnifiedBillingsTab({
                             amount: item.amount, // Calculated final price
                             currency: item.currency,
                             quotation_category: cat.category_name,
-                            // Auto-route to correct booking based on service tag
-                            booking_id: resolveBookingId(item.service || existingItem.service_type),
+                            // Preserve the persisted link state. Do not auto-link
+                            // project billings just because a booking exists for the service.
+                            booking_id: existingItem.booking_id ?? null,
                             // Extended fields
                             quantity: item.quantity,
                             forex_rate: item.forex_rate,
@@ -198,7 +202,9 @@ export function UnifiedBillingsTab({
                     currency: item.currency,
                     status: 'unbilled', // Virtual items are always unbilled by definition
                     quotation_category: cat.category_name,
-                    booking_id: resolveBookingId(item.service),
+                    // New quotation-backed project billings start unlinked until the
+                    // user explicitly sends them to a booking.
+                    booking_id: bookingId || null,
                     // Extended fields for editing
                     quantity: item.quantity,
                     forex_rate: item.forex_rate,
@@ -303,6 +309,7 @@ export function UnifiedBillingsTab({
       status: item.status,
       amount: item.amount,
       currency: item.currency || "PHP",
+      booking_id: item.booking_id ?? null,
       originalData: item
     }));
   }, [filteredItems]);
@@ -508,6 +515,8 @@ export function UnifiedBillingsTab({
             currency: item.currency || "PHP",
             status: item.status || "unbilled",
             is_taxed: item.is_taxed || false,
+            source_quotation_item_id: item.source_quotation_item_id || null,
+            source_type: item.source_type || (item.source_quotation_item_id ? "quotation_item" : "manual"),
             catalog_item_id: item.catalog_item_id || null,
             // Snapshot: preserve catalog metadata at creation time so renames
             // don't alter historical billing line descriptions.
@@ -570,6 +579,51 @@ export function UnifiedBillingsTab({
       }
   };
 
+  // In project-level view: count real items with null booking_id that can be resolved
+  const resolvableUnlinked = useMemo(() => {
+    if (bookingId || !stableLinkedBookings.length) return [];
+    return localItems.filter(item => {
+      if (item.is_virtual || !item.id || item.id.startsWith("virtual-") || item.id.startsWith("temp-")) return false;
+      if (item.booking_id) return false;
+      const resolved = resolveBookingIdForService({
+        serviceType: item.service_type,
+        linkedBookings: stableLinkedBookings,
+      });
+      return !!resolved;
+    });
+  }, [bookingId, localItems, stableLinkedBookings]);
+
+  const handleLinkAll = async () => {
+    if (resolvableUnlinked.length === 0) return;
+    setIsLinkingAll(true);
+    try {
+      const updates = resolvableUnlinked
+        .map(item => ({
+          id: item.id,
+          booking_id: resolveBookingIdForService({
+            serviceType: item.service_type,
+            linkedBookings: stableLinkedBookings,
+          }),
+        }))
+        .filter((u): u is { id: string; booking_id: string } => !!u.booking_id);
+
+      const results = await Promise.all(
+        updates.map(({ id, booking_id }) =>
+          supabase.from("billing_line_items").update({ booking_id }).eq("id", id)
+        )
+      );
+      const err = results.find(r => r.error)?.error;
+      if (err) {
+        toast.error(`Failed to link: ${err.message}`);
+      } else {
+        toast.success(`${updates.length} billing item${updates.length !== 1 ? "s" : ""} linked to their bookings.`);
+        onRefresh();
+      }
+    } finally {
+      setIsLinkingAll(false);
+    }
+  };
+
   const handleVoidItem = async (itemId: string) => {
     const item = localItems.find(i => i.id === itemId);
     if (!item) return;
@@ -596,6 +650,55 @@ export function UnifiedBillingsTab({
     const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
     logActivity("billing", itemId, item.description ?? itemId, "cancelled", actor);
     toast.success("Billing item voided");
+    onRefresh();
+  };
+
+  const handleSendServiceToBooking = async (itemIds: string[], bookingId: string) => {
+    const selectedItems = localItems.filter(item => itemIds.includes(item.id));
+    const payload = selectedItems.map(item => ({
+      id: item.id,
+      is_virtual: Boolean(item.is_virtual || item.id.startsWith("virtual-") || item.id.startsWith("temp-")),
+      description: item.description || "",
+      service_type: item.service_type || "",
+      quotation_category: item.quotation_category || null,
+      category: item.quotation_category || item.category || null,
+      amount: item.amount || 0,
+      quantity: item.quantity || 1,
+      currency: item.currency || "PHP",
+      status: item.status || "unbilled",
+      is_taxed: Boolean(item.is_taxed),
+      source_quotation_item_id: item.source_quotation_item_id || null,
+      source_type: item.source_type || (item.source_quotation_item_id ? "quotation_item" : "manual"),
+      catalog_item_id: item.catalog_item_id || null,
+      catalog_snapshot: item.catalog_item_id
+        ? {
+            name: item.description || "",
+            unit_type: item.unit_type || null,
+            tax_code: item.tax_code || null,
+            category_name: item.quotation_category || null,
+            default_price: item.amount || 0,
+            currency: item.currency || "PHP",
+          }
+        : (item.catalog_snapshot || {}),
+      created_at: item.created_at || new Date().toISOString(),
+    }));
+
+    const { error } = await supabase.rpc("send_billing_items_to_booking", {
+      p_booking_id: bookingId,
+      p_project_number: projectId,
+      p_items: payload,
+    });
+
+    if (error) {
+      toast.error(`Failed to send billings: ${error.message}`);
+      return;
+    }
+
+    setLocalItems(prev =>
+      prev.map(item => itemIds.includes(item.id) ? { ...item, booking_id: bookingId } : item)
+    );
+
+    toast.success(`${itemIds.length} billing item${itemIds.length !== 1 ? "s" : ""} sent to booking`);
     onRefresh();
   };
 
@@ -659,6 +762,38 @@ export function UnifiedBillingsTab({
       {extraActions && (
         <div className="mb-4">
           {extraActions}
+        </div>
+      )}
+
+      {/* Unlinked items notice — only shown in project view, not booking view */}
+      {resolvableUnlinked.length > 0 && !readOnly && (
+        <div
+          className="flex items-center justify-between mb-4 px-4 py-3 rounded-lg"
+          style={{
+            backgroundColor: "var(--theme-status-warning-bg)",
+            border: "1px solid var(--theme-status-warning-border)",
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <Link2 size={14} style={{ color: "var(--theme-status-warning-fg)", flexShrink: 0 }} />
+            <span style={{ fontSize: "13px", color: "var(--theme-status-warning-fg)", fontWeight: 500 }}>
+              {resolvableUnlinked.length} billing item{resolvableUnlinked.length !== 1 ? "s" : ""} can be linked to their bookings.
+            </span>
+          </div>
+          <button
+            onClick={handleLinkAll}
+            disabled={isLinkingAll || pendingChanges}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors"
+            style={{
+              backgroundColor: "var(--theme-action-primary-bg)",
+              color: "#fff",
+              opacity: isLinkingAll || pendingChanges ? 0.6 : 1,
+              cursor: isLinkingAll || pendingChanges ? "not-allowed" : "pointer",
+            }}
+          >
+            {isLinkingAll ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />}
+            {isLinkingAll ? "Linking…" : "Link All"}
+          </button>
         </div>
       )}
 
@@ -772,6 +907,7 @@ export function UnifiedBillingsTab({
         linkedBookings={stableLinkedBookings}
         highlightId={highlightId}
         onVoidItem={!readOnly ? handleVoidItem : undefined}
+        onSendServiceToBooking={!readOnly ? handleSendServiceToBooking : undefined}
       />
     </div>
   );

@@ -52,7 +52,7 @@ const ENTITY_ROUTES: Record<string, Record<string, (id: string) => string>> = {
   },
   booking: {
     "Operations": (id) => `/operations/${id}`,
-    "Accounting": (id) => `/accounting/bookings/${id}`,
+    "Accounting": (id) => `/accounting/bookings?booking=${id}`,
     "Executive":  (id) => `/operations/${id}`,
   },
   project: {

@@ -4,6 +4,7 @@ import { CreateEVoucherForm } from "./evouchers/CreateEVoucherForm";
 import { EVoucherDetailView } from "./EVoucherDetailView";
 import { UnifiedEVouchersTable } from "./evouchers/UnifiedEVouchersTable";
 import { useEVouchers } from "../../hooks/useEVouchers";
+import { useUser } from "../../hooks/useUser";
 import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
 
 type AccountingTab = "acct-pending-disburse" | "acct-waiting-on-rep" | "acct-pending-verification" | "acct-archive";
@@ -21,8 +22,7 @@ export function EVouchersContent() {
   const [selectedEvoucher, setSelectedEvoucher] = useState<any>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  const userData = localStorage.getItem("neuron_user");
-  const currentUser = userData ? JSON.parse(userData) : null;
+  const { user: currentUser } = useUser();
 
   const { evouchers, isLoading, refresh } = useEVouchers(activeTab, currentUser?.id);
 
@@ -50,7 +50,7 @@ export function EVouchersContent() {
             <NeuronRefreshButton onRefresh={async () => refresh()} label="Refresh e-vouchers" />
             <button
               onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-[var(--theme-action-primary-bg)] text-white rounded-lg hover:bg-[#0D6559] transition-colors font-medium text-[14px]"
+              className="flex items-center gap-2 px-4 py-2 bg-[var(--theme-action-primary-bg)] text-white rounded-lg hover:bg-[var(--theme-action-primary-border)] transition-colors font-medium text-[14px]"
             >
               <Plus size={16} />
               New E-Voucher
@@ -59,15 +59,17 @@ export function EVouchersContent() {
         </div>
 
         {/* 4-Tab Navigation */}
-        <div className="flex items-center gap-8 border-b border-[var(--theme-border-default)]">
+        <div className="flex items-center gap-8 border-b border-[var(--theme-border-default)]" role="tablist">
           {TABS.map((tab) => {
             const isActive = activeTab === tab.id;
             const TabIcon = tab.icon;
             return (
               <button
                 key={tab.id}
+                role="tab"
+                aria-selected={isActive}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 py-4 relative group ${isActive ? "text-[var(--theme-action-primary-bg)]" : "text-[var(--theme-text-muted)]"}`}
+                className={`flex items-center gap-2 py-4 relative transition-colors ${isActive ? "text-[var(--theme-action-primary-bg)]" : "text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]"}`}
                 title={tab.description}
               >
                 <TabIcon size={18} strokeWidth={isActive ? 2.5 : 2} />
@@ -112,6 +114,7 @@ export function EVouchersContent() {
             onViewDetail={setSelectedEvoucher}
             onRefresh={refresh}
             isLoading={isLoading}
+            showDaysOutstanding={activeTab === "acct-waiting-on-rep"}
           />
         )}
       </div>

@@ -265,7 +265,7 @@ export function ContractRateCardV2({
     <div
       style={{
         backgroundColor: "var(--theme-bg-surface)",
-        border: "1px solid #E5E9E8",
+        border: "1px solid var(--neuron-ui-border)",
         borderRadius: "12px",
         padding: "28px",
         marginBottom: "24px",
@@ -279,7 +279,7 @@ export function ContractRateCardV2({
           justifyContent: "space-between",
           marginBottom: "24px",
           paddingBottom: "20px",
-          borderBottom: "2px solid #E8F5F3",
+          borderBottom: "2px solid var(--neuron-ui-border)",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -300,7 +300,7 @@ export function ContractRateCardV2({
               fontSize: "11px",
               fontWeight: 500,
               color: "var(--theme-text-muted)",
-              backgroundColor: "#F0F4F3",
+              backgroundColor: "var(--theme-bg-surface-subtle)",
               padding: "2px 8px",
               borderRadius: "4px",
             }}
@@ -325,7 +325,7 @@ export function ContractRateCardV2({
                   fontWeight: 600,
                   color: "var(--theme-text-muted)",
                   backgroundColor: "transparent",
-                  border: "1px dashed #C8D0CD",
+                  border: "1px dashed var(--neuron-ui-border)",
                   borderRadius: "6px",
                   cursor: "pointer",
                   transition: "all 0.15s ease",
@@ -335,8 +335,8 @@ export function ContractRateCardV2({
                   e.currentTarget.style.color = "var(--theme-action-primary-bg)";
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "#C8D0CD";
-                  e.currentTarget.style.color = "#6B7A76";
+                  e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
+                  e.currentTarget.style.color = "var(--theme-text-muted)";
                 }}
               >
                 <Plus size={14} />
@@ -379,7 +379,7 @@ export function ContractRateCardV2({
                   fontWeight: 600,
                   color: "var(--neuron-brand-green)",
                   backgroundColor: "transparent",
-                  border: "1px solid #B2DFDB",
+                  border: "1px solid var(--neuron-ui-border)",
                   borderRadius: "6px",
                   cursor: "pointer",
                   transition: "all 0.15s ease",
@@ -406,7 +406,7 @@ export function ContractRateCardV2({
                 fontWeight: 600,
                 color: "var(--neuron-brand-green)",
                 backgroundColor: "transparent",
-                border: "1px solid #B2DFDB",
+                border: "1px solid var(--neuron-ui-border)",
                 borderRadius: "6px",
                 cursor: "pointer",
                 transition: "all 0.15s ease",
@@ -476,7 +476,7 @@ export function ContractRateCardV2({
         /* ── Rate Grid ── */
         <div
           style={{
-            border: "1px solid #E5E9E8",
+            border: "1px solid var(--neuron-ui-border)",
             borderRadius: "10px",
             overflow: "visible",
             backgroundColor: "var(--theme-bg-surface)",
@@ -491,7 +491,7 @@ export function ContractRateCardV2({
                 gap: "0",
                 padding: "10px 16px",
                 backgroundColor: "var(--theme-bg-surface)",
-                borderBottom: "2px solid #E5E9E8",
+                borderBottom: "2px solid var(--neuron-ui-border)",
                 borderRadius: "10px 10px 0 0",
                 minWidth: "fit-content",
                 alignItems: "center",
@@ -531,7 +531,7 @@ export function ContractRateCardV2({
                         padding: "2px 6px",
                         fontSize: "11px",
                         fontWeight: 600,
-                        border: "1px solid #0F766E",
+                        border: "1px solid var(--neuron-brand-green)",
                         borderRadius: "4px",
                         outline: "none",
                         backgroundColor: "var(--theme-bg-surface)",
@@ -622,7 +622,7 @@ export function ContractRateCardV2({
               style={{
                 padding: "8px 16px",
                 backgroundColor: "var(--theme-bg-surface)",
-                borderTop: "1px solid #E5E9E8",
+                borderTop: "1px solid var(--neuron-ui-border)",
                 borderRadius: "0 0 10px 10px",
                 fontSize: "11px",
                 fontWeight: 500,
@@ -682,9 +682,9 @@ const cellInputStyle: React.CSSProperties = {
   padding: "6px 8px",
   fontSize: "13px",
   fontWeight: 500,
-  color: "#2C3E38",
+  color: "var(--neuron-ink-primary)",
   backgroundColor: "var(--theme-bg-surface)",
-  border: "1px solid #E0E6E4",
+  border: "1px solid var(--neuron-ui-border)",
   borderRadius: "6px",
   outline: "none",
   fontFamily: "inherit",
@@ -732,7 +732,7 @@ function RateLineItem({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       style={{
-        borderBottom: isLast ? "none" : "1px solid #E5E9E8",
+        borderBottom: isLast ? "none" : "1px solid var(--neuron-ui-border)",
         backgroundColor: isHovered && !viewMode ? "var(--theme-bg-surface-subtle)" : "transparent",
         transition: "background-color 0.1s ease",
       }}
@@ -886,7 +886,7 @@ function RateLineItem({
                   padding: "6px 8px",
                   fontSize: "12px",
                   borderRadius: "6px",
-                  border: "1px solid #E0E6E4",
+                  border: "1px solid var(--neuron-ui-border)",
                   backgroundColor: "var(--theme-bg-surface)",
                   fontWeight: 500,
                 }}
@@ -946,7 +946,7 @@ function RateLineItem({
               cursor: "pointer",
               fontSize: "11px",
               fontWeight: 600,
-              color: isAtCost ? "#1D4ED8" : "#9CA3AF",
+              color: isAtCost ? "#3B82F6" : "var(--neuron-ink-muted)",
               flexShrink: 0,
               padding: "3px 8px",
               borderRadius: "4px",
@@ -969,7 +969,7 @@ function RateLineItem({
                 width: "12px",
                 height: "12px",
                 borderRadius: "3px",
-                border: isAtCost ? "1.5px solid #3B82F6" : "1.5px solid #C8D0CD",
+                border: isAtCost ? "1.5px solid #3B82F6" : "1.5px solid var(--neuron-ui-border)",
                 backgroundColor: isAtCost ? "#3B82F6" : "var(--theme-bg-surface)",
                 position: "relative",
                 flexShrink: 0,
@@ -1014,7 +1014,7 @@ function RateLineItem({
                 cursor: "pointer",
                 fontSize: "11px",
                 fontWeight: 600,
-                color: hasTiered ? "#0F766E" : "#9CA3AF",
+                color: hasTiered ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)",
                 flexShrink: 0,
                 padding: "3px 8px",
                 borderRadius: "4px",
@@ -1037,8 +1037,8 @@ function RateLineItem({
                   width: "12px",
                   height: "12px",
                   borderRadius: "3px",
-                  border: hasTiered ? "1.5px solid #0F766E" : "1.5px solid #C8D0CD",
-                  backgroundColor: hasTiered ? "#0F766E" : "var(--theme-bg-surface)",
+                  border: hasTiered ? "1.5px solid var(--neuron-brand-green)" : "1.5px solid var(--neuron-ui-border)",
+                  backgroundColor: hasTiered ? "var(--neuron-brand-green)" : "var(--theme-bg-surface)",
                   position: "relative",
                   flexShrink: 0,
                   transition: "all 0.15s ease",
@@ -1084,7 +1084,7 @@ function RateLineItem({
                 width: "44px",
                 padding: "3px 6px",
                 fontSize: "12px",
-                border: "1px solid #D9E1DE",
+                border: "1px solid var(--neuron-ui-border)",
                 borderRadius: "4px",
                 textAlign: "center",
                 color: "var(--neuron-ink-primary)",
@@ -1097,7 +1097,7 @@ function RateLineItem({
               style={{
                 display: "flex",
                 alignItems: "center",
-                border: "1px solid #D9E1DE",
+                border: "1px solid var(--neuron-ui-border)",
                 borderRadius: "4px",
                 overflow: "hidden",
               }}
@@ -1108,7 +1108,7 @@ function RateLineItem({
                   fontSize: "11px",
                   color: "var(--neuron-ink-muted)",
                   backgroundColor: "var(--theme-bg-surface-subtle)",
-                  borderRight: "1px solid #D9E1DE",
+                  borderRight: "1px solid var(--neuron-ui-border)",
                 }}
               >
                 PHP
@@ -1150,7 +1150,7 @@ function RateLineItem({
               style={{
                 width: "1px",
                 height: "16px",
-                backgroundColor: "#E5E9E8",
+                backgroundColor: "var(--neuron-ui-border)",
                 flexShrink: 0,
               }}
             />
@@ -1198,7 +1198,7 @@ function RateLineItem({
                 fontStyle: "italic",
                 margin: 0,
                 padding: "6px 8px",
-                border: "1px solid #E0E6E4",
+                border: "1px solid var(--neuron-ui-border)",
                 borderRadius: "6px",
                 backgroundColor: "var(--theme-bg-surface-subtle)",
                 whiteSpace: "pre-wrap",

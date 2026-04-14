@@ -14,6 +14,7 @@ interface SidePanelProps {
   size?: SidePanelSize;
   width?: string; // Custom width override
   showCloseButton?: boolean;
+  zIndexBase?: number;
 }
 
 export function SidePanel({
@@ -24,7 +25,8 @@ export function SidePanel({
   footer,
   size = "md",
   width,
-  showCloseButton = true
+  showCloseButton = true,
+  zIndexBase = 1100,
 }: SidePanelProps) {
   
   // Handle ESC key to close
@@ -77,10 +79,11 @@ export function SidePanel({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black/20 backdrop-blur-[2px] z-[60]"
+            className="fixed inset-0 bg-black/20 backdrop-blur-[2px]"
             onClick={onClose}
             style={{ 
-              backgroundColor: "rgba(18, 51, 43, 0.15)"
+              backgroundColor: "rgba(18, 51, 43, 0.15)",
+              zIndex: zIndexBase,
             }}
           />
 
@@ -95,8 +98,8 @@ export function SidePanel({
               stiffness: 300,
               duration: 0.3
             }}
-            className="fixed right-0 top-0 h-full bg-[var(--theme-bg-surface)] shadow-2xl z-[70] flex flex-col border-l border-[var(--theme-border-default)]"
-            style={{ width: panelWidth, maxWidth: "100vw" }}
+            className="fixed right-0 top-0 h-full bg-[var(--theme-bg-surface)] shadow-2xl flex flex-col border-l border-[var(--theme-border-default)]"
+            style={{ width: panelWidth, maxWidth: "100vw", zIndex: zIndexBase + 10 }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Standard Header (Optional) */}

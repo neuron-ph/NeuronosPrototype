@@ -5,6 +5,7 @@ import type { Expense as OperationsExpense } from "../../../types/operations";
 
 interface ExpensesTabProps {
   bookingId: string;
+  bookingNumber?: string;
   bookingType?: "forwarding" | "brokerage" | "trucking" | "marine-insurance" | "others";
   currentUserId?: string;
   currentUserName?: string;
@@ -18,6 +19,7 @@ interface ExpensesTabProps {
 
 export function ExpensesTab({
   bookingId,
+  bookingNumber,
   bookingType,
   currentUser,
   readOnly = false,
@@ -30,18 +32,14 @@ export function ExpensesTab({
   const { data: expenses = [], isLoading } = useQuery({
     queryKey: ["evouchers", "booking_expenses", bookingId],
     queryFn: async () => {
-      const { data: allEVouchers, error } = await supabase.from("evouchers").select("*");
+      const { data: allEVouchers, error } = await supabase
+        .from("evouchers")
+        .select("*")
+        .eq("booking_id", bookingId);
 
       if (error) throw error;
 
-      // Filter for this specific booking
-      const relevantEVouchers = (allEVouchers || []).filter((ev: any) => {
-        if (ev.booking_id !== bookingId) return false;
-
-        // Must be an Expense or Budget Request
-        const type = (ev.transaction_type || "").toLowerCase();
-        return type === "expense" || type === "budget_request";
-      });
+      const relevantEVouchers = allEVouchers || [];
 
       // Map to OperationsExpense type
       const mappedExpenses: OperationsExpense[] = relevantEVouchers.map((ev: any) => {
@@ -59,7 +57,7 @@ export function ExpensesTab({
           projectNumber: ev.project_number,
           bookingType: bookingType || "Other",
           expenseName: ev.voucher_number || ev.id,
-          expenseCategory: ev.expense_category || "Uncategorized",
+          expenseCategory: ev.expense_category || ev.gl_category || "Uncategorized",
           amount: ev.total_amount || ev.amount || 0,
           currency: ev.currency || "PHP",
           expenseDate: ev.request_date || ev.created_at,
@@ -70,8 +68,8 @@ export function ExpensesTab({
           createdAt: ev.created_at,
           status: status,
           vendor: ev.vendor_name,
-          category: ev.expense_category,
-          subCategory: ev.sub_category,
+          category: ev.expense_category || ev.gl_category,
+          subCategory: ev.sub_category || ev.gl_sub_category,
           lineItems: ev.line_items || [],
           isBillable: ev.is_billable,
         } as unknown as OperationsExpense;
@@ -104,6 +102,7 @@ export function ExpensesTab({
         context="booking"
         onRefresh={handleRefresh}
         bookingId={bookingId}
+        projectNumber={bookingNumber}
         bookingType={bookingType}
         highlightId={highlightId}
         existingBillingItems={existingBillingItems}

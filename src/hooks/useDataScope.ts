@@ -6,7 +6,13 @@ import { queryKeys } from '../lib/queryKeys';
 /**
  * Resolves the current user's data visibility scope.
  *
+ * Accepts an optional `resource` string to enable functional visibility —
+ * certain departments need org-wide read access to a resource regardless of
+ * their role in the hierarchy (e.g. Accounting must see all bookings to
+ * process billing and e-vouchers).
+ *
  * Resolution order:
+ *   0. Functional visibility — department has org-wide access for this resource ('all')
  *   1. Executive dept → sees everything ('all')
  *   2. permission_override exists → elevated scope
  *   3. manager → all users in same department ('userIds')
@@ -14,11 +20,23 @@ import { queryKeys } from '../lib/queryKeys';
  *   5. staff → own records only ('own')
  *
  * Usage in list queries:
- *   const { scope, isLoaded } = useDataScope();
+ *   const { scope, isLoaded } = useDataScope('bookings');
  *   if (scope.type === 'all') { /* no filter *\/ }
  *   if (scope.type === 'userIds') query = query.in('created_by', scope.ids);
  *   if (scope.type === 'own') query = query.or(`created_by.eq.${scope.userId},assigned_to.eq.${scope.userId}`);
  */
+
+/**
+ * Declares which departments have org-wide read access for a given resource.
+ * Add new entries here as functional requirements grow — no component changes needed.
+ *
+ * 'Executive' is always org-wide via the role hierarchy; listing it here is optional
+ * but makes the config self-documenting.
+ */
+const FUNCTIONAL_VISIBILITY: Record<string, string[]> = {
+  bookings: ['Accounting', 'Executive'],
+  financials: ['Accounting', 'Executive'],
+};
 
 export type DataScope =
   | { type: 'all' }
@@ -30,16 +48,21 @@ export interface DataScopeResult {
   isLoaded: boolean;
 }
 
-export function useDataScope(): DataScopeResult {
+export function useDataScope(resource?: string): DataScopeResult {
   const { user, effectiveDepartment, effectiveRole } = useUser();
 
   const { data: scope = { type: 'own', userId: '' }, isLoading } = useQuery<DataScope>({
-    queryKey: queryKeys.dataScope.user(user?.id ?? ''),
+    queryKey: queryKeys.dataScope.user(user?.id ?? '', resource),
     enabled: !!user,
     staleTime: 5 * 60 * 1000, // 5 minutes
     queryFn: async () => {
       if (!user) {
         return { type: 'own', userId: '' };
+      }
+
+      // 0. Functional visibility — department has org-wide access for this resource
+      if (resource && FUNCTIONAL_VISIBILITY[resource]?.includes(effectiveDepartment ?? '')) {
+        return { type: 'all' };
       }
 
       // 1. Executive department — full access, no queries needed

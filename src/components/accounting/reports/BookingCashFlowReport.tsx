@@ -29,9 +29,9 @@ import type { ReportColumnDef, ReportSummaryCardDef, ReportFooterCell } from "./
 
 const SERVICE_TYPE_COLORS: Record<string, string> = {
   Forwarding:        R.teal,
-  Brokerage:         "#6366f1",
-  Trucking:          "#f59e0b",
-  "Marine Insurance": "#0ea5e9",
+  Brokerage:         "var(--neuron-status-accent-fg)",
+  Trucking:          R.amber,
+  "Marine Insurance": "var(--neuron-semantic-info)",
   Others:            R.muted,
 };
 
@@ -410,7 +410,7 @@ export function BookingCashFlowReport({ scope }: Props) {
               className="px-3 py-1.5 text-[12px] font-medium transition-colors"
               style={{
                 backgroundColor: groupBy === id ? R.teal : R.white,
-                color: groupBy === id ? "#fff" : R.muted,
+                color: groupBy === id ? "var(--theme-action-primary-text)" : R.muted,
               }}
             >
               {label}

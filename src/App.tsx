@@ -1,6 +1,7 @@
 // App entrypoint — Neuron OS
 // Force recompilation: cache-bust 2026-03-12b
 import { useState, useEffect, Suspense, lazy } from "react";
+import { supabase } from "./utils/supabase/client";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation, useParams, useSearchParams, Outlet } from "react-router";
 import { Layout } from "./components/Layout";
 import { UserProvider, useUser } from "./hooks/useUser";
@@ -33,12 +34,12 @@ const AccountingCustomers = lazy(() => import("./components/accounting/Accountin
 const ReportsModule = lazy(() => import("./components/accounting/reports/ReportsModule").then((module) => ({ default: module.ReportsModule })));
 const FinancialStatementsPage = lazy(() => import("./components/accounting/FinancialStatementsPage").then((module) => ({ default: module.FinancialStatementsPage })));
 const EVouchersContent = lazy(() => import("./components/accounting/EVouchersContent").then((module) => ({ default: module.EVouchersContent })));
-const TransactionsModule = lazy(() => import("./components/transactions/TransactionsModule").then((module) => ({ default: module.TransactionsModule })));
 const ChartOfAccounts = lazy(() => import("./components/accounting/coa/ChartOfAccounts").then((module) => ({ default: module.ChartOfAccounts })));
+const GeneralJournal = lazy(() => import("./components/accounting/journal/GeneralJournal").then((module) => ({ default: module.GeneralJournal })));
 const HR = lazy(() => import("./components/HR").then((module) => ({ default: module.HR })));
 const InboxPage = lazy(() => import("./components/InboxPage").then((module) => ({ default: module.InboxPage })));
 const MyEVouchersPage = lazy(() => import("./components/MyEVouchersPage").then((module) => ({ default: module.MyEVouchersPage })));
-const EVoucherDetailPage = lazy(() => import("./components/accounting/evouchers/EVoucherDetailPage").then((module) => ({ default: module.EVoucherDetailPage })));
+const DisburseEVoucherPage = lazy(() => import("./components/accounting/evouchers/DisburseEVoucherPage").then((module) => ({ default: module.DisburseEVoucherPage })));
 const ActivityLogPage = lazy(() => import("./components/ActivityLogPage").then((module) => ({ default: module.ActivityLogPage })));
 const EmployeeProfile = lazy(() => import("./components/EmployeeProfile").then((module) => ({ default: module.EmployeeProfile })));
 const CreateBooking = lazy(() => import("./components/operations/CreateBooking").then((module) => ({ default: module.CreateBooking })));
@@ -234,7 +235,7 @@ function RouteWrapper({ children, page }: { children: React.ReactNode; page: str
     if (path.startsWith("/operations")) return "operations";
     if (path.startsWith("/projects")) return "projects";
     if (path.startsWith("/contracts")) return "contracts";
-    if (path.startsWith("/accounting/transactions")) return "acct-transactions";
+    if (path.startsWith("/accounting/journal")) return "acct-journal";
     if (path.startsWith("/accounting/coa")) return "acct-coa";
     if (path.startsWith("/accounting/evouchers")) return "acct-evouchers";
     if (path.startsWith("/accounting/financials")) return "acct-financials";
@@ -287,7 +288,7 @@ function RouteWrapper({ children, page }: { children: React.ReactNode; page: str
       "ops-trucking": "/operations/trucking",
       "ops-marine-insurance": "/operations/marine-insurance",
       "ops-others": "/operations/others",
-      "acct-transactions": "/accounting/transactions",
+      "acct-journal": "/accounting/journal",
       "acct-coa": "/accounting/coa",
       "acct-evouchers": "/accounting/evouchers",
       "acct-financials": "/accounting/financials",
@@ -637,13 +638,57 @@ function OperationsProjectsPage() {
 
 function ForwardingBookingsPage() {
   const { user } = useUser();
-  
+
   return (
     <RouteWrapper page="ops-forwarding">
-      <Operations 
+      <Operations
         view="forwarding"
         currentUser={user}
       />
+    </RouteWrapper>
+  );
+}
+
+function BrokerageBookingsPage() {
+  const { user } = useUser();
+  const [searchParams] = useSearchParams();
+  const pendingBookingId = searchParams.get("booking");
+  return (
+    <RouteWrapper page="ops-brokerage">
+      <BrokerageBookings currentUser={user} pendingBookingId={pendingBookingId} />
+    </RouteWrapper>
+  );
+}
+
+function TruckingBookingsPage() {
+  const { user } = useUser();
+  const [searchParams] = useSearchParams();
+  const pendingBookingId = searchParams.get("booking");
+  return (
+    <RouteWrapper page="ops-trucking">
+      <TruckingBookings currentUser={user} pendingBookingId={pendingBookingId} />
+    </RouteWrapper>
+  );
+}
+
+function MarineInsuranceBookingsPage() {
+  const { user } = useUser();
+  const [searchParams] = useSearchParams();
+  const pendingBookingId = searchParams.get("booking");
+  return (
+    <RouteWrapper page="ops-marine-insurance">
+      <MarineInsuranceBookings currentUser={user} pendingBookingId={pendingBookingId} />
+    </RouteWrapper>
+  );
+}
+
+function OthersBookingsPage() {
+  const { user } = useUser();
+  const [searchParams] = useSearchParams();
+  const pendingBookingId = searchParams.get("booking");
+  return (
+    <RouteWrapper page="ops-others">
+      <OthersBookings currentUser={user} pendingBookingId={pendingBookingId} />
     </RouteWrapper>
   );
 }
@@ -671,28 +716,46 @@ function CreateBookingPage() {
 function BookingDetailPage() {
   const { bookingId } = useParams();
   const navigate = useNavigate();
-  
-  // TODO: Fetch booking data based on bookingId
-  const booking = null;
-  
-  if (!booking) {
+  const [notFound, setNotFound] = useState(false);
+
+  useEffect(() => {
+    if (!bookingId) {
+      navigate('/operations', { replace: true });
+      return;
+    }
+
+    supabase
+      .from('bookings')
+      .select('service_type')
+      .eq('id', bookingId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data) {
+          setNotFound(true);
+          return;
+        }
+        const slugMap: Record<string, string> = {
+          'Forwarding':       '/operations/forwarding',
+          'Brokerage':        '/operations/brokerage',
+          'Trucking':         '/operations/trucking',
+          'Marine Insurance': '/operations/marine-insurance',
+          'Others':           '/operations/others',
+        };
+        const slug = slugMap[data.service_type] ?? '/operations';
+        navigate(`${slug}?booking=${bookingId}`, { replace: true });
+      });
+  }, [bookingId, navigate]);
+
+  if (notFound) {
     return (
       <RouteWrapper page="operations">
         <div className="h-full flex items-center justify-center" style={{ background: "var(--neuron-bg-page)" }}>
           <div className="text-center">
             <h2 style={{ color: "var(--neuron-ink-primary)" }} className="mb-2">Booking Not Found</h2>
             <p style={{ color: "var(--neuron-ink-muted)" }}>Booking ID: {bookingId}</p>
-            <button 
+            <button
               onClick={() => navigate('/operations')}
-              style={{
-                marginTop: '16px',
-                padding: '8px 16px',
-                background: 'var(--neuron-brand-green)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer'
-              }}
+              style={{ marginTop: '16px', padding: '8px 16px', background: 'var(--neuron-brand-green)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
             >
               Back to Operations
             </button>
@@ -701,18 +764,12 @@ function BookingDetailPage() {
       </RouteWrapper>
     );
   }
-  
+
   return (
     <RouteWrapper page="operations">
-      <BookingFullView booking={booking} onBack={() => navigate('/operations')} />
-    </RouteWrapper>
-  );
-}
-
-function AccountingTransactionsPage() {
-  return (
-    <RouteWrapper page="acct-transactions">
-      <TransactionsModule />
+      <div className="h-full flex items-center justify-center" style={{ background: "var(--neuron-bg-page)" }}>
+        <p style={{ color: "var(--neuron-ink-muted)" }}>Loading…</p>
+      </div>
     </RouteWrapper>
   );
 }
@@ -786,6 +843,14 @@ function AccountingCoaPage() {
   return (
     <RouteWrapper page="acct-coa">
       <ChartOfAccounts />
+    </RouteWrapper>
+  );
+}
+
+function AccountingJournalPage() {
+  return (
+    <RouteWrapper page="acct-journal">
+      <GeneralJournal />
     </RouteWrapper>
   );
 }
@@ -1017,15 +1082,14 @@ function AppContent() {
           <Route path="/operations/create" element={<CreateBookingPage />} />
           <Route path="/operations/:bookingId" element={<BookingDetailPage />} />
           <Route path="/operations/forwarding" element={<ForwardingBookingsPage />} />
-          <Route path="/operations/trucking" element={<RouteWrapper page="ops-trucking"><TruckingBookings /></RouteWrapper>} />
-          <Route path="/operations/brokerage" element={<RouteWrapper page="ops-brokerage"><BrokerageBookings /></RouteWrapper>} />
-          <Route path="/operations/marine-insurance" element={<RouteWrapper page="ops-marine-insurance"><MarineInsuranceBookings /></RouteWrapper>} />
-          <Route path="/operations/others" element={<RouteWrapper page="ops-others"><OthersBookings /></RouteWrapper>} />
+          <Route path="/operations/trucking" element={<TruckingBookingsPage />} />
+          <Route path="/operations/brokerage" element={<BrokerageBookingsPage />} />
+          <Route path="/operations/marine-insurance" element={<MarineInsuranceBookingsPage />} />
+          <Route path="/operations/others" element={<OthersBookingsPage />} />
         </Route>
         
         {/* Accounting — guarded */}
         <Route element={<GuardedLayout allowedDepartments={['Accounting']} />}>
-          <Route path="/accounting/transactions" element={<AccountingTransactionsPage />} />
           <Route path="/accounting/evouchers" element={<AccountingEVouchersPage />} />
           <Route path="/accounting/invoices" element={<AccountingInvoicesPage />} />
           <Route path="/accounting/billings" element={<AccountingBillingsPage />} />
@@ -1038,8 +1102,13 @@ function AppContent() {
           <Route path="/accounting/customers" element={<AccountingCustomersPage />} />
           <Route path="/accounting/bookings" element={<AccountingBookingsPage />} />
           <Route path="/accounting/reports" element={<AccountingReportsPage />} />
-          <Route path="/accounting/statements" element={<AccountingStatementsPage />} />
           <Route path="/accounting/catalog" element={<AccountingCatalogPage />} />
+        </Route>
+
+        {/* General Journal + Financial Statements — Accounting + Executive */}
+        <Route element={<GuardedLayout allowedDepartments={['Accounting', 'Executive']} />}>
+          <Route path="/accounting/journal" element={<AccountingJournalPage />} />
+          <Route path="/accounting/statements" element={<AccountingStatementsPage />} />
         </Route>
 
         {/* Finance Overview — Accounting Manager or Executive only */}
@@ -1067,7 +1136,7 @@ function AppContent() {
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/inbox" element={<InboxPageWrapper />} />
         <Route path="/my-evouchers" element={<MyEVouchersPageWrapper />} />
-        <Route path="/evouchers/:id" element={<RouteWrapper page="my-evouchers"><EVoucherDetailPage /></RouteWrapper>} />
+        <Route path="/evouchers/:id/disburse" element={<RouteWrapper page="acct-evouchers"><DisburseEVoucherPage /></RouteWrapper>} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/design-system" element={<DesignSystemPage />} />
         

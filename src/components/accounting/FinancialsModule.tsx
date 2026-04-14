@@ -160,7 +160,7 @@ const pickUniqueRef = (refs: string[]): string => (refs.length === 1 ? refs[0] :
 export function FinancialsModule() {
   const [activeTab, setActiveTab] = useState<FinancialsTab>("dashboard");
   const navigate = useNavigate();
-  const { scope: dataScope, isLoaded: isScopeLoaded } = useDataScope();
+  const { scope: dataScope, isLoaded: isScopeLoaded } = useDataScope('financials');
 
   // Detail sheet state (C9 + C10)
   const [selectedBillingId, setSelectedBillingId] = useState<string | null>(null);
@@ -252,7 +252,7 @@ export function FinancialsModule() {
         applyScope(supabase.from('billing_line_items').select('*'), dataScope),
         applyScope(supabase.from('invoices').select('*'), dataScope),
         applyScope(supabase.from('collections').select('*'), dataScope),
-        applyScope(supabase.from('expenses').select('*'), dataScope),
+        applyScope(supabase.from('evouchers').select('*'), dataScope),
       ]);
 
       const billingItems = (!e1 && billingRows) ? billingRows : [];

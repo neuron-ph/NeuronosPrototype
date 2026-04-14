@@ -1,12 +1,11 @@
 import { useState, useMemo } from "react";
-import { Search, Filter, Calendar, FileText, Building2, Users, Wallet, DollarSign, Receipt, TrendingUp, Banknote } from "lucide-react";
+import { Search, FileText } from "lucide-react";
 import { DataTable, ColumnDef } from "../../common/DataTable";
 import { CustomDatePicker } from "../../common/CustomDatePicker";
 import { CustomDropdown } from "../../bd/CustomDropdown";
 import { EVoucherStatusBadge } from "./EVoucherStatusBadge";
 import { LiquidationPanel } from "./LiquidationPanel";
-import { PhilippinePeso } from "../../icons/PhilippinePeso";
-import type { EVoucher, EVoucherStatus, EVoucherTransactionType } from "../../../types/evoucher";
+import type { EVoucher, EVoucherTransactionType } from "../../../types/evoucher";
 
 interface UnifiedEVouchersTableProps {
   evouchers: EVoucher[];
@@ -14,14 +13,16 @@ interface UnifiedEVouchersTableProps {
   onViewDetail: (evoucher: EVoucher) => void;
   onRefresh?: () => void;
   isLoading?: boolean;
+  showDaysOutstanding?: boolean;
 }
 
-export function UnifiedEVouchersTable({ 
-  evouchers, 
-  view, 
+export function UnifiedEVouchersTable({
+  evouchers,
+  view,
   onViewDetail,
   onRefresh,
-  isLoading 
+  isLoading,
+  showDaysOutstanding = false,
 }: UnifiedEVouchersTableProps) {
   // -- State --
   const [searchQuery, setSearchQuery] = useState("");
@@ -48,25 +49,18 @@ export function UnifiedEVouchersTable({
     });
   };
 
-  const getTransactionTypeLabel = (type: EVoucherTransactionType | undefined) => {
-    if (!type) return "Expense";
-    const labels: Record<EVoucherTransactionType, string> = {
-      expense: "Expense",
-      budget_request: "Budget Request",
-      cash_advance: "Cash Advance",
-      reimbursement: "Reimbursement"
-    };
-    return labels[type] || type;
-  };
-
-  const getTypeIcon = (type: EVoucherTransactionType | undefined) => {
-    const iconProps = { size: 14, className: "text-[var(--theme-text-muted)]" };
+  const getTypeConfig = (type: EVoucherTransactionType | undefined): { label: string; style: React.CSSProperties } => {
     switch (type) {
-      case "expense": return <Wallet {...iconProps} />;
-      case "budget_request": return <DollarSign {...iconProps} />;
-      case "cash_advance": return <Banknote {...iconProps} />;
-      case "reimbursement": return <Users {...iconProps} />;
-      default: return <FileText {...iconProps} />;
+      case "expense":
+        return { label: "Expense", style: { background: "var(--neuron-semantic-info-bg)", color: "var(--neuron-semantic-info)" } };
+      case "budget_request":
+        return { label: "Budget Request", style: { background: "var(--theme-status-warning-bg)", color: "var(--theme-status-warning-fg)" } };
+      case "cash_advance":
+        return { label: "Cash Advance", style: { background: "var(--theme-status-success-bg)", color: "var(--theme-status-success-fg)" } };
+      case "reimbursement":
+        return { label: "Reimbursement", style: { background: "var(--neuron-status-accent-bg)", color: "var(--neuron-status-accent-fg)" } };
+      default:
+        return { label: "Expense", style: { background: "var(--theme-bg-surface-subtle)", color: "var(--theme-text-secondary)" } };
     }
   };
 
@@ -122,7 +116,7 @@ export function UnifiedEVouchersTable({
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     
     if (diffDays >= 3) return "text-[var(--theme-status-danger-fg)]";
-    if (diffDays >= 2) return "text-amber-600";
+    if (diffDays >= 2) return "text-[var(--theme-status-warning-fg)]";
     return "text-[var(--theme-text-primary)]";
   };
 
@@ -146,22 +140,22 @@ export function UnifiedEVouchersTable({
       header: "Voucher #",
       width: "140px",
       cell: (item) => (
-        <div className="flex items-center gap-2">
-            {getTypeIcon(item.transaction_type)}
-            <span className="text-[12px] font-mono text-[var(--theme-action-primary-bg)] font-medium group-hover:underline decoration-[#0F766E] underline-offset-2">
-            {item.voucher_number}
-            </span>
-        </div>
+        <span className="text-[12px] font-mono text-[var(--theme-action-primary-bg)] font-medium group-hover:underline decoration-[var(--theme-action-primary-bg)] underline-offset-2">
+          {item.voucher_number || "—"}
+        </span>
       )
     },
     {
       header: "Type",
-      width: "100px",
-      cell: (item) => (
-        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.002em] bg-[var(--theme-bg-surface-subtle)] text-[var(--theme-text-secondary)]">
-            {getTransactionTypeLabel(item.transaction_type)}
-        </span>
-      )
+      width: "130px",
+      cell: (item) => {
+        const { label, style } = getTypeConfig(item.transaction_type);
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium" style={style}>
+            {label}
+          </span>
+        );
+      }
     },
     {
       header: "Requestor",
@@ -185,11 +179,31 @@ export function UnifiedEVouchersTable({
     {
       header: "Linked To",
       cell: (item) => (
-        <span className="text-[12px] text-[var(--theme-action-primary-bg)] font-medium truncate block max-w-[150px]">
+        <span className={`text-[12px] font-medium truncate block max-w-[150px] ${(item.project_number || item.customer_name) ? "text-[var(--theme-action-primary-bg)]" : "text-[var(--theme-text-muted)]"}`}>
           {item.project_number || item.customer_name || "—"}
         </span>
       )
     },
+    ...(showDaysOutstanding ? [{
+      header: "Days Outstanding",
+      width: "120px",
+      align: "right" as const,
+      cell: (item: EVoucher) => {
+        const disbDate = item.disbursement_date;
+        if (!disbDate) return <span className="text-[12px] text-[var(--theme-text-muted)]">—</span>;
+        const days = Math.floor((Date.now() - new Date(disbDate).getTime()) / 86_400_000);
+        const color = days >= 14
+          ? "var(--theme-status-danger-fg)"
+          : days >= 7
+          ? "var(--theme-status-warning-fg)"
+          : "var(--theme-text-secondary)";
+        return (
+          <span style={{ fontSize: "12px", fontWeight: 600, color, fontVariantNumeric: "tabular-nums" }}>
+            {days}d
+          </span>
+        );
+      }
+    }] : []),
     {
       header: "Amount",
       width: "120px",
@@ -215,7 +229,7 @@ export function UnifiedEVouchersTable({
                         e.stopPropagation();
                         setLiquidationVoucher(item);
                     }}
-                    className="text-[10px] font-semibold text-[var(--theme-action-primary-bg)] hover:text-[#0D6560] bg-[var(--theme-bg-surface-tint)] hover:bg-[#D0EBE7] px-2 py-1 rounded transition-colors flex items-center gap-1"
+                    className="text-[10px] font-semibold text-[var(--theme-action-primary-bg)] hover:text-[var(--theme-action-primary-border)] bg-[var(--theme-bg-surface-tint)] hover:bg-[var(--theme-status-success-bg)] px-2 py-1 rounded transition-colors flex items-center gap-1"
                 >
                     <FileText size={10} />
                     Liquidate
@@ -238,7 +252,7 @@ export function UnifiedEVouchersTable({
             placeholder="Search voucher #, requestor, vendor..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F766E] text-[13px] border border-[var(--theme-border-default)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-primary)] placeholder-[#98A2B3]"
+            className="w-full pl-10 pr-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--theme-action-primary-bg)] text-[13px] border border-[var(--theme-border-default)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-primary)] placeholder-[var(--theme-text-muted)]"
           />
         </div>
 
@@ -300,7 +314,6 @@ export function UnifiedEVouchersTable({
         emptyMessage="No E-Vouchers found matching your filters."
         onRowClick={onViewDetail}
         rowClassName={() => "group cursor-pointer hover:bg-[var(--theme-bg-surface-subtle)] align-top"}
-        icon={FileText}
         footerSummary={[
           { 
              label: "Total Count", 

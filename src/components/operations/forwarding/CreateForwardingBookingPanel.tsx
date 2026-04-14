@@ -19,6 +19,7 @@ import { useCustomerOptions } from "../shared/useCustomerOptions";
 import { ConsigneePicker } from "../../shared/ConsigneePicker";
 import { logCreation } from "../../../utils/activityLog";
 import { fireBookingAssignmentTickets } from "../../../utils/workflowTickets";
+import { generateBookingNumber } from "../../../utils/bookingNumberUtils";
 
 interface CreateForwardingBookingPanelProps {
   isOpen: boolean;
@@ -128,17 +129,37 @@ export function CreateForwardingBookingPanel({
   // Apply prefill data when component mounts or prefillData changes
   useEffect(() => {
     if (prefillData && source === "pricing") {
-      // Auto-populate fields from prefillData
+      // General information
+      if (prefillData.name) setBookingName((prev) => prev || prefillData.name);
       if (prefillData.customerName) setCustomerName(prefillData.customerName);
       if (prefillData.movement) setMovement(prefillData.movement);
       if (prefillData.projectNumber) setProjectNumber(prefillData.projectNumber);
       if (prefillData.quotationReferenceNumber) setQuotationReferenceNumber(prefillData.quotationReferenceNumber);
-      if (prefillData.commodityDescription) setCommodityDescription(prefillData.commodityDescription);
+      if (prefillData.accountOwner) setAccountOwner(prefillData.accountOwner);
+      if (prefillData.accountHandler) setAccountHandler(prefillData.accountHandler);
+      if (prefillData.mode) setMode(prefillData.mode as "FCL" | "LCL" | "AIR");
+      if (prefillData.typeOfEntry) setTypeOfEntry(prefillData.typeOfEntry);
+      if (prefillData.cargoType) setCargoType(prefillData.cargoType);
+      if (prefillData.stackability) setStackability(prefillData.stackability);
       if (prefillData.deliveryAddress) setDeliveryAddress(prefillData.deliveryAddress);
+      // Shipment information
+      if (prefillData.consignee) setConsignee(prefillData.consignee);
+      if (prefillData.shipper) setShipper(prefillData.shipper);
+      if (prefillData.carrier) setCarrier(prefillData.carrier);
       if (prefillData.aolPol) setAolPol(prefillData.aolPol);
       if (prefillData.aodPod) setAodPod(prefillData.aodPod);
-      if (prefillData.cargoType) setCargoType(prefillData.cargoType);
-      if (prefillData.mode) setMode(prefillData.mode as "FCL" | "LCL" | "AIR");
+      if (prefillData.commodityDescription) setCommodityDescription(prefillData.commodityDescription);
+      if (prefillData.countryOfOrigin) setCountryOfOrigin(prefillData.countryOfOrigin);
+      if (prefillData.preferentialTreatment) setPreferentialTreatment(prefillData.preferentialTreatment);
+      if (prefillData.grossWeight) setGrossWeight(prefillData.grossWeight);
+      if (prefillData.dimensions) setDimensions(prefillData.dimensions);
+      // Expected volume
+      if (prefillData.qty20ft) setQty20ft(prefillData.qty20ft);
+      if (prefillData.qty40ft) setQty40ft(prefillData.qty40ft);
+      if (prefillData.qty45ft) setQty45ft(prefillData.qty45ft);
+      if (prefillData.volumeGrossWeight) setVolumeGrossWeight(prefillData.volumeGrossWeight);
+      if (prefillData.volumeDimensions) setVolumeDimensions(prefillData.volumeDimensions);
+      if (prefillData.volumeChargeableWeight) setVolumeChargeableWeight(prefillData.volumeChargeableWeight);
     }
   }, [prefillData, source]);
 
@@ -168,6 +189,10 @@ export function CreateForwardingBookingPanel({
   };
 
   const validateForm = () => {
+    if (!bookingName.trim()) {
+      toast.error("Booking Name is required");
+      return false;
+    }
     if (!customerName) {
       toast.error("Customer Name is required");
       return false;
@@ -185,11 +210,7 @@ export function CreateForwardingBookingPanel({
       return false;
     }
 
-    // If from Pricing module, require team assignments
-    if (source === "pricing" && !teamAssignment) {
-      toast.error("Please complete team assignments");
-      return false;
-    }
+    // Team assignment is optional
 
     if (status === "Pending" && !pendingReason) {
       toast.error("Pending Reason is required for Pending status");
@@ -223,7 +244,7 @@ export function CreateForwardingBookingPanel({
     setIsSubmitting(true);
 
     try {
-      const autoBookingNumber = bookingNumber.trim() || `FWD-${Date.now()}`;
+      const autoBookingNumber = bookingNumber.trim() || await generateBookingNumber("Forwarding");
 
       const details: Record<string, any> = {
         project_number: projectNumber || undefined,
@@ -294,7 +315,7 @@ export function CreateForwardingBookingPanel({
       const insertPayload: Record<string, any> = {
         id: crypto.randomUUID(),
         booking_number: autoBookingNumber,
-        name: bookingName.trim() || null,
+        name: bookingName.trim(),
         service_type: 'Forwarding',
         customer_name: customerName,
         movement_type: movement,
@@ -305,7 +326,7 @@ export function CreateForwardingBookingPanel({
         ...(detectedContractId && { contract_id: detectedContractId }),
       };
 
-      if (source === "pricing" && teamAssignment) {
+      if (teamAssignment) {
         insertPayload.manager_id = teamAssignment.manager.id;
         insertPayload.manager_name = teamAssignment.manager.name;
         insertPayload.team_id = teamAssignment.team.id;
@@ -338,7 +359,7 @@ export function CreateForwardingBookingPanel({
         }
       }
 
-      if (source === "pricing" && teamAssignment?.saveAsDefault && customerId) {
+      if (teamAssignment?.saveAsDefault && customerId) {
         try {
           await supabase.from('client_handler_preferences').upsert({
             customer_id: customerId,
@@ -358,7 +379,7 @@ export function CreateForwardingBookingPanel({
 
       logCreation("booking", createdBooking.id, createdBooking.booking_number ?? createdBooking.id, { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
 
-      if (source === "pricing" && teamAssignment) {
+      if (teamAssignment) {
         void fireBookingAssignmentTickets({
           bookingId: createdBooking.id,
           bookingNumber: createdBooking.booking_number,
@@ -393,8 +414,7 @@ export function CreateForwardingBookingPanel({
   const isFormValid = customerName.trim() !== "" &&
     consignee.trim() !== "" &&
     aolPol.trim() !== "" &&
-    aodPod.trim() !== "" &&
-    (source === "operations" || (source === "pricing" && teamAssignment !== null));
+    aodPod.trim() !== "";
 
   return (
     <BookingCreationPanel
@@ -432,7 +452,7 @@ export function CreateForwardingBookingPanel({
                 type="text"
                 value={bookingNumber}
                 onChange={(e) => setBookingNumber(e.target.value)}
-                placeholder="Leave blank for auto-generation or enter custom"
+                placeholder="Auto-generated on save (e.g. FWD-2026-0001)"
                 className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
                 style={{
                   border: "1px solid var(--neuron-ui-border)",
@@ -441,7 +461,7 @@ export function CreateForwardingBookingPanel({
                 }}
               />
               <p className="text-xs mt-1" style={{ color: "var(--theme-text-muted)" }}>
-                Leave blank to auto-generate (e.g., FWD-2025-001) or enter a custom booking number
+                Leave blank to auto-generate (e.g., FWD-2026-0001) or enter a custom number
               </p>
             </div>
 
@@ -487,7 +507,7 @@ export function CreateForwardingBookingPanel({
 
                 <div>
                   <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                    Booking Name <span style={{ color: "var(--theme-text-muted)", fontWeight: 400 }}>(Optional)</span>
+                    Booking Name <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
                   </label>
                   <input
                     type="text"
@@ -1817,8 +1837,8 @@ export function CreateForwardingBookingPanel({
               </div>
             )}
 
-            {/* Team Assignment - Only show when from Pricing */}
-            {source === "pricing" && customerId && (
+            {/* Team Assignment */}
+            {customerName && (
               <div className="mb-8">
                 <div className="flex items-center gap-2 mb-4">
                   <Users size={16} style={{ color: "var(--theme-action-primary-bg)" }} />

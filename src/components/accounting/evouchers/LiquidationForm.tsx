@@ -16,6 +16,8 @@ interface LiquidationFormProps {
   advanceAmount: number;
   currentUser: { id: string; name: string };
   onSubmitted?: () => void;
+  /** When true, renders inline (no SidePanel wrapper) */
+  inline?: boolean;
 }
 
 function newLineItem(): LiquidationLineItem {
@@ -34,6 +36,7 @@ export function LiquidationForm({
   advanceAmount,
   currentUser,
   onSubmitted,
+  inline = false,
 }: LiquidationFormProps) {
   const [lineItems, setLineItems] = useState<LiquidationLineItem[]>([newLineItem()]);
   const [unusedReturn, setUnusedReturn] = useState<string>("");
@@ -105,35 +108,44 @@ export function LiquidationForm({
           id: `EH-${Date.now()}`,
           evoucher_id: evoucherId,
           action: "Liquidation Submitted (Final) — Pending Accounting Verification",
-          previous_status: "pending_liquidation",
-          new_status: "pending_verification",
-          performed_by: currentUser.id,
-          performed_by_name: currentUser.name,
-          performed_by_role: "Handler",
+          status: "pending_verification",
+          user_id: currentUser.id,
+          user_name: currentUser.name,
+          user_role: "Handler",
+          metadata: {
+            previous_status: "pending_liquidation",
+            new_status: "pending_verification",
+          },
           created_at: new Date().toISOString(),
         });
 
         // 3. Auto-create Reimbursement EV if overspend
         if (hasOverspend) {
+          const reimbursementId = `EV-REIMB-${Date.now()}`;
+          const reimbursementCreatedAt = new Date().toISOString();
           const { error: reimburseError } = await supabase
             .from("evouchers")
             .insert({
-              id: `EV-REIMB-${Date.now()}`,
+              id: reimbursementId,
+              evoucher_number: reimbursementId,
               transaction_type: "reimbursement",
+              source_module: "operations",
               status: "draft",
-              requestor_id: currentUser.id,
-              requestor_name: currentUser.name,
               amount: overspend,
               currency: "PHP",
               purpose: `Reimbursement for overspend on ${evoucherNumber}`,
               description: `Automatically created from liquidation of ${evoucherNumber}. Handler spent ₱${overspend.toLocaleString()} beyond the approved advance.`,
               vendor_name: currentUser.name,
-              parent_voucher_id: evoucherId,
-              approvers: [],
-              workflow_history: [],
-              request_date: new Date().toISOString().split("T")[0],
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
+              created_by: currentUser.id,
+              created_by_name: currentUser.name,
+              details: {
+                requestor_id: currentUser.id,
+                requestor_name: currentUser.name,
+                parent_voucher_id: evoucherId,
+                request_date: reimbursementCreatedAt.split("T")[0],
+              },
+              created_at: reimbursementCreatedAt,
+              updated_at: reimbursementCreatedAt,
             });
 
           if (reimburseError) {
@@ -141,7 +153,7 @@ export function LiquidationForm({
             toast.warning("Overspend reimbursement EV could not be auto-created. Please create it manually.");
           } else {
             const reimburseActor = { id: currentUser.id, name: currentUser.name, department: "" };
-            logCreation("evoucher", `EV-REIMB-${Date.now()}`, `Reimbursement for ${evoucherNumber}`, reimburseActor);
+            logCreation("evoucher", reimbursementId, `Reimbursement for ${evoucherNumber}`, reimburseActor);
             toast.info(`A draft Reimbursement EV for ₱${overspend.toLocaleString()} has been created. Submit it separately.`);
           }
         }
@@ -182,9 +194,9 @@ export function LiquidationForm({
   };
 
   const footer = (
-    <div style={{ padding: "16px 24px", borderTop: "1px solid var(--neuron-ui-border)", display: "flex", flexDirection: "column", gap: "12px", backgroundColor: "var(--neuron-bg-elevated)" }}>
+    <div style={{ padding: "16px 24px", borderTop: "1px solid var(--theme-border-default)", display: "flex", flexDirection: "column", gap: "12px", backgroundColor: "var(--theme-bg-surface)" }}>
       {/* Final submission toggle */}
-      <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 16px", borderRadius: "8px", backgroundColor: isFinal ? "var(--theme-bg-surface-tint)" : "var(--theme-bg-surface-subtle)", border: "1px solid var(--neuron-ui-border)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 16px", borderRadius: "8px", backgroundColor: isFinal ? "var(--theme-bg-surface-tint)" : "var(--theme-bg-surface-subtle)", border: "1px solid var(--theme-border-default)" }}>
         <input
           type="checkbox"
           id="is-final"
@@ -192,7 +204,7 @@ export function LiquidationForm({
           onChange={(e) => setIsFinal(e.target.checked)}
           style={{ width: "16px", height: "16px", cursor: "pointer" }}
         />
-        <label htmlFor="is-final" style={{ fontSize: "13px", fontWeight: 500, color: "var(--neuron-ink-primary)", cursor: "pointer" }}>
+        <label htmlFor="is-final" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)", cursor: "pointer" }}>
           This is my final submission — close the advance and send to Accounting for review
         </label>
       </div>
@@ -200,14 +212,14 @@ export function LiquidationForm({
       <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
         <button
           onClick={onClose}
-          style={{ height: "40px", padding: "0 20px", background: "none", border: "none", color: "var(--neuron-ink-muted)", fontSize: "13px", fontWeight: 500, cursor: "pointer" }}
+          style={{ height: "40px", padding: "0 20px", background: "none", border: "none", color: "var(--theme-text-muted)", fontSize: "13px", fontWeight: 500, cursor: "pointer" }}
         >
           Cancel
         </button>
         <button
           onClick={handleSubmit}
           disabled={submitting}
-          style={{ height: "40px", padding: "0 24px", borderRadius: "8px", backgroundColor: "var(--neuron-action-primary)", border: "none", color: "var(--neuron-action-primary-text)", fontSize: "13px", fontWeight: 600, cursor: submitting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "8px", opacity: submitting ? 0.8 : 1 }}
+          style={{ height: "40px", padding: "0 24px", borderRadius: "8px", backgroundColor: "var(--theme-action-primary-bg)", border: "none", color: "var(--theme-action-primary-text)", fontSize: "13px", fontWeight: 600, cursor: submitting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "8px", opacity: submitting ? 0.8 : 1 }}
         >
           {submitting && <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} />}
           {isFinal ? "Submit & Close Advance" : "Save Receipts"}
@@ -216,12 +228,11 @@ export function LiquidationForm({
     </div>
   );
 
-  return (
-    <SidePanel isOpen={isOpen} onClose={onClose} title={`Liquidate ${evoucherNumber}`} footer={footer} width="560px">
-      <div style={{ padding: "24px", overflowY: "auto", height: "100%" }}>
+  const formBody = (
+    <div style={{ padding: inline ? "20px 0 0 0" : "24px", overflowY: inline ? undefined : "auto", height: inline ? undefined : "100%" }}>
 
         {/* Advance summary */}
-        <div style={{ padding: "12px 16px", borderRadius: "8px", backgroundColor: "var(--theme-bg-surface-subtle)", border: "1px solid var(--neuron-ui-border)", marginBottom: "24px" }}>
+        <div style={{ padding: "12px 16px", borderRadius: "8px", backgroundColor: "var(--theme-bg-surface-subtle)", border: "1px solid var(--theme-border-default)", marginBottom: "24px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
             <span style={{ fontSize: "13px", color: "var(--theme-text-muted)" }}>Cash Advance</span>
             <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
@@ -262,7 +273,7 @@ export function LiquidationForm({
             <p style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)" }}>Receipt Line Items</p>
             <button
               onClick={addItem}
-              style={{ height: "32px", padding: "0 12px", borderRadius: "6px", border: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-secondary)", fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
+              style={{ height: "32px", padding: "0 12px", borderRadius: "6px", border: "1px solid var(--theme-border-default)", backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-secondary)", fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
             >
               <Plus size={14} />
               Add receipt
@@ -274,31 +285,41 @@ export function LiquidationForm({
               <div key={item.id} style={{ display: "grid", gridTemplateColumns: "1fr 120px 32px", gap: "8px", alignItems: "start" }}>
                 {/* Description */}
                 <div>
-                  {index === 0 && (
-                    <p style={{ fontSize: "12px", color: "var(--theme-text-muted)", marginBottom: "4px" }}>Description</p>
-                  )}
+                  <label
+                    htmlFor={`li-desc-${item.id}`}
+                    style={{ display: index === 0 ? "block" : "none", fontSize: "12px", color: "var(--theme-text-muted)", marginBottom: "4px" }}
+                  >
+                    Description
+                  </label>
                   <input
+                    id={`li-desc-${item.id}`}
                     type="text"
                     value={item.description}
                     onChange={(e) => updateItem(item.id, "description", e.target.value)}
                     placeholder="e.g., Port charges, fuel, etc."
-                    style={{ width: "100%", height: "36px", border: "1px solid var(--neuron-ui-border)", borderRadius: "6px", padding: "0 10px", fontSize: "13px", outline: "none", boxSizing: "border-box" }}
+                    aria-label={index > 0 ? `Receipt description ${index + 1}` : undefined}
+                    style={{ width: "100%", height: "36px", border: "1px solid var(--theme-border-default)", borderRadius: "6px", padding: "0 10px", fontSize: "13px", outline: "none", boxSizing: "border-box", backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-primary)" }}
                   />
                 </div>
 
                 {/* Amount */}
                 <div>
-                  {index === 0 && (
-                    <p style={{ fontSize: "12px", color: "var(--theme-text-muted)", marginBottom: "4px" }}>Amount (₱)</p>
-                  )}
+                  <label
+                    htmlFor={`li-amt-${item.id}`}
+                    style={{ display: index === 0 ? "block" : "none", fontSize: "12px", color: "var(--theme-text-muted)", marginBottom: "4px" }}
+                  >
+                    Amount (₱)
+                  </label>
                   <input
+                    id={`li-amt-${item.id}`}
                     type="number"
                     value={item.amount || ""}
                     onChange={(e) => updateItem(item.id, "amount", parseFloat(e.target.value) || 0)}
                     placeholder="0.00"
                     min={0}
                     step={0.01}
-                    style={{ width: "100%", height: "36px", border: "1px solid var(--neuron-ui-border)", borderRadius: "6px", padding: "0 10px", fontSize: "13px", outline: "none", boxSizing: "border-box" }}
+                    aria-label={index > 0 ? `Receipt amount ${index + 1}` : undefined}
+                    style={{ width: "100%", height: "36px", border: "1px solid var(--theme-border-default)", borderRadius: "6px", padding: "0 10px", fontSize: "13px", outline: "none", boxSizing: "border-box", backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-primary)" }}
                   />
                 </div>
 
@@ -307,7 +328,7 @@ export function LiquidationForm({
                   <button
                     onClick={() => removeItem(item.id)}
                     disabled={lineItems.length === 1}
-                    style={{ width: "32px", height: "36px", borderRadius: "6px", border: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-muted)", cursor: lineItems.length === 1 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: lineItems.length === 1 ? 0.4 : 1 }}
+                    style={{ width: "32px", height: "36px", borderRadius: "6px", border: "1px solid var(--theme-border-default)", backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-muted)", cursor: lineItems.length === 1 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: lineItems.length === 1 ? 0.4 : 1 }}
                   >
                     <Trash2 size={14} />
                   </button>
@@ -331,11 +352,26 @@ export function LiquidationForm({
               placeholder="0.00"
               min={0}
               step={0.01}
-              style={{ width: "100%", height: "36px", border: "1px solid var(--neuron-ui-border)", borderRadius: "6px", padding: "0 10px", fontSize: "13px", outline: "none", boxSizing: "border-box" }}
+              style={{ width: "100%", height: "36px", border: "1px solid var(--theme-border-default)", borderRadius: "6px", padding: "0 10px", fontSize: "13px", outline: "none", boxSizing: "border-box", backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-primary)" }}
             />
           </div>
         )}
       </div>
+  );
+
+  if (inline) {
+    if (!isOpen) return null;
+    return (
+      <div style={{ borderTop: "1px solid var(--theme-border-default)", marginTop: "16px" }}>
+        {formBody}
+        {footer}
+      </div>
+    );
+  }
+
+  return (
+    <SidePanel isOpen={isOpen} onClose={onClose} title={`Liquidate ${evoucherNumber}`} footer={footer} width="560px">
+      {formBody}
     </SidePanel>
   );
 }

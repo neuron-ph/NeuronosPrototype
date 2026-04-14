@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X } from "lucide-react";
+import { X, Ban } from "lucide-react";
 import { ExpensesTab } from "../operations/shared/ExpensesTab";
 import { supabase } from "../../utils/supabase/client";
 import { useQuery } from "@tanstack/react-query";
@@ -22,6 +22,7 @@ interface ProjectBookingReadOnlyViewProps {
     department: string;
   } | null;
   onBookingUpdated?: () => void;
+  onOpenCancelDelete?: () => void;
 }
 
 type DetailTab = "booking-info" | "billings" | "expenses" | "comments";
@@ -31,9 +32,12 @@ export function ProjectBookingReadOnlyView({
   bookingType,
   onBack,
   currentUser,
-  onBookingUpdated
+  onBookingUpdated,
+  onOpenCancelDelete,
 }: ProjectBookingReadOnlyViewProps) {
   const [activeTab, setActiveTab] = useState<DetailTab>("booking-info");
+
+  const isPricing = currentUser?.department === "Pricing";
 
   const { data: booking = null, isFetching: isLoading } = useQuery({
     queryKey: [...queryKeys.bookings.detail(bookingId), bookingType],
@@ -169,7 +173,7 @@ export function ProjectBookingReadOnlyView({
                   color: "var(--theme-text-primary)",
                   marginBottom: "4px"
                 }}>
-                  {bookingId}
+                  {booking.booking_number || bookingId}
                 </h1>
                 <p style={{ fontSize: "13px", color: "var(--theme-text-muted)", margin: 0 }}>
                   {booking.customerName && booking.customerName !== "—" 
@@ -181,10 +185,41 @@ export function ProjectBookingReadOnlyView({
 
               <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                 {booking && (
-                  <StatusSelector 
-                    status={booking.status as ExecutionStatus} 
+                  <StatusSelector
+                    status={booking.status as ExecutionStatus}
                     readOnly={true}
                   />
+                )}
+
+                {/* Cancel / Delete — Pricing only */}
+                {isPricing && booking && (
+                  <button
+                    onClick={() => onOpenCancelDelete?.()}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      padding: "7px 14px",
+                      borderRadius: "6px",
+                      border: "1px solid var(--theme-border-default)",
+                      backgroundColor: "var(--theme-bg-surface)",
+                      color: "var(--theme-text-secondary)",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      cursor: "pointer",
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.borderColor = "var(--theme-status-danger-fg)";
+                      e.currentTarget.style.color = "var(--theme-status-danger-fg)";
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.borderColor = "var(--theme-border-default)";
+                      e.currentTarget.style.color = "var(--theme-text-secondary)";
+                    }}
+                  >
+                    <Ban size={14} />
+                    Cancel / Delete
+                  </button>
                 )}
 
                 {/* Close Button */}
@@ -343,7 +378,7 @@ export function ProjectBookingReadOnlyView({
           from { opacity: 0; }
           to { opacity: 1; }
         }
-        
+
         @keyframes slideInRight {
           from {
             transform: translateX(100%);
