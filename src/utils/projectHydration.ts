@@ -218,7 +218,6 @@ export function buildProjectInsertFromQuotation(
     id: options.id || `proj-${Date.now()}`,
     project_number: options.projectNumber,
     quotation_id: quotation.id ?? null,
-    quotation_name: quotation.quotation_name ?? null,
     customer_id: quotation.customer_id ?? null,
     customer_name: quotation.customer_name ?? quotation.customer_company ?? null,
     status: options.status || "Active",

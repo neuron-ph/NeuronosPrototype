@@ -28,8 +28,9 @@ function mapToForwardingBooking(row: Record<string, any>): ForwardingBooking {
     ...d,
     ...row,
     // Explicit camelCase mappings expected by ForwardingBooking type
-    bookingId: row.booking_number || row.id,
+    bookingId: row.id,
     id: row.id,
+    booking_number: row.booking_number,
     customerName: row.customer_name,
     projectNumber: d.project_number || row.project_id,
     accountOwner: d.account_owner || row.manager_name,
@@ -124,7 +125,12 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
     fetchBookings();
   };
 
-  const handleDeleteBooking = async (bookingId: string, currentStatus: ExecutionStatus, e: React.MouseEvent) => {
+  const handleDeleteBooking = async (
+    bookingId: string,
+    bookingLabel: string,
+    currentStatus: ExecutionStatus,
+    e: React.MouseEvent
+  ) => {
     e.stopPropagation(); // Prevent row click
 
     try {
@@ -134,14 +140,14 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
         return;
       }
 
-      if (!window.confirm(`Delete booking ${bookingId}? No linked invoices, collections, expenses, or e-vouchers were found.`)) {
+      if (!window.confirm(`Delete booking ${bookingLabel}? No linked invoices, collections, expenses, or e-vouchers were found.`)) {
         return;
       }
 
       const { error } = await supabase.from('bookings').delete().eq('id', bookingId);
       if (error) throw error;
 
-      logDeletion("booking", bookingId, bookingId, { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
+      logDeletion("booking", bookingId, bookingLabel, { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
       toast.success('Booking deleted successfully');
       fetchBookings(); // Refresh list
     } catch (error) {
@@ -668,7 +674,12 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
                       </td>
                       <td className="py-4 px-4 text-center">
                         <button
-                          onClick={(e) => handleDeleteBooking(booking.bookingId, booking.status as ExecutionStatus, e)}
+                          onClick={(e) => handleDeleteBooking(
+                            booking.bookingId,
+                            (booking as any).booking_number || booking.bookingId,
+                            booking.status as ExecutionStatus,
+                            e
+                          )}
                           style={{
                             display: "inline-flex",
                             alignItems: "center",
