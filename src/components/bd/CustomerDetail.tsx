@@ -1406,7 +1406,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
 
             {/* Tasks Tab */}
             {activeTab === "tasks" && (
-                <div>
+                <div className="h-full">
                   {!selectedTask && !isCreatingTask ? (
                     /* Task List */
                     <>
