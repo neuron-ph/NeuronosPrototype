@@ -15,6 +15,7 @@ import {
   ChevronRight,
   ChevronLeft,
   Menu,
+  X,
   Banknote,
   ListTodo,
   Truck,
@@ -58,6 +59,12 @@ interface NeuronSidebarProps {
   currentUser?: { name?: string; email?: string; department?: string; role?: string; avatar_url?: string | null } | null;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+  /** True when viewport is ≥ lg (1024px). Controls desktop vs mobile overlay rendering. */
+  isDesktop?: boolean;
+  /** Whether the mobile drawer is open. Only used when isDesktop=false. */
+  isMobileOpen?: boolean;
+  /** Called when the user taps the close button or backdrop on mobile. */
+  onMobileClose?: () => void;
 }
 
 // Wrapper component for the Philippine Peso icon
@@ -76,7 +83,10 @@ const PesoIcon = ({ size = 20, style }: { size?: number; style?: React.CSSProper
   </div>
 );
 
-export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapsed, onToggleCollapse }: NeuronSidebarProps) {
+export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapsed: _isCollapsed, onToggleCollapse, isDesktop = true, isMobileOpen = false, onMobileClose }: NeuronSidebarProps) {
+  // On mobile (< lg) the sidebar is always shown fully expanded as an overlay drawer.
+  // Shadow the prop so all existing JSX references get the effective value automatically.
+  const isCollapsed = !isDesktop ? false : _isCollapsed;
   const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
   const navRef = useRef<HTMLElement | null>(null);
   const [showTopScrollFade, setShowTopScrollFade] = useState(false);
@@ -182,7 +192,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
     };
   }, [
     updateScrollFade,
-    isCollapsed,
+    _isCollapsed,
     isBDExpanded,
     isPricingExpanded,
     isOperationsExpanded,
@@ -401,15 +411,27 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
 
   return (
     <div
-      className="flex flex-col h-full"
+      className="flex flex-col"
       style={{
-        // Width is controlled by the parent grid-template-columns in Layout.tsx
         minWidth: 0,
         backgroundColor: "var(--neuron-bg-elevated)",
         borderRight: "1px solid var(--neuron-ui-border)",
         overflow: "hidden",
-        position: "relative",
-        zIndex: 20,
+        // Desktop: sits in the CSS grid column, height fills the grid row
+        // Mobile: fixed overlay drawer that slides in from the left
+        ...(isDesktop
+          ? { position: "relative", zIndex: 20, height: "100%" }
+          : {
+              position: "fixed",
+              top: 0,
+              left: 0,
+              height: "100dvh",
+              width: "272px",
+              zIndex: 50,
+              transform: isMobileOpen ? "translateX(0)" : "translateX(-280px)",
+              transition: "transform 0.28s cubic-bezier(0.25, 1, 0.5, 1), box-shadow 0.28s",
+              boxShadow: isMobileOpen ? "4px 0 32px rgba(0,0,0,0.18)" : "none",
+            }),
       }}
     >
       {/* Header */}
@@ -427,51 +449,72 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
           />
         )}
         
-        {/* Collapse Toggle Button */}
-        <button
-          onClick={onToggleCollapse}
-          className="flex items-center justify-center rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuron-ui-active-border)]"
-          style={{
-            width: "32px",
-            height: "32px",
-            color: "var(--neuron-ink-muted)",
-            flexShrink: 0,
-            marginLeft: isCollapsed ? "auto" : "0",
-            marginRight: isCollapsed ? "auto" : "0",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = "transparent";
-          }}
-        >
-          <AnimatePresence initial={false} mode="wait">
-            {isCollapsed ? (
-              <motion.span
-                key="right"
-                initial={{ opacity: 0, rotate: -45 }}
-                animate={{ opacity: 1, rotate: 0 }}
-                exit={{ opacity: 0, rotate: 45 }}
-                transition={{ duration: 0.15, ease: [0.25, 1, 0.5, 1] }}
-                style={{ display: "flex" }}
-              >
-                <ChevronRight size={20} />
-              </motion.span>
-            ) : (
-              <motion.span
-                key="left"
-                initial={{ opacity: 0, rotate: 45 }}
-                animate={{ opacity: 1, rotate: 0 }}
-                exit={{ opacity: 0, rotate: -45 }}
-                transition={{ duration: 0.15, ease: [0.25, 1, 0.5, 1] }}
-                style={{ display: "flex" }}
-              >
-                <ChevronLeft size={20} />
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </button>
+        {/* Mobile: X close button — Desktop: collapse toggle */}
+        {!isDesktop ? (
+          <button
+            onClick={onMobileClose}
+            className="flex items-center justify-center rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuron-ui-active-border)]"
+            style={{
+              width: "32px",
+              height: "32px",
+              color: "var(--neuron-ink-muted)",
+              flexShrink: 0,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "transparent";
+            }}
+          >
+            <X size={20} />
+          </button>
+        ) : (
+          <button
+            onClick={onToggleCollapse}
+            className="flex items-center justify-center rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuron-ui-active-border)]"
+            style={{
+              width: "32px",
+              height: "32px",
+              color: "var(--neuron-ink-muted)",
+              flexShrink: 0,
+              marginLeft: isCollapsed ? "auto" : "0",
+              marginRight: isCollapsed ? "auto" : "0",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "transparent";
+            }}
+          >
+            <AnimatePresence initial={false} mode="wait">
+              {isCollapsed ? (
+                <motion.span
+                  key="right"
+                  initial={{ opacity: 0, rotate: -45 }}
+                  animate={{ opacity: 1, rotate: 0 }}
+                  exit={{ opacity: 0, rotate: 45 }}
+                  transition={{ duration: 0.15, ease: [0.25, 1, 0.5, 1] }}
+                  style={{ display: "flex" }}
+                >
+                  <ChevronRight size={20} />
+                </motion.span>
+              ) : (
+                <motion.span
+                  key="left"
+                  initial={{ opacity: 0, rotate: 45 }}
+                  animate={{ opacity: 1, rotate: 0 }}
+                  exit={{ opacity: 0, rotate: -45 }}
+                  transition={{ duration: 0.15, ease: [0.25, 1, 0.5, 1] }}
+                  style={{ display: "flex" }}
+                >
+                  <ChevronLeft size={20} />
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </button>
+        )}
       </div>
 
       {/* Navigation */}

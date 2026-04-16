@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react";
-import { Search, Plus, Mail, Phone, Building2, User, CircleDot } from "lucide-react";
+import { Search, Plus, Mail, Phone, User, CircleDot } from "lucide-react";
 import type { Contact } from "../../types/contact";
-import { ContactCreationModal } from "./ContactCreationModal";
 import { ContactDetailView } from "./ContactDetailView";
 import { QuotationBuilderV3 } from "../pricing/quotations/QuotationBuilderV3";
 import { supabase } from "../../utils/supabase/client";
@@ -13,6 +12,8 @@ import { CustomDropdown } from "../bd/CustomDropdown";
 import { useContacts } from "../../hooks/useContacts";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../../lib/queryKeys";
+import { AddContactPanel } from "../bd/AddContactPanel";
+import { useBreakpoint } from "../../hooks/useBreakpoint";
 
 type View = "list" | "detail" | "builder";
 
@@ -24,7 +25,7 @@ interface ContactsModuleWithBackendProps {
 export function ContactsModuleWithBackend({ onViewQuotation, contactId }: ContactsModuleWithBackendProps) {
   const [view, setView] = useState<View>("list");
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
+  const [isAddContactOpen, setIsAddContactOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
   const [quotation, setQuotation] = useState<QuotationNew | null>(null);
@@ -32,8 +33,10 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
   const { user } = useUser();
   const queryClient = useQueryClient();
   const { contacts: allContacts, isLoading } = useContacts();
+  const { isMobile, isTablet } = useBreakpoint();
+  const isCompact = isMobile || isTablet;
 
-  // Client-side filtering (replaces server-side search + status filter)
+  // Client-side filtering
   const contacts = useMemo(() => {
     return allContacts.filter((c: any) => {
       if (statusFilter !== "All Statuses" && c.status !== statusFilter) return false;
@@ -60,20 +63,37 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
     });
   }
 
-  // Create new contact
-  const handleCreateContact = async (contactData: Partial<Contact>) => {
+  // Create new contact — adapts AddContactPanel's data format to the contacts table
+  const handleCreateContact = async (contactData: any) => {
     try {
       const newId = `contact-${Date.now()}`;
+      const firstName = contactData.first_name || "";
+      const lastName = contactData.last_name || "";
+      const transformedData = {
+        name: `${firstName} ${lastName}`.trim() || contactData.name || "Contact",
+        first_name: firstName || null,
+        last_name: lastName || null,
+        title: contactData.title || null,
+        email: contactData.email || null,
+        phone: contactData.phone || null,
+        customer_id: contactData.customer_id || null,
+        owner_id: contactData.owner_id || null,
+        lifecycle_stage: contactData.lifecycle_stage || "Lead",
+        lead_status: contactData.lead_status || "New",
+        notes: contactData.notes || null,
+        created_by: user?.id ?? null,
+      };
+
       const { error } = await supabase.from('contacts').insert({
-        ...contactData,
+        ...transformedData,
         id: newId,
         created_at: new Date().toISOString(),
       });
       if (error) throw error;
       const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
-      logCreation("contact", newId, contactData.name ?? newId, _actor);
+      logCreation("contact", newId, transformedData.name, _actor);
       queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all() });
-      setIsCreating(false);
+      setIsAddContactOpen(false);
     } catch (error) {
       console.error("Error creating contact:", error);
       throw error;
@@ -97,7 +117,6 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
     }
   };
 
-  // View contact detail — use the already-fetched contact object directly
   const handleViewContact = (contact: Contact) => {
     setSelectedContact(contact);
     setView("detail");
@@ -177,7 +196,6 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
           contact_person_name: selectedContact.name,
           contact_person_id: selectedContact.id,
           customer_name: selectedContact.company,
-          // customer_id will need to be looked up from the customer database
         }}
       />
     );
@@ -196,7 +214,7 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
       {/* Header */}
       <div
         style={{
-          padding: "32px 48px 24px 48px",
+          padding: isMobile ? "16px 16px 16px 16px" : "32px 48px 24px 48px",
           borderBottom: "1px solid var(--neuron-ui-border)",
         }}
       >
@@ -204,24 +222,27 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
           style={{
             display: "flex",
             justifyContent: "space-between",
-            alignItems: "flex-start",
-            marginBottom: "24px",
+            alignItems: "center",
+            marginBottom: isMobile ? "16px" : "24px",
+            gap: "12px",
           }}
         >
-          <div>
+          <div style={{ minWidth: 0 }}>
             <h1
               style={{
-                fontSize: "28px",
+                fontSize: isMobile ? "22px" : "28px",
                 fontWeight: 600,
                 color: "var(--neuron-ink-primary)",
                 marginBottom: "4px",
+                letterSpacing: "-0.8px",
+                lineHeight: 1.2,
               }}
             >
               Contacts
             </h1>
             <p
               style={{
-                fontSize: "14px",
+                fontSize: "13px",
                 color: "var(--neuron-ink-muted)",
                 margin: 0,
               }}
@@ -231,12 +252,13 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
           </div>
 
           <button
-            onClick={() => setIsCreating(true)}
+            onClick={() => setIsAddContactOpen(true)}
             style={{
               display: "flex",
               alignItems: "center",
               gap: "8px",
-              padding: "10px 20px",
+              height: "40px",
+              padding: "0 20px",
               backgroundColor: "var(--neuron-brand-green)",
               border: "none",
               borderRadius: "8px",
@@ -244,17 +266,16 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
               fontWeight: 600,
               color: "white",
               cursor: "pointer",
-              transition: "all 0.2s ease",
+              transition: "background-color 0.15s ease",
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.backgroundColor = "#0F544A";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor =
-                "var(--neuron-brand-green)";
+              e.currentTarget.style.backgroundColor = "var(--neuron-brand-green)";
             }}
           >
-            <Plus size={18} />
+            <Plus size={16} />
             Add Contact
           </button>
         </div>
@@ -264,7 +285,7 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
           {/* Search */}
           <div style={{ position: "relative", flex: 1 }}>
             <Search
-              size={18}
+              size={16}
               style={{
                 position: "absolute",
                 left: "12px",
@@ -280,16 +301,17 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
                 width: "100%",
-                padding: "10px 12px 10px 40px",
-                border: "1px solid var(--neuron-ui-border)",
+                padding: "9px 12px 9px 38px",
+                border: "1.5px solid var(--neuron-ui-border)",
                 borderRadius: "8px",
-                fontSize: "14px",
+                fontSize: "13px",
+                color: "var(--neuron-ink-primary)",
+                backgroundColor: "var(--theme-bg-surface)",
                 outline: "none",
-                transition: "border-color 0.2s ease",
+                transition: "border-color 0.15s ease",
               }}
               onFocus={(e) => {
-                e.currentTarget.style.borderColor =
-                  "var(--neuron-brand-green)";
+                e.currentTarget.style.borderColor = "var(--neuron-brand-green)";
               }}
               onBlur={(e) => {
                 e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
@@ -302,11 +324,11 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
             value={statusFilter}
             onChange={setStatusFilter}
             options={[
-              { value: "All Statuses", label: "All Statuses", icon: <CircleDot size={16} /> },
-              { value: "Lead", label: "Lead", icon: <CircleDot size={16} style={{ color: "var(--theme-text-muted)" }} /> },
-              { value: "Prospect", label: "Prospect", icon: <CircleDot size={16} style={{ color: "#F59E0B" }} /> },
-              { value: "MQL", label: "MQL", icon: <CircleDot size={16} style={{ color: "#3B82F6" }} /> },
-              { value: "Customer", label: "Customer", icon: <CircleDot size={16} style={{ color: "#10B981" }} /> }
+              { value: "All Statuses", label: "All Statuses", icon: <CircleDot size={14} /> },
+              { value: "Lead", label: "Lead", icon: <CircleDot size={14} style={{ color: "var(--theme-text-muted)" }} /> },
+              { value: "Prospect", label: "Prospect", icon: <CircleDot size={14} style={{ color: "#F59E0B" }} /> },
+              { value: "MQL", label: "MQL", icon: <CircleDot size={14} style={{ color: "#3B82F6" }} /> },
+              { value: "Customer", label: "Customer", icon: <CircleDot size={14} style={{ color: "#10B981" }} /> }
             ]}
             placeholder="Filter by status"
           />
@@ -314,7 +336,7 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
       </div>
 
       {/* Table */}
-      <div style={{ flex: 1, overflow: "auto", padding: "24px 48px" }}>
+      <div style={{ flex: 1, overflow: "auto", padding: isMobile ? "16px" : "24px 48px" }}>
         {isLoading ? (
           <div
             style={{
@@ -323,6 +345,7 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
               justifyContent: "center",
               padding: "60px 20px",
               color: "var(--neuron-ink-muted)",
+              fontSize: "13px",
             }}
           >
             Loading contacts...
@@ -334,203 +357,192 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
               flexDirection: "column",
               alignItems: "center",
               justifyContent: "center",
-              padding: "60px 20px",
+              padding: "80px 20px",
               color: "var(--neuron-ink-muted)",
             }}
           >
-            <User size={48} style={{ marginBottom: "16px", opacity: 0.3 }} />
-            <p style={{ fontSize: "16px", fontWeight: 500 }}>
-              No contacts found
+            <div style={{
+              width: "48px",
+              height: "48px",
+              borderRadius: "12px",
+              backgroundColor: "var(--theme-bg-surface-tint)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: "16px",
+            }}>
+              <User size={20} style={{ color: "var(--neuron-brand-green)" }} />
+            </div>
+            <p style={{ fontSize: "14px", fontWeight: 600, color: "var(--neuron-ink-primary)", margin: "0 0 6px 0" }}>
+              {searchQuery || statusFilter !== "All Statuses" ? "No contacts match your filters" : "No contacts yet"}
             </p>
-            <p style={{ fontSize: "14px", marginTop: "8px" }}>
+            <p style={{ fontSize: "13px", color: "var(--neuron-ink-muted)", margin: 0 }}>
               {searchQuery || statusFilter !== "All Statuses"
-                ? "Try adjusting your filters"
-                : "Add your first contact to get started"}
+                ? "Try adjusting your search or filters"
+                : "Add your first contact to start building your pipeline"}
             </p>
           </div>
         ) : (
           <div
             style={{
-              border: "1px solid var(--theme-border-default)",
-              borderRadius: "12px",
+              border: "1.5px solid var(--theme-border-default)",
+              borderRadius: "10px",
               overflow: "hidden",
               backgroundColor: "var(--theme-bg-surface)",
             }}
           >
-            {/* Table Header */}
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "2fr 2fr 1.5fr 1fr 1fr",
-                gap: "16px",
-                padding: "12px 24px",
-                backgroundColor: "transparent",
-                borderBottom: "1px solid var(--theme-border-default)",
-                fontSize: "11px",
-                fontWeight: 600,
-                color: "var(--theme-text-muted)",
-                textTransform: "uppercase",
-                letterSpacing: "0.5px",
-              }}
-            >
-              <div>Name</div>
-              <div>Company</div>
-              <div>Contact Info</div>
-              <div>Status</div>
-              <div>Last Activity</div>
-            </div>
-
-            {/* Table Rows */}
-            {contacts.map((contact, index) => {
-              const statusColors = getStatusColor(contact.status);
-              return (
-                <div
-                  key={contact.id}
-                  onClick={() => handleViewContact(contact)}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "2fr 2fr 1.5fr 1fr 1fr",
-                    gap: "16px",
-                    padding: "16px 24px",
-                    backgroundColor: index % 2 === 0 ? "var(--theme-bg-surface)" : "var(--neuron-pill-inactive-bg)",
-                    cursor: "pointer",
-                    transition: "background-color 0.2s",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor =
-                      index % 2 === 0 ? "var(--theme-bg-surface)" : "var(--neuron-pill-inactive-bg)";
-                  }}
-                >
-                  {/* Name */}
+            {isCompact ? (
+              // ── Mobile / tablet: vertical card list ────────────────
+              contacts.map((contact, index) => {
+                const statusColors = getStatusColor(contact.status);
+                return (
                   <div
-                    style={{ display: "flex", alignItems: "center", gap: "8px" }}
-                  >
-                    <div
-                      style={{
-                        width: "32px",
-                        height: "32px",
-                        borderRadius: "50%",
-                        backgroundColor: "var(--theme-bg-surface-tint)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
-                      }}
-                    >
-                      <User size={16} style={{ color: "var(--neuron-brand-green)" }} />
-                    </div>
-                    <span
-                      style={{
-                        fontSize: "14px",
-                        fontWeight: 500,
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    >
-                      {contact.name}
-                    </span>
-                  </div>
-
-                  {/* Company */}
-                  <div style={{ display: "flex", alignItems: "center" }}>
-                    <span
-                      style={{
-                        fontSize: "14px",
-                        color: "var(--neuron-ink-secondary)",
-                      }}
-                    >
-                      {contact.company}
-                    </span>
-                  </div>
-
-                  {/* Contact Info */}
-                  <div
+                    key={contact.id}
+                    onClick={() => handleViewContact(contact)}
                     style={{
                       display: "flex",
-                      flexDirection: "column",
-                      gap: "2px",
-                      justifyContent: "center",
+                      alignItems: "center",
+                      gap: "12px",
+                      padding: "14px 16px",
+                      borderBottom: index < contacts.length - 1 ? "1px solid var(--theme-border-default)" : "none",
+                      cursor: "pointer",
+                      transition: "background-color 0.1s",
                     }}
+                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
                   >
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "4px",
-                      }}
-                    >
-                      <Mail size={12} style={{ color: "var(--neuron-ink-muted)" }} />
-                      <span
-                        style={{
-                          fontSize: "12px",
-                          color: "var(--neuron-ink-secondary)",
-                        }}
-                      >
-                        {contact.email}
-                      </span>
+                    <div style={{
+                      width: "38px", height: "38px", borderRadius: "50%", flexShrink: 0,
+                      backgroundColor: "var(--theme-bg-surface-tint)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: "14px", fontWeight: 700, color: "var(--neuron-brand-green)",
+                    }}>
+                      {(contact.name || "?").charAt(0).toUpperCase()}
                     </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "4px",
-                      }}
-                    >
-                      <Phone size={12} style={{ color: "var(--neuron-ink-muted)" }} />
-                      <span
-                        style={{
-                          fontSize: "12px",
-                          color: "var(--neuron-ink-secondary)",
-                        }}
-                      >
-                        {contact.phone}
-                      </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--neuron-ink-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: contact.company ? "2px" : 0 }}>
+                        {contact.name}
+                      </div>
+                      {contact.company && (
+                        <div style={{ fontSize: "12px", color: "var(--neuron-ink-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {contact.company}
+                        </div>
+                      )}
                     </div>
-                  </div>
-
-                  {/* Status */}
-                  <div style={{ display: "flex", alignItems: "center" }}>
-                    <span
-                      style={{
-                        padding: "4px 10px",
-                        borderRadius: "6px",
-                        backgroundColor: statusColors.bg,
-                        color: statusColors.text,
-                        fontSize: "12px",
-                        fontWeight: 500,
-                      }}
-                    >
+                    <span style={{
+                      padding: "3px 9px", borderRadius: "4px", flexShrink: 0,
+                      backgroundColor: statusColors.bg, color: statusColors.text,
+                      fontSize: "11px", fontWeight: 600,
+                    }}>
                       {contact.status}
                     </span>
                   </div>
-
-                  {/* Last Activity */}
-                  <div style={{ display: "flex", alignItems: "center" }}>
-                    <span
-                      style={{
-                        fontSize: "13px",
-                        color: "var(--neuron-ink-muted)",
-                      }}
-                    >
-                      {formatDate(contact.last_activity)}
-                    </span>
-                  </div>
+                );
+              })
+            ) : (
+              // ── Desktop: grid table ────────────────────────────────
+              <>
+                {/* Table Header */}
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: "2fr 2fr 1.5fr 1fr 1fr",
+                  gap: "16px",
+                  padding: "10px 24px",
+                  borderBottom: "1px solid var(--theme-border-default)",
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  color: "var(--theme-text-muted)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.6px",
+                }}>
+                  <div>Name</div>
+                  <div>Company</div>
+                  <div>Contact Info</div>
+                  <div>Status</div>
+                  <div>Last Activity</div>
                 </div>
-              );
-            })}
+
+                {/* Table Rows */}
+                {contacts.map((contact, index) => {
+                  const statusColors = getStatusColor(contact.status);
+                  return (
+                    <div
+                      key={contact.id}
+                      onClick={() => handleViewContact(contact)}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "2fr 2fr 1.5fr 1fr 1fr",
+                        gap: "16px",
+                        padding: "14px 24px",
+                        borderBottom: index < contacts.length - 1 ? "1px solid var(--theme-border-default)" : "none",
+                        cursor: "pointer",
+                        transition: "background-color 0.1s",
+                        backgroundColor: "transparent",
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <div style={{
+                          width: "30px", height: "30px", borderRadius: "50%", flexShrink: 0,
+                          backgroundColor: "var(--theme-bg-surface-tint)",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: "11px", fontWeight: 700, color: "var(--neuron-brand-green)", letterSpacing: "0.02em",
+                        }}>
+                          {(contact.name || "?").charAt(0).toUpperCase()}
+                        </div>
+                        <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--neuron-ink-primary)" }}>
+                          {contact.name}
+                        </span>
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center" }}>
+                        <span style={{ fontSize: "13px", color: "var(--neuron-ink-secondary)" }}>
+                          {contact.company || "—"}
+                        </span>
+                      </div>
+
+                      <div style={{ display: "flex", flexDirection: "column", gap: "3px", justifyContent: "center" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                          <Mail size={11} style={{ color: "var(--neuron-ink-muted)", flexShrink: 0 }} />
+                          <span style={{ fontSize: "12px", color: "var(--neuron-ink-secondary)" }}>{contact.email || "—"}</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                          <Phone size={11} style={{ color: "var(--neuron-ink-muted)", flexShrink: 0 }} />
+                          <span style={{ fontSize: "12px", color: "var(--neuron-ink-secondary)" }}>{contact.phone || "—"}</span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center" }}>
+                        <span style={{
+                          padding: "3px 9px", borderRadius: "4px",
+                          backgroundColor: statusColors.bg, color: statusColors.text,
+                          fontSize: "11px", fontWeight: 600, letterSpacing: "0.02em",
+                        }}>
+                          {contact.status}
+                        </span>
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center" }}>
+                        <span style={{ fontSize: "12px", color: "var(--neuron-ink-muted)" }}>
+                          {contact.last_activity ? formatDate(contact.last_activity) : "—"}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
+            )}
           </div>
         )}
       </div>
 
-      {/* Creation Modal */}
-      {isCreating && (
-        <ContactCreationModal
-          onClose={() => setIsCreating(false)}
-          onSave={handleCreateContact}
-        />
-      )}
+      {/* Add Contact Side Panel */}
+      <AddContactPanel
+        isOpen={isAddContactOpen}
+        onClose={() => setIsAddContactOpen(false)}
+        onSave={handleCreateContact}
+      />
     </div>
   );
 }

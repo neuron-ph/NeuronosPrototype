@@ -17,8 +17,40 @@ Development is now fully local with Claude Code. No Figma Make. All data access 
 
 - **Always develop and commit on `dev`** — pushing to `dev` triggers a Vercel preview build against the dev Supabase
 - **Never commit directly to `main`** — it is production
-- **To release to prod**: merge `dev → main` and push — always confirm with Marcus before doing this
+- **To release to prod**: Marcus says **"Release dev to prod"** — this triggers a full checklist (see below), not just a git merge. Never do a partial release.
 - Vercel env vars are scoped per environment: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set to the dev instance for Preview, and the prod instance for Production
+
+### "Release dev to prod" — Full Checklist
+
+When Marcus says **"Release dev to prod"**, always do ALL of these in order:
+
+1. **Edge Functions** — compare every function in `supabase/functions/` against what's deployed on prod (via MCP). Redeploy any that differ.
+2. **SQL migrations** — check `supabase/migrations/` for any files not yet applied to prod. Surface them to Marcus for manual confirmation before applying.
+3. **Merge `dev → main`** and push.
+4. **Tag the release** — `git tag stable/YYYY-MM-DD && git push origin stable/YYYY-MM-DD`.
+
+Never do just the git merge alone — Edge Functions and DB schema are separate systems that don't move with git. Skipping steps 1–2 is how dev/prod drift happens.
+
+### Locking a Stable Prod State
+
+When a prod release is stable and you want to keep developing without risk:
+
+```bash
+# Tag the stable commit so you can always return to it
+git tag stable/YYYY-MM-DD        # e.g. stable/2026-04-15
+git push origin stable/2026-04-15
+
+# Then keep developing on dev as normal
+```
+
+To roll prod back to the last stable tag if something goes wrong:
+```bash
+git checkout main
+git reset --hard stable/YYYY-MM-DD
+git push origin main --force      # confirm with Marcus before doing this
+```
+
+**The rule**: tag `main` every time a prod release is confirmed working. Tags are cheap and give you a safe rollback point without needing a separate branch.
 
 ## Commands
 
@@ -166,6 +198,23 @@ Default to `supabase.from()` for all data operations. Only reach for an Edge Fun
 - **Admin auth operations** — creating users with a set password (`auth.admin.createUser`), deleting auth accounts, etc. These require the `SUPABASE_SERVICE_ROLE_KEY`, which must never be exposed to the frontend.
 
 Do not write a new Edge Function for anything achievable with the Supabase JS client and RLS.
+
+### Edge Function Rules (learned from prod incident)
+
+1. **Never edit Edge Functions directly in the Supabase dashboard.** Always edit the local file in `supabase/functions/<name>/index.ts` first, then deploy via MCP or CLI. Dashboard edits create invisible drift between dev and prod.
+
+2. **Always use `verify_jwt: false` + manual auth inside the function.** Never rely on `verify_jwt: true` (the Supabase gateway JWT check) — it can silently reject requests before the function runs, making errors hard to diagnose. Instead, read the `Authorization` header inside the function, decode the JWT manually (`atob(jwt.split(".")[1])`), and use the admin client (service role key) to verify the caller.
+
+3. **After any Edge Function change on dev, deploy to prod immediately** — don't leave the two projects running different function versions.
+
+4. **Current Edge Function pattern** (use this as the template):
+   ```ts
+   // verify_jwt: false — function handles its own auth
+   const authHeader = req.headers.get("Authorization");
+   const jwt = authHeader.replace("Bearer ", "");
+   const { sub: callerAuthId } = JSON.parse(atob(jwt.split(".")[1]));
+   // use adminClient.from("users").eq("auth_id", callerAuthId).maybeSingle() to verify caller
+   ```
 
 ## Things to Avoid
 

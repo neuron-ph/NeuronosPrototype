@@ -304,7 +304,7 @@ function ItemRow({
     <button
       type="button"
       onClick={onClick}
-      className="w-full px-4 py-2.5 flex items-start gap-3 text-left transition-colors hover:bg-[var(--neuron-state-hover)] focus-visible:outline-none focus-visible:bg-[var(--neuron-state-selected)]"
+      className="w-full px-4 py-3 sm:py-2.5 flex items-start gap-3 text-left transition-colors hover:bg-[var(--neuron-state-hover)] focus-visible:outline-none focus-visible:bg-[var(--neuron-state-selected)]"
       style={urgent ? { background: "var(--neuron-semantic-danger-bg)" } : undefined}
     >
       <StatusDot color={dotColor} />
@@ -667,11 +667,11 @@ function TodoRow({
       <button
         type="button"
         onClick={() => onDelete(todo.id)}
-        className="w-4 h-4 flex-shrink-0 flex items-center justify-center rounded transition-all duration-150 hover:text-[var(--neuron-semantic-danger)]"
+        className="w-5 h-5 flex-shrink-0 flex items-center justify-center rounded transition-all duration-150 hover:text-[var(--neuron-semantic-danger)] [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:pointer-events-none"
         style={{
           color: "var(--neuron-ink-muted)",
-          opacity: hovered ? 1 : 0,
-          pointerEvents: hovered ? "auto" : "none",
+          opacity: hovered ? 1 : undefined,
+          pointerEvents: hovered ? "auto" : undefined,
         }}
         aria-label="Delete task"
         tabIndex={hovered ? 0 : -1}
@@ -704,7 +704,7 @@ function JumpBackIn({ onNavigate }: { onNavigate: (path: string) => void }) {
               key={i}
               type="button"
               onClick={() => onNavigate(r.path)}
-              className="w-full px-5 py-2 flex items-center gap-3 text-left transition-colors hover:bg-[var(--neuron-state-hover)] focus-visible:outline-none focus-visible:bg-[var(--neuron-state-selected)]"
+              className="w-full px-5 py-3 sm:py-2.5 flex items-center gap-3 text-left transition-colors hover:bg-[var(--neuron-state-hover)] focus-visible:outline-none focus-visible:bg-[var(--neuron-state-selected)]"
             >
               <span className="flex-shrink-0" style={{ color: RECENT_TYPE_COLOR[r.type] }}>
                 {recentTypeIcon(r.type)}
@@ -890,23 +890,23 @@ function DeptQueuePanel({
   return (
     <Panel>
       <div
-        className="flex items-center justify-between px-4"
+        className="flex items-center justify-between min-w-0 overflow-x-auto scrollbar-hide"
         style={{ borderBottom: "1px solid var(--neuron-ui-border)" }}
       >
         <h2
-          className="text-[13px] font-semibold tracking-tight py-3"
+          className="text-[13px] font-semibold tracking-tight py-3 px-4 flex-shrink-0"
           style={{ color: "var(--neuron-ink-primary)" }}
         >
           {queueLabel}
         </h2>
         {tabs.length > 1 && (
-          <div className="flex items-center gap-0">
+          <div className="flex items-center gap-0 flex-shrink-0 pr-1">
             {tabs.map((tab) => (
               <button
                 key={tab.key}
                 type="button"
                 onClick={() => setActiveTab(tab.key)}
-                className="flex items-center gap-1.5 px-3 py-3 text-[12px] font-medium transition-colors border-b-2 focus-visible:outline-none"
+                className="flex items-center gap-1.5 px-3 py-3 text-[12px] font-medium transition-colors border-b-2 focus-visible:outline-none whitespace-nowrap"
                 style={{
                   color:            activeTab === tab.key ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)",
                   borderBottomColor: activeTab === tab.key ? "var(--neuron-brand-green)" : "transparent",
@@ -1171,12 +1171,12 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
 
       {/* ── Mission briefing header ── */}
       <motion.div
-        className="px-10 pt-8 pb-6 flex-shrink-0"
+        className="px-5 sm:px-7 lg:px-10 pt-5 sm:pt-6 lg:pt-8 pb-4 sm:pb-5 lg:pb-6 flex-shrink-0"
         initial={{ opacity: 0, y: -6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, ease: EASE_OUT_QUINT }}
       >
-        <div className="flex items-start justify-between gap-8">
+        <div className="flex items-start justify-between gap-4 sm:gap-6 lg:gap-8">
 
           {/* Identity block */}
           <div>
@@ -1184,7 +1184,7 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
               {getMessagePool()[msgIndex]}
             </p>
             <h1
-              className="text-[34px] font-semibold tracking-tight leading-tight"
+              className="text-[26px] sm:text-[30px] lg:text-[34px] font-semibold tracking-tight leading-tight"
               style={{ color: "var(--neuron-ink-primary)", letterSpacing: "-0.03em" }}
             >
               {getGreeting()}, {firstName}.
@@ -1214,7 +1214,7 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
               aria-label={`${attentionCount} items need attention — go to inbox`}
             >
               <p
-                className="text-[52px] font-semibold tabular-nums leading-none transition-opacity group-hover:opacity-70"
+                className="text-[38px] sm:text-[46px] lg:text-[52px] font-semibold tabular-nums leading-none transition-opacity group-hover:opacity-70"
                 style={{
                   color:          urgentCount > 0 ? "var(--neuron-semantic-danger)" : "var(--neuron-brand-green)",
                   letterSpacing:  "-0.04em",
@@ -1237,7 +1237,7 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
         </div>
 
         {/* Header rule */}
-        <div className="mt-6" style={{ borderBottom: "1px solid var(--neuron-ui-divider)" }} />
+        <div className="mt-4 sm:mt-5 lg:mt-6" style={{ borderBottom: "1px solid var(--neuron-ui-divider)" }} />
       </motion.div>
 
       {/* ── Content ── */}
@@ -1253,10 +1253,10 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
           style={{ height: "40px", background: "linear-gradient(to top, var(--theme-bg-surface), transparent)" }}
         />
 
-        <div className="h-full overflow-auto scrollbar-hide px-10 pt-4 pb-12">
+        <div className="h-full overflow-auto scrollbar-hide px-5 sm:px-7 lg:px-10 pt-4 pb-12">
 
-          {/* Responsive grid: single column → 2fr/1fr at lg */}
-          <div className="grid gap-4 grid-cols-1 lg:grid-cols-[2fr_1fr]">
+          {/* Responsive grid: single column → 2-column at md */}
+          <div className="grid gap-4 grid-cols-1 md:grid-cols-[2fr_1fr]">
 
             {/* My Work — col 1, row 1 */}
             <motion.div
@@ -1264,7 +1264,7 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
               variants={panelVariants}
               initial="hidden"
               animate="visible"
-              className="lg:col-start-1 lg:row-start-1"
+              className="md:col-start-1 md:row-start-1"
             >
               <MyWorkPanel
                 tickets={myTickets}
@@ -1283,7 +1283,7 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
               variants={panelVariants}
               initial="hidden"
               animate="visible"
-              className="flex flex-col min-h-0 lg:col-start-2 lg:row-start-1 lg:row-span-2"
+              className="flex flex-col min-h-0 md:col-start-2 md:row-start-1 md:row-span-2"
               style={{ height: "100%" }}
             >
               {userId && <TodoPanel userId={userId} />}
@@ -1295,7 +1295,7 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
               variants={panelVariants}
               initial="hidden"
               animate="visible"
-              className="lg:col-start-1 lg:row-start-2"
+              className="md:col-start-1 md:row-start-2"
             >
               <JumpBackIn onNavigate={goTo} />
             </motion.div>
@@ -1307,7 +1307,7 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
                 variants={panelVariants}
                 initial="hidden"
                 animate="visible"
-                className="col-span-full lg:row-start-3"
+                className="col-span-full md:row-start-3"
               >
                 <DeptQueuePanel
                   dept={dept}

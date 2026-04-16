@@ -1,6 +1,7 @@
-import { ArrowLeft, Mail, Phone, Building2, Calendar, FileText, Edit2, Save, X, Plus } from "lucide-react";
+import { ArrowLeft, Mail, Phone, Building2, FileText, Edit2, Save, X, Plus } from "lucide-react";
 import { useState } from "react";
 import type { Contact } from "../../types/contact";
+import { useBreakpoint } from "../../hooks/useBreakpoint";
 
 interface ContactDetailViewProps {
   contact: Contact;
@@ -13,6 +14,7 @@ interface ContactDetailViewProps {
 export function ContactDetailView({ contact, onBack, onUpdate, onViewQuotation, onCreateInquiry }: ContactDetailViewProps) {
   const [activeTab, setActiveTab] = useState<"activities" | "tasks" | "inquiries" | "attachments" | "comments">("inquiries");
   const [isEditing, setIsEditing] = useState(false);
+  const { isMobile } = useBreakpoint();
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
     name: contact.name,
@@ -84,9 +86,9 @@ export function ContactDetailView({ contact, onBack, onUpdate, onViewQuotation, 
       backgroundColor: "var(--theme-bg-surface)"
     }}>
       {/* Header */}
-      <div style={{ 
-        padding: "32px 48px 0",
-        borderBottom: "1px solid var(--neuron-ui-border)"
+      <div style={{
+        padding: isMobile ? "16px 16px 0" : "32px 48px 0",
+        borderBottom: "1px solid var(--neuron-ui-border)",
       }}>
         <button
           onClick={onBack}
@@ -97,11 +99,11 @@ export function ContactDetailView({ contact, onBack, onUpdate, onViewQuotation, 
             background: "none",
             border: "none",
             cursor: "pointer",
-            fontSize: "14px",
+            fontSize: "13px",
             fontWeight: 500,
             color: "var(--neuron-ink-secondary)",
-            marginBottom: "24px",
-            padding: "4px 0"
+            marginBottom: isMobile ? "16px" : "24px",
+            padding: "4px 0",
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.color = "var(--neuron-brand-green)";
@@ -114,15 +116,22 @@ export function ContactDetailView({ contact, onBack, onUpdate, onViewQuotation, 
           Back to Contacts
         </button>
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "32px" }}>
-          <div style={{ flex: 1 }}>
+        <div style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          marginBottom: isMobile ? "20px" : "32px",
+          gap: "12px",
+          flexWrap: isMobile ? "wrap" : "nowrap",
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
             {isEditing ? (
               <input
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 style={{
-                  fontSize: "28px",
+                  fontSize: isMobile ? "22px" : "28px",
                   fontWeight: 600,
                   color: "var(--neuron-ink-primary)",
                   border: "1px solid var(--neuron-ui-border)",
@@ -130,15 +139,16 @@ export function ContactDetailView({ contact, onBack, onUpdate, onViewQuotation, 
                   padding: "8px 12px",
                   width: "100%",
                   maxWidth: "500px",
-                  outline: "none"
+                  outline: "none",
                 }}
               />
             ) : (
-              <h1 style={{ 
-                fontSize: "28px",
+              <h1 style={{
+                fontSize: isMobile ? "22px" : "28px",
                 fontWeight: 600,
                 color: "var(--neuron-ink-primary)",
-                marginBottom: "4px"
+                marginBottom: "4px",
+                lineHeight: 1.2,
               }}>
                 {contact.name}
               </h1>
@@ -281,7 +291,13 @@ export function ContactDetailView({ contact, onBack, onUpdate, onViewQuotation, 
         </div>
 
         {/* Tabs */}
-        <div style={{ display: "flex", gap: "32px", borderBottom: "1px solid var(--neuron-ui-border)" }}>
+        <div style={{
+          display: "flex",
+          gap: isMobile ? "20px" : "32px",
+          borderBottom: "1px solid var(--neuron-ui-border)",
+          overflowX: isMobile ? "auto" : "visible",
+          scrollbarWidth: "none",
+        }}>
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -317,8 +333,12 @@ export function ContactDetailView({ contact, onBack, onUpdate, onViewQuotation, 
 
       {/* Tab Content */}
       <div style={{ flex: 1, overflow: "auto" }}>
-        <div style={{ padding: "32px 48px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "32px" }}>
+        <div style={{ padding: isMobile ? "16px" : "32px 48px" }}>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr",
+            gap: isMobile ? "24px" : "32px",
+          }}>
             {/* Left Column - Tab Content */}
             <div>
               {activeTab === "inquiries" && (
@@ -459,80 +479,97 @@ export function ContactDetailView({ contact, onBack, onUpdate, onViewQuotation, 
 
               {activeTab === "activities" && (
                 <div style={{
-                  padding: "64px 24px",
+                  padding: "56px 24px",
                   textAlign: "center",
-                  border: "1px dashed var(--neuron-ui-border)",
+                  border: "1px solid var(--neuron-ui-border)",
                   borderRadius: "8px",
-                  color: "var(--neuron-ink-muted)"
+                  color: "var(--neuron-ink-muted)",
                 }}>
-                  <p style={{ fontSize: "14px", margin: 0 }}>Activities coming soon</p>
+                  <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--neuron-ink-primary)", margin: "0 0 4px 0" }}>
+                    No activities logged
+                  </p>
+                  <p style={{ fontSize: "12px", margin: 0 }}>
+                    Calls, emails, and meetings with this contact will appear here
+                  </p>
                 </div>
               )}
 
               {activeTab === "tasks" && (
                 <div style={{
-                  padding: "64px 24px",
+                  padding: "56px 24px",
                   textAlign: "center",
-                  border: "1px dashed var(--neuron-ui-border)",
+                  border: "1px solid var(--neuron-ui-border)",
                   borderRadius: "8px",
-                  color: "var(--neuron-ink-muted)"
+                  color: "var(--neuron-ink-muted)",
                 }}>
-                  <p style={{ fontSize: "14px", margin: 0 }}>Tasks coming soon</p>
+                  <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--neuron-ink-primary)", margin: "0 0 4px 0" }}>
+                    No open tasks
+                  </p>
+                  <p style={{ fontSize: "12px", margin: 0 }}>
+                    Follow-up tasks assigned to this contact will appear here
+                  </p>
                 </div>
               )}
 
               {activeTab === "attachments" && (
                 <div style={{
-                  padding: "64px 24px",
+                  padding: "56px 24px",
                   textAlign: "center",
-                  border: "1px dashed var(--neuron-ui-border)",
+                  border: "1px solid var(--neuron-ui-border)",
                   borderRadius: "8px",
-                  color: "var(--neuron-ink-muted)"
+                  color: "var(--neuron-ink-muted)",
                 }}>
-                  <p style={{ fontSize: "14px", margin: 0 }}>Attachments coming soon</p>
+                  <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--neuron-ink-primary)", margin: "0 0 4px 0" }}>
+                    No attachments
+                  </p>
+                  <p style={{ fontSize: "12px", margin: 0 }}>
+                    Documents shared with or from this contact will be stored here
+                  </p>
                 </div>
               )}
 
               {activeTab === "comments" && (
                 <div style={{
-                  padding: "64px 24px",
+                  padding: "56px 24px",
                   textAlign: "center",
-                  border: "1px dashed var(--neuron-ui-border)",
+                  border: "1px solid var(--neuron-ui-border)",
                   borderRadius: "8px",
-                  color: "var(--neuron-ink-muted)"
+                  color: "var(--neuron-ink-muted)",
                 }}>
-                  <p style={{ fontSize: "14px", margin: 0 }}>Comments coming soon</p>
+                  <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--neuron-ink-primary)", margin: "0 0 4px 0" }}>
+                    No comments yet
+                  </p>
+                  <p style={{ fontSize: "12px", margin: 0 }}>
+                    Internal notes about this contact will appear here
+                  </p>
                 </div>
               )}
             </div>
 
             {/* Right Column - Contact Details */}
             <div>
-              <h2 style={{ 
-                fontSize: "18px",
+              <h2 style={{
+                fontSize: "13px",
                 fontWeight: 600,
-                color: "var(--neuron-ink-primary)",
-                marginBottom: "16px"
+                color: "var(--neuron-ink-muted)",
+                textTransform: "uppercase",
+                letterSpacing: "0.6px",
+                marginBottom: "20px",
               }}>
                 Contact Details
               </h2>
 
-              <div style={{
-                border: "1px solid var(--neuron-ui-border)",
-                borderRadius: "8px",
-                padding: "20px"
-              }}>
-                <div style={{ marginBottom: "20px" }}>
-                  <label style={{ 
-                    fontSize: "12px", 
-                    color: "var(--neuron-ink-muted)", 
-                    textTransform: "uppercase",
-                    letterSpacing: "0.5px",
-                    display: "block",
-                    marginBottom: "6px"
-                  }}>
-                    First Name
-                  </label>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                {/* First Name */}
+                <div style={{
+                  padding: "14px 0",
+                  borderBottom: "1px solid var(--neuron-ui-border)",
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1.4fr",
+                  alignItems: "center",
+                  gap: "12px",
+                }}>
+                  <span style={{ fontSize: "12px", color: "var(--neuron-ink-muted)" }}>First Name</span>
                   {isEditing ? (
                     <input
                       type="text"
@@ -542,32 +579,34 @@ export function ContactDetailView({ contact, onBack, onUpdate, onViewQuotation, 
                         setFormData({ ...formData, name: `${e.target.value} ${lastName}`.trim() });
                       }}
                       style={{
-                        width: "100%",
-                        padding: "8px 12px",
+                        padding: "6px 10px",
                         border: "1px solid var(--neuron-ui-border)",
                         borderRadius: "6px",
-                        fontSize: "14px",
-                        outline: "none"
+                        fontSize: "13px",
+                        outline: "none",
+                        color: "var(--neuron-ink-primary)",
+                        backgroundColor: "var(--theme-bg-surface)",
                       }}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = "var(--neuron-brand-green)"; }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = "var(--neuron-ui-border)"; }}
                     />
                   ) : (
-                    <p style={{ fontSize: "14px", color: "var(--neuron-ink-primary)", margin: 0 }}>
+                    <span style={{ fontSize: "13px", color: "var(--neuron-ink-primary)", fontWeight: 500 }}>
                       {(contact.name ?? "").split(" ")[0] || "—"}
-                    </p>
+                    </span>
                   )}
                 </div>
 
-                <div style={{ marginBottom: "20px" }}>
-                  <label style={{
-                    fontSize: "12px",
-                    color: "var(--neuron-ink-muted)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.5px",
-                    display: "block",
-                    marginBottom: "6px"
-                  }}>
-                    Last Name
-                  </label>
+                {/* Last Name */}
+                <div style={{
+                  padding: "14px 0",
+                  borderBottom: "1px solid var(--neuron-ui-border)",
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1.4fr",
+                  alignItems: "center",
+                  gap: "12px",
+                }}>
+                  <span style={{ fontSize: "12px", color: "var(--neuron-ink-muted)" }}>Last Name</span>
                   {isEditing ? (
                     <input
                       type="text"
@@ -577,124 +616,128 @@ export function ContactDetailView({ contact, onBack, onUpdate, onViewQuotation, 
                         setFormData({ ...formData, name: `${firstName} ${e.target.value}`.trim() });
                       }}
                       style={{
-                        width: "100%",
-                        padding: "8px 12px",
+                        padding: "6px 10px",
                         border: "1px solid var(--neuron-ui-border)",
                         borderRadius: "6px",
-                        fontSize: "14px",
-                        outline: "none"
+                        fontSize: "13px",
+                        outline: "none",
+                        color: "var(--neuron-ink-primary)",
+                        backgroundColor: "var(--theme-bg-surface)",
                       }}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = "var(--neuron-brand-green)"; }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = "var(--neuron-ui-border)"; }}
                     />
                   ) : (
-                    <p style={{ fontSize: "14px", color: "var(--neuron-ink-primary)", margin: 0 }}>
+                    <span style={{ fontSize: "13px", color: "var(--neuron-ink-primary)", fontWeight: 500 }}>
                       {(contact.name ?? "").split(" ").slice(1).join(" ") || "—"}
-                    </p>
+                    </span>
                   )}
                 </div>
 
-                <div style={{ marginBottom: "20px" }}>
-                  <label style={{ 
-                    fontSize: "12px", 
-                    color: "var(--neuron-ink-muted)", 
-                    textTransform: "uppercase",
-                    letterSpacing: "0.5px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    marginBottom: "6px"
-                  }}>
-                    <Mail size={14} />
+                {/* Email */}
+                <div style={{
+                  padding: "14px 0",
+                  borderBottom: "1px solid var(--neuron-ui-border)",
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1.4fr",
+                  alignItems: "center",
+                  gap: "12px",
+                }}>
+                  <span style={{ fontSize: "12px", color: "var(--neuron-ink-muted)", display: "flex", alignItems: "center", gap: "5px" }}>
+                    <Mail size={12} />
                     Email
-                  </label>
+                  </span>
                   {isEditing ? (
                     <input
                       type="email"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                       style={{
-                        width: "100%",
-                        padding: "8px 12px",
+                        padding: "6px 10px",
                         border: "1px solid var(--neuron-ui-border)",
                         borderRadius: "6px",
-                        fontSize: "14px",
-                        outline: "none"
+                        fontSize: "13px",
+                        outline: "none",
+                        color: "var(--neuron-ink-primary)",
+                        backgroundColor: "var(--theme-bg-surface)",
                       }}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = "var(--neuron-brand-green)"; }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = "var(--neuron-ui-border)"; }}
                     />
                   ) : (
-                    <p style={{ fontSize: "14px", color: "var(--neuron-ink-primary)", margin: 0 }}>
-                      {contact.email}
-                    </p>
+                    <span style={{ fontSize: "13px", color: "var(--neuron-ink-primary)", fontWeight: 500 }}>
+                      {contact.email || "—"}
+                    </span>
                   )}
                 </div>
 
-                <div style={{ marginBottom: "20px" }}>
-                  <label style={{ 
-                    fontSize: "12px", 
-                    color: "var(--neuron-ink-muted)", 
-                    textTransform: "uppercase",
-                    letterSpacing: "0.5px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    marginBottom: "6px"
-                  }}>
-                    <Phone size={14} />
-                    Mobile Number
-                  </label>
+                {/* Phone */}
+                <div style={{
+                  padding: "14px 0",
+                  borderBottom: "1px solid var(--neuron-ui-border)",
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1.4fr",
+                  alignItems: "center",
+                  gap: "12px",
+                }}>
+                  <span style={{ fontSize: "12px", color: "var(--neuron-ink-muted)", display: "flex", alignItems: "center", gap: "5px" }}>
+                    <Phone size={12} />
+                    Mobile
+                  </span>
                   {isEditing ? (
                     <input
                       type="tel"
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                       style={{
-                        width: "100%",
-                        padding: "8px 12px",
+                        padding: "6px 10px",
                         border: "1px solid var(--neuron-ui-border)",
                         borderRadius: "6px",
-                        fontSize: "14px",
-                        outline: "none"
+                        fontSize: "13px",
+                        outline: "none",
+                        color: "var(--neuron-ink-primary)",
+                        backgroundColor: "var(--theme-bg-surface)",
                       }}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = "var(--neuron-brand-green)"; }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = "var(--neuron-ui-border)"; }}
                     />
                   ) : (
-                    <p style={{ fontSize: "14px", color: "var(--neuron-ink-primary)", margin: 0 }}>
-                      {contact.phone}
-                    </p>
+                    <span style={{ fontSize: "13px", color: "var(--neuron-ink-primary)", fontWeight: 500 }}>
+                      {contact.phone || "—"}
+                    </span>
                   )}
                 </div>
 
-                <div style={{ marginBottom: "20px" }}>
-                  <label style={{ 
-                    fontSize: "12px", 
-                    color: "var(--neuron-ink-muted)", 
-                    textTransform: "uppercase",
-                    letterSpacing: "0.5px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    marginBottom: "6px"
-                  }}>
-                    <Building2 size={14} />
+                {/* Company */}
+                <div style={{
+                  padding: "14px 0",
+                  borderBottom: "1px solid var(--neuron-ui-border)",
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1.4fr",
+                  alignItems: "center",
+                  gap: "12px",
+                }}>
+                  <span style={{ fontSize: "12px", color: "var(--neuron-ink-muted)", display: "flex", alignItems: "center", gap: "5px" }}>
+                    <Building2 size={12} />
                     Company
-                  </label>
-                  <p style={{ fontSize: "14px", color: "var(--neuron-ink-primary)", margin: 0 }}>
-                    {contact.company}
-                  </p>
+                  </span>
+                  <span style={{ fontSize: "13px", color: "var(--neuron-ink-primary)", fontWeight: 500 }}>
+                    {contact.company || "—"}
+                  </span>
                 </div>
 
-                <div style={{ marginBottom: "20px" }}>
-                  <label style={{ 
-                    fontSize: "12px", 
-                    color: "var(--neuron-ink-muted)", 
-                    textTransform: "uppercase",
-                    letterSpacing: "0.5px",
-                    display: "block",
-                    marginBottom: "6px"
-                  }}>
-                    Lifecycle Stage
-                  </label>
-                  <p style={{ fontSize: "14px", color: "var(--neuron-ink-primary)", margin: 0 }}>
-                    {contact.status}
-                  </p>
+                {/* Lifecycle Stage */}
+                <div style={{
+                  padding: "14px 0",
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1.4fr",
+                  alignItems: "center",
+                  gap: "12px",
+                }}>
+                  <span style={{ fontSize: "12px", color: "var(--neuron-ink-muted)" }}>Stage</span>
+                  <span style={{ fontSize: "13px", color: "var(--neuron-ink-primary)", fontWeight: 500 }}>
+                    {contact.status || "—"}
+                  </span>
                 </div>
               </div>
             </div>

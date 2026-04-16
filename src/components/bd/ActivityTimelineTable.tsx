@@ -98,10 +98,10 @@ export function ActivityTimelineTable({
   const getActivityTypeColor = (type: ActivityType) => {
     // System activities get different styling
     if (type === "System Update" || type === "Note") {
-      return "bg-[#F1F6F4] text-[var(--theme-text-muted)]";
+      return "bg-[var(--theme-state-hover)] text-[var(--theme-text-muted)]";
     }
     // All logged activities get completed/success styling
-    return "bg-[var(--theme-bg-surface-tint)] text-[#2B8A6E]";
+    return "bg-[var(--theme-bg-surface-tint)] text-[var(--theme-action-primary-bg)]";
   };
 
   const formatDate = (dateString: string) => {
@@ -193,7 +193,7 @@ export function ActivityTimelineTable({
           options={[
             { value: "All Time", label: "All Time", icon: <Calendar className="w-3.5 h-3.5" style={{ color: "var(--neuron-ink-muted)" }} /> },
             { value: "Today", label: "Today", icon: <Calendar className="w-3.5 h-3.5" style={{ color: "var(--theme-action-primary-bg)" }} /> },
-            { value: "This Week", label: "This Week", icon: <Calendar className="w-3.5 h-3.5" style={{ color: "#C88A2B" }} /> },
+            { value: "This Week", label: "This Week", icon: <Calendar className="w-3.5 h-3.5" style={{ color: "var(--theme-status-warning-fg)" }} /> },
             { value: "This Month", label: "This Month", icon: <Calendar className="w-3.5 h-3.5" style={{ color: "var(--theme-text-muted)" }} /> }
           ]}
         />
