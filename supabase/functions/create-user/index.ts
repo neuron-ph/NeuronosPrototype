@@ -3,7 +3,6 @@ import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,15 +23,30 @@ serve(async (req) => {
       );
     }
 
-    // Verify the caller is an Executive department user via their JWT + RLS
-    const callerClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
+    // Decode the JWT to get the caller's auth_id (sub claim)
+    const jwt = authHeader.replace("Bearer ", "");
+    let callerAuthId: string;
+    try {
+      const payload = JSON.parse(atob(jwt.split(".")[1]));
+      callerAuthId = payload.sub;
+      if (!callerAuthId) throw new Error("No sub");
+    } catch {
+      return new Response(
+        JSON.stringify({ success: false, error: "Invalid authorization token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Use admin client to look up the caller's department by auth_id (bypasses RLS safely)
+    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    const { data: callerProfile, error: profileError } = await callerClient
+    const { data: callerProfile, error: profileError } = await adminClient
       .from("users")
       .select("department")
-      .single();
+      .eq("auth_id", callerAuthId)
+      .maybeSingle();
 
     if (profileError || !callerProfile) {
       return new Response(
@@ -68,10 +82,6 @@ serve(async (req) => {
     }
 
     // Create the Supabase Auth user using the service role key
-    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-
     const { data: authData, error: authError } = await adminClient.auth.admin.createUser({
       email,
       password,
@@ -89,8 +99,8 @@ serve(async (req) => {
 
     const newAuthUserId = authData.user.id;
 
-    // The handle_new_auth_user trigger fires and creates a public.users row with email + name from metadata.
-    // Now update it with the provided department, role, and team.
+    // The handle_new_auth_user trigger fires and creates a public.users row.
+    // Update it with the provided department, role, and team.
     let updateResult = await adminClient
       .from("users")
       .update({ name, department, role, team_id: team_id || null })
@@ -111,13 +121,10 @@ serve(async (req) => {
 
     if (updateResult.error) {
       console.error("Profile update error:", updateResult.error);
-      // Auth user was created — log for manual recovery but don't fail the whole request
     }
 
-    const updatedUser = updateResult.data;
-
     return new Response(
-      JSON.stringify({ success: true, user: updatedUser }),
+      JSON.stringify({ success: true, user: updateResult.data }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

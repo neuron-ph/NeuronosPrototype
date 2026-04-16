@@ -67,19 +67,19 @@ const ENTITY_LABEL: Record<string, string> = {
 };
 
 const ACTION_COLOR: Record<string, string> = {
-  created:       "#16A34A",
-  updated:       "#2563EB",
-  deleted:       "#DC2626",
-  status_change: "#D97706",
-  approved:      "#059669",
-  rejected:      "#DC2626",
-  posted:        "#0F766E",
-  cancelled:     "#6B7280",
-  converted:     "#7C3AED",
-  assigned:      "#6366F1",
-  login:         "#475569",
-  logout:        "#475569",
-  deactivated:   "#DC2626",
+  created:       "var(--theme-status-success-fg)",
+  updated:       "var(--neuron-semantic-info)",
+  deleted:       "var(--theme-status-danger-fg)",
+  status_change: "var(--theme-status-warning-fg)",
+  approved:      "var(--theme-status-success-fg)",
+  rejected:      "var(--theme-status-danger-fg)",
+  posted:        "var(--theme-action-primary-bg)",
+  cancelled:     "var(--theme-text-muted)",
+  converted:     "var(--neuron-status-accent-fg)",
+  assigned:      "var(--neuron-semantic-info)",
+  login:         "var(--theme-text-muted)",
+  logout:        "var(--theme-text-muted)",
+  deactivated:   "var(--theme-status-danger-fg)",
 };
 
 const ACTION_LABEL: Record<string, string> = {
@@ -343,11 +343,11 @@ export function ActivityLogPage() {
             <div className="flex items-center gap-1.5">
               <Circle
                 size={7}
-                fill={isLive ? "#16A34A" : "#D1D5DB"}
+                fill="currentColor"
                 stroke="none"
-                style={{ flexShrink: 0 }}
+                style={{ flexShrink: 0, color: isLive ? "var(--theme-status-success-fg)" : "var(--theme-text-muted)" }}
               />
-              <span style={{ fontSize: 12, color: isLive ? "#16A34A" : "var(--theme-text-muted)", fontWeight: 500 }}>
+              <span style={{ fontSize: 12, color: isLive ? "var(--theme-status-success-fg)" : "var(--theme-text-muted)", fontWeight: 500 }}>
                 {isLive ? "Live" : "Connecting"}
               </span>
             </div>
@@ -707,7 +707,7 @@ export function ActivityLogPage() {
                       <>
                         <span style={{
                           fontSize: 11, padding: "1px 6px", borderRadius: 4,
-                          backgroundColor: "#FEF2F2", color: "#B91C1C",
+                          backgroundColor: "var(--theme-status-danger-bg)", color: "var(--theme-status-danger-fg)",
                           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                           maxWidth: 70, flexShrink: 0,
                         }}>
@@ -719,7 +719,7 @@ export function ActivityLogPage() {
                     {entry.new_value && (
                       <span style={{
                         fontSize: 11, padding: "1px 6px", borderRadius: 4,
-                        backgroundColor: "#F0FDF4", color: "#15803D",
+                        backgroundColor: "var(--theme-status-success-bg)", color: "var(--theme-status-success-fg)",
                         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                         maxWidth: 70, flexShrink: 0,
                       }}>
@@ -832,7 +832,7 @@ export function ActivityLogPage() {
                                 <>
                                   <span style={{
                                     fontSize: 12, padding: "2px 8px", borderRadius: 4,
-                                    backgroundColor: "#FEF2F2", color: "#B91C1C", fontWeight: 500,
+                                    backgroundColor: "var(--theme-status-danger-bg)", color: "var(--theme-status-danger-fg)", fontWeight: 500,
                                   }}>
                                     {entry.old_value}
                                   </span>
@@ -842,7 +842,7 @@ export function ActivityLogPage() {
                               {entry.new_value && (
                                 <span style={{
                                   fontSize: 12, padding: "2px 8px", borderRadius: 4,
-                                  backgroundColor: "#F0FDF4", color: "#15803D", fontWeight: 500,
+                                  backgroundColor: "var(--theme-status-success-bg)", color: "var(--theme-status-success-fg)", fontWeight: 500,
                                 }}>
                                   {entry.new_value}
                                 </span>

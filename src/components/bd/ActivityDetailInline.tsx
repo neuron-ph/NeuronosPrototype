@@ -291,7 +291,7 @@ export function ActivityDetailInline({
                       className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
                       style={{
                         backgroundColor: "var(--theme-bg-surface-tint)",
-                        border: "1px solid #0F766E30"
+                        border: "1px solid var(--theme-status-success-border)"
                       }}
                     >
                       <Building2 size={14} style={{ color: "var(--theme-action-primary-bg)" }} />
@@ -362,7 +362,7 @@ export function ActivityDetailInline({
                       e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)";
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = "#FAFAFA";
+                      e.currentTarget.style.backgroundColor = "var(--neuron-pill-inactive-bg)";
                     }}
                   >
                     <div className="flex items-center justify-center w-8 h-8 rounded bg-[var(--theme-bg-surface-subtle)] flex-shrink-0">
@@ -422,7 +422,7 @@ export function ActivityDetailInline({
                       className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
                       style={{
                         backgroundColor: "var(--theme-bg-surface-tint)",
-                        border: "1px solid #0F766E30"
+                        border: "1px solid var(--theme-status-success-border)"
                       }}
                     >
                       <User size={14} style={{ color: "var(--theme-action-primary-bg)" }} />

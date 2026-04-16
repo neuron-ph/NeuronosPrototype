@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
+import { Menu } from "lucide-react";
 import { NeuronSidebar } from "./NeuronSidebar";
+import { NeuronLogo } from "./NeuronLogo";
 
 // Environment badge — only shown on deployed builds (import.meta.env.PROD).
 // Detects which Supabase project the build is connected to so misconfigured
@@ -66,34 +68,116 @@ export function Layout({ children, currentPage, onNavigate, currentUser }: Layou
     return false;
   });
 
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth >= 1024 : true
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const handler = (e: MediaQueryListEvent) => {
+      setIsDesktop(e.matches);
+      if (e.matches) setIsMobileOpen(false);
+    };
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
   useEffect(() => {
     localStorage.setItem("neuron_sidebar_collapsed", String(isCollapsed));
   }, [isCollapsed]);
 
   const toggleCollapse = useCallback(() => setIsCollapsed((v) => !v), []);
+  const closeMobile = useCallback(() => setIsMobileOpen(false), []);
+
+  const handleNavigate = useCallback(
+    (page: Page) => {
+      setIsMobileOpen(false);
+      onNavigate(page);
+    },
+    [onNavigate]
+  );
 
   return (
     <div
-      className="h-screen overflow-hidden"
-      style={{
-        display: "grid",
-        gridTemplateColumns: isCollapsed ? "72px 1fr" : "272px 1fr",
-        transition: "grid-template-columns 0.25s cubic-bezier(0.25, 1, 0.5, 1)",
-        background: "var(--neuron-bg-page)",
-      }}
+      className="h-screen overflow-hidden flex flex-col"
+      style={{ background: "var(--neuron-bg-page)" }}
     >
-      <NeuronSidebar
-        currentPage={currentPage as any}
-        onNavigate={onNavigate as any}
-        currentUser={currentUser}
-        isCollapsed={isCollapsed}
-        onToggleCollapse={toggleCollapse}
-      />
+      {/* Mobile top bar — visible only below lg (1024px) */}
+      {!isDesktop && (
+        <div
+          className="flex items-center justify-between px-4 flex-shrink-0"
+          style={{
+            height: "56px",
+            backgroundColor: "var(--neuron-bg-elevated)",
+            borderBottom: "1px solid var(--neuron-ui-border)",
+          }}
+        >
+          <button
+            onClick={() => setIsMobileOpen(true)}
+            className="flex items-center justify-center rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuron-ui-active-border)]"
+            style={{ width: "36px", height: "36px", color: "var(--neuron-ink-secondary)" }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "transparent";
+            }}
+          >
+            <Menu size={20} />
+          </button>
+          <NeuronLogo
+            height={22}
+            className="cursor-pointer"
+            onClick={() => handleNavigate("dashboard")}
+          />
+          {/* Balance spacer so logo is visually centered */}
+          <div style={{ width: "36px" }} />
+        </div>
+      )}
 
-      {/* Main Content Area - Fills remaining space */}
-      <main className="min-h-0 overflow-y-auto overflow-x-hidden">
-        {children}
-      </main>
+      {/* Sidebar + Main content grid */}
+      <div
+        className="flex-1 min-h-0"
+        style={{
+          display: "grid",
+          gridTemplateColumns: isDesktop
+            ? isCollapsed
+              ? "72px 1fr"
+              : "272px 1fr"
+            : "1fr",
+          gridTemplateRows: "1fr",
+          height: "100%",
+          transition: isDesktop
+            ? "grid-template-columns 0.25s cubic-bezier(0.25, 1, 0.5, 1)"
+            : "none",
+        }}
+      >
+        <NeuronSidebar
+          currentPage={currentPage as any}
+          onNavigate={handleNavigate as any}
+          currentUser={currentUser}
+          isCollapsed={isCollapsed}
+          onToggleCollapse={toggleCollapse}
+          isDesktop={isDesktop}
+          isMobileOpen={isMobileOpen}
+          onMobileClose={closeMobile}
+        />
+
+        <main className="min-h-0 h-full overflow-y-auto overflow-x-auto">
+          {children}
+        </main>
+      </div>
+
+      {/* Mobile backdrop — closes sidebar on tap outside */}
+      {!isDesktop && isMobileOpen && (
+        <div
+          className="fixed inset-0"
+          style={{ backgroundColor: "rgba(18, 51, 43, 0.45)", zIndex: 49 }}
+          onClick={closeMobile}
+        />
+      )}
 
       <EnvBadge />
     </div>
