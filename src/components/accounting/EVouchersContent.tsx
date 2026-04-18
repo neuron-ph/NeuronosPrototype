@@ -6,6 +6,7 @@ import { UnifiedEVouchersTable } from "./evouchers/UnifiedEVouchersTable";
 import { useEVouchers } from "../../hooks/useEVouchers";
 import { useUser } from "../../hooks/useUser";
 import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
+import { usePermission } from "../../context/PermissionProvider";
 
 type AccountingTab = "acct-pending-disburse" | "acct-waiting-on-rep" | "acct-pending-verification" | "acct-archive";
 
@@ -17,7 +18,21 @@ const TABS: { id: AccountingTab; label: string; icon: typeof Banknote; descripti
 ];
 
 export function EVouchersContent() {
-  const [activeTab, setActiveTab] = useState<AccountingTab>("acct-pending-disburse");
+  const { can } = usePermission();
+
+  const canPendingDisburse    = can("accounting_evouchers_pending_disburse_tab", "view");
+  const canWaitingOnRep       = can("accounting_evouchers_waiting_on_rep_tab", "view");
+  const canPendingVerification = can("accounting_evouchers_pending_verification_tab", "view");
+  const canArchive            = can("accounting_evouchers_archive_tab", "view");
+
+  const defaultTab: AccountingTab =
+    canPendingDisburse    ? "acct-pending-disburse" :
+    canWaitingOnRep       ? "acct-waiting-on-rep" :
+    canPendingVerification ? "acct-pending-verification" :
+    canArchive            ? "acct-archive" :
+    "acct-pending-disburse";
+
+  const [activeTab, setActiveTab] = useState<AccountingTab>(defaultTab);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedEvoucher, setSelectedEvoucher] = useState<any>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -60,7 +75,13 @@ export function EVouchersContent() {
 
         {/* 4-Tab Navigation */}
         <div className="flex items-center gap-8 border-b border-[var(--theme-border-default)]" role="tablist">
-          {TABS.map((tab) => {
+          {TABS.filter((tab) => {
+            if (tab.id === "acct-pending-disburse")    return canPendingDisburse;
+            if (tab.id === "acct-waiting-on-rep")      return canWaitingOnRep;
+            if (tab.id === "acct-pending-verification") return canPendingVerification;
+            if (tab.id === "acct-archive")             return canArchive;
+            return true;
+          }).map((tab) => {
             const isActive = activeTab === tab.id;
             const TabIcon = tab.icon;
             return (

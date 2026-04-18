@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { usePermission } from "../../../context/PermissionProvider";
 import { Plus, Search, Filter, Download, ChevronDown, ChevronRight, Folder, FileText, MoreHorizontal, RefreshCw, BookOpen } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { getAccounts, seedInitialAccounts, resetChartOfAccounts } from "../../../utils/accounting-api";
@@ -13,11 +14,23 @@ import { ManualJournalEntryPanel } from "./ManualJournalEntryPanel";
 type FlatAccount = Account & { level: number };
 
 export function ChartOfAccounts() {
+  const { can } = usePermission();
+
+  const canAllTab             = can("accounting_coa_all_tab", "view");
+  const canBalanceSheetTab    = can("accounting_coa_balance_sheet_tab", "view");
+  const canIncomeStatementTab = can("accounting_coa_income_statement_tab", "view");
+
+  const defaultCOATab: "All" | "BalanceSheet" | "IncomeStatement" =
+    canAllTab             ? "All" :
+    canBalanceSheetTab    ? "BalanceSheet" :
+    canIncomeStatementTab ? "IncomeStatement" :
+    "All";
+
   // State
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<"All" | "BalanceSheet" | "IncomeStatement">("All");
+  const [activeTab, setActiveTab] = useState<"All" | "BalanceSheet" | "IncomeStatement">(defaultCOATab);
   
   // Ledger View State
   const [viewMode, setViewMode] = useState<"list" | "ledger">("list");
@@ -411,7 +424,12 @@ export function ChartOfAccounts() {
           display: "flex", 
           gap: "24px"
         }}>
-          {(["All", "BalanceSheet", "IncomeStatement"] as const).map((tab) => {
+          {(["All", "BalanceSheet", "IncomeStatement"] as const).filter((tab) => {
+            if (tab === "All")             return canAllTab;
+            if (tab === "BalanceSheet")    return canBalanceSheetTab;
+            if (tab === "IncomeStatement") return canIncomeStatementTab;
+            return true;
+          }).map((tab) => {
              const label = tab === "All" ? "All Accounts" : tab === "BalanceSheet" ? "Balance Sheet" : "Income Statement";
              return (
                <button

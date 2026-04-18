@@ -7,10 +7,13 @@
  *   role:       'staff' | 'team_leader' | 'manager'
  */
 
-export type Department = "Business Development" | "Pricing" | "Operations" | "Accounting" | "Executive" | "HR";
-export type Role = "staff" | "team_leader" | "manager";
+export type { Role } from './roles';
+export { hasMinRole } from './roles';
+import { hasMinRole } from './roles';
 
-export type QuotationAction = 
+export type Department = "Business Development" | "Pricing" | "Operations" | "Accounting" | "Executive" | "HR";
+
+export type QuotationAction =
   | "create_inquiry"
   | "edit_inquiry"
   | "submit_to_pricing"
@@ -35,21 +38,6 @@ export type BookingAction =
   | "create_billing"
   | "create_expense";
 
-/**
- * Role hierarchy: staff (0) < team_leader (1) < manager (2)
- */
-const ROLE_LEVEL: Record<Role, number> = {
-  staff: 0,
-  team_leader: 1,
-  manager: 2,
-};
-
-/**
- * Check if a user's role meets or exceeds a minimum role level.
- */
-export function hasMinRole(userRole: Role, minRole: Role): boolean {
-  return ROLE_LEVEL[userRole] >= ROLE_LEVEL[minRole];
-}
 
 /**
  * Check if a user can access a given module.
@@ -216,7 +204,7 @@ export function canDeleteEVoucher(
 
   return (
     ["draft", "rejected", "cancelled"].includes(normalizedStatus) ||
-    ["manager", "team_leader"].includes(userRole)
+    ["manager", "team_leader", "supervisor", "executive"].includes(userRole)
   );
 }
 
@@ -234,8 +222,8 @@ export function canPerformEVAction(
 ): boolean {
   const isExecutive = userDepartment === "Executive";
   const isAccounting = userDepartment === "Accounting";
-  // Cast to Role; unknown roles fall back to staff-level (no access)
-  const normalizedRole = (["staff", "team_leader", "manager"].includes(userRole)
+  // Normalize role — supervisor/executive included; unknown roles fall back to staff
+  const normalizedRole = (["staff", "team_leader", "supervisor", "manager", "executive"].includes(userRole)
     ? userRole
     : "staff") as Role;
   const isTLOrAbove = hasMinRole(normalizedRole, "team_leader");

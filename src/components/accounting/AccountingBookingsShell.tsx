@@ -10,6 +10,7 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router";
+import { usePermission } from "../../context/PermissionProvider";
 import { Container, Ship, Truck, FileText, Package } from "lucide-react";
 import { ForwardingBookings } from "../operations/forwarding/ForwardingBookings";
 import { ForwardingBookingDetails } from "../operations/forwarding/ForwardingBookingDetails";
@@ -30,7 +31,22 @@ const SERVICE_TABS: { id: ServiceTab; label: string; icon: typeof Container }[] 
 ];
 
 export function AccountingBookingsShell() {
-  const [activeTab, setActiveTab] = useState<ServiceTab>("forwarding");
+  const { can } = usePermission();
+  const canForwarding = can("accounting_bookings_forwarding_tab", "view");
+  const canBrokerage = can("accounting_bookings_brokerage_tab", "view");
+  const canTrucking = can("accounting_bookings_trucking_tab", "view");
+  const canMarineInsurance = can("accounting_bookings_marine_insurance_tab", "view");
+  const canOthers = can("accounting_bookings_others_tab", "view");
+
+  const firstAllowedTab: ServiceTab =
+    canForwarding ? "forwarding" :
+    canBrokerage ? "brokerage" :
+    canTrucking ? "trucking" :
+    canMarineInsurance ? "marine-insurance" :
+    canOthers ? "others" :
+    "forwarding";
+
+  const [activeTab, setActiveTab] = useState<ServiceTab>(firstAllowedTab);
   const [searchParams, setSearchParams] = useSearchParams();
   const [pendingBookingId, setPendingBookingId] = useState<string | null>(null);
   const [pendingTab, setPendingTab] = useState<string | null>(null);
@@ -86,6 +102,7 @@ export function AccountingBookingsShell() {
   const renderContent = () => {
     switch (activeTab) {
       case "forwarding":
+        if (!canForwarding) return null;
         if (fwdSubView === "detail" && selectedFwdBooking) {
           return (
             <ForwardingBookingDetails
@@ -99,12 +116,16 @@ export function AccountingBookingsShell() {
         }
         return <ForwardingBookings onSelectBooking={handleSelectFwdBooking} pendingBookingId={pendingBookingId} />;
       case "brokerage":
+        if (!canBrokerage) return null;
         return <BrokerageBookings pendingBookingId={pendingBookingId} initialTab={pendingTab} highlightId={pendingHighlightId} />;
       case "trucking":
+        if (!canTrucking) return null;
         return <TruckingBookings pendingBookingId={pendingBookingId} initialTab={pendingTab} highlightId={pendingHighlightId} />;
       case "marine-insurance":
+        if (!canMarineInsurance) return null;
         return <MarineInsuranceBookings pendingBookingId={pendingBookingId} initialTab={pendingTab} highlightId={pendingHighlightId} />;
       case "others":
+        if (!canOthers) return null;
         return <OthersBookings pendingBookingId={pendingBookingId} initialTab={pendingTab} highlightId={pendingHighlightId} />;
       default:
         return null;
@@ -144,7 +165,14 @@ export function AccountingBookingsShell() {
           borderBottom: "1px solid var(--neuron-ui-border)",
         }}
       >
-        {SERVICE_TABS.map((tab) => {
+        {SERVICE_TABS.filter((tab) => {
+          if (tab.id === "forwarding") return canForwarding;
+          if (tab.id === "brokerage") return canBrokerage;
+          if (tab.id === "trucking") return canTrucking;
+          if (tab.id === "marine-insurance") return canMarineInsurance;
+          if (tab.id === "others") return canOthers;
+          return false;
+        }).map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           return (

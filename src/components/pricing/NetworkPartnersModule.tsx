@@ -1,5 +1,6 @@
 import { Search, Plus, Globe, Award, ChevronDown, ChevronRight, Plane, Ship, Loader2, User, Phone, Mail } from "lucide-react";
 import { useState, useMemo } from "react";
+import { usePermission } from "../../context/PermissionProvider";
 import { 
   COUNTRIES, 
   isExpired, 
@@ -57,16 +58,23 @@ export function NetworkPartnersModule({
 }: NetworkPartnersModuleProps) {
   // Use hook if props are not provided
   const hookData = useNetworkPartners();
-  
+
   // Determine source of truth
   const partners = propPartners || hookData.partners;
   const isLoading = propIsLoading !== undefined ? propIsLoading : hookData.isLoading;
   const savePartner = propOnSavePartner || hookData.savePartner;
-  
+
+  const { can } = usePermission();
+  const canViewInternationalTab = can("pricing_network_partners_international_tab", "view");
+  const canViewCoLoaderTab = can("pricing_network_partners_co_loader_tab", "view");
+  const canViewAllInTab = can("pricing_network_partners_all_in_tab", "view");
+
   const [searchQuery, setSearchQuery] = useState("");
   const [countryFilter, setCountryFilter] = useState<string>("All");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [activeTab, setActiveTab] = useState<Tab>("international");
+  const [activeTab, setActiveTab] = useState<Tab>(
+    canViewInternationalTab ? "international" : canViewCoLoaderTab ? "co-loader" : canViewAllInTab ? "all-in" : "international"
+  );
   const [isPartnerSheetOpen, setIsPartnerSheetOpen] = useState(false);
   
   const [collapsedCountries, setCollapsedCountries] = useState<Set<string>>(new Set());
@@ -447,84 +455,90 @@ export function NetworkPartnersModule({
 
           {/* Tabs Row */}
           <div style={{ padding: "0 48px", display: "flex", gap: "32px", borderBottom: "1px solid var(--neuron-ui-border)" }}>
-            <button
-              onClick={() => setActiveTab("international")}
-              style={{
-                padding: "0 0 16px 0",
-                fontSize: "14px",
-                fontWeight: 600,
-                color: activeTab === "international" ? "var(--theme-action-primary-bg)" : "var(--neuron-pill-inactive-text)",
-                borderBottom: activeTab === "international" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                transition: "all 0.2s"
-              }}
-            >
-              International Partners
-              <span style={{
-                backgroundColor: activeTab === "international" ? "var(--theme-status-success-bg)" : "var(--neuron-pill-inactive-bg)",
-                color: activeTab === "international" ? "var(--theme-action-primary-bg)" : "var(--neuron-pill-inactive-text)",
-                fontSize: "12px", 
-                padding: "2px 8px", 
-                borderRadius: "12px" 
-              }}>
-                {tabCounts.international}
-              </span>
-            </button>
-            <button
-              onClick={() => setActiveTab("co-loader")}
-              style={{
-                padding: "0 0 16px 0",
-                fontSize: "14px",
-                fontWeight: 600,
-                color: activeTab === "co-loader" ? "var(--theme-action-primary-bg)" : "var(--neuron-pill-inactive-text)",
-                borderBottom: activeTab === "co-loader" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                transition: "all 0.2s"
-              }}
-            >
-              Co-Loader Partners
-              <span style={{
-                backgroundColor: activeTab === "co-loader" ? "var(--theme-status-success-bg)" : "var(--neuron-pill-inactive-bg)",
-                color: activeTab === "co-loader" ? "var(--theme-action-primary-bg)" : "var(--neuron-pill-inactive-text)",
-                fontSize: "12px", 
-                padding: "2px 8px", 
-                borderRadius: "12px" 
-              }}>
-                {tabCounts["co-loader"]}
-              </span>
-            </button>
-            <button
-              onClick={() => setActiveTab("all-in")}
-              style={{
-                padding: "0 0 16px 0",
-                fontSize: "14px",
-                fontWeight: 600,
-                color: activeTab === "all-in" ? "var(--theme-action-primary-bg)" : "var(--neuron-pill-inactive-text)",
-                borderBottom: activeTab === "all-in" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                transition: "all 0.2s"
-              }}
-            >
-              All-In Partners
-              <span style={{
-                backgroundColor: activeTab === "all-in" ? "var(--theme-status-success-bg)" : "var(--neuron-pill-inactive-bg)",
-                color: activeTab === "all-in" ? "var(--theme-action-primary-bg)" : "var(--neuron-pill-inactive-text)",
-                fontSize: "12px", 
-                padding: "2px 8px", 
-                borderRadius: "12px" 
-              }}>
-                {tabCounts["all-in"]}
-              </span>
-            </button>
+            {canViewInternationalTab && (
+              <button
+                onClick={() => setActiveTab("international")}
+                style={{
+                  padding: "0 0 16px 0",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  color: activeTab === "international" ? "var(--theme-action-primary-bg)" : "var(--neuron-pill-inactive-text)",
+                  borderBottom: activeTab === "international" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  transition: "all 0.2s"
+                }}
+              >
+                International Partners
+                <span style={{
+                  backgroundColor: activeTab === "international" ? "var(--theme-status-success-bg)" : "var(--neuron-pill-inactive-bg)",
+                  color: activeTab === "international" ? "var(--theme-action-primary-bg)" : "var(--neuron-pill-inactive-text)",
+                  fontSize: "12px",
+                  padding: "2px 8px",
+                  borderRadius: "12px"
+                }}>
+                  {tabCounts.international}
+                </span>
+              </button>
+            )}
+            {canViewCoLoaderTab && (
+              <button
+                onClick={() => setActiveTab("co-loader")}
+                style={{
+                  padding: "0 0 16px 0",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  color: activeTab === "co-loader" ? "var(--theme-action-primary-bg)" : "var(--neuron-pill-inactive-text)",
+                  borderBottom: activeTab === "co-loader" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  transition: "all 0.2s"
+                }}
+              >
+                Co-Loader Partners
+                <span style={{
+                  backgroundColor: activeTab === "co-loader" ? "var(--theme-status-success-bg)" : "var(--neuron-pill-inactive-bg)",
+                  color: activeTab === "co-loader" ? "var(--theme-action-primary-bg)" : "var(--neuron-pill-inactive-text)",
+                  fontSize: "12px",
+                  padding: "2px 8px",
+                  borderRadius: "12px"
+                }}>
+                  {tabCounts["co-loader"]}
+                </span>
+              </button>
+            )}
+            {canViewAllInTab && (
+              <button
+                onClick={() => setActiveTab("all-in")}
+                style={{
+                  padding: "0 0 16px 0",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  color: activeTab === "all-in" ? "var(--theme-action-primary-bg)" : "var(--neuron-pill-inactive-text)",
+                  borderBottom: activeTab === "all-in" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  transition: "all 0.2s"
+                }}
+              >
+                All-In Partners
+                <span style={{
+                  backgroundColor: activeTab === "all-in" ? "var(--theme-status-success-bg)" : "var(--neuron-pill-inactive-bg)",
+                  color: activeTab === "all-in" ? "var(--theme-action-primary-bg)" : "var(--neuron-pill-inactive-text)",
+                  fontSize: "12px",
+                  padding: "2px 8px",
+                  borderRadius: "12px"
+                }}>
+                  {tabCounts["all-in"]}
+                </span>
+              </button>
+            )}
           </div>
         </div>
 

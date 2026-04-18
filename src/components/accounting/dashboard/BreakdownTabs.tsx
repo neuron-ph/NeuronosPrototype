@@ -10,6 +10,7 @@
 import { useState, useMemo } from "react";
 import { AlertTriangle } from "lucide-react";
 import { formatCurrencyCompact } from "../aggregate/types";
+import { usePermission } from "../../../context/PermissionProvider";
 
 interface BreakdownTabsProps {
   billingItems: any[];
@@ -417,7 +418,13 @@ function EmptyState({ text }: { text: string }) {
 // ── Main Component ──
 
 export function BreakdownTabs({ billingItems, invoices, expenses, onNavigateTab }: BreakdownTabsProps) {
-  const [activeTab, setActiveTab] = useState<TabKey>("service");
+  const { can } = usePermission();
+  const canService = can("accounting_breakdown_service_tab", "view");
+  const canCustomer = can("accounting_breakdown_customer_tab", "view");
+  const canCategory = can("accounting_breakdown_category_tab", "view");
+  const [activeTab, setActiveTab] = useState<TabKey>(
+    canService ? "service" : canCustomer ? "customer" : canCategory ? "category" : "service"
+  );
 
   return (
     <div
@@ -439,20 +446,28 @@ export function BreakdownTabs({ billingItems, invoices, expenses, onNavigateTab 
 
           {/* Tab pills */}
           <div className="flex items-center rounded-lg p-0.5" style={{ background: "var(--theme-border-default)" }}>
-            {TABS.map((tab) => (
-              <button
-                key={tab.key}
-                className="px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all cursor-pointer"
-                style={{
-                  background: activeTab === tab.key ? "var(--theme-bg-surface)" : "transparent",
-                  color: activeTab === tab.key ? "var(--theme-text-primary)" : "var(--theme-text-muted)",
-                  boxShadow: activeTab === tab.key ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
-                }}
-                onClick={() => setActiveTab(tab.key)}
-              >
-                {tab.label}
-              </button>
-            ))}
+            {TABS.map((tab) => {
+              const tabCanMap: Record<TabKey, boolean> = {
+                service: canService,
+                customer: canCustomer,
+                category: canCategory,
+              };
+              if (!tabCanMap[tab.key]) return null;
+              return (
+                <button
+                  key={tab.key}
+                  className="px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all cursor-pointer"
+                  style={{
+                    background: activeTab === tab.key ? "var(--theme-bg-surface)" : "transparent",
+                    color: activeTab === tab.key ? "var(--theme-text-primary)" : "var(--theme-text-muted)",
+                    boxShadow: activeTab === tab.key ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+                  }}
+                  onClick={() => setActiveTab(tab.key)}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -468,13 +483,13 @@ export function BreakdownTabs({ billingItems, invoices, expenses, onNavigateTab 
       </div>
 
       {/* Tab content */}
-      {activeTab === "service" && (
+      {activeTab === "service" && canService && (
         <ServiceTab billingItems={billingItems} invoices={invoices} expenses={expenses} />
       )}
-      {activeTab === "customer" && (
+      {activeTab === "customer" && canCustomer && (
         <CustomerTab billingItems={billingItems} invoices={invoices} />
       )}
-      {activeTab === "category" && (
+      {activeTab === "category" && canCategory && (
         <CategoryTab invoices={invoices} billingItems={billingItems} expenses={expenses} />
       )}
     </div>

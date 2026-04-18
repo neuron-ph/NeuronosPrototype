@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { Loader2, ZoomIn, ZoomOut, Maximize, ChevronDown, Layout, Check, FileText, Calendar, Box, Truck, CreditCard, Download, Printer, RefreshCw } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useUser } from "../../../hooks/useUser";
+import { usePermission } from "../../../context/PermissionProvider";
 import { logCreation, logActivity } from "../../../utils/activityLog";
 import { toast } from "../../ui/toast-utils";
 import type { FinancialContainer } from "../../../types/financials";
@@ -64,6 +65,12 @@ export function InvoiceBuilder({
 }: InvoiceBuilderProps) {
   // -- Common State --
   const { user } = useUser();
+  const { can } = usePermission();
+  const canViewItemsTab = can("ops_invoices_items_tab", "view");
+  const canViewDetailsTab = can("ops_invoices_details_tab", "view");
+  const canViewLegalTab = can("ops_invoices_legal_tab", "view");
+  const canViewSettingsTab = can("ops_invoices_settings_tab", "view");
+
   const [scale, setScale] = useState(0.85);
   const [autoScale, setAutoScale] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -91,7 +98,8 @@ export function InvoiceBuilder({
 
   // -- Create Mode State --
   type CreateTab = 'items' | 'details' | 'legal' | 'settings';
-  const [activeTab, setActiveTab] = useState<CreateTab>('items');
+  const defaultCreateTab: CreateTab = canViewItemsTab ? 'items' : canViewDetailsTab ? 'details' : canViewLegalTab ? 'legal' : canViewSettingsTab ? 'settings' : 'items';
+  const [activeTab, setActiveTab] = useState<CreateTab>(defaultCreateTab);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [dueDate, setDueDate] = useState("");
@@ -824,11 +832,11 @@ export function InvoiceBuilder({
           {mode === 'create' && (
             <div className="flex shrink-0 border-b border-[var(--theme-border-default)] bg-[var(--theme-bg-surface)]">
               {([
-                { id: 'items' as CreateTab, label: 'Items', icon: FileText },
-                { id: 'details' as CreateTab, label: 'Details', icon: Calendar },
-                { id: 'legal' as CreateTab, label: 'Shipment', icon: Truck },
-                { id: 'settings' as CreateTab, label: 'Settings', icon: Layout },
-              ]).map(({ id, label, icon: Icon }) => {
+                { id: 'items' as CreateTab, label: 'Items', icon: FileText, allowed: canViewItemsTab },
+                { id: 'details' as CreateTab, label: 'Details', icon: Calendar, allowed: canViewDetailsTab },
+                { id: 'legal' as CreateTab, label: 'Shipment', icon: Truck, allowed: canViewLegalTab },
+                { id: 'settings' as CreateTab, label: 'Settings', icon: Layout, allowed: canViewSettingsTab },
+              ]).filter(({ allowed }) => allowed).map(({ id, label, icon: Icon }) => {
                 const isActive = activeTab === id;
                 return (
                   <button
@@ -876,7 +884,7 @@ export function InvoiceBuilder({
           <div className={`flex-1 ${mode === 'create' && activeTab === 'items' ? 'overflow-hidden flex flex-col' : 'overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--theme-border-default)]'}`}>
 
             {/* ─── CREATE MODE: Items Tab ─── */}
-            {mode === 'create' && activeTab === 'items' && (
+            {mode === 'create' && activeTab === 'items' && canViewItemsTab && (
               <>
                 {/* Table Header */}
                 <div className="flex items-center bg-[var(--theme-bg-page)] border-b border-[var(--theme-border-default)] px-4 py-2.5 shrink-0">
@@ -994,7 +1002,7 @@ export function InvoiceBuilder({
             )}
 
             {/* ─── CREATE MODE: Details Tab ─── */}
-            {mode === 'create' && activeTab === 'details' && (
+            {mode === 'create' && activeTab === 'details' && canViewDetailsTab && (
               <div className="p-5 space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -1045,7 +1053,7 @@ export function InvoiceBuilder({
             )}
 
             {/* ─── CREATE MODE: Shipment Tab ─── */}
-            {mode === 'create' && activeTab === 'legal' && (
+            {mode === 'create' && activeTab === 'legal' && canViewLegalTab && (
               <div className="p-5 space-y-4">
                 {/* Bill To Toggle */}
                 <div>
@@ -1158,7 +1166,7 @@ export function InvoiceBuilder({
             )}
 
             {/* ─── CREATE MODE: Settings Tab ─── */}
-            {mode === 'create' && activeTab === 'settings' && (
+            {mode === 'create' && activeTab === 'settings' && canViewSettingsTab && (
               <div className="p-5 space-y-6">
                 {/* Currency & GL */}
                 <div>

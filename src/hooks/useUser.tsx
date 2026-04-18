@@ -12,7 +12,7 @@ export interface User {
   email: string;
   name: string;
   department: 'Business Development' | 'Pricing' | 'Operations' | 'Accounting' | 'Executive' | 'HR';
-  role: 'staff' | 'team_leader' | 'manager';
+  role: 'staff' | 'team_leader' | 'supervisor' | 'manager' | 'executive';
   created_at: string;
   is_active: boolean;
   team_id?: string | null;

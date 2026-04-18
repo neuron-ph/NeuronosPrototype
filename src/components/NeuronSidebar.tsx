@@ -33,8 +33,10 @@ import {
   TrendingUp
 } from "lucide-react";
 import { NeuronLogo } from "./NeuronLogo";
+import { usePermission } from "../context/PermissionProvider";
 import { useUser } from "../hooks/useUser";
 import { supabase } from "../utils/supabase/client";
+import type { ModuleId } from "./admin/permissionsConfig";
 
 // Prefetch lazy module bundles on sidebar hover — React caches the promise so the
 // bundle downloads at most once regardless of how many times the user hovers.
@@ -45,6 +47,24 @@ const prefetchAccounting = () => void import("./accounting/FinancialsModule");
 const prefetchInbox      = () => void import("./InboxPage");
 
 type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" |"pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" |"ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" |"operations" | "acct-transactions" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-journal" | "acct-coa" | "acct-reports" | "acct-statements" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "calendar" | "inbox" | "my-evouchers" | "ticket-queue" | "settings" | "admin-users" | "admin" | "ticket-testing" | "activity-log" | "design-system";
+
+const sidebarPermissionMap: Partial<Record<Page, ModuleId>> = {
+  "bd-contacts": "bd_contacts",
+  "bd-customers": "bd_customers",
+  "bd-tasks": "bd_tasks",
+  "bd-activities": "bd_activities",
+  "bd-budget-requests": "bd_budget_requests",
+  "pricing-quotations": "pricing_quotations",
+  "pricing-contracts": "pricing_contracts",
+  "acct-evouchers": "acct_evouchers",
+  "acct-billings": "acct_billings",
+  "acct-collections": "acct_collections",
+  "acct-expenses": "acct_expenses",
+  "acct-reports": "acct_reports",
+  "hr": "hr",
+  "activity-log": "exec_activity_log",
+  "admin-users": "exec_users",
+};
 
 // SVG for Philippine Peso icon
 const Vector = () => (
@@ -201,10 +221,11 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
   ]);
   
   // Role level map — mirrors RouteGuard so sidebar visibility matches route access
-  const ROLE_LEVEL: Record<string, number> = { staff: 0, team_leader: 1, manager: 2 };
+  const ROLE_LEVEL: Record<string, number> = { staff: 0, team_leader: 1, supervisor: 2, manager: 3, executive: 4 };
 
   // Use effectiveDepartment from context for dev role override support
   const { user, effectiveDepartment, effectiveRole } = useUser();
+  const { can, isLoaded: permissionsLoaded } = usePermission();
 
   // Fetch inbox unread count — with hard timeout so a hung Supabase client
   // doesn't block the main thread or accumulate zombie requests.
@@ -293,6 +314,32 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
     { id: "acct-reports" as Page, label: "Reports", icon: BarChart3 },
     { id: "acct-statements" as Page, label: "Financial Statements", icon: TrendingUp },
   ];
+
+  const canViewPage = useCallback((page: Page) => {
+    const moduleId = sidebarPermissionMap[page];
+    if (!moduleId) return true;
+    if (!permissionsLoaded) return false;
+    return can(moduleId, "view");
+  }, [can, permissionsLoaded]);
+
+  const visibleBdSubItems = bdSubItems.filter((item) => canViewPage(item.id));
+  const visiblePricingSubItems = pricingSubItems.filter((item) => canViewPage(item.id));
+  const visibleOperationsSubItems = operationsSubItems.filter((item) => canViewPage(item.id));
+  const visibleAcctSubItems = acctSubItems
+    .filter((item) => {
+      if (!item.minRole || isExecutive) return true;
+      const userLevel = ROLE_LEVEL[effectiveRole || "staff"] ?? 0;
+      return userLevel >= (ROLE_LEVEL[item.minRole] ?? 0);
+    })
+    .filter((item) => canViewPage(item.id));
+
+  const showBDSection = showBD && visibleBdSubItems.length > 0;
+  const showPricingSection = showPricing && visiblePricingSubItems.length > 0;
+  const showOperationsSection = showOperations && visibleOperationsSubItems.length > 0;
+  const showAccountingSection = showAccounting && visibleAcctSubItems.length > 0;
+  const showHRItem = showHR && canViewPage("hr");
+  const showActivityLog = isExecutive && canViewPage("activity-log");
+  const showAdminUsers = isExecutive && canViewPage("admin-users");
   
   // Check if any section page is active
   const isBDActive = currentPage.startsWith("bd-");
@@ -531,12 +578,13 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
         {renderSectionHeader("WORK")}
         
         {/* Business Development with sub-items */}
-        {showBD && (
+        {showBDSection && (
           <div style={{ marginBottom: isBDExpanded ? "8px" : "0px" }}>
             <button
               onClick={() => {
                 if (isCollapsed) {
-                  onNavigate("bd-contacts");
+                  const firstVisibleBdItem = visibleBdSubItems[0];
+                  if (firstVisibleBdItem) onNavigate(firstVisibleBdItem.id);
                 } else {
                   setIsBDExpanded(!isBDExpanded);
                 }
@@ -621,19 +669,20 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
               }}
             >
               <div className="space-y-1 mt-1">
-                {bdSubItems.map(item => renderNavButton(item, true))}
+                {visibleBdSubItems.map(item => renderNavButton(item, true))}
               </div>
             </div>
           </div>
         )}
         
         {/* Pricing with sub-items */}
-        {showPricing && (
+        {showPricingSection && (
           <div style={{ marginBottom: isPricingExpanded ? "8px" : "0px" }}>
             <button
               onClick={() => {
                 if (isCollapsed) {
-                  onNavigate("pricing-contacts");
+                  const firstVisiblePricingItem = visiblePricingSubItems[0];
+                  if (firstVisiblePricingItem) onNavigate(firstVisiblePricingItem.id);
                 } else {
                   setIsPricingExpanded(!isPricingExpanded);
                 }
@@ -718,19 +767,20 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
               }}
             >
               <div className="space-y-1 mt-1">
-                {pricingSubItems.map(item => renderNavButton(item, true))}
+                {visiblePricingSubItems.map(item => renderNavButton(item, true))}
               </div>
             </div>
           </div>
         )}
         
         {/* Operations with sub-items */}
-        {showOperations && (
+        {showOperationsSection && (
           <div style={{ marginBottom: isOperationsExpanded ? "8px" : "0px" }}>
             <button
               onClick={() => {
                 if (isCollapsed) {
-                  onNavigate("ops-forwarding");
+                  const firstVisibleOperationsItem = visibleOperationsSubItems[0];
+                  if (firstVisibleOperationsItem) onNavigate(firstVisibleOperationsItem.id);
                 } else {
                   setIsOperationsExpanded(!isOperationsExpanded);
                 }
@@ -815,7 +865,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
               }}
             >
               <div className="space-y-1 mt-1">
-                {operationsSubItems.map(item => renderNavButton(item, true))}
+                {visibleOperationsSubItems.map(item => renderNavButton(item, true))}
               </div>
             </div>
           </div>
@@ -823,16 +873,17 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
         
         {/* HR */}
         <div className="space-y-1">
-          {showHR && renderNavButton({ id: "hr" as Page, label: "HR", icon: User })}
+          {showHRItem && renderNavButton({ id: "hr" as Page, label: "HR", icon: User })}
         </div>
 
         {/* Accounting with sub-items */}
-        {showAccounting && (
+        {showAccountingSection && (
           <div style={{ marginBottom: isAcctExpanded ? "8px" : "0px" }}>
             <button
               onClick={() => {
                 if (isCollapsed) {
-                  onNavigate("acct-evouchers");
+                  const firstVisibleAccountingItem = visibleAcctSubItems[0];
+                  if (firstVisibleAccountingItem) onNavigate(firstVisibleAccountingItem.id);
                 } else {
                   setIsAcctExpanded(!isAcctExpanded);
                 }
@@ -917,13 +968,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
               }}
             >
               <div className="space-y-1 mt-1">
-                {acctSubItems
-                  .filter(item => {
-                    if (!item.minRole || isExecutive) return true;
-                    const userLevel = ROLE_LEVEL[effectiveRole || "staff"] ?? 0;
-                    return userLevel >= (ROLE_LEVEL[item.minRole] ?? 0);
-                  })
-                  .map(item => renderNavButton(item, true))}
+                {visibleAcctSubItems.map(item => renderNavButton(item, true))}
               </div>
             </div>
           </div>
@@ -1034,11 +1079,11 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
         {otherItems.map(item => renderNavButton(item))}
 
         {/* Executive Section */}
-        {currentUser?.department === 'Executive' && (
+        {(showActivityLog || showAdminUsers) && (
           <>
             {renderSectionHeader("EXECUTIVE")}
-            {renderNavButton({ id: "activity-log" as Page, label: "Activity Log", icon: Activity })}
-            {(() => {
+            {showActivityLog && renderNavButton({ id: "activity-log" as Page, label: "Activity Log", icon: Activity })}
+            {showAdminUsers && (() => {
               const isActive = currentPage === "admin-users";
               return (
                 <button

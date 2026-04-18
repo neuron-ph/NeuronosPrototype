@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Edit, Inbox, Send, FileText, Layers, Search, X } from "lucide-react";
 import type { InboxTab, ThreadSummary } from "../../hooks/useInbox";
 import { ThreadListItem } from "./ThreadListItem";
+import { usePermission } from "../../context/PermissionProvider";
 
 interface ThreadListPanelProps {
   threads: ThreadSummary[];
@@ -72,6 +73,7 @@ export function ThreadListPanel({
   onSelectThread,
   onCompose,
 }: ThreadListPanelProps) {
+  const { can } = usePermission();
   const [searchQuery, setSearchQuery] = useState("");
 
   const filteredThreads = searchQuery.trim()
@@ -87,10 +89,10 @@ export function ThreadListPanel({
     : threads;
 
   const tabs: { key: InboxTab; label: string; icon: React.ReactNode; count?: number }[] = [
-    { key: "inbox", label: "Inbox", icon: <Inbox size={13} />, count: unreadCount || undefined },
-    ...(isManager ? [{ key: "queue" as InboxTab, label: "Queue", icon: <Layers size={13} />, count: queueCount || undefined }] : []),
-    { key: "sent", label: "Sent", icon: <Send size={13} /> },
-    { key: "drafts", label: "Drafts", icon: <FileText size={13} />, count: draftCount || undefined },
+    ...(can("inbox_inbox_tab", "view") ? [{ key: "inbox" as InboxTab, label: "Inbox", icon: <Inbox size={13} />, count: unreadCount || undefined }] : []),
+    ...(isManager && can("inbox_queue_tab", "view") ? [{ key: "queue" as InboxTab, label: "Queue", icon: <Layers size={13} />, count: queueCount || undefined }] : []),
+    ...(can("inbox_sent_tab", "view") ? [{ key: "sent" as InboxTab, label: "Sent", icon: <Send size={13} /> }] : []),
+    ...(can("inbox_drafts_tab", "view") ? [{ key: "drafts" as InboxTab, label: "Drafts", icon: <FileText size={13} />, count: draftCount || undefined }] : []),
   ];
 
   return (

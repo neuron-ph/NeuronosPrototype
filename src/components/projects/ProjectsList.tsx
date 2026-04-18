@@ -7,6 +7,7 @@ import { CustomDatePicker } from "../common/CustomDatePicker";
 import { useProjectsFinancialsMap } from "../../hooks/useProjectsFinancialsMap";
 import { SkeletonTable, SkeletonControlBar } from "../shared/NeuronSkeleton";
 import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
+import { usePermission } from "../../context/PermissionProvider";
 
 interface ProjectsListProps {
   projects: Project[];
@@ -22,16 +23,22 @@ interface ProjectsListProps {
   onRefresh?: () => Promise<void>;
 }
 
-export function ProjectsList({ 
-  projects, 
-  onSelectProject, 
+export function ProjectsList({
+  projects,
+  onSelectProject,
   isLoading,
   currentUser,
   department,
   onRefresh,
 }: ProjectsListProps) {
+  const { can } = usePermission();
+  const canViewAll = can("ops_projects_all_tab", "view");
+  const canViewActive = can("ops_projects_active_tab", "view");
+  const canViewCompleted = can("ops_projects_completed_tab", "view");
+
+  const defaultTab = canViewAll ? "all" : canViewActive ? "active" : canViewCompleted ? "completed" : "all";
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<"all" | "active" | "completed">("all");
+  const [activeTab, setActiveTab] = useState<"all" | "active" | "completed">(defaultTab);
   
   // Filters
   const [dateFrom, setDateFrom] = useState<string>("");
@@ -304,119 +311,125 @@ export function ProjectsList({
         </div>
 
         {/* Tabs */}
-        <div style={{ 
-          display: "flex", 
-          gap: "8px", 
+        <div style={{
+          display: "flex",
+          gap: "8px",
           borderBottom: "1px solid var(--theme-border-default)",
           marginBottom: "24px"
         }}>
-          <button
-            onClick={() => setActiveTab("all")}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "12px 20px",
-              background: "transparent",
-              border: "none",
-              borderBottom: activeTab === "all" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
-              color: activeTab === "all" ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)",
-              fontSize: "14px",
-              fontWeight: 600,
-              cursor: "pointer",
-              transition: "all 0.2s ease",
-              marginBottom: "-1px"
-            }}
-          >
-            <Briefcase size={18} />
-            All Projects
-            <span
+          {canViewAll && (
+            <button
+              onClick={() => setActiveTab("all")}
               style={{
-                padding: "2px 8px",
-                borderRadius: "12px",
-                fontSize: "11px",
-                fontWeight: 700,
-                background: activeTab === "all" ? "var(--theme-action-primary-bg)" : "var(--theme-action-primary-bg-15, rgba(15,118,110,0.08))",
-                color: activeTab === "all" ? "#FFFFFF" : "var(--theme-action-primary-bg)",
-                minWidth: "20px",
-                textAlign: "center"
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "12px 20px",
+                background: "transparent",
+                border: "none",
+                borderBottom: activeTab === "all" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
+                color: activeTab === "all" ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)",
+                fontSize: "14px",
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+                marginBottom: "-1px"
               }}
             >
-              {allCount}
-            </span>
-          </button>
-          
-          <button
-            onClick={() => setActiveTab("active")}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "12px 20px",
-              background: "transparent",
-              border: "none",
-              borderBottom: activeTab === "active" ? "2px solid var(--theme-status-warning-fg)" : "2px solid transparent",
-              color: activeTab === "active" ? "var(--theme-status-warning-fg)" : "var(--theme-text-muted)",
-              fontSize: "14px",
-              fontWeight: 600,
-              cursor: "pointer",
-              transition: "all 0.2s ease",
-              marginBottom: "-1px"
-            }}
-          >
-            <Package size={18} />
-            Active
-            <span
+              <Briefcase size={18} />
+              All Projects
+              <span
+                style={{
+                  padding: "2px 8px",
+                  borderRadius: "12px",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  background: activeTab === "all" ? "var(--theme-action-primary-bg)" : "var(--theme-action-primary-bg-15, rgba(15,118,110,0.08))",
+                  color: activeTab === "all" ? "#FFFFFF" : "var(--theme-action-primary-bg)",
+                  minWidth: "20px",
+                  textAlign: "center"
+                }}
+              >
+                {allCount}
+              </span>
+            </button>
+          )}
+
+          {canViewActive && (
+            <button
+              onClick={() => setActiveTab("active")}
               style={{
-                padding: "2px 8px",
-                borderRadius: "12px",
-                fontSize: "11px",
-                fontWeight: 700,
-                background: activeTab === "active" ? "var(--theme-status-warning-fg)" : "var(--theme-status-warning-bg)",
-                color: activeTab === "active" ? "#FFFFFF" : "var(--theme-status-warning-fg)",
-                minWidth: "20px",
-                textAlign: "center"
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "12px 20px",
+                background: "transparent",
+                border: "none",
+                borderBottom: activeTab === "active" ? "2px solid var(--theme-status-warning-fg)" : "2px solid transparent",
+                color: activeTab === "active" ? "var(--theme-status-warning-fg)" : "var(--theme-text-muted)",
+                fontSize: "14px",
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+                marginBottom: "-1px"
               }}
             >
-              {activeCount}
-            </span>
-          </button>
-          
-          <button
-            onClick={() => setActiveTab("completed")}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "12px 20px",
-              background: "transparent",
-              border: "none",
-              borderBottom: activeTab === "completed" ? "2px solid var(--theme-status-success-fg)" : "2px solid transparent",
-              color: activeTab === "completed" ? "var(--theme-status-success-fg)" : "var(--theme-text-muted)",
-              fontSize: "14px",
-              fontWeight: 600,
-              cursor: "pointer",
-              transition: "all 0.2s ease",
-              marginBottom: "-1px"
-            }}
-          >
-            <CheckCircle size={18} />
-            Completed
-            <span
+              <Package size={18} />
+              Active
+              <span
+                style={{
+                  padding: "2px 8px",
+                  borderRadius: "12px",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  background: activeTab === "active" ? "var(--theme-status-warning-fg)" : "var(--theme-status-warning-bg)",
+                  color: activeTab === "active" ? "#FFFFFF" : "var(--theme-status-warning-fg)",
+                  minWidth: "20px",
+                  textAlign: "center"
+                }}
+              >
+                {activeCount}
+              </span>
+            </button>
+          )}
+
+          {canViewCompleted && (
+            <button
+              onClick={() => setActiveTab("completed")}
               style={{
-                padding: "2px 8px",
-                borderRadius: "12px",
-                fontSize: "11px",
-                fontWeight: 700,
-                background: activeTab === "completed" ? "var(--theme-status-success-fg)" : "var(--theme-status-success-bg)",
-                color: activeTab === "completed" ? "#FFFFFF" : "var(--theme-status-success-fg)",
-                minWidth: "20px",
-                textAlign: "center"
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "12px 20px",
+                background: "transparent",
+                border: "none",
+                borderBottom: activeTab === "completed" ? "2px solid var(--theme-status-success-fg)" : "2px solid transparent",
+                color: activeTab === "completed" ? "var(--theme-status-success-fg)" : "var(--theme-text-muted)",
+                fontSize: "14px",
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+                marginBottom: "-1px"
               }}
             >
-              {completedCount}
-            </span>
-          </button>
+              <CheckCircle size={18} />
+              Completed
+              <span
+                style={{
+                  padding: "2px 8px",
+                  borderRadius: "12px",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  background: activeTab === "completed" ? "var(--theme-status-success-fg)" : "var(--theme-status-success-bg)",
+                  color: activeTab === "completed" ? "#FFFFFF" : "var(--theme-status-success-fg)",
+                  minWidth: "20px",
+                  textAlign: "center"
+                }}
+              >
+                {completedCount}
+              </span>
+            </button>
+          )}
         </div>
 
         {/* Table */}

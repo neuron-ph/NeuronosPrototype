@@ -15,6 +15,7 @@
  */
 
 import { useState, useCallback, useMemo } from "react";
+import { usePermission } from "../../context/PermissionProvider";
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "../../lib/queryKeys";
 import { useNavigate } from "react-router";
@@ -158,7 +159,22 @@ const getPrimaryRefDisplay = (refs: string[], fallback = "—"): string => {
 const pickUniqueRef = (refs: string[]): string => (refs.length === 1 ? refs[0] : "");
 
 export function FinancialsModule() {
-  const [activeTab, setActiveTab] = useState<FinancialsTab>("dashboard");
+  const { can } = usePermission();
+  const canDashboard = can("accounting_financials_dashboard_tab", "view");
+  const canBillings = can("accounting_financials_billings_tab", "view");
+  const canInvoices = can("accounting_financials_invoices_tab", "view");
+  const canCollections = can("accounting_financials_collections_tab", "view");
+  const canExpenses = can("accounting_financials_expenses_tab", "view");
+
+  const firstAllowedTab: FinancialsTab =
+    canDashboard ? "dashboard" :
+    canBillings ? "billings" :
+    canInvoices ? "invoices" :
+    canCollections ? "collections" :
+    canExpenses ? "expenses" :
+    "dashboard";
+
+  const [activeTab, setActiveTab] = useState<FinancialsTab>(firstAllowedTab);
   const navigate = useNavigate();
   const { scope: dataScope, isLoaded: isScopeLoaded } = useDataScope('financials');
 
@@ -1427,7 +1443,14 @@ export function FinancialsModule() {
 
         {/* Tab Bar */}
         <div className="flex items-center gap-0 border-b border-[var(--theme-border-default)]">
-          {TABS.map((tab) => {
+          {TABS.filter((tab) => {
+            if (tab.id === "dashboard") return canDashboard;
+            if (tab.id === "billings") return canBillings;
+            if (tab.id === "invoices") return canInvoices;
+            if (tab.id === "collections") return canCollections;
+            if (tab.id === "expenses") return canExpenses;
+            return false;
+          }).map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
@@ -1455,7 +1478,7 @@ export function FinancialsModule() {
 
       {/* Tab Content */}
       <div className="flex-1 overflow-auto px-12 pt-6 pb-12">
-        {activeTab === "dashboard" && (
+        {canDashboard && activeTab === "dashboard" && (
           <FinancialDashboard
             billingItems={billingItems}
             invoices={invoices}
@@ -1468,7 +1491,7 @@ export function FinancialsModule() {
           />
         )}
 
-        {activeTab === "billings" && (
+        {canBillings && activeTab === "billings" && (
           <AggregateFinancialShell
             scope={scope}
             onScopeChange={setScope}
@@ -1503,7 +1526,7 @@ export function FinancialsModule() {
           </AggregateFinancialShell>
         )}
 
-        {activeTab === "invoices" && (
+        {canInvoices && activeTab === "invoices" && (
           <AggregateFinancialShell
             scope={scope}
             onScopeChange={setScope}
@@ -1547,7 +1570,7 @@ export function FinancialsModule() {
           </AggregateFinancialShell>
         )}
 
-        {activeTab === "collections" && (
+        {canCollections && activeTab === "collections" && (
           <AggregateFinancialShell
             scope={scope}
             onScopeChange={setScope}
@@ -1588,7 +1611,7 @@ export function FinancialsModule() {
           </AggregateFinancialShell>
         )}
 
-        {activeTab === "expenses" && (
+        {canExpenses && activeTab === "expenses" && (
           <AggregateFinancialShell
             scope={scope}
             onScopeChange={setScope}

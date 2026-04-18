@@ -20,6 +20,7 @@ import { RequestBillingButton } from "../../common/RequestBillingButton";
 import { loadBookingActivityLog, appendBookingActivity } from "../../../utils/bookingActivityLog";
 import { BookingTeamSection } from "../shared/BookingTeamSection";
 import { useUser } from "../../../hooks/useUser";
+import { usePermission } from "../../../context/PermissionProvider";
 import { fireBillingTicketOnCompletion } from "../../../utils/workflowTickets";
 import { logStatusChange } from "../../../utils/activityLog";
 
@@ -85,8 +86,12 @@ export function ForwardingBookingDetails({
   initialTab,
   highlightId
 }: ForwardingBookingDetailsProps) {
+  const { can } = usePermission();
+  const canViewBillings = can("ops_bookings_billings_tab", "view");
   const [activeTab, setActiveTab] = useState<DetailTab>(
-    (initialTab as DetailTab) || "booking-info"
+    initialTab === "billings" && !canViewBillings
+      ? "booking-info"
+      : (initialTab as DetailTab) || "booking-info"
   );
   const [showTimeline, setShowTimeline] = useState(false);
   const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>(initialActivityLog);
@@ -311,25 +316,27 @@ export function ForwardingBookingDetails({
           >
             Booking Information
           </button>
-          <button
-            onClick={() => setActiveTab("billings")}
-            style={{
-              padding: "0 4px",
-              fontSize: "14px",
-              fontWeight: 500,
-              color: activeTab === "billings" ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-muted)",
-              background: "none",
-              borderTop: "none",
-              borderLeft: "none",
-              borderRight: "none",
-              borderBottom: activeTab === "billings" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
-              cursor: "pointer",
-              transition: "all 0.2s",
-              height: "100%"
-            }}
-          >
-            Billings
-          </button>
+          {canViewBillings && (
+            <button
+              onClick={() => setActiveTab("billings")}
+              style={{
+                padding: "0 4px",
+                fontSize: "14px",
+                fontWeight: 500,
+                color: activeTab === "billings" ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-muted)",
+                background: "none",
+                borderTop: "none",
+                borderLeft: "none",
+                borderRight: "none",
+                borderBottom: activeTab === "billings" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
+                cursor: "pointer",
+                transition: "all 0.2s",
+                height: "100%"
+              }}
+            >
+              Billings
+            </button>
+          )}
           <button
             onClick={() => setActiveTab("expenses")}
             style={{
@@ -480,7 +487,7 @@ export function ForwardingBookingDetails({
               currentUser={currentUser}
             />
           )}
-          {activeTab === "billings" && (
+          {activeTab === "billings" && canViewBillings && (
             <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]">
               <UnifiedBillingsTab
                 items={bookingBillingItems}

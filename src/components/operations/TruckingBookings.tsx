@@ -10,6 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "../../lib/queryKeys";
 import { useDataScope } from "../../hooks/useDataScope";
 import { SkeletonTable } from "../shared/NeuronSkeleton";
+import { usePermission } from "../../context/PermissionProvider";
 import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
 import { logDeletion } from "../../utils/activityLog";
 import type { ExecutionStatus } from "../../types/operations";
@@ -37,11 +38,24 @@ interface TruckingBookingsProps {
 }
 
 export function TruckingBookings({ currentUser, pendingBookingId, initialTab, highlightId }: TruckingBookingsProps = {}) {
+  const { can } = usePermission();
+  const canViewAllTab        = can("ops_trucking_all_tab", "view");
+  const canViewMyTab         = can("ops_trucking_my_tab", "view");
+  const canViewDraftTab      = can("ops_trucking_draft_tab", "view");
+  const canViewInProgressTab = can("ops_trucking_in_progress_tab", "view");
+  const canViewCompletedTab  = can("ops_trucking_completed_tab", "view");
+
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [movementFilter, setMovementFilter] = useState<string>("all");
-  const [activeTab, setActiveTab] = useState<"all" | "my" | "draft" | "in-progress" | "completed">("all");
+  const [activeTab, setActiveTab] = useState<"all" | "my" | "draft" | "in-progress" | "completed">(() => {
+    if (canViewAllTab)        return "all";
+    if (canViewMyTab)         return "my";
+    if (canViewDraftTab)      return "draft";
+    if (canViewInProgressTab) return "in-progress";
+    return "completed";
+  });
   const [timePeriodFilter, setTimePeriodFilter] = useState<string>("all");
   const [ownerFilter, setOwnerFilter] = useState<string>("all");
   const [handlerFilter, setHandlerFilter] = useState<string>("all");
@@ -458,52 +472,62 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
           </div>
 
           {/* Tabs */}
-          <div style={{ 
-            display: "flex", 
-            gap: "8px", 
+          <div style={{
+            display: "flex",
+            gap: "8px",
             borderBottom: "1px solid var(--theme-border-default)",
             marginBottom: "24px"
           }}>
-            <TabButton
-              icon={<Briefcase size={18} />}
-              label="All Bookings"
-              count={allCount}
-              isActive={activeTab === "all"}
-              color="var(--theme-action-primary-bg)"
-              onClick={() => setActiveTab("all")}
-            />
-            <TabButton
-              icon={<UserCheck size={18} />}
-              label="Assigned to Me"
-              count={myCount}
-              isActive={activeTab === "my"}
-              color="var(--neuron-status-accent-fg)"
-              onClick={() => setActiveTab("my")}
-            />
-            <TabButton
-              icon={<FileEdit size={18} />}
-              label="Draft"
-              count={draftCount}
-              isActive={activeTab === "draft"}
-              color="var(--theme-text-muted)"
-              onClick={() => setActiveTab("draft")}
-            />
-            <TabButton
-              icon={<Clock size={18} />}
-              label="In Progress"
-              count={inProgressCount}
-              isActive={activeTab === "in-progress"}
-              color="var(--theme-action-primary-bg)"
-              onClick={() => setActiveTab("in-progress")}
-            />
-            <TabButton
-              icon={<CheckCircle size={18} />}
-              label="Completed"
-              count={completedCount}
-              isActive={activeTab === "completed"}
-              color="var(--theme-status-success-fg)"
-              onClick={() => setActiveTab("completed")}
-            />
+            {canViewAllTab && (
+              <TabButton
+                icon={<Briefcase size={18} />}
+                label="All Bookings"
+                count={allCount}
+                isActive={activeTab === "all"}
+                color="var(--theme-action-primary-bg)"
+                onClick={() => setActiveTab("all")}
+              />
+            )}
+            {canViewMyTab && (
+              <TabButton
+                icon={<UserCheck size={18} />}
+                label="Assigned to Me"
+                count={myCount}
+                isActive={activeTab === "my"}
+                color="var(--neuron-status-accent-fg)"
+                onClick={() => setActiveTab("my")}
+              />
+            )}
+            {canViewDraftTab && (
+              <TabButton
+                icon={<FileEdit size={18} />}
+                label="Draft"
+                count={draftCount}
+                isActive={activeTab === "draft"}
+                color="var(--theme-text-muted)"
+                onClick={() => setActiveTab("draft")}
+              />
+            )}
+            {canViewInProgressTab && (
+              <TabButton
+                icon={<Clock size={18} />}
+                label="In Progress"
+                count={inProgressCount}
+                isActive={activeTab === "in-progress"}
+                color="var(--theme-action-primary-bg)"
+                onClick={() => setActiveTab("in-progress")}
+              />
+            )}
+            {canViewCompletedTab && (
+              <TabButton
+                icon={<CheckCircle size={18} />}
+                label="Completed"
+                count={completedCount}
+                isActive={activeTab === "completed"}
+                color="var(--theme-status-success-fg)"
+                onClick={() => setActiveTab("completed")}
+              />
+            )}
           </div>
         </div>
 

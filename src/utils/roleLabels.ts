@@ -4,8 +4,10 @@
  */
 const OPS_DISPLAY_LABELS: Record<string, string> = {
   staff: "Handler",
-  team_leader: "Supervisor",
+  team_leader: "Team Leader",
+  supervisor: "Supervisor",
   manager: "Manager",
+  executive: "Executive",
 };
 
 export function getOpsDisplayLabel(role: string): string {

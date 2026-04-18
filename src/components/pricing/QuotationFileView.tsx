@@ -1,4 +1,5 @@
 import { ArrowLeft, Download, Edit3, FileText, FolderPlus, Layout, UserCircle } from "lucide-react";
+import { usePermission } from "../../context/PermissionProvider";
 import { CustomDatePicker } from "../common/CustomDatePicker";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -47,7 +48,12 @@ interface QuotationFileViewProps {
 type TabType = "details" | "comments";
 
 export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, onAcceptQuotation, onDelete, onUpdate, onSaveQuotation, onDuplicate, onCreateTicket, onConvertToProject, onConvertToContract, currentUser }: QuotationFileViewProps) {
-  const [activeTab, setActiveTab] = useState<TabType>("details");
+  const { can } = usePermission();
+  const canViewDetailsTab = can("pricing_quotations_details_tab", "view");
+  const canViewCommentsTab = can("pricing_quotations_comments_tab", "view");
+  const [activeTab, setActiveTab] = useState<TabType>(
+    canViewDetailsTab ? "details" : canViewCommentsTab ? "comments" : "details"
+  );
   const [viewMode, setViewMode] = useState<"form" | "pdf">("form");
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
@@ -747,52 +753,56 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
       }}>
         {/* Tabs - Left Side */}
         <div role="tablist" aria-label="Quotation sections" style={{ display: "flex", gap: "24px", height: "100%" }}>
-          <button
-            role="tab"
-            aria-selected={activeTab === "details"}
-            aria-controls="tab-panel-details"
-            id="tab-details"
-            onClick={() => setActiveTab("details")}
-            style={{
-              padding: "0 4px",
-              fontSize: "14px",
-              fontWeight: 500,
-              color: activeTab === "details" ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-muted)",
-              background: "none",
-              borderTop: "none",
-              borderLeft: "none",
-              borderRight: "none",
-              borderBottom: activeTab === "details" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
-              cursor: "pointer",
-              transition: "all 0.2s",
-              height: "100%"
-            }}
-          >
-            Details
-          </button>
-          <button
-            role="tab"
-            aria-selected={activeTab === "comments"}
-            aria-controls="tab-panel-comments"
-            id="tab-comments"
-            onClick={() => setActiveTab("comments")}
-            style={{
-              padding: "0 4px",
-              fontSize: "14px",
-              fontWeight: 500,
-              color: activeTab === "comments" ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-muted)",
-              background: "none",
-              borderTop: "none",
-              borderLeft: "none",
-              borderRight: "none",
-              borderBottom: activeTab === "comments" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
-              cursor: "pointer",
-              transition: "all 0.2s",
-              height: "100%"
-            }}
-          >
-            Comments
-          </button>
+          {canViewDetailsTab && (
+            <button
+              role="tab"
+              aria-selected={activeTab === "details"}
+              aria-controls="tab-panel-details"
+              id="tab-details"
+              onClick={() => setActiveTab("details")}
+              style={{
+                padding: "0 4px",
+                fontSize: "14px",
+                fontWeight: 500,
+                color: activeTab === "details" ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-muted)",
+                background: "none",
+                borderTop: "none",
+                borderLeft: "none",
+                borderRight: "none",
+                borderBottom: activeTab === "details" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
+                cursor: "pointer",
+                transition: "all 0.2s",
+                height: "100%"
+              }}
+            >
+              Details
+            </button>
+          )}
+          {canViewCommentsTab && (
+            <button
+              role="tab"
+              aria-selected={activeTab === "comments"}
+              aria-controls="tab-panel-comments"
+              id="tab-comments"
+              onClick={() => setActiveTab("comments")}
+              style={{
+                padding: "0 4px",
+                fontSize: "14px",
+                fontWeight: 500,
+                color: activeTab === "comments" ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-muted)",
+                background: "none",
+                borderTop: "none",
+                borderLeft: "none",
+                borderRight: "none",
+                borderBottom: activeTab === "comments" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
+                cursor: "pointer",
+                transition: "all 0.2s",
+                height: "100%"
+              }}
+            >
+              Comments
+            </button>
+          )}
         </div>
 
         {/* Action Controls - Right Side */}
@@ -1113,7 +1123,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
           flexDirection: "column",
         }}
       >
-        {activeTab === "details" ? (
+        {activeTab === "details" && canViewDetailsTab ? (
           viewMode === "pdf" ? (
             // PDF mode: same container as form view
             <div style={{ padding: "32px 48px", maxWidth: "1400px", margin: "0 auto", width: "100%" }}>
@@ -1174,7 +1184,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
               />
             </div>
           )
-        ) : (
+        ) : activeTab === "comments" && canViewCommentsTab ? (
           <div style={{ flex: 1 }}>
             <CommentsTab
               entityId={quotation.id}
@@ -1184,7 +1194,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
               currentUserDepartment={currentUserDepartment}
             />
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Create Project Modal */}

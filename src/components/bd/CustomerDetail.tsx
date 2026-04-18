@@ -17,6 +17,7 @@ import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
 import { useUser } from "../../hooks/useUser";
 import { logActivity } from "../../utils/activityLog";
+import { usePermission } from "../../context/PermissionProvider";
 
 interface CustomerDetailProps {
   customer: Customer;
@@ -107,7 +108,32 @@ const mockComments: Comment[] = [
 
 export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquiry, onViewProject, variant = "bd" }: CustomerDetailProps) {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<"contacts" | "activities" | "tasks" | "inquiries" | "comments" | "attachments" | "projects" | "contracts">(variant === "pricing" ? "inquiries" : "contacts");
+  const { can } = usePermission();
+  const canViewContactsTab    = can("bd_customers_contacts_tab", "view");
+  const canViewActivitiesTab  = can("bd_customers_activities_tab", "view");
+  const canViewTasksTab       = can("bd_customers_tasks_tab", "view");
+  const canViewInquiriesTab   = can("bd_customers_inquiries_tab", "view");
+  const canViewProjectsTab    = can("bd_customers_projects_tab", "view");
+  const canViewContractsTab   = can("bd_customers_contracts_tab", "view");
+  const canViewCommentsTab    = can("bd_customers_comments_tab", "view");
+  const canViewAttachmentsTab = can("bd_customers_attachments_tab", "view");
+  const [activeTab, setActiveTab] = useState<"contacts" | "activities" | "tasks" | "inquiries" | "comments" | "attachments" | "projects" | "contracts">(() => {
+    if (variant === "pricing") {
+      if (canViewInquiriesTab) return "inquiries";
+      if (canViewProjectsTab)  return "projects";
+      if (canViewContractsTab) return "contracts";
+      if (canViewCommentsTab)  return "comments";
+      return "attachments";
+    }
+    if (canViewContactsTab)   return "contacts";
+    if (canViewActivitiesTab) return "activities";
+    if (canViewTasksTab)      return "tasks";
+    if (canViewInquiriesTab)  return "inquiries";
+    if (canViewProjectsTab)   return "projects";
+    if (canViewContractsTab)  return "contracts";
+    if (canViewCommentsTab)   return "comments";
+    return "attachments";
+  });
   
   const [newComment, setNewComment] = useState("");
   const [isEditing, setIsEditing] = useState(false);
@@ -823,7 +849,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
           <div className="flex flex-col h-full">
             {/* Tabs */}
             <div className="flex items-center gap-6 mb-6" style={{ borderBottom: "1px solid var(--neuron-ui-divider)" }}>
-              {variant === "bd" && (
+              {variant === "bd" && canViewContactsTab && (
                 <button
                   onClick={() => setActiveTab("contacts")}
                   className="px-1 pb-3 text-[13px] font-medium transition-colors relative"
@@ -833,15 +859,14 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                 >
                   Contacts
                   {activeTab === "contacts" && (
-                    <div 
+                    <div
                       className="absolute bottom-0 left-0 right-0 h-0.5"
                       style={{ backgroundColor: "var(--theme-action-primary-bg)" }}
                     />
                   )}
                 </button>
               )}
-              {variant === "bd" && (
-                <>
+              {variant === "bd" && canViewActivitiesTab && (
                   <button
                     onClick={() => setActiveTab("activities")}
                     className="px-1 pb-3 text-[13px] font-medium transition-colors relative"
@@ -851,12 +876,14 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                   >
                     Activities
                     {activeTab === "activities" && (
-                      <div 
+                      <div
                         className="absolute bottom-0 left-0 right-0 h-0.5"
                         style={{ backgroundColor: "var(--theme-action-primary-bg)" }}
                       />
                     )}
                   </button>
+              )}
+              {variant === "bd" && canViewTasksTab && (
                   <button
                     onClick={() => setActiveTab("tasks")}
                     className="px-1 pb-3 text-[13px] font-medium transition-colors relative"
@@ -866,97 +893,105 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                   >
                     Tasks
                     {activeTab === "tasks" && (
-                      <div 
+                      <div
                         className="absolute bottom-0 left-0 right-0 h-0.5"
                         style={{ backgroundColor: "var(--theme-action-primary-bg)" }}
                       />
                     )}
                   </button>
-                </>
               )}
-              <button
-                onClick={() => setActiveTab("inquiries")}
-                className="px-1 pb-3 text-[13px] font-medium transition-colors relative"
-                style={{
-                  color: activeTab === "inquiries" ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)"
-                }}
-              >
-                Inquiries
-                {activeTab === "inquiries" && (
-                  <div 
-                    className="absolute bottom-0 left-0 right-0 h-0.5"
-                    style={{ backgroundColor: "var(--theme-action-primary-bg)" }}
-                  />
-                )}
-              </button>
-              <button
-                onClick={() => setActiveTab("projects")}
-                className="px-1 pb-3 text-[13px] font-medium transition-colors relative"
-                style={{
-                  color: activeTab === "projects" ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)"
-                }}
-              >
-                Projects
-                {activeTab === "projects" && (
-                  <div 
-                    className="absolute bottom-0 left-0 right-0 h-0.5"
-                    style={{ backgroundColor: "var(--theme-action-primary-bg)" }}
-                  />
-                )}
-              </button>
+              {canViewInquiriesTab && (
+                <button
+                  onClick={() => setActiveTab("inquiries")}
+                  className="px-1 pb-3 text-[13px] font-medium transition-colors relative"
+                  style={{
+                    color: activeTab === "inquiries" ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)"
+                  }}
+                >
+                  Inquiries
+                  {activeTab === "inquiries" && (
+                    <div
+                      className="absolute bottom-0 left-0 right-0 h-0.5"
+                      style={{ backgroundColor: "var(--theme-action-primary-bg)" }}
+                    />
+                  )}
+                </button>
+              )}
+              {canViewProjectsTab && (
+                <button
+                  onClick={() => setActiveTab("projects")}
+                  className="px-1 pb-3 text-[13px] font-medium transition-colors relative"
+                  style={{
+                    color: activeTab === "projects" ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)"
+                  }}
+                >
+                  Projects
+                  {activeTab === "projects" && (
+                    <div
+                      className="absolute bottom-0 left-0 right-0 h-0.5"
+                      style={{ backgroundColor: "var(--theme-action-primary-bg)" }}
+                    />
+                  )}
+                </button>
+              )}
               {/* ✨ PHASE 5: Contracts tab */}
-              <button
-                onClick={() => setActiveTab("contracts")}
-                className="px-1 pb-3 text-[13px] font-medium transition-colors relative"
-                style={{
-                  color: activeTab === "contracts" ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)"
-                }}
-              >
-                Contracts
-                {activeTab === "contracts" && (
-                  <div 
-                    className="absolute bottom-0 left-0 right-0 h-0.5"
-                    style={{ backgroundColor: "var(--theme-action-primary-bg)" }}
-                  />
-                )}
-              </button>
-
-              <button
-                onClick={() => setActiveTab("comments")}
-                className="px-1 pb-3 text-[13px] font-medium transition-colors relative"
-                style={{
-                  color: activeTab === "comments" ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)"
-                }}
-              >
-                Comments
-                {activeTab === "comments" && (
-                  <div 
-                    className="absolute bottom-0 left-0 right-0 h-0.5"
-                    style={{ backgroundColor: "var(--theme-action-primary-bg)" }}
-                  />
-                )}
-              </button>
-              <button
-                onClick={() => setActiveTab("attachments")}
-                className="px-1 pb-3 text-[13px] font-medium transition-colors relative"
-                style={{
-                  color: activeTab === "attachments" ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)"
-                }}
-              >
-                Attachments
-                {activeTab === "attachments" && (
-                  <div 
-                    className="absolute bottom-0 left-0 right-0 h-0.5"
-                    style={{ backgroundColor: "var(--theme-action-primary-bg)" }}
-                  />
-                )}
-              </button>
+              {canViewContractsTab && (
+                <button
+                  onClick={() => setActiveTab("contracts")}
+                  className="px-1 pb-3 text-[13px] font-medium transition-colors relative"
+                  style={{
+                    color: activeTab === "contracts" ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)"
+                  }}
+                >
+                  Contracts
+                  {activeTab === "contracts" && (
+                    <div
+                      className="absolute bottom-0 left-0 right-0 h-0.5"
+                      style={{ backgroundColor: "var(--theme-action-primary-bg)" }}
+                    />
+                  )}
+                </button>
+              )}
+              {canViewCommentsTab && (
+                <button
+                  onClick={() => setActiveTab("comments")}
+                  className="px-1 pb-3 text-[13px] font-medium transition-colors relative"
+                  style={{
+                    color: activeTab === "comments" ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)"
+                  }}
+                >
+                  Comments
+                  {activeTab === "comments" && (
+                    <div
+                      className="absolute bottom-0 left-0 right-0 h-0.5"
+                      style={{ backgroundColor: "var(--theme-action-primary-bg)" }}
+                    />
+                  )}
+                </button>
+              )}
+              {canViewAttachmentsTab && (
+                <button
+                  onClick={() => setActiveTab("attachments")}
+                  className="px-1 pb-3 text-[13px] font-medium transition-colors relative"
+                  style={{
+                    color: activeTab === "attachments" ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)"
+                  }}
+                >
+                  Attachments
+                  {activeTab === "attachments" && (
+                    <div
+                      className="absolute bottom-0 left-0 right-0 h-0.5"
+                      style={{ backgroundColor: "var(--theme-action-primary-bg)" }}
+                    />
+                  )}
+                </button>
+              )}
             </div>
 
             {/* Tab Content */}
             <div className="flex-1 overflow-auto">
               {/* Contacts Tab */}
-              {activeTab === "contacts" && variant === "bd" && (
+              {activeTab === "contacts" && variant === "bd" && canViewContactsTab && (
                 <div>
                   <div className="flex items-center justify-between mb-6">
                     <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
@@ -1083,7 +1118,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
               )}
 
               {/* Activities Tab */}
-              {activeTab === "activities" && (
+              {activeTab === "activities" && canViewActivitiesTab && (
                 <div>
                   {isLoggingActivity ? (
                     /* Log Activity Form */
@@ -1405,7 +1440,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
             )}
 
             {/* Tasks Tab */}
-            {activeTab === "tasks" && (
+            {activeTab === "tasks" && canViewTasksTab && (
                 <div className="h-full">
                   {!selectedTask && !isCreatingTask ? (
                     /* Task List */
@@ -1700,7 +1735,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
             )}
 
             {/* Inquiries Tab */}
-            {activeTab === "inquiries" && (
+            {activeTab === "inquiries" && canViewInquiriesTab && (
               <div style={{ paddingBottom: "32px" }}>
                 <CustomerInquiriesTab 
                   inquiries={inquiries}
@@ -1712,7 +1747,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
             )}
 
             {/* Projects Tab */}
-            {activeTab === "projects" && (
+            {activeTab === "projects" && canViewProjectsTab && (
               <div style={{ paddingBottom: "32px" }}>
                 <CustomerProjectsTab 
                   projects={projects}
@@ -1723,7 +1758,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
             )}
 
             {/* ✨ PHASE 5: Contracts Tab */}
-            {activeTab === "contracts" && (
+            {activeTab === "contracts" && canViewContractsTab && (
               <div style={{ paddingBottom: "32px" }}>
                 {isLoadingContracts ? (
                   <div style={{ padding: "48px", textAlign: "center", color: "var(--theme-text-muted)", fontSize: "13px" }}>
@@ -1852,7 +1887,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
             )}
 
             {/* Comments Tab */}
-            {activeTab === "comments" && (
+            {activeTab === "comments" && canViewCommentsTab && (
               <div>
                 {/* Comments List */}
                 <div className="space-y-4 mb-6">
@@ -1945,7 +1980,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
               </div>
             )}
 
-            {activeTab === "attachments" && (
+            {activeTab === "attachments" && canViewAttachmentsTab && (
               <div>
                 <div className="flex items-center justify-between mb-6">
                   <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--theme-text-primary)" }}>

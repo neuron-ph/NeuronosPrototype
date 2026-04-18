@@ -65,24 +65,24 @@ export function useDataScope(resource?: string): DataScopeResult {
         return { type: 'all' };
       }
 
-      // 1. Executive department — full access, no queries needed
-      if (effectiveDepartment === 'Executive') {
+      // 1. Executive department or executive role — full access
+      if (effectiveDepartment === 'Executive' || effectiveRole === 'executive') {
         return { type: 'all' };
       }
 
       // 2. Fire permission_override check and role-based users query in parallel.
-      //    For staff the users query is wasted (~1 row returned and discarded), but
-      //    it saves a full round-trip for manager/team_leader paths which are common.
       const overridePromise = supabase
         .from('permission_overrides')
         .select('scope, departments')
         .eq('user_id', user.id)
         .maybeSingle();
 
+      const isTeamRole = effectiveRole === 'team_leader' || effectiveRole === 'supervisor';
+
       const deptUsersPromise =
         effectiveRole === 'manager'
           ? supabase.from('users').select('id').eq('department', effectiveDepartment).eq('is_active', true)
-          : effectiveRole === 'team_leader' && user.team_id
+          : isTeamRole && user.team_id
           ? supabase.from('users').select('id').eq('team_id', user.team_id).eq('is_active', true)
           : Promise.resolve({ data: null });
 
@@ -104,7 +104,6 @@ export function useDataScope(resource?: string): DataScopeResult {
           return { type: 'all' };
         }
         if (override.scope === 'department_wide') {
-          // Re-use the already-fetched dept users if role also matched department
           const ids = roleUsers?.map((u) => u.id) ??
             (await supabase.from('users').select('id').eq('department', effectiveDepartment).eq('is_active', true))
               .data?.map((u) => u.id) ?? [];
@@ -120,17 +119,17 @@ export function useDataScope(resource?: string): DataScopeResult {
         }
       }
 
-      // 3. Manager — all active users in same department (already fetched above)
+      // 3. Manager — all active users in same department
       if (effectiveRole === 'manager') {
         return { type: 'userIds', ids: roleUsers?.map((u) => u.id) ?? [] };
       }
 
-      // 4. Team leader — all active users in same team (already fetched above)
-      if (effectiveRole === 'team_leader' && user.team_id) {
+      // 4. Team leader or supervisor — all active users in same team
+      if (isTeamRole && user.team_id) {
         return { type: 'userIds', ids: roleUsers?.map((u) => u.id) ?? [] };
       }
 
-      // 5. Staff (or team_leader with no team assigned) — own records only
+      // 5. Staff, supervisor with no team, or team_leader with no team — own records only
       return { type: 'own', userId: user.id };
     },
   });

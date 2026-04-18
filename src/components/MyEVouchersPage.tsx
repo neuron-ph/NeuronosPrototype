@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
+import { usePermission } from "../context/PermissionProvider";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Plus, CheckCircle, ClipboardList,
@@ -82,6 +83,22 @@ async function approveEVInline(
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function MyEVouchersPage() {
+  const { can } = usePermission();
+
+  const canAllTab     = can("my_evouchers_all_tab", "view");
+  const canDraftTab   = can("my_evouchers_draft_tab", "view");
+  const canPendingTab = can("my_evouchers_pending_tab", "view");
+  const canActiveTab  = can("my_evouchers_active_tab", "view");
+  const canDoneTab    = can("my_evouchers_done_tab", "view");
+
+  const defaultEVTab: ActiveTab =
+    canAllTab     ? "all" :
+    canDraftTab   ? "draft" :
+    canPendingTab ? "pending" :
+    canActiveTab  ? "active" :
+    canDoneTab    ? "done" :
+    "all";
+
   const { user, effectiveDepartment, effectiveRole } = useUser();
   const queryClient = useQueryClient();
 
@@ -93,7 +110,7 @@ export function MyEVouchersPage() {
 
   // ── UI state ────────────────────────────────────────────────────────────
   const [scope, setScope] = useState<"mine" | "dept">("mine");
-  const [activeTab, setActiveTab] = useState<ActiveTab>("all");
+  const [activeTab, setActiveTab] = useState<ActiveTab>(defaultEVTab);
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -490,7 +507,14 @@ export function MyEVouchersPage() {
             marginBottom: "24px",
           }}
         >
-          {TABS.map(({ key, label, color, bgActive, bgInactive }) => {
+          {TABS.filter(({ key }) => {
+            if (key === "all")     return canAllTab;
+            if (key === "draft")   return canDraftTab;
+            if (key === "pending") return canPendingTab;
+            if (key === "active")  return canActiveTab;
+            if (key === "done")    return canDoneTab;
+            return true;
+          }).map(({ key, label, color, bgActive, bgInactive }) => {
             const isActive = activeTab === key;
             const count = tabCounts[key];
             return (

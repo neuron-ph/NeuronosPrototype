@@ -8,9 +8,11 @@ import { useUser } from "../../hooks/useUser";
 import { logCreation } from "../../utils/activityLog";
 import { useContacts } from "../../hooks/useContacts";
 import { useCRMActivities } from "../../hooks/useCRMActivities";
+import { usePermission } from "../../context/PermissionProvider";
 import { AddContactPanel } from "../bd/AddContactPanel";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { toast } from "sonner@2.0.3";
+import type { ModuleId } from "../admin/permissionsConfig";
 import type { Contact, LifecycleStage, LeadStatus } from "../../types/bd";
 import { useDataScope } from "../../hooks/useDataScope";
 import { useBreakpoint } from "../../hooks/useBreakpoint";
@@ -40,10 +42,11 @@ interface BackendContact {
 
 interface ContactsListWithFiltersProps {
   userDepartment: "Business Development" | "Pricing";
+  moduleId?: ModuleId;
   onViewContact: (contact: Contact) => void;
 }
 
-export function ContactsListWithFilters({ userDepartment, onViewContact }: ContactsListWithFiltersProps) {
+export function ContactsListWithFilters({ userDepartment, moduleId, onViewContact }: ContactsListWithFiltersProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [lifecycleFilter, setLifecycleFilter] = useState<LifecycleStage | "All">("All");
   const [statusFilter, setStatusFilter] = useState<LeadStatus | "All">("All");
@@ -52,12 +55,16 @@ export function ContactsListWithFilters({ userDepartment, onViewContact }: Conta
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
 
   const { user } = useUser();
+  const { can } = usePermission();
   const { scope, isLoaded } = useDataScope();
   const { isMobile, isTablet } = useBreakpoint();
 
   const { users: bdUsers } = useUsers({ department: 'Business Development' });
   const { contacts: allContacts, isLoading, invalidate: invalidateContacts } = useContacts({ enabled: isLoaded });
   const { activities } = useCRMActivities();
+
+  const canViewModule = moduleId ? can(moduleId, "view") : true;
+  const showAdvancedFilters = userDepartment === "Business Development" && canViewModule;
 
   // Apply scope + search client-side
   const contacts = allContacts.filter((contact: BackendContact) => {
@@ -75,10 +82,11 @@ export function ContactsListWithFilters({ userDepartment, onViewContact }: Conta
   });
 
   const permissions = {
-    canCreate: userDepartment === "Business Development",
-    canEdit: userDepartment === "Business Development",
-    showKPIs: true,
-    showOwnerFilter: userDepartment === "Business Development",
+    canCreate: moduleId ? can(moduleId, "create") : userDepartment === "Business Development",
+    canEdit: moduleId ? can(moduleId, "edit") : userDepartment === "Business Development",
+    showKPIs: canViewModule,
+    showOwnerFilter: showAdvancedFilters,
+    showAdvancedFilters,
   };
 
   const handleSaveContact = async (contactData: any) => {
@@ -246,7 +254,7 @@ export function ContactsListWithFilters({ userDepartment, onViewContact }: Conta
               Contacts
             </h1>
             <p style={{ fontSize: "13px", color: "var(--theme-text-muted)", margin: 0 }}>
-              {userDepartment === "Business Development"
+              {permissions.showAdvancedFilters
                 ? "Manage all customer and lead contacts"
                 : "View contacts and check inquiries"}
             </p>
@@ -320,7 +328,7 @@ export function ContactsListWithFilters({ userDepartment, onViewContact }: Conta
                 />
               </div>
 
-              {userDepartment === "Business Development" && (
+              {permissions.showAdvancedFilters && (
                 <button
                   onClick={() => setIsFilterSheetOpen(true)}
                   style={{
@@ -353,7 +361,7 @@ export function ContactsListWithFilters({ userDepartment, onViewContact }: Conta
             </div>
 
             {/* Inline filter card — expands below the search bar */}
-            {userDepartment === "Business Development" && (
+            {permissions.showAdvancedFilters && (
               <AnimatePresence>
                 {isFilterSheetOpen && (
                   <motion.div
@@ -598,7 +606,7 @@ export function ContactsListWithFilters({ userDepartment, onViewContact }: Conta
               />
             </div>
 
-            {userDepartment === "Business Development" && (
+            {permissions.showAdvancedFilters && (
               <>
                 <div style={{ minWidth: "140px" }}>
                   <CustomDropdown

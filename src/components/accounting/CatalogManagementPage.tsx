@@ -12,6 +12,7 @@
 // This page is for auditing, organizing, and maintaining the taxonomy.
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { usePermission } from "../../context/PermissionProvider";
 import { createPortal } from "react-dom";
 import {
   Search, Plus, Pencil, X, Check, AlertTriangle,
@@ -38,7 +39,10 @@ interface CatalogCategoryWithSide extends CatalogCategory {
 // ==================== MAIN COMPONENT ====================
 
 export function CatalogManagementPage() {
-  const [activeTab, setActiveTab] = useState<PrimaryTab>("items");
+  const { can } = usePermission();
+  const canItems = can("accounting_catalog_items_tab", "view");
+  const canMatrix = can("accounting_catalog_matrix_tab", "view");
+  const [activeTab, setActiveTab] = useState<PrimaryTab>(canItems ? "items" : canMatrix ? "matrix" : "items");
 
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "var(--theme-bg-page)" }}>
@@ -58,18 +62,24 @@ export function CatalogManagementPage() {
 
           {/* ── Primary Tab Bar ── */}
           <div style={{ display: "flex", alignItems: "center", borderBottom: "1px solid var(--theme-border-default)", marginBottom: "20px", flexShrink: 0 }}>
-            <TabButton active={activeTab === "items"} onClick={() => setActiveTab("items")}>
-              Items
-            </TabButton>
-            <div style={{ width: 1, height: 20, backgroundColor: "var(--theme-border-default)", margin: "0 8px" }} />
-            <TabButton active={activeTab === "matrix"} onClick={() => setActiveTab("matrix")} icon={<Grid3X3 size={14} />}>
-              Rate Matrix
-            </TabButton>
+            {canItems && (
+              <TabButton active={activeTab === "items"} onClick={() => setActiveTab("items")}>
+                Items
+              </TabButton>
+            )}
+            {canItems && canMatrix && (
+              <div style={{ width: 1, height: 20, backgroundColor: "var(--theme-border-default)", margin: "0 8px" }} />
+            )}
+            {canMatrix && (
+              <TabButton active={activeTab === "matrix"} onClick={() => setActiveTab("matrix")} icon={<Grid3X3 size={14} />}>
+                Rate Matrix
+              </TabButton>
+            )}
           </div>
 
           {/* ── Tab Content ── */}
-          {activeTab === "items" && <ItemsTab />}
-          {activeTab === "matrix" && (
+          {activeTab === "items" && canItems && <ItemsTab />}
+          {activeTab === "matrix" && canMatrix && (
             <div style={{ flex: 1, overflow: "hidden" }}>
               <ChargeExpenseMatrix />
             </div>
@@ -112,9 +122,15 @@ function TabButton({ active, onClick, children, icon }: {
 
 function ItemsTab() {
   const queryClient = useQueryClient();
+  const { can } = usePermission();
+  const canAll = can("accounting_catalog_all_tab", "view");
+  const canBilling = can("accounting_catalog_billing_tab", "view");
+  const canExpense = can("accounting_catalog_expense_tab", "view");
 
   // ── State ──
-  const [sideFilter, setSideFilter] = useState<SideFilter>("all");
+  const [sideFilter, setSideFilter] = useState<SideFilter>(
+    canAll ? "all" : canBilling ? "billing" : canExpense ? "expense" : "all"
+  );
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -418,15 +434,21 @@ function ItemsTab() {
 
       {/* ── Sub-tabs: All | Billing | Expense ── */}
       <div style={{ display: "flex", alignItems: "center", gap: "4px", marginBottom: "16px", flexShrink: 0 }}>
-        <SubTabPill active={sideFilter === "all"} onClick={() => setSideFilter("all")} count={tabCounts.all}>
-          All
-        </SubTabPill>
-        <SubTabPill active={sideFilter === "billing"} onClick={() => setSideFilter("billing")} count={tabCounts.billing}>
-          Billing
-        </SubTabPill>
-        <SubTabPill active={sideFilter === "expense"} onClick={() => setSideFilter("expense")} count={tabCounts.expense}>
-          Expense
-        </SubTabPill>
+        {canAll && (
+          <SubTabPill active={sideFilter === "all"} onClick={() => setSideFilter("all")} count={tabCounts.all}>
+            All
+          </SubTabPill>
+        )}
+        {canBilling && (
+          <SubTabPill active={sideFilter === "billing"} onClick={() => setSideFilter("billing")} count={tabCounts.billing}>
+            Billing
+          </SubTabPill>
+        )}
+        {canExpense && (
+          <SubTabPill active={sideFilter === "expense"} onClick={() => setSideFilter("expense")} count={tabCounts.expense}>
+            Expense
+          </SubTabPill>
+        )}
       </div>
 
       {/* ── Toolbar ── */}

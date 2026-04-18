@@ -39,9 +39,11 @@ export const DEPARTMENTS = [
 ];
 
 export const ROLES = [
-  { value: "staff", label: "Staff" },
+  { value: "staff",       label: "Staff" },
   { value: "team_leader", label: "Team Leader" },
-  { value: "manager", label: "Manager" },
+  { value: "supervisor",  label: "Supervisor" },
+  { value: "manager",     label: "Manager" },
+  { value: "executive",   label: "Executive" },
 ];
 
 export const TEAM_ROLES: { value: TeamRole | ""; label: string }[] = [
