@@ -1,3 +1,4 @@
+import { usePermission } from "../../context/PermissionProvider";
 import { Button } from "../ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Badge } from "../ui/badge";
@@ -43,6 +44,11 @@ export function ApprovalsPage({
   onApprovePayment,
   onRejectPayment,
 }: ApprovalsPageProps) {
+  const { can } = usePermission();
+  const canExpenses = can("accounting_approvals_expenses_tab", "view");
+  const canPayments = can("accounting_approvals_payments_tab", "view");
+  const defaultTab = canExpenses ? "expenses" : canPayments ? "payments" : "expenses";
+
   const pendingExpenses = expenses.filter((e) => e.status === "Pending");
   const pendingPayments = payments.filter((p) => p.status === "Pending");
 
@@ -69,25 +75,29 @@ export function ApprovalsPage({
         </p>
       </div>
 
-      <Tabs defaultValue="expenses" className="w-full">
+      <Tabs defaultValue={defaultTab} className="w-full">
         <TabsList className="bg-[var(--theme-bg-page)] p-1 mb-6 h-10" style={{ borderRadius: 'var(--radius-sm)' }}>
-          <TabsTrigger 
-            value="expenses" 
-            className="text-[14px] h-8 px-4 data-[state=active]:bg-[var(--theme-bg-surface)]" 
-            style={{ borderRadius: 'var(--radius-xs)' }}
-          >
-            Expenses ({pendingExpenses.length})
-          </TabsTrigger>
-          <TabsTrigger 
-            value="payments" 
-            className="text-[14px] h-8 px-4 data-[state=active]:bg-[var(--theme-bg-surface)]"
-            style={{ borderRadius: 'var(--radius-xs)' }}
-          >
-            Payments ({pendingPayments.length})
-          </TabsTrigger>
+          {canExpenses && (
+            <TabsTrigger
+              value="expenses"
+              className="text-[14px] h-8 px-4 data-[state=active]:bg-[var(--theme-bg-surface)]"
+              style={{ borderRadius: 'var(--radius-xs)' }}
+            >
+              Expenses ({pendingExpenses.length})
+            </TabsTrigger>
+          )}
+          {canPayments && (
+            <TabsTrigger
+              value="payments"
+              className="text-[14px] h-8 px-4 data-[state=active]:bg-[var(--theme-bg-surface)]"
+              style={{ borderRadius: 'var(--radius-xs)' }}
+            >
+              Payments ({pendingPayments.length})
+            </TabsTrigger>
+          )}
         </TabsList>
 
-        <TabsContent value="expenses">
+        {canExpenses && <TabsContent value="expenses">
           <div className="border border-[var(--theme-border-default)] overflow-hidden" style={{ borderRadius: 'var(--radius-sm)' }}>
             <Table>
               <TableHeader>
@@ -162,9 +172,9 @@ export function ApprovalsPage({
               </TableBody>
             </Table>
           </div>
-        </TabsContent>
+        </TabsContent>}
 
-        <TabsContent value="payments">
+        {canPayments && <TabsContent value="payments">
           <div className="border border-[var(--theme-border-default)] overflow-hidden" style={{ borderRadius: 'var(--radius-sm)' }}>
             <Table>
               <TableHeader>
@@ -231,7 +241,7 @@ export function ApprovalsPage({
               </TableBody>
             </Table>
           </div>
-        </TabsContent>
+        </TabsContent>}
       </Tabs>
     </>
   );

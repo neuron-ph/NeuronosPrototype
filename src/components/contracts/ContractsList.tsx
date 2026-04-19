@@ -9,6 +9,7 @@
  */
 
 import { useState } from "react";
+import { usePermission } from "../../context/PermissionProvider";
 import type { QuotationNew } from "../../types/pricing";
 import { NeuronStatusPill } from "../NeuronStatusPill";
 import { Search, Handshake, CheckCircle, Package, Calendar, CircleDot, Ship, Truck, Shield, User, Clock, Briefcase, AlertCircle, Building2 } from "lucide-react";
@@ -40,8 +41,15 @@ export function ContractsList({
   department,
   onRefresh,
 }: ContractsListProps) {
+  const { can } = usePermission();
+  const canViewAllTab = can("pricing_contracts_all_tab", "view");
+  const canViewActiveTab = can("pricing_contracts_active_tab", "view");
+  const canViewExpiringTab = can("pricing_contracts_expiring_tab", "view");
+
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<"all" | "active" | "expiring">("all");
+  const [activeTab, setActiveTab] = useState<"all" | "active" | "expiring">(
+    canViewAllTab ? "all" : canViewActiveTab ? "active" : canViewExpiringTab ? "expiring" : "all"
+  );
   
   // Filters
   const [dateFrom, setDateFrom] = useState<string>("");
@@ -261,119 +269,125 @@ export function ContractsList({
         </div>
 
         {/* Tabs */}
-        <div style={{ 
-          display: "flex", 
-          gap: "8px", 
+        <div style={{
+          display: "flex",
+          gap: "8px",
           borderBottom: "1px solid var(--theme-border-default)",
           marginBottom: "24px"
         }}>
-          <button
-            onClick={() => setActiveTab("all")}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "12px 20px",
-              background: "transparent",
-              border: "none",
-              borderBottom: activeTab === "all" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
-              color: activeTab === "all" ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)",
-              fontSize: "14px",
-              fontWeight: 600,
-              cursor: "pointer",
-              transition: "all 0.2s ease",
-              marginBottom: "-1px"
-            }}
-          >
-            <Handshake size={18} />
-            All Contracts
-            <span
+          {canViewAllTab && (
+            <button
+              onClick={() => setActiveTab("all")}
               style={{
-                padding: "2px 8px",
-                borderRadius: "12px",
-                fontSize: "11px",
-                fontWeight: 700,
-                background: activeTab === "all" ? "var(--theme-action-primary-bg)" : "var(--theme-bg-surface-tint)",
-                color: activeTab === "all" ? "#FFFFFF" : "var(--theme-action-primary-bg)",
-                minWidth: "20px",
-                textAlign: "center"
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "12px 20px",
+                background: "transparent",
+                border: "none",
+                borderBottom: activeTab === "all" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
+                color: activeTab === "all" ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)",
+                fontSize: "14px",
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+                marginBottom: "-1px"
               }}
             >
-              {allCount}
-            </span>
-          </button>
-          
-          <button
-            onClick={() => setActiveTab("active")}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "12px 20px",
-              background: "transparent",
-              border: "none",
-              borderBottom: activeTab === "active" ? "2px solid var(--theme-status-warning-fg)" : "2px solid transparent",
-              color: activeTab === "active" ? "var(--theme-status-warning-fg)" : "var(--theme-text-muted)",
-              fontSize: "14px",
-              fontWeight: 600,
-              cursor: "pointer",
-              transition: "all 0.2s ease",
-              marginBottom: "-1px"
-            }}
-          >
-            <Package size={18} />
-            Active
-            <span
+              <Handshake size={18} />
+              All Contracts
+              <span
+                style={{
+                  padding: "2px 8px",
+                  borderRadius: "12px",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  background: activeTab === "all" ? "var(--theme-action-primary-bg)" : "var(--theme-bg-surface-tint)",
+                  color: activeTab === "all" ? "#FFFFFF" : "var(--theme-action-primary-bg)",
+                  minWidth: "20px",
+                  textAlign: "center"
+                }}
+              >
+                {allCount}
+              </span>
+            </button>
+          )}
+
+          {canViewActiveTab && (
+            <button
+              onClick={() => setActiveTab("active")}
               style={{
-                padding: "2px 8px",
-                borderRadius: "12px",
-                fontSize: "11px",
-                fontWeight: 700,
-                background: activeTab === "active" ? "var(--theme-status-warning-fg)" : "var(--theme-status-warning-bg)",
-                color: activeTab === "active" ? "#FFFFFF" : "var(--theme-status-warning-fg)",
-                minWidth: "20px",
-                textAlign: "center"
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "12px 20px",
+                background: "transparent",
+                border: "none",
+                borderBottom: activeTab === "active" ? "2px solid var(--theme-status-warning-fg)" : "2px solid transparent",
+                color: activeTab === "active" ? "var(--theme-status-warning-fg)" : "var(--theme-text-muted)",
+                fontSize: "14px",
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+                marginBottom: "-1px"
               }}
             >
-              {activeCount}
-            </span>
-          </button>
-          
-          <button
-            onClick={() => setActiveTab("expiring")}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "12px 20px",
-              background: "transparent",
-              border: "none",
-              borderBottom: activeTab === "expiring" ? "2px solid var(--theme-status-danger-fg)" : "2px solid transparent",
-              color: activeTab === "expiring" ? "var(--theme-status-danger-fg)" : "var(--theme-text-muted)",
-              fontSize: "14px",
-              fontWeight: 600,
-              cursor: "pointer",
-              transition: "all 0.2s ease",
-              marginBottom: "-1px"
-            }}
-          >
-            <AlertCircle size={18} />
-            Expiring
-            <span
+              <Package size={18} />
+              Active
+              <span
+                style={{
+                  padding: "2px 8px",
+                  borderRadius: "12px",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  background: activeTab === "active" ? "var(--theme-status-warning-fg)" : "var(--theme-status-warning-bg)",
+                  color: activeTab === "active" ? "#FFFFFF" : "var(--theme-status-warning-fg)",
+                  minWidth: "20px",
+                  textAlign: "center"
+                }}
+              >
+                {activeCount}
+              </span>
+            </button>
+          )}
+
+          {canViewExpiringTab && (
+            <button
+              onClick={() => setActiveTab("expiring")}
               style={{
-                padding: "2px 8px",
-                borderRadius: "12px",
-                fontSize: "11px",
-                fontWeight: 700,
-                background: activeTab === "expiring" ? "var(--theme-status-danger-fg)" : "var(--theme-status-danger-bg)",
-                color: activeTab === "expiring" ? "#FFFFFF" : "var(--theme-status-danger-fg)",
-                minWidth: "20px",
-                textAlign: "center"
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "12px 20px",
+                background: "transparent",
+                border: "none",
+                borderBottom: activeTab === "expiring" ? "2px solid var(--theme-status-danger-fg)" : "2px solid transparent",
+                color: activeTab === "expiring" ? "var(--theme-status-danger-fg)" : "var(--theme-text-muted)",
+                fontSize: "14px",
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+                marginBottom: "-1px"
               }}
             >
-              {expiringCount}
-            </span>
-          </button>
+              <AlertCircle size={18} />
+              Expiring
+              <span
+                style={{
+                  padding: "2px 8px",
+                  borderRadius: "12px",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  background: activeTab === "expiring" ? "var(--theme-status-danger-fg)" : "var(--theme-status-danger-bg)",
+                  color: activeTab === "expiring" ? "#FFFFFF" : "var(--theme-status-danger-fg)",
+                  minWidth: "20px",
+                  textAlign: "center"
+                }}
+              >
+                {expiringCount}
+              </span>
+            </button>
+          )}
         </div>
 
         {/* Table */}

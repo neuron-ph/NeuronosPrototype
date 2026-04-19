@@ -2,6 +2,7 @@ import { ArrowLeft, Mail, Phone, Building2, FileText, Edit2, Save, X, Plus } fro
 import { useState } from "react";
 import type { Contact } from "../../types/contact";
 import { useBreakpoint } from "../../hooks/useBreakpoint";
+import { usePermission } from "../../context/PermissionProvider";
 
 interface ContactDetailViewProps {
   contact: Contact;
@@ -12,7 +13,23 @@ interface ContactDetailViewProps {
 }
 
 export function ContactDetailView({ contact, onBack, onUpdate, onViewQuotation, onCreateInquiry }: ContactDetailViewProps) {
-  const [activeTab, setActiveTab] = useState<"activities" | "tasks" | "inquiries" | "attachments" | "comments">("inquiries");
+  const { can } = usePermission();
+
+  const canActivities  = can("bd_contacts_activities_tab", "view");
+  const canTasks       = can("bd_contacts_tasks_tab", "view");
+  const canInquiries   = can("bd_contacts_inquiries_tab", "view");
+  const canAttachments = can("bd_contacts_attachments_tab", "view");
+  const canComments    = can("bd_contacts_comments_tab", "view");
+
+  const defaultContactTab: "activities" | "tasks" | "inquiries" | "attachments" | "comments" =
+    canInquiries   ? "inquiries" :
+    canActivities  ? "activities" :
+    canTasks       ? "tasks" :
+    canAttachments ? "attachments" :
+    canComments    ? "comments" :
+    "inquiries";
+
+  const [activeTab, setActiveTab] = useState<"activities" | "tasks" | "inquiries" | "attachments" | "comments">(defaultContactTab);
   const [isEditing, setIsEditing] = useState(false);
   const { isMobile } = useBreakpoint();
   const [isSaving, setIsSaving] = useState(false);
@@ -298,7 +315,14 @@ export function ContactDetailView({ contact, onBack, onUpdate, onViewQuotation, 
           overflowX: isMobile ? "auto" : "visible",
           scrollbarWidth: "none",
         }}>
-          {tabs.map((tab) => (
+          {tabs.filter((tab) => {
+            if (tab.id === "activities")  return canActivities;
+            if (tab.id === "tasks")       return canTasks;
+            if (tab.id === "inquiries")   return canInquiries;
+            if (tab.id === "attachments") return canAttachments;
+            if (tab.id === "comments")    return canComments;
+            return true;
+          }).map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
@@ -341,7 +365,7 @@ export function ContactDetailView({ contact, onBack, onUpdate, onViewQuotation, 
           }}>
             {/* Left Column - Tab Content */}
             <div>
-              {activeTab === "inquiries" && (
+              {activeTab === "inquiries" && canInquiries && (
                 <>
                   <div style={{
                     display: "flex",
@@ -477,7 +501,7 @@ export function ContactDetailView({ contact, onBack, onUpdate, onViewQuotation, 
                 </>
               )}
 
-              {activeTab === "activities" && (
+              {activeTab === "activities" && canActivities && (
                 <div style={{
                   padding: "56px 24px",
                   textAlign: "center",
@@ -494,7 +518,7 @@ export function ContactDetailView({ contact, onBack, onUpdate, onViewQuotation, 
                 </div>
               )}
 
-              {activeTab === "tasks" && (
+              {activeTab === "tasks" && canTasks && (
                 <div style={{
                   padding: "56px 24px",
                   textAlign: "center",
@@ -511,7 +535,7 @@ export function ContactDetailView({ contact, onBack, onUpdate, onViewQuotation, 
                 </div>
               )}
 
-              {activeTab === "attachments" && (
+              {activeTab === "attachments" && canAttachments && (
                 <div style={{
                   padding: "56px 24px",
                   textAlign: "center",
@@ -528,7 +552,7 @@ export function ContactDetailView({ contact, onBack, onUpdate, onViewQuotation, 
                 </div>
               )}
 
-              {activeTab === "comments" && (
+              {activeTab === "comments" && canComments && (
                 <div style={{
                   padding: "56px 24px",
                   textAlign: "center",

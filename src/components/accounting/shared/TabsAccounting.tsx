@@ -1,11 +1,13 @@
-import { 
-  FileText, 
-  CheckSquare, 
-  Wallet, 
-  FolderTree, 
-  ArrowUpDown, 
-  Users 
+import {
+  FileText,
+  CheckSquare,
+  Wallet,
+  FolderTree,
+  ArrowUpDown,
+  Users
 } from "lucide-react";
+import { usePermission } from "../../../context/PermissionProvider";
+import type { ModuleId } from "../../admin/permissionsConfig";
 
 export type AccountingTabValue = 
   | "entries" 
@@ -29,7 +31,7 @@ interface TabsAccountingProps {
   className?: string;
 }
 
-const tabs: Tab[] = [
+const ALL_TABS: Tab[] = [
   { value: "entries", label: "Entries", icon: FileText },
   { value: "approvals", label: "Approvals", icon: CheckSquare },
   { value: "accounts", label: "Accounts", icon: Wallet },
@@ -38,13 +40,26 @@ const tabs: Tab[] = [
   { value: "import-export", label: "Import/Export", icon: ArrowUpDown },
 ];
 
-export function TabsAccounting({ 
-  active, 
-  onTabChange, 
+const TAB_PERMISSION_IDS: Record<AccountingTabValue, ModuleId> = {
+  entries: "accounting_entries_module_tab",
+  approvals: "accounting_approvals_module_tab",
+  accounts: "accounting_accounts_module_tab",
+  categories: "accounting_categories_module_tab",
+  clients: "accounting_clients_module_tab",
+  "import-export": "accounting_import_export_module_tab",
+};
+
+export function TabsAccounting({
+  active,
+  onTabChange,
   disabled = [],
   showIcons = true,
   className = "",
 }: TabsAccountingProps) {
+  const { can } = usePermission();
+
+  const tabs = ALL_TABS.filter((tab) => can(TAB_PERMISSION_IDS[tab.value], "view"));
+
   return (
     <div className={`w-full border-b border-[var(--theme-border-default)] bg-[var(--theme-bg-surface)] ${className}`}>
       <div className="max-w-[1200px] mx-auto px-3">

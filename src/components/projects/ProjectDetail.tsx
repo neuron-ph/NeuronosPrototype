@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { ArrowLeft, MoreVertical, Edit3, Copy, Archive, Trash2, Layout, FileText, Briefcase, Receipt, FileStack, DollarSign, TrendingUp, Paperclip, MessageSquare, Layers, Users } from "lucide-react";
+import { usePermission } from "../../context/PermissionProvider";
 import type { Project, ProjectStatus } from "../../types/pricing";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
@@ -110,19 +111,42 @@ function buildQuotationUpdatePayload(data: any): Record<string, unknown> {
   );
 }
 
-export function ProjectDetail({ 
-  project, 
-  onBack, 
-  onUpdate, 
+export function ProjectDetail({
+  project,
+  onBack,
+  onUpdate,
   currentUser,
   department,
   onCreateTicket,
   initialTab,
   highlightId
 }: ProjectDetailProps) {
-  const [activeTab, setActiveTab] = useState<ProjectTab>(
-    (initialTab as ProjectTab) || "financial_overview"
-  );
+  const { can } = usePermission();
+  const canViewInfoTab = can("ops_projects_info_tab", "view");
+  const canViewQuotationTab = can("ops_projects_quotation_tab", "view");
+  const canViewBookingsTab = can("ops_projects_bookings_tab", "view");
+  const canViewExpensesTab = can("ops_projects_expenses_tab", "view");
+  const canViewBillingsTab = can("ops_projects_billings_tab", "view");
+  const canViewInvoicesTab = can("ops_projects_invoices_tab", "view");
+  const canViewCollectionsTab = can("ops_projects_collections_tab", "view");
+  const canViewAttachmentsTab = can("ops_projects_attachments_tab", "view");
+  const canViewCommentsTab = can("ops_projects_comments_tab", "view");
+
+  const defaultTab: ProjectTab = (() => {
+    if (initialTab) return initialTab as ProjectTab;
+    if (canViewInfoTab) return "financial_overview";
+    if (canViewQuotationTab) return "quotation";
+    if (canViewBookingsTab) return "bookings";
+    if (canViewExpensesTab) return "expenses";
+    if (canViewBillingsTab) return "billings";
+    if (canViewInvoicesTab) return "invoices";
+    if (canViewCollectionsTab) return "collections";
+    if (canViewAttachmentsTab) return "attachments";
+    if (canViewCommentsTab) return "comments";
+    return "financial_overview";
+  })();
+
+  const [activeTab, setActiveTab] = useState<ProjectTab>(defaultTab);
   const [activeCategory, setActiveCategory] = useState<TabCategory>("dashboard");
   const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [showPreviewPanel, setShowPreviewPanel] = useState(false);
@@ -535,7 +559,20 @@ export function ProjectDetail({
 
       {/* Tabs Tier 2: Sub-tabs (Conditional Render) */}
       <div className="px-12 py-3 bg-[var(--theme-bg-surface)] border-b border-[var(--theme-border-default)] flex gap-2 overflow-x-auto min-h-[57px]">
-        {TAB_STRUCTURE[activeCategory].map((tab) => {
+        {TAB_STRUCTURE[activeCategory].filter((tab) => {
+            const tabPermMap: Record<string, boolean> = {
+              financial_overview: canViewInfoTab,
+              quotation: canViewQuotationTab,
+              bookings: canViewBookingsTab,
+              expenses: canViewExpensesTab,
+              billings: canViewBillingsTab,
+              invoices: canViewInvoicesTab,
+              collections: canViewCollectionsTab,
+              attachments: canViewAttachmentsTab,
+              comments: canViewCommentsTab,
+            };
+            return tabPermMap[tab.id] !== false;
+          }).map((tab) => {
             const isActive = activeTab === tab.id;
             const Icon = tab.icon;
             return (
@@ -559,67 +596,67 @@ export function ProjectDetail({
 
       {/* Content */}
       <div style={{ flex: 1, overflow: "auto", backgroundColor: "var(--theme-bg-surface)" }}>
-        {activeTab === "financial_overview" && (
+        {activeTab === "financial_overview" && canViewInfoTab && (
           <div className="max-w-7xl mx-auto">
             <ProjectFinancialOverview financials={financials} />
           </div>
         )}
-        
-        {activeTab === "quotation" && (
-          <ProjectOverviewTab 
-            project={project} 
+
+        {activeTab === "quotation" && canViewQuotationTab && (
+          <ProjectOverviewTab
+            project={project}
             currentUser={currentUser}
             onUpdate={onUpdate}
             onViewBooking={handleViewBooking}
             onSaveQuotation={handleSaveQuotation}
           />
         )}
-        
+
         {/* PDF Studio Tab Removed - Rendered as Full Screen Module */}
 
-        {activeTab === "bookings" && (
-          <ProjectBookingsTab 
-            project={project} 
+        {activeTab === "bookings" && canViewBookingsTab && (
+          <ProjectBookingsTab
+            project={project}
             currentUser={currentUser}
             selectedBookingId={selectedBookingId}
           />
         )}
-        
-        {activeTab === "expenses" && (
+
+        {activeTab === "expenses" && canViewExpensesTab && (
           <div className="max-w-7xl mx-auto">
             <ProjectExpensesTab project={project} currentUser={currentUser} />
           </div>
         )}
-        
-        {activeTab === "billings" && (
+
+        {activeTab === "billings" && canViewBillingsTab && (
           <div className="max-w-7xl mx-auto">
             <ProjectBillings financials={financials} project={project} highlightId={highlightId} />
           </div>
         )}
-        
-        {activeTab === "invoices" && (
+
+        {activeTab === "invoices" && canViewInvoicesTab && (
           <ProjectInvoices financials={financials} project={project} currentUser={currentUser} highlightId={highlightId} />
         )}
-        
-        {activeTab === "collections" && (
+
+        {activeTab === "collections" && canViewCollectionsTab && (
           <div className="max-w-7xl mx-auto">
-            <ProjectCollectionsTab 
+            <ProjectCollectionsTab
               financials={financials}
-              project={project} 
+              project={project}
               currentUser={currentUser}
               highlightId={highlightId}
             />
           </div>
         )}
-        
-        {activeTab === "attachments" && (
-          <ProjectAttachmentsTab 
-            project={project} 
+
+        {activeTab === "attachments" && canViewAttachmentsTab && (
+          <ProjectAttachmentsTab
+            project={project}
             currentUser={currentUser}
           />
         )}
-        
-        {activeTab === "comments" && (
+
+        {activeTab === "comments" && canViewCommentsTab && (
           <CommentsTab
             entityId={project.id}
             entityType="project"

@@ -623,6 +623,7 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
             {subView === "list" && (
               <ContactsListWithFilters 
                 userDepartment={userDepartment}
+                moduleId="bd_contacts"
                 onViewContact={handleViewContact} 
               />
             )}

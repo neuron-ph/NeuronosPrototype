@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { usePermission } from "../../../context/PermissionProvider";
 import {
   BookOpen, Plus, Download, Search, ChevronLeft, ChevronRight,
   CheckCircle, AlertTriangle, Loader2, RefreshCw,
@@ -217,6 +218,12 @@ function SourceChip({ entry }: { entry: JournalEntry }) {
 
 export function GeneralJournal() {
   const { user } = useUser();
+  const { can } = usePermission();
+  const canAllSources = can("accounting_journal_all_sources_tab", "view");
+  const canEvoucher = can("accounting_journal_evoucher_tab", "view");
+  const canInvoice = can("accounting_journal_invoice_tab", "view");
+  const canCollection = can("accounting_journal_collection_tab", "view");
+  const canManual = can("accounting_journal_manual_tab", "view");
   const isAccounting = user?.department === "Accounting";
 
   // ── Data state ──
@@ -230,7 +237,7 @@ export function GeneralJournal() {
   const [filters, setFilters] = useState<Filters>({
     dateFrom: startOfMonthISO(),
     dateTo: endOfMonthISO(),
-    sourceType: "all",
+    sourceType: canAllSources ? "all" : canEvoucher ? "evoucher" : canInvoice ? "invoice" : canCollection ? "collection" : canManual ? "manual" : "all",
     statusFilter: "all",
     accountId: "",
     search: "",
@@ -505,6 +512,14 @@ export function GeneralJournal() {
         {/* Source tabs */}
         <div className="flex items-center gap-8" role="tablist">
           {SOURCE_TABS.map((tab) => {
+            const tabCanMap: Record<SourceType, boolean> = {
+              all: canAllSources,
+              evoucher: canEvoucher,
+              invoice: canInvoice,
+              collection: canCollection,
+              manual: canManual,
+            };
+            if (!tabCanMap[tab.id]) return null;
             const isActive = filters.sourceType === tab.id;
             const TabIcon = tab.icon;
             return (

@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { Settings, ChevronDown, Globe, Wallet } from "lucide-react";
 import { useUser } from "../../hooks/useUser";
+import { usePermission } from "../../context/PermissionProvider";
 import { logActivity } from "../../utils/activityLog";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../../lib/queryKeys";
@@ -21,16 +22,22 @@ import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
 
 export function TransactionsModule() {
   const { user } = useUser();
+  const { can } = usePermission();
+  const canForReview = can("accounting_transactions_for_review_tab", "view");
+  const canCategorized = can("accounting_transactions_categorized_tab", "view");
+  const canExcluded = can("accounting_transactions_excluded_tab", "view");
   const [currency, setCurrency] = useState<Currency>("USD");
   const [selectedBankId, setSelectedBankId] = useState<string | null>(null);
   const [isAddAccountOpen, setIsAddAccountOpen] = useState(false);
   const [isManageAccountsOpen, setIsManageAccountsOpen] = useState(false);
-  
+
   // Settings State
   const [visibleAccountIds, setVisibleAccountIds] = useState<string[] | null>(null);
 
   // Filter State
-  const [activeTab, setActiveTab] = useState<ReviewStatus>('for_review');
+  const [activeTab, setActiveTab] = useState<ReviewStatus>(
+    canForReview ? 'for_review' : canCategorized ? 'categorized' : canExcluded ? 'excluded' : 'for_review'
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -442,7 +449,7 @@ export function TransactionsModule() {
         </div>
         
         {/* Controls */}
-        <TransactionsControlBar 
+        <TransactionsControlBar
             activeTab={activeTab}
             onTabChange={setActiveTab}
             searchQuery={searchQuery}
@@ -453,15 +460,24 @@ export function TransactionsModule() {
             onDateToChange={setDateTo}
             filterType={filterType}
             onFilterTypeChange={setFilterType}
+            visibleTabs={[
+              ...(canForReview ? ['for_review' as const] : []),
+              ...(canCategorized ? ['categorized' as const] : []),
+              ...(canExcluded ? ['excluded' as const] : []),
+            ]}
         />
       </div>
       )}
 
       {/* Main Table Area */}
       {!isLoading && (
+        (activeTab === 'for_review' && canForReview) ||
+        (activeTab === 'categorized' && canCategorized) ||
+        (activeTab === 'excluded' && canExcluded)
+      ) && (
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-[1400px] mx-auto border border-[var(--theme-border-default)] rounded-lg overflow-hidden shadow-sm bg-[var(--theme-bg-surface)]">
-            <TransactionsTable 
+            <TransactionsTable
                 transactions={filteredTransactions}
                 isLoading={isLoading}
                 onAction={handleAction}

@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { usePermission } from "../../context/PermissionProvider";
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "../../lib/queryKeys";
 import {
@@ -68,7 +69,23 @@ const TABS: { id: TabType; label: string; icon: typeof Layout }[] = [
 // ─── component ───────────────────────────────────────────────────────────────
 
 export function CustomerLedgerDetail({ customer, onClose, contactCount }: CustomerLedgerDetailProps) {
-  const [activeTab, setActiveTab] = useState<TabType>("overview");
+  const { can } = usePermission();
+
+  const canOverview     = can("accounting_customer_ledger_overview_tab", "view");
+  const canProjects     = can("accounting_customer_ledger_projects_tab", "view");
+  const canBillings     = can("accounting_customer_ledger_billings_tab", "view");
+  const canCollections  = can("accounting_customer_ledger_collections_tab", "view");
+  const canExpenses     = can("accounting_customer_ledger_expenses_tab", "view");
+
+  const defaultLedgerTab: TabType =
+    canOverview    ? "overview" :
+    canProjects    ? "projects" :
+    canBillings    ? "billings" :
+    canCollections ? "collections" :
+    canExpenses    ? "expenses" :
+    "overview";
+
+  const [activeTab, setActiveTab] = useState<TabType>(defaultLedgerTab);
   const [projectSearch,    setProjectSearch]    = useState("");
   const [billingSearch,    setBillingSearch]    = useState("");
   const [collectionSearch, setCollectionSearch] = useState("");
@@ -293,7 +310,14 @@ export function CustomerLedgerDetail({ customer, onClose, contactCount }: Custom
       {/* ── Tab nav ─────────────────────────────────────────────────────── */}
       <div className="px-12 border-b border-[var(--theme-border-default)] bg-[var(--theme-bg-surface)] flex-shrink-0">
         <div className="flex items-center gap-1 py-3" role="tablist">
-          {TABS.map(({ id, label, icon: Icon }) => {
+          {TABS.filter(({ id }) => {
+            if (id === "overview")    return canOverview;
+            if (id === "projects")    return canProjects;
+            if (id === "billings")    return canBillings;
+            if (id === "collections") return canCollections;
+            if (id === "expenses")    return canExpenses;
+            return true;
+          }).map(({ id, label, icon: Icon }) => {
             const active = activeTab === id;
             return (
               <button
@@ -326,7 +350,7 @@ export function CustomerLedgerDetail({ customer, onClose, contactCount }: Custom
         <div className="max-w-7xl mx-auto space-y-6">
 
           {/* ─── OVERVIEW ─────────────────────────────────────────────── */}
-          {activeTab === "overview" && (
+          {activeTab === "overview" && canOverview && (
             <>
               {/* Flat financial summary — no card per column, just a divided row */}
               <div
@@ -486,7 +510,7 @@ export function CustomerLedgerDetail({ customer, onClose, contactCount }: Custom
           )}
 
           {/* ─── PROJECTS ─────────────────────────────────────────────── */}
-          {activeTab === "projects" && (
+          {activeTab === "projects" && canProjects && (
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <div className="flex-1 relative">
@@ -578,7 +602,7 @@ export function CustomerLedgerDetail({ customer, onClose, contactCount }: Custom
           )}
 
           {/* ─── BILLINGS ─────────────────────────────────────────────── */}
-          {activeTab === "billings" && (
+          {activeTab === "billings" && canBillings && (
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <div className="flex-1 relative">
@@ -656,7 +680,7 @@ export function CustomerLedgerDetail({ customer, onClose, contactCount }: Custom
           )}
 
           {/* ─── COLLECTIONS ──────────────────────────────────────────── */}
-          {activeTab === "collections" && (
+          {activeTab === "collections" && canCollections && (
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <div className="flex-1 relative">
@@ -720,7 +744,7 @@ export function CustomerLedgerDetail({ customer, onClose, contactCount }: Custom
           )}
 
           {/* ─── EXPENSES ─────────────────────────────────────────────── */}
-          {activeTab === "expenses" && (
+          {activeTab === "expenses" && canExpenses && (
             <UnifiedExpensesTab
               expenses={expenses.map(exp => ({
                 expenseId: exp.id,

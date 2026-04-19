@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { supabase } from "../../utils/supabase/client";
 import { useUser } from "../../hooks/useUser";
+import { usePermission } from "../../context/PermissionProvider";
 import {
   TrendingUp, Scale, Banknote, ChevronLeft, ChevronRight,
   RefreshCw, Loader2, Printer, ChevronDown, ChevronUp,
@@ -1168,9 +1169,15 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
 
 export function FinancialStatementsPage() {
   const { user } = useUser();
+  const { can } = usePermission();
+  const canIncomeStatement = can("accounting_financial_statements_income_statement_tab", "view");
+  const canBalanceSheet = can("accounting_financial_statements_balance_sheet_tab", "view");
+  const canCashFlow = can("accounting_financial_statements_cash_flow_tab", "view");
   const now = new Date();
 
-  const [tab, setTab]             = useState<Tab>("income_statement");
+  const [tab, setTab]             = useState<Tab>(
+    canIncomeStatement ? "income_statement" : canBalanceSheet ? "balance_sheet" : canCashFlow ? "cash_flow" : "income_statement"
+  );
   const [layout, setLayout]       = useState<BalanceLayout>("report");
   const [year, setYear]           = useState(now.getFullYear());
   const [month, setMonth]         = useState(now.getMonth());
@@ -1433,6 +1440,12 @@ export function FinancialStatementsPage() {
         {/* ── Tab Bar ── */}
         <div className="flex items-center" style={{ borderBottom: "1px solid var(--neuron-ui-border)" }}>
           {TABS.map(({ id, label, icon: Icon }) => {
+            const tabCanMap: Record<Tab, boolean> = {
+              income_statement: canIncomeStatement,
+              balance_sheet: canBalanceSheet,
+              cash_flow: canCashFlow,
+            };
+            if (!tabCanMap[id]) return null;
             const isActive = tab === id;
             return (
               <button key={id} onClick={() => setTab(id)}
@@ -1490,7 +1503,7 @@ export function FinancialStatementsPage() {
           style={{ backgroundColor: "var(--neuron-bg-elevated)", border: "1px solid var(--neuron-ui-border)" }}>
           {loading ? (
             <StatementSkeleton />
-          ) : tab === "income_statement" ? (
+          ) : tab === "income_statement" && canIncomeStatement ? (
             <IncomeStatement
               balances={balances}
               priorBalances={priorBals}
@@ -1500,21 +1513,21 @@ export function FinancialStatementsPage() {
               showEmpty={showEmpty}
               onExport={handleExport}
             />
-          ) : tab === "balance_sheet" ? (
+          ) : tab === "balance_sheet" && canBalanceSheet ? (
             <BalanceSheetReport
               balances={balances}
               asOf={asOfLabel}
               layout={layout}
               showEmpty={showEmpty}
             />
-          ) : (
+          ) : tab === "cash_flow" && canCashFlow ? (
             <CashFlowStatement
               periodBalances={balances}
               beginBalances={beginBals}
               period={periodLabel}
               showEmpty={showEmpty}
             />
-          )}
+          ) : null}
         </div>
       </div>
     </div>

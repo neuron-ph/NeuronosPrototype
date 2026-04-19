@@ -14,6 +14,7 @@ import {
   Clock, Inbox, ListChecks,
   User, Building2, FileText, FileQuestion, Truck, MessageSquare, Receipt, FolderOpen,
 } from "lucide-react";
+import { MemoPanel } from "./memos/MemoPanel";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1154,6 +1155,22 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
     openInquiries: 0, inProgressQuotations: 0, activeBookings: 0, openTickets: 0, pendingEVs: 0,
   };
 
+  const canWriteMemos = user?.department === "Executive" || user?.role === "executive";
+
+  const [memoOpen, setMemoOpen] = useState(false);
+  const [latestMemo, setLatestMemo] = useState<{ id: string; title: string; created_at: string } | null>(null);
+
+  useEffect(() => {
+    supabase
+      .from("memos")
+      .select("id, title, created_at")
+      .eq("is_published", true)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => setLatestMemo(data ?? null));
+  }, []);
+
   const attentionCount = myTickets.length + myApprovals.length;
   const urgentCount    = myTickets.filter((t) => t.priority === "urgent").length;
   const displayCount   = useCountUp(attentionCount, 480, 200);
@@ -1165,6 +1182,17 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
   const goBooking  = (b: BookingItem) => navigate(bookingRoute(b.service_type));
 
   const hasDeptQueue = ["Business Development", "Pricing", "Operations", "Accounting", "Executive"].includes(dept);
+
+  if (memoOpen) {
+    return (
+      <MemoPanel
+        isOpen={memoOpen}
+        onClose={() => setMemoOpen(false)}
+        userId={userId}
+        canWrite={canWriteMemos}
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--theme-bg-surface)" }}>
@@ -1254,6 +1282,52 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
         />
 
         <div className="h-full overflow-auto scrollbar-hide px-5 sm:px-7 lg:px-10 pt-4 pb-12">
+
+          {/* Memo banner — shown when a published memo exists, or exec can write */}
+          {(latestMemo || canWriteMemos) && (
+            <motion.div
+              custom={-1}
+              variants={panelVariants}
+              initial="hidden"
+              animate="visible"
+              style={{ marginBottom: "16px" }}
+            >
+              <motion.button
+                type="button"
+                onClick={() => setMemoOpen(true)}
+                whileTap={{ scale: 0.996 }}
+                className="w-full text-left flex items-center gap-3 px-4 py-3.5 rounded-[var(--neuron-radius-l)] group transition-all duration-150 bg-[var(--neuron-bg-elevated)] border border-[var(--neuron-ui-border)] hover:border-[var(--neuron-brand-green)] hover:bg-[var(--neuron-brand-green-100)] focus-visible:outline-none focus-visible:border-[var(--neuron-brand-green)]"
+              >
+                <FileText size={15} className="flex-shrink-0 mt-px" style={{ color: "var(--neuron-brand-green)" }} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-3">
+                    <span
+                      className="text-[10px] font-semibold uppercase tracking-[0.06em]"
+                      style={{ color: "var(--neuron-ink-muted)" }}
+                    >
+                      Memo from Executive
+                    </span>
+                    {latestMemo && (
+                      <span className="flex-shrink-0 text-[11px] tabular-nums" style={{ color: "var(--neuron-ink-muted)" }}>
+                        {timeAgo(latestMemo.created_at)}
+                      </span>
+                    )}
+                  </div>
+                  <p
+                    className="text-[13px] font-medium truncate mt-0.5"
+                    style={{ color: "var(--neuron-ink-primary)" }}
+                  >
+                    {latestMemo ? latestMemo.title : "No memos yet — click to write the first one"}
+                  </p>
+                </div>
+                <ArrowRight
+                  size={13}
+                  className="flex-shrink-0 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150"
+                  style={{ color: "var(--neuron-brand-green)" }}
+                />
+              </motion.button>
+            </motion.div>
+          )}
 
           {/* Responsive grid: single column → 2-column at md */}
           <div className="grid gap-4 grid-cols-1 md:grid-cols-[2fr_1fr]">

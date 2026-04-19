@@ -22,6 +22,7 @@ import { RequestBillingButton } from "../common/RequestBillingButton";
 import { loadBookingActivityLog, appendBookingActivity } from "../../utils/bookingActivityLog";
 import { BookingTeamSection } from "./shared/BookingTeamSection";
 import { useUser } from "../../hooks/useUser";
+import { usePermission } from "../../context/PermissionProvider";
 import { fireBillingTicketOnCompletion } from "../../utils/workflowTickets";
 import { logStatusChange } from "../../utils/activityLog";
 
@@ -162,8 +163,12 @@ function ActivityTimeline({ activities }: { activities: ActivityLogEntry[] }) {
 }
 
 export function TruckingBookingDetails({ booking, onBack, onUpdate, currentUser, initialTab, highlightId }: TruckingBookingDetailsProps) {
+  const { can } = usePermission();
+  const canViewBillings = can("ops_bookings_billings_tab", "view");
   const [activeTab, setActiveTab] = useState<DetailTab>(
-    (initialTab as DetailTab) || "booking-info"
+    initialTab === "billings" && !canViewBillings
+      ? "booking-info"
+      : (initialTab as DetailTab) || "booking-info"
   );
   const [showTimeline, setShowTimeline] = useState(false);
   const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>(initialActivityLog);
@@ -288,7 +293,7 @@ export function TruckingBookingDetails({ booking, onBack, onUpdate, currentUser,
       <div style={{ padding: "0 48px", borderBottom: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--theme-bg-surface)", display: "flex", justifyContent: "space-between", alignItems: "center", height: "56px" }}>
         <div style={{ display: "flex", gap: "24px", height: "100%" }}>
           <button onClick={() => setActiveTab("booking-info")} style={tabStyle("booking-info")}>Booking Information</button>
-          <button onClick={() => setActiveTab("billings")} style={tabStyle("billings")}>Billings</button>
+          {canViewBillings && <button onClick={() => setActiveTab("billings")} style={tabStyle("billings")}>Billings</button>}
           <button onClick={() => setActiveTab("expenses")} style={tabStyle("expenses")}>Expenses</button>
           <button onClick={() => setActiveTab("comments")} style={tabStyle("comments")}>Comments</button>
         </div>
@@ -343,7 +348,7 @@ export function TruckingBookingDetails({ booking, onBack, onUpdate, currentUser,
       <div style={{ flex: 1, overflow: "hidden", display: "flex" }}>
         <div style={{ flex: showTimeline ? "0 0 65%" : "1", overflow: "auto", transition: "flex 0.3s ease" }}>
           {activeTab === "booking-info" && <BookingInformationTab booking={editedBooking} onBookingUpdated={onUpdate} addActivity={addActivity} setEditedBooking={setEditedBooking} currentUser={currentUser} />}
-          {activeTab === "billings" && <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]"><UnifiedBillingsTab items={bookingBillingItems} projectId={booking.projectNumber || ""} bookingId={booking.bookingId} onRefresh={financials.refresh} isLoading={financials.isLoading} extraActions={<BookingRateCardButton booking={booking} serviceType="Trucking" existingBillingItems={bookingBillingItems} onRefresh={financials.refresh} />} pendingBillableCount={pendingBillableCount} /></div>}
+          {activeTab === "billings" && canViewBillings && <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]"><UnifiedBillingsTab items={bookingBillingItems} projectId={booking.projectNumber || ""} bookingId={booking.bookingId} onRefresh={financials.refresh} isLoading={financials.isLoading} extraActions={<BookingRateCardButton booking={booking} serviceType="Trucking" existingBillingItems={bookingBillingItems} onRefresh={financials.refresh} />} pendingBillableCount={pendingBillableCount} /></div>}
           {activeTab === "expenses" && <ExpensesTab bookingId={booking.bookingId} bookingNumber={(booking as any).booking_number || booking.bookingId} bookingType="trucking" currentUser={currentUser} highlightId={activeTab === "expenses" ? highlightId : undefined} existingBillingItems={bookingBillingItems} onPendingCountChange={setPendingBillableCount} />}
           {activeTab === "comments" && <BookingCommentsTab bookingId={booking.bookingId} />}
         </div>

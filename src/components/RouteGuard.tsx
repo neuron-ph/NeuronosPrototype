@@ -1,6 +1,8 @@
 import { useEffect, type ReactNode } from "react";
 import { useNavigate } from "react-router";
+import { usePermission } from "../context/PermissionProvider";
 import { useUser } from "../hooks/useUser";
+import type { ActionId, ModuleId } from "./admin/permissionsConfig";
 
 /**
  * RouteGuard — Prevents URL-bar access to restricted modules.
@@ -16,52 +18,76 @@ import { useUser } from "../hooks/useUser";
 const ROLE_LEVEL: Record<string, number> = {
   staff: 0,
   team_leader: 1,
-  manager: 2,
+  supervisor: 2,
+  manager: 3,
+  executive: 4,
 };
 
 interface RouteGuardProps {
   children: ReactNode;
   allowedDepartments?: string[];
-  requireMinRole?: "staff" | "team_leader" | "manager";
+  requireMinRole?: "staff" | "team_leader" | "supervisor" | "manager" | "executive";
+  requiredPermission?: { moduleId: ModuleId; action: ActionId };
 }
 
-export function RouteGuard({ children, allowedDepartments, requireMinRole }: RouteGuardProps) {
+export function RouteGuard({ children, allowedDepartments, requireMinRole, requiredPermission }: RouteGuardProps) {
   const navigate = useNavigate();
   const { effectiveDepartment, effectiveRole, isAuthenticated, isLoading } = useUser();
+  const { can, isLoaded: permissionsLoaded } = usePermission();
 
   useEffect(() => {
     // Don't check while loading or if not authenticated
     if (isLoading || !isAuthenticated) return;
+    if (requiredPermission && !permissionsLoaded) return;
 
     const dept = effectiveDepartment || "";
     const role = effectiveRole || "staff";
+    const isExecutive = dept === "Executive";
 
-    // Executive department always passes
-    if (dept === "Executive") return;
+    if (!isExecutive) {
+      // Check department access
+      if (allowedDepartments && allowedDepartments.length > 0) {
+        if (!allowedDepartments.includes(dept)) {
+          console.warn(`[RouteGuard] Access denied: department "${dept}" not in allowed list [${allowedDepartments.join(", ")}]`);
+          navigate("/dashboard", { replace: true });
+          return;
+        }
+      }
 
-    // Check department access
-    if (allowedDepartments && allowedDepartments.length > 0) {
-      if (!allowedDepartments.includes(dept)) {
-        console.warn(`[RouteGuard] Access denied: department "${dept}" not in allowed list [${allowedDepartments.join(", ")}]`);
-        navigate("/dashboard", { replace: true });
-        return;
+      // Check minimum role
+      if (requireMinRole) {
+        const userLevel = ROLE_LEVEL[role] ?? 0;
+        const requiredLevel = ROLE_LEVEL[requireMinRole] ?? 0;
+        if (userLevel < requiredLevel) {
+          console.warn(`[RouteGuard] Access denied: role "${role}" below minimum "${requireMinRole}"`);
+          navigate("/dashboard", { replace: true });
+          return;
+        }
       }
     }
 
-    // Check minimum role
-    if (requireMinRole) {
-      const userLevel = ROLE_LEVEL[role] ?? 0;
-      const requiredLevel = ROLE_LEVEL[requireMinRole] ?? 0;
-      if (userLevel < requiredLevel) {
-        console.warn(`[RouteGuard] Access denied: role "${role}" below minimum "${requireMinRole}"`);
-        navigate("/dashboard", { replace: true });
-        return;
-      }
+    if (requiredPermission && !can(requiredPermission.moduleId, requiredPermission.action)) {
+      console.warn(
+        `[RouteGuard] Access denied: missing permission "${requiredPermission.moduleId}.${requiredPermission.action}"`,
+      );
+      navigate("/dashboard", { replace: true });
     }
-  }, [effectiveDepartment, effectiveRole, isAuthenticated, isLoading, allowedDepartments, requireMinRole, navigate]);
+  }, [
+    effectiveDepartment,
+    effectiveRole,
+    isAuthenticated,
+    isLoading,
+    allowedDepartments,
+    requireMinRole,
+    requiredPermission,
+    permissionsLoaded,
+    can,
+    navigate,
+  ]);
 
   // Show nothing while loading auth state
   if (isLoading) return null;
+  if (requiredPermission && !permissionsLoaded) return null;
 
   return <>{children}</>;
 }

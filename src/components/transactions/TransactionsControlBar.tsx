@@ -14,6 +14,7 @@ interface TransactionsControlBarProps {
   onDateToChange: (date: string) => void;
   filterType: string;
   onFilterTypeChange: (type: string) => void;
+  visibleTabs?: ReviewStatus[];
 }
 
 export function TransactionsControlBar({
@@ -26,14 +27,16 @@ export function TransactionsControlBar({
   dateTo,
   onDateToChange,
   filterType,
-  onFilterTypeChange
+  onFilterTypeChange,
+  visibleTabs,
 }: TransactionsControlBarProps) {
-  
-  const tabs: { id: ReviewStatus; label: string }[] = [
+
+  const allTabs: { id: ReviewStatus; label: string }[] = [
     { id: 'for_review', label: 'For Review' },
     { id: 'categorized', label: 'Categorized' },
     { id: 'excluded', label: 'Excluded' }
   ];
+  const tabs = visibleTabs ? allTabs.filter((t) => visibleTabs.includes(t.id)) : allTabs;
 
   return (
     <div className="flex flex-col bg-[var(--theme-bg-surface)] border-b border-[var(--theme-border-default)]">

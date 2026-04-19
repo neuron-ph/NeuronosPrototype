@@ -4785,3 +4785,57 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION send_billing_items_to_booking(TEXT, TEXT, JSONB) TO authenticated;
+
+-- ────────────────────────────────────────────────────────────
+-- MIGRATION 048: Access Profiles
+-- ────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS public.access_profiles (
+  id                 uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  name               text        NOT NULL,
+  description        text,
+  target_department  text,
+  target_role        text,
+  module_grants      jsonb       NOT NULL DEFAULT '{}',
+  is_active          boolean     NOT NULL DEFAULT true,
+  created_by         text        REFERENCES public.users(id) ON DELETE SET NULL,
+  updated_by         text        REFERENCES public.users(id) ON DELETE SET NULL,
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  updated_at         timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT access_profiles_name_not_blank
+    CHECK (length(trim(name)) > 0),
+  CONSTRAINT access_profiles_module_grants_object
+    CHECK (jsonb_typeof(module_grants) = 'object')
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS access_profiles_name_unique_idx
+  ON public.access_profiles (lower(name));
+
+DROP TRIGGER IF EXISTS access_profiles_updated_at ON public.access_profiles;
+CREATE TRIGGER access_profiles_updated_at
+  BEFORE UPDATE ON public.access_profiles
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+ALTER TABLE public.permission_overrides
+  ADD COLUMN IF NOT EXISTS applied_profile_id uuid
+    REFERENCES public.access_profiles(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS permission_overrides_applied_profile_id_idx
+  ON public.permission_overrides(applied_profile_id);
+
+ALTER TABLE public.access_profiles ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "access_profiles_select" ON public.access_profiles;
+CREATE POLICY "access_profiles_select"
+  ON public.access_profiles
+  FOR SELECT
+  TO authenticated
+  USING (public.is_executive());
+
+DROP POLICY IF EXISTS "access_profiles_manage" ON public.access_profiles;
+CREATE POLICY "access_profiles_manage"
+  ON public.access_profiles
+  FOR ALL
+  TO authenticated
+  USING (public.is_executive())
+  WITH CHECK (public.is_executive());

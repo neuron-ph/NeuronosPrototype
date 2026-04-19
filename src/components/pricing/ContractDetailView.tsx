@@ -13,6 +13,7 @@
  */
 
 import { useState, useEffect, useMemo } from "react";
+import { usePermission } from "../../context/PermissionProvider";
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "../../lib/queryKeys";
 import { ArrowLeft, Edit3, RefreshCw, FileText, Calendar, Building2, Briefcase, Ship, Shield, Truck, Clock, Zap, Plus, ChevronDown, Layout, Layers, Users, Receipt, FileStack, DollarSign, TrendingUp, Paperclip, MessageSquare, Eye, MoreVertical } from "lucide-react";
@@ -102,9 +103,34 @@ export function ContractDetailView({
   initialTab,
   highlightId,
 }: ContractDetailViewProps) {
-  const [activeTab, setActiveTab] = useState<ContractTab>(
-    (initialTab as ContractTab) || "financial_overview"
-  );
+  const { can } = usePermission();
+  const canViewFinancialOverviewTab = can("pricing_contracts_financial_overview_tab", "view");
+  const canViewRateCardTab = can("pricing_contracts_rate_card_tab", "view");
+  const canViewBookingsTab = can("pricing_contracts_bookings_tab", "view");
+  const canViewBillingsTab = can("pricing_contracts_billings_tab", "view");
+  const canViewInvoicesTab = can("pricing_contracts_invoices_tab", "view");
+  const canViewCollectionsTab = can("pricing_contracts_collections_tab", "view");
+  const canViewExpensesTab = can("pricing_contracts_expenses_tab", "view");
+  const canViewAttachmentsTab = can("pricing_contracts_attachments_tab", "view");
+  const canViewCommentsTab = can("pricing_contracts_comments_tab", "view");
+  const canViewActivityTab = can("pricing_contracts_activity_tab", "view");
+
+  const resolveInitialTab = (): ContractTab => {
+    if (initialTab) return initialTab as ContractTab;
+    if (canViewFinancialOverviewTab) return "financial_overview";
+    if (canViewRateCardTab) return "rate-card";
+    if (canViewBookingsTab) return "bookings";
+    if (canViewBillingsTab) return "billings";
+    if (canViewInvoicesTab) return "invoices";
+    if (canViewCollectionsTab) return "collections";
+    if (canViewExpensesTab) return "expenses";
+    if (canViewAttachmentsTab) return "attachments";
+    if (canViewCommentsTab) return "comments";
+    if (canViewActivityTab) return "activity";
+    return "financial_overview";
+  };
+
+  const [activeTab, setActiveTab] = useState<ContractTab>(resolveInitialTab());
   const [activeCategory, setActiveCategory] = useState<TabCategory>("dashboard");
   const bookingsTabActive = ["bookings", "billings", "expenses", "invoices", "collections"].includes(activeTab);
 
@@ -896,6 +922,19 @@ export function ContractDetailView({
       {/* Tabs Tier 2: Sub-tabs */}
       <div className="px-12 py-3 bg-[var(--theme-bg-surface)] border-b border-[var(--theme-border-default)] flex gap-2 overflow-x-auto min-h-[57px]">
         {TAB_STRUCTURE[activeCategory].map((tab) => {
+          const tabPermMap: Record<string, boolean> = {
+            financial_overview: canViewFinancialOverviewTab,
+            "rate-card": canViewRateCardTab,
+            bookings: canViewBookingsTab,
+            billings: canViewBillingsTab,
+            invoices: canViewInvoicesTab,
+            collections: canViewCollectionsTab,
+            expenses: canViewExpensesTab,
+            attachments: canViewAttachmentsTab,
+            comments: canViewCommentsTab,
+            activity: canViewActivityTab,
+          };
+          if (!tabPermMap[tab.id]) return null;
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;
           return (
@@ -919,28 +958,28 @@ export function ContractDetailView({
 
       {/* Tab Content */}
       <div style={{ flex: 1, overflow: "auto", backgroundColor: "var(--theme-bg-surface)" }}>
-        {activeTab === "financial_overview" && (
+        {activeTab === "financial_overview" && canViewFinancialOverviewTab && (
           <div className="max-w-7xl mx-auto">
             <ProjectFinancialOverview financials={contractFinancials} />
           </div>
         )}
-        {activeTab === "rate-card" && (
+        {activeTab === "rate-card" && canViewRateCardTab && (
           <div style={{ padding: "0 48px" }}>{renderRateCardTab()}</div>
         )}
-        {activeTab === "bookings" && (
+        {activeTab === "bookings" && canViewBookingsTab && (
           <div style={{ padding: "0 48px" }}>{renderBookingsTab()}</div>
         )}
-        {activeTab === "billings" && (
+        {activeTab === "billings" && canViewBillingsTab && (
           <div className="max-w-7xl mx-auto" style={{ padding: "0 48px" }}>{renderBillingsTab()}</div>
         )}
-        {activeTab === "invoices" && renderInvoicesTab()}
-        {activeTab === "collections" && (
+        {activeTab === "invoices" && canViewInvoicesTab && renderInvoicesTab()}
+        {activeTab === "collections" && canViewCollectionsTab && (
           <div className="max-w-7xl mx-auto" style={{ padding: "0 48px" }}>{renderCollectionsTab()}</div>
         )}
-        {activeTab === "expenses" && (
+        {activeTab === "expenses" && canViewExpensesTab && (
           <div className="max-w-7xl mx-auto" style={{ padding: "0 48px" }}>{renderExpensesTab()}</div>
         )}
-        {activeTab === "attachments" && (
+        {activeTab === "attachments" && canViewAttachmentsTab && (
           <div className="max-w-7xl mx-auto">
             <EntityAttachmentsTab
               entityId={quotation.id}
@@ -949,7 +988,7 @@ export function ContractDetailView({
             />
           </div>
         )}
-        {activeTab === "comments" && (
+        {activeTab === "comments" && canViewCommentsTab && (
           <div className="max-w-7xl mx-auto" style={{ padding: "32px 48px" }}>
             <CommentsTab
               entityId={quotation.id}
@@ -960,7 +999,7 @@ export function ContractDetailView({
             />
           </div>
         )}
-        {activeTab === "activity" && (
+        {activeTab === "activity" && canViewActivityTab && (
           <div style={{ padding: "0 48px" }}>{renderActivityTab()}</div>
         )}
       </div>

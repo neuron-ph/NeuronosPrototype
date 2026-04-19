@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../utils/supabase/client';
 import { useUser } from './useUser';
 import { queryKeys } from '../lib/queryKeys';
+import { BLOCK_HIGHER_RANK_VISIBILITY_GRANT } from '../lib/rbacGrantKeys';
 
 /**
  * Resolves the current user's data visibility scope.
@@ -38,6 +39,25 @@ const FUNCTIONAL_VISIBILITY: Record<string, string[]> = {
   financials: ['Accounting', 'Executive'],
 };
 
+type ScopedUser = { id: string; role: string | null };
+type PermissionOverrideScope = {
+  scope: 'department_wide' | 'cross_department' | 'full';
+  departments: string[] | null;
+  module_grants: Record<string, boolean> | null;
+};
+
+const ROLE_LEVEL: Record<string, number> = {
+  staff: 0,
+  team_leader: 1,
+  supervisor: 2,
+  manager: 3,
+  executive: 4,
+};
+
+function getRoleLevel(role?: string | null): number {
+  return ROLE_LEVEL[role ?? 'staff'] ?? ROLE_LEVEL.staff;
+}
+
 export type DataScope =
   | { type: 'all' }
   | { type: 'userIds'; ids: string[] }
@@ -65,26 +85,26 @@ export function useDataScope(resource?: string): DataScopeResult {
         return { type: 'all' };
       }
 
-      // 1. Executive department — full access, no queries needed
-      if (effectiveDepartment === 'Executive') {
+      // 1. Executive department or executive role — full access
+      if (effectiveDepartment === 'Executive' || effectiveRole === 'executive') {
         return { type: 'all' };
       }
 
       // 2. Fire permission_override check and role-based users query in parallel.
-      //    For staff the users query is wasted (~1 row returned and discarded), but
-      //    it saves a full round-trip for manager/team_leader paths which are common.
       const overridePromise = supabase
         .from('permission_overrides')
-        .select('scope, departments')
+        .select('scope, departments, module_grants')
         .eq('user_id', user.id)
         .maybeSingle();
 
+      const isTeamRole = effectiveRole === 'team_leader' || effectiveRole === 'supervisor';
+
       const deptUsersPromise =
         effectiveRole === 'manager'
-          ? supabase.from('users').select('id').eq('department', effectiveDepartment).eq('is_active', true)
-          : effectiveRole === 'team_leader' && user.team_id
-          ? supabase.from('users').select('id').eq('team_id', user.team_id).eq('is_active', true)
-          : Promise.resolve({ data: null });
+          ? supabase.from('users').select('id, role').eq('department', effectiveDepartment).eq('is_active', true)
+          : isTeamRole && user.team_id
+          ? supabase.from('users').select('id, role').eq('team_id', user.team_id).eq('is_active', true)
+          : Promise.resolve({ data: null, error: null });
 
       const [
         { data: override, error: overrideError },
@@ -98,39 +118,57 @@ export function useDataScope(resource?: string): DataScopeResult {
         console.warn('[DataScope] role users fetch failed:', roleUsersError.message);
       }
 
+      const permissionOverride = override as PermissionOverrideScope | null;
+      const blockHigherRankVisibility =
+        permissionOverride?.module_grants?.[BLOCK_HIGHER_RANK_VISIBILITY_GRANT] === true;
+      const myRoleLevel = getRoleLevel(effectiveRole);
+      const visibleIds = (rows?: ScopedUser[] | null): string[] =>
+        (rows ?? [])
+          .filter((row) => (
+            row.id === user.id ||
+            !blockHigherRankVisibility ||
+            getRoleLevel(row.role) <= myRoleLevel
+          ))
+          .map((row) => row.id);
+
       // Override takes precedence over role
-      if (override) {
-        if (override.scope === 'full') {
+      if (permissionOverride) {
+        if (permissionOverride.scope === 'full') {
           return { type: 'all' };
         }
-        if (override.scope === 'department_wide') {
-          // Re-use the already-fetched dept users if role also matched department
-          const ids = roleUsers?.map((u) => u.id) ??
-            (await supabase.from('users').select('id').eq('department', effectiveDepartment).eq('is_active', true))
-              .data?.map((u) => u.id) ?? [];
+        if (permissionOverride.scope === 'department_wide') {
+          const departmentRows =
+            effectiveRole === 'manager'
+              ? (roleUsers as ScopedUser[] | null)
+              : ((await supabase
+                .from('users')
+                .select('id, role')
+                .eq('department', effectiveDepartment)
+                .eq('is_active', true)).data as ScopedUser[] | null);
+          const ids = visibleIds(departmentRows);
           return { type: 'userIds', ids };
         }
-        if (override.scope === 'cross_department' && override.departments?.length) {
+        if (permissionOverride.scope === 'cross_department' && permissionOverride.departments?.length) {
           const { data: crossUsers } = await supabase
             .from('users')
-            .select('id')
-            .in('department', override.departments)
+            .select('id, role')
+            .in('department', permissionOverride.departments)
             .eq('is_active', true);
-          return { type: 'userIds', ids: crossUsers?.map((u) => u.id) ?? [] };
+          return { type: 'userIds', ids: visibleIds(crossUsers as ScopedUser[] | null) };
         }
       }
 
-      // 3. Manager — all active users in same department (already fetched above)
+      // 3. Manager — all active users in same department
       if (effectiveRole === 'manager') {
-        return { type: 'userIds', ids: roleUsers?.map((u) => u.id) ?? [] };
+        return { type: 'userIds', ids: visibleIds(roleUsers as ScopedUser[] | null) };
       }
 
-      // 4. Team leader — all active users in same team (already fetched above)
-      if (effectiveRole === 'team_leader' && user.team_id) {
-        return { type: 'userIds', ids: roleUsers?.map((u) => u.id) ?? [] };
+      // 4. Team leader or supervisor — all active users in same team
+      if (isTeamRole && user.team_id) {
+        return { type: 'userIds', ids: visibleIds(roleUsers as ScopedUser[] | null) };
       }
 
-      // 5. Staff (or team_leader with no team assigned) — own records only
+      // 5. Staff, supervisor with no team, or team_leader with no team — own records only
       return { type: 'own', userId: user.id };
     },
   });

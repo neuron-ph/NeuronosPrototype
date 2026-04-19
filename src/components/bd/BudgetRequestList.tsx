@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { usePermission } from "../../context/PermissionProvider";
 import { Search, Plus, Calendar, ArrowUpDown, X, SlidersHorizontal, Users, Package, Briefcase, FileText } from "lucide-react";
 import { supabase } from '../../utils/supabase/client';
 import { toast } from "../ui/toast-utils";
@@ -17,9 +18,16 @@ type DateRangeFilter = "all" | "today" | "this-week" | "this-month" | "this-quar
 type SortOption = "date-newest" | "date-oldest" | "amount-highest" | "amount-lowest" | "status" | "requestor";
 
 export function BudgetRequestList() {
+  const { can } = usePermission();
+  const canViewAllTab        = can("bd_budget_requests_all_tab", "view");
+  const canViewMyRequestsTab = can("bd_budget_requests_my_requests_tab", "view");
+
   // State
   const [searchQuery, setSearchQuery] = useState("");
-  const [quickFilterTab, setQuickFilterTab] = useState<QuickFilterTab>("all");
+  const [quickFilterTab, setQuickFilterTab] = useState<QuickFilterTab>(() => {
+    if (canViewAllTab) return "all";
+    return "my-requests";
+  });
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
@@ -341,38 +349,62 @@ export function BudgetRequestList() {
           borderBottom: "1px solid var(--neuron-ui-border)",
           paddingBottom: "0px"
         }}>
-          {[
-            { id: "all" as QuickFilterTab, label: "All Requests" },
-            { id: "my-requests" as QuickFilterTab, label: "My Requests" },
-          ].map(tab => (
+          {canViewAllTab && (
             <button
-              key={tab.id}
-              onClick={() => setQuickFilterTab(tab.id)}
+              onClick={() => setQuickFilterTab("all")}
               style={{
                 padding: "10px 16px",
                 fontSize: "14px",
                 fontWeight: 500,
-                color: quickFilterTab === tab.id ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)",
+                color: quickFilterTab === "all" ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)",
                 backgroundColor: "transparent",
                 border: "none",
-                borderBottom: quickFilterTab === tab.id ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
+                borderBottom: quickFilterTab === "all" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
                 cursor: "pointer",
                 transition: "all 0.2s ease",
               }}
               onMouseEnter={(e) => {
-                if (quickFilterTab !== tab.id) {
+                if (quickFilterTab !== "all") {
                   e.currentTarget.style.color = "var(--theme-text-primary)";
                 }
               }}
               onMouseLeave={(e) => {
-                if (quickFilterTab !== tab.id) {
+                if (quickFilterTab !== "all") {
                   e.currentTarget.style.color = "var(--theme-text-muted)";
                 }
               }}
             >
-              {tab.label}
+              All Requests
             </button>
-          ))}
+          )}
+          {canViewMyRequestsTab && (
+            <button
+              onClick={() => setQuickFilterTab("my-requests")}
+              style={{
+                padding: "10px 16px",
+                fontSize: "14px",
+                fontWeight: 500,
+                color: quickFilterTab === "my-requests" ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)",
+                backgroundColor: "transparent",
+                border: "none",
+                borderBottom: quickFilterTab === "my-requests" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+              }}
+              onMouseEnter={(e) => {
+                if (quickFilterTab !== "my-requests") {
+                  e.currentTarget.style.color = "var(--theme-text-primary)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (quickFilterTab !== "my-requests") {
+                  e.currentTarget.style.color = "var(--theme-text-muted)";
+                }
+              }}
+            >
+              My Requests
+            </button>
+          )}
         </div>
 
         {/* Filters Row */}

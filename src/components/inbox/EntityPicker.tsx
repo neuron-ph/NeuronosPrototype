@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Search, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../../utils/supabase/client";
+import { usePermission } from "../../context/PermissionProvider";
+import type { ModuleId } from "../admin/permissionsConfig";
 
 type EntityType =
   | "inquiry" | "quotation" | "contract" | "booking"
@@ -34,8 +36,31 @@ interface EntityPickerProps {
   onClose: () => void;
 }
 
+const ENTITY_TAB_PERMISSION_IDS: Record<EntityType, ModuleId> = {
+  inquiry: "inbox_entity_inquiry_tab",
+  quotation: "inbox_entity_quotation_tab",
+  contract: "inbox_entity_contract_tab",
+  booking: "inbox_entity_booking_tab",
+  project: "inbox_entity_project_tab",
+  invoice: "inbox_entity_invoice_tab",
+  collection: "inbox_entity_collection_tab",
+  expense: "inbox_entity_expense_tab",
+  customer: "inbox_entity_customer_tab",
+  contact: "inbox_entity_contact_tab",
+  vendor: "inbox_entity_vendor_tab",
+  budget_request: "inbox_entity_budget_request_tab",
+};
+
 export function EntityPicker({ onSelect, onClose }: EntityPickerProps) {
-  const [activeType, setActiveType] = useState<EntityType>("inquiry");
+  const { can } = usePermission();
+
+  const allowedEntityTabs = ENTITY_TABS.filter((tab) =>
+    can(ENTITY_TAB_PERMISSION_IDS[tab.key], "view")
+  );
+
+  const [activeType, setActiveType] = useState<EntityType>(
+    allowedEntityTabs[0]?.key ?? "inquiry"
+  );
   const [query, setQuery] = useState("");
 
   const q = query.trim().toLowerCase();
@@ -238,7 +263,7 @@ export function EntityPicker({ onSelect, onClose }: EntityPickerProps) {
             scrollbarWidth: "none",
           }}
         >
-          {ENTITY_TABS.map((tab) => (
+          {allowedEntityTabs.map((tab) => (
             <button
               key={tab.key}
               onClick={() => { setActiveType(tab.key); setQuery(""); }}
