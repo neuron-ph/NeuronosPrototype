@@ -8,7 +8,7 @@ import { useUser } from "../../hooks/useUser";
 import { logCreation, logDeletion, logActivity } from "../../utils/activityLog";
 import { toast } from "sonner@2.0.3";
 import {
-  Plus, Users, Shield, UsersRound, Settings,
+  Plus, Users, Shield, UsersRound, BookMarked,
   ChevronRight, Edit, Trash2, Search, X,
 } from "lucide-react";
 import { DataTable, ColumnDef } from "../common/DataTable";
@@ -20,6 +20,8 @@ import { Button } from "../ui/button";
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "../ui/select";
 import { PermissionsMatrix } from "./PermissionsMatrix";
 import { AccessConfiguration, type ConfigUser } from "./AccessConfiguration";
+import { AccessProfiles, ProfileEditor } from "./accessProfiles/AccessProfiles";
+import type { AccessProfile } from "./accessProfiles/accessProfileTypes";
 import type { UserRow } from "./userFormShared";
 import { usePermission } from "../../context/PermissionProvider";
 
@@ -51,8 +53,10 @@ interface PermissionOverride {
   notes: string | null;
   created_at: string;
   module_grants?: Record<string, boolean>;
+  applied_profile_id?: string | null;
   user?: { name: string; email: string; department: string; role: Role };
   grantor?: { name: string } | null;
+  profile?: { id: string; name: string } | null;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -202,11 +206,10 @@ interface FiltersState {
 }
 
 function FilterBar({
-  filters, onChange, overrideUserIds,
+  filters, onChange,
 }: {
   filters: FiltersState;
   onChange: (f: FiltersState) => void;
-  overrideUserIds: Set<string>;
 }) {
   const hasActive = filters.search || filters.dept || filters.role || filters.status || filters.overrides !== "all";
   return (
@@ -328,16 +331,21 @@ function UsersTab({
     onCountUpdate(users.length);
   }, [users.length, onCountUpdate]);
 
-  const { data: overrideUserIds = new Set<string>() } = useQuery({
-    queryKey: ["permission_overrides", "user-ids"],
+  const { data: accessSummaries = [] } = useQuery({
+    queryKey: ["permission_overrides", "access-summary"],
     queryFn: async () => {
       const { data } = await supabase
         .from("permission_overrides")
-        .select("user_id");
-      return new Set((data ?? []).map((r: any) => r.user_id as string));
+        .select("user_id, module_grants, applied_profile_id, profile:applied_profile_id(id, name)");
+      return (data ?? []) as unknown as Array<{ user_id: string; module_grants: Record<string, boolean> | null; applied_profile_id: string | null; profile?: { id: string; name: string } | null }>;
     },
     staleTime: 30 * 1000,
   });
+
+  const accessSummaryByUserId = useMemo(
+    () => new Map(accessSummaries.map(s => [s.user_id, s])),
+    [accessSummaries]
+  );
 
   const filtered = useMemo(() => {
     return users.filter(u => {
@@ -347,11 +355,11 @@ function UsersTab({
       if (filters.role && u.role !== filters.role) return false;
       const uStatus = u.status || (u.is_active ? "active" : "inactive");
       if (filters.status && uStatus !== filters.status) return false;
-      if (filters.overrides === "yes" && !overrideUserIds.has(u.id!)) return false;
-      if (filters.overrides === "no" && overrideUserIds.has(u.id!)) return false;
+      if (filters.overrides === "yes" && !accessSummaryByUserId.has(u.id!)) return false;
+      if (filters.overrides === "no" && accessSummaryByUserId.has(u.id!)) return false;
       return true;
     });
-  }, [users, filters, overrideUserIds]);
+  }, [users, filters, accessSummaryByUserId]);
 
   const columns = useMemo<ColumnDef<UserRow & { status?: UserStatus; teams?: { name: string } | null }>[]>(() => [
     {
@@ -404,17 +412,28 @@ function UsersTab({
       header: "Access",
       width: "140px",
       cell: (u) => {
-        const hasOverride = overrideUserIds.has(u.id!);
+        const summary = accessSummaryByUserId.get(u.id!);
+        const hasGrants = summary && Object.keys(summary.module_grants ?? {}).length > 0;
+        const profileName = summary?.profile?.name ?? null;
+        let accessBadge: React.ReactNode;
+        if (!summary || !hasGrants) {
+          accessBadge = <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>Default</span>;
+        } else if (profileName) {
+          accessBadge = (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--neuron-action-primary)", background: "color-mix(in oklch, var(--neuron-action-primary) 12%, transparent)", padding: "2px 8px", borderRadius: 999, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <BookMarked size={11} /> {profileName}
+            </span>
+          );
+        } else {
+          accessBadge = (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--neuron-status-accent-fg)", background: "var(--neuron-status-accent-bg)", padding: "2px 8px", borderRadius: 999 }}>
+              <Shield size={11} /> Custom
+            </span>
+          );
+        }
         return (
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {hasOverride
-              ? (
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--neuron-status-accent-fg)", background: "var(--neuron-status-accent-bg)", padding: "2px 8px", borderRadius: 999 }}>
-                  <Shield size={11} /> Custom
-                </span>
-              )
-              : <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>Default</span>
-            }
+            {accessBadge}
             <button
               onClick={e => {
                 e.stopPropagation();
@@ -436,7 +455,7 @@ function UsersTab({
         );
       },
     },
-  ], [overrideUserIds]);
+  ], [accessSummaryByUserId]);
 
   if (isError) {
     return (
@@ -480,7 +499,7 @@ function UsersTab({
         </button>
       </div>
 
-      <FilterBar filters={filters} onChange={setFilters} overrideUserIds={overrideUserIds} />
+      <FilterBar filters={filters} onChange={setFilters} />
 
       <DataTable
         data={filtered}
@@ -1092,9 +1111,9 @@ function AccessOverridesTab({ onCountUpdate }: { onCountUpdate: (count: number) 
     queryFn: async () => {
       const { data } = await supabase
         .from("permission_overrides")
-        .select("*, user:user_id(name, email, department, role), grantor:granted_by(name)")
+        .select("*, user:user_id(name, email, department, role), grantor:granted_by(name), profile:applied_profile_id(id, name)")
         .order("created_at", { ascending: false });
-      return (data ?? []) as PermissionOverride[];
+      return (data ?? []) as unknown as PermissionOverride[];
     },
     staleTime: 5 * 60 * 1000,
   });
@@ -1131,6 +1150,7 @@ function AccessOverridesTab({ onCountUpdate }: { onCountUpdate: (count: number) 
       departments: formScope === "cross_department" ? formDepts : null,
       granted_by: currentUser?.id ?? null,
       notes: formNotes.trim() || null,
+      applied_profile_id: null,
     };
     const { error } = await supabase.from("permission_overrides").upsert(payload, { onConflict: "user_id" });
     setSaving(false);
@@ -1142,7 +1162,7 @@ function AccessOverridesTab({ onCountUpdate }: { onCountUpdate: (count: number) 
     setAdding(false);
     setFormUserId(""); setFormScope("department_wide"); setFormDepts([]); setFormNotes("");
     queryClient.invalidateQueries({ queryKey: ["permission_overrides"] });
-    queryClient.invalidateQueries({ queryKey: ["permission_overrides", "user-ids"] });
+    queryClient.invalidateQueries({ queryKey: ["permission_overrides", "access-summary"] });
   };
 
   const handleRevokeConfirmed = async (ov: PermissionOverride) => {
@@ -1153,7 +1173,7 @@ function AccessOverridesTab({ onCountUpdate }: { onCountUpdate: (count: number) 
     if (error) { toast.error("Failed to revoke override."); return; }
     toast.success("Override revoked.");
     queryClient.invalidateQueries({ queryKey: ["permission_overrides"] });
-    queryClient.invalidateQueries({ queryKey: ["permission_overrides", "user-ids"] });
+    queryClient.invalidateQueries({ queryKey: ["permission_overrides", "access-summary"] });
   };
 
   const toggleDept = (dept: string) =>
@@ -1233,6 +1253,11 @@ function AccessOverridesTab({ onCountUpdate }: { onCountUpdate: (count: number) 
                   <div>
                     <p style={{ fontSize: 13, fontWeight: 500, color: "var(--neuron-ink-primary)", margin: 0 }}>{ov.user?.name ?? ov.user_id}</p>
                     <p style={{ fontSize: 11, color: "var(--neuron-ink-muted)", margin: 0 }}>{ov.user?.email}</p>
+                    {ov.profile?.name && (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 3, fontSize: 10, fontWeight: 500, color: "var(--neuron-action-primary)", background: "color-mix(in srgb, var(--neuron-action-primary) 10%, transparent)", padding: "2px 6px", borderRadius: 999 }}>
+                        <BookMarked size={10} /> {ov.profile.name}
+                      </span>
+                    )}
                   </div>
                   <span style={{ fontSize: 11, fontWeight: 500, padding: "3px 8px", borderRadius: 999, backgroundColor: scopeMeta.bg, color: scopeMeta.text, display: "inline-flex", width: "fit-content" }}>
                     {scopeMeta.label}
@@ -1391,114 +1416,15 @@ function AccessOverridesTab({ onCountUpdate }: { onCountUpdate: (count: number) 
   );
 }
 
-// ─── Org Settings Tab ─────────────────────────────────────────────────────────
-
-function OrgSettingsTab() {
-  const { data: setting, isLoading } = useQuery<boolean>({
-    queryKey: ["org_settings", "block_higher_rank_visibility"],
-    staleTime: 60 * 1000,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("org_settings")
-        .select("block_higher_rank_visibility")
-        .eq("id", "default")
-        .maybeSingle();
-      return data?.block_higher_rank_visibility ?? false;
-    },
-  });
-
-  const queryClient = useQueryClient();
-  const [saving, setSaving] = useState(false);
-
-  async function handleToggle(next: boolean) {
-    setSaving(true);
-    const { error } = await supabase
-      .from("org_settings")
-      .update({ block_higher_rank_visibility: next, updated_at: new Date().toISOString() })
-      .eq("id", "default");
-    setSaving(false);
-    if (error) {
-      toast.error("Failed to save setting");
-    } else {
-      queryClient.setQueryData(["org_settings", "block_higher_rank_visibility"], next);
-      toast.success(next ? "Higher-rank visibility blocked" : "Higher-rank visibility allowed");
-    }
-  }
-
-  const value = setting ?? false;
-
-  return (
-    <div style={{ maxWidth: 600 }}>
-      <h2 style={{ fontSize: 16, fontWeight: 600, color: "var(--neuron-ink-primary)", marginBottom: 4 }}>
-        Org Settings
-      </h2>
-      <p style={{ fontSize: 13, color: "var(--neuron-ink-muted)", marginBottom: 28 }}>
-        Global visibility and access rules that apply to all members.
-      </p>
-
-      <div style={{
-        border: "1px solid var(--neuron-ui-border)",
-        borderRadius: 10,
-        padding: "20px 24px",
-        backgroundColor: "var(--neuron-bg-elevated)",
-        display: "flex",
-        alignItems: "flex-start",
-        justifyContent: "space-between",
-        gap: 24,
-      }}>
-        <div style={{ flex: 1 }}>
-          <p style={{ fontSize: 14, fontWeight: 500, color: "var(--neuron-ink-primary)", marginBottom: 4 }}>
-            Block higher-rank visibility
-          </p>
-          <p style={{ fontSize: 13, color: "var(--neuron-ink-muted)", margin: 0, lineHeight: 1.5 }}>
-            When ON, staff cannot see records owned by users with a higher rank unless directly assigned.
-            When OFF (default), the existing permissive behavior applies.
-          </p>
-        </div>
-        <button
-          disabled={isLoading || saving}
-          onClick={() => handleToggle(!value)}
-          style={{
-            flexShrink: 0,
-            width: 44,
-            height: 24,
-            borderRadius: 12,
-            border: "none",
-            backgroundColor: value ? "var(--neuron-action-primary)" : "var(--neuron-ui-border)",
-            cursor: isLoading || saving ? "not-allowed" : "pointer",
-            position: "relative",
-            transition: "background-color 0.2s",
-            opacity: isLoading || saving ? 0.6 : 1,
-          }}
-          aria-pressed={value}
-          aria-label="Block higher-rank visibility"
-        >
-          <span style={{
-            position: "absolute",
-            top: 2,
-            left: value ? 22 : 2,
-            width: 20,
-            height: 20,
-            borderRadius: "50%",
-            backgroundColor: "#fff",
-            transition: "left 0.2s",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-          }} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ─── Tab navigation ───────────────────────────────────────────────────────────
 
-type Tab = "users" | "teams" | "overrides" | "settings";
+type Tab = "users" | "teams" | "overrides" | "profiles";
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
-  { id: "users",     label: "Users",            icon: Users },
-  { id: "teams",     label: "Teams",            icon: UsersRound },
+  { id: "users",    label: "Users",            icon: Users },
+  { id: "teams",    label: "Teams",            icon: UsersRound },
   { id: "overrides", label: "Access Overrides", icon: Shield },
-  { id: "settings",  label: "Org Settings",     icon: Settings },
+  { id: "profiles",  label: "Access Profiles",  icon: BookMarked },
 ];
 
 // ─── Tab counts context ────────────────────────────────────────────────────────
@@ -1507,26 +1433,28 @@ interface TabCounts {
   users: number;
   teams: number;
   overrides: number;
-  settings: number;
+  profiles: number;
 }
 
 // ─── Root export ──────────────────────────────────────────────────────────────
 
 export function UserManagement() {
   const { can } = usePermission();
-  const canViewUsersTab     = can("admin_users_tab", "view");
-  const canViewTeamsTab     = can("admin_teams_tab", "view");
-  const canViewOverridesTab = can("admin_overrides_tab", "view");
-  const canViewSettingsTab  = can("admin_settings_tab", "view");
+  const canViewUsersTab          = can("admin_users_tab", "view");
+  const canViewTeamsTab          = can("admin_teams_tab", "view");
+  const canViewOverridesTab      = can("admin_overrides_tab", "view");
+  const canViewAccessProfilesTab = can("admin_access_profiles_tab", "view");
 
   const [activeTab, setActiveTab] = useState<Tab>(() => {
-    if (canViewUsersTab)     return "users";
-    if (canViewTeamsTab)     return "teams";
-    if (canViewOverridesTab) return "overrides";
-    return "settings";
+    if (canViewUsersTab)          return "users";
+    if (canViewTeamsTab)          return "teams";
+    if (canViewOverridesTab)      return "overrides";
+    if (canViewAccessProfilesTab) return "profiles";
+    return "users";
   });
-  const [tabCounts, setTabCounts] = useState<TabCounts>({ users: 0, teams: 0, overrides: 0, settings: 0 });
+  const [tabCounts, setTabCounts] = useState<TabCounts>({ users: 0, teams: 0, overrides: 0, profiles: 0 });
   const [configuringUser, setConfiguringUser] = useState<ConfigUser | null>(null);
+  const [editingProfile, setEditingProfile] = useState<Partial<AccessProfile> | null | undefined>(undefined);
   const handleUsersCount = useCallback((count: number) => setTabCounts(prev => ({ ...prev, users: count })), []);
   const handleTeamsCount = useCallback((count: number) => setTabCounts(prev => ({ ...prev, teams: count })), []);
   const handleOverridesCount = useCallback((count: number) => setTabCounts(prev => ({ ...prev, overrides: count })), []);
@@ -1551,6 +1479,27 @@ export function UserManagement() {
     );
   }
 
+  if (editingProfile !== undefined) {
+    return (
+      <AnimatePresence mode="wait">
+        <motion.div
+          key="profile-editor"
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
+          style={{ height: "100%", display: "flex", flexDirection: "column", backgroundColor: "var(--neuron-bg-elevated)", padding: "0 48px" }}
+        >
+          <ProfileEditor
+            profile={editingProfile}
+            onBack={() => setEditingProfile(undefined)}
+            onSaved={() => setEditingProfile(undefined)}
+          />
+        </motion.div>
+      </AnimatePresence>
+    );
+  }
+
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", backgroundColor: "var(--neuron-bg-elevated)" }}>
       {/* Page Header */}
@@ -1567,10 +1516,10 @@ export function UserManagement() {
         {/* Tab nav — sliding underline via layoutId */}
         <div style={{ display: "flex", gap: "24px" }}>
           {TABS.filter(({ id }) =>
-            (id === "users"     && canViewUsersTab)    ||
-            (id === "teams"     && canViewTeamsTab)    ||
-            (id === "overrides" && canViewOverridesTab)||
-            (id === "settings"  && canViewSettingsTab)
+            (id === "users"     && canViewUsersTab)          ||
+            (id === "teams"     && canViewTeamsTab)          ||
+            (id === "overrides" && canViewOverridesTab)      ||
+            (id === "profiles"  && canViewAccessProfilesTab)
           ).map(({ id, label, icon: Icon }) => {
             const isActive = activeTab === id;
             const count = tabCounts[id as keyof TabCounts];
@@ -1602,7 +1551,7 @@ export function UserManagement() {
               >
                 <Icon size={16} />
                 {label}
-                {id !== "settings" && (
+                {id !== "profiles" && (
                   <span
                     style={{
                       display: "inline-flex",
@@ -1651,10 +1600,10 @@ export function UserManagement() {
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
           >
-            {activeTab === "users"     && canViewUsersTab     && <UsersTab onCountUpdate={handleUsersCount} onConfigureAccess={setConfiguringUser} />}
-            {activeTab === "teams"     && canViewTeamsTab     && <TeamsTab onCountUpdate={handleTeamsCount} />}
-            {activeTab === "overrides" && canViewOverridesTab && <AccessOverridesTab onCountUpdate={handleOverridesCount} />}
-            {activeTab === "settings"  && canViewSettingsTab  && <OrgSettingsTab />}
+            {activeTab === "users"     && canViewUsersTab          && <UsersTab onCountUpdate={handleUsersCount} onConfigureAccess={setConfiguringUser} />}
+            {activeTab === "teams"     && canViewTeamsTab          && <TeamsTab onCountUpdate={handleTeamsCount} />}
+            {activeTab === "overrides" && canViewOverridesTab      && <AccessOverridesTab onCountUpdate={handleOverridesCount} />}
+            {activeTab === "profiles"  && canViewAccessProfilesTab && <AccessProfiles onConfigureAccess={setConfiguringUser} onEditProfile={setEditingProfile} />}
           </motion.div>
         </AnimatePresence>
       </div>

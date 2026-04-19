@@ -1176,3 +1176,8 @@ input[type="checkbox"] {
   background-color: var(--neuron-brand-green);
   color: white;
 }
+
+.memo-card-row:hover .delete-btn,
+.memo-list-row:hover .delete-btn {
+  opacity: 1 !important;
+}

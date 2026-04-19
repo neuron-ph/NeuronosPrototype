@@ -254,6 +254,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
     const interval = setInterval(fetchUnreadCount, 60_000);
     return () => clearInterval(interval);
   }, [fetchUnreadCount]);
+
   
   // Determine what modules to show based on effective department
   const userDepartment = effectiveDepartment || currentUser?.department || "Operations";
