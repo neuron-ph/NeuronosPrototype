@@ -11,6 +11,10 @@ type BillableEVInput = Partial<EVoucher> & {
   details?: { is_billable?: boolean | string } | null;
 };
 
+type EVoucherSubmitActor = {
+  department?: string | null;
+};
+
 const isTrue = (value: unknown) => value === true || value === "true";
 
 const isBillableEV = (ev: BillableEVInput) =>
@@ -18,6 +22,19 @@ const isBillableEV = (ev: BillableEVInput) =>
 
 const getBookingId = (ev: BillableEVInput) =>
   ev.booking_id ?? ev.bookingId ?? null;
+
+export function determineSubmittedEVoucherStatus(
+  context: string,
+  actor?: EVoucherSubmitActor,
+) {
+  const actorDepartment = actor?.department?.trim().toLowerCase();
+
+  if (context === "accounting" || actorDepartment === "executive") {
+    return "pending_accounting";
+  }
+
+  return "pending_manager";
+}
 
 export async function ensureBillableExpenseBillingItem(
   ev: BillableEVInput,

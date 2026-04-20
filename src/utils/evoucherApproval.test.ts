@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { approveEVInline, ensureBillableExpenseBillingItem } from "./evoucherApproval";
+import {
+  approveEVInline,
+  determineSubmittedEVoucherStatus,
+  ensureBillableExpenseBillingItem,
+} from "./evoucherApproval";
 import { supabase } from "./supabase/client";
 
 vi.mock("./supabase/client", () => ({
@@ -100,5 +104,27 @@ describe("approveEVInline", () => {
     } as any);
 
     expect(result.billingError).toContain("not_billable");
+  });
+});
+
+describe("determineSubmittedEVoucherStatus", () => {
+  it("sends Executive-created vouchers directly to Accounting for disbursement", () => {
+    expect(
+      determineSubmittedEVoucherStatus("personal", {
+        department: "Executive",
+      }),
+    ).toBe("pending_accounting");
+  });
+
+  it("keeps non-Accounting, non-Executive vouchers in manager approval", () => {
+    expect(
+      determineSubmittedEVoucherStatus("operations", {
+        department: "Operations",
+      }),
+    ).toBe("pending_manager");
+  });
+
+  it("keeps Accounting-created vouchers in the disbursement queue", () => {
+    expect(determineSubmittedEVoucherStatus("accounting")).toBe("pending_accounting");
   });
 });
