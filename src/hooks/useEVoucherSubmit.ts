@@ -8,6 +8,7 @@ import {
   logDeletion,
   type ActivityActor,
 } from "../utils/activityLog";
+import { determineSubmittedEVoucherStatus } from "../utils/evoucherApproval";
 
 type EVoucherContext =
   | "bd"
@@ -364,10 +365,9 @@ export function useEVoucherSubmit(
         );
       }
 
-      // Accounting-created e-vouchers skip the approval chain — they go straight to
-      // the disbursement queue. All other departments (ops, bd, etc.) need manager
-      // and CEO sign-off first.
-      const submittedStatus = context === "accounting" ? "pending_accounting" : "pending_manager";
+      // Accounting and Executive-created e-vouchers skip manager/CEO approval
+      // and go straight to the disbursement queue.
+      const submittedStatus = determineSubmittedEVoucherStatus(context, actor);
 
       const { error: submitErr } = await supabase
         .from("evouchers")
