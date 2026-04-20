@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router";
+import { useNavigate, useLocation } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import { supabase } from "../../utils/supabase/client";
 import { queryKeys } from "../../lib/queryKeys";
@@ -1440,6 +1440,7 @@ interface TabCounts {
 
 export function UserManagement() {
   const { can } = usePermission();
+  const location = useLocation();
   const canViewUsersTab          = can("admin_users_tab", "view");
   const canViewTeamsTab          = can("admin_teams_tab", "view");
   const canViewOverridesTab      = can("admin_overrides_tab", "view");
@@ -1453,7 +1454,9 @@ export function UserManagement() {
     return "users";
   });
   const [tabCounts, setTabCounts] = useState<TabCounts>({ users: 0, teams: 0, overrides: 0, profiles: 0 });
-  const [configuringUser, setConfiguringUser] = useState<ConfigUser | null>(null);
+  const [configuringUser, setConfiguringUser] = useState<ConfigUser | null>(
+    (location.state as any)?.configureUser ?? null
+  );
   const [editingProfile, setEditingProfile] = useState<Partial<AccessProfile> | null | undefined>(undefined);
   const handleUsersCount = useCallback((count: number) => setTabCounts(prev => ({ ...prev, users: count })), []);
   const handleTeamsCount = useCallback((count: number) => setTabCounts(prev => ({ ...prev, teams: count })), []);

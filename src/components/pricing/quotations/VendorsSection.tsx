@@ -7,6 +7,10 @@ import { FormSelect } from "./FormSelect";
 import { supabase } from "../../../utils/supabase/client";
 import { ChargeCategoriesManager } from "../shared/ChargeCategoriesManager";
 import { toast } from "sonner";
+import {
+  createSupabaseCatalogSyncClient,
+  syncChargeCategoriesToCatalog,
+} from "../../../utils/pricing/catalogSync";
 
 /**
  * 🎯 VENDORS SECTION - INLINE RATE MANAGEMENT
@@ -56,6 +60,10 @@ const VENDOR_MASTERLIST = NETWORK_PARTNERS.map(partner => ({
   charge_categories: partner.charge_categories,
   line_items: partner.line_items || []
 }));
+
+function isChargeCategoryData(data: QuotationChargeCategory[] | VendorLineItem[]): data is QuotationChargeCategory[] {
+  return data.length > 0 && "line_items" in data[0];
+}
 
 interface VendorsSectionProps {
   vendors: Vendor[];
@@ -287,7 +295,14 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
       
       // Import if we have data
       if (data && data.length > 0) {
-        onImportCharges(vendor.vendor_id || vendorId, vendor.name || "Unknown Vendor", data, vendor.service_tag);
+        let dataToImport = data;
+
+        if (isChargeCategoryData(data)) {
+          dataToImport = await syncChargeCategoriesToCatalog(data, createSupabaseCatalogSyncClient(), { side: "revenue" });
+          setVendorRatesCache(prev => new Map(prev).set(vendorId, dataToImport as QuotationChargeCategory[]));
+        }
+
+        onImportCharges(vendor.vendor_id || vendorId, vendor.name || "Unknown Vendor", dataToImport, vendor.service_tag);
       }
     }
   };
@@ -313,25 +328,33 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
     setSavingVendorId(vendorId);
     
     try {
+      const syncedRates = await syncChargeCategoriesToCatalog(
+        cachedRates,
+        createSupabaseCatalogSyncClient(),
+        { side: "revenue" }
+      );
+
       // Step 1: Save to backend - delete existing and re-insert
       await supabase.from('vendor_charge_categories').delete().eq('vendor_id', vendor.vendor_id);
-      if (cachedRates.length > 0) {
+      if (syncedRates.length > 0) {
         const { error: saveError } = await supabase.from('vendor_charge_categories').insert(
-          cachedRates.map((cc: any) => ({ ...cc, vendor_id: vendor.vendor_id }))
+          syncedRates.map((cc: any) => ({ ...cc, vendor_id: vendor.vendor_id }))
         );
         if (saveError) throw new Error(saveError.message);
       }
-      console.log(`✅ Saved ${cachedRates.length} categories to backend for ${vendor.name}`);
+      console.log(`✅ Saved ${syncedRates.length} categories to backend for ${vendor.name}`);
+
+      setVendorRatesCache(prev => new Map(prev).set(vendorId, syncedRates));
       
       // Step 2: Update originalVendorRates to reflect saved state
-      setOriginalVendorRates(prev => new Map(prev).set(vendorId, JSON.parse(JSON.stringify(cachedRates))));
+      setOriginalVendorRates(prev => new Map(prev).set(vendorId, JSON.parse(JSON.stringify(syncedRates))));
       
       // Step 3: Clear unsaved changes indicator
       setHasUnsavedChanges(prev => new Map(prev).set(vendorId, false));
       
       // Step 4: Import to buying price (use existing function)
       if (onImportCharges) {
-        onImportCharges(vendor.vendor_id, vendor.name || "Unknown Vendor", cachedRates, vendor.service_tag);
+        onImportCharges(vendor.vendor_id, vendor.name || "Unknown Vendor", syncedRates, vendor.service_tag);
         console.log(`✅ Imported rates to buying price for ${vendor.name}`);
       }
       
@@ -491,7 +514,6 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
                   value={newVendorServiceTag}
                   onChange={(value) => setNewVendorServiceTag(value)}
                   options={[
-                    { value: "", label: "General" },
                     { value: "Forwarding", label: "Forwarding" },
                     { value: "Brokerage", label: "Brokerage" },
                     { value: "Trucking", label: "Trucking" },
@@ -511,7 +533,7 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
                   fontSize: "12px",
                   fontWeight: 500,
                   color: "white",
-                  backgroundColor: newVendorName.trim() ? "#0F766E" : "#D1D5DB",
+                  backgroundColor: newVendorName.trim() ? "#0F766E" : "var(--theme-border-default)",
                   border: "none",
                   borderRadius: "6px",
                   cursor: newVendorName.trim() ? "pointer" : "not-allowed"
@@ -531,7 +553,6 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
             const isExpanded = expandedVendorIds.has(vendor.id);
             const isLoading = loadingVendorRates.has(vendor.id);
             const cachedRates = vendorRatesCache.get(vendor.id) || [];
-            const hasRates = cachedRates.length > 0;
             
             // Check if vendor has rates (from cache, hardcoded, or backend)
             const hasRatesInCache = cachedRates && cachedRates.length > 0;
@@ -667,7 +688,7 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
                           fontWeight: 500,
                           color: "var(--neuron-ink-base)",
                           backgroundColor: "var(--theme-bg-surface)",
-                          border: "1px solid #D9E1DE",
+                          border: "1px solid var(--neuron-ui-border)",
                           borderRadius: "4px",
                           cursor: "pointer",
                           outline: "none"
@@ -688,10 +709,10 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
                           fontSize: "11px",
                           fontWeight: 500,
                           color: "var(--neuron-semantic-warn)",
-                          backgroundColor: "#FEF3E8",
+                          backgroundColor: "var(--neuron-semantic-warn-bg)",
                           padding: "4px 8px",
                           borderRadius: "4px",
-                          border: "1px solid #F5D9B8",
+                          border: "1px solid var(--theme-status-warning-border)",
                           whiteSpace: "nowrap"
                         }}>
                           <span style={{
@@ -770,7 +791,7 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
                             padding: "6px 12px",
                             color: "var(--neuron-brand-teal)",
                             backgroundColor: "var(--theme-bg-surface)",
-                            border: "1px solid #D9E1DE",
+                            border: "1px solid var(--neuron-ui-border)",
                             borderRadius: "4px",
                             cursor: "pointer",
                             display: "flex",
@@ -787,7 +808,7 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
                           }}
                           onMouseLeave={(e) => {
                             e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
-                            e.currentTarget.style.borderColor = "#D9E1DE";
+                            e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
                           }}
                         >
                           <Download size={14} />
@@ -812,7 +833,7 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
                             padding: "6px 12px",
                             color: "var(--neuron-ink-muted)",
                             backgroundColor: "var(--theme-bg-surface)",
-                            border: "1px solid #D9E1DE",
+                            border: "1px solid var(--neuron-ui-border)",
                             borderRadius: "4px",
                             cursor: "pointer",
                             display: "flex",
@@ -824,12 +845,12 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
                             whiteSpace: "nowrap"
                           }}
                           onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor = "#F5F5F5";
-                            e.currentTarget.style.borderColor = "#B0B0B0";
+                            e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)";
+                            e.currentTarget.style.borderColor = "var(--theme-border-default)";
                           }}
                           onMouseLeave={(e) => {
                             e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
-                            e.currentTarget.style.borderColor = "#D9E1DE";
+                            e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
                           }}
                         >
                           <Plus size={14} />
@@ -858,8 +879,8 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
                       transition: "all 0.15s ease"
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = "#FEE2E2";
-                      e.currentTarget.style.color = "#DC2626";
+                      e.currentTarget.style.backgroundColor = "var(--theme-status-danger-bg)";
+                      e.currentTarget.style.color = "var(--theme-status-danger-fg)";
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.backgroundColor = "transparent";
@@ -906,7 +927,7 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
                         Loading vendor rates...
                       </div>
                     </div>
-                  ) : hasRates ? (
+                  ) : (
                     // Rate Card Content - Direct, no header
                     <ChargeCategoriesManager
                       categories={cachedRates}
@@ -938,30 +959,6 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
                       readOnly={viewMode}
                       showCurrencySelector={false}
                     />
-                  ) : (
-                    // Empty State
-                    <div style={{
-                      padding: "32px",
-                      textAlign: "center",
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      gap: "8px"
-                    }}>
-                      <div style={{
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: "var(--neuron-ink-base)"
-                      }}>
-                        No rates configured yet
-                      </div>
-                      <div style={{
-                        fontSize: "12px",
-                        color: "var(--neuron-ink-muted)"
-                      }}>
-                        Click "Add Category" above to create your first rate category
-                      </div>
-                    </div>
                   )}
                 </div>
               )}

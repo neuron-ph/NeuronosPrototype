@@ -62,12 +62,11 @@ export function AddContactPanel({ isOpen, onClose, onSave, prefilledCustomerId, 
 
   if (!isOpen) return null;
 
-  const isFormValid = 
+  const isFormValid =
     formData.first_name.trim() !== "" &&
     formData.last_name.trim() !== "" &&
     formData.email.trim() !== "" &&
     formData.phone.trim() !== "" &&
-    formData.customer_id !== "" &&
     formData.owner_id !== "";
 
   return (
@@ -281,12 +280,12 @@ export function AddContactPanel({ isOpen, onClose, onSave, prefilledCustomerId, 
               </div>
 
               <div>
-                <label 
-                  htmlFor="customer_id" 
+                <label
+                  htmlFor="customer_id"
                   className="block mb-1.5"
                   style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
                 >
-                  Company <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
+                  Company <span style={{ fontSize: "12px", fontWeight: 400, color: "var(--theme-text-muted)" }}>(optional)</span>
                 </label>
                 {prefilledCustomerId && prefilledCustomerName ? (
                   // Show locked field when adding from Customer Detail page
@@ -312,11 +311,10 @@ export function AddContactPanel({ isOpen, onClose, onSave, prefilledCustomerId, 
                     value={formData.customer_id}
                     onChange={(value) => handleChange("customer_id", value)}
                     options={[
-                      { value: "", label: "Select a company..." },
+                      { value: "", label: "No company (standalone contact)" },
                       ...customers.map(company => ({ value: company.id, label: company.name }))
                     ]}
-                    placeholder="Select a company..."
-                    required
+                    placeholder="No company (standalone contact)"
                   />
                 )}
               </div>

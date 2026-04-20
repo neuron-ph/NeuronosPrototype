@@ -1,7 +1,8 @@
-import { useState, useRef } from "react";
+import { useRef } from "react";
 import { Trash2 } from "lucide-react";
 import type { QuotationLineItemNew } from "../../../types/pricing";
 import { CatalogItemCombobox } from "../../shared/pricing/CatalogItemCombobox";
+import { NaturalNumberInput } from "../../shared/pricing/NaturalNumberInput";
 import type { ChargeCategoriesMode } from "./ChargeCategoriesManager";
 
 interface FieldVisibility {
@@ -15,6 +16,7 @@ interface LineItemRowProps {
   item: QuotationLineItemNew;
   categoryId: string;
   categoryName: string;
+  catalogCategoryId?: string;
   onUpdate: (categoryId: string, itemId: string, lineItem: Omit<QuotationLineItemNew, "id" | "amount">) => void;
   onDelete: (categoryId: string, lineItemId: string) => void;
   currency: string;
@@ -27,6 +29,7 @@ export function LineItemRow({
   item, 
   categoryId, 
   categoryName,
+  catalogCategoryId,
   onUpdate, 
   onDelete,
   currency,
@@ -42,7 +45,7 @@ export function LineItemRow({
   const forexRef = useRef<HTMLInputElement>(null);
   const remarksRef = useRef<HTMLInputElement>(null);
 
-  const handleFieldChange = (field: keyof Omit<QuotationLineItemNew, "id" | "amount">, value: any) => {
+  const handleFieldsChange = (updates: Partial<Omit<QuotationLineItemNew, "id" | "amount">>) => {
     const updatedItem = {
       description: item.description,
       price: item.price,
@@ -54,9 +57,14 @@ export function LineItemRow({
       is_taxed: item.is_taxed ?? item.taxed ?? false,
       taxed: item.taxed ?? item.is_taxed ?? false,
       remarks: item.remarks,
-      [field]: value
+      catalog_item_id: item.catalog_item_id,
+      ...updates
     };
     onUpdate(categoryId, item.id, updatedItem);
+  };
+
+  const handleFieldChange = (field: keyof Omit<QuotationLineItemNew, "id" | "amount">, value: any) => {
+    handleFieldsChange({ [field]: value });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent, nextRef?: React.RefObject<HTMLInputElement | null>) => {
@@ -108,10 +116,8 @@ export function LineItemRow({
             value={item.description}
             catalogItemId={item.catalog_item_id}
             side="revenue"
-            onChange={(desc, catId) => {
-              handleFieldChange("description", desc);
-              if (catId !== undefined) handleFieldChange("catalog_item_id", catId);
-            }}
+            categoryId={catalogCategoryId}
+            onChange={(description, catalogItemId) => handleFieldsChange({ description, catalog_item_id: catalogItemId })}
             placeholder="Select or type charge..."
           />
         )}
@@ -119,12 +125,12 @@ export function LineItemRow({
 
       {/* Price */}
       <td style={{ padding: "4px" }}>
-        <input
+        <NaturalNumberInput
           ref={priceRef}
-          type="number"
           value={item.price}
-          onChange={(e) => handleFieldChange("price", parseFloat(e.target.value) || 0)}
+          onChange={(value) => handleFieldChange("price", value)}
           onKeyDown={(e) => handleKeyDown(e, mode === "simplified" ? unitRef : qtyRef)}
+          decimals={2}
           step="0.01"
           disabled={readOnly}
           style={inputStyle}
@@ -160,12 +166,12 @@ export function LineItemRow({
       {/* Quantity (Full mode only) */}
       {fieldVisibility.quantity && (
         <td style={{ padding: "4px" }}>
-          <input
+          <NaturalNumberInput
             ref={qtyRef}
-            type="number"
             value={item.quantity}
-            onChange={(e) => handleFieldChange("quantity", parseFloat(e.target.value) || 1)}
+            onChange={(value) => handleFieldChange("quantity", value)}
             onKeyDown={(e) => handleKeyDown(e, forexRef)}
+            decimals={2}
             step="0.01"
             disabled={readOnly}
             style={inputStyle}
@@ -181,12 +187,12 @@ export function LineItemRow({
       {/* Forex Rate (Full mode only) */}
       {fieldVisibility.forex && (
         <td style={{ padding: "4px" }}>
-          <input
+          <NaturalNumberInput
             ref={forexRef}
-            type="number"
             value={item.forex_rate}
-            onChange={(e) => handleFieldChange("forex_rate", parseFloat(e.target.value) || 1)}
+            onChange={(value) => handleFieldChange("forex_rate", value)}
             onKeyDown={(e) => handleKeyDown(e, remarksRef)}
+            decimals={4}
             step="0.0001"
             disabled={readOnly}
             style={inputStyle}

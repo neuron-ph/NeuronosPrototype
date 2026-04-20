@@ -174,7 +174,7 @@ export const mapExpenseRowsForScope = (
       status: row.status || "draft",
       amount: row.amount || row.total_amount || 0,
       currency: row.currency || "PHP",
-      isBillable: row.is_billable || false,
+      isBillable: row.is_billable || (row.details as any)?.is_billable || false,
       serviceType: row.service_type,
       projectNumber: row.project_number,
       contractId: row.contract_id || null,

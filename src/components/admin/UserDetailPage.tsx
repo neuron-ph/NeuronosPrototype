@@ -8,10 +8,14 @@ import { useTeams } from "../../hooks/useTeams";
 import { toast } from "sonner@2.0.3";
 import {
   ArrowLeft, Loader2, KeyRound, Trash2,
-  UserCheck, UserX, UserMinus, Pencil,
+  UserCheck, UserX, UserMinus, Pencil, Shield,
 } from "lucide-react";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { getOpsDisplayLabel } from "../../utils/roleLabels";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "../ui/alert-dialog";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -22,22 +26,6 @@ function formatRole(role: string) {
 }
 
 type UserStatus = "active" | "inactive" | "suspended";
-
-const STATUS_CONFIG: Record<UserStatus, { bg: string; text: string; dot: string; label: string }> = {
-  active:    { bg: "var(--theme-status-success-bg)", text: "#166534", dot: "var(--theme-status-success-fg)",  label: "Active" },
-  inactive:  { bg: "var(--neuron-pill-inactive-bg)", text: "var(--theme-text-muted)", dot: "var(--neuron-ui-muted)",  label: "Inactive" },
-  suspended: { bg: "var(--theme-status-warning-bg)", text: "var(--theme-status-warning-fg)", dot: "var(--theme-status-warning-fg)",  label: "Suspended" },
-};
-
-function StatusBadge({ status }: { status: string }) {
-  const c = STATUS_CONFIG[status as UserStatus] ?? STATUS_CONFIG.inactive;
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: 999, background: c.bg, fontSize: 12, fontWeight: 500, color: c.text }}>
-      <span style={{ width: 6, height: 6, borderRadius: "50%", background: c.dot, flexShrink: 0 }} />
-      {c.label}
-    </span>
-  );
-}
 
 const inputStyle: React.CSSProperties = {
   flex: 1, height: 36,
@@ -61,11 +49,28 @@ export function UserDetailPage() {
   const [editTeamId, setEditTeamId] = useState("");
   const [editServiceType, setEditServiceType] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
-  const [resetOpen, setResetOpen]   = useState(false);
-  const [newPw, setNewPw]           = useState("");
+  const [resetOpen, setResetOpen]       = useState(false);
+  const [newPw, setNewPw]               = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const { teams } = useTeams();
+
+  const { data: accessSummary } = useQuery({
+    queryKey: ["permission_overrides", "access-summary", userId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("permission_overrides")
+        .select("module_grants, applied_profile_id, profile:applied_profile_id(name)")
+        .eq("user_id", userId!)
+        .maybeSingle();
+      if (!data) return null;
+      const overrideCount = Object.keys(data.module_grants ?? {}).length;
+      const profileName = (data as any)?.profile?.name ?? null;
+      return { profileName, overrideCount };
+    },
+    enabled: !!userId,
+  });
 
   const { data: user, isLoading } = useQuery({
     queryKey: ["users", "detail", userId],
@@ -135,8 +140,6 @@ export function UserDetailPage() {
 
   const handleStatusChange = async (newStatus: UserStatus) => {
     if (!user) return;
-    const verb = { active: "activate", inactive: "deactivate", suspended: "suspend" }[newStatus];
-    if (!confirm(`${verb.charAt(0).toUpperCase() + verb.slice(1)} ${user.name}?`)) return;
     setActionLoading(newStatus);
     try {
       await callAdminAction("updateStatus", { userId: user.id, status: newStatus });
@@ -169,7 +172,6 @@ export function UserDetailPage() {
   const handleDelete = async () => {
     if (!user) return;
     if (user.id === currentUser?.id) { toast.error("You cannot delete your own account."); return; }
-    // Safeguard: don't delete last executive
     if (user.department === "Executive") {
       const { count } = await supabase
         .from("users")
@@ -178,11 +180,15 @@ export function UserDetailPage() {
         .eq("is_active", true);
       if ((count ?? 0) <= 1) { toast.error("Cannot delete the last active Executive."); return; }
     }
-    if (!confirm(`Permanently delete ${user.name}'s account? This cannot be undone.`)) return;
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteConfirmed = async () => {
+    setShowDeleteConfirm(false);
     setActionLoading("delete");
     try {
-      await callAdminAction("deleteUser", { userId: user.id });
-      toast.success(`${user.name}'s account deleted.`);
+      await callAdminAction("deleteUser", { userId: user!.id });
+      toast.success(`${user!.name}'s account deleted.`);
       navigate("/admin/users");
     } catch (err: any) {
       toast.error(err.message || "Failed to delete account");
@@ -251,7 +257,6 @@ export function UserDetailPage() {
             <div style={{ flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4, flexWrap: "wrap" }}>
                 <h2 style={{ fontSize: 20, fontWeight: 600, color: "var(--neuron-ink-primary)", margin: 0 }}>{user.name}</h2>
-                <StatusBadge status={status} />
               </div>
               <p style={{ fontSize: 13, color: "var(--neuron-ink-muted)", margin: "0 0 10px" }}>{user.email}</p>
               {!editing && (
@@ -357,9 +362,34 @@ export function UserDetailPage() {
           )}
         </div>
 
-        {/* ── Permissions ── (hidden until feature is ready) */}
+        {/* ── Access & Permissions ── */}
+        <div style={{ background: "var(--neuron-bg-elevated)", border: "1px solid var(--neuron-ui-border)", borderRadius: 12, padding: 24 }}>
+          <h3 style={{ fontSize: 13, fontWeight: 600, color: "var(--neuron-ink-muted)", marginBottom: 16, marginTop: 0, textTransform: "uppercase", letterSpacing: "0.05em" }}>Access &amp; Permissions</h3>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {accessSummary?.profileName ? (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: 999, background: "var(--theme-bg-surface-tint)", fontSize: 12, fontWeight: 500, color: "var(--neuron-action-primary)" }}>
+                  <Shield size={11} /> {accessSummary.profileName}
+                </span>
+              ) : (
+                <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)", fontStyle: "italic" }}>No profile applied</span>
+              )}
+              {(accessSummary?.overrideCount ?? 0) > 0 && (
+                <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>
+                  {accessSummary!.overrideCount} override{accessSummary!.overrideCount !== 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => navigate("/admin/users", { state: { configureUser: { id: user.id, name: user.name, email: user.email, department: user.department, role: user.role } } })}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", borderRadius: 8, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-action-primary)", fontSize: 13, fontWeight: 500, cursor: "pointer", flexShrink: 0 }}
+            >
+              <Shield size={14} /> Configure Access
+            </button>
+          </div>
+        </div>
 
-        {/* ── Account actions ── */}
+        {/* ── Account ── */}
         <div style={{ background: "var(--neuron-bg-elevated)", border: "1px solid var(--neuron-ui-border)", borderRadius: 12, padding: 24 }}>
           <h3 style={{ fontSize: 13, fontWeight: 600, color: "var(--neuron-ink-muted)", marginBottom: 16, marginTop: 0, textTransform: "uppercase", letterSpacing: "0.05em" }}>Account</h3>
 
@@ -404,16 +434,6 @@ export function UserDetailPage() {
               >
                 <KeyRound size={14} /> Reset Password
               </button>
-              {user.id !== currentUser?.id && (
-                <button
-                  onClick={handleDelete}
-                  disabled={!!actionLoading}
-                  style={{ height: 34, padding: "0 14px", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, border: "1px solid var(--theme-status-danger-border)", background: "var(--neuron-bg-elevated)", color: "var(--theme-status-danger-fg)", opacity: actionLoading ? 0.6 : 1 }}
-                >
-                  {actionLoading === "delete" ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Trash2 size={14} />}
-                  Delete Account
-                </button>
-              )}
             </div>
 
             {resetOpen && (
@@ -447,6 +467,50 @@ export function UserDetailPage() {
             )}
           </div>
         </div>
+
+        {/* ── Danger Zone ── */}
+        {user.id !== currentUser?.id && (
+          <div style={{ background: "var(--neuron-bg-elevated)", border: "1px solid var(--theme-status-danger-border)", borderRadius: 12, padding: 24 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 600, color: "var(--theme-status-danger-fg)", marginBottom: 16, marginTop: 0, textTransform: "uppercase", letterSpacing: "0.05em" }}>Danger Zone</h3>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 500, color: "var(--neuron-ink-primary)", margin: "0 0 4px" }}>Delete Account</p>
+                <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: 0 }}>
+                  Permanently removes this user's account. This cannot be undone.
+                </p>
+              </div>
+              <button
+                onClick={handleDelete}
+                disabled={!!actionLoading}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 34, padding: "0 14px", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: actionLoading ? "not-allowed" : "pointer", border: "1px solid var(--theme-status-danger-border)", background: "var(--neuron-bg-elevated)", color: "var(--theme-status-danger-fg)", flexShrink: 0, opacity: actionLoading ? 0.6 : 1 }}
+              >
+                {actionLoading === "delete" ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Trash2 size={14} />}
+                Delete Account
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Delete confirmation ── */}
+        <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete {user.name}'s account?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This permanently removes their account and cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteConfirmed}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Delete Account
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
       </div>
 

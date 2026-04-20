@@ -7,6 +7,7 @@ import { EVoucherStatusBadge } from "./EVoucherStatusBadge";
 import { EVoucherWorkflowPanel } from "./EVoucherWorkflowPanel";
 import { EVoucherHistoryTimeline } from "./EVoucherHistoryTimeline";
 import { LiquidationForm } from "./LiquidationForm";
+import { LiquidationHistory } from "./LiquidationHistory";
 import type { EVoucher } from "../../../types/evoucher";
 
 const TRANSACTION_TYPE_LABELS: Record<string, string> = {
@@ -33,6 +34,9 @@ export function EVoucherDetailPage() {
   const [evoucher, setEvoucher] = useState<EVoucher | null>(null);
   const [loading, setLoading] = useState(true);
   const [showLiquidation, setShowLiquidation] = useState(false);
+  const [historyKey, setHistoryKey] = useState(0);
+  const [prevTotalSpent, setPrevTotalSpent] = useState(0);
+  const [prevTotalReturned, setPrevTotalReturned] = useState(0);
 
   const from = searchParams.get("from") || "my";
   const backRoute = BACK_ROUTES[from] || "/my-evouchers";
@@ -64,6 +68,7 @@ export function EVoucherDetailPage() {
   // Exposed so child workflow panels can trigger a refresh
   const refetchEV = () => {
     if (!id) return;
+    setHistoryKey(k => k + 1);
     supabase
       .from("evouchers")
       .select("*, evoucher_line_items(*)")
@@ -234,6 +239,17 @@ export function EVoucherDetailPage() {
             </div>
           )}
 
+          {/* Liquidation History — cash_advance and budget_request only, post-disbursement */}
+          {(evoucher.transaction_type === "cash_advance" || evoucher.transaction_type === "budget_request") &&
+            ["disbursed", "pending_liquidation", "pending_verification", "posted"].includes(status) && (
+            <LiquidationHistory
+              key={historyKey}
+              evoucherId={evoucher.id}
+              advanceAmount={evoucher.amount}
+              currency={evoucher.currency}
+            />
+          )}
+
           {/* Approval Timeline */}
           <div style={{ border: "1px solid var(--theme-border-default)", borderRadius: "12px", overflow: "hidden" }}>
             <EVoucherHistoryTimeline evoucherId={evoucher.id} />
@@ -254,15 +270,37 @@ export function EVoucherDetailPage() {
               amount={evoucher.amount}
               currentStatus={evoucher.status}
               requestorId={evoucher.requestor_id}
-              currentUser={user ? { id: user.id, name: user.name, department: user.department, role: user.role } : undefined}
+              currentUser={user ? {
+                id: user.id,
+                name: user.name,
+                department: user.department,
+                role: user.role,
+                ev_approval_authority: user.ev_approval_authority ?? undefined,
+              } : undefined}
               onStatusChange={refetchEV}
+              isBillable={evoucher.is_billable === true || (evoucher as any).details?.is_billable === true}
+              bookingId={evoucher.booking_id ?? undefined}
+              projectNumber={evoucher.project_number}
+              currency={evoucher.currency}
+              expenseCategory={(evoucher as any).expense_category ?? evoucher.gl_category}
             />
           </div>
 
           {/* Liquidation shortcut */}
           {needsLiquidation && (
             <button
-              onClick={() => setShowLiquidation(true)}
+              onClick={async () => {
+                if (status === "pending_liquidation") {
+                  const { data } = await supabase
+                    .from("liquidation_submissions")
+                    .select("total_spend, unused_return")
+                    .eq("evoucher_id", evoucher.id);
+                  const rows = data ?? [];
+                  setPrevTotalSpent(rows.reduce((s: number, r: any) => s + (r.total_spend ?? 0), 0));
+                  setPrevTotalReturned(rows.reduce((s: number, r: any) => s + (r.unused_return ?? 0), 0));
+                }
+                setShowLiquidation(true);
+              }}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
                 padding: "14px", borderRadius: "10px", border: "1px solid var(--theme-action-primary-bg)",
@@ -271,7 +309,7 @@ export function EVoucherDetailPage() {
               }}
             >
               <ClipboardList size={16} />
-              Submit Liquidation
+              {status === "pending_liquidation" ? "Add More Receipts" : "Submit Liquidation"}
             </button>
           )}
 
@@ -376,6 +414,8 @@ export function EVoucherDetailPage() {
             setShowLiquidation(false);
             refetchEV();
           }}
+          previousTotalSpent={prevTotalSpent > 0 ? prevTotalSpent : undefined}
+          previousTotalReturned={prevTotalReturned > 0 ? prevTotalReturned : undefined}
         />
       )}
     </div>

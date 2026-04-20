@@ -178,6 +178,7 @@ export interface EVoucher {
   sub_category?: string;
   
   // Linking
+  booking_id?: string | null;
   project_number?: string; // Booking ID
   customer_id?: string;
   customer_name?: string;

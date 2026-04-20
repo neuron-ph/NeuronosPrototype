@@ -273,6 +273,7 @@ export function CategorySection({
                     item={item}
                     categoryId={category.id}
                     categoryName={categoryName}
+                    catalogCategoryId={category.catalog_category_id}
                     onUpdate={onUpdateLineItem}
                     onDelete={onDeleteLineItem}
                     currency={currency}

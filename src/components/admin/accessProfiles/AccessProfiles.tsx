@@ -12,6 +12,7 @@ import { PermissionGrantEditor } from "./PermissionGrantEditor";
 import type { AccessProfile, AccessProfileSummary, ModuleGrants } from "./accessProfileTypes";
 import { cloneGrants, countGrantOverrides, normalizeProfileName } from "./accessGrantUtils";
 import type { ConfigUser } from "../AccessConfiguration";
+import { SidePanel } from "../../common/SidePanel";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,7 +47,7 @@ interface UserOption {
   role: string;
 }
 
-function ApplyProfileDialog({
+function ApplyProfileContent({
   profile,
   onClose,
   onApplied,
@@ -116,7 +117,6 @@ function ApplyProfileDialog({
     queryClient.invalidateQueries({ queryKey: ["permission_overrides", "access-summary"] });
     queryClient.invalidateQueries({ queryKey: ["permission_overrides", "module_grants", selected.id] });
     toast.success(`Profile "${profile.name}" applied to ${selected.name}`);
-    // Audit log
     try {
       await (supabase as any).from("permission_audit_log").insert({
         target_user_id: selected.id,
@@ -134,107 +134,94 @@ function ApplyProfileDialog({
   };
 
   return (
-    <div
-      style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.4)" }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div style={{ width: 460, backgroundColor: "var(--neuron-bg-elevated)", borderRadius: 12, border: "1px solid var(--neuron-ui-border)", boxShadow: "0 20px 60px rgba(0,0,0,0.25)", overflow: "hidden" }}>
-        {/* Header */}
-        <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid var(--neuron-ui-border)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-            <UserCheck size={16} style={{ color: "var(--neuron-action-primary)" }} />
-            <h3 style={{ fontSize: 15, fontWeight: 600, color: "var(--neuron-ink-primary)", margin: 0 }}>Apply Profile</h3>
-          </div>
-          <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: 0 }}>
-            Select a user to apply <strong style={{ color: "var(--neuron-ink-primary)" }}>{profile.name}</strong>.
-            This will overwrite their current access overrides.
-          </p>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div style={{ padding: "16px 24px 12px", flexShrink: 0 }}>
+        <p style={{ fontSize: 13, color: "var(--neuron-ink-muted)", margin: "0 0 10px" }}>
+          Select a user to apply <strong style={{ color: "var(--neuron-ink-primary)" }}>{profile.name}</strong>.
+          This will overwrite their current access overrides.
+        </p>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 10px", height: 34, borderRadius: 8, border: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--neuron-bg-elevated)" }}>
+          <Search size={13} style={{ color: "var(--neuron-ink-muted)", flexShrink: 0 }} />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search users…"
+            autoFocus
+            style={{ flex: 1, border: "none", outline: "none", background: "transparent", fontSize: 13, color: "var(--neuron-ink-primary)" }}
+          />
+          {search && (
+            <button onClick={() => setSearch("")} style={{ display: "flex", alignItems: "center", border: "none", background: "none", cursor: "pointer", color: "var(--neuron-ink-muted)", padding: 0 }}>
+              <X size={12} />
+            </button>
+          )}
         </div>
+      </div>
 
-        {/* User search */}
-        <div style={{ padding: "16px 24px 12px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 10px", height: 34, borderRadius: 8, border: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--neuron-bg-elevated)", marginBottom: 10 }}>
-            <Search size={13} style={{ color: "var(--neuron-ink-muted)", flexShrink: 0 }} />
-            <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search users…"
-              autoFocus
-              style={{ flex: 1, border: "none", outline: "none", background: "transparent", fontSize: 13, color: "var(--neuron-ink-primary)" }}
-            />
-            {search && (
-              <button onClick={() => setSearch("")} style={{ display: "flex", alignItems: "center", border: "none", background: "none", cursor: "pointer", color: "var(--neuron-ink-muted)", padding: 0 }}>
-                <X size={12} />
-              </button>
-            )}
-          </div>
-          <div style={{ maxHeight: 220, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }}>
-            {filtered.slice(0, 30).map(u => (
-              <button
-                key={u.id}
-                onClick={() => setSelected(u)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, border: "none", cursor: "pointer", textAlign: "left",
-                  backgroundColor: selected?.id === u.id ? "color-mix(in oklch, var(--neuron-action-primary) 10%, transparent)" : "transparent",
-                  transition: "background-color 0.12s",
-                }}
-                onMouseEnter={e => { if (selected?.id !== u.id) e.currentTarget.style.backgroundColor = "var(--neuron-bg-surface-subtle)"; }}
-                onMouseLeave={e => { if (selected?.id !== u.id) e.currentTarget.style.backgroundColor = "transparent"; }}
-              >
-                <div style={{ width: 30, height: 30, borderRadius: "50%", backgroundColor: "var(--neuron-bg-surface-subtle)", border: "1.5px solid var(--neuron-ui-border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, color: "var(--neuron-ink-muted)", flexShrink: 0 }}>
-                  {u.name.charAt(0).toUpperCase()}
+      <div style={{ flex: 1, overflowY: "auto", padding: "0 24px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          {filtered.slice(0, 30).map(u => (
+            <button
+              key={u.id}
+              onClick={() => setSelected(u)}
+              style={{
+                display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, border: "none", cursor: "pointer", textAlign: "left",
+                backgroundColor: selected?.id === u.id ? "color-mix(in oklch, var(--neuron-action-primary) 10%, transparent)" : "transparent",
+                transition: "background-color 0.12s",
+              }}
+              onMouseEnter={e => { if (selected?.id !== u.id) e.currentTarget.style.backgroundColor = "var(--neuron-bg-surface-subtle)"; }}
+              onMouseLeave={e => { if (selected?.id !== u.id) e.currentTarget.style.backgroundColor = "transparent"; }}
+            >
+              <div style={{ width: 30, height: 30, borderRadius: "50%", backgroundColor: "var(--neuron-bg-surface-subtle)", border: "1.5px solid var(--neuron-ui-border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, color: "var(--neuron-ink-muted)", flexShrink: 0 }}>
+                {u.name.charAt(0).toUpperCase()}
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: "var(--neuron-ink-primary)", lineHeight: 1.3 }}>{u.name}</div>
+                <div style={{ fontSize: 11, color: "var(--neuron-ink-muted)" }}>{u.department} · {u.role.replaceAll("_", " ")}</div>
+              </div>
+              {selected?.id === u.id && (
+                <div style={{ marginLeft: "auto", width: 16, height: 16, borderRadius: "50%", backgroundColor: "var(--neuron-action-primary)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </div>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: "var(--neuron-ink-primary)", lineHeight: 1.3 }}>{u.name}</div>
-                  <div style={{ fontSize: 11, color: "var(--neuron-ink-muted)" }}>{u.department} · {u.role.replace("_", " ")}</div>
-                </div>
-                {selected?.id === u.id && (
-                  <div style={{ marginLeft: "auto", width: 16, height: 16, borderRadius: "50%", backgroundColor: "var(--neuron-action-primary)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </div>
-                )}
-              </button>
-            ))}
-            {filtered.length === 0 && (
-              <div style={{ padding: "16px", textAlign: "center", fontSize: 13, color: "var(--neuron-ink-muted)" }}>No users found</div>
-            )}
-          </div>
+              )}
+            </button>
+          ))}
+          {filtered.length === 0 && (
+            <div style={{ padding: "16px", textAlign: "center", fontSize: 13, color: "var(--neuron-ink-muted)" }}>No users found</div>
+          )}
         </div>
+      </div>
 
-        {/* Mismatch warning */}
-        {mismatchWarning && (
-          <div style={{ margin: "0 24px 12px", padding: "8px 12px", borderRadius: 8, backgroundColor: "var(--theme-status-warning-bg)", border: "1px solid var(--theme-status-warning-fg)", display: "flex", alignItems: "flex-start", gap: 8 }}>
-            <AlertTriangle size={13} style={{ color: "var(--theme-status-warning-fg)", flexShrink: 0, marginTop: 1 }} />
-            <span style={{ fontSize: 12, color: "var(--theme-status-warning-fg)" }}>
-              Mismatch in {mismatchWarning}. You can still apply the profile.
-            </span>
-          </div>
-        )}
-
-        {/* Footer */}
-        <div style={{ padding: "12px 24px 20px", borderTop: "1px solid var(--neuron-ui-border)", display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button
-            onClick={onClose}
-            style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-muted)", fontSize: 13, fontWeight: 500, cursor: "pointer" }}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleApply}
-            disabled={!selected || applying}
-            style={{
-              padding: "7px 16px", borderRadius: 8, border: "none",
-              background: selected ? "var(--neuron-action-primary)" : "var(--neuron-bg-surface-subtle)",
-              color: selected ? "var(--neuron-action-primary-text)" : "var(--neuron-ink-muted)",
-              fontSize: 13, fontWeight: 600, cursor: selected && !applying ? "pointer" : "not-allowed",
-              display: "flex", alignItems: "center", gap: 6, opacity: applying ? 0.7 : 1,
-            }}
-          >
-            <UserCheck size={13} />
-            {applying ? "Applying…" : "Apply Profile"}
-          </button>
+      {mismatchWarning && (
+        <div style={{ margin: "0 24px", padding: "8px 12px", borderRadius: 8, backgroundColor: "var(--theme-status-warning-bg)", border: "1px solid color-mix(in oklch, var(--theme-status-warning-fg) 40%, transparent)", display: "flex", alignItems: "flex-start", gap: 8, flexShrink: 0 }}>
+          <AlertTriangle size={13} style={{ color: "var(--theme-status-warning-fg)", flexShrink: 0, marginTop: 1 }} />
+          <span style={{ fontSize: 12, color: "var(--theme-status-warning-fg)" }}>
+            Mismatch in {mismatchWarning}. You can still apply the profile.
+          </span>
         </div>
+      )}
+
+      <div style={{ flexShrink: 0, padding: "12px 24px 20px", borderTop: "1px solid var(--neuron-ui-border)", display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+        <button
+          onClick={onClose}
+          style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-muted)", fontSize: 13, fontWeight: 500, cursor: "pointer" }}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleApply}
+          disabled={!selected || applying}
+          style={{
+            padding: "7px 16px", borderRadius: 8, border: "none",
+            background: selected ? "var(--neuron-action-primary)" : "var(--neuron-bg-surface-subtle)",
+            color: selected ? "var(--neuron-action-primary-text)" : "var(--neuron-ink-muted)",
+            fontSize: 13, fontWeight: 600, cursor: selected && !applying ? "pointer" : "not-allowed",
+            display: "flex", alignItems: "center", gap: 6, opacity: applying ? 0.7 : 1,
+          }}
+        >
+          <UserCheck size={13} />
+          {applying ? "Applying…" : "Apply Profile"}
+        </button>
       </div>
     </div>
   );
@@ -242,7 +229,7 @@ function ApplyProfileDialog({
 
 // ─── Delete Confirm Dialog ────────────────────────────────────────────────────
 
-function DeleteProfileDialog({
+function DeleteProfileContent({
   profile,
   onClose,
   onDeleted,
@@ -257,7 +244,12 @@ function DeleteProfileDialog({
 
   const handleDelete = async () => {
     setDeleting(true);
-    // Audit log first
+    const { error } = await supabase.from("access_profiles").delete().eq("id", profile.id);
+    if (error) {
+      setDeleting(false);
+      toast.error("Failed to delete profile");
+      return;
+    }
     try {
       await (supabase as any).from("permission_audit_log").insert({
         changed_by: currentUser?.name || currentUser?.email || "unknown",
@@ -268,12 +260,7 @@ function DeleteProfileDialog({
         },
       });
     } catch { console.warn("[AccessProfiles] audit log failed") }
-    const { error } = await supabase.from("access_profiles").delete().eq("id", profile.id);
     setDeleting(false);
-    if (error) {
-      toast.error("Failed to delete profile");
-      return;
-    }
     queryClient.invalidateQueries({ queryKey: ["access_profiles"] });
     queryClient.invalidateQueries({ queryKey: ["permission_overrides", "access-summary"] });
     toast.success(`Profile "${profile.name}" deleted`);
@@ -282,33 +269,30 @@ function DeleteProfileDialog({
   };
 
   return (
-    <div
-      style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.4)" }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div style={{ width: 400, backgroundColor: "var(--neuron-bg-elevated)", borderRadius: 12, border: "1px solid var(--neuron-ui-border)", boxShadow: "0 20px 60px rgba(0,0,0,0.25)", overflow: "hidden" }}>
-        <div style={{ padding: "20px 24px 16px" }}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, color: "var(--neuron-ink-primary)", margin: "0 0 8px" }}>Delete Profile</h3>
-          <p style={{ fontSize: 13, color: "var(--neuron-ink-muted)", margin: 0, lineHeight: 1.5 }}>
-            Are you sure you want to delete <strong style={{ color: "var(--neuron-ink-primary)" }}>{profile.name}</strong>?
-          </p>
-          <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: "8px 0 0", lineHeight: 1.5 }}>
-            Users who had this profile applied will keep their current access rules unchanged. The profile reference will be cleared.
-          </p>
-        </div>
-        <div style={{ padding: "12px 24px 20px", borderTop: "1px solid var(--neuron-ui-border)", display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button onClick={onClose} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-muted)", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
-            Cancel
-          </button>
-          <button
-            onClick={handleDelete}
-            disabled={deleting}
-            style={{ padding: "7px 16px", borderRadius: 8, border: "none", background: "var(--neuron-semantic-error, #dc2626)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: deleting ? "not-allowed" : "pointer", opacity: deleting ? 0.7 : 1, display: "flex", alignItems: "center", gap: 6 }}
-          >
-            <Trash2 size={13} />
-            {deleting ? "Deleting…" : "Delete"}
-          </button>
-        </div>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div style={{ flex: 1, padding: 24 }}>
+        <p style={{ fontSize: 13, color: "var(--neuron-ink-muted)", margin: 0, lineHeight: 1.5 }}>
+          Are you sure you want to delete <strong style={{ color: "var(--neuron-ink-primary)" }}>{profile.name}</strong>?
+        </p>
+        <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: "8px 0 0", lineHeight: 1.5 }}>
+          Users who had this profile applied will keep their current access rules unchanged. The profile reference will be cleared.
+        </p>
+      </div>
+      <div style={{ flexShrink: 0, padding: "12px 24px 20px", borderTop: "1px solid var(--neuron-ui-border)", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <button
+          onClick={onClose}
+          style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-muted)", fontSize: 13, fontWeight: 500, cursor: "pointer" }}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          style={{ padding: "7px 16px", borderRadius: 8, border: "none", background: "var(--neuron-semantic-error, #dc2626)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: deleting ? "not-allowed" : "pointer", opacity: deleting ? 0.7 : 1, display: "flex", alignItems: "center", gap: 6 }}
+        >
+          <Trash2 size={13} />
+          {deleting ? "Deleting…" : "Delete"}
+        </button>
       </div>
     </div>
   );
@@ -695,23 +679,35 @@ export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditPr
         />
       )}
 
-      {/* Apply dialog */}
-      {applyingProfile && (
-        <ApplyProfileDialog
-          profile={applyingProfile}
-          onClose={() => setApplyingProfile(null)}
-          onApplied={() => setApplyingProfile(null)}
-        />
-      )}
+      <SidePanel
+        isOpen={!!applyingProfile}
+        onClose={() => setApplyingProfile(null)}
+        size="sm"
+        title="Apply Profile"
+      >
+        {applyingProfile && (
+          <ApplyProfileContent
+            profile={applyingProfile}
+            onClose={() => setApplyingProfile(null)}
+            onApplied={() => setApplyingProfile(null)}
+          />
+        )}
+      </SidePanel>
 
-      {/* Delete dialog */}
-      {deletingProfile && (
-        <DeleteProfileDialog
-          profile={deletingProfile}
-          onClose={() => setDeletingProfile(null)}
-          onDeleted={() => setDeletingProfile(null)}
-        />
-      )}
+      <SidePanel
+        isOpen={!!deletingProfile}
+        onClose={() => setDeletingProfile(null)}
+        size="sm"
+        title="Delete Profile"
+      >
+        {deletingProfile && (
+          <DeleteProfileContent
+            profile={deletingProfile}
+            onClose={() => setDeletingProfile(null)}
+            onDeleted={() => setDeletingProfile(null)}
+          />
+        )}
+      </SidePanel>
     </div>
   );
 }

@@ -114,6 +114,12 @@ export function UnifiedExpensesTab({
 
     setConvertingId(null);
     if (error) {
+      // Unique index violation means auto-billing already created it on approval
+      if (error.code === "23505") {
+        toast.info("Already converted to a billing item");
+        onRefresh?.();
+        return;
+      }
       toast.error("Failed to convert expense to billing item");
       return;
     }
@@ -410,8 +416,7 @@ export function UnifiedExpensesTab({
           request_date: selectedExpense.expenseDate || selectedExpense.createdAt,
           expense_category: selectedExpense.expenseCategory,
           project_number: selectedExpense.projectNumber || projectNumber || "",
-          // Defaults for view mode
-          transaction_type: "expense",
+          transaction_type: (selectedExpense.transactionType || selectedExpense.transaction_type || "expense") as string,
           is_billable: selectedExpense.isBillable,
           sub_category: "",
           line_items: [{

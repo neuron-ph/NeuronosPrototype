@@ -265,9 +265,10 @@ export function CatalogItemCombobox({
   }, [items, searchText, categoryId]);
 
   // Check if typed text exactly matches an existing item
-  const exactMatch = items.some(
-    (item) => item.name.toLowerCase() === searchText.toLowerCase().trim()
-  );
+  const exactMatch = items.some((item) => {
+    const sameName = item.name.toLowerCase() === searchText.toLowerCase().trim();
+    return sameName && (!categoryId || item.category_id === categoryId);
+  });
 
   // Handle selecting an existing item
   const handleSelect = (item: CatalogItem) => {

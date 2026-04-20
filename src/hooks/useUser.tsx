@@ -22,6 +22,8 @@ export interface User {
   service_type?: 'Forwarding' | 'Brokerage' | 'Trucking' | 'Marine Insurance' | 'Others' | null;
   // Display-only hierarchy label — not RBAC, applies to all departments
   team_role?: TeamRole | null;
+  // EV-specific delegation: TL with this flag bypasses CEO and routes directly to Accounting
+  ev_approval_authority?: boolean | null;
 }
 
 interface SignupOptions {
@@ -84,6 +86,7 @@ async function fetchUserProfile(authUid: string): Promise<User | null> {
       phone: data.phone || null,
       service_type: data.service_type || null,
       team_role: data.team_role || null,
+      ev_approval_authority: data.ev_approval_authority ?? null,
     };
   } catch (error) {
     console.error('Error fetching user profile:', error);

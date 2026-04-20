@@ -71,7 +71,8 @@ export function ExpensesTab({
           category: ev.expense_category || ev.gl_category,
           subCategory: ev.sub_category || ev.gl_sub_category,
           lineItems: ev.line_items || [],
-          isBillable: ev.is_billable,
+          isBillable: ev.is_billable ?? ev.details?.is_billable ?? false,
+          transactionType: ev.transaction_type || ev.details?.transaction_type || "expense",
         } as unknown as OperationsExpense;
       });
 

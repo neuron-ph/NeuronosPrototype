@@ -145,7 +145,7 @@ export const normalizeBookingExpense = (row: Record<string, unknown>): BookingEx
       asString(row.expense_category) ??
       asString(row.expenseCategory) ??
       asString(row.category),
-    isBillable: asBoolean(row.is_billable ?? row.isBillable),
+    isBillable: asBoolean(row.is_billable ?? row.isBillable ?? (row.details as any)?.is_billable),
     paymentStatus: asString(row.payment_status) ?? asString(row.paymentStatus),
   };
 };

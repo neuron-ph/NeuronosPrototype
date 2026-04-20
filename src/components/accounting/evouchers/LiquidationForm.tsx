@@ -18,6 +18,9 @@ interface LiquidationFormProps {
   onSubmitted?: () => void;
   /** When true, renders inline (no SidePanel wrapper) */
   inline?: boolean;
+  /** Cumulative totals from prior submissions — used for balance display and overspend detection */
+  previousTotalSpent?: number;
+  previousTotalReturned?: number;
 }
 
 function newLineItem(): LiquidationLineItem {
@@ -37,15 +40,23 @@ export function LiquidationForm({
   currentUser,
   onSubmitted,
   inline = false,
+  previousTotalSpent = 0,
+  previousTotalReturned = 0,
 }: LiquidationFormProps) {
   const [lineItems, setLineItems] = useState<LiquidationLineItem[]>([newLineItem()]);
   const [unusedReturn, setUnusedReturn] = useState<string>("");
   const [isFinal, setIsFinal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const totalSpend = lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-  const overspend = totalSpend - advanceAmount;
+  const currentSessionSpend = lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  // Keep totalSpend as current-session value for DB storage
+  const totalSpend = currentSessionSpend;
+  const finalReturn = isFinal ? (Number(unusedReturn) || 0) : 0;
+  const cumulativeSpend = previousTotalSpent + currentSessionSpend;
+  const cumulativeReturned = previousTotalReturned + finalReturn;
+  const overspend = Math.max(0, cumulativeSpend - cumulativeReturned - advanceAmount);
   const hasOverspend = isFinal && overspend > 0;
+  const hasPrevious = previousTotalSpent > 0 || previousTotalReturned > 0;
 
   const updateItem = (id: string, field: keyof LiquidationLineItem, value: string | number) => {
     setLineItems((prev) =>
@@ -69,8 +80,7 @@ export function LiquidationForm({
     }
 
     if (isFinal && hasOverspend) {
-      // Auto-create a Reimbursement EV after this submission completes
-      const confirmMsg = `Your spend (₱${totalSpend.toLocaleString()}) exceeds the advance (₱${advanceAmount.toLocaleString()}) by ₱${overspend.toLocaleString()}. A Reimbursement E-Voucher will be created for this difference. Proceed?`;
+      const confirmMsg = `Your total spend (₱${cumulativeSpend.toLocaleString()}) exceeds the advance (₱${advanceAmount.toLocaleString()}) by ₱${overspend.toLocaleString()}. A Reimbursement E-Voucher will be created for this difference. Proceed?`;
       if (!confirm(confirmMsg)) return;
     }
 
@@ -119,7 +129,7 @@ export function LiquidationForm({
           created_at: new Date().toISOString(),
         });
 
-        // 3. Auto-create Reimbursement EV if overspend
+        // 3. Auto-create Reimbursement EV if overspend (cumulative)
         if (hasOverspend) {
           const reimbursementId = `EV-REIMB-${Date.now()}`;
           const reimbursementCreatedAt = new Date().toISOString();
@@ -131,7 +141,7 @@ export function LiquidationForm({
               transaction_type: "reimbursement",
               source_module: "operations",
               status: "draft",
-              amount: overspend,
+              amount: overspend, // cumulative overspend
               currency: "PHP",
               purpose: `Reimbursement for overspend on ${evoucherNumber}`,
               description: `Automatically created from liquidation of ${evoucherNumber}. Handler spent ₱${overspend.toLocaleString()} beyond the approved advance.`,
@@ -161,7 +171,7 @@ export function LiquidationForm({
         // Notify Accounting: liquidation submitted for verification
         createWorkflowTicket({
           subject: `Verify Liquidation: ${evoucherNumber}`,
-          body: `Liquidation receipts for ${evoucherNumber} are ready for your verification.\n\nTotal spend: ₱${totalSpend.toLocaleString()}`,
+          body: `Liquidation receipts for ${evoucherNumber} are ready for your verification.\n\nTotal spend: ₱${cumulativeSpend.toLocaleString()}\nUnused return: ₱${cumulativeReturned.toLocaleString()}`,
           type: "request",
           recipientDept: "Accounting",
           linkedRecordType: "expense",
@@ -231,6 +241,32 @@ export function LiquidationForm({
   const formBody = (
     <div style={{ padding: inline ? "20px 0 0 0" : "24px", overflowY: inline ? undefined : "auto", height: inline ? undefined : "100%" }}>
 
+        {/* Previous submissions callout */}
+        {hasPrevious && (
+          <div style={{
+            padding: "10px 14px", borderRadius: "8px",
+            backgroundColor: "var(--theme-bg-surface-subtle)",
+            border: "1px solid var(--theme-border-default)",
+            marginBottom: "12px",
+            display: "flex", flexDirection: "column", gap: "4px",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ fontSize: "12px", color: "var(--theme-text-muted)" }}>Previously filed</span>
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--theme-text-primary)", fontVariantNumeric: "tabular-nums" }}>
+                {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(previousTotalSpent)}
+              </span>
+            </div>
+            {previousTotalReturned > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ fontSize: "12px", color: "var(--theme-text-muted)" }}>Previously returned</span>
+                <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--theme-status-success-fg)", fontVariantNumeric: "tabular-nums" }}>
+                  {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(previousTotalReturned)}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Advance summary */}
         <div style={{ padding: "12px 16px", borderRadius: "8px", backgroundColor: "var(--theme-bg-surface-subtle)", border: "1px solid var(--theme-border-default)", marginBottom: "24px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
@@ -240,16 +276,26 @@ export function LiquidationForm({
             </span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-            <span style={{ fontSize: "13px", color: "var(--theme-text-muted)" }}>Total spent (this session)</span>
-            <span style={{ fontSize: "14px", fontWeight: 600, color: totalSpend > advanceAmount ? "var(--theme-status-danger-fg)" : "var(--theme-text-primary)" }}>
-              {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(totalSpend)}
+            <span style={{ fontSize: "13px", color: "var(--theme-text-muted)" }}>
+              {hasPrevious ? "This session's spend" : "Total spent (this session)"}
+            </span>
+            <span style={{ fontSize: "14px", fontWeight: 600, color: currentSessionSpend > advanceAmount ? "var(--theme-status-danger-fg)" : "var(--theme-text-primary)" }}>
+              {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(currentSessionSpend)}
             </span>
           </div>
-          {totalSpend > 0 && (
+          {hasPrevious && (
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+              <span style={{ fontSize: "13px", color: "var(--theme-text-muted)" }}>Cumulative spend</span>
+              <span style={{ fontSize: "14px", fontWeight: 600, color: cumulativeSpend > advanceAmount ? "var(--theme-status-danger-fg)" : "var(--theme-text-primary)" }}>
+                {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(cumulativeSpend)}
+              </span>
+            </div>
+          )}
+          {cumulativeSpend > 0 && (
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <span style={{ fontSize: "12px", color: "var(--theme-text-muted)" }}>Balance remaining</span>
-              <span style={{ fontSize: "12px", color: advanceAmount - totalSpend < 0 ? "var(--theme-status-danger-fg)" : "var(--theme-status-success-fg)", fontWeight: 500 }}>
-                {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(advanceAmount - totalSpend)}
+              <span style={{ fontSize: "12px", color: advanceAmount - cumulativeSpend < 0 ? "var(--theme-status-danger-fg)" : "var(--theme-status-success-fg)", fontWeight: 500 }}>
+                {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(advanceAmount - cumulativeSpend)}
               </span>
             </div>
           )}

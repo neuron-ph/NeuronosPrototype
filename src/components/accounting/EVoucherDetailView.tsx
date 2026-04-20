@@ -9,7 +9,7 @@ import type { EVoucher } from "../../types/evoucher";
 interface EVoucherDetailViewProps {
   evoucher: EVoucher;
   onClose: () => void;
-  currentUser?: { id: string; name: string; email: string; role?: string; department?: string };
+  currentUser?: { id: string; name: string; email: string; role?: string; department?: string; ev_approval_authority?: boolean | null };
   onStatusChange?: () => void;
 }
 
@@ -518,6 +518,11 @@ export function EVoucherDetailView({
               onStatusChange?.();
               onClose();
             }}
+            isBillable={evoucher.is_billable === true || (evoucher as any).details?.is_billable === true}
+            bookingId={evoucher.booking_id ?? undefined}
+            projectNumber={evoucher.project_number}
+            currency={evoucher.currency}
+            expenseCategory={(evoucher as any).expense_category ?? evoucher.gl_category}
           />
         </div>
 
