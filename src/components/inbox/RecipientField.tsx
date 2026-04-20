@@ -82,8 +82,10 @@ export function RecipientField({
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIdx, setHighlightedIdx] = useState(0);
+  const [openUpward, setOpenUpward] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const { people, depts } = buildOptions(allUsers, query, excludeIds);
   const flatOptions = [...people, ...depts];
@@ -120,10 +122,19 @@ export function RecipientField({
 
   useEffect(() => { setHighlightedIdx(0); }, [query, excludeIds.length]);
 
+  useEffect(() => {
+    if (!isOpen || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    setOpenUpward(spaceBelow < 280 && spaceAbove > spaceBelow);
+  }, [isOpen]);
+
   const showDropdown = !readOnly && isOpen && (people.length > 0 || depts.length > 0);
 
   return (
     <div
+      ref={containerRef}
       style={{
         padding: "8px 0",
         borderBottom: `1px solid ${isOpen && !readOnly ? "var(--theme-status-success-border)" : "var(--theme-border-subtle)"}`,
@@ -244,14 +255,18 @@ export function RecipientField({
           ref={dropdownRef}
           style={{
             position: "absolute",
-            bottom: "calc(100% + 4px)",
+            ...(openUpward
+              ? { bottom: "calc(100% + 4px)" }
+              : { top: "calc(100% + 4px)" }),
             left: 0,
             right: 0,
             zIndex: 9999,
             backgroundColor: "var(--theme-bg-surface)",
             border: "1px solid var(--theme-border-default)",
             borderRadius: 10,
-            boxShadow: "0 -4px 24px rgba(0,0,0,0.10)",
+            boxShadow: openUpward
+              ? "0 -4px 24px rgba(0,0,0,0.10)"
+              : "0 4px 24px rgba(0,0,0,0.10)",
             maxHeight: 260,
             overflowY: "auto",
           }}

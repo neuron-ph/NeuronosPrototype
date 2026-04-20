@@ -71,11 +71,12 @@ export function ChargeCategoriesManager({
     setExpandedCategories(newExpanded);
   };
 
-  const handleAddCategory = (name: string) => {
+  const handleAddCategory = (name: string, catalogCategoryId?: string) => {
     const newCategory: QuotationChargeCategory = {
       id: generateCategoryId(),
       category_name: name,
       name: name, // Backward compatibility
+      catalog_category_id: catalogCategoryId,
       line_items: [],
       subtotal: 0
     };
@@ -189,7 +190,6 @@ export function ChargeCategoriesManager({
     <section style={{ marginBottom: "32px" }}>
       <div style={{
         border: "1px solid var(--neuron-ui-border)",
-        borderLeft: "3px solid var(--neuron-brand-green)",
         borderRadius: "8px",
         backgroundColor: "var(--theme-bg-surface)",
         overflow: "visible"

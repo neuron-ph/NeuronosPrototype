@@ -11,6 +11,7 @@ import { toast } from "sonner@2.0.3";
 import { LiquidationForm } from "./LiquidationForm";
 import { GLConfirmationSheet } from "./GLConfirmationSheet";
 import type { EVoucherAPType } from "../../../types/evoucher";
+import { ensureBillableExpenseBillingItem } from "../../../utils/evoucherApproval";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -31,6 +32,12 @@ interface EVoucherWorkflowPanelProps {
   requestorId?: string;
   currentUser?: CurrentUser;
   onStatusChange?: () => void;
+  // Billable expense auto-billing
+  isBillable?: boolean;
+  bookingId?: string;
+  projectNumber?: string;
+  currency?: string;
+  expenseCategory?: string;
 }
 
 // ─── Button base styles — stable reference outside component ──────────────────
@@ -68,12 +75,19 @@ export function EVoucherWorkflowPanel({
   requestorId,
   currentUser,
   onStatusChange,
+  isBillable,
+  bookingId,
+  projectNumber,
+  currency,
+  expenseCategory,
 }: EVoucherWorkflowPanelProps) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const from = searchParams.get("from") || "accounting";
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [previousTotalSpent, setPreviousTotalSpent] = useState(0);
+  const [previousTotalReturned, setPreviousTotalReturned] = useState(0);
 
   // Inline confirm for destructive actions (cancel, unlock)
   const [pendingConfirm, setPendingConfirm] = useState<"cancel" | "unlock" | null>(null);
@@ -107,9 +121,7 @@ export function EVoucherWorkflowPanel({
   const canVerifyAndPost = canPerformEVAction("post_gl", role, department) && currentStatus === "pending_verification";
   const canUnlockForCorrection = canPerformEVAction("unlock_posted", role, department) && currentStatus === "posted";
 
-  const isAdvanceType =
-    transactionType === "cash_advance" || transactionType === "budget_request" ||
-    transactionType === "expense" || transactionType === "direct_expense";
+  const isAdvanceType = transactionType === "cash_advance" || transactionType === "budget_request";
   const canOpenLiquidation =
     isOwner && isAdvanceType &&
     (currentStatus === "disbursed" || currentStatus === "pending_liquidation");
@@ -144,6 +156,20 @@ export function EVoucherWorkflowPanel({
       .eq("id", evoucherId);
     if (error) throw error;
     await writeHistory(action, currentStatus, newStatus, notes);
+  };
+
+  // ── Billable expense auto-billing ─────────────────────────────────────────
+
+  const ensureBillableBillingItem = async () => {
+    const result = await ensureBillableExpenseBillingItem({
+      id: evoucherId,
+      isBillable,
+      bookingId,
+    });
+    if (result.billingError) {
+      console.error("Failed to ensure billable expense billing item", result.billingError);
+      toast.warning(`Approved, but automatic booking billing could not be created. ${result.billingError}`);
+    }
   };
 
   // ── Action handlers ───────────────────────────────────────────────────────
@@ -192,6 +218,7 @@ export function EVoucherWorkflowPanel({
           : "Approved — forwarded to CEO for final approval"
       );
       if (nextStatus === "pending_accounting" && currentUser?.id) {
+        await ensureBillableBillingItem();
         createWorkflowTicket({
           subject: `Disburse E-Voucher: ${evoucherNumber}`,
           body: `${evoucherNumber} has been approved and is ready for disbursement.`,
@@ -219,6 +246,7 @@ export function EVoucherWorkflowPanel({
     try {
       await transition("pending_accounting", "Approved by CEO / Executive");
       if (actor) logApproval("evoucher", evoucherId, evoucherNumber, currentStatus, "pending_accounting", actor, true);
+      await ensureBillableBillingItem();
       toast.success("Approved — forwarded to Accounting");
       if (currentUser?.id) {
         createWorkflowTicket({
@@ -579,7 +607,18 @@ export function EVoucherWorkflowPanel({
         {/* Requestor: open liquidation */}
         {canOpenLiquidation && !showLiquidationForm && (
           <button
-            onClick={() => setShowLiquidationForm(true)}
+            onClick={async () => {
+              if (currentStatus === "pending_liquidation") {
+                const { data } = await supabase
+                  .from("liquidation_submissions")
+                  .select("total_spend, unused_return")
+                  .eq("evoucher_id", evoucherId);
+                const rows = data ?? [];
+                setPreviousTotalSpent(rows.reduce((s: number, r: any) => s + (r.total_spend ?? 0), 0));
+                setPreviousTotalReturned(rows.reduce((s: number, r: any) => s + (r.unused_return ?? 0), 0));
+              }
+              setShowLiquidationForm(true);
+            }}
             style={{ ...btnBase, backgroundColor: "var(--theme-action-primary-bg)", color: "#fff", cursor: "pointer" }}
           >
             <ClipboardList size={15} />
@@ -646,6 +685,8 @@ export function EVoucherWorkflowPanel({
           currentUser={{ id: currentUser.id, name: currentUser.name }}
           onSubmitted={() => { setShowLiquidationForm(false); onStatusChange?.(); }}
           inline
+          previousTotalSpent={previousTotalSpent > 0 ? previousTotalSpent : undefined}
+          previousTotalReturned={previousTotalReturned > 0 ? previousTotalReturned : undefined}
         />
       )}
     </>

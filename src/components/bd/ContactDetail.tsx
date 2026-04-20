@@ -1,4 +1,4 @@
-import { ArrowLeft, Mail, Phone, Building2, User, Edit, Trash2, Paperclip, Download, FileText, Image as ImageIcon, File, Upload, CheckCircle2, AlertCircle, MessageSquare, Send, Plus, Users, MessageCircle, Linkedin, StickyNote, Flag, CheckSquare } from "lucide-react";
+import { ArrowLeft, Mail, Phone, Building2, User, Edit, Trash2, Paperclip, Download, FileText, Image as ImageIcon, File, Upload, CheckCircle2, AlertCircle, MessageSquare, Send, Plus, Users, MessageCircle, Linkedin, StickyNote, Flag, CheckSquare, UserCheck } from "lucide-react";
 import { useState, useRef } from "react";
 import { usePermission } from "../../context/PermissionProvider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -160,6 +160,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
   const [activityAttachments, setActivityAttachments] = useState<Attachment[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>(mockAttachments);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isConverting, setIsConverting] = useState(false);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -423,6 +424,41 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
     setIsEditing(false);
   };
 
+  const handleConvertToCustomer = async () => {
+    if (isConverting) return;
+    setIsConverting(true);
+    try {
+      const fullName = [contact.first_name, contact.last_name].filter(Boolean).join(" ") || contact.name || "Unnamed Contact";
+      const customerId = `customer-${Date.now()}`;
+      const { error: createError } = await supabase.from("customers").insert({
+        id: customerId,
+        name: fullName,
+        email: contact.email ?? null,
+        phone: contact.phone ?? contact.mobile_number ?? null,
+        status: "Active",
+        client_type: "Local",
+        created_by: user?.id ?? null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      if (createError) throw createError;
+
+      const { error: linkError } = await supabase
+        .from("contacts")
+        .update({ customer_id: customerId, lifecycle_stage: "Customer", updated_at: new Date().toISOString() })
+        .eq("id", contact.id);
+      if (linkError) throw linkError;
+
+      queryClient.invalidateQueries({ queryKey: queryKeys.customers.detail(customerId) });
+      queryClient.invalidateQueries({ queryKey: ["bd_contacts"] });
+      toast.success(`${fullName} is now a Customer Account.`);
+    } catch (err: any) {
+      toast.error("Failed to convert: " + (err.message ?? "Unknown error"));
+    } finally {
+      setIsConverting(false);
+    }
+  };
+
   const company = getCompany();
   const inquiries = getContactInquiries();
 
@@ -531,6 +567,29 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                         <Edit size={14} />
                         Update Details
                       </button>
+                      {!effectiveCustomerId && (
+                        <button
+                          onClick={handleConvertToCustomer}
+                          disabled={isConverting}
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg transition-colors text-[13px]"
+                          style={{
+                            border: "1px solid var(--theme-action-primary-bg)",
+                            backgroundColor: "var(--theme-bg-surface)",
+                            color: "var(--theme-action-primary-bg)",
+                            opacity: isConverting ? 0.6 : 1,
+                            cursor: isConverting ? "not-allowed" : "pointer"
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isConverting) e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
+                          }}
+                        >
+                          <UserCheck size={14} />
+                          {isConverting ? "Converting..." : "Convert to Customer"}
+                        </button>
+                      )}
                     </>
                   ) : (
                     <>
@@ -779,9 +838,15 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                     </span>
                   </div>
                   <div>
-                    <div className="text-[14px]" style={{ color: "var(--theme-text-primary)" }}>{company?.name || "—"}</div>
-                    {company?.industry && (
-                      <div className="text-[12px]" style={{ color: "var(--theme-text-muted)" }}>{company.industry}</div>
+                    {company ? (
+                      <>
+                        <div className="text-[14px]" style={{ color: "var(--theme-text-primary)" }}>{company.name}</div>
+                        {company.industry && (
+                          <div className="text-[12px]" style={{ color: "var(--theme-text-muted)" }}>{company.industry}</div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="text-[13px] italic" style={{ color: "var(--theme-text-muted)" }}>No company — standalone contact</div>
                     )}
                   </div>
                 </div>

@@ -104,6 +104,7 @@ export interface QuotationChargeCategory {
   name?: string;             // Backward compatibility alias
   line_items: QuotationLineItemNew[];
   subtotal: number;          // Auto-calculated sum of line_items amounts
+  catalog_category_id?: string; // FK to catalog_categories.id, used to scope catalog item creation
   
   // ✨ NEW: Category expansion state (for collapsible UI)
   is_expanded?: boolean;     // true = expanded, false = collapsed (default: true)

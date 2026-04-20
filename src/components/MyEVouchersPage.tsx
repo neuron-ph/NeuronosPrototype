@@ -10,8 +10,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useUser } from "../hooks/useUser";
 import { useEVouchers } from "../hooks/useEVouchers";
 import { canPerformEVAction } from "../utils/permissions";
-import { supabase } from "../utils/supabase/client";
 import { queryKeys } from "../lib/queryKeys";
+import { approveEVInline } from "../utils/evoucherApproval";
 import { toast } from "sonner@2.0.3";
 import { DataTable, type ColumnDef } from "./common/DataTable";
 import { EVoucherStatusBadge } from "./accounting/evouchers/EVoucherStatusBadge";
@@ -46,39 +46,6 @@ type ActiveTab = "all" | "draft" | "pending" | "active" | "done";
 const EASE_OUT_QUART = [0.16, 1, 0.3, 1] as const;
 
 // ─── Inline approval handler ──────────────────────────────────────────────────
-
-async function approveEVInline(
-  ev: EVoucher,
-  isExecutive: boolean,
-  userId: string | undefined,
-  userName: string | undefined,
-  department: string,
-) {
-  const nextStatus = isExecutive ? "pending_accounting" : "pending_ceo";
-  const action = isExecutive
-    ? "Approved by CEO / Executive"
-    : "Approved by Team Leader / Manager";
-
-  const { error } = await supabase
-    .from("evouchers")
-    .update({ status: nextStatus, updated_at: new Date().toISOString() })
-    .eq("id", ev.id);
-
-  if (error) throw error;
-
-  await supabase.from("evoucher_history").insert({
-    id: `EH-${Date.now()}`,
-    evoucher_id: ev.id,
-    action,
-    status: nextStatus,
-    user_id: userId ?? null,
-    user_name: userName ?? null,
-    user_role: department,
-    remarks: null,
-    metadata: { previous_status: ev.status, new_status: nextStatus },
-    created_at: new Date().toISOString(),
-  });
-}
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -194,9 +161,12 @@ export function MyEVouchersPage() {
   const handleInlineApprove = useCallback(async (ev: EVoucher) => {
     setApprovingId(ev.id);
     try {
-      await approveEVInline(ev, isExecutive, user?.id, user?.name, effectiveDepartment);
+      const result = await approveEVInline(ev, isExecutive, user?.id, user?.name, effectiveDepartment);
       const dest = isExecutive ? "Accounting" : "CEO";
       toast.success(`${ev.voucher_number} approved — forwarded to ${dest}`);
+      if (result.billingError) {
+        toast.warning(`Approved, but automatic booking billing could not be created. ${result.billingError}`);
+      }
       refreshAll();
     } catch {
       toast.error("Approval failed — use the detail panel to retry");

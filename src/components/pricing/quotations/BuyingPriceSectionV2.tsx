@@ -5,7 +5,7 @@ import { CustomDropdown } from "../../bd/CustomDropdown";
 import { CategoryHeader } from "./CategoryHeader";
 import { CategoryPresetDropdown } from "./CategoryPresetDropdown";
 import { CustomCheckbox } from "../../bd/CustomCheckbox";
-import { FormattedNumberInput } from "../../shared/pricing/FormattedNumberInput";
+import { NaturalNumberInput } from "../../shared/pricing/NaturalNumberInput";
 
 interface BuyingPriceSectionProps {
   categories: BuyingPriceCategory[];
@@ -280,7 +280,7 @@ export function BuyingPriceSectionV2({
     <div
       style={{
         backgroundColor: "var(--theme-bg-surface)",
-        border: "1px solid #E5E9E8",
+        border: "1px solid var(--neuron-ui-border)",
         borderRadius: "12px",
         padding: "28px",
         marginBottom: "24px",
@@ -294,7 +294,7 @@ export function BuyingPriceSectionV2({
         justifyContent: "space-between",
         marginBottom: "24px",
         paddingBottom: "20px",
-        borderBottom: "2px solid #E8F5F3"
+        borderBottom: "2px solid var(--theme-border-subtle)"
       }}>
         {/* Section Header */}
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -326,7 +326,7 @@ export function BuyingPriceSectionV2({
               fontWeight: 600,
               color: "var(--neuron-brand-green)",
               backgroundColor: "var(--theme-bg-surface)",
-              border: "1px solid #D9E1DE",
+              border: "1px solid var(--neuron-ui-border)",
               borderRadius: "8px",
               cursor: "pointer",
               transition: "all 0.2s ease"
@@ -338,7 +338,7 @@ export function BuyingPriceSectionV2({
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
-              e.currentTarget.style.borderColor = "#D9E1DE";
+              e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
               e.currentTarget.style.transform = "translateY(0)";
             }}
           >
@@ -403,7 +403,7 @@ export function BuyingPriceSectionV2({
 
             return (
               <div key={`${vendorGroup.vendor_id}-${vendorGroup.vendor_service}`} style={{
-                border: "1px solid #E0E6E4",
+                border: "1px solid var(--neuron-ui-border)",
                 borderRadius: "10px",
                 overflow: "hidden",
                 backgroundColor: "var(--theme-bg-surface)"
@@ -423,10 +423,10 @@ export function BuyingPriceSectionV2({
                     transition: "all 0.2s ease"
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = "#F0F9F8";
+                    e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)";
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
+                    e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)";
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -442,7 +442,7 @@ export function BuyingPriceSectionV2({
                     <span style={{
                       fontSize: "14px",
                       fontWeight: 600,
-                      color: "#2C3E38"
+                      color: "var(--neuron-ink-base)"
                     }}>
                       {vendorGroup.vendor_name}
                     </span>
@@ -481,14 +481,14 @@ export function BuyingPriceSectionV2({
 
                 {/* Vendor's Categories */}
                 {isVendorExpanded && (
-                  <div style={{ padding: "8px", backgroundColor: "#FCFCFC", display: "flex", flexDirection: "column", gap: "8px" }}>
+                  <div style={{ padding: "8px", backgroundColor: "var(--theme-bg-surface-subtle)", display: "flex", flexDirection: "column", gap: "8px" }}>
                     {vendorGroup.categories.map((categoryGroup, catIdx) => {
                       const catKey = `${vendorGroup.vendor_id}:::${categoryGroup.category_id}`;
                       const isCategoryExpanded = expandedVendorCategories.has(catKey);
 
                       return (
                         <div key={categoryGroup.category_id} style={{
-                          border: "1px solid #E0E6E4",
+                          border: "1px solid var(--neuron-ui-border)",
                           borderRadius: "10px",
                           overflow: "hidden",
                           backgroundColor: "var(--theme-bg-surface)"
@@ -516,10 +516,10 @@ export function BuyingPriceSectionV2({
                               transition: "all 0.2s ease"
                             }}
                             onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = "#F0F9F8";
+                              e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)";
                             }}
                             onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
+                              e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)";
                             }}
                           >
                             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -535,7 +535,7 @@ export function BuyingPriceSectionV2({
                               <span style={{
                                 fontSize: "14px",
                                 fontWeight: 600,
-                                color: "#2C3E38"
+                                color: "var(--neuron-ink-base)"
                               }}>
                                 {categoryGroup.category_name}
                               </span>
@@ -563,7 +563,7 @@ export function BuyingPriceSectionV2({
                           {isCategoryExpanded && (
                             <div style={{ padding: "12px", backgroundColor: "var(--theme-bg-surface)" }}>
                               <div style={{
-                                border: "1px solid #E5E9E8",
+                                border: "1px solid var(--neuron-ui-border)",
                                 borderRadius: "10px",
                                 overflow: "hidden",
                                 backgroundColor: "var(--theme-bg-surface)"
@@ -584,7 +584,7 @@ export function BuyingPriceSectionV2({
                                     fontWeight: 600,
                                     color: "var(--theme-text-muted)",
                                     letterSpacing: "0.02em",
-                                    borderBottom: "1px solid #EDF2F1"
+                                    borderBottom: "1px solid var(--theme-border-subtle)"
                                   }}>
                                     <div>Item</div>
                                     <div style={{ textAlign: "right" }}>Qty</div>
@@ -606,7 +606,7 @@ export function BuyingPriceSectionV2({
                                           gap: "8px",
                                           padding: "12px 16px",
                                           fontSize: "13px",
-                                          color: "#2C3E38",
+                                          color: "var(--neuron-ink-base)",
                                           backgroundColor: "var(--theme-bg-surface)",
                                           alignItems: "center",
                                           borderBottom: idx === categoryGroup.line_items.length - 1 ? "none" : "1px solid var(--theme-border-subtle)"
@@ -624,11 +624,11 @@ export function BuyingPriceSectionV2({
                                             width: "100%",
                                             padding: "6px 8px",
                                             fontSize: "13px",
-                                            border: "1px solid #E0E6E4",
+                                            border: "1px solid var(--neuron-ui-border)",
                                             borderRadius: "6px",
                                             backgroundColor: viewMode ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface)",
                                             fontWeight: 500,
-                                            color: "#2C3E38",
+                                            color: "var(--neuron-ink-base)",
                                             transition: "all 0.15s ease",
                                             overflow: "hidden",
                                             textOverflow: "ellipsis",
@@ -643,16 +643,17 @@ export function BuyingPriceSectionV2({
                                           }}
                                           onBlur={(e) => {
                                             if (viewMode) return;
-                                            e.currentTarget.style.borderColor = "#E0E6E4";
+                                            e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
                                             e.currentTarget.style.boxShadow = "none";
                                           }}
                                         />
                                         
                                         {/* Qty */}
-                                        <input
-                                          type="number"
-                                          value={item.quantity.toFixed(2)}
-                                          onChange={(e) => handleFieldChange(item._categoryId, item.id, 'quantity', parseFloat(e.target.value) || 0)}
+                                        <NaturalNumberInput
+                                          value={item.quantity}
+                                          onChange={(value) => handleFieldChange(item._categoryId, item.id, 'quantity', value)}
+                                          decimals={2}
+                                          formatOnBlur
                                           step="0.01"
                                           min="0"
                                           disabled={viewMode}
@@ -661,7 +662,7 @@ export function BuyingPriceSectionV2({
                                             padding: "6px 8px",
                                             fontSize: "13px",
                                             textAlign: "right",
-                                            border: "1px solid #E0E6E4",
+                                            border: "1px solid var(--neuron-ui-border)",
                                             borderRadius: "6px",
                                             backgroundColor: viewMode ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface)",
                                             color: "var(--neuron-brand-green)",
@@ -677,16 +678,17 @@ export function BuyingPriceSectionV2({
                                           }}
                                           onBlur={(e) => {
                                             if (viewMode) return;
-                                            e.currentTarget.style.borderColor = "#E0E6E4";
+                                            e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
                                             e.currentTarget.style.boxShadow = "none";
                                           }}
                                         />
                                         
                                         {/* Rate */}
-                                        <input
-                                          type="number"
-                                          value={item.price.toFixed(2)}
-                                          onChange={(e) => handleFieldChange(item._categoryId, item.id, 'price', parseFloat(e.target.value) || 0)}
+                                        <NaturalNumberInput
+                                          value={item.price}
+                                          onChange={(value) => handleFieldChange(item._categoryId, item.id, 'price', value)}
+                                          decimals={2}
+                                          formatOnBlur
                                           step="0.01"
                                           min="0"
                                           disabled={viewMode}
@@ -695,7 +697,7 @@ export function BuyingPriceSectionV2({
                                             padding: "6px 8px",
                                             fontSize: "13px",
                                             textAlign: "right",
-                                            border: "1px solid #E0E6E4",
+                                            border: "1px solid var(--neuron-ui-border)",
                                             borderRadius: "6px",
                                             backgroundColor: viewMode ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface)",
                                             color: "var(--neuron-brand-green)",
@@ -711,7 +713,7 @@ export function BuyingPriceSectionV2({
                                           }}
                                           onBlur={(e) => {
                                             if (viewMode) return;
-                                            e.currentTarget.style.borderColor = "#E0E6E4";
+                                            e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
                                             e.currentTarget.style.boxShadow = "none";
                                           }}
                                         />
@@ -734,17 +736,18 @@ export function BuyingPriceSectionV2({
                                         </div>
                                         
                                         {/* Forex */}
-                                        <FormattedNumberInput
+                                        <NaturalNumberInput
                                           value={item.forex_rate}
-                                          onChange={(val) => handleFieldChange(item._categoryId, item.id, 'forex_rate', val)}
+                                          onChange={(value) => handleFieldChange(item._categoryId, item.id, 'forex_rate', value)}
                                           decimals={2}
+                                          formatOnBlur
                                           disabled={viewMode}
                                           style={{
                                             width: "100%",
                                             padding: "6px 8px",
                                             fontSize: "12px",
                                             textAlign: "right",
-                                            border: "1px solid #E0E6E4",
+                                            border: "1px solid var(--neuron-ui-border)",
                                             borderRadius: "6px",
                                             backgroundColor: viewMode ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface-subtle)",
                                             outline: "none",
@@ -798,7 +801,7 @@ export function BuyingPriceSectionV2({
                                         gap: "14px",
                                         padding: "10px 16px 12px 28px",
                                         backgroundColor: "var(--theme-bg-surface-subtle)",
-                                        borderTop: "1px solid #EDF2F1",
+                                        borderTop: "1px solid var(--theme-border-subtle)",
                                         fontSize: "12px",
                                         color: "var(--theme-text-muted)",
                                         borderBottom: idx === categoryGroup.line_items.length - 1 ? "none" : "1px solid var(--theme-border-subtle)"
@@ -823,10 +826,10 @@ export function BuyingPriceSectionV2({
                                               flex: 1,
                                               padding: "5px 8px",
                                               fontSize: "12px",
-                                              border: "1px solid #E0E6E4",
+                                              border: "1px solid var(--neuron-ui-border)",
                                               borderRadius: "6px",
                                               backgroundColor: viewMode ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface)",
-                                              color: "#2C3E38",
+                                              color: "var(--neuron-ink-base)",
                                               outline: "none",
                                               transition: "all 0.15s ease",
                                               cursor: viewMode ? "default" : "text"
@@ -838,7 +841,7 @@ export function BuyingPriceSectionV2({
                                             }}
                                             onBlur={(e) => {
                                               if (viewMode) return;
-                                              e.currentTarget.style.borderColor = "#E0E6E4";
+                                              e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
                                               e.currentTarget.style.boxShadow = "none";
                                             }}
                                           />
@@ -876,7 +879,7 @@ export function BuyingPriceSectionV2({
                                             gap: "5px",
                                             padding: "5px 10px",
                                             fontSize: "12px",
-                                            border: "1px solid #FCD4D1",
+                                            border: "1px solid var(--theme-status-danger-border)",
                                             borderRadius: "6px",
                                             backgroundColor: "var(--theme-bg-surface)",
                                             color: "var(--theme-status-danger-fg)",
@@ -886,13 +889,13 @@ export function BuyingPriceSectionV2({
                                           }}
                                           title="Remove Item"
                                           onMouseEnter={(e) => {
-                                            e.currentTarget.style.backgroundColor = "#FEF2F2";
-                                            e.currentTarget.style.borderColor = "#DC2626";
+                                            e.currentTarget.style.backgroundColor = "var(--theme-status-danger-bg)";
+                                            e.currentTarget.style.borderColor = "var(--theme-status-danger-fg)";
                                             e.currentTarget.style.transform = "translateY(-1px)";
                                           }}
                                           onMouseLeave={(e) => {
                                             e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
-                                            e.currentTarget.style.borderColor = "#FCD4D1";
+                                            e.currentTarget.style.borderColor = "var(--theme-status-danger-border)";
                                             e.currentTarget.style.transform = "translateY(0)";
                                           }}
                                         >
@@ -921,9 +924,9 @@ export function BuyingPriceSectionV2({
             display: "flex",
             justifyContent: "flex-end",
             padding: "20px 24px",
-            backgroundColor: "#F0F9F8",
+            backgroundColor: "var(--theme-bg-surface-tint)",
             borderRadius: "10px",
-            border: "2px solid #D1EDE8"
+            border: "2px solid var(--theme-status-success-border)"
           }}>
             <div style={{
               display: "grid",
@@ -934,7 +937,7 @@ export function BuyingPriceSectionV2({
               <div style={{
                 fontSize: "15px",
                 fontWeight: 600,
-                color: "#2C3E38",
+                color: "var(--neuron-ink-base)",
                 letterSpacing: "-0.01em"
               }}>
                 Total Buying Price:

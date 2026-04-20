@@ -1,5 +1,5 @@
 import { Trash2 } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { CustomCheckbox } from "../../bd/CustomCheckbox";
 import { CustomDropdown } from "../../bd/CustomDropdown";
 import { FormattedNumberInput } from "./FormattedNumberInput";
@@ -67,6 +67,31 @@ export function UniversalPricingRow({
 }: UniversalPricingRowProps) {
   const { simpleMode, showCost, showMarkup, showTax, showForex, priceEditable, showPHPConversion } = config;
   const isViewMode = mode === "view";
+
+  // Draft state for numeric inputs — allows typing "2." without losing the decimal
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+
+  const draftVal = (field: string, numericVal: number): string | number =>
+    drafts[field] !== undefined ? drafts[field] : numericVal;
+
+  const onDraftChange = (field: string, val: string, commit: (n: number) => void, pattern = /^-?\d*\.?\d*$/) => {
+    if (val === '' || pattern.test(val)) {
+      setDrafts(prev => ({ ...prev, [field]: val }));
+      const num = parseFloat(val);
+      if (!isNaN(num)) commit(num);
+    }
+  };
+
+  const onDraftFocus = (field: string, numericVal: number) => {
+    setDrafts(prev => ({ ...prev, [field]: String(numericVal) }));
+  };
+
+  const onDraftBlur = (field: string, commit: (n: number) => void, e: React.FocusEvent<HTMLInputElement>, styleClear?: () => void) => {
+    const draft = drafts[field];
+    commit(draft === undefined || draft === '' ? 0 : parseFloat(draft) || 0);
+    setDrafts(prev => { const n = { ...prev }; delete n[field]; return n; });
+    styleClear?.();
+  };
 
   // Effective Visibility Logic (Matches PricingTableHeader)
   const showC = !simpleMode && showCost;
@@ -178,13 +203,8 @@ export function UniversalPricingRow({
           <input
             type="text"
             inputMode="decimal"
-            value={data.quantity}
-            onChange={(e) => {
-              const val = e.target.value;
-              if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                handleFieldChange('quantity', val === '' ? 0 : parseFloat(val) || 0);
-              }
-            }}
+            value={draftVal('quantity', data.quantity)}
+            onChange={(e) => onDraftChange('quantity', e.target.value, (n) => handleFieldChange('quantity', n), /^\d*\.?\d*$/)}
             style={{
               width: "100%",
               padding: "6px 8px",
@@ -201,12 +221,15 @@ export function UniversalPricingRow({
               WebkitAppearance: "none"
             }}
             onFocus={(e) => {
+              onDraftFocus('quantity', data.quantity);
               e.currentTarget.style.borderColor = "var(--neuron-brand-teal)";
               e.currentTarget.style.boxShadow = "0 0 0 3px rgba(15, 118, 110, 0.08)";
             }}
             onBlur={(e) => {
-              e.currentTarget.style.borderColor = "var(--theme-border-default)";
-              e.currentTarget.style.boxShadow = "none";
+              onDraftBlur('quantity', (n) => handleFieldChange('quantity', n), e, () => {
+                e.currentTarget.style.borderColor = "var(--theme-border-default)";
+                e.currentTarget.style.boxShadow = "none";
+              });
             }}
           />
         )}
@@ -226,13 +249,8 @@ export function UniversalPricingRow({
             <input
               type="text"
               inputMode="decimal"
-              value={data.base_cost}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                  handleFieldChange('base_cost', val === '' ? 0 : parseFloat(val) || 0);
-                }
-              }}
+              value={draftVal('base_cost', data.base_cost)}
+              onChange={(e) => onDraftChange('base_cost', e.target.value, (n) => handleFieldChange('base_cost', n), /^\d*\.?\d*$/)}
               style={{
                 width: "100%",
                 padding: "6px 8px",
@@ -249,12 +267,15 @@ export function UniversalPricingRow({
                 WebkitAppearance: "none"
               }}
               onFocus={(e) => {
+                onDraftFocus('base_cost', data.base_cost);
                 e.currentTarget.style.borderColor = "var(--neuron-brand-teal)";
                 e.currentTarget.style.boxShadow = "0 0 0 3px rgba(15, 118, 110, 0.08)";
               }}
               onBlur={(e) => {
-                e.currentTarget.style.borderColor = "var(--theme-border-default)";
-                e.currentTarget.style.boxShadow = "none";
+                onDraftBlur('base_cost', (n) => handleFieldChange('base_cost', n), e, () => {
+                  e.currentTarget.style.borderColor = "var(--theme-border-default)";
+                  e.currentTarget.style.boxShadow = "none";
+                });
               }}
             />
           )
@@ -265,13 +286,8 @@ export function UniversalPricingRow({
           <input
             type="text"
             inputMode="decimal"
-            value={isViewMode ? data.amount_added.toFixed(2) : data.amount_added}
-            onChange={(e) => {
-              const val = e.target.value;
-              if (val === '' || /^-?\d*\.?\d*$/.test(val)) {
-                handlers?.onAmountChange && handlers.onAmountChange(val === '' ? 0 : parseFloat(val) || 0);
-              }
-            }}
+            value={isViewMode ? data.amount_added.toFixed(2) : draftVal('amount_added', data.amount_added)}
+            onChange={(e) => onDraftChange('amount_added', e.target.value, (n) => handlers?.onAmountChange?.(n))}
             disabled={isViewMode}
             style={{
               width: "100%",
@@ -289,13 +305,16 @@ export function UniversalPricingRow({
             }}
             onFocus={(e) => {
               if (isViewMode) return;
+              onDraftFocus('amount_added', data.amount_added);
               e.currentTarget.style.borderColor = "var(--theme-markup-focus)";
               e.currentTarget.style.boxShadow = "0 0 0 3px rgba(245, 158, 11, 0.1)";
             }}
             onBlur={(e) => {
               if (isViewMode) return;
-              e.currentTarget.style.borderColor = "var(--theme-markup-border)";
-              e.currentTarget.style.boxShadow = "none";
+              onDraftBlur('amount_added', (n) => handlers?.onAmountChange?.(n), e, () => {
+                e.currentTarget.style.borderColor = "var(--theme-markup-border)";
+                e.currentTarget.style.boxShadow = "none";
+              });
             }}
           />
         )}
@@ -305,13 +324,8 @@ export function UniversalPricingRow({
           <input
             type="text"
             inputMode="decimal"
-            value={isViewMode ? data.percentage_added.toFixed(1) : data.percentage_added}
-            onChange={(e) => {
-              const val = e.target.value;
-              if (val === '' || /^-?\d*\.?\d*$/.test(val)) {
-                handlers?.onPercentageChange && handlers.onPercentageChange(val === '' ? 0 : parseFloat(val) || 0);
-              }
-            }}
+            value={isViewMode ? data.percentage_added.toFixed(1) : draftVal('percentage_added', data.percentage_added)}
+            onChange={(e) => onDraftChange('percentage_added', e.target.value, (n) => handlers?.onPercentageChange?.(n))}
             disabled={isViewMode}
             style={{
               width: "100%",
@@ -329,13 +343,16 @@ export function UniversalPricingRow({
             }}
             onFocus={(e) => {
               if (isViewMode) return;
+              onDraftFocus('percentage_added', data.percentage_added);
               e.currentTarget.style.borderColor = "var(--theme-markup-focus)";
               e.currentTarget.style.boxShadow = "0 0 0 3px rgba(245, 158, 11, 0.1)";
             }}
             onBlur={(e) => {
               if (isViewMode) return;
-              e.currentTarget.style.borderColor = "var(--theme-markup-border)";
-              e.currentTarget.style.boxShadow = "none";
+              onDraftBlur('percentage_added', (n) => handlers?.onPercentageChange?.(n), e, () => {
+                e.currentTarget.style.borderColor = "var(--theme-markup-border)";
+                e.currentTarget.style.boxShadow = "none";
+              });
             }}
           />
         )}

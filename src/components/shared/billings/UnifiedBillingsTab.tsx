@@ -10,6 +10,7 @@ import { toast } from "../../ui/toast-utils";
 import { supabase } from "../../../utils/supabase/client";
 import type { QuotationNew } from "../../../types/pricing";
 import { buildServiceToBookingMap, resolveBookingIdForService } from "../../../utils/financialSelectors";
+import { getBillingDisplayCategory } from "../../../utils/billingCategory";
 
 // Interface matching the backend response for billing items
 export interface BillingItem {
@@ -229,7 +230,7 @@ export function UnifiedBillingsTab({
          setLocalItems(prev => prev === mergedItems ? prev : mergedItems);
          
          // Update categories based on merged items — only update if content changed
-         const newCatNames = mergedItems.map(i => i.quotation_category || "General");
+         const newCatNames = mergedItems.map(getBillingDisplayCategory);
          const newCatsSet = new Set(newCatNames);
          if (newCatsSet.size === 0) newCatsSet.add("General");
          setActiveCategories(prev => {
@@ -290,7 +291,7 @@ export function UnifiedBillingsTab({
 
       // 4. Category Filter
       if (selectedCategory) {
-        const cat = item.quotation_category || "Uncategorized";
+        const cat = getBillingDisplayCategory(item);
         if (cat !== selectedCategory) return false;
       }
 
@@ -303,7 +304,7 @@ export function UnifiedBillingsTab({
     return filteredItems.map(item => ({
       id: item.id,
       date: item.created_at,
-      category: item.quotation_category || "Uncategorized",
+      category: getBillingDisplayCategory(item),
       serviceType: item.service_type || "General",
       description: item.description,
       status: item.status,
@@ -342,7 +343,7 @@ export function UnifiedBillingsTab({
 
   const handleRenameCategory = (oldName: string, newName: string) => {
     if (!newName.trim() || oldName === newName) return;
-    const hasImmutableItems = localItems.some((item) => (item.quotation_category || "General") === oldName && isImmutableBillingItem(item));
+    const hasImmutableItems = localItems.some((item) => getBillingDisplayCategory(item) === oldName && isImmutableBillingItem(item));
     if (hasImmutableItems) {
       toast.error("Categories with invoiced or paid billing lines cannot be renamed.");
       return;
@@ -358,7 +359,7 @@ export function UnifiedBillingsTab({
 
     // 2. Update Items
     setLocalItems(prev => prev.map(item => {
-        const cat = item.quotation_category || "General";
+        const cat = getBillingDisplayCategory(item);
         if (cat === oldName) {
             return { ...item, quotation_category: newName };
         }
@@ -368,7 +369,7 @@ export function UnifiedBillingsTab({
   };
 
   const handleDeleteCategory = (name: string) => {
-      const hasImmutableItems = localItems.some((item) => (item.quotation_category || "General") === name && isImmutableBillingItem(item));
+      const hasImmutableItems = localItems.some((item) => getBillingDisplayCategory(item) === name && isImmutableBillingItem(item));
       if (hasImmutableItems) {
           toast.error("Categories with invoiced or paid billing lines cannot be deleted.");
           return;
@@ -379,7 +380,7 @@ export function UnifiedBillingsTab({
               next.delete(name);
               return next;
           });
-          setLocalItems(prev => prev.filter(item => (item.quotation_category || "General") !== name));
+          setLocalItems(prev => prev.filter(item => getBillingDisplayCategory(item) !== name));
           setPendingChanges(true);
       }
   };
@@ -504,12 +505,17 @@ export function UnifiedBillingsTab({
             item.is_virtual ||
             (item.id && (item.id.startsWith('temp-') || item.id.startsWith('virtual-')));
 
-          const mapRow = (item: any) => ({
+          const mapRow = (item: any) => {
+            const displayCategory = getBillingDisplayCategory(item);
+            const persistedCategory = displayCategory === "General" ? "Uncategorized" : displayCategory;
+
+            return ({
             booking_id: item.booking_id || null,
             project_number: projectId,
             description: item.description || "",
             service_type: item.service_type || "",
-            category: item.quotation_category || "Uncategorized",
+            category: persistedCategory,
+            quotation_category: persistedCategory,
             amount: item.amount || 0,
             quantity: item.quantity || 1,
             currency: item.currency || "PHP",
@@ -525,13 +531,14 @@ export function UnifiedBillingsTab({
                   name: item.description || "",
                   unit_type: item.unit_type || null,
                   tax_code: item.tax_code || null,
-                  category_name: item.quotation_category || null,
+                  category_name: persistedCategory,
                   default_price: item.amount || 0,
                   currency: item.currency || "PHP",
                 }
               : (item.catalog_snapshot || {}),
             created_at: item.created_at || new Date().toISOString(),
-          });
+            });
+          };
 
           const realItems = itemsToSave.filter(i => !isNew(i));
           const newItems = itemsToSave.filter(i => isNew(i));
@@ -655,13 +662,17 @@ export function UnifiedBillingsTab({
 
   const handleSendServiceToBooking = async (itemIds: string[], bookingId: string) => {
     const selectedItems = localItems.filter(item => itemIds.includes(item.id));
-    const payload = selectedItems.map(item => ({
+    const payload = selectedItems.map(item => {
+      const displayCategory = getBillingDisplayCategory(item);
+      const persistedCategory = displayCategory === "General" ? null : displayCategory;
+
+      return ({
       id: item.id,
       is_virtual: Boolean(item.is_virtual || item.id.startsWith("virtual-") || item.id.startsWith("temp-")),
       description: item.description || "",
       service_type: item.service_type || "",
-      quotation_category: item.quotation_category || null,
-      category: item.quotation_category || item.category || null,
+      quotation_category: persistedCategory,
+      category: persistedCategory,
       amount: item.amount || 0,
       quantity: item.quantity || 1,
       currency: item.currency || "PHP",
@@ -675,13 +686,14 @@ export function UnifiedBillingsTab({
             name: item.description || "",
             unit_type: item.unit_type || null,
             tax_code: item.tax_code || null,
-            category_name: item.quotation_category || null,
+            category_name: persistedCategory,
             default_price: item.amount || 0,
             currency: item.currency || "PHP",
           }
         : (item.catalog_snapshot || {}),
       created_at: item.created_at || new Date().toISOString(),
-    }));
+      });
+    });
 
     const { error } = await supabase.rpc("send_billing_items_to_booking", {
       p_booking_id: bookingId,

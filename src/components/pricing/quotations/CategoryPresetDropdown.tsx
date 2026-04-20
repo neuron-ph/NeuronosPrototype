@@ -192,6 +192,7 @@ export function CategoryPresetDropdown({ isOpen, onClose, onSelect, buttonRef, a
                 width: "100%",
                 padding: "8px 36px 8px 36px",
                 fontSize: "13px",
+                color: "var(--theme-text-primary)",
                 border: "1px solid var(--theme-border-default)",
                 borderRadius: "6px",
                 outline: "none",

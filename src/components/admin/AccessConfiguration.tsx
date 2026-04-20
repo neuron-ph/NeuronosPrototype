@@ -8,6 +8,10 @@ import { useUser } from "../../hooks/useUser";
 import { PermissionGrantEditor } from "./accessProfiles/PermissionGrantEditor";
 import type { ModuleGrants, AccessProfileSummary } from "./accessProfiles/accessProfileTypes";
 import { cloneGrants, hasGrantOverrides, normalizeProfileName, shouldClearAppliedProfile } from "./accessProfiles/accessGrantUtils";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "../ui/alert-dialog";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -142,6 +146,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
   const [changedAfterProfileApply, setChangedAfterProfileApply] = useState(false);
   const [showApplyProfileMenu, setShowApplyProfileMenu] = useState(false);
   const [showSaveAsProfile, setShowSaveAsProfile] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
 
   // Query active profiles for Apply Profile dropdown
   const { data: profiles = [] } = useQuery<AccessProfileSummary[]>({
@@ -298,181 +303,27 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
 
       {/* Top bar */}
       <div style={{
-        padding: "16px 40px",
+        padding: "12px 40px",
         borderBottom: "1px solid var(--neuron-ui-border)",
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        flexShrink: 0, gap: 16,
+        display: "flex", alignItems: "center",
+        flexShrink: 0,
         backgroundColor: "var(--neuron-bg-elevated)",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
-          <button
-            onClick={onBack}
-            style={{
-              display: "flex", alignItems: "center", gap: 5,
-              padding: "6px 12px", borderRadius: 8,
-              border: "1px solid var(--neuron-ui-border)",
-              background: "transparent", color: "var(--neuron-ink-muted)",
-              fontSize: 13, fontWeight: 500, cursor: "pointer",
-              transition: "color 0.12s, border-color 0.12s", flexShrink: 0,
-            }}
-            onMouseEnter={e => { e.currentTarget.style.color = "var(--neuron-ink-primary)"; e.currentTarget.style.borderColor = "var(--neuron-ink-muted)"; }}
-            onMouseLeave={e => { e.currentTarget.style.color = "var(--neuron-ink-muted)"; e.currentTarget.style.borderColor = "var(--neuron-ui-border)"; }}
-          >
-            <ArrowLeft size={13} /> Back
-          </button>
-
-          <div style={{ width: 1, height: 24, backgroundColor: "var(--neuron-ui-border)", flexShrink: 0 }} />
-
-          {/* User identity */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-            <div style={{
-              width: 34, height: 34, borderRadius: "50%",
-              backgroundColor: "var(--neuron-bg-surface-subtle)",
-              border: "1.5px solid var(--neuron-ui-border)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 13, fontWeight: 600, color: "var(--neuron-ink-muted)", flexShrink: 0,
-            }}>
-              {(user.name || user.email || "?").charAt(0).toUpperCase()}
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <p style={{ fontSize: 14, fontWeight: 600, color: "var(--neuron-ink-primary)", margin: 0, lineHeight: 1.25 }}>
-                {user.name}
-              </p>
-              <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 2, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>{user.department}</span>
-                <span style={{ fontSize: 11, color: "var(--neuron-ui-border)" }}>·</span>
-                <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 7px", borderRadius: 999, backgroundColor: rc.bg, color: rc.text, flexShrink: 0 }}>
-                  {roleLabel}
-                </span>
-                {/* Profile badge */}
-                {showProfileBadge && (
-                  <>
-                    <span style={{ fontSize: 11, color: "var(--neuron-ui-border)" }}>·</span>
-                    <span style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 11, fontWeight: 500, padding: "1px 7px", borderRadius: 999, backgroundColor: "color-mix(in oklch, var(--neuron-action-primary) 12%, transparent)", color: "var(--neuron-action-primary)", flexShrink: 0 }}>
-                      <BookMarked size={10} />
-                      Based on: {appliedProfileName}
-                    </span>
-                  </>
-                )}
-                {lastSaved && (
-                  <>
-                    <span style={{ fontSize: 11, color: "var(--neuron-ui-border)" }}>·</span>
-                    <span style={{ fontSize: 11, color: "var(--neuron-ink-muted)" }}>
-                      Saved by {lastSaved.by} {formatRelativeTime(lastSaved.at)}
-                    </span>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Right actions */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          <AnimatePresence>
-            {isDirty && (
-              <motion.div
-                initial={{ opacity: 0, x: 8 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 8 }}
-                transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-                style={{ display: "flex", alignItems: "center", gap: 8 }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--theme-status-warning-fg)", padding: "5px 10px", borderRadius: 8, backgroundColor: "var(--theme-status-warning-bg)" }}>
-                  <AlertTriangle size={12} /> Unsaved changes
-                </div>
-                <button
-                  onClick={handleReset}
-                  style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 10px", borderRadius: 8, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-muted)", fontSize: 12, fontWeight: 500, cursor: "pointer" }}
-                  title="Discard all unsaved changes"
-                >
-                  <RotateCcw size={11} /> Reset
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Apply Profile button */}
-          <div ref={applyProfileBtnRef} style={{ position: "relative" }}>
-            <button
-              onClick={() => setShowApplyProfileMenu(v => !v)}
-              style={{
-                height: 34, padding: "0 12px", borderRadius: 8,
-                border: "1px solid var(--neuron-ui-border)",
-                background: "transparent", color: "var(--neuron-ink-muted)",
-                fontSize: 13, fontWeight: 500, cursor: "pointer",
-                display: "flex", alignItems: "center", gap: 5,
-                transition: "color 0.12s, border-color 0.12s",
-              }}
-            >
-              <BookMarked size={13} /> Apply Profile <ChevronDown size={11} style={{ opacity: 0.6 }} />
-            </button>
-            {showApplyProfileMenu && (
-              <div style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 1000, width: 240, backgroundColor: "var(--neuron-bg-elevated)", borderRadius: 10, border: "1px solid var(--neuron-ui-border)", boxShadow: "0 8px 24px rgba(0,0,0,0.12)", overflow: "hidden" }}>
-                {profiles.length === 0 ? (
-                  <div style={{ padding: "16px", fontSize: 12, color: "var(--neuron-ink-muted)", textAlign: "center" }}>No profiles yet</div>
-                ) : (
-                  <div style={{ maxHeight: 280, overflowY: "auto" }}>
-                    {profiles.map(p => (
-                      <button
-                        key={p.id}
-                        onClick={() => handleApplyProfile(p)}
-                        style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "flex-start", padding: "10px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left", borderTop: "1px solid var(--neuron-ui-border)", transition: "background-color 0.1s" }}
-                        onMouseEnter={e => e.currentTarget.style.backgroundColor = "var(--neuron-bg-surface-subtle)"}
-                        onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
-                      >
-                        <span style={{ fontSize: 13, fontWeight: 500, color: "var(--neuron-ink-primary)" }}>{p.name}</span>
-                        {p.target_department && (
-                          <span style={{ fontSize: 11, color: "var(--neuron-ink-muted)", marginTop: 1 }}>{p.target_department}</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Save as Profile button */}
-          {!loading && hasGrantOverrides(overrides) && (
-            <div style={{ position: "relative" }}>
-              <button
-                onClick={() => setShowSaveAsProfile(v => !v)}
-                style={{ height: 34, padding: "0 12px", borderRadius: 8, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-muted)", fontSize: 13, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}
-              >
-                <BookOpen size={13} /> Save as Profile
-              </button>
-              {showSaveAsProfile && (
-                <SaveAsProfileForm
-                  grants={overrides}
-                  onSaved={() => {}}
-                  onClose={() => setShowSaveAsProfile(false)}
-                />
-              )}
-            </div>
-          )}
-
-          <button
-            onClick={handleSave}
-            disabled={!isDirty || saving}
-            style={{
-              height: 34, padding: "0 16px", borderRadius: 8,
-              background: isDirty ? "var(--neuron-action-primary)" : "var(--neuron-bg-surface-subtle)",
-              border: "none",
-              color: isDirty ? "var(--neuron-action-primary-text)" : "var(--neuron-ink-muted)",
-              fontSize: 13, fontWeight: 600,
-              cursor: isDirty && !saving ? "pointer" : "not-allowed",
-              display: "flex", alignItems: "center", gap: 6,
-              transition: "background-color 0.15s, color 0.15s",
-              opacity: saving ? 0.7 : 1,
-            }}
-            onMouseEnter={e => { if (isDirty && !saving) e.currentTarget.style.background = "var(--neuron-action-primary-hover)"; }}
-            onMouseLeave={e => { if (isDirty && !saving) e.currentTarget.style.background = "var(--neuron-action-primary)"; }}
-          >
-            <Save size={13} />
-            {saving ? "Saving…" : "Save Changes"}
-          </button>
-        </div>
+        <button
+          onClick={() => isDirty ? setConfirmLeave(true) : onBack()}
+          style={{
+            display: "flex", alignItems: "center", gap: 5,
+            padding: "6px 12px", borderRadius: 8,
+            border: "1px solid var(--neuron-ui-border)",
+            background: "transparent", color: "var(--neuron-ink-muted)",
+            fontSize: 13, fontWeight: 500, cursor: "pointer",
+            transition: "color 0.12s, border-color 0.12s", flexShrink: 0,
+          }}
+          onMouseEnter={e => { e.currentTarget.style.color = "var(--neuron-ink-primary)"; e.currentTarget.style.borderColor = "var(--neuron-ink-muted)"; }}
+          onMouseLeave={e => { e.currentTarget.style.color = "var(--neuron-ink-muted)"; e.currentTarget.style.borderColor = "var(--neuron-ui-border)"; }}
+        >
+          <ArrowLeft size={13} /> Users
+        </button>
       </div>
 
       {/* Scrollable body */}
@@ -536,6 +387,146 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
             </div>
           )}
 
+          {/* Profile card */}
+          {!loading && (
+            <div ref={applyProfileBtnRef} style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "16px 20px", marginBottom: 16, border: "1px solid var(--neuron-ui-border)", borderRadius: 10, backgroundColor: "var(--neuron-bg-elevated)", flexWrap: "wrap" }}>
+              {/* Left: user identity + profile context */}
+              <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+                <div style={{ width: 36, height: 36, borderRadius: "50%", backgroundColor: "var(--neuron-bg-surface-subtle)", border: "1.5px solid var(--neuron-ui-border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 600, color: "var(--neuron-ink-muted)", flexShrink: 0 }}>
+                  {(user.name || user.email || "?").charAt(0).toUpperCase()}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: "var(--neuron-ink-primary)" }}>{user.name}</span>
+                    <span style={{ fontSize: 11, color: "var(--neuron-ui-border)" }}>·</span>
+                    <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>{user.department}</span>
+                    <span style={{ fontSize: 11, color: "var(--neuron-ui-border)" }}>·</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 7px", borderRadius: 999, backgroundColor: rc.bg, color: rc.text, flexShrink: 0 }}>
+                      {roleLabel}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    {showProfileBadge && (
+                      <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 500, padding: "1px 7px", borderRadius: 999, backgroundColor: "color-mix(in oklch, var(--neuron-action-primary) 12%, transparent)", color: "var(--neuron-action-primary)" }}>
+                        <BookMarked size={10} />
+                        Based on: {appliedProfileName}
+                      </span>
+                    )}
+                    {lastSaved && (
+                      <span style={{ fontSize: 11, color: "var(--neuron-ink-muted)" }}>
+                        {showProfileBadge && <span style={{ marginRight: 4, color: "var(--neuron-ui-border)" }}>·</span>}
+                        Saved by {lastSaved.by} {formatRelativeTime(lastSaved.at)}
+                      </span>
+                    )}
+                    {!showProfileBadge && !lastSaved && (
+                      <span style={{ fontSize: 11, color: "var(--neuron-ink-muted)", fontStyle: "italic" }}>No profile applied</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: actions */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                <AnimatePresence>
+                  {isDirty && (
+                    <motion.div
+                      initial={{ opacity: 0, x: 8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 8 }}
+                      transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                      style={{ display: "flex", alignItems: "center", gap: 8 }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--theme-status-warning-fg)", padding: "5px 10px", borderRadius: 8, backgroundColor: "var(--theme-status-warning-bg)" }}>
+                        <AlertTriangle size={12} /> Unsaved changes
+                      </div>
+                      <button
+                        onClick={handleReset}
+                        style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 10px", borderRadius: 8, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-muted)", fontSize: 12, fontWeight: 500, cursor: "pointer" }}
+                        title="Discard all unsaved changes"
+                      >
+                        <RotateCcw size={11} /> Reset
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <button
+                  onClick={() => setShowApplyProfileMenu(v => !v)}
+                  style={{ height: 34, padding: "0 12px", borderRadius: 8, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-muted)", fontSize: 13, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, transition: "color 0.12s, border-color 0.12s" }}
+                >
+                  <BookMarked size={13} /> Apply Profile <ChevronDown size={11} style={{ opacity: 0.6 }} />
+                </button>
+
+                {/* Save as Profile */}
+                {hasGrantOverrides(overrides) && (
+                  <div style={{ position: "relative" }}>
+                    <button
+                      onClick={() => setShowSaveAsProfile(v => !v)}
+                      style={{ height: 34, padding: "0 12px", borderRadius: 8, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-muted)", fontSize: 13, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}
+                    >
+                      <BookOpen size={13} /> Save as Profile
+                    </button>
+                    {showSaveAsProfile && (
+                      <SaveAsProfileForm
+                        grants={overrides}
+                        onSaved={() => {}}
+                        onClose={() => setShowSaveAsProfile(false)}
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* Save Changes */}
+                <button
+                  onClick={handleSave}
+                  disabled={!isDirty || saving}
+                  style={{
+                    height: 34, padding: "0 16px", borderRadius: 8,
+                    background: isDirty ? "var(--neuron-action-primary)" : "var(--neuron-bg-surface-subtle)",
+                    border: "none",
+                    color: isDirty ? "var(--neuron-action-primary-text)" : "var(--neuron-ink-muted)",
+                    fontSize: 13, fontWeight: 600,
+                    cursor: isDirty && !saving ? "pointer" : "not-allowed",
+                    display: "flex", alignItems: "center", gap: 6,
+                    transition: "background-color 0.15s, color 0.15s",
+                    opacity: saving ? 0.7 : 1,
+                  }}
+                  onMouseEnter={e => { if (isDirty && !saving) e.currentTarget.style.background = "var(--neuron-action-primary-hover)"; }}
+                  onMouseLeave={e => { if (isDirty && !saving) e.currentTarget.style.background = "var(--neuron-action-primary)"; }}
+                >
+                  <Save size={13} />
+                  {saving ? "Saving…" : "Save Changes"}
+                </button>
+              </div>
+
+              {/* Full-width profile dropdown */}
+              {showApplyProfileMenu && (
+                <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 100, backgroundColor: "var(--neuron-bg-elevated)", borderRadius: 10, border: "1px solid var(--neuron-ui-border)", overflow: "hidden" }}>
+                  {profiles.length === 0 ? (
+                    <div style={{ padding: "16px", fontSize: 12, color: "var(--neuron-ink-muted)", textAlign: "center" }}>No profiles yet</div>
+                  ) : (
+                    <div style={{ maxHeight: 260, overflowY: "auto" }}>
+                      {profiles.map(p => (
+                        <button
+                          key={p.id}
+                          onClick={() => handleApplyProfile(p)}
+                          style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "flex-start", padding: "10px 20px", background: "none", border: "none", cursor: "pointer", textAlign: "left", borderTop: "1px solid var(--neuron-ui-border)", transition: "background-color 0.1s" }}
+                          onMouseEnter={e => e.currentTarget.style.backgroundColor = "var(--neuron-bg-surface-subtle)"}
+                          onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
+                        >
+                          <span style={{ fontSize: 13, fontWeight: 500, color: "var(--neuron-ink-primary)" }}>{p.name}</span>
+                          {p.target_department && (
+                            <span style={{ fontSize: 11, color: "var(--neuron-ink-muted)", marginTop: 1 }}>{p.target_department}</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <PermissionGrantEditor
             grants={overrides}
             onChange={(nextGrants) => handleGrantChange(nextGrants)}
@@ -546,6 +537,22 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
           />
         </div>
       </div>
+
+      <AlertDialog open={confirmLeave} onOpenChange={setConfirmLeave}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Leave without saving?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved changes to {user.name}'s access rules. They will be lost if you leave now.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Stay</AlertDialogCancel>
+            <AlertDialogAction onClick={onBack}>Leave without saving</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </div>
   );
 }

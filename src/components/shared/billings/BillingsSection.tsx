@@ -2,6 +2,7 @@ import { Plus, Receipt } from "lucide-react";
 import React, { useState, useRef, useEffect } from "react";
 import { BillingCategorySection, BillingCategoryItem } from "./BillingCategorySection";
 import { CategoryPresetDropdown } from "../../pricing/quotations/CategoryPresetDropdown";
+import { getBillingDisplayCategory } from "../../../utils/billingCategory";
 
 interface BillingsSectionProps {
   items: BillingCategoryItem[];
@@ -34,7 +35,7 @@ export function BillingsSection({
 
   // Group items by category
   const categoriesMap = items.reduce((acc, item) => {
-    const cat = item.quotation_category || "Uncategorized";
+    const cat = getBillingDisplayCategory(item);
     if (!acc[cat]) acc[cat] = [];
     acc[cat].push(item);
     return acc;

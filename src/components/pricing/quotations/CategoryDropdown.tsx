@@ -1,33 +1,40 @@
 import { useState, useRef, useEffect } from "react";
 import { Search, Plus, FolderPlus } from "lucide-react";
+import { toast } from "sonner@2.0.3";
 import { supabase } from "../../../utils/supabase/client";
 
 interface CategoryDropdownProps {
-  onAdd: (name: string) => void;
+  onAdd: (name: string, catalogCategoryId?: string) => void;
   onClose: () => void;
+}
+
+interface CategoryOption {
+  id: string;
+  name: string;
 }
 
 export function CategoryDropdown({ onAdd, onClose }: CategoryDropdownProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [isCustomMode, setIsCustomMode] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const [predefinedCategories, setPredefinedCategories] = useState<string[]>([]);
+  const [predefinedCategories, setPredefinedCategories] = useState<CategoryOption[]>([]);
 
   useEffect(() => {
     supabase
       .from("catalog_categories")
-      .select("name")
+      .select("id, name")
       .in("side", ["revenue", "both"])
       .order("sort_order")
       .then(({ data }) => {
-        if (data) setPredefinedCategories(data.map((c) => c.name));
+        if (data) setPredefinedCategories(data);
       });
   }, []);
 
   const filteredCategories = predefinedCategories.filter(cat =>
-    cat.toLowerCase().includes(searchTerm.toLowerCase())
+    cat.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   // Close dropdown when clicking outside
@@ -47,15 +54,42 @@ export function CategoryDropdown({ onAdd, onClose }: CategoryDropdownProps) {
     searchInputRef.current?.focus();
   }, []);
 
-  const handleSelectCategory = (name: string) => {
-    onAdd(name);
+  const handleSelectCategory = (category: CategoryOption) => {
+    onAdd(category.name, category.id);
     onClose();
   };
 
-  const handleCustomSubmit = () => {
-    if (searchTerm.trim()) {
-      onAdd(searchTerm.trim().toUpperCase());
+  const handleCustomSubmit = async () => {
+    const name = searchTerm.trim().toUpperCase();
+    if (!name || isCreating) return;
+
+    setIsCreating(true);
+    try {
+      const { data, error } = await supabase
+        .from("catalog_categories")
+        .insert({
+          id: `cat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          name,
+          side: "revenue",
+          sort_order: 100,
+          is_default: false,
+        })
+        .select("id, name")
+        .single();
+
+      if (error) throw new Error(error.message);
+      if (!data) throw new Error("Catalog category was not returned");
+
+      onAdd(data.name, data.id);
+      toast.success(`"${data.name}" added to catalog`);
       onClose();
+    } catch (error) {
+      console.error("Failed to create catalog category:", error);
+      toast.error(`Category added locally, but catalog sync failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+      onAdd(name);
+      onClose();
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -66,7 +100,7 @@ export function CategoryDropdown({ onAdd, onClose }: CategoryDropdownProps) {
       e.preventDefault();
       // If there's an exact match, use it; otherwise create custom
       const exactMatch = filteredCategories.find(cat => 
-        cat.toLowerCase() === searchTerm.toLowerCase()
+        cat.name.toLowerCase() === searchTerm.toLowerCase()
       );
       if (exactMatch) {
         handleSelectCategory(exactMatch);
@@ -120,6 +154,7 @@ export function CategoryDropdown({ onAdd, onClose }: CategoryDropdownProps) {
               border: "none",
               outline: "none",
               fontSize: "13px",
+              color: "var(--neuron-ink-base)",
               backgroundColor: "transparent"
             }}
           />
@@ -147,7 +182,7 @@ export function CategoryDropdown({ onAdd, onClose }: CategoryDropdownProps) {
             </div>
             {filteredCategories.map((category) => (
               <button
-                key={category}
+                key={category.id}
                 onClick={() => handleSelectCategory(category)}
                 style={{
                   width: "100%",
@@ -164,7 +199,7 @@ export function CategoryDropdown({ onAdd, onClose }: CategoryDropdownProps) {
                   marginBottom: "4px"
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "#F0FDF4";
+                  e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)";
                   e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
                 }}
                 onMouseLeave={(e) => {
@@ -172,7 +207,7 @@ export function CategoryDropdown({ onAdd, onClose }: CategoryDropdownProps) {
                   e.currentTarget.style.borderColor = "transparent";
                 }}
               >
-                {category}
+                {category.name}
               </button>
             ))}
           </div>
@@ -180,7 +215,7 @@ export function CategoryDropdown({ onAdd, onClose }: CategoryDropdownProps) {
 
         {/* Custom Category Option */}
         {searchTerm.trim() && !filteredCategories.some(cat => 
-          cat.toLowerCase() === searchTerm.toLowerCase()
+          cat.name.toLowerCase() === searchTerm.toLowerCase()
         ) && (
           <div style={{ 
             padding: "8px",
@@ -199,6 +234,7 @@ export function CategoryDropdown({ onAdd, onClose }: CategoryDropdownProps) {
             </div>
             <button
               onClick={handleCustomSubmit}
+              disabled={isCreating}
               style={{
                 width: "100%",
                 padding: "10px 12px",
@@ -206,9 +242,9 @@ export function CategoryDropdown({ onAdd, onClose }: CategoryDropdownProps) {
                 fontWeight: 500,
                 color: "var(--theme-action-primary-bg)",
                 backgroundColor: "var(--theme-bg-surface-tint)",
-                border: "1px solid #0F766E",
+                border: "1px solid var(--theme-action-primary-bg)",
                 borderRadius: "6px",
-                cursor: "pointer",
+                cursor: isCreating ? "wait" : "pointer",
                 textAlign: "left",
                 display: "flex",
                 alignItems: "center",
@@ -225,7 +261,7 @@ export function CategoryDropdown({ onAdd, onClose }: CategoryDropdownProps) {
               }}
             >
               <Plus size={14} />
-              <span>Create "{searchTerm.trim().toUpperCase()}"</span>
+              <span>{isCreating ? "Creating..." : `Create "${searchTerm.trim().toUpperCase()}"`}</span>
             </button>
           </div>
         )}
