@@ -1109,11 +1109,12 @@ interface MyHomepageProps {
 
 export function MyHomepage({ currentUser }: MyHomepageProps) {
   const navigate = useNavigate();
-  const { user, effectiveDepartment, effectiveRole } = useUser();
+  const { user, session, effectiveDepartment, effectiveRole } = useUser();
 
   const dept      = effectiveDepartment || currentUser?.department || "";
   const role      = (effectiveRole || currentUser?.role || "").toLowerCase();
   const userId    = user?.id ?? "";
+  const authUid   = session?.user?.id ?? "";
   const firstName = (currentUser?.name || (user as any)?.name || "there").split(" ")[0];
 
   const [msgIndex] = useState(() => {
@@ -1360,7 +1361,7 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
               className="flex flex-col min-h-0 md:col-start-2 md:row-start-1 md:row-span-2"
               style={{ height: "100%" }}
             >
-              {userId && <TodoPanel userId={userId} />}
+              {authUid && <TodoPanel userId={authUid} />}
             </motion.div>
 
             {/* Continue Work — col 1, row 2 */}
