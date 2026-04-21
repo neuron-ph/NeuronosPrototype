@@ -179,7 +179,8 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
   const [isEditingTask, setIsEditingTask] = useState(false);
   const [editedTask, setEditedTask] = useState<Task | null>(null);
   const [isAddContactPanelOpen, setIsAddContactPanelOpen] = useState(false);
-  const { user } = useUser();
+  const { user, effectiveRole, effectiveDepartment } = useUser();
+  const canAssignOwner = effectiveDepartment === "Executive" || effectiveRole === "manager" || effectiveRole === "executive";
   const queryClient = useQueryClient();
 
   // Fetch quotations for this customer
@@ -401,6 +402,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
         registered_address: editedCustomer.registered_address,
         status: editedCustomer.status,
         lead_source: editedCustomer.lead_source,
+        owner_id: editedCustomer.owner_id || null,
         notes: editedCustomer.notes,
         updated_at: new Date().toISOString(),
       };
@@ -616,7 +618,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                         </label>
                       </div>
                       <p className="text-[13px] pl-6" style={{ color: "var(--neuron-ink-primary)" }}>
-                        {getOwnerName(customer.owner_id || "")}
+                        {getOwnerName(localCustomer.owner_id || "")}
                       </p>
                     </div>
                   )}
@@ -779,6 +781,28 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                         color: "var(--neuron-ink-primary)"
                       }}
                     />
+                  </div>
+
+                  {/* Account Owner */}
+                  <div>
+                    <label className="block text-[11px] font-medium uppercase tracking-wide mb-1.5" style={{ color: "var(--neuron-ink-muted)" }}>
+                      Account Owner
+                    </label>
+                    {canAssignOwner ? (
+                      <CustomDropdown
+                        value={editedCustomer.owner_id || ""}
+                        options={[
+                          { value: "", label: "Unassigned" },
+                          ...users.filter(u => u.department === "Business Development" || u.department === "Pricing").map(u => ({ value: u.id, label: u.name }))
+                        ]}
+                        onChange={(val) => setEditedCustomer({ ...editedCustomer, owner_id: val || null })}
+                        fullWidth
+                      />
+                    ) : (
+                      <p className="text-[13px] pl-0" style={{ color: "var(--neuron-ink-primary)" }}>
+                        {getOwnerName(editedCustomer.owner_id || "") || "Unassigned"}
+                      </p>
+                    )}
                   </div>
 
                   {/* Notes */}

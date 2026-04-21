@@ -180,7 +180,8 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
     setAttachments([newAttachment, ...attachments]);
   };
   
-  const { user } = useUser();
+  const { user, effectiveRole, effectiveDepartment } = useUser();
+  const canAssignOwner = effectiveDepartment === "Executive" || effectiveRole === "manager" || effectiveRole === "executive";
 
   // Backend uses 'customer_id', frontend alias is 'company_id' — support both
   const effectiveCustomerId = contact.customer_id || contact.company_id;
@@ -366,6 +367,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
         customer_id: editedContact.customer_id ?? editedContact.company_id ?? null,
         lifecycle_stage: editedContact.lifecycle_stage,
         lead_status: editedContact.lead_status,
+        owner_id: editedContact.owner_id || null,
         notes: editedContact.notes,
       };
 
@@ -382,7 +384,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
         // Detect which fields changed and summarise old → new
         const fieldLabels: Record<string, string> = {
           name: "Name", title: "Title", email: "Email", phone: "Phone",
-          lifecycle_stage: "Stage", lead_status: "Lead Status", notes: "Notes",
+          lifecycle_stage: "Stage", lead_status: "Lead Status", owner_id: "Account Owner", notes: "Notes",
         };
         const changedFields = Object.keys(fieldLabels).filter(f => {
           const oldVal = (contact as Record<string, unknown>)[f];
@@ -906,6 +908,29 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                       style={{ backgroundColor: getLeadStatusColor(contact.lead_status ?? '') }}
                     >
                       {contact.lead_status}
+                    </span>
+                  )}
+                </div>
+
+                {/* Account Owner */}
+                <div>
+                  <div className="mb-1.5">
+                    <span className="text-[11px] uppercase tracking-wide font-medium" style={{ color: "var(--theme-text-muted)" }}>
+                      Account Owner
+                    </span>
+                  </div>
+                  {isEditing && canAssignOwner ? (
+                    <CustomDropdown
+                      value={editedContact.owner_id || ""}
+                      options={[
+                        { value: "", label: "Unassigned" },
+                        ...users.filter(u => u.department === "Business Development" || u.department === "Pricing").map(u => ({ value: u.id, label: u.name }))
+                      ]}
+                      onChange={(value) => setEditedContact({ ...editedContact, owner_id: value || null })}
+                    />
+                  ) : (
+                    <span className="text-[14px]" style={{ color: contact.owner_id ? "var(--theme-text-primary)" : "var(--theme-text-muted)" }}>
+                      {contact.owner_id ? (users.find(u => u.id === contact.owner_id)?.name ?? "—") : "Unassigned"}
                     </span>
                   )}
                 </div>

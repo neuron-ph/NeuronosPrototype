@@ -39,6 +39,16 @@ const FUNCTIONAL_VISIBILITY: Record<string, string[]> = {
   financials: ['Accounting', 'Executive'],
 };
 
+/**
+ * Resources where managers (and above) in the listed departments see ALL records org-wide,
+ * not just their own department's records. Staff in these departments still get 'own' scope.
+ * Use case: BD managers must see contacts/customers created by Pricing or Executive.
+ */
+const MANAGER_WIDE_VISIBILITY: Record<string, string[]> = {
+  contacts: ['Business Development'],
+  customers: ['Business Development'],
+};
+
 type ScopedUser = { id: string; role: string | null };
 type PermissionOverrideScope = {
   scope: 'department_wide' | 'cross_department' | 'full';
@@ -160,6 +170,9 @@ export function useDataScope(resource?: string): DataScopeResult {
 
       // 3. Manager — all active users in same department
       if (effectiveRole === 'manager') {
+        if (resource && MANAGER_WIDE_VISIBILITY[resource]?.includes(effectiveDepartment ?? '')) {
+          return { type: 'all' };
+        }
         return { type: 'userIds', ids: visibleIds(roleUsers as ScopedUser[] | null) };
       }
 
