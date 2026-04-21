@@ -11,6 +11,10 @@ import {
   createSupabaseCatalogSyncClient,
   syncChargeCategoriesToCatalog,
 } from "../../../utils/pricing/catalogSync";
+import {
+  fetchVendorChargeCategories,
+  saveVendorChargeCategories,
+} from "../../../utils/pricing/vendorRateCards";
 
 /**
  * 🎯 VENDORS SECTION - INLINE RATE MANAGEMENT
@@ -165,9 +169,9 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
     if (vendorBackendId) {
       try {
         console.log(`🌐 Fetching rates from backend for ${vendor.name}...`);
-        const { data: ccData, error: ccError } = await supabase.from('vendor_charge_categories').select('*').eq('vendor_id', vendorBackendId);
+        const ccData = await fetchVendorChargeCategories(supabase, vendorBackendId);
         
-        if (!ccError && ccData && ccData.length > 0) {
+        if (ccData.length > 0) {
           fetchedRates = ccData;
           console.log(`✅ Fetched ${fetchedRates.length} categories from backend for ${vendor.name}`);
         }
@@ -277,8 +281,8 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
       // Try to fetch live vendor data from backend
       if (vendor.vendor_id) {
         try {
-          const { data: ccData } = await supabase.from('vendor_charge_categories').select('*').eq('vendor_id', vendor.vendor_id);
-          if (ccData && ccData.length > 0) {
+          const ccData = await fetchVendorChargeCategories(supabase, vendor.vendor_id);
+          if (ccData.length > 0) {
             data = ccData;
             console.log(`✅ Imported live charge categories from backend for vendor ${vendor.name}`);
           }
@@ -334,14 +338,13 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
         { side: "revenue" }
       );
 
-      // Step 1: Save to backend - delete existing and re-insert
-      await supabase.from('vendor_charge_categories').delete().eq('vendor_id', vendor.vendor_id);
-      if (syncedRates.length > 0) {
-        const { error: saveError } = await supabase.from('vendor_charge_categories').insert(
-          syncedRates.map((cc: any) => ({ ...cc, vendor_id: vendor.vendor_id }))
-        );
-        if (saveError) throw new Error(saveError.message);
-      }
+      // Step 1: Save to backend on the unified service provider record
+      await saveVendorChargeCategories(supabase, {
+        vendorId: vendor.vendor_id,
+        vendorName: vendor.name,
+        vendorType: vendor.type,
+        categories: syncedRates,
+      });
       console.log(`✅ Saved ${syncedRates.length} categories to backend for ${vendor.name}`);
 
       setVendorRatesCache(prev => new Map(prev).set(vendorId, syncedRates));

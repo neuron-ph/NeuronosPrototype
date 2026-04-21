@@ -425,14 +425,16 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
     setSubView("create");
   };
 
-  const handleCreateInquiry = (customer: Customer) => {
+  const handleCreateInquiry = (customer: Customer, quotationType?: QuotationType) => {
     // Pre-fill customer info and open quotation builder
     const inquiryTemplate: Partial<QuotationNew> = {
       customer_id: customer.id,
-      customer_name: customer.name,
-      customer_company: customer.name,
+      customer_name: customer.company_name || customer.name,
+      customer_company: customer.company_name || customer.name,
+      quotation_type: quotationType || "project",
       status: "Pending Pricing",
     };
+    setPendingQuotationType(quotationType || "project");
     setSelectedQuotation(inquiryTemplate as QuotationNew);
     setSubView("create");
   };
@@ -526,6 +528,7 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
                 initialData={selectedQuotation || undefined}
                 builderMode="quotation"
                 customerData={selectedCustomer}
+                initialQuotationType={selectedQuotation?.quotation_type || pendingQuotationType}
               />
             )}
           </>
