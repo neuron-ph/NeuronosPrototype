@@ -23,6 +23,7 @@ import { AccessConfiguration, type ConfigUser } from "./AccessConfiguration";
 import { AccessProfiles, ProfileEditor } from "./accessProfiles/AccessProfiles";
 import type { AccessProfile } from "./accessProfiles/accessProfileTypes";
 import type { UserRow } from "./userFormShared";
+import { buildTeamMembershipUpdatePlan } from "./teamMembership";
 import { usePermission } from "../../context/PermissionProvider";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -562,11 +563,25 @@ function InlineTeamCreateRow({
       .insert({ name: name.trim(), department: dept, leader_id: null })
       .select()
       .single();
-    if (error) { setSaving(false); toast.error("Failed to create team."); return; }
+    if (error) {
+      setSaving(false);
+      toast.error(`Failed to create team: ${error.message}`);
+      return;
+    }
 
     const memberEntries = Object.entries(memberRoles).filter(([, r]) => r);
     for (const [userId, role] of memberEntries) {
-      await supabase.from("users").update({ team_id: newTeam.id, team_role: role }).eq("id", userId);
+      const { error: memberError } = await supabase
+        .from("users")
+        .update({ team_id: newTeam.id, team_role: role })
+        .eq("id", userId);
+
+      if (memberError) {
+        await supabase.from("teams").delete().eq("id", newTeam.id);
+        setSaving(false);
+        toast.error(`Team member assignment failed: ${memberError.message}`);
+        return;
+      }
     }
     const actor = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
     logCreation("team", newTeam.id, newTeam.name ?? newTeam.id, actor);
@@ -680,13 +695,42 @@ function InlineTeamEditRow({
     if (!name.trim()) { toast.error("Team name is required."); return; }
     setSaving(true);
     const { error } = await supabase.from("teams").update({ name: name.trim() }).eq("id", team.id);
-    if (error) { setSaving(false); toast.error("Failed to update team."); return; }
+    if (error) {
+      setSaving(false);
+      toast.error(`Failed to update team: ${error.message}`);
+      return;
+    }
 
-    // Clear all current members, then re-assign with roles
-    await supabase.from("users").update({ team_id: null, team_role: null }).eq("team_id", team.id);
-    const memberEntries = Object.entries(memberRoles).filter(([, r]) => r);
-    for (const [userId, role] of memberEntries) {
-      await supabase.from("users").update({ team_id: team.id, team_role: role }).eq("id", userId);
+    const plan = buildTeamMembershipUpdatePlan({
+      teamId: team.id,
+      currentMembers: users,
+      memberRoles,
+    });
+
+    for (const userId of plan.removals) {
+      const { error: removeError } = await supabase
+        .from("users")
+        .update({ team_id: null, team_role: null })
+        .eq("id", userId);
+
+      if (removeError) {
+        setSaving(false);
+        toast.error(`Failed to remove team member: ${removeError.message}`);
+        return;
+      }
+    }
+
+    for (const { userId, role } of plan.assignments) {
+      const { error: assignError } = await supabase
+        .from("users")
+        .update({ team_id: team.id, team_role: role })
+        .eq("id", userId);
+
+      if (assignError) {
+        setSaving(false);
+        toast.error(`Failed to save team member: ${assignError.message}`);
+        return;
+      }
     }
 
     setSaving(false);
@@ -777,7 +821,7 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const { data: teams = [], refetch: fetchTeams } = useQuery({
-    queryKey: ["teams"],
+    queryKey: queryKeys.teams.list(),
     queryFn: async () => {
       const { data } = await supabase.from("teams").select("id, name, department, leader_id").order("department").order("name");
       return (data ?? []) as Team[];
@@ -785,7 +829,7 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: allUsers = [] } = useQuery({
+  const { data: allUsers = [], refetch: fetchActiveUsers } = useQuery({
     queryKey: ["users", "active-list"],
     queryFn: async () => {
       const { data } = await supabase.from("users").select("id, name, role, department, email, team_id, team_role, avatar_url").eq("is_active", true).order("name");
@@ -811,18 +855,31 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
 
   const deptUsersFor = useCallback((dept: Department) => allUsers.filter(u => u.department === dept), [allUsers]);
 
+  const refreshTeamsData = useCallback(async () => {
+    await Promise.all([
+      fetchTeams(),
+      fetchActiveUsers(),
+      queryClient.invalidateQueries({ queryKey: queryKeys.teams.all() }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.users.all() }),
+    ]);
+  }, [fetchActiveUsers, fetchTeams, queryClient]);
+
   const handleDeleteConfirmed = async (teamId: string, teamName: string) => {
     setConfirmDeleteId(null);
     setDeletingId(teamId);
-    await supabase.from("users").update({ team_id: null }).eq("team_id", teamId);
+    const { error: memberError } = await supabase.from("users").update({ team_id: null, team_role: null }).eq("team_id", teamId);
+    if (memberError) {
+      setDeletingId(null);
+      toast.error(`Failed to clear team members: ${memberError.message}`);
+      return;
+    }
     const { error } = await supabase.from("teams").delete().eq("id", teamId);
     setDeletingId(null);
     if (error) { toast.error("Failed to delete team."); return; }
     const actor = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
     logDeletion("team", teamId, teamName, actor);
     toast.success(`Team "${teamName}" deleted.`);
-    fetchTeams();
-    queryClient.invalidateQueries({ queryKey: queryKeys.users.list() });
+    void refreshTeamsData();
   };
 
   const totalTeams = teams.length;
@@ -888,7 +945,7 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
                       <InlineTeamEditRow
                         team={team}
                         users={allUsers}
-                        onSaved={() => { setEditingTeamId(null); fetchTeams(); queryClient.invalidateQueries({ queryKey: queryKeys.users.list() }); }}
+                        onSaved={() => { setEditingTeamId(null); void refreshTeamsData(); }}
                         onCancel={() => setEditingTeamId(null)}
                       />
                     </motion.div>
@@ -1076,7 +1133,7 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
                 <InlineTeamCreateRow
                   dept={dept as Department}
                   users={deptUsersFor(dept as Department)}
-                  onSaved={() => { setCreatingInDept(null); fetchTeams(); queryClient.invalidateQueries({ queryKey: queryKeys.users.list() }); }}
+                  onSaved={() => { setCreatingInDept(null); void refreshTeamsData(); }}
                   onCancel={() => setCreatingInDept(null)}
                 />
               </motion.div>
