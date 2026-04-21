@@ -1,10 +1,11 @@
 import type { Customer } from "../../types/bd";
+import type { QuotationType } from "../../types/pricing";
 import { CustomerDetail } from "../bd/CustomerDetail";
 
 interface PricingCustomerDetailProps {
   customer: Customer;
   onBack: () => void;
-  onCreateInquiry?: (customer: Customer) => void;
+  onCreateInquiry?: (customer: Customer, quotationType?: QuotationType) => void;
   onViewInquiry?: (inquiryId: string) => void;
 }
 

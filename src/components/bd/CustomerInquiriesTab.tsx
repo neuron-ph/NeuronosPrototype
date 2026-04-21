@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { QuotationNew } from "../../types/pricing";
-import { Package, Search, FileText, Plus, CheckCircle2, Calendar, Clock } from "lucide-react";
+import type { QuotationNew, QuotationType } from "../../types/pricing";
+import { Package, Search, FileText, CheckCircle2, Calendar, Clock } from "lucide-react";
 import { CustomDropdown } from "./CustomDropdown";
+import { CreateQuotationMenu } from "../pricing/CreateQuotationMenu";
 
 interface CustomerInquiriesTabProps {
   inquiries: QuotationNew[];
   onViewInquiry?: (inquiryId: string) => void;
-  onCreateInquiry?: () => void;
+  onCreateInquiry?: (quotationType: QuotationType) => void;
   isLoading?: boolean;
 }
 
@@ -97,30 +98,11 @@ export function CustomerInquiriesTab({ inquiries, onViewInquiry, onCreateInquiry
 
         {/* Create Button */}
         {onCreateInquiry && (
-          <button
-            onClick={onCreateInquiry}
-            className="flex items-center gap-2 transition-colors"
-            style={{
-              height: "40px", // Slightly smaller than TasksList (48px) to fit nicely in the tab content area
-              padding: "0 16px",
-              borderRadius: "12px",
-              background: "var(--theme-action-primary-bg)",
-              border: "none",
-              color: "#FFFFFF",
-              fontSize: "13px",
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = "var(--theme-action-primary-border)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "var(--theme-action-primary-bg)";
-            }}
-          >
-            <Plus size={16} />
-            New Inquiry
-          </button>
+          <CreateQuotationMenu
+            buttonText="New Inquiry"
+            entityWord="Inquiry"
+            onSelect={onCreateInquiry}
+          />
         )}
       </div>
 
@@ -131,12 +113,13 @@ export function CustomerInquiriesTab({ inquiries, onViewInquiry, onCreateInquiry
               <FileText size={48} style={{ color: "var(--theme-border-default)", margin: "0 auto 16px" }} />
               <p className="text-[14px]" style={{ color: "var(--theme-text-muted)" }}>No Inquiries Yet</p>
               {onCreateInquiry && (
-                <button
-                  onClick={onCreateInquiry}
-                  className="mt-4 px-4 py-2 rounded-lg text-[13px] font-medium text-[var(--theme-action-primary-bg)] hover:bg-[var(--theme-bg-surface-tint)] transition-colors"
-                >
-                  Create first inquiry
-                </button>
+                <div className="mt-4 inline-flex">
+                  <CreateQuotationMenu
+                    buttonText="Create first inquiry"
+                    entityWord="Inquiry"
+                    onSelect={onCreateInquiry}
+                  />
+                </div>
               )}
             </>
           ) : (

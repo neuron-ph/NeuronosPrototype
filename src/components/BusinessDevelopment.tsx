@@ -27,6 +27,7 @@ import { useUsers } from "../hooks/useUsers";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../lib/queryKeys";
 import { fetchProjectsWithQuotation, fetchProjectWithQuotation } from "../utils/projectHydration";
+import { buildCreateInquiryDraft, shouldPreserveInquiryBuilder } from "../utils/createInquiryFlow";
 
 type BDView = "contacts" | "customers" | "inquiries" | "projects" | "tasks" | "activities" | "budget-requests" | "reports";
 type SubView = "list" | "detail" | "builder";
@@ -55,6 +56,7 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [customerDetailKey, setCustomerDetailKey] = useState(0);
   const [pendingQuotationType, setPendingQuotationType] = useState<QuotationType>("project");
+  const preserveNextInquiryBuilderResetRef = useRef(false);
   
   // State for fetched related data
   const [activityContactInfo, setActivityContactInfo] = useState<Contact | null>(null);
@@ -109,6 +111,11 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
 
   // Reset to list view when switching between main views
   useEffect(() => {
+    if (preserveNextInquiryBuilderResetRef.current && shouldPreserveInquiryBuilder(view, subView)) {
+      preserveNextInquiryBuilderResetRef.current = false;
+      return;
+    }
+    preserveNextInquiryBuilderResetRef.current = false;
     setSubView("list");
     setSelectedContact(null);
     setSelectedCustomer(null);
@@ -631,7 +638,7 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
               <ContactDetail 
                 contact={selectedContact} 
                 onBack={handleBackFromContact}
-                onCreateInquiry={async (customer, contact) => {
+                onCreateInquiry={async (customer, contact, quotationType) => {
                   let customerToUse = customer;
                   
                   if (!customerToUse && contact?.customer_id) {
@@ -650,8 +657,10 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
                     }
                   }
                   
+                  setPendingQuotationType(quotationType || "project");
                   setSelectedCustomer(customerToUse || null);
                   setSelectedContact(contact ?? null);
+                  preserveNextInquiryBuilderResetRef.current = true;
                   setView("inquiries");
                   setSubView("builder");
                 }}
@@ -673,8 +682,8 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
                 key={customerDetailKey}
                 customer={selectedCustomer} 
                 onBack={handleBackFromCustomer}
-                onCreateInquiry={() => {
-                  // Handle inquiry creation within customer detail view
+                onCreateInquiry={(_customer, quotationType) => {
+                  setPendingQuotationType(quotationType || "project");
                   setSubView("builder");
                 }}
                 onViewInquiry={onViewInquiry}
@@ -737,11 +746,8 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
                   setSubView("detail");
                 }}
                 builderMode="inquiry"
-                initialData={{
-                  customer_id: selectedCustomer.id,
-                  customer_name: selectedCustomer.company_name,
-                  status: "Draft"
-                } as Partial<QuotationNew>}
+                initialQuotationType={pendingQuotationType}
+                initialData={buildCreateInquiryDraft(selectedCustomer)}
               />
             )}
           </>
@@ -858,12 +864,9 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
                 builderMode="inquiry"
                 mode={selectedQuotation ? "edit" : "create"}
                 initialQuotationType={selectedQuotation?.quotation_type || pendingQuotationType}
-                initialData={selectedQuotation || (customerData ? {
-                  customer_id: customerData.id,
-                  customer_name: customerData.company_name,
-                  customer_company: customerData.company_name,
-                  status: "Draft"
-                } as Partial<QuotationNew> : undefined)}
+                initialData={selectedQuotation || ((customerData || selectedCustomer)
+                  ? buildCreateInquiryDraft((customerData || selectedCustomer)!, selectedContact)
+                  : undefined)}
               />
             )}
           </>

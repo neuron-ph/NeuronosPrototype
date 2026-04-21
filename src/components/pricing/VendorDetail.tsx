@@ -10,6 +10,10 @@ import { CustomDropdown } from "../bd/CustomDropdown";
 import { CustomDatePicker } from "../common/CustomDatePicker";
 import { ChargeCategoriesManager } from "./shared/ChargeCategoriesManager";
 import { PartnerSheet } from "./partners/PartnerSheet";
+import {
+  fetchVendorChargeCategories,
+  saveVendorChargeCategories,
+} from "../../utils/pricing/vendorRateCards";
 
 // --- UNIFIED COMPONENT SYSTEM ---
 
@@ -224,11 +228,10 @@ export function VendorDetail({ vendor: initialVendor, onBack, onSave }: VendorDe
   }, [initialVendor]);
 
   const { data: fetchedCategories, isLoading } = useQuery({
-    queryKey: ["vendor_charge_categories", currentVendor.id],
+    queryKey: ["vendor_rate_categories", currentVendor.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from('vendor_charge_categories').select('*').eq('vendor_id', currentVendor.id);
-      if (!error && data) return data as QuotationChargeCategory[];
-      return (currentVendor.charge_categories || []) as QuotationChargeCategory[];
+      const data = await fetchVendorChargeCategories(supabase, currentVendor.id);
+      return data.length > 0 ? data : (currentVendor.charge_categories || []) as QuotationChargeCategory[];
     },
     staleTime: 30_000,
   });
@@ -254,14 +257,12 @@ export function VendorDetail({ vendor: initialVendor, onBack, onSave }: VendorDe
   const saveChargeCategories = async () => {
     try {
       setIsSaving(true);
-      // Delete existing and re-insert
-      await supabase.from('vendor_charge_categories').delete().eq('vendor_id', currentVendor.id);
-      if (chargeCategories.length > 0) {
-        const { error } = await supabase.from('vendor_charge_categories').insert(
-          chargeCategories.map((cc: any) => ({ ...cc, vendor_id: currentVendor.id }))
-        );
-        if (error) throw error;
-      }
+      await saveVendorChargeCategories(supabase, {
+        vendorId: currentVendor.id,
+        vendorName: currentVendor.company_name,
+        vendorType: currentVendor.partner_type,
+        categories: chargeCategories,
+      });
 
       console.log(`✅ Saved ${chargeCategories.length} charge categories for vendor ${currentVendor.id}`);
       setHasUnsavedChanges(false);

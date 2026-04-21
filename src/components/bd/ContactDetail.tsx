@@ -4,18 +4,19 @@ import { usePermission } from "../../context/PermissionProvider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../../lib/queryKeys";
 import type { Contact, LifecycleStage, LeadStatus, Task, Activity, Customer, ActivityType, TaskType } from "../../types/bd";
-import type { QuotationNew } from "../../types/pricing";
+import type { QuotationNew, QuotationType } from "../../types/pricing";
 import { CustomDropdown } from "./CustomDropdown";
 import { ActivityTimelineTable } from "./ActivityTimelineTable";
 import { supabase } from "../../utils/supabase/client";
 import { useUser } from "../../hooks/useUser";
 import { logActivity, logCreation } from "../../utils/activityLog";
 import { toast } from "sonner@2.0.3";
+import { CreateQuotationMenu } from "../pricing/CreateQuotationMenu";
 
 interface ContactDetailProps {
   contact: Contact;
   onBack: () => void;
-  onCreateInquiry?: (customer: Customer, contact?: Contact) => void;
+  onCreateInquiry?: (customer: Customer, contact?: Contact, quotationType?: QuotationType) => void;
   variant?: "bd" | "pricing";
 }
 
@@ -2477,23 +2478,11 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                       Inquiries
                     </h3>
                     {onCreateInquiry && company && (
-                      <button
-                        onClick={() => onCreateInquiry(company, contact)}
-                        className="px-4 py-2.5 rounded-lg text-[13px] font-medium transition-colors flex items-center gap-2"
-                        style={{
-                          backgroundColor: "var(--theme-action-primary-bg)",
-                          color: "#FFFFFF"
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = "var(--theme-action-primary-border)";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
-                        }}
-                      >
-                        <Plus size={16} />
-                        Create Inquiry
-                      </button>
+                      <CreateQuotationMenu
+                        buttonText="Create Inquiry"
+                        entityWord="Inquiry"
+                        onSelect={(quotationType) => onCreateInquiry(company, contact, quotationType)}
+                      />
                     )}
                   </div>
 

@@ -4,7 +4,7 @@ import { useNavigate } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../../lib/queryKeys";
 import type { Customer, Contact, Industry, CustomerStatus, Task, Activity } from "../../types/bd";
-import type { QuotationNew, Project } from "../../types/pricing";
+import type { QuotationNew, Project, QuotationType } from "../../types/pricing";
 import { CustomDropdown } from "./CustomDropdown";
 import { TaskDetailInline } from "./TaskDetailInline";
 import { ActivityDetailInline } from "./ActivityDetailInline";
@@ -22,7 +22,7 @@ import { usePermission } from "../../context/PermissionProvider";
 interface CustomerDetailProps {
   customer: Customer;
   onBack: () => void;
-  onCreateInquiry?: (customer: Customer) => void;
+  onCreateInquiry?: (customer: Customer, quotationType?: QuotationType) => void;
   onViewInquiry?: (inquiryId: string) => void;
   onViewProject?: (project: Project) => void;
   variant?: "bd" | "pricing";
@@ -1764,7 +1764,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                 <CustomerInquiriesTab 
                   inquiries={inquiries}
                   onViewInquiry={onViewInquiry}
-                  onCreateInquiry={() => onCreateInquiry && onCreateInquiry(customer)}
+                  onCreateInquiry={(quotationType) => onCreateInquiry && onCreateInquiry(customer, quotationType)}
                   isLoading={isLoadingQuotations}
                 />
               </div>
