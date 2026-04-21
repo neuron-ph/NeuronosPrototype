@@ -277,7 +277,7 @@ function ComposeView({
   return (
     <motion.div key="compose" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
       transition={{ duration: 0.18, ease: [0.25, 1, 0.5, 1] }}
-      style={{ maxWidth: 680, margin: "0 auto", display: "flex", flexDirection: "column", gap: "18px" }}
+      style={{ width: "100%", display: "flex", flexDirection: "column", gap: "18px", flex: 1, minHeight: 0 }}
     >
       {/* Title */}
       <div>
@@ -305,11 +305,11 @@ function ComposeView({
       </div>
 
       {/* Body */}
-      <div>
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
         <label style={LABEL_STYLE}>Body</label>
         <textarea value={draft.body} onChange={e => onChange({ ...draft, body: e.target.value })}
           placeholder="Describe what changed and why it matters to your team…"
-          rows={8} style={{ ...INPUT_STYLE, resize: "vertical", lineHeight: "21px" }} />
+          style={{ ...INPUT_STYLE, resize: "none", lineHeight: "21px", flex: 1, minHeight: 0 }} />
       </div>
 
       {/* Featured toggle */}
@@ -513,13 +513,13 @@ export function MemoPanel({ isOpen, onClose, userId, canWrite }: MemoPanelProps)
         </div>
 
         {/* Right content area */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "24px 32px" }}>
+        <div style={{ flex: 1, overflowY: view === "compose" ? "hidden" : "auto", padding: "24px 32px", display: "flex", flexDirection: "column" }}>
           <AnimatePresence mode="wait">
 
             {/* Compose */}
             {view === "compose" && (
               <motion.div key="compose" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.18, ease: [0.25, 1, 0.5, 1] }}>
+                transition={{ duration: 0.18, ease: [0.25, 1, 0.5, 1] }} style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
                 <ComposeView draft={draft} onChange={setDraft} onPreview={() => setView("preview")} onCancel={() => setView("list")} />
               </motion.div>
             )}
