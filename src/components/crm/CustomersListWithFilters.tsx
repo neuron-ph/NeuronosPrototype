@@ -29,12 +29,12 @@ export function CustomersListWithFilters({ userDepartment, onViewCustomer }: Cus
 
   const { user } = useUser();
 
-  const { scope, isLoaded } = useDataScope();
+  const { scope, isLoaded } = useDataScope('customers');
 
   // Permissions based on department
   const permissions = {
-    canCreate: userDepartment === "Business Development",
-    canEdit: userDepartment === "Business Development",
+    canCreate: userDepartment === "Business Development" || userDepartment === "Pricing",
+    canEdit: userDepartment === "Business Development" || userDepartment === "Pricing",
     showKPIs: true, // Both BD and PD see KPIs
     showOwnerFilter: userDepartment === "Business Development",
   };

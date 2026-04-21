@@ -56,7 +56,7 @@ export function ContactsListWithFilters({ userDepartment, moduleId, onViewContac
 
   const { user } = useUser();
   const { can } = usePermission();
-  const { scope, isLoaded } = useDataScope();
+  const { scope, isLoaded } = useDataScope('contacts');
   const { isMobile, isTablet } = useBreakpoint();
 
   const { users: bdUsers } = useUsers({ department: 'Business Development' });
@@ -82,8 +82,8 @@ export function ContactsListWithFilters({ userDepartment, moduleId, onViewContac
   });
 
   const permissions = {
-    canCreate: moduleId ? can(moduleId, "create") : userDepartment === "Business Development",
-    canEdit: moduleId ? can(moduleId, "edit") : userDepartment === "Business Development",
+    canCreate: moduleId ? can(moduleId, "create") : (userDepartment === "Business Development" || userDepartment === "Pricing"),
+    canEdit: moduleId ? can(moduleId, "edit") : (userDepartment === "Business Development" || userDepartment === "Pricing"),
     showKPIs: canViewModule,
     showOwnerFilter: showAdvancedFilters,
     showAdvancedFilters,

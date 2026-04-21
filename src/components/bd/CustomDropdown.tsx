@@ -54,13 +54,27 @@ export function CustomDropdown({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number; minWidth: number } | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; minWidth: number; openUpward: boolean } | null>(null);
+
+  const computeMenuPos = () => {
+    if (!buttonRef.current) return null;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const maxMenuHeight = 240;
+    const gap = 4;
+    const spaceBelow = window.innerHeight - rect.bottom - gap;
+    const openUpward = spaceBelow < maxMenuHeight && rect.top > maxMenuHeight;
+    return {
+      top: openUpward ? rect.top - gap - maxMenuHeight : rect.bottom + gap,
+      left: rect.left,
+      minWidth: rect.width,
+      openUpward,
+    };
+  };
 
   // Compute position when opening
   useEffect(() => {
     if (isOpen && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setMenuPos({ top: rect.bottom + 4, left: rect.left, minWidth: rect.width });
+      setMenuPos(computeMenuPos());
     }
   }, [isOpen]);
 
@@ -86,12 +100,7 @@ export function CustomDropdown({
   // Reposition menu on scroll so it stays anchored to the button
   useEffect(() => {
     if (!isOpen || !buttonRef.current) return;
-    const updatePosition = () => {
-      if (buttonRef.current) {
-        const rect = buttonRef.current.getBoundingClientRect();
-        setMenuPos({ top: rect.bottom + 4, left: rect.left, minWidth: rect.width });
-      }
-    };
+    const updatePosition = () => setMenuPos(computeMenuPos());
     window.addEventListener("scroll", updatePosition, true);
     return () => window.removeEventListener("scroll", updatePosition, true);
   }, [isOpen]);
