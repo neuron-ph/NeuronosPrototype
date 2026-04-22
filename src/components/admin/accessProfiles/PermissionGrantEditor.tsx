@@ -497,6 +497,28 @@ function GroupAccordion({
       }}>
         <div style={{ overflow: "hidden" }}>
           <div style={{ borderTop: "1px solid var(--neuron-ui-border)" }}>
+            {/* Local column legend — always visible at top of each open accordion */}
+            <div style={{
+              display: "grid", gridTemplateColumns: GRID_COLS,
+              padding: "0 20px", height: 24, alignItems: "center",
+              backgroundColor: "color-mix(in oklch, var(--neuron-bg-surface-subtle) 60%, var(--neuron-bg-elevated))",
+              borderBottom: "1px solid color-mix(in oklch, var(--neuron-ui-border) 60%, transparent)",
+            }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.6 }}>
+                Module / Tab
+              </span>
+              {PERM_ACTIONS.map(action => (
+                <span key={action} style={{
+                  fontSize: 9, fontWeight: 700,
+                  color: activeActionFilter === action ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
+                  textTransform: "uppercase", letterSpacing: "0.08em",
+                  textAlign: "center", opacity: activeActionFilter === action ? 1 : 0.6,
+                  transition: "color 0.14s, opacity 0.14s",
+                }}>
+                  {ACTION_LABELS[action]}
+                </span>
+              ))}
+            </div>
             {filteredSegments.map((seg, si) => {
               const hasChildren = seg.children.length > 0;
               const childrenMatchSearch = searching && seg.children.some(c => matchedIds.has(c.id));
