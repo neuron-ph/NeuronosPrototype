@@ -85,6 +85,7 @@ import { QuotationRateBreakdownSheet } from "./QuotationRateBreakdownSheet";
 import type { BookingQuantities } from "../../../utils/contractRateEngine";
 import { ContractRateToolbar } from "./ContractRateToolbar";
 import { normalizeQuotationStatus } from "../../../utils/quotationStatus";
+import { calculateSellingItemFromBuyingPrice } from "../../../utils/pricing/quotationSignedPricing";
 
 interface ContainerEntry {
   id: string;
@@ -1287,7 +1288,7 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
    *        ↓
    *   Find matching line item by ID (buyingItemsMap.get)
    *        ↓
-   *   Calculate new base_cost = price × quantity × forex_rate
+   *   Copy buying price into base_cost as the signed unit cost
    *        ↓
    *   Preserve markup: final_price = base_cost + amount_added
    *        ↓
@@ -1345,26 +1346,7 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
             return sellingItem;
           }
           
-          // Calculate new base cost from buying price
-          const newBaseCost = matchingBuyingItem.price * matchingBuyingItem.quantity * matchingBuyingItem.forex_rate;
-          
-          // Preserve existing markup (amount_added and percentage_added)
-          // Recalculate final_price = base_cost + amount_added
-          const finalPrice = newBaseCost + sellingItem.amount_added;
-          
-          // Also calculate the amount for this line item
-          const amount = finalPrice * matchingBuyingItem.quantity * sellingItem.forex_rate;
-          
-          return {
-            ...sellingItem,
-            base_cost: newBaseCost,
-            final_price: finalPrice,
-            price: finalPrice, // Keep price field in sync
-            quantity: matchingBuyingItem.quantity, // Sync quantity from buying
-            currency: matchingBuyingItem.currency, // Sync currency
-            forex_rate: matchingBuyingItem.forex_rate, // Sync forex rate
-            amount: amount
-          } as SellingPriceLineItem;
+          return calculateSellingItemFromBuyingPrice(sellingItem, matchingBuyingItem);
         });
         
         // Recalculate category subtotal

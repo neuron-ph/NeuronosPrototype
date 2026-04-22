@@ -259,15 +259,25 @@ function ModuleRow({
   return (
     <div style={{
       display: "grid", gridTemplateColumns: GRID_COLS,
-      padding: "5px 20px 5px 44px", alignItems: "center",
+      padding: "4px 20px 4px 34px", alignItems: "center",
       backgroundColor: highlighted
         ? "color-mix(in oklch, var(--neuron-action-primary) 7%, var(--neuron-bg-elevated))"
         : "var(--neuron-bg-surface-subtle)",
-      borderTop: "1px solid color-mix(in oklch, var(--neuron-ui-border) 30%, transparent)",
+      borderTop: "1px solid color-mix(in oklch, var(--neuron-ui-border) 45%, transparent)",
       transition: "background-color 0.15s",
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, paddingRight: 12, minWidth: 0 }}>
-        <span style={{ fontSize: 9, color: "var(--neuron-action-primary)", opacity: 0.5, flexShrink: 0, lineHeight: 1, marginTop: 1 }}>╰</span>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, paddingRight: 12, minWidth: 0 }}>
+        {/* L-shaped tree connector */}
+        <div style={{
+          flexShrink: 0,
+          width: 10,
+          height: 18,
+          borderLeft: "1.5px solid color-mix(in oklch, var(--neuron-ui-border) 70%, transparent)",
+          borderBottom: "1.5px solid color-mix(in oklch, var(--neuron-ui-border) 70%, transparent)",
+          borderBottomLeftRadius: 2,
+          marginBottom: -2,
+          alignSelf: "flex-end",
+        }} />
         <span style={{
           fontSize: 12, color: "var(--neuron-ink-secondary, var(--neuron-ink-muted))", fontWeight: 400,
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",

@@ -689,8 +689,8 @@ export function BuyingPriceSectionV2({
                                           onChange={(value) => handleFieldChange(item._categoryId, item.id, 'price', value)}
                                           decimals={2}
                                           formatOnBlur
+                                          allowNegative
                                           step="0.01"
-                                          min="0"
                                           disabled={viewMode}
                                           style={{
                                             width: "100%",

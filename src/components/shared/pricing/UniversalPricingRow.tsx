@@ -67,6 +67,7 @@ export function UniversalPricingRow({
 }: UniversalPricingRowProps) {
   const { simpleMode, showCost, showMarkup, showTax, showForex, priceEditable, showPHPConversion } = config;
   const isViewMode = mode === "view";
+  const percentageMarkupDisabled = data.base_cost < 0;
 
   // Draft state for numeric inputs — allows typing "2." without losing the decimal
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -250,7 +251,7 @@ export function UniversalPricingRow({
               type="text"
               inputMode="decimal"
               value={draftVal('base_cost', data.base_cost)}
-              onChange={(e) => onDraftChange('base_cost', e.target.value, (n) => handleFieldChange('base_cost', n), /^\d*\.?\d*$/)}
+              onChange={(e) => onDraftChange('base_cost', e.target.value, (n) => handleFieldChange('base_cost', n))}
               style={{
                 width: "100%",
                 padding: "6px 8px",
@@ -324,9 +325,16 @@ export function UniversalPricingRow({
           <input
             type="text"
             inputMode="decimal"
-            value={isViewMode ? data.percentage_added.toFixed(1) : draftVal('percentage_added', data.percentage_added)}
+            value={
+              percentageMarkupDisabled
+                ? "0.0"
+                : isViewMode
+                  ? data.percentage_added.toFixed(1)
+                  : draftVal('percentage_added', data.percentage_added)
+            }
             onChange={(e) => onDraftChange('percentage_added', e.target.value, (n) => handlers?.onPercentageChange?.(n))}
-            disabled={isViewMode}
+            disabled={isViewMode || percentageMarkupDisabled}
+            title={percentageMarkupDisabled ? "Percentage markup is disabled for negative costs. Use amount added instead." : undefined}
             style={{
               width: "100%",
               padding: "6px 8px",
@@ -339,16 +347,17 @@ export function UniversalPricingRow({
               fontWeight: 600,
               outline: "none",
               transition: "all 0.15s ease",
-              cursor: isViewMode ? "default" : "text"
+              opacity: percentageMarkupDisabled ? 0.55 : 1,
+              cursor: isViewMode || percentageMarkupDisabled ? "not-allowed" : "text"
             }}
             onFocus={(e) => {
-              if (isViewMode) return;
+              if (isViewMode || percentageMarkupDisabled) return;
               onDraftFocus('percentage_added', data.percentage_added);
               e.currentTarget.style.borderColor = "var(--theme-markup-focus)";
               e.currentTarget.style.boxShadow = "0 0 0 3px rgba(245, 158, 11, 0.1)";
             }}
             onBlur={(e) => {
-              if (isViewMode) return;
+              if (isViewMode || percentageMarkupDisabled) return;
               onDraftBlur('percentage_added', (n) => handlers?.onPercentageChange?.(n), e, () => {
                 e.currentTarget.style.borderColor = "var(--theme-markup-border)";
                 e.currentTarget.style.boxShadow = "none";

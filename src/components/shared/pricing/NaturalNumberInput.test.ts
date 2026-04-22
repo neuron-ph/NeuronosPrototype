@@ -11,10 +11,20 @@ describe("NaturalNumberInput draft helpers", () => {
     expect(isAllowedNumberDraft("abc")).toBe(false);
   });
 
+  it("allows signed drafts only when negative values are enabled", () => {
+    expect(isAllowedNumberDraft("-", true)).toBe(true);
+    expect(isAllowedNumberDraft("-12", true)).toBe(true);
+    expect(isAllowedNumberDraft("-12.34", true)).toBe(true);
+    expect(isAllowedNumberDraft("--12", true)).toBe(false);
+    expect(isAllowedNumberDraft("-12.3.4", true)).toBe(false);
+    expect(isAllowedNumberDraft("-12")).toBe(false);
+  });
+
   it("commits a draft to a number only when editing is finished", () => {
     expect(commitNumberDraft("", 0)).toBe(0);
     expect(commitNumberDraft(".", 0)).toBe(0);
     expect(commitNumberDraft("234", 0)).toBe(234);
     expect(commitNumberDraft("234.5", 0)).toBe(234.5);
+    expect(commitNumberDraft("-234.5", 0)).toBe(-234.5);
   });
 });

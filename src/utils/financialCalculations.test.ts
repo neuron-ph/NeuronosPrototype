@@ -252,6 +252,29 @@ describe("convertQuotationToVirtualItems", () => {
     expect(result[0].quotation_category).toBe("Ocean Freight");
   });
 
+  it("creates virtual billing items from negative quotation selling amounts so accounting can review them", () => {
+    const quotation: RawRow = {
+      created_at: "2025-01-01T00:00:00Z",
+      selling_price: [
+        {
+          category_name: "Ocean Freight",
+          line_items: [
+            { id: "li1", description: "Rebate", amount: -200, currency: "USD", service: "Forwarding" },
+            { id: "li2", description: "Freight", amount: 100, currency: "USD", service: "Forwarding" },
+          ],
+        },
+      ],
+    };
+
+    const result = convertQuotationToVirtualItems(quotation, "PRJ-001");
+
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe("virtual-li1");
+    expect(result[0].amount).toBe(-200);
+    expect(result[1].id).toBe("virtual-li2");
+    expect(result[1].amount).toBe(100);
+  });
+
   it("returns empty array when selling_price is not an array", () => {
     expect(convertQuotationToVirtualItems({ selling_price: null }, "PRJ-001")).toEqual([]);
     expect(convertQuotationToVirtualItems({ selling_price: "bad" }, "PRJ-001")).toEqual([]);
