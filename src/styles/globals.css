@@ -1181,3 +1181,80 @@ input[type="checkbox"] {
 .memo-list-row:hover .delete-btn {
   opacity: 1 !important;
 }
+
+/* ── Shared rich text styles (editor + read views) ── */
+.memo-rich p                { margin: 0 0 8px; }
+.memo-rich p:last-child     { margin-bottom: 0; }
+.memo-rich strong           { font-weight: 600; color: var(--neuron-ink-primary); }
+.memo-rich em               { font-style: italic; }
+.memo-rich code             { font-family: ui-monospace, monospace; font-size: 0.9em; background: var(--neuron-state-hover); padding: 1px 5px; border-radius: 4px; }
+.memo-rich ul               { margin: 0 0 8px; padding-left: 18px; list-style: disc; }
+.memo-rich ol               { margin: 0 0 8px; padding-left: 18px; list-style: decimal; }
+.memo-rich li               { margin-bottom: 3px; }
+.memo-rich ul:last-child,
+.memo-rich ol:last-child    { margin-bottom: 0; }
+.memo-rich h1               { font-size: 17px; font-weight: 700; color: var(--neuron-ink-primary); margin: 0 0 6px; line-height: 1.3; }
+.memo-rich h2               { font-size: 15px; font-weight: 600; color: var(--neuron-ink-primary); margin: 0 0 5px; line-height: 1.3; }
+.memo-rich h3               { font-size: 13px; font-weight: 600; color: var(--neuron-ink-primary); margin: 0 0 4px; line-height: 1.3; }
+.memo-rich blockquote       { margin: 0 0 8px; padding: 6px 12px; border-left: 3px solid var(--neuron-brand-green); background: color-mix(in oklch, var(--neuron-brand-green) 6%, transparent); border-radius: 0 4px 4px 0; color: var(--neuron-ink-secondary); }
+.memo-rich blockquote p     { margin: 0; }
+.memo-rich hr               { border: none; border-top: 1px solid var(--neuron-ui-border); margin: 10px 0; }
+
+/* Read-only body wrapper (ReleaseCard + list rows) */
+.memo-body { font-size: 13px; color: var(--neuron-ink-secondary); line-height: 20px; margin-bottom: 12px; }
+.memo-body--list { margin-bottom: 10px; line-height: 19px; }
+.memo-body p, .memo-body strong, .memo-body em, .memo-body code,
+.memo-body ul, .memo-body ol, .memo-body li, .memo-body h1, .memo-body h2, .memo-body h3,
+.memo-body blockquote, .memo-body blockquote p, .memo-body hr { }
+/* inherit shared rules via duplicated selectors */
+.memo-body p                { margin: 0 0 8px; }
+.memo-body p:last-child     { margin-bottom: 0; }
+.memo-body strong           { font-weight: 600; color: var(--neuron-ink-primary); }
+.memo-body em               { font-style: italic; }
+.memo-body code             { font-family: ui-monospace, monospace; font-size: 0.9em; background: var(--neuron-state-hover); padding: 1px 5px; border-radius: 4px; }
+.memo-body ul               { margin: 0 0 8px; padding-left: 18px; list-style: disc; }
+.memo-body ol               { margin: 0 0 8px; padding-left: 18px; list-style: decimal; }
+.memo-body li               { margin-bottom: 3px; }
+.memo-body ul:last-child,
+.memo-body ol:last-child    { margin-bottom: 0; }
+.memo-body h1               { font-size: 17px; font-weight: 700; color: var(--neuron-ink-primary); margin: 0 0 6px; line-height: 1.3; }
+.memo-body h2               { font-size: 15px; font-weight: 600; color: var(--neuron-ink-primary); margin: 0 0 5px; line-height: 1.3; }
+.memo-body h3               { font-size: 13px; font-weight: 600; color: var(--neuron-ink-primary); margin: 0 0 4px; line-height: 1.3; }
+.memo-body blockquote       { margin: 0 0 8px; padding: 6px 12px; border-left: 3px solid var(--neuron-brand-green); background: color-mix(in oklch, var(--neuron-brand-green) 6%, transparent); border-radius: 0 4px 4px 0; color: var(--neuron-ink-secondary); }
+.memo-body blockquote p     { margin: 0; }
+.memo-body hr               { border: none; border-top: 1px solid var(--neuron-ui-border); margin: 10px 0; }
+
+/* Tiptap WYSIWYG editor area */
+.memo-editor .tiptap,
+.memo-editor .ProseMirror  {
+  outline: none;
+  padding: 10px 12px;
+  min-height: 100%;
+  font-size: 13px;
+  color: var(--neuron-ink-primary);
+  line-height: 21px;
+  font-family: inherit;
+}
+.memo-editor .ProseMirror p                { margin: 0 0 8px; }
+.memo-editor .ProseMirror p:last-child     { margin-bottom: 0; }
+.memo-editor .ProseMirror strong           { font-weight: 600; }
+.memo-editor .ProseMirror em               { font-style: italic; }
+.memo-editor .ProseMirror code             { font-family: ui-monospace, monospace; font-size: 0.9em; background: var(--neuron-state-hover); padding: 1px 5px; border-radius: 4px; }
+.memo-editor .ProseMirror ul               { margin: 0 0 8px; padding-left: 18px; list-style: disc; }
+.memo-editor .ProseMirror ol               { margin: 0 0 8px; padding-left: 18px; list-style: decimal; }
+.memo-editor .ProseMirror li               { margin-bottom: 3px; }
+.memo-editor .ProseMirror ul:last-child,
+.memo-editor .ProseMirror ol:last-child    { margin-bottom: 0; }
+.memo-editor .ProseMirror h1               { font-size: 20px; font-weight: 700; margin: 0 0 8px; line-height: 1.25; }
+.memo-editor .ProseMirror h2               { font-size: 16px; font-weight: 600; margin: 0 0 6px; line-height: 1.3; }
+.memo-editor .ProseMirror h3               { font-size: 14px; font-weight: 600; margin: 0 0 5px; line-height: 1.3; }
+.memo-editor .ProseMirror blockquote       { margin: 0 0 8px; padding: 6px 12px; border-left: 3px solid var(--neuron-brand-green); background: color-mix(in oklch, var(--neuron-brand-green) 6%, transparent); border-radius: 0 4px 4px 0; color: var(--neuron-ink-secondary); }
+.memo-editor .ProseMirror blockquote p     { margin: 0; }
+.memo-editor .ProseMirror hr               { border: none; border-top: 1px solid var(--neuron-ui-border); margin: 12px 0; }
+.memo-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--neuron-ink-muted);
+  pointer-events: none;
+  float: left;
+  height: 0;
+}

@@ -1,11 +1,18 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import Placeholder from "@tiptap/extension-placeholder";
+import ReactMarkdown from "react-markdown";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "sonner@2.0.3";
 import {
   Plus, ArrowLeft, Send, Loader2, X, Megaphone,
   Sparkles, TrendingUp, Wrench, Star, RotateCcw, Trash2,
+  Bold, Italic, Code, List, ListOrdered,
+  Heading1, Heading2, Heading3, Minus, Quote,
 } from "lucide-react";
+import type { Editor } from "@tiptap/react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -56,6 +63,22 @@ function getTimeGroup(iso: string): string {
   if (diff < 7)  return "THIS WEEK";
   if (diff < 14) return "LAST WEEK";
   return new Date(iso).toLocaleDateString("en-PH", { month: "long", year: "numeric" }).toUpperCase();
+}
+
+// ─── MemoBody — renders both HTML (Tiptap) and legacy plain/markdown bodies ──
+
+function MemoBody({ body, className }: { body: string; className?: string }) {
+  const isHtml = body.trimStart().startsWith("<");
+  return isHtml ? (
+    <div
+      className={`memo-body ${className ?? ""}`}
+      dangerouslySetInnerHTML={{ __html: body }}
+    />
+  ) : (
+    <div className={`memo-body ${className ?? ""}`}>
+      <ReactMarkdown>{body}</ReactMarkdown>
+    </div>
+  );
 }
 
 // ─── TypeBadge ────────────────────────────────────────────────────────────────
@@ -125,29 +148,20 @@ function ReleaseCard({ memo, featured = false, onDelete }: { memo: Memo; feature
           : "var(--neuron-ui-border)",
       }}
     >
-      {/* Module tag */}
       {memo.module && (
         <div style={{ fontSize: "11px", color: "var(--neuron-ink-muted)", marginBottom: "4px", fontWeight: 500 }}>
           {memo.module}
         </div>
       )}
-
-      {/* Title */}
       <div style={{ fontSize: "15px", fontWeight: 600, color: "var(--neuron-ink-primary)", lineHeight: "22px", marginBottom: "8px" }}>
         {featured && (
           <Star size={12} style={{ display: "inline", marginRight: "6px", color: "var(--neuron-brand-green)", verticalAlign: "middle", marginBottom: "2px" }} />
         )}
         {memo.title}
       </div>
-
-      {/* Body */}
       {memo.body && (
-        <p style={{ fontSize: "13px", color: "var(--neuron-ink-secondary)", lineHeight: "20px", margin: "0 0 12px", whiteSpace: "pre-wrap" }}>
-          {memo.body}
-        </p>
+        <MemoBody body={memo.body} className="memo-body--card" />
       )}
-
-      {/* Footer */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
           <TypeBadge type={memo.memo_type} />
@@ -200,7 +214,6 @@ function FilterSidebar({
 
   return (
     <div style={{ width: 200, flexShrink: 0, paddingRight: 24, paddingTop: 4 }}>
-      {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
         <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--neuron-ink-primary)" }}>Filters</span>
         {hasActive && (
@@ -212,8 +225,6 @@ function FilterSidebar({
           </button>
         )}
       </div>
-
-      {/* Type filter */}
       <div style={{ marginBottom: "20px" }}>
         <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--neuron-ink-muted)", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "8px" }}>
           Release type
@@ -223,8 +234,6 @@ function FilterSidebar({
           <RadioItem key={t} label={TYPE_CONFIG[t].label} active={filters.type === t} onClick={() => onChange({ ...filters, type: t })} />
         ))}
       </div>
-
-      {/* Module filter — only show if there are multiple modules in data */}
       {availableModules.length > 1 && (
         <div>
           <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--neuron-ink-muted)", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "8px" }}>
@@ -236,6 +245,88 @@ function FilterSidebar({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── RichToolbar ──────────────────────────────────────────────────────────────
+
+type ToolbarGroup = Array<{
+  title: string;
+  icon: React.ElementType;
+  action: (e: Editor) => void;
+  isActive?: (e: Editor) => boolean;
+}>;
+
+const TOOLBAR_GROUPS: ToolbarGroup[] = [
+  [
+    { title: "Heading 1", icon: Heading1, action: e => e.chain().focus().toggleHeading({ level: 1 }).run(), isActive: e => e.isActive("heading", { level: 1 }) },
+    { title: "Heading 2", icon: Heading2, action: e => e.chain().focus().toggleHeading({ level: 2 }).run(), isActive: e => e.isActive("heading", { level: 2 }) },
+    { title: "Heading 3", icon: Heading3, action: e => e.chain().focus().toggleHeading({ level: 3 }).run(), isActive: e => e.isActive("heading", { level: 3 }) },
+  ],
+  [
+    { title: "Bold",       icon: Bold,   action: e => e.chain().focus().toggleBold().run(),        isActive: e => e.isActive("bold") },
+    { title: "Italic",     icon: Italic, action: e => e.chain().focus().toggleItalic().run(),      isActive: e => e.isActive("italic") },
+    { title: "Code",       icon: Code,   action: e => e.chain().focus().toggleCode().run(),        isActive: e => e.isActive("code") },
+    { title: "Blockquote", icon: Quote,  action: e => e.chain().focus().toggleBlockquote().run(), isActive: e => e.isActive("blockquote") },
+  ],
+  [
+    { title: "Bullet list",   icon: List,         action: e => e.chain().focus().toggleBulletList().run(),  isActive: e => e.isActive("bulletList") },
+    { title: "Numbered list", icon: ListOrdered,  action: e => e.chain().focus().toggleOrderedList().run(), isActive: e => e.isActive("orderedList") },
+  ],
+  [
+    { title: "Separator", icon: Minus, action: e => e.chain().focus().setHorizontalRule().run() },
+  ],
+];
+
+function RichToolbar({ editor }: { editor: Editor | null }) {
+  if (!editor) return null;
+
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: "2px", padding: "5px 8px",
+      borderBottom: "1px solid var(--neuron-ui-border)",
+      background: "var(--neuron-bg-page)", flexShrink: 0,
+    }}>
+      {TOOLBAR_GROUPS.map((group, gi) => (
+        <div key={gi} style={{ display: "flex", alignItems: "center", gap: "2px" }}>
+          {gi > 0 && (
+            <div style={{ width: 1, height: 16, background: "var(--neuron-ui-border)", margin: "0 4px", flexShrink: 0 }} />
+          )}
+          {group.map(({ title, icon: Icon, action, isActive }) => {
+            const active = isActive?.(editor) ?? false;
+            return (
+              <button
+                key={title}
+                title={title}
+                type="button"
+                onMouseDown={e => { e.preventDefault(); action(editor); }}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  width: 28, height: 28, borderRadius: "5px", border: "none",
+                  cursor: "pointer", flexShrink: 0,
+                  background: active ? "color-mix(in oklch, var(--neuron-brand-green) 12%, transparent)" : "none",
+                  color: active ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)",
+                }}
+                onMouseEnter={e => {
+                  if (!active) {
+                    (e.currentTarget as HTMLElement).style.background = "var(--neuron-state-hover)";
+                    (e.currentTarget as HTMLElement).style.color = "var(--neuron-ink-primary)";
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!active) {
+                    (e.currentTarget as HTMLElement).style.background = "none";
+                    (e.currentTarget as HTMLElement).style.color = "var(--neuron-ink-muted)";
+                  }
+                }}
+              >
+                <Icon size={14} />
+              </button>
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 }
@@ -272,10 +363,33 @@ function ComposeView({
   onPreview: () => void;
   onCancel: () => void;
 }) {
-  const canPreview = !!(draft.title.trim() || draft.body.trim());
+  // Refs keep onUpdate from closing over stale draft/onChange
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        bulletList: { keepMarks: true, keepAttributes: false },
+        orderedList: { keepMarks: true, keepAttributes: false },
+      }),
+      Placeholder.configure({ placeholder: "Describe what changed and why it matters to your team…" }),
+    ],
+    content: draft.body || "",
+    onUpdate: ({ editor }) => {
+      const html = editor.isEmpty ? "" : editor.getHTML();
+      onChangeRef.current({ ...draftRef.current, body: html });
+    },
+  });
+
+  const canPreview = !!(draft.title.trim() || (editor && !editor.isEmpty));
 
   return (
-    <motion.div key="compose" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+    <motion.div
+      key="compose"
+      initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
       transition={{ duration: 0.18, ease: [0.25, 1, 0.5, 1] }}
       style={{ width: "100%", display: "flex", flexDirection: "column", gap: "18px", flex: 1, minHeight: 0 }}
     >
@@ -304,12 +418,20 @@ function ComposeView({
         </div>
       </div>
 
-      {/* Body */}
+      {/* Body — rich text editor */}
       <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
         <label style={LABEL_STYLE}>Body</label>
-        <textarea value={draft.body} onChange={e => onChange({ ...draft, body: e.target.value })}
-          placeholder="Describe what changed and why it matters to your team…"
-          style={{ ...INPUT_STYLE, resize: "none", lineHeight: "21px", flex: 1, minHeight: 0 }} />
+        <div style={{
+          display: "flex", flexDirection: "column", flex: 1, minHeight: 0,
+          border: "1px solid var(--neuron-ui-border)", borderRadius: "6px",
+          overflow: "hidden", background: "var(--neuron-bg-elevated)",
+        }}>
+          <RichToolbar editor={editor} />
+          <div className="memo-editor" style={{ flex: 1, overflowY: "auto", cursor: "text" }}
+            onClick={() => editor?.chain().focus().run()}>
+            <EditorContent editor={editor} />
+          </div>
+        </div>
       </div>
 
       {/* Featured toggle */}
@@ -329,15 +451,14 @@ function ComposeView({
             transition: "left 0.15s ease",
           }} />
         </button>
-        <span style={{ fontSize: "13px", color: "var(--neuron-ink-primary)" }}>
-          Pin as featured
-        </span>
+        <span style={{ fontSize: "13px", color: "var(--neuron-ink-primary)" }}>Pin as featured</span>
         {draft.is_featured && <Star size={13} style={{ color: "var(--neuron-brand-green)" }} />}
       </label>
 
       {/* Actions */}
       <div style={{ display: "flex", gap: "10px", paddingTop: "4px" }}>
-        <button onClick={onCancel} style={{ flex: 1, padding: "9px", borderRadius: "6px", border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-secondary)", fontSize: "13px", fontWeight: 500, cursor: "pointer" }}>
+        <button onClick={onCancel}
+          style={{ flex: 1, padding: "9px", borderRadius: "6px", border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-secondary)", fontSize: "13px", fontWeight: 500, cursor: "pointer" }}>
           Cancel
         </button>
         <button onClick={onPreview} disabled={!canPreview}
@@ -395,7 +516,7 @@ export function MemoPanel({ isOpen, onClose, userId, canWrite }: MemoPanelProps)
     if (!draft.title.trim()) { toast.error("Title is required"); return; }
     setPublishing(true);
     const { error } = await supabase.from("memos").insert({
-      title: draft.title.trim(), body: draft.body.trim(),
+      title: draft.title.trim(), body: draft.body,
       memo_type: draft.memo_type,
       module: draft.module || null,
       is_featured: draft.is_featured,
@@ -407,7 +528,6 @@ export function MemoPanel({ isOpen, onClose, userId, canWrite }: MemoPanelProps)
     setDraft(EMPTY_DRAFT); setView("list"); fetchMemos();
   };
 
-  // Derived data
   const availableModules = useMemo(() =>
     [...new Set(memos.map(m => m.module).filter(Boolean))] as string[],
     [memos]
@@ -422,7 +542,6 @@ export function MemoPanel({ isOpen, onClose, userId, canWrite }: MemoPanelProps)
   const featured  = filtered.filter(m => m.is_featured);
   const releases  = filtered.filter(m => !m.is_featured);
 
-  // Group releases by time period
   const grouped = useMemo(() => {
     const groups: { label: string; items: Memo[] }[] = [];
     const seen = new Map<string, Memo[]>();
@@ -498,7 +617,7 @@ export function MemoPanel({ isOpen, onClose, userId, canWrite }: MemoPanelProps)
       {/* ── Body — always two-column ── */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
 
-        {/* Filter sidebar — shown only in list view */}
+        {/* Filter sidebar */}
         <div style={{
           width: 220, flexShrink: 0, overflowY: "auto",
           borderRight: "1px solid var(--neuron-ui-border)",
@@ -557,7 +676,6 @@ export function MemoPanel({ isOpen, onClose, userId, canWrite }: MemoPanelProps)
                   </div>
                 ) : (
                   <div>
-                    {/* Featured */}
                     {featured.length > 0 && (
                       <section style={{ marginBottom: "32px" }}>
                         <h2 style={{ fontSize: "16px", fontWeight: 600, color: "var(--neuron-ink-primary)", marginBottom: "12px" }}>Featured</h2>
@@ -566,7 +684,6 @@ export function MemoPanel({ isOpen, onClose, userId, canWrite }: MemoPanelProps)
                         </div>
                       </section>
                     )}
-                    {/* All releases */}
                     {releases.length > 0 && (
                       <section>
                         <h2 style={{ fontSize: "16px", fontWeight: 600, color: "var(--neuron-ink-primary)", marginBottom: "16px" }}>All Releases</h2>
@@ -579,7 +696,7 @@ export function MemoPanel({ isOpen, onClose, userId, canWrite }: MemoPanelProps)
                                   <div key={m.id} className="memo-list-row" style={{ backgroundColor: "var(--neuron-bg-elevated)", padding: "16px 20px", borderBottom: i < items.length - 1 ? "1px solid var(--neuron-ui-border)" : "none" }}>
                                     {m.module && <div style={{ fontSize: "11px", color: "var(--neuron-ink-muted)", marginBottom: "3px", fontWeight: 500 }}>{m.module}</div>}
                                     <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--neuron-ink-primary)", lineHeight: "20px", marginBottom: "6px" }}>{m.title}</div>
-                                    {m.body && <p style={{ fontSize: "13px", color: "var(--neuron-ink-secondary)", lineHeight: "19px", margin: "0 0 10px", whiteSpace: "pre-wrap" }}>{m.body}</p>}
+                                    {m.body && <MemoBody body={m.body} className="memo-body--list" />}
                                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                                       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                                         <TypeBadge type={m.memo_type} />

@@ -1475,12 +1475,11 @@ function AccessOverridesTab({ onCountUpdate }: { onCountUpdate: (count: number) 
 
 // ─── Tab navigation ───────────────────────────────────────────────────────────
 
-type Tab = "users" | "teams" | "overrides" | "profiles";
+type Tab = "users" | "teams" | "profiles";
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "users",    label: "Users",            icon: Users },
   { id: "teams",    label: "Teams",            icon: UsersRound },
-  { id: "overrides", label: "Access Overrides", icon: Shield },
   { id: "profiles",  label: "Access Profiles",  icon: BookMarked },
 ];
 
@@ -1489,7 +1488,6 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
 interface TabCounts {
   users: number;
   teams: number;
-  overrides: number;
   profiles: number;
 }
 
@@ -1500,24 +1498,21 @@ export function UserManagement() {
   const location = useLocation();
   const canViewUsersTab          = can("admin_users_tab", "view");
   const canViewTeamsTab          = can("admin_teams_tab", "view");
-  const canViewOverridesTab      = can("admin_overrides_tab", "view");
   const canViewAccessProfilesTab = can("admin_access_profiles_tab", "view");
 
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     if (canViewUsersTab)          return "users";
     if (canViewTeamsTab)          return "teams";
-    if (canViewOverridesTab)      return "overrides";
     if (canViewAccessProfilesTab) return "profiles";
     return "users";
   });
-  const [tabCounts, setTabCounts] = useState<TabCounts>({ users: 0, teams: 0, overrides: 0, profiles: 0 });
+  const [tabCounts, setTabCounts] = useState<TabCounts>({ users: 0, teams: 0, profiles: 0 });
   const [configuringUser, setConfiguringUser] = useState<ConfigUser | null>(
     (location.state as any)?.configureUser ?? null
   );
   const [editingProfile, setEditingProfile] = useState<Partial<AccessProfile> | null | undefined>(undefined);
   const handleUsersCount = useCallback((count: number) => setTabCounts(prev => ({ ...prev, users: count })), []);
   const handleTeamsCount = useCallback((count: number) => setTabCounts(prev => ({ ...prev, teams: count })), []);
-  const handleOverridesCount = useCallback((count: number) => setTabCounts(prev => ({ ...prev, overrides: count })), []);
 
   if (configuringUser) {
     return (
@@ -1548,7 +1543,7 @@ export function UserManagement() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -4 }}
           transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
-          style={{ height: "100%", display: "flex", flexDirection: "column", backgroundColor: "var(--neuron-bg-elevated)", padding: "0 48px" }}
+          style={{ height: "100%", overflowY: "auto", backgroundColor: "var(--neuron-bg-elevated)", padding: "0 48px 48px" }}
         >
           <ProfileEditor
             profile={editingProfile}
@@ -1578,7 +1573,6 @@ export function UserManagement() {
           {TABS.filter(({ id }) =>
             (id === "users"     && canViewUsersTab)          ||
             (id === "teams"     && canViewTeamsTab)          ||
-            (id === "overrides" && canViewOverridesTab)      ||
             (id === "profiles"  && canViewAccessProfilesTab)
           ).map(({ id, label, icon: Icon }) => {
             const isActive = activeTab === id;
@@ -1662,7 +1656,6 @@ export function UserManagement() {
           >
             {activeTab === "users"     && canViewUsersTab          && <UsersTab onCountUpdate={handleUsersCount} onConfigureAccess={setConfiguringUser} />}
             {activeTab === "teams"     && canViewTeamsTab          && <TeamsTab onCountUpdate={handleTeamsCount} />}
-            {activeTab === "overrides" && canViewOverridesTab      && <AccessOverridesTab onCountUpdate={handleOverridesCount} />}
             {activeTab === "profiles"  && canViewAccessProfilesTab && <AccessProfiles onConfigureAccess={setConfiguringUser} onEditProfile={setEditingProfile} />}
           </motion.div>
         </AnimatePresence>

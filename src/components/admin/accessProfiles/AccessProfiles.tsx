@@ -1,11 +1,11 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "motion/react";
 import { supabase } from "../../../utils/supabase/client";
 import { toast } from "sonner@2.0.3";
 import { useUser } from "../../../hooks/useUser";
 import {
-  Plus, ArrowLeft, Save, Trash2, RotateCcw, UserCheck, AlertTriangle, BookMarked, Search, X,
+  Plus, ArrowLeft, Save, Trash2, UserCheck, AlertTriangle, BookMarked, Search, X, ChevronUp,
 } from "lucide-react";
 import { DataTable, type ColumnDef } from "../../common/DataTable";
 import { PermissionGrantEditor } from "./PermissionGrantEditor";
@@ -325,6 +325,11 @@ export function ProfileEditor({
   const [savedTargetRole, setSavedTargetRole] = useState(profile?.target_role ?? "");
   const [saving, setSaving] = useState(false);
   const [nameError, setNameError] = useState("");
+  const [metaOpen, setMetaOpen] = useState(isNew);
+  const [showBaseline, setShowBaseline] = useState(false);
+  const [emptyGrantsWarning, setEmptyGrantsWarning] = useState(false);
+  const [confirmExitOpen, setConfirmExitOpen] = useState(false);
+  const prevGrantsRef = useRef<ModuleGrants>({});
 
   const isDirty = useMemo(() => {
     if (name !== savedName) return true;
@@ -336,10 +341,41 @@ export function ProfileEditor({
     return gk.some(k => grants[k] !== savedGrants[k]);
   }, [name, savedName, description, savedDescription, targetDepartment, savedTargetDepartment, targetRole, savedTargetRole, grants, savedGrants]);
 
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
+
+  const handleBack = () => {
+    if (!isDirty) { onBack(); return; }
+    setConfirmExitOpen(true);
+  };
+
+  const handleClearAll = () => {
+    prevGrantsRef.current = { ...grants };
+    setGrants({});
+    toast("Access rules cleared.", {
+      action: { label: "Undo", onClick: () => setGrants(prevGrantsRef.current) },
+      duration: 5000,
+    });
+  };
+
+  const canShowBaseline = !!targetRole && !!targetDepartment;
+  const grantCount = countGrantOverrides(grants);
+
   const handleSave = async () => {
     const trimmed = normalizeProfileName(name);
     if (!trimmed) { setNameError("Profile name is required"); return; }
     setNameError("");
+
+    if (Object.keys(grants).length === 0 && !emptyGrantsWarning) {
+      setEmptyGrantsWarning(true);
+      return;
+    }
+    setEmptyGrantsWarning(false);
+
     setSaving(true);
 
     const now = new Date().toISOString();
@@ -402,12 +438,19 @@ export function ProfileEditor({
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 0, height: "100%" }}>
-      {/* Editor top bar */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 0 16px", gap: 16, flexWrap: "wrap" }}>
+    <div>
+      {/* Editor top bar — sticky so Save is always reachable while scrolling */}
+      <div style={{
+        position: "sticky", top: 0, zIndex: 20,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "14px 0", gap: 16, flexWrap: "wrap",
+        backgroundColor: "var(--neuron-bg-elevated)",
+        borderBottom: "1px solid var(--neuron-ui-border)",
+        marginBottom: 20,
+      }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
           <button
-            onClick={onBack}
+            onClick={handleBack}
             style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 8, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-muted)", fontSize: 13, fontWeight: 500, cursor: "pointer" }}
           >
             <ArrowLeft size={13} /> Back
@@ -442,85 +485,212 @@ export function ProfileEditor({
         </div>
       </div>
 
-      {/* Profile metadata */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20, padding: 16, borderRadius: 10, border: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--neuron-bg-surface-subtle)" }}>
-        <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-            Profile Name *
-          </label>
-          <input
-            type="text"
-            value={name}
-            onChange={e => { setName(e.target.value); setNameError(""); }}
-            placeholder="e.g. BD Manager, Ops Supervisor"
-            style={{
-              padding: "8px 12px", borderRadius: 8, fontSize: 13, fontWeight: 500,
-              border: `1px solid ${nameError ? "var(--neuron-semantic-error, #dc2626)" : "var(--neuron-ui-border)"}`,
-              background: "var(--neuron-bg-elevated)", color: "var(--neuron-ink-primary)", outline: "none",
-            }}
-          />
-          {nameError && <span style={{ fontSize: 11, color: "var(--neuron-semantic-error, #dc2626)" }}>{nameError}</span>}
+      {/* Collapsed metadata summary bar */}
+      {!metaOpen && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px",
+          marginBottom: 14, borderRadius: 8, border: "1px solid var(--neuron-ui-border)",
+          backgroundColor: "var(--neuron-bg-surface-subtle)" }}>
+          <span style={{ fontSize: 13, fontWeight: 500, color: "var(--neuron-ink-primary)", flex: 1, minWidth: 0,
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {name || "Untitled profile"}
+            {targetDepartment && (
+              <span style={{ color: "var(--neuron-ink-muted)", fontWeight: 400 }}> · {targetDepartment}</span>
+            )}
+            {targetRole && (
+              <span style={{ color: "var(--neuron-ink-muted)", fontWeight: 400 }}>
+                {" / "}{ROLES.find(r => r.value === targetRole)?.label ?? targetRole}
+              </span>
+            )}
+          </span>
+          <button onClick={() => setMetaOpen(true)} style={{ fontSize: 12, color: "var(--neuron-action-primary)",
+            border: "none", background: "none", cursor: "pointer", flexShrink: 0, padding: "2px 4px" }}>
+            Edit details
+          </button>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Description</label>
-          <input
-            type="text"
-            value={description}
-            onChange={e => setDescription(e.target.value)}
-            placeholder="Optional description"
-            style={{ padding: "8px 12px", borderRadius: 8, fontSize: 13, border: "1px solid var(--neuron-ui-border)", background: "var(--neuron-bg-elevated)", color: "var(--neuron-ink-primary)", outline: "none" }}
-          />
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Target Department</label>
-          <select
-            value={targetDepartment}
-            onChange={e => setTargetDepartment(e.target.value)}
-            style={{ padding: "8px 12px", borderRadius: 8, fontSize: 13, border: "1px solid var(--neuron-ui-border)", background: "var(--neuron-bg-elevated)", color: "var(--neuron-ink-primary)", outline: "none" }}
-          >
-            <option value="">Any department</option>
-            {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
-          </select>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Target Role</label>
-          <select
-            value={targetRole}
-            onChange={e => setTargetRole(e.target.value)}
-            style={{ padding: "8px 12px", borderRadius: 8, fontSize: 13, border: "1px solid var(--neuron-ui-border)", background: "var(--neuron-bg-elevated)", color: "var(--neuron-ink-primary)", outline: "none" }}
-          >
-            <option value="">Any role</option>
-            {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-          </select>
+      )}
+
+      {/* Profile metadata — collapsible */}
+      <div style={{
+        display: "grid",
+        gridTemplateRows: metaOpen ? "1fr" : "0fr",
+        transition: "grid-template-rows 0.24s cubic-bezier(0.16,1,0.3,1)",
+        marginBottom: metaOpen ? 0 : 0,
+      }}>
+        <div style={{ overflow: "hidden" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20, padding: "16px 16px 20px", borderRadius: 10, border: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--neuron-bg-surface-subtle)" }}>
+            {/* Header row: label + Collapse button */}
+            <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                Profile Name *
+              </label>
+              <button
+                onClick={() => setMetaOpen(false)}
+                style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 11, color: "var(--neuron-ink-muted)", border: "none", background: "none", cursor: "pointer", padding: "2px 4px" }}
+              >
+                Collapse <ChevronUp size={12} />
+              </button>
+            </div>
+            {/* Name input */}
+            <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: 4 }}>
+              <input
+                type="text"
+                value={name}
+                onChange={e => { setName(e.target.value); setNameError(""); }}
+                placeholder="e.g. BD Manager, Ops Supervisor"
+                autoFocus={isNew}
+                style={{
+                  padding: "8px 12px", borderRadius: 8, fontSize: 13, fontWeight: 500,
+                  border: `1px solid ${nameError ? "var(--neuron-semantic-error, #dc2626)" : "var(--neuron-ui-border)"}`,
+                  background: "var(--neuron-bg-elevated)", color: "var(--neuron-ink-primary)", outline: "none",
+                }}
+              />
+              {nameError && <span style={{ fontSize: 11, color: "var(--neuron-semantic-error, #dc2626)" }}>{nameError}</span>}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Description</label>
+              <input
+                type="text"
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="Optional description"
+                style={{ padding: "8px 12px", borderRadius: 8, fontSize: 13, border: "1px solid var(--neuron-ui-border)", background: "var(--neuron-bg-elevated)", color: "var(--neuron-ink-primary)", outline: "none" }}
+              />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Target Department</label>
+              <select
+                value={targetDepartment}
+                onChange={e => setTargetDepartment(e.target.value)}
+                style={{ padding: "8px 12px", borderRadius: 8, fontSize: 13, border: "1px solid var(--neuron-ui-border)", background: "var(--neuron-bg-elevated)", color: "var(--neuron-ink-primary)", outline: "none" }}
+              >
+                <option value="">Any department</option>
+                {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Target Role</label>
+              <select
+                value={targetRole}
+                onChange={e => setTargetRole(e.target.value)}
+                style={{ padding: "8px 12px", borderRadius: 8, fontSize: 13, border: "1px solid var(--neuron-ui-border)", background: "var(--neuron-bg-elevated)", color: "var(--neuron-ink-primary)", outline: "none" }}
+              >
+                <option value="">Any role</option>
+                {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+              </select>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Grant count badge */}
-      <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--neuron-ink-muted)" }}>Access Rules</span>
-        {countGrantOverrides(grants) > 0 && (
-          <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 8px", borderRadius: 999, backgroundColor: "color-mix(in oklch, var(--neuron-action-primary) 12%, transparent)", color: "var(--neuron-action-primary)" }}>
-            {countGrantOverrides(grants)} explicit rules
+      {/* Grant count / controls row */}
+      <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Access Rules</span>
+        {grantCount > 0 && (
+          <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 8px", borderRadius: 999,
+            backgroundColor: "color-mix(in oklch, var(--neuron-action-primary) 12%, transparent)",
+            color: "var(--neuron-action-primary)" }}>
+            {grantCount} explicit rules
           </span>
         )}
-        {countGrantOverrides(grants) > 0 && (
+        {canShowBaseline && (
           <button
-            onClick={() => setGrants({})}
-            style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--neuron-ink-muted)", padding: "2px 8px", borderRadius: 6, border: "1px solid var(--neuron-ui-border)", background: "transparent", cursor: "pointer" }}
-          >
-            <RotateCcw size={10} /> Clear all
+            onClick={() => setShowBaseline(s => !s)}
+            style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6,
+              border: showBaseline ? "1.5px solid var(--neuron-action-primary)" : "1px solid var(--neuron-ui-border)",
+              backgroundColor: showBaseline ? "color-mix(in oklch, var(--neuron-action-primary) 10%, transparent)" : "transparent",
+              color: showBaseline ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
+              cursor: "pointer" }}>
+            {showBaseline ? "Hide baseline" : `Preview ${ROLES.find(r => r.value === targetRole)?.label} baseline`}
+          </button>
+        )}
+        {emptyGrantsWarning && (
+          <span style={{ fontSize: 11, color: "var(--theme-status-warning-fg)", display: "flex", alignItems: "center", gap: 4 }}>
+            <AlertTriangle size={11} /> No rules set — click Save again to confirm
+          </span>
+        )}
+        {grantCount > 0 && (
+          <button onClick={handleClearAll} style={{ fontSize: 11, color: "var(--neuron-semantic-error, #dc2626)",
+            border: "none", background: "none", cursor: "pointer", padding: "2px 0", marginLeft: "auto",
+            textDecoration: "underline", textUnderlineOffset: 2, opacity: 0.8 }}>
+            Clear all
           </button>
         )}
       </div>
 
       {/* Grant editor */}
-      <div style={{ flex: 1, overflow: "auto" }}>
-        <PermissionGrantEditor
-          grants={grants}
-          onChange={(nextGrants) => setGrants(nextGrants)}
-          showInheritedBaseline={false}
-        />
-      </div>
+      <PermissionGrantEditor
+        grants={grants}
+        onChange={(nextGrants) => setGrants(nextGrants)}
+        showInheritedBaseline={showBaseline && canShowBaseline}
+        baselineRole={targetRole}
+        baselineDepartment={targetDepartment}
+      />
+
+      {/* Exit confirmation modal */}
+      <AnimatePresence>
+        {confirmExitOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            onClick={() => setConfirmExitOpen(false)}
+            style={{
+              position: "fixed", inset: 0, zIndex: 1000,
+              backgroundColor: "rgba(18,51,43,0.28)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 6 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 4 }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              onClick={e => e.stopPropagation()}
+              style={{
+                background: "var(--neuron-bg-elevated)", borderRadius: 12,
+                padding: "24px 24px 20px", maxWidth: 380, width: "90%",
+                border: "1px solid var(--neuron-ui-border)",
+                boxShadow: "0 8px 32px color-mix(in oklch, var(--neuron-ink-primary) 14%, transparent)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 20 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 8, flexShrink: 0,
+                  backgroundColor: "color-mix(in oklch, var(--neuron-semantic-error, #dc2626) 10%, transparent)",
+                  display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <AlertTriangle size={16} style={{ color: "var(--neuron-semantic-error, #dc2626)" }} />
+                </div>
+                <div>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: "var(--neuron-ink-primary)", margin: "0 0 4px" }}>
+                    Discard changes?
+                  </p>
+                  <p style={{ fontSize: 13, color: "var(--neuron-ink-muted)", margin: 0, lineHeight: 1.5 }}>
+                    You have unsaved changes to this profile. Going back will discard them.
+                  </p>
+                </div>
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                <button
+                  onClick={() => setConfirmExitOpen(false)}
+                  style={{ padding: "7px 16px", borderRadius: 8, border: "1px solid var(--neuron-ui-border)",
+                    background: "transparent", color: "var(--neuron-ink-muted)", fontSize: 13,
+                    fontWeight: 500, cursor: "pointer" }}
+                >
+                  Keep editing
+                </button>
+                <button
+                  onClick={() => { setConfirmExitOpen(false); onBack(); }}
+                  style={{ padding: "7px 16px", borderRadius: 8, border: "none",
+                    background: "var(--neuron-semantic-error, #dc2626)", color: "#fff",
+                    fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+                >
+                  Discard & go back
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -612,6 +782,18 @@ export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditPr
             style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--neuron-ui-border)", background: "transparent", fontSize: 12, fontWeight: 500, color: "var(--neuron-ink-muted)", cursor: "pointer" }}
           >
             Edit
+          </button>
+          <button
+            onClick={() => onEditProfile({
+              ...row as unknown as Partial<AccessProfile>,
+              id: undefined,
+              name: `${row.name} (Copy)`,
+            })}
+            style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--neuron-ui-border)",
+              background: "transparent", fontSize: 12, fontWeight: 500, color: "var(--neuron-ink-muted)",
+              cursor: "pointer" }}
+          >
+            Duplicate
           </button>
           <button
             onClick={() => setApplyingProfile(row)}

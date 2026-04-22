@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { ChevronDown, ChevronRight, EyeOff, Search, X } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronsDown, ChevronsUp, EyeOff, Search, X } from "lucide-react";
 import {
   PERM_MODULES, PERM_ACTIONS,
   getInheritedPermission,
@@ -323,7 +323,7 @@ function ModuleRow({
 
 function GroupAccordion({
   group, modules, baselineRole, baselineDepartment, showInheritedBaseline,
-  grants, onToggle, defaultOpen, searchQuery, matchedIds, highlightedCellKeys, activeActionFilter,
+  grants, onToggle, onChange, defaultOpen, searchQuery, matchedIds, highlightedCellKeys, activeActionFilter,
 }: {
   group: string;
   modules: typeof PERM_MODULES;
@@ -332,6 +332,7 @@ function GroupAccordion({
   showInheritedBaseline: boolean;
   grants: ModuleGrants;
   onToggle: (moduleId: ModuleId, action: ActionId, next: boolean) => void;
+  onChange: (newGrants: ModuleGrants, meta: { manual: boolean }) => void;
   defaultOpen: boolean;
   searchQuery: string;
   matchedIds: Set<string>;
@@ -391,6 +392,27 @@ function GroupAccordion({
     }, 0);
   }, [modules, grants]);
 
+  const handleBulkGrant = (action: ActionId | "all", next: boolean) => {
+    const newGrants = { ...grants };
+    for (const mod of modules) {
+      const applicable = new Set(mod.applicableActions ?? PERM_ACTIONS);
+      const actions: ActionId[] = action === "all" ? [...PERM_ACTIONS] : [action as ActionId];
+      for (const a of actions) {
+        if (!applicable.has(a)) continue;
+        const key = `${mod.id}:${a}`;
+        if (showInheritedBaseline && baselineRole && baselineDepartment) {
+          const inherited = getInheritedPermission(baselineRole, baselineDepartment, mod.id as ModuleId, a);
+          if (next === inherited) delete newGrants[key];
+          else newGrants[key] = next;
+        } else {
+          if (next) newGrants[key] = true;
+          else delete newGrants[key];
+        }
+      }
+    }
+    onChange(newGrants, { manual: true });
+  };
+
   return (
     <div style={{ border: "1px solid var(--neuron-ui-border)", borderRadius: 10, overflow: "hidden" }}>
 
@@ -426,16 +448,35 @@ function GroupAccordion({
           )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {effectiveOpen && !searching && !activeActionFilter && (
+            <div style={{ display: "flex", gap: 3, alignItems: "center" }} onClick={e => e.stopPropagation()}>
+              <button onClick={() => handleBulkGrant("view", true)} style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 5, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-muted)", cursor: "pointer", whiteSpace: "nowrap" }}>
+                +View
+              </button>
+              <button onClick={() => handleBulkGrant("all", true)} style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 5, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-muted)", cursor: "pointer", whiteSpace: "nowrap" }}>
+                +All
+              </button>
+              <button onClick={() => handleBulkGrant("all", false)} style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 5, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-muted)", cursor: "pointer", whiteSpace: "nowrap" }}>
+                Clear
+              </button>
+            </div>
+          )}
           {segmentsWithChildren.length > 0 && effectiveOpen && !searching && (
             <button
               onClick={toggleAllTabs}
               style={{
-                fontSize: 11, fontWeight: 500, color: "var(--neuron-ink-muted)",
-                padding: "3px 8px", borderRadius: 6, border: "1px solid var(--neuron-ui-border)",
-                background: "transparent", cursor: "pointer", whiteSpace: "nowrap",
+                display: "flex", alignItems: "center", gap: 4,
+                fontSize: 11, fontWeight: 600,
+                color: "var(--neuron-action-primary)",
+                padding: "3px 9px", borderRadius: 6,
+                border: "1.5px solid color-mix(in oklch, var(--neuron-action-primary) 40%, transparent)",
+                background: "color-mix(in oklch, var(--neuron-action-primary) 8%, transparent)",
+                cursor: "pointer", whiteSpace: "nowrap",
               }}
             >
-              {allTabsExpanded ? "Collapse tabs" : "Expand tabs"}
+              {allTabsExpanded
+                ? <><ChevronsUp size={11} /> Collapse tabs</>
+                : <><ChevronsDown size={11} /> Expand tabs</>}
             </button>
           )}
           {!searching && !activeActionFilter && (
@@ -456,6 +497,28 @@ function GroupAccordion({
       }}>
         <div style={{ overflow: "hidden" }}>
           <div style={{ borderTop: "1px solid var(--neuron-ui-border)" }}>
+            {/* Local column legend — always visible at top of each open accordion */}
+            <div style={{
+              display: "grid", gridTemplateColumns: GRID_COLS,
+              padding: "0 20px", height: 24, alignItems: "center",
+              backgroundColor: "color-mix(in oklch, var(--neuron-bg-surface-subtle) 60%, var(--neuron-bg-elevated))",
+              borderBottom: "1px solid color-mix(in oklch, var(--neuron-ui-border) 60%, transparent)",
+            }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.6 }}>
+                Module / Tab
+              </span>
+              {PERM_ACTIONS.map(action => (
+                <span key={action} style={{
+                  fontSize: 9, fontWeight: 700,
+                  color: activeActionFilter === action ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
+                  textTransform: "uppercase", letterSpacing: "0.08em",
+                  textAlign: "center", opacity: activeActionFilter === action ? 1 : 0.6,
+                  transition: "color 0.14s, opacity 0.14s",
+                }}>
+                  {ACTION_LABELS[action]}
+                </span>
+              ))}
+            </div>
             {filteredSegments.map((seg, si) => {
               const hasChildren = seg.children.length > 0;
               const childrenMatchSearch = searching && seg.children.some(c => matchedIds.has(c.id));
@@ -488,8 +551,8 @@ function GroupAccordion({
                           {seg.parent.label}
                         </span>
                         {hasChildren && !searching && (
-                          <ChevronRight size={12} style={{
-                            color: childrenOpen ? "var(--neuron-action-primary)" : "var(--neuron-ui-border)",
+                          <ChevronRight size={14} style={{
+                            color: childrenOpen ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
                             transform: childrenOpen ? "rotate(90deg)" : "rotate(0deg)",
                             transition: "transform 0.18s cubic-bezier(0.16,1,0.3,1), color 0.14s", flexShrink: 0,
                           }} />
@@ -656,55 +719,7 @@ export function PermissionGrantEditor({
   if (loading) return <SkeletonLoader />;
 
   return (
-    <div style={{ maxWidth: 1080, margin: "0 auto" }}>
-      {/* Data visibility rules */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          gap: 18,
-          padding: "14px 16px",
-          marginBottom: 12,
-          border: "1px solid var(--neuron-ui-border)",
-          borderRadius: 8,
-          backgroundColor: "var(--neuron-bg-elevated)",
-        }}
-      >
-        <div style={{ display: "flex", gap: 12, minWidth: 0 }}>
-          <div
-            style={{
-              width: 30,
-              height: 30,
-              borderRadius: 8,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: "color-mix(in oklch, var(--neuron-action-primary) 10%, transparent)",
-              color: "var(--neuron-action-primary)",
-              flexShrink: 0,
-            }}
-          >
-            <EyeOff size={15} />
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 650, color: "var(--neuron-ink-primary)", marginBottom: 3 }}>
-              Block higher-rank visibility
-            </div>
-            <div style={{ fontSize: 12, lineHeight: 1.45, color: "var(--neuron-ink-muted)", maxWidth: 660 }}>
-              {showInheritedBaseline
-                ? "This user cannot see records owned by a higher-rank user unless directly assigned."
-                : "Members using this profile cannot see records owned by a higher-rank user unless directly assigned."}
-            </div>
-          </div>
-        </div>
-        <RbacRuleSwitch
-          checked={blockHigherRankVisibility}
-          onChange={handleHigherRankRuleChange}
-          disabled={disabled}
-        />
-      </div>
-
+    <div style={{ maxWidth: 1080, margin: "0 auto", paddingBottom: 48 }}>
       {/* Search bar */}
       <div style={{ marginBottom: 8 }}>
         <div
@@ -751,9 +766,9 @@ export function PermissionGrantEditor({
       </div>
 
       {/* Action-chip faceting */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
         <span style={{ fontSize: 10, fontWeight: 700, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em", flexShrink: 0 }}>
-          Highlight overrides:
+          Show:
         </span>
         {PERM_ACTIONS.map(action => {
           const isActive = activeActionFilter === action;
@@ -802,8 +817,25 @@ export function PermissionGrantEditor({
         )}
       </div>
 
-      {/* Sticky column header */}
-      <div style={{ position: "sticky", top: 0, zIndex: 10, backgroundColor: "var(--neuron-bg-elevated)", marginBottom: 8 }}>
+      {/* Block higher-rank visibility — compact row */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "7px 12px", marginBottom: 10, borderRadius: 8,
+        border: "1px solid var(--neuron-ui-border)",
+        backgroundColor: "var(--neuron-bg-surface-subtle)", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+          <EyeOff size={13} style={{ color: "var(--neuron-ink-muted)", flexShrink: 0 }} />
+          <span style={{ fontSize: 12, fontWeight: 500, color: "var(--neuron-ink-muted)", whiteSpace: "nowrap" }}>
+            Block higher-rank visibility
+          </span>
+          <span style={{ fontSize: 11, color: "var(--neuron-ink-muted)", opacity: 0.6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
+            — hide records owned by higher-rank users unless directly assigned
+          </span>
+        </div>
+        <RbacRuleSwitch checked={blockHigherRankVisibility} onChange={handleHigherRankRuleChange} disabled={disabled} />
+      </div>
+
+      {/* Column header */}
+      <div style={{ marginBottom: 10 }}>
         <div style={{
           display: "grid", gridTemplateColumns: GRID_COLS,
           padding: "0 20px", height: 32, alignItems: "center",
@@ -838,6 +870,7 @@ export function PermissionGrantEditor({
             showInheritedBaseline={showInheritedBaseline}
             grants={grants}
             onToggle={handleToggle}
+            onChange={onChange}
             defaultOpen={gi === 0}
             searchQuery={searchQuery}
             matchedIds={matchedIds}
