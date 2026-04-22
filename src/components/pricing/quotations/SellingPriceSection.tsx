@@ -7,6 +7,11 @@ import { PhilippinePeso } from "../../icons/PhilippinePeso";
 import { PricingTableHeader } from "../../shared/pricing/PricingTableHeader";
 import { UniversalPricingRow, PricingItemData } from "../../shared/pricing/UniversalPricingRow";
 import { NeuronModal } from "../../ui/NeuronModal";
+import {
+  calculateSellingItemFromAmountAdded,
+  calculateSellingItemFromCostChange,
+  calculateSellingItemFromPercentage,
+} from "../../../utils/pricing/quotationSignedPricing";
 
 interface SellingPriceSectionProps {
   categories: SellingPriceCategory[];
@@ -65,12 +70,7 @@ export function SellingPriceSection({
 
         // Recalculate if base_cost changed — update final_price from base_cost + markup
         if (field === 'base_cost') {
-          const newBaseCost = Math.max(0, value);
-          updatedItem.base_cost = newBaseCost;
-          updatedItem.amount_added = (newBaseCost * updatedItem.percentage_added) / 100;
-          updatedItem.final_price = newBaseCost + updatedItem.amount_added;
-          updatedItem.price = updatedItem.final_price;
-          updatedItem.amount = updatedItem.final_price * updatedItem.quantity * updatedItem.forex_rate;
+          return calculateSellingItemFromCostChange(updatedItem, value);
         }
 
         // Recalculate if quantity, forex_rate, or is_taxed changed
@@ -93,21 +93,11 @@ export function SellingPriceSection({
   
   // Handle amount input change
   const handleAmountChange = (categoryId: string, itemId: string, newAmount: number) => {
-    const validAmount = Math.max(0, newAmount);
     (onChange as any)((prev: SellingPriceCategory[]) => prev.map(cat => {
       if (cat.id !== categoryId) return cat;
       const updatedItems = cat.line_items.map(item => {
         if (item.id !== itemId) return item;
-        const percentage = item.base_cost > 0 ? (validAmount / item.base_cost) * 100 : 0;
-        const finalPrice = item.base_cost + validAmount;
-        return {
-          ...item,
-          amount_added: validAmount,
-          percentage_added: percentage,
-          final_price: finalPrice,
-          price: finalPrice,
-          amount: finalPrice * item.quantity * item.forex_rate
-        };
+        return calculateSellingItemFromAmountAdded(item, newAmount);
       });
       const subtotal = updatedItems.reduce((sum, item) => sum + item.amount, 0);
       return { ...cat, line_items: updatedItems, subtotal };
@@ -116,21 +106,11 @@ export function SellingPriceSection({
 
   // Handle percentage input change
   const handlePercentageChange = (categoryId: string, itemId: string, newPercentage: number) => {
-    const validPercentage = Math.max(0, newPercentage);
     (onChange as any)((prev: SellingPriceCategory[]) => prev.map(cat => {
       if (cat.id !== categoryId) return cat;
       const updatedItems = cat.line_items.map(item => {
         if (item.id !== itemId) return item;
-        const amount = (item.base_cost * validPercentage) / 100;
-        const finalPrice = item.base_cost + amount;
-        return {
-          ...item,
-          amount_added: amount,
-          percentage_added: validPercentage,
-          final_price: finalPrice,
-          price: finalPrice,
-          amount: finalPrice * item.quantity * item.forex_rate
-        };
+        return calculateSellingItemFromPercentage(item, newPercentage);
       });
       const subtotal = updatedItems.reduce((sum, item) => sum + item.amount, 0);
       return { ...cat, line_items: updatedItems, subtotal };

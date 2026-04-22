@@ -11,6 +11,7 @@ import { supabase } from "../../../utils/supabase/client";
 import type { QuotationNew } from "../../../types/pricing";
 import { buildServiceToBookingMap, resolveBookingIdForService } from "../../../utils/financialSelectors";
 import { getBillingDisplayCategory } from "../../../utils/billingCategory";
+import { findNegativeBillingAmountItems } from "../../../utils/pricing/quotationSignedPricing";
 
 // Interface matching the backend response for billing items
 export interface BillingItem {
@@ -499,6 +500,12 @@ export function UnifiedBillingsTab({
             return;
           }
 
+          const negativeAmountItems = findNegativeBillingAmountItems(itemsToSave);
+          if (negativeAmountItems.length > 0) {
+            toast.error(`Billing rows cannot be negative: ${negativeAmountItems.map(item => item.description || item.id).join(", ")}`);
+            return;
+          }
+
           toast.info("Saving changes...");
 
           const isNew = (item: any) =>
@@ -662,6 +669,12 @@ export function UnifiedBillingsTab({
 
   const handleSendServiceToBooking = async (itemIds: string[], bookingId: string) => {
     const selectedItems = localItems.filter(item => itemIds.includes(item.id));
+    const negativeAmountItems = findNegativeBillingAmountItems(selectedItems);
+    if (negativeAmountItems.length > 0) {
+      toast.error(`Cannot send negative billing rows to booking: ${negativeAmountItems.map(item => item.description || item.id).join(", ")}`);
+      return;
+    }
+
     const payload = selectedItems.map(item => {
       const displayCategory = getBillingDisplayCategory(item);
       const persistedCategory = displayCategory === "General" ? null : displayCategory;
