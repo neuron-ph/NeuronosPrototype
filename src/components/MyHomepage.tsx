@@ -1160,6 +1160,9 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
 
   const [memoOpen, setMemoOpen] = useState(false);
   const [latestMemo, setLatestMemo] = useState<{ id: string; title: string; created_at: string } | null>(null);
+  const [memoLastRead, setMemoLastRead] = useState<string | null>(() =>
+    localStorage.getItem(`neuron_memo_last_read_${userId}`)
+  );
 
   useEffect(() => {
     supabase
@@ -1171,6 +1174,18 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
       .maybeSingle()
       .then(({ data }) => setLatestMemo(data ?? null));
   }, []);
+
+  const hasUnreadMemo = !!(
+    latestMemo &&
+    (!memoLastRead || new Date(latestMemo.created_at) > new Date(memoLastRead))
+  );
+
+  const openMemoPanel = () => {
+    const now = new Date().toISOString();
+    localStorage.setItem(`neuron_memo_last_read_${userId}`, now);
+    setMemoLastRead(now);
+    setMemoOpen(true);
+  };
 
   const attentionCount = myTickets.length + myApprovals.length;
   const urgentCount    = myTickets.filter((t) => t.priority === "urgent").length;
@@ -1295,11 +1310,21 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
             >
               <motion.button
                 type="button"
-                onClick={() => setMemoOpen(true)}
+                onClick={openMemoPanel}
                 whileTap={{ scale: 0.996 }}
                 className="w-full text-left flex items-center gap-3 px-4 py-3.5 rounded-[var(--neuron-radius-l)] group transition-all duration-150 bg-[var(--neuron-bg-elevated)] border border-[var(--neuron-ui-border)] hover:border-[var(--neuron-brand-green)] hover:bg-[var(--neuron-brand-green-100)] focus-visible:outline-none focus-visible:border-[var(--neuron-brand-green)]"
               >
-                <FileText size={15} className="flex-shrink-0 mt-px" style={{ color: "var(--neuron-brand-green)" }} />
+                <div className="relative flex-shrink-0 mt-px">
+                  <FileText size={15} style={{ color: "var(--neuron-brand-green)" }} />
+                  {hasUnreadMemo && (
+                    <span style={{
+                      position: "absolute", top: -3, right: -3,
+                      width: 7, height: 7, borderRadius: "50%",
+                      backgroundColor: "#ef4444",
+                      border: "1.5px solid var(--neuron-bg-elevated)",
+                    }} />
+                  )}
+                </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-3">
                     <span
