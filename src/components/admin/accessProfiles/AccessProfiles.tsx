@@ -632,7 +632,7 @@ export function ProfileEditor({
 
       {/* Exit confirmation — uses the standard AlertDialog, same as delete confirmations */}
       <AlertDialog open={confirmExitOpen} onOpenChange={setConfirmExitOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="sm:max-w-sm">
           <AlertDialogHeader>
             <AlertDialogTitle>Discard changes?</AlertDialogTitle>
             <AlertDialogDescription>
