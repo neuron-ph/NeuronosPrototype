@@ -323,7 +323,7 @@ function ModuleRow({
 
 function GroupAccordion({
   group, modules, baselineRole, baselineDepartment, showInheritedBaseline,
-  grants, onToggle, defaultOpen, searchQuery, matchedIds, highlightedCellKeys, activeActionFilter,
+  grants, onToggle, onChange, defaultOpen, searchQuery, matchedIds, highlightedCellKeys, activeActionFilter,
 }: {
   group: string;
   modules: typeof PERM_MODULES;
@@ -332,6 +332,7 @@ function GroupAccordion({
   showInheritedBaseline: boolean;
   grants: ModuleGrants;
   onToggle: (moduleId: ModuleId, action: ActionId, next: boolean) => void;
+  onChange: (newGrants: ModuleGrants, meta: { manual: boolean }) => void;
   defaultOpen: boolean;
   searchQuery: string;
   matchedIds: Set<string>;
@@ -391,6 +392,27 @@ function GroupAccordion({
     }, 0);
   }, [modules, grants]);
 
+  const handleBulkGrant = (action: ActionId | "all", next: boolean) => {
+    const newGrants = { ...grants };
+    for (const mod of modules) {
+      const applicable = new Set(mod.applicableActions ?? PERM_ACTIONS);
+      const actions: ActionId[] = action === "all" ? [...PERM_ACTIONS] : [action as ActionId];
+      for (const a of actions) {
+        if (!applicable.has(a)) continue;
+        const key = `${mod.id}:${a}`;
+        if (showInheritedBaseline && baselineRole && baselineDepartment) {
+          const inherited = getInheritedPermission(baselineRole, baselineDepartment, mod.id as ModuleId, a);
+          if (next === inherited) delete newGrants[key];
+          else newGrants[key] = next;
+        } else {
+          if (next) newGrants[key] = true;
+          else delete newGrants[key];
+        }
+      }
+    }
+    onChange(newGrants, { manual: true });
+  };
+
   return (
     <div style={{ border: "1px solid var(--neuron-ui-border)", borderRadius: 10, overflow: "hidden" }}>
 
@@ -426,6 +448,19 @@ function GroupAccordion({
           )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {effectiveOpen && !searching && !activeActionFilter && (
+            <div style={{ display: "flex", gap: 3, alignItems: "center" }} onClick={e => e.stopPropagation()}>
+              <button onClick={() => handleBulkGrant("view", true)} style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 5, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-muted)", cursor: "pointer", whiteSpace: "nowrap" }}>
+                +View
+              </button>
+              <button onClick={() => handleBulkGrant("all", true)} style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 5, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-muted)", cursor: "pointer", whiteSpace: "nowrap" }}>
+                +All
+              </button>
+              <button onClick={() => handleBulkGrant("all", false)} style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 5, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-muted)", cursor: "pointer", whiteSpace: "nowrap" }}>
+                Clear
+              </button>
+            </div>
+          )}
           {segmentsWithChildren.length > 0 && effectiveOpen && !searching && (
             <button
               onClick={toggleAllTabs}
@@ -657,54 +692,6 @@ export function PermissionGrantEditor({
 
   return (
     <div style={{ maxWidth: 1080, margin: "0 auto" }}>
-      {/* Data visibility rules */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          gap: 18,
-          padding: "14px 16px",
-          marginBottom: 12,
-          border: "1px solid var(--neuron-ui-border)",
-          borderRadius: 8,
-          backgroundColor: "var(--neuron-bg-elevated)",
-        }}
-      >
-        <div style={{ display: "flex", gap: 12, minWidth: 0 }}>
-          <div
-            style={{
-              width: 30,
-              height: 30,
-              borderRadius: 8,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: "color-mix(in oklch, var(--neuron-action-primary) 10%, transparent)",
-              color: "var(--neuron-action-primary)",
-              flexShrink: 0,
-            }}
-          >
-            <EyeOff size={15} />
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 650, color: "var(--neuron-ink-primary)", marginBottom: 3 }}>
-              Block higher-rank visibility
-            </div>
-            <div style={{ fontSize: 12, lineHeight: 1.45, color: "var(--neuron-ink-muted)", maxWidth: 660 }}>
-              {showInheritedBaseline
-                ? "This user cannot see records owned by a higher-rank user unless directly assigned."
-                : "Members using this profile cannot see records owned by a higher-rank user unless directly assigned."}
-            </div>
-          </div>
-        </div>
-        <RbacRuleSwitch
-          checked={blockHigherRankVisibility}
-          onChange={handleHigherRankRuleChange}
-          disabled={disabled}
-        />
-      </div>
-
       {/* Search bar */}
       <div style={{ marginBottom: 8 }}>
         <div
@@ -802,6 +789,23 @@ export function PermissionGrantEditor({
         )}
       </div>
 
+      {/* Block higher-rank visibility — compact row */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "7px 12px", marginBottom: 10, borderRadius: 8,
+        border: "1px solid var(--neuron-ui-border)",
+        backgroundColor: "var(--neuron-bg-surface-subtle)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <EyeOff size={13} style={{ color: "var(--neuron-ink-muted)", flexShrink: 0 }} />
+          <span style={{ fontSize: 12, fontWeight: 500, color: "var(--neuron-ink-muted)" }}>
+            Block higher-rank visibility
+          </span>
+          <span style={{ fontSize: 11, color: "var(--neuron-ink-muted)", opacity: 0.7 }}>
+            — members cannot see records owned by higher-rank users unless directly assigned
+          </span>
+        </div>
+        <RbacRuleSwitch checked={blockHigherRankVisibility} onChange={handleHigherRankRuleChange} disabled={disabled} />
+      </div>
+
       {/* Sticky column header */}
       <div style={{ position: "sticky", top: 0, zIndex: 10, backgroundColor: "var(--neuron-bg-elevated)", marginBottom: 8 }}>
         <div style={{
@@ -838,6 +842,7 @@ export function PermissionGrantEditor({
             showInheritedBaseline={showInheritedBaseline}
             grants={grants}
             onToggle={handleToggle}
+            onChange={onChange}
             defaultOpen={gi === 0}
             searchQuery={searchQuery}
             matchedIds={matchedIds}
