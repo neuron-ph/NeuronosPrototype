@@ -691,7 +691,7 @@ export function PermissionGrantEditor({
   if (loading) return <SkeletonLoader />;
 
   return (
-    <div style={{ maxWidth: 1080, margin: "0 auto" }}>
+    <div style={{ maxWidth: 1080, margin: "0 auto", paddingBottom: 48 }}>
       {/* Search bar */}
       <div style={{ marginBottom: 8 }}>
         <div
@@ -738,9 +738,9 @@ export function PermissionGrantEditor({
       </div>
 
       {/* Action-chip faceting */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
         <span style={{ fontSize: 10, fontWeight: 700, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em", flexShrink: 0 }}>
-          Highlight overrides:
+          Show:
         </span>
         {PERM_ACTIONS.map(action => {
           const isActive = activeActionFilter === action;
@@ -793,21 +793,21 @@ export function PermissionGrantEditor({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "7px 12px", marginBottom: 10, borderRadius: 8,
         border: "1px solid var(--neuron-ui-border)",
-        backgroundColor: "var(--neuron-bg-surface-subtle)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        backgroundColor: "var(--neuron-bg-surface-subtle)", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
           <EyeOff size={13} style={{ color: "var(--neuron-ink-muted)", flexShrink: 0 }} />
-          <span style={{ fontSize: 12, fontWeight: 500, color: "var(--neuron-ink-muted)" }}>
+          <span style={{ fontSize: 12, fontWeight: 500, color: "var(--neuron-ink-muted)", whiteSpace: "nowrap" }}>
             Block higher-rank visibility
           </span>
-          <span style={{ fontSize: 11, color: "var(--neuron-ink-muted)", opacity: 0.7 }}>
-            — members cannot see records owned by higher-rank users unless directly assigned
+          <span style={{ fontSize: 11, color: "var(--neuron-ink-muted)", opacity: 0.6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
+            — hide records owned by higher-rank users unless directly assigned
           </span>
         </div>
         <RbacRuleSwitch checked={blockHigherRankVisibility} onChange={handleHigherRankRuleChange} disabled={disabled} />
       </div>
 
-      {/* Sticky column header */}
-      <div style={{ position: "sticky", top: 0, zIndex: 10, backgroundColor: "var(--neuron-bg-elevated)", marginBottom: 8 }}>
+      {/* Column header */}
+      <div style={{ marginBottom: 10 }}>
         <div style={{
           display: "grid", gridTemplateColumns: GRID_COLS,
           padding: "0 20px", height: 32, alignItems: "center",

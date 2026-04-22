@@ -5,7 +5,7 @@ import { supabase } from "../../../utils/supabase/client";
 import { toast } from "sonner@2.0.3";
 import { useUser } from "../../../hooks/useUser";
 import {
-  Plus, ArrowLeft, Save, Trash2, UserCheck, AlertTriangle, BookMarked, Search, X,
+  Plus, ArrowLeft, Save, Trash2, UserCheck, AlertTriangle, BookMarked, Search, X, ChevronUp,
 } from "lucide-react";
 import { DataTable, type ColumnDef } from "../../common/DataTable";
 import { PermissionGrantEditor } from "./PermissionGrantEditor";
@@ -328,6 +328,7 @@ export function ProfileEditor({
   const [metaOpen, setMetaOpen] = useState(isNew);
   const [showBaseline, setShowBaseline] = useState(false);
   const [emptyGrantsWarning, setEmptyGrantsWarning] = useState(false);
+  const [confirmExitOpen, setConfirmExitOpen] = useState(false);
   const prevGrantsRef = useRef<ModuleGrants>({});
 
   const isDirty = useMemo(() => {
@@ -349,11 +350,7 @@ export function ProfileEditor({
 
   const handleBack = () => {
     if (!isDirty) { onBack(); return; }
-    toast("Unsaved changes will be lost.", {
-      action: { label: "Discard & go back", onClick: onBack },
-      cancel: { label: "Keep editing", onClick: () => {} },
-      duration: 8000,
-    });
+    setConfirmExitOpen(true);
   };
 
   const handleClearAll = () => {
@@ -441,9 +438,16 @@ export function ProfileEditor({
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 0, height: "100%" }}>
-      {/* Editor top bar */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 0 16px", gap: 16, flexWrap: "wrap" }}>
+    <div>
+      {/* Editor top bar — sticky so Save is always reachable while scrolling */}
+      <div style={{
+        position: "sticky", top: 0, zIndex: 20,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "14px 0", gap: 16, flexWrap: "wrap",
+        backgroundColor: "var(--neuron-bg-elevated)",
+        borderBottom: "1px solid var(--neuron-ui-border)",
+        marginBottom: 20,
+      }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
           <button
             onClick={handleBack}
@@ -513,14 +517,17 @@ export function ProfileEditor({
         marginBottom: metaOpen ? 0 : 0,
       }}>
         <div style={{ overflow: "hidden" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20, padding: 16, borderRadius: 10, border: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--neuron-bg-surface-subtle)", paddingBottom: 4 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20, padding: "16px 16px 20px", borderRadius: 10, border: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--neuron-bg-surface-subtle)" }}>
             {/* Header row: label + Collapse button */}
             <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
               <label style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                 Profile Name *
               </label>
-              <button onClick={() => setMetaOpen(false)} style={{ fontSize: 11, color: "var(--neuron-ink-muted)", border: "none", background: "none", cursor: "pointer", padding: "2px 4px" }}>
-                Collapse ↑
+              <button
+                onClick={() => setMetaOpen(false)}
+                style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 11, color: "var(--neuron-ink-muted)", border: "none", background: "none", cursor: "pointer", padding: "2px 4px" }}
+              >
+                Collapse <ChevronUp size={12} />
               </button>
             </div>
             {/* Name input */}
@@ -577,7 +584,7 @@ export function ProfileEditor({
 
       {/* Grant count / controls row */}
       <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--neuron-ink-muted)" }}>Access Rules</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Access Rules</span>
         {grantCount > 0 && (
           <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 8px", borderRadius: 999,
             backgroundColor: "color-mix(in oklch, var(--neuron-action-primary) 12%, transparent)",
@@ -611,15 +618,79 @@ export function ProfileEditor({
       </div>
 
       {/* Grant editor */}
-      <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
-        <PermissionGrantEditor
-          grants={grants}
-          onChange={(nextGrants) => setGrants(nextGrants)}
-          showInheritedBaseline={showBaseline && canShowBaseline}
-          baselineRole={targetRole}
-          baselineDepartment={targetDepartment}
-        />
-      </div>
+      <PermissionGrantEditor
+        grants={grants}
+        onChange={(nextGrants) => setGrants(nextGrants)}
+        showInheritedBaseline={showBaseline && canShowBaseline}
+        baselineRole={targetRole}
+        baselineDepartment={targetDepartment}
+      />
+
+      {/* Exit confirmation modal */}
+      <AnimatePresence>
+        {confirmExitOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            onClick={() => setConfirmExitOpen(false)}
+            style={{
+              position: "fixed", inset: 0, zIndex: 1000,
+              backgroundColor: "rgba(18,51,43,0.28)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 6 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 4 }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              onClick={e => e.stopPropagation()}
+              style={{
+                background: "var(--neuron-bg-elevated)", borderRadius: 12,
+                padding: "24px 24px 20px", maxWidth: 380, width: "90%",
+                border: "1px solid var(--neuron-ui-border)",
+                boxShadow: "0 8px 32px color-mix(in oklch, var(--neuron-ink-primary) 14%, transparent)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 20 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 8, flexShrink: 0,
+                  backgroundColor: "color-mix(in oklch, var(--neuron-semantic-error, #dc2626) 10%, transparent)",
+                  display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <AlertTriangle size={16} style={{ color: "var(--neuron-semantic-error, #dc2626)" }} />
+                </div>
+                <div>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: "var(--neuron-ink-primary)", margin: "0 0 4px" }}>
+                    Discard changes?
+                  </p>
+                  <p style={{ fontSize: 13, color: "var(--neuron-ink-muted)", margin: 0, lineHeight: 1.5 }}>
+                    You have unsaved changes to this profile. Going back will discard them.
+                  </p>
+                </div>
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                <button
+                  onClick={() => setConfirmExitOpen(false)}
+                  style={{ padding: "7px 16px", borderRadius: 8, border: "1px solid var(--neuron-ui-border)",
+                    background: "transparent", color: "var(--neuron-ink-muted)", fontSize: 13,
+                    fontWeight: 500, cursor: "pointer" }}
+                >
+                  Keep editing
+                </button>
+                <button
+                  onClick={() => { setConfirmExitOpen(false); onBack(); }}
+                  style={{ padding: "7px 16px", borderRadius: 8, border: "none",
+                    background: "var(--neuron-semantic-error, #dc2626)", color: "#fff",
+                    fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+                >
+                  Discard & go back
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

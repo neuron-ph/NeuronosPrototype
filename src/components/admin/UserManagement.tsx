@@ -1548,7 +1548,7 @@ export function UserManagement() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -4 }}
           transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
-          style={{ height: "100%", display: "flex", flexDirection: "column", backgroundColor: "var(--neuron-bg-elevated)", padding: "0 48px" }}
+          style={{ height: "100%", overflowY: "auto", backgroundColor: "var(--neuron-bg-elevated)", padding: "0 48px 48px" }}
         >
           <ProfileEditor
             profile={editingProfile}
