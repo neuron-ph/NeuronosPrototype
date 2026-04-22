@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { ChevronDown, ChevronRight, EyeOff, Search, X } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronsDown, ChevronsUp, EyeOff, Search, X } from "lucide-react";
 import {
   PERM_MODULES, PERM_ACTIONS,
   getInheritedPermission,
@@ -465,12 +465,18 @@ function GroupAccordion({
             <button
               onClick={toggleAllTabs}
               style={{
-                fontSize: 11, fontWeight: 500, color: "var(--neuron-ink-muted)",
-                padding: "3px 8px", borderRadius: 6, border: "1px solid var(--neuron-ui-border)",
-                background: "transparent", cursor: "pointer", whiteSpace: "nowrap",
+                display: "flex", alignItems: "center", gap: 4,
+                fontSize: 11, fontWeight: 600,
+                color: "var(--neuron-action-primary)",
+                padding: "3px 9px", borderRadius: 6,
+                border: "1.5px solid color-mix(in oklch, var(--neuron-action-primary) 40%, transparent)",
+                background: "color-mix(in oklch, var(--neuron-action-primary) 8%, transparent)",
+                cursor: "pointer", whiteSpace: "nowrap",
               }}
             >
-              {allTabsExpanded ? "Collapse tabs" : "Expand tabs"}
+              {allTabsExpanded
+                ? <><ChevronsUp size={11} /> Collapse tabs</>
+                : <><ChevronsDown size={11} /> Expand tabs</>}
             </button>
           )}
           {!searching && !activeActionFilter && (
@@ -523,8 +529,8 @@ function GroupAccordion({
                           {seg.parent.label}
                         </span>
                         {hasChildren && !searching && (
-                          <ChevronRight size={12} style={{
-                            color: childrenOpen ? "var(--neuron-action-primary)" : "var(--neuron-ui-border)",
+                          <ChevronRight size={14} style={{
+                            color: childrenOpen ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
                             transform: childrenOpen ? "rotate(90deg)" : "rotate(0deg)",
                             transition: "transform 0.18s cubic-bezier(0.16,1,0.3,1), color 0.14s", flexShrink: 0,
                           }} />
