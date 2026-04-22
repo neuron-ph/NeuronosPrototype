@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { motion, AnimatePresence } from "motion/react";
+
 import { supabase } from "../../../utils/supabase/client";
 import { toast } from "sonner@2.0.3";
 import { useUser } from "../../../hooks/useUser";
@@ -8,6 +8,10 @@ import {
   Plus, ArrowLeft, Save, Trash2, UserCheck, AlertTriangle, BookMarked, Search, X, ChevronUp,
 } from "lucide-react";
 import { DataTable, type ColumnDef } from "../../common/DataTable";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "../../ui/alert-dialog";
 import { PermissionGrantEditor } from "./PermissionGrantEditor";
 import type { AccessProfile, AccessProfileSummary, ModuleGrants } from "./accessProfileTypes";
 import { cloneGrants, countGrantOverrides, normalizeProfileName } from "./accessGrantUtils";
@@ -626,71 +630,26 @@ export function ProfileEditor({
         baselineDepartment={targetDepartment}
       />
 
-      {/* Exit confirmation modal */}
-      <AnimatePresence>
-        {confirmExitOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            onClick={() => setConfirmExitOpen(false)}
-            style={{
-              position: "fixed", inset: 0, zIndex: 1000,
-              backgroundColor: "rgba(18,51,43,0.28)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 6 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 4 }}
-              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-              onClick={e => e.stopPropagation()}
-              style={{
-                background: "var(--neuron-bg-elevated)", borderRadius: 12,
-                padding: "24px 24px 20px", maxWidth: 380, width: "90%",
-                border: "1px solid var(--neuron-ui-border)",
-                boxShadow: "0 8px 32px color-mix(in oklch, var(--neuron-ink-primary) 14%, transparent)",
-              }}
+      {/* Exit confirmation — uses the standard AlertDialog, same as delete confirmations */}
+      <AlertDialog open={confirmExitOpen} onOpenChange={setConfirmExitOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard changes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved changes to this profile. Going back will discard them.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={onBack}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 20 }}>
-                <div style={{ width: 34, height: 34, borderRadius: 8, flexShrink: 0,
-                  backgroundColor: "color-mix(in oklch, var(--neuron-semantic-error, #dc2626) 10%, transparent)",
-                  display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <AlertTriangle size={16} style={{ color: "var(--neuron-semantic-error, #dc2626)" }} />
-                </div>
-                <div>
-                  <p style={{ fontSize: 14, fontWeight: 600, color: "var(--neuron-ink-primary)", margin: "0 0 4px" }}>
-                    Discard changes?
-                  </p>
-                  <p style={{ fontSize: 13, color: "var(--neuron-ink-muted)", margin: 0, lineHeight: 1.5 }}>
-                    You have unsaved changes to this profile. Going back will discard them.
-                  </p>
-                </div>
-              </div>
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                <button
-                  onClick={() => setConfirmExitOpen(false)}
-                  style={{ padding: "7px 16px", borderRadius: 8, border: "1px solid var(--neuron-ui-border)",
-                    background: "transparent", color: "var(--neuron-ink-muted)", fontSize: 13,
-                    fontWeight: 500, cursor: "pointer" }}
-                >
-                  Keep editing
-                </button>
-                <button
-                  onClick={() => { setConfirmExitOpen(false); onBack(); }}
-                  style={{ padding: "7px 16px", borderRadius: 8, border: "none",
-                    background: "var(--neuron-semantic-error, #dc2626)", color: "#fff",
-                    fontSize: 13, fontWeight: 600, cursor: "pointer" }}
-                >
-                  Discard & go back
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              Discard & go back
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
