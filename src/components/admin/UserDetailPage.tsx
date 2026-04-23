@@ -12,10 +12,7 @@ import {
 } from "lucide-react";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { getOpsDisplayLabel } from "../../utils/roleLabels";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "../ui/alert-dialog";
+import { NeuronModal } from "../ui/NeuronModal";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -492,25 +489,16 @@ export function UserDetailPage() {
         )}
 
         {/* ── Delete confirmation ── */}
-        <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete {user.name}'s account?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This permanently removes their account and cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleDeleteConfirmed}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              >
-                Delete Account
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <NeuronModal
+          isOpen={showDeleteConfirm}
+          onClose={() => setShowDeleteConfirm(false)}
+          title={`Delete ${user.name}'s account?`}
+          description="This permanently removes their account and cannot be undone."
+          confirmLabel="Delete Account"
+          confirmIcon={<Trash2 size={15} />}
+          onConfirm={handleDeleteConfirmed}
+          variant="danger"
+        />
 
       </div>
 

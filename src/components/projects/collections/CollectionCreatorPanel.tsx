@@ -13,6 +13,7 @@ import { CustomDropdown } from "../../bd/CustomDropdown";
 import { calculateInvoiceBalance } from "../../../utils/accounting-math";
 import { supabase } from "../../../utils/supabase/client";
 import { REVERSED_INVOICE_STATUS } from "../../../utils/invoiceReversal";
+import { NeuronModal } from "../../ui/NeuronModal";
 
 interface CollectionCreatorPanelProps {
   isOpen: boolean;
@@ -52,6 +53,7 @@ export function CollectionCreatorPanel({
   const { user } = useUser();
   const [isSaving, setIsSaving] = useState(false);
   const isReadOnly = mode === 'view';
+  const [pendingDeleteInvoice, setPendingDeleteInvoice] = useState<{ id: string; voucherNumber: string } | null>(null);
 
   // -- Form State --
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
@@ -235,23 +237,23 @@ export function CollectionCreatorPanel({
   };
 
   // Delete a reversed invoice — only allowed when status='reversed'
-  const handleDeleteInvoice = async (id: string) => {
+  const handleDeleteInvoice = (id: string) => {
     const target = invoices.find(inv => inv.id === id);
     if (!target?.isReversed) return;
+    setPendingDeleteInvoice({ id, voucherNumber: target.voucher_number });
+  };
 
-    const confirmed = window.confirm(
-      `Delete reversed invoice "${target.voucher_number}"?\n\nThis permanently removes the record. This action cannot be undone.`
-    );
-    if (!confirmed) return;
-
+  const handleDeleteInvoiceConfirm = async () => {
+    if (!pendingDeleteInvoice) return;
+    const { id, voucherNumber } = pendingDeleteInvoice;
     const { error } = await supabase.from("invoices").delete().eq("id", id);
     if (error) {
       toast.error("Failed to delete invoice: " + error.message);
       return;
     }
-
     setInvoices(prev => prev.filter(inv => inv.id !== id));
-    toast.success(`Reversed invoice ${target.voucher_number} deleted.`);
+    toast.success(`Reversed invoice ${voucherNumber} deleted.`);
+    setPendingDeleteInvoice(null);
   };
 
   // -- Submission --
@@ -667,6 +669,15 @@ export function CollectionCreatorPanel({
           </div>
         )}
       </div>
+      <NeuronModal
+        isOpen={!!pendingDeleteInvoice}
+        onClose={() => setPendingDeleteInvoice(null)}
+        title={`Delete reversed invoice "${pendingDeleteInvoice?.voucherNumber ?? ''}"?`}
+        description="This permanently removes the record and cannot be undone."
+        confirmLabel="Delete Invoice"
+        onConfirm={handleDeleteInvoiceConfirm}
+        variant="danger"
+      />
     </SidePanel>
   );
 }

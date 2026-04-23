@@ -8,10 +8,7 @@ import { useUser } from "../../hooks/useUser";
 import { PermissionGrantEditor } from "./accessProfiles/PermissionGrantEditor";
 import type { ModuleGrants, AccessProfileSummary } from "./accessProfiles/accessProfileTypes";
 import { cloneGrants, hasGrantOverrides, normalizeProfileName, shouldClearAppliedProfile } from "./accessProfiles/accessGrantUtils";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "../ui/alert-dialog";
+import { NeuronModal } from "../ui/NeuronModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -538,20 +535,15 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
         </div>
       </div>
 
-      <AlertDialog open={confirmLeave} onOpenChange={setConfirmLeave}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Leave without saving?</AlertDialogTitle>
-            <AlertDialogDescription>
-              You have unsaved changes to {user.name}'s access rules. They will be lost if you leave now.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Stay</AlertDialogCancel>
-            <AlertDialogAction onClick={onBack}>Leave without saving</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <NeuronModal
+        isOpen={confirmLeave}
+        onClose={() => setConfirmLeave(false)}
+        title="Leave without saving?"
+        description={`You have unsaved changes to ${user.name}'s access rules. They will be lost if you leave now.`}
+        confirmLabel="Leave without saving"
+        onConfirm={onBack}
+        variant="warning"
+      />
 
     </div>
   );

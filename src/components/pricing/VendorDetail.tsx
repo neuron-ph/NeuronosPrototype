@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Building2, Award, MapPin, User, Mail, Phone, Ship, MessageSquare, Trash2, Plus, Edit, ShieldCheck, Plane, FileText } from "lucide-react";
+import { NeuronModal } from "../ui/NeuronModal";
 import { supabase } from "../../utils/supabase/client";
 import { useNetworkPartners } from "../../hooks/useNetworkPartners";
 import type { NetworkPartner } from "../../data/networkPartners";
@@ -220,6 +221,7 @@ export function VendorDetail({ vendor: initialVendor, onBack, onSave }: VendorDe
   const [isSaving, setIsSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isEditSheetOpen, setIsEditSheetOpen] = useState(false); // Kept for adding contact logic if needed, but primary edit is inline
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   // Update local state if prop changes
   useEffect(() => {
@@ -315,16 +317,16 @@ export function VendorDetail({ vendor: initialVendor, onBack, onSave }: VendorDe
     setIsEditing(false);
   };
 
-  const handleDeleteVendor = async () => {
-    if (window.confirm("Are you sure you want to delete this vendor? This action cannot be undone.")) {
-      try {
-        if (hookData.deletePartner) {
-           await hookData.deletePartner(currentVendor.id);
-        }
-        onBack();
-      } catch (error) {
-        console.error("Failed to delete vendor", error);
+  const handleDeleteVendor = () => setDeleteOpen(true);
+
+  const handleDeleteVendorConfirm = async () => {
+    try {
+      if (hookData.deletePartner) {
+        await hookData.deletePartner(currentVendor.id);
       }
+      onBack();
+    } catch (error) {
+      console.error("Failed to delete vendor", error);
     }
   };
 
@@ -747,6 +749,15 @@ export function VendorDetail({ vendor: initialVendor, onBack, onSave }: VendorDe
         onClose={() => setIsEditSheetOpen(false)}
         initialData={currentVendor}
         onSave={handleUpdateVendor}
+      />
+      <NeuronModal
+        isOpen={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        title="Delete this vendor?"
+        description="This action cannot be undone. The vendor and all associated data will be permanently removed."
+        confirmLabel="Delete Vendor"
+        onConfirm={handleDeleteVendorConfirm}
+        variant="danger"
       />
     </div>
   );

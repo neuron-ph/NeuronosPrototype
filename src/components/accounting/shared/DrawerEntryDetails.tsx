@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter } from "../../ui/drawer";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
@@ -6,6 +7,7 @@ import { Edit2, CheckCircle, XCircle, Trash2, Download, Calendar, Building2, Wal
 import { format } from "date-fns";
 import { EntryType, BadgeType } from "./BadgeType";
 import { AccountingEntry } from "./TableAccountingEntries";
+import { NeuronModal } from "../../ui/NeuronModal";
 
 interface DrawerEntryDetailsProps {
   open: boolean;
@@ -26,6 +28,8 @@ export function DrawerEntryDetails({
   onReject,
   onDelete,
 }: DrawerEntryDetailsProps) {
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
   if (!entry) return null;
 
   const canEdit = entry.status === "Pending";
@@ -47,11 +51,11 @@ export function DrawerEntryDetails({
     onOpenChange(false);
   };
 
-  const handleDelete = () => {
-    if (window.confirm("Are you sure you want to delete this entry?")) {
-      onDelete?.(entry.id);
-      onOpenChange(false);
-    }
+  const handleDelete = () => setDeleteOpen(true);
+
+  const handleDeleteConfirm = () => {
+    onDelete?.(entry.id);
+    onOpenChange(false);
   };
 
   const getStatusBadge = (status: string) => {
@@ -260,6 +264,15 @@ export function DrawerEntryDetails({
           </div>
         </DrawerFooter>
       </DrawerContent>
+      <NeuronModal
+        isOpen={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        title="Delete entry?"
+        description="This will permanently remove the entry and cannot be undone."
+        confirmLabel="Delete Entry"
+        onConfirm={handleDeleteConfirm}
+        variant="danger"
+      />
     </Drawer>
   );
 }

@@ -1258,3 +1258,36 @@ input[type="checkbox"] {
   float: left;
   height: 0;
 }
+
+/* ── Radix AlertDialog: animations + brand scrim ──────────────────────────────
+   tailwindcss-animate is not installed, so animate-in/zoom-in-95 etc. are
+   inert class names here. We target data-state directly instead.            */
+
+[data-slot="alert-dialog-overlay"] {
+  background: oklch(from var(--neuron-ink-primary) l c h / 0.5) !important;
+}
+[data-slot="alert-dialog-overlay"][data-state="open"] {
+  animation: alertOverlayIn 0.2s ease forwards;
+}
+[data-slot="alert-dialog-overlay"][data-state="closed"] {
+  animation: alertOverlayOut 0.15s ease forwards;
+}
+
+[data-slot="alert-dialog-content"][data-state="open"] {
+  animation: alertContentIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+[data-slot="alert-dialog-content"][data-state="closed"] {
+  animation: alertContentOut 0.15s ease forwards;
+}
+
+@keyframes alertOverlayIn  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes alertOverlayOut { from { opacity: 1; } to { opacity: 0; } }
+
+@keyframes alertContentIn {
+  from { opacity: 0; transform: translate(-50%, -48%) scale(0.96); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes alertContentOut {
+  from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  to   { opacity: 0; transform: translate(-50%, -48%) scale(0.96); }
+}
