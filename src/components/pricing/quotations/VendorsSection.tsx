@@ -15,6 +15,7 @@ import {
   fetchVendorChargeCategories,
   saveVendorChargeCategories,
 } from "../../../utils/pricing/vendorRateCards";
+import { NeuronModal } from "../../ui/NeuronModal";
 
 /**
  * 🎯 VENDORS SECTION - INLINE RATE MANAGEMENT
@@ -101,6 +102,7 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
   
   // ✨ PHASE 5: Save & Import Workflow
   const [savingVendorId, setSavingVendorId] = useState<string | null>(null);
+  const [pendingCollapseVendorId, setPendingCollapseVendorId] = useState<string | null>(null);
   
   // ✨ PHASE 1: Toggle vendor expansion
   const toggleVendorExpansion = (vendorId: string) => {
@@ -108,22 +110,10 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
     
     // ✨ PHASE 7: Warn user if collapsing with unsaved changes
     if (isCurrentlyExpanded && hasUnsavedChanges.get(vendorId)) {
-      const confirmDiscard = window.confirm(
-        "You have unsaved changes. If you collapse this vendor, your changes will be lost. Are you sure you want to continue?"
-      );
-      if (!confirmDiscard) {
-        return; // User cancelled, don't collapse
-      }
-      
-      // User confirmed - discard changes by resetting to original rates
-      const vendorOriginal = originalVendorRates.get(vendorId);
-      if (vendorOriginal) {
-        setVendorRatesCache(prev => new Map(prev).set(vendorId, JSON.parse(JSON.stringify(vendorOriginal))));
-      }
-      setHasUnsavedChanges(prev => new Map(prev).set(vendorId, false));
-      console.log(`🗑️ Discarded unsaved changes for vendor ${vendorId}`);
+      setPendingCollapseVendorId(vendorId);
+      return;
     }
-    
+
     setExpandedVendorIds((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(vendorId)) {
@@ -370,6 +360,21 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
     } finally {
       setSavingVendorId(null);
     }
+  };
+
+  const handleDiscardAndCollapse = () => {
+    if (!pendingCollapseVendorId) return;
+    const vendorOriginal = originalVendorRates.get(pendingCollapseVendorId);
+    if (vendorOriginal) {
+      setVendorRatesCache(prev => new Map(prev).set(pendingCollapseVendorId, JSON.parse(JSON.stringify(vendorOriginal))));
+    }
+    setHasUnsavedChanges(prev => new Map(prev).set(pendingCollapseVendorId, false));
+    setExpandedVendorIds(prev => {
+      const next = new Set(prev);
+      next.delete(pendingCollapseVendorId);
+      return next;
+    });
+    setPendingCollapseVendorId(null);
   };
 
   return (
@@ -984,6 +989,16 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
           No vendors added yet
         </div>
       )}
+
+      <NeuronModal
+        isOpen={!!pendingCollapseVendorId}
+        onClose={() => setPendingCollapseVendorId(null)}
+        title="Discard unsaved changes?"
+        description="If you collapse this vendor, your unsaved rate changes will be lost."
+        confirmLabel="Discard & Collapse"
+        onConfirm={handleDiscardAndCollapse}
+        variant="warning"
+      />
     </div>
   );
 }

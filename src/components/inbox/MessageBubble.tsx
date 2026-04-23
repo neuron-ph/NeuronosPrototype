@@ -5,6 +5,7 @@ import { useUser } from "../../hooks/useUser";
 import { toast } from "sonner@2.0.3";
 import type { ThreadMessage, ThreadAttachment } from "../../hooks/useThread";
 import { EntityContextCard } from "./EntityContextCard";
+import { NeuronModal } from "../ui/NeuronModal";
 
 // ── Time helpers ─────────────────────────────────────────────────────────────
 
@@ -129,10 +130,12 @@ export function MessageBubble({ message, onRetract, variant = "default" }: Messa
   const { user } = useUser();
   const [isRetracting, setIsRetracting] = useState(false);
   const [showActions, setShowActions] = useState(false);
+  const [retractOpen, setRetractOpen] = useState(false);
   const isOwn = message.sender_id === user?.id;
 
-  const handleRetract = async () => {
-    if (!window.confirm("Retract this message? It will leave an audit placeholder visible to all participants.")) return;
+  const handleRetract = () => setRetractOpen(true);
+
+  const handleRetractConfirm = async () => {
     setIsRetracting(true);
     const { error } = await supabase
       .from("ticket_messages")
@@ -570,6 +573,16 @@ export function MessageBubble({ message, onRetract, variant = "default" }: Messa
           ))}
         </div>
       )}
+      <NeuronModal
+        isOpen={retractOpen}
+        onClose={() => setRetractOpen(false)}
+        title="Retract this message?"
+        description="This will leave an audit placeholder visible to all participants and cannot be undone."
+        confirmLabel="Retract Message"
+        onConfirm={handleRetractConfirm}
+        isLoading={isRetracting}
+        variant="warning"
+      />
     </div>
   );
 }

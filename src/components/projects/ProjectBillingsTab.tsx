@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { NeuronModal } from "../ui/NeuronModal";
 import { FileText, Plus, Loader2, Filter, CheckSquare, Square, ChevronRight, Printer, Mail } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../utils/supabase/client";
@@ -175,17 +176,19 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
   };
 
   const [isFinalizing, setIsFinalizing] = useState<string | null>(null);
+  const [pendingFinalize, setPendingFinalize] = useState<string | null>(null);
 
-  const handleFinalize = async (statementRef: string) => {
+  const handleFinalize = (statementRef: string) => {
     if (isFinalizing) return;
-    
-    // Confirm dialog (simple browser confirm for now, or use toast)
-    if (!window.confirm("Are you sure you want to finalize this statement? This will post to the General Ledger and cannot be undone.")) {
-      return;
-    }
+    setPendingFinalize(statementRef);
+  };
 
+  const handleFinalizeConfirm = async () => {
+    if (!pendingFinalize) return;
+    const statementRef = pendingFinalize;
+    setPendingFinalize(null);
     setIsFinalizing(statementRef);
-    const toastId = toast.loading("Finalizing statement...", { id: "finalize-stmt" });
+    toast.loading("Finalizing statement...", { id: "finalize-stmt" });
 
     try {
       const { error: finalizeError } = await supabase.from('evouchers').update({
@@ -649,6 +652,16 @@ export function ProjectBillingsTab({ project, currentUser }: ProjectBillingsTabP
           
         </div>
       </div>
+
+      <NeuronModal
+        isOpen={!!pendingFinalize}
+        onClose={() => setPendingFinalize(null)}
+        title="Finalize this statement?"
+        description="This will post to the General Ledger and cannot be undone."
+        confirmLabel="Finalize Statement"
+        onConfirm={handleFinalizeConfirm}
+        variant="warning"
+      />
     </div>
   );
 }

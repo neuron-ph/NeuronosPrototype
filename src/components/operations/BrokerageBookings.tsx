@@ -14,6 +14,7 @@ import { usePermission } from "../../context/PermissionProvider";
 import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
 import { logDeletion } from "../../utils/activityLog";
 import type { ExecutionStatus } from "../../types/operations";
+import { NeuronModal } from "../../ui/NeuronModal";
 
 interface BrokerageBooking {
   bookingId: string;
@@ -63,6 +64,7 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
   const [handlerFilter, setHandlerFilter] = useState<string>("all");
   const [entryTypeFilter, setEntryTypeFilter] = useState<string>("all");
   const [selectedBooking, setSelectedBooking] = useState<BrokerageBooking | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; label: string } | null>(null);
 
   const { scope, isLoaded: scopeLoaded } = useDataScope('bookings');
 
@@ -142,28 +144,33 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
   };
 
   const handleDeleteBooking = async (bookingId: string, bookingLabel: string, currentStatus: ExecutionStatus, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent row click
-
+    e.stopPropagation();
     try {
       const financialState = await assessBookingFinancialState(bookingId);
       if (!canHardDeleteBooking(currentStatus, financialState)) {
         toast.error(getBookingCancellationMessage(currentStatus, financialState));
         return;
       }
-
-      if (!window.confirm(`Delete booking ${bookingLabel}? No linked invoices, collections, expenses, or e-vouchers were found.`)) {
-        return;
-      }
-
-      const { error } = await supabase.from('bookings').delete().eq('id', bookingId);
-      if (error) throw error;
-
-      logDeletion("booking", bookingId, bookingLabel, { id: "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
-      toast.success('Booking deleted successfully');
-      fetchBookings(); // Refresh list
+      setPendingDelete({ id: bookingId, label: bookingLabel });
     } catch (error) {
       console.error('Error deleting booking:', error);
       toast.error('Unable to delete booking');
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!pendingDelete) return;
+    try {
+      const { error } = await supabase.from('bookings').delete().eq('id', pendingDelete.id);
+      if (error) throw error;
+      logDeletion("booking", pendingDelete.id, pendingDelete.label, { id: "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
+      toast.success('Booking deleted successfully');
+      fetchBookings();
+    } catch (error) {
+      console.error('Error deleting booking:', error);
+      toast.error('Unable to delete booking');
+    } finally {
+      setPendingDelete(null);
     }
   };
 
@@ -733,6 +740,15 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
           currentUser={currentUser as any}
         />
       )}
+      <NeuronModal
+        isOpen={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        title={`Delete booking ${pendingDelete?.label ?? ''}?`}
+        description="No linked invoices, collections, expenses, or e-vouchers were found. This action cannot be undone."
+        confirmLabel="Delete Booking"
+        onConfirm={handleConfirmDelete}
+        variant="danger"
+      />
     </>
   );
 }

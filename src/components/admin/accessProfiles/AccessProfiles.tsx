@@ -8,10 +8,7 @@ import {
   Plus, ArrowLeft, Save, Trash2, UserCheck, AlertTriangle, BookMarked, Search, X, ChevronUp,
 } from "lucide-react";
 import { DataTable, type ColumnDef } from "../../common/DataTable";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "../../ui/alert-dialog";
+import { NeuronModal } from "../../ui/NeuronModal";
 import { PermissionGrantEditor } from "./PermissionGrantEditor";
 import type { AccessProfile, AccessProfileSummary, ModuleGrants } from "./accessProfileTypes";
 import { cloneGrants, countGrantOverrides, normalizeProfileName } from "./accessGrantUtils";
@@ -357,6 +354,27 @@ export function ProfileEditor({
     setConfirmExitOpen(true);
   };
 
+  const handleDiscard = () => {
+    const snapshot = { grants: { ...grants }, name, description, targetDepartment, targetRole };
+    let undone = false;
+    setConfirmExitOpen(false);
+    toast("Changes discarded.", {
+      action: {
+        label: "Undo",
+        onClick: () => {
+          undone = true;
+          setGrants(snapshot.grants);
+          setName(snapshot.name);
+          setDescription(snapshot.description);
+          setTargetDepartment(snapshot.targetDepartment);
+          setTargetRole(snapshot.targetRole);
+        },
+      },
+      duration: 5000,
+      onDismiss: () => { if (!undone) onBack(); },
+    });
+  };
+
   const handleClearAll = () => {
     prevGrantsRef.current = { ...grants };
     setGrants({});
@@ -630,26 +648,17 @@ export function ProfileEditor({
         baselineDepartment={targetDepartment}
       />
 
-      {/* Exit confirmation — uses the standard AlertDialog, same as delete confirmations */}
-      <AlertDialog open={confirmExitOpen} onOpenChange={setConfirmExitOpen}>
-        <AlertDialogContent className="sm:max-w-sm">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Discard changes?</AlertDialogTitle>
-            <AlertDialogDescription>
-              You have unsaved changes to this profile. Going back will discard them.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep editing</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={onBack}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Discard & go back
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Exit confirmation */}
+      <NeuronModal
+        isOpen={confirmExitOpen}
+        onClose={() => setConfirmExitOpen(false)}
+        title="Discard changes?"
+        description="You have unsaved changes. Going back will discard them permanently."
+        confirmLabel="Discard & go back"
+        confirmIcon={<ArrowLeft size={15} />}
+        onConfirm={handleDiscard}
+        variant="danger"
+      />
     </div>
   );
 }

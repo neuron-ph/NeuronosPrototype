@@ -12,6 +12,7 @@ import {
 } from "./shared";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "../ui/table";
 import { BadgeType } from "./shared/BadgeType";
+import { NeuronModal } from "../ui/NeuronModal";
 
 export function EntriesPageNew() {
   // Global state
@@ -41,6 +42,7 @@ export function EntriesPageNew() {
 
   // Keyboard navigation state
   const [selectedRowIndex, setSelectedRowIndex] = useState(-1);
+  const [deleteEntryOpen, setDeleteEntryOpen] = useState(false);
 
   // Mock data - Replace with actual API calls
   const [entries, setEntries] = useState<AccountingEntry[]>([
@@ -173,6 +175,14 @@ export function EntriesPageNew() {
     setEntries(entries.filter((e) => e.id !== id));
   };
 
+  const handleDeleteEntryConfirm = () => {
+    const currentEntry = selectedRowIndex >= 0 ? filteredEntries[selectedRowIndex] : null;
+    if (currentEntry) {
+      handleDelete(currentEntry.id);
+      setSelectedRowIndex(-1);
+    }
+  };
+
   // Handle row click
   const handleRowClick = (entry: AccountingEntry, index: number) => {
     setSelectedEntry(entry);
@@ -229,10 +239,7 @@ export function EntriesPageNew() {
         case "Delete":
           e.preventDefault();
           if (currentEntry && currentEntry.status === "Pending") {
-            if (window.confirm("Are you sure you want to delete this entry?")) {
-              handleDelete(currentEntry.id);
-              setSelectedRowIndex(-1);
-            }
+            setDeleteEntryOpen(true);
           }
           break;
       }
@@ -508,6 +515,16 @@ export function EntriesPageNew() {
           { value: "ND-2025-001", label: "ND-2025-001" },
           { value: "ND-2025-002", label: "ND-2025-002" },
         ]}
+      />
+
+      <NeuronModal
+        isOpen={deleteEntryOpen}
+        onClose={() => setDeleteEntryOpen(false)}
+        title="Delete this entry?"
+        description="This will permanently remove the entry and cannot be undone."
+        confirmLabel="Delete Entry"
+        onConfirm={handleDeleteEntryConfirm}
+        variant="danger"
       />
 
       {/* Entry Details Drawer */}
