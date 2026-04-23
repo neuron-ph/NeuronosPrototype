@@ -14,7 +14,7 @@ import { usePermission } from "../../context/PermissionProvider";
 import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
 import { logDeletion } from "../../utils/activityLog";
 import type { ExecutionStatus } from "../../types/operations";
-import { NeuronModal } from "../../ui/NeuronModal";
+import { NeuronModal } from "../ui/NeuronModal";
 
 interface BrokerageBooking {
   bookingId: string;
