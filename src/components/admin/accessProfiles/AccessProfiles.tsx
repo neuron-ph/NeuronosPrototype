@@ -1,5 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
 import { supabase } from "../../../utils/supabase/client";
 import { toast } from "sonner@2.0.3";
@@ -38,6 +40,139 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function formatRole(role: string): string {
+  return ROLES.find(r => r.value === role)?.label
+    ?? role.split("_").map(w => w[0].toUpperCase() + w.slice(1)).join(" ");
+}
+
+// ─── Apply Profile Modal ──────────────────────────────────────────────────────
+
+function ApplyProfileModal({
+  profile,
+  onClose,
+  onApplied,
+}: {
+  profile: AccessProfileSummary | null;
+  onClose: () => void;
+  onApplied: (userId: string) => void;
+}) {
+  const reduced = useReducedMotion();
+
+  const overlayVariants = {
+    hidden:  { opacity: 0 },
+    visible: { opacity: 1, transition: { duration: reduced ? 0 : 0.18, ease: "easeOut" as const } },
+    exit:    { opacity: 0, transition: { duration: reduced ? 0 : 0.14, ease: "easeIn" as const } },
+  };
+  const cardVariants = {
+    hidden:  { opacity: 0, scale: reduced ? 1 : 0.97, y: reduced ? 0 : 10 },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    visible: { opacity: 1, scale: 1, y: 0, transition: { duration: reduced ? 0 : 0.26, ease: [0.16, 1, 0.3, 1] as any } },
+    exit:    { opacity: 0, scale: reduced ? 1 : 0.98, y: reduced ? 0 : 4, transition: { duration: reduced ? 0 : 0.16, ease: "easeIn" as const } },
+  };
+
+  useEffect(() => {
+    if (!profile) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [profile, onClose]);
+
+  const ruleCount = profile ? countGrantOverrides(profile.module_grants) : 0;
+
+  return createPortal(
+    <AnimatePresence>
+      {profile && (
+        <motion.div
+          key="apply-profile-overlay"
+          variants={overlayVariants}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          onClick={onClose}
+          style={{
+            position: "fixed", inset: 0, zIndex: 1000,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: "16px",
+            backgroundColor: "rgba(18, 51, 43, 0.38)",
+            backdropFilter: "blur(2px)",
+            WebkitBackdropFilter: "blur(2px)",
+          }}
+        >
+          <motion.div
+            key="apply-profile-card"
+            variants={cardVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            onClick={e => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="apply-profile-title"
+            style={{
+              width: "100%",
+              maxWidth: "680px",
+              height: "min(640px, 90vh)",
+              backgroundColor: "var(--theme-bg-surface)",
+              border: "1px solid var(--theme-border-default)",
+              borderRadius: "12px",
+              boxShadow: "0 16px 48px 0 rgba(16, 24, 20, 0.18), 0 2px 8px 0 rgba(16, 24, 20, 0.08)",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+            }}
+          >
+            {/* Header */}
+            <div style={{
+              borderBottom: "1px solid var(--neuron-ui-border)",
+              padding: "20px 24px 18px",
+              flexShrink: 0,
+            }}>
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <h2
+                    id="apply-profile-title"
+                    className="text-[18px] font-semibold text-[var(--neuron-ink-primary)] leading-tight m-0 truncate"
+                  >
+                    {profile.name}
+                  </h2>
+                  <p className="m-0 mt-1.5 text-[12px] text-[var(--neuron-ink-muted)]">
+                    {[
+                      profile.target_department ?? null,
+                      profile.target_role ? formatRole(profile.target_role) : null,
+                    ].filter(Boolean).join(" · ")}
+                    {(profile.target_department || profile.target_role) && ruleCount > 0 && " · "}
+                    {ruleCount > 0 && (
+                      <span style={{ color: "var(--neuron-action-primary)", fontWeight: 600 }}>
+                        {ruleCount} {ruleCount === 1 ? "rule" : "rules"}
+                      </span>
+                    )}
+                    {!profile.target_department && !profile.target_role && ruleCount === 0 && (
+                      <span className="italic">Any department · any role</span>
+                    )}
+                  </p>
+                </div>
+                <button
+                  onClick={onClose}
+                  aria-label="Close"
+                  className="flex items-center justify-center w-7 h-7 rounded-md bg-transparent border-none cursor-pointer text-[var(--neuron-ink-muted)] hover:bg-[var(--neuron-bg-surface-subtle)] transition-colors shrink-0 mt-0.5"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+              <ApplyProfileContent profile={profile} onClose={onClose} onApplied={onApplied} />
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    document.body,
+  );
+}
+
 // ─── Apply To User Dialog ──────────────────────────────────────────────────────
 
 interface UserOption {
@@ -46,6 +181,7 @@ interface UserOption {
   email: string;
   department: string;
   role: string;
+  avatar_url: string | null;
 }
 
 function ApplyProfileContent({
@@ -59,16 +195,16 @@ function ApplyProfileContent({
 }) {
   const { user: currentUser } = useUser();
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<UserOption | null>(null);
+  const [selected, setSelected] = useState<UserOption[]>([]);
   const [applying, setApplying] = useState(false);
   const queryClient = useQueryClient();
 
-  const { data: users = [] } = useQuery<UserOption[]>({
+  const { data: users = [], isLoading: usersLoading } = useQuery<UserOption[]>({
     queryKey: ["users", "active-list"],
     queryFn: async () => {
       const { data } = await supabase
         .from("users")
-        .select("id, name, email, department, role")
+        .select("id, name, email, department, role, avatar_url")
         .eq("is_active", true)
         .order("name");
       return (data ?? []) as UserOption[];
@@ -83,145 +219,245 @@ function ApplyProfileContent({
     );
   }, [users, search]);
 
-  const mismatchWarning = useMemo(() => {
-    if (!selected) return null;
-    const warnings: string[] = [];
-    if (profile.target_department && profile.target_department !== selected.department) {
-      warnings.push(`department (profile targets ${profile.target_department}, user is in ${selected.department})`);
-    }
-    if (profile.target_role && profile.target_role !== selected.role) {
-      warnings.push(`role (profile targets ${profile.target_role}, user is ${selected.role})`);
-    }
-    return warnings.length > 0 ? warnings.join(" and ") : null;
-  }, [selected, profile]);
+  const visible = filtered.slice(0, 30);
+  const hasMore = filtered.length > 30;
+
+  function hasMismatch(u: UserOption): boolean {
+    if (profile.target_department && profile.target_department !== u.department) return true;
+    if (profile.target_role && profile.target_role !== u.role) return true;
+    return false;
+  }
+
+  function getMismatchTooltip(u: UserOption): string | null {
+    const parts: string[] = [];
+    if (profile.target_department && profile.target_department !== u.department)
+      parts.push(`department: ${u.department} vs. ${profile.target_department}`);
+    if (profile.target_role && profile.target_role !== u.role)
+      parts.push(`role: ${formatRole(u.role)} vs. ${formatRole(profile.target_role)}`);
+    return parts.length > 0 ? `Outside target — ${parts.join(", ")}` : null;
+  }
+
+  function toggleUser(u: UserOption) {
+    setSelected(prev =>
+      prev.some(s => s.id === u.id) ? prev.filter(s => s.id !== u.id) : [...prev, u]
+    );
+  }
+
+  const mismatchCount = useMemo(
+    () => selected.filter(u => hasMismatch(u)).length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selected, profile],
+  );
 
   const handleApply = async () => {
-    if (!selected) return;
+    if (selected.length === 0) return;
     setApplying(true);
-    const { error } = await supabase.from("permission_overrides").upsert(
-      {
-        user_id: selected.id,
-        scope: "department_wide",
-        module_grants: cloneGrants(profile.module_grants),
-        applied_profile_id: profile.id,
-        granted_by: currentUser?.id ?? null,
-        notes: `Applied access profile: ${profile.name}`,
-      },
-      { onConflict: "user_id" },
-    );
-    setApplying(false);
-    if (error) {
-      toast.error("Failed to apply profile");
-      return;
+    let failed = 0;
+
+    for (const u of selected) {
+      const { error } = await supabase.from("permission_overrides").upsert(
+        {
+          user_id: u.id,
+          scope: "department_wide",
+          module_grants: cloneGrants(profile.module_grants),
+          applied_profile_id: profile.id,
+          granted_by: currentUser?.id ?? null,
+          notes: `Applied access profile: ${profile.name}`,
+        },
+        { onConflict: "user_id" },
+      );
+      if (error) {
+        failed++;
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["permission_overrides", "module_grants", u.id] });
+        try {
+          await (supabase as any).from("permission_audit_log").insert({
+            target_user_id: u.id,
+            changed_by: currentUser?.name || currentUser?.email || "unknown",
+            changes: {
+              action: "access_profile_applied",
+              profile_id: profile.id,
+              profile_name: profile.name,
+              changed_keys: Object.keys(profile.module_grants),
+            },
+          });
+        } catch { console.warn("[AccessProfiles] audit log failed") }
+        onApplied(u.id);
+      }
     }
+
+    setApplying(false);
     queryClient.invalidateQueries({ queryKey: ["permission_overrides"] });
     queryClient.invalidateQueries({ queryKey: ["permission_overrides", "access-summary"] });
-    queryClient.invalidateQueries({ queryKey: ["permission_overrides", "module_grants", selected.id] });
-    toast.success(`Profile "${profile.name}" applied to ${selected.name}`);
-    try {
-      await (supabase as any).from("permission_audit_log").insert({
-        target_user_id: selected.id,
-        changed_by: currentUser?.name || currentUser?.email || "unknown",
-        changes: {
-          action: "access_profile_applied",
-          profile_id: profile.id,
-          profile_name: profile.name,
-          changed_keys: Object.keys(profile.module_grants),
-        },
-      });
-    } catch { console.warn("[AccessProfiles] audit log failed") }
-    onApplied(selected.id);
+
+    const appliedCount = selected.length - failed;
+    if (appliedCount === 0) {
+      toast.error("Couldn't apply the profile — please try again");
+    } else if (failed > 0) {
+      toast.warning(`Applied to ${appliedCount} of ${selected.length} users — ${failed} failed`);
+    } else {
+      const who = selected.length === 1 ? selected[0].name : `${appliedCount} users`;
+      toast.success(`"${profile.name}" applied to ${who}`);
+    }
     onClose();
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <div style={{ padding: "16px 24px 12px", flexShrink: 0 }}>
-        <p style={{ fontSize: 13, color: "var(--neuron-ink-muted)", margin: "0 0 10px" }}>
-          Select a user to apply <strong style={{ color: "var(--neuron-ink-primary)" }}>{profile.name}</strong>.
-          This will overwrite their current access overrides.
-        </p>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 10px", height: 34, borderRadius: 8, border: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--neuron-bg-elevated)" }}>
-          <Search size={13} style={{ color: "var(--neuron-ink-muted)", flexShrink: 0 }} />
+    <div className="flex flex-col h-full">
+      {/* Search */}
+      <div className="px-6 pt-5 pb-3 shrink-0">
+        <div className="flex items-center gap-2 px-3 h-[36px] rounded-lg border border-[var(--neuron-ui-border)] bg-[var(--neuron-bg-elevated)] focus-within:border-[var(--neuron-action-primary)] transition-colors">
+          <Search size={13} className="text-[var(--neuron-ink-muted)] shrink-0" />
           <input
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search users…"
+            placeholder="Search by name or email…"
             autoFocus
-            style={{ flex: 1, border: "none", outline: "none", background: "transparent", fontSize: 13, color: "var(--neuron-ink-primary)" }}
+            aria-label="Search users"
+            className="flex-1 border-none outline-none bg-transparent text-[13px] text-[var(--neuron-ink-primary)] placeholder:text-[var(--neuron-ink-muted)]"
           />
           {search && (
-            <button onClick={() => setSearch("")} style={{ display: "flex", alignItems: "center", border: "none", background: "none", cursor: "pointer", color: "var(--neuron-ink-muted)", padding: 0 }}>
+            <button
+              onClick={() => setSearch("")}
+              aria-label="Clear search"
+              className="flex items-center bg-transparent border-none cursor-pointer text-[var(--neuron-ink-muted)] p-0 hover:text-[var(--neuron-ink-primary)] transition-colors"
+            >
               <X size={12} />
             </button>
           )}
         </div>
       </div>
 
-      <div style={{ flex: 1, overflowY: "auto", padding: "0 24px" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          {filtered.slice(0, 30).map(u => (
-            <button
-              key={u.id}
-              onClick={() => setSelected(u)}
-              style={{
-                display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, border: "none", cursor: "pointer", textAlign: "left",
-                backgroundColor: selected?.id === u.id ? "color-mix(in oklch, var(--neuron-action-primary) 10%, transparent)" : "transparent",
-                transition: "background-color 0.12s",
-              }}
-              onMouseEnter={e => { if (selected?.id !== u.id) e.currentTarget.style.backgroundColor = "var(--neuron-bg-surface-subtle)"; }}
-              onMouseLeave={e => { if (selected?.id !== u.id) e.currentTarget.style.backgroundColor = "transparent"; }}
+      {/* User list */}
+      <div className="flex-1 overflow-y-auto px-6 pt-1 pb-3">
+        {usersLoading ? (
+          <div className="flex flex-col">
+            {[1, 2, 3, 4, 5].map(i => (
+              <div key={i} className="animate-pulse h-[56px] bg-[var(--neuron-bg-surface-subtle)]" />
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-12 text-center">
+            <Search size={20} className="text-[var(--neuron-ui-border)]" />
+            <p className="text-[13px] text-[var(--neuron-ink-muted)] m-0">
+              {search ? `No users match "${search}"` : "No active users found"}
+            </p>
+          </div>
+        ) : (
+          <>
+            <div
+              role="listbox"
+              aria-label="Select users"
+              aria-multiselectable="true"
+              className="flex flex-col"
             >
-              <div style={{ width: 30, height: 30, borderRadius: "50%", backgroundColor: "var(--neuron-bg-surface-subtle)", border: "1.5px solid var(--neuron-ui-border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, color: "var(--neuron-ink-muted)", flexShrink: 0 }}>
-                {u.name.charAt(0).toUpperCase()}
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: "var(--neuron-ink-primary)", lineHeight: 1.3 }}>{u.name}</div>
-                <div style={{ fontSize: 11, color: "var(--neuron-ink-muted)" }}>{u.department} · {u.role.replaceAll("_", " ")}</div>
-              </div>
-              {selected?.id === u.id && (
-                <div style={{ marginLeft: "auto", width: 16, height: 16, borderRadius: "50%", backgroundColor: "var(--neuron-action-primary)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                </div>
-              )}
-            </button>
-          ))}
-          {filtered.length === 0 && (
-            <div style={{ padding: "16px", textAlign: "center", fontSize: 13, color: "var(--neuron-ink-muted)" }}>No users found</div>
-          )}
-        </div>
+              {visible.map(u => {
+                const isSelected = selected.some(s => s.id === u.id);
+                const mismatch = hasMismatch(u);
+                const tooltip = getMismatchTooltip(u);
+                return (
+                  <button
+                    key={u.id}
+                    role="option"
+                    aria-selected={isSelected}
+                    onClick={() => toggleUser(u)}
+                    title={tooltip ?? undefined}
+                    className={`flex items-center gap-3 w-full px-3 py-3 border-x-0 border-t-0 cursor-pointer text-left transition-colors duration-[120ms] last:border-b-0${!isSelected ? " hover:bg-[var(--neuron-bg-surface-subtle)]" : ""}`}
+                    style={{
+                      borderBottomWidth: "1px",
+                      borderBottomStyle: "solid",
+                      borderBottomColor: "var(--neuron-ui-border)",
+                      ...(isSelected ? { backgroundColor: "color-mix(in oklch, var(--neuron-action-primary) 8%, transparent)" } : {}),
+                    }}
+                  >
+                    {/* Avatar */}
+                    <div
+                      aria-hidden="true"
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-[13px] font-semibold shrink-0 overflow-hidden bg-[var(--neuron-bg-elevated)] text-[var(--neuron-ink-muted)] border border-[var(--neuron-ui-border)]"
+                    >
+                      {u.avatar_url
+                        ? <img src={u.avatar_url} alt="" className="w-full h-full object-cover" />
+                        : u.name.charAt(0).toUpperCase()
+                      }
+                    </div>
+
+                    {/* Name + dept + role */}
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[13px] font-medium text-[var(--neuron-ink-primary)] leading-snug">{u.name}</div>
+                      <div className="text-[11px] text-[var(--neuron-ink-muted)] mt-0.5">
+                        {u.department} · {formatRole(u.role)}
+                      </div>
+                    </div>
+
+                    {/* Mismatch indicator or checkmark */}
+                    {mismatch && !isSelected && (
+                      <AlertTriangle size={13} className="text-[var(--theme-status-warning-fg)] shrink-0" />
+                    )}
+                    {isSelected && (
+                      <div
+                        className="w-[18px] h-[18px] rounded-full flex items-center justify-center shrink-0"
+                        style={{ backgroundColor: "var(--neuron-action-primary)" }}
+                      >
+                        <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
+                          <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            {hasMore && (
+              <p className="text-[11px] text-[var(--neuron-ink-muted)] text-center pt-3">
+                Showing first 30 of {filtered.length} — search to narrow results
+              </p>
+            )}
+          </>
+        )}
       </div>
 
-      {mismatchWarning && (
-        <div style={{ margin: "0 24px", padding: "8px 12px", borderRadius: 8, backgroundColor: "var(--theme-status-warning-bg)", border: "1px solid color-mix(in oklch, var(--theme-status-warning-fg) 40%, transparent)", display: "flex", alignItems: "flex-start", gap: 8, flexShrink: 0 }}>
-          <AlertTriangle size={13} style={{ color: "var(--theme-status-warning-fg)", flexShrink: 0, marginTop: 1 }} />
-          <span style={{ fontSize: 12, color: "var(--theme-status-warning-fg)" }}>
-            Mismatch in {mismatchWarning}. You can still apply the profile.
+      {/* Mismatch warning */}
+      {mismatchCount > 0 && (
+        <div
+          className="mx-6 mb-3 px-3 py-2 rounded-lg bg-[var(--theme-status-warning-bg)] flex items-start gap-2 shrink-0"
+          style={{ border: "1px solid color-mix(in oklch, var(--theme-status-warning-fg) 40%, transparent)" }}
+        >
+          <AlertTriangle size={13} className="text-[var(--theme-status-warning-fg)] shrink-0 mt-px" />
+          <span className="text-[12px] text-[var(--theme-status-warning-fg)] leading-snug">
+            {mismatchCount === 1
+              ? "1 selected user is outside this profile's target department or role — you can still apply."
+              : `${mismatchCount} selected users are outside this profile's target — you can still apply.`
+            }
           </span>
         </div>
       )}
 
-      <div style={{ flexShrink: 0, padding: "12px 24px 20px", borderTop: "1px solid var(--neuron-ui-border)", display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+      {/* Footer */}
+      <div className="shrink-0 px-6 pt-3 pb-5 border-t border-[var(--neuron-ui-border)] flex justify-end gap-2">
         <button
           onClick={onClose}
-          style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-muted)", fontSize: 13, fontWeight: 500, cursor: "pointer" }}
+          className="px-4 py-2 rounded-lg border border-[var(--neuron-ui-border)] bg-transparent text-[var(--neuron-ink-muted)] text-[13px] font-medium cursor-pointer hover:bg-[var(--neuron-bg-surface-subtle)] transition-colors"
         >
           Cancel
         </button>
         <button
           onClick={handleApply}
-          disabled={!selected || applying}
+          disabled={selected.length === 0 || applying}
+          className="px-4 py-2 rounded-lg border-none text-[13px] font-semibold flex items-center gap-1.5 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
           style={{
-            padding: "7px 16px", borderRadius: 8, border: "none",
-            background: selected ? "var(--neuron-action-primary)" : "var(--neuron-bg-surface-subtle)",
-            color: selected ? "var(--neuron-action-primary-text)" : "var(--neuron-ink-muted)",
-            fontSize: 13, fontWeight: 600, cursor: selected && !applying ? "pointer" : "not-allowed",
-            display: "flex", alignItems: "center", gap: 6, opacity: applying ? 0.7 : 1,
+            backgroundColor: selected.length > 0 ? "var(--neuron-action-primary)" : "var(--neuron-bg-surface-subtle)",
+            color: selected.length > 0 ? "var(--neuron-action-primary-text)" : "var(--neuron-ink-muted)",
+            cursor: selected.length > 0 && !applying ? "pointer" : "not-allowed",
           }}
         >
           <UserCheck size={13} />
-          {applying ? "Applying…" : "Apply Profile"}
+          {applying
+            ? "Applying…"
+            : selected.length > 0
+              ? `Apply to ${selected.length} ${selected.length === 1 ? "user" : "users"}`
+              : "Apply Profile"
+          }
         </button>
       </div>
     </div>
@@ -829,20 +1065,11 @@ export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditPr
         />
       )}
 
-      <SidePanel
-        isOpen={!!applyingProfile}
+      <ApplyProfileModal
+        profile={applyingProfile}
         onClose={() => setApplyingProfile(null)}
-        size="sm"
-        title="Apply Profile"
-      >
-        {applyingProfile && (
-          <ApplyProfileContent
-            profile={applyingProfile}
-            onClose={() => setApplyingProfile(null)}
-            onApplied={() => setApplyingProfile(null)}
-          />
-        )}
-      </SidePanel>
+        onApplied={() => setApplyingProfile(null)}
+      />
 
       <SidePanel
         isOpen={!!deletingProfile}
