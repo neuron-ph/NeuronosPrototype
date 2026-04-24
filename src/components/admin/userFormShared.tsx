@@ -96,8 +96,8 @@ export function FieldError({ message }: { message: string }) {
 
 /** Base Tailwind class for user form text inputs. */
 export const INPUT_BASE =
-  "w-full h-10 border border-[var(--neuron-ui-border)] rounded-lg px-3 text-[13px] text-[var(--neuron-ink-primary)] bg-[var(--neuron-bg-elevated)] outline-none";
+  "w-full h-10 border border-[var(--neuron-ui-border)] rounded-lg px-3 text-[13px] text-[var(--neuron-ink-primary)] bg-[var(--neuron-bg-elevated)] outline-none focus-visible:border-[var(--theme-border-strong)] focus-visible:ring-[3px] focus-visible:ring-[rgba(95,196,161,0.18)]";
 
 /** Tailwind class for user form text inputs in an error state. */
 export const INPUT_ERROR =
-  "w-full h-10 border border-[var(--neuron-semantic-danger)] rounded-lg px-3 text-[13px] text-[var(--neuron-ink-primary)] bg-[var(--neuron-bg-elevated)] outline-none";
+  "w-full h-10 border border-[var(--neuron-semantic-danger)] rounded-lg px-3 text-[13px] text-[var(--neuron-ink-primary)] bg-[var(--neuron-bg-elevated)] outline-none focus-visible:ring-[3px] focus-visible:ring-[rgba(180,35,24,0.15)]";

@@ -173,3 +173,78 @@ export interface Consignee {
   created_at: string;
   updated_at: string;
 }
+
+// ==================== TEAM PROFILES ====================
+
+export interface TeamProfileAssignment {
+  role_key: string;    // stable machine key: 'manager' | 'supervisor' | 'handler' | 'pricing_analyst' | etc.
+  role_label: string;  // display label: 'Manager' | 'Pricing Analyst' | etc.
+  user_id: string;
+  user_name: string;
+}
+
+export interface TeamProfileScope {
+  customer_id: string;
+  department: string;
+  service_type?: string | null;
+  team_id?: string | null;
+}
+
+export interface CustomerTeamProfile extends TeamProfileScope {
+  id: string;
+  team_name?: string | null;
+  assignments: TeamProfileAssignment[];
+  notes: string | null;
+  created_by?: string | null;
+  updated_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContactTeamOverride {
+  id: string;
+  contact_id: string;
+  customer_id: string;
+  department: string;
+  service_type?: string | null;
+  team_id?: string | null;
+  team_name?: string | null;
+  assignments: TeamProfileAssignment[];
+  notes: string | null;
+  created_by?: string | null;
+  updated_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UpsertCustomerTeamProfileInput {
+  customer_id: string;
+  department: string;
+  service_type?: string | null;
+  team_id?: string | null;
+  team_name?: string | null;
+  assignments: TeamProfileAssignment[];
+  notes?: string | null;
+  updated_by?: string | null;
+}
+
+export interface UpsertContactTeamOverrideInput {
+  contact_id: string;
+  customer_id: string;
+  department: string;
+  service_type?: string | null;
+  team_id?: string | null;
+  team_name?: string | null;
+  assignments: TeamProfileAssignment[];
+  notes?: string | null;
+  updated_by?: string | null;
+}
+
+export interface ResolvedTeamProfile {
+  department: string;
+  service_type?: string | null;
+  team_id?: string | null;
+  team_name?: string | null;
+  assignments: TeamProfileAssignment[];
+  source: 'contact_override' | 'customer' | 'legacy' | 'none';
+}

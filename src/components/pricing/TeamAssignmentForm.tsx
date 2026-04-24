@@ -13,6 +13,7 @@ export interface TeamAssignment {
 
 interface TeamAssignmentFormProps {
   customerId: string;
+  serviceType?: string;
   onChange: (assignments: TeamAssignment) => void;
   initialAssignments?: TeamAssignment;
 }
@@ -30,6 +31,7 @@ interface Team {
 
 export function TeamAssignmentForm({
   customerId,
+  serviceType,
   onChange,
   initialAssignments,
 }: TeamAssignmentFormProps) {
@@ -91,26 +93,45 @@ export function TeamAssignmentForm({
       });
   }, [selectedTeamId]);
 
-  // Load saved preference when team changes
+  // Load saved preference when team changes — prefer customer_team_profiles, fallback to legacy
   useEffect(() => {
     if (!customerId || !selectedTeamId) return;
 
+    const effectiveServiceType = serviceType ?? null;
+
     supabase
-      .from("client_handler_preferences")
-      .select("preferred_supervisor_id, preferred_handler_id")
+      .from("customer_team_profiles")
+      .select("assignments, team_id")
       .eq("customer_id", customerId)
-      .eq("preferred_team_id", selectedTeamId)
+      .eq("department", "Operations")
+      .eq("team_id", selectedTeamId)
       .maybeSingle()
-      .then(({ data }) => {
-        if (data) {
-          if (data.preferred_supervisor_id) setSelectedSupervisorId(data.preferred_supervisor_id);
-          if (data.preferred_handler_id) setSelectedHandlerId(data.preferred_handler_id);
+      .then(async ({ data: profileData }) => {
+        if (profileData?.assignments?.length) {
+          const assignments: { role_key: string; user_id: string }[] = profileData.assignments;
+          const sv = assignments.find((a) => a.role_key === "supervisor");
+          const hd = assignments.find((a) => a.role_key === "handler");
+          if (sv?.user_id) setSelectedSupervisorId(sv.user_id);
+          if (hd?.user_id) setSelectedHandlerId(hd.user_id);
+          setHasSavedPreference(true);
+          return;
+        }
+        // Fallback to legacy table
+        const { data: legacyData } = await supabase
+          .from("client_handler_preferences")
+          .select("preferred_supervisor_id, preferred_handler_id")
+          .eq("customer_id", customerId)
+          .eq("preferred_team_id", selectedTeamId)
+          .maybeSingle();
+        if (legacyData) {
+          if (legacyData.preferred_supervisor_id) setSelectedSupervisorId(legacyData.preferred_supervisor_id);
+          if (legacyData.preferred_handler_id) setSelectedHandlerId(legacyData.preferred_handler_id);
           setHasSavedPreference(true);
         } else {
           setHasSavedPreference(false);
         }
       });
-  }, [customerId, selectedTeamId]);
+  }, [customerId, selectedTeamId, serviceType]);
 
   // Fire onChange once team + manager are set; supervisor/handler are optional
   useEffect(() => {

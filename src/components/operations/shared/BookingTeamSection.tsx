@@ -19,6 +19,8 @@ import { toast } from "../../ui/toast-utils";
 import { appendBookingActivity } from "../../../utils/bookingActivityLog";
 import { fireBookingAssignmentTickets } from "../../../utils/workflowTickets";
 import { useUser } from "../../../hooks/useUser";
+import { operationsAssignmentToProfileInput } from "../../../utils/teamProfileMapping";
+import { upsertCustomerTeamProfile } from "../../../utils/teamProfilePersistence";
 
 interface BookingTeamSectionProps {
   bookingId: string;
@@ -191,22 +193,20 @@ export function BookingTeamSection({
         });
       }
 
-      // Save as default preference if requested
-      if (pendingAssignment.saveAsDefault && customerId) {
+      // Save as default preference — write to canonical customer_team_profiles
+      if (pendingAssignment.saveAsDefault && customerId && serviceType) {
         try {
-          await supabase.from("client_handler_preferences").upsert({
-            customer_id: customerId,
-            preferred_team_id: pendingAssignment.team.id,
-            preferred_team_name: pendingAssignment.team.name,
-            preferred_manager_id: pendingAssignment.manager.id,
-            preferred_manager_name: pendingAssignment.manager.name,
-            preferred_supervisor_id: pendingAssignment.supervisor?.id ?? null,
-            preferred_supervisor_name: pendingAssignment.supervisor?.name ?? null,
-            preferred_handler_id: pendingAssignment.handler?.id ?? null,
-            preferred_handler_name: pendingAssignment.handler?.name ?? null,
+          const profileInput = operationsAssignmentToProfileInput(
+            pendingAssignment,
+            customerId,
+            serviceType
+          );
+          await upsertCustomerTeamProfile({
+            ...profileInput,
+            updated_by: user?.id ?? null,
           });
         } catch (prefErr) {
-          console.error("BookingTeamSection: preference save failed", prefErr);
+          console.error("BookingTeamSection: profile save failed", prefErr);
         }
       }
 
