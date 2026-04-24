@@ -147,6 +147,17 @@ export const queryKeys = {
       ["calendar", "auto", start, end] as const,
     detail: (id: string) => ["calendar", "detail", id] as const,
   },
+  teamProfiles: {
+    all: () => ["teamProfiles"] as const,
+    forCustomer: (customerId: string) => ["teamProfiles", "customer", customerId] as const,
+    forContact: (contactId: string) => ["teamProfiles", "contact", contactId] as const,
+    resolved: (params: {
+      customerId?: string;
+      contactId?: string | null;
+      department: string;
+      serviceType?: string | null;
+    }) => ["teamProfiles", "resolved", params] as const,
+  },
   workflowTickets: {
     all: () => ["workflowTickets"] as const,
     pendingForDept: (dept: string) => ["workflowTickets", "pending", dept] as const,

@@ -12,6 +12,7 @@ import { ActivityTimelineTable } from "./ActivityTimelineTable";
 import { AddContactPanel } from "./AddContactPanel";
 import { CustomerProjectsTab } from "./CustomerProjectsTab";
 import { CustomerInquiriesTab } from "./CustomerInquiriesTab";
+import { CustomerTeamsTab } from "./CustomerTeamsTab";
 import { ConsigneeInlineSection } from "./ConsigneeInlineSection";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
@@ -117,11 +118,14 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
   const canViewContractsTab   = can("bd_customers_contracts_tab", "view");
   const canViewCommentsTab    = can("bd_customers_comments_tab", "view");
   const canViewAttachmentsTab = can("bd_customers_attachments_tab", "view");
-  const [activeTab, setActiveTab] = useState<"contacts" | "activities" | "tasks" | "inquiries" | "comments" | "attachments" | "projects" | "contracts">(() => {
+  const canViewTeamsTab       = can("bd_customers_teams_tab", "view");
+  const canEditTeamsTab       = can("bd_customers_teams_tab", "edit");
+  const [activeTab, setActiveTab] = useState<"contacts" | "activities" | "tasks" | "inquiries" | "comments" | "attachments" | "projects" | "contracts" | "teams">(() => {
     if (variant === "pricing") {
       if (canViewInquiriesTab) return "inquiries";
       if (canViewProjectsTab)  return "projects";
       if (canViewContractsTab) return "contracts";
+      if (canViewTeamsTab)     return "teams";
       if (canViewCommentsTab)  return "comments";
       return "attachments";
     }
@@ -131,6 +135,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
     if (canViewInquiriesTab)  return "inquiries";
     if (canViewProjectsTab)   return "projects";
     if (canViewContractsTab)  return "contracts";
+    if (canViewTeamsTab)      return "teams";
     if (canViewCommentsTab)   return "comments";
     return "attachments";
   });
@@ -969,6 +974,23 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                 >
                   Contracts
                   {activeTab === "contracts" && (
+                    <div
+                      className="absolute bottom-0 left-0 right-0 h-0.5"
+                      style={{ backgroundColor: "var(--theme-action-primary-bg)" }}
+                    />
+                  )}
+                </button>
+              )}
+              {canViewTeamsTab && (
+                <button
+                  onClick={() => setActiveTab("teams")}
+                  className="px-1 pb-3 text-[13px] font-medium transition-colors relative"
+                  style={{
+                    color: activeTab === "teams" ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)"
+                  }}
+                >
+                  Teams
+                  {activeTab === "teams" && (
                     <div
                       className="absolute bottom-0 left-0 right-0 h-0.5"
                       style={{ backgroundColor: "var(--theme-action-primary-bg)" }}
@@ -1907,6 +1929,13 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                     })}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Teams Tab */}
+            {activeTab === "teams" && canViewTeamsTab && (
+              <div style={{ paddingBottom: "32px" }}>
+                <CustomerTeamsTab customerId={customer.id} canEdit={canEditTeamsTab} />
               </div>
             )}
 

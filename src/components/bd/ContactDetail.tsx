@@ -12,6 +12,7 @@ import { useUser } from "../../hooks/useUser";
 import { logActivity, logCreation } from "../../utils/activityLog";
 import { toast } from "sonner@2.0.3";
 import { CreateQuotationMenu } from "../pricing/CreateQuotationMenu";
+import { ContactTeamsTab } from "./ContactTeamsTab";
 
 interface ContactDetailProps {
   contact: Contact;
@@ -125,16 +126,20 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
   const canViewInquiriesTab   = can("bd_contacts_inquiries_tab", "view");
   const canViewAttachmentsTab = can("bd_contacts_attachments_tab", "view");
   const canViewCommentsTab    = can("bd_contacts_comments_tab", "view");
+  const canViewTeamsTab       = can("bd_contacts_teams_tab", "view");
+  const canEditTeamsTab       = can("bd_contacts_teams_tab", "edit");
 
-  const [activeTab, setActiveTab] = useState<"activities" | "tasks" | "inquiries" | "attachments" | "comments">(() => {
+  const [activeTab, setActiveTab] = useState<"activities" | "tasks" | "inquiries" | "attachments" | "comments" | "teams">(() => {
     if (variant === "pricing") {
-      if (canViewInquiriesTab) return "inquiries";
+      if (canViewInquiriesTab)   return "inquiries";
+      if (canViewTeamsTab)       return "teams";
       if (canViewAttachmentsTab) return "attachments";
       return "comments";
     }
     if (canViewActivitiesTab)  return "activities";
     if (canViewTasksTab)       return "tasks";
     if (canViewInquiriesTab)   return "inquiries";
+    if (canViewTeamsTab)       return "teams";
     if (canViewAttachmentsTab) return "attachments";
     return "comments";
   });
@@ -1054,6 +1059,23 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                 >
                   Inquiries
                   {activeTab === "inquiries" && (
+                    <div
+                      className="absolute bottom-0 left-0 right-0 h-0.5"
+                      style={{ backgroundColor: "var(--theme-action-primary-bg)" }}
+                    />
+                  )}
+                </button>
+              )}
+              {canViewTeamsTab && (
+                <button
+                  onClick={() => setActiveTab("teams")}
+                  className="px-1 pb-3 text-[13px] font-medium transition-colors relative"
+                  style={{
+                    color: activeTab === "teams" ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)"
+                  }}
+                >
+                  Teams
+                  {activeTab === "teams" && (
                     <div
                       className="absolute bottom-0 left-0 right-0 h-0.5"
                       style={{ backgroundColor: "var(--theme-action-primary-bg)" }}
@@ -2575,6 +2597,17 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+
+              {activeTab === "teams" && canViewTeamsTab && effectiveCustomerId && (
+                <div style={{ paddingBottom: "32px" }}>
+                  <ContactTeamsTab
+                    contactId={contact.id}
+                    customerId={effectiveCustomerId}
+                    customerName={customer?.name ?? "Customer"}
+                    canEdit={canEditTeamsTab}
+                  />
                 </div>
               )}
 

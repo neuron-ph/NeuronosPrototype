@@ -6,6 +6,8 @@ export type ModuleId =
   | "bd_customers_contacts_tab" | "bd_customers_activities_tab" | "bd_customers_tasks_tab"
   | "bd_customers_inquiries_tab" | "bd_customers_comments_tab" | "bd_customers_attachments_tab"
   | "bd_customers_projects_tab" | "bd_customers_contracts_tab"
+  | "bd_customers_teams_tab"
+  | "bd_contacts_teams_tab"
   | "bd_budget_requests_all_tab" | "bd_budget_requests_my_requests_tab"
   // ─── Pricing ─────────────────────────────────────────────────────────────────
   | "pricing_quotations" | "pricing_contracts" | "pricing_network_partners"
@@ -142,6 +144,8 @@ export const PERM_MODULES: PermModule[] = [
   { id: "bd_customers_attachments_tab", label: "↳ Attachments", group: BD, dept: BD, applicableActions: A.viewOnly },
   { id: "bd_customers_projects_tab",    label: "↳ Projects",    group: BD, dept: BD, applicableActions: A.viewOnly },
   { id: "bd_customers_contracts_tab",   label: "↳ Contracts",   group: BD, dept: BD, applicableActions: A.viewOnly },
+  { id: "bd_customers_teams_tab",       label: "↳ Teams",       group: BD, dept: BD, applicableActions: A.tabInfo },
+  { id: "bd_contacts_teams_tab",        label: "↳ Teams",       group: BD, dept: BD, applicableActions: A.tabInfo },
 
   { id: "bd_tasks",      label: "Tasks",      group: BD, dept: BD, applicableActions: A.listOnly },
   { id: "bd_activities", label: "Activities", group: BD, dept: BD, applicableActions: A.logStyle },

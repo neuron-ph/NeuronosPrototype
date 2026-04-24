@@ -12,7 +12,6 @@ import {
   ChevronRight, Edit, Trash2, Search, X,
 } from "lucide-react";
 import { DataTable, ColumnDef } from "../common/DataTable";
-import { CreateUserPanel } from "./CreateUserPanel";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -301,7 +300,6 @@ function UsersTab({
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [showCreate, setShowCreate] = useState(false);
   const [filters, setFilters] = useState<FiltersState>({ search: "", dept: "", role: "", status: "", overrides: "all" });
 
   useEffect(() => {
@@ -473,7 +471,7 @@ function UsersTab({
       <p style={{ fontSize: 14, fontWeight: 500, color: "var(--neuron-ink-primary)", marginBottom: 4 }}>No members yet</p>
       <p style={{ fontSize: 13, color: "var(--neuron-ink-muted)", marginBottom: 20 }}>Create an account to add someone to your workspace.</p>
       <button
-        onClick={() => setShowCreate(true)}
+        onClick={() => navigate("/admin/users/new")}
         style={{ height: 38, padding: "0 18px", borderRadius: 8, background: "var(--neuron-bg-elevated)", border: "1px solid var(--neuron-action-primary)", color: "var(--neuron-action-primary)", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}
       >
         <Plus size={15} /> Create Account
@@ -491,7 +489,7 @@ function UsersTab({
           </span>
         </p>
         <button
-          onClick={() => setShowCreate(true)}
+          onClick={() => navigate("/admin/users/new")}
           style={{ height: 36, padding: "0 14px", borderRadius: 8, background: "var(--neuron-action-primary)", border: "none", color: "var(--neuron-action-primary-text)", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
           onMouseEnter={e => { e.currentTarget.style.background = "var(--neuron-action-primary-hover)"; }}
           onMouseLeave={e => { e.currentTarget.style.background = "var(--neuron-action-primary)"; }}
@@ -510,29 +508,7 @@ function UsersTab({
         onRowClick={(u) => navigate(`/admin/users/${u.id}`)}
       />
 
-      {showCreate && (
-        <CreateUserPanel
-          isOpen={showCreate}
-          onClose={() => setShowCreate(false)}
-          onCreated={(newUser) => {
-            // Optimistically insert the new user into the list immediately
-            queryClient.setQueryData<(UserRow & { status?: UserStatus; teams?: { name: string } | null })[]>(
-              queryKeys.users.list(),
-              (old = []) => {
-                const fresh = {
-                  ...newUser,
-                  is_active: (newUser as any).status !== "inactive",
-                  teams: null,
-                } as UserRow & { status?: UserStatus; teams?: null };
-                return [...old, fresh].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
-              }
-            );
-            // Also refetch in background to get server-canonical data
-            queryClient.invalidateQueries({ queryKey: queryKeys.users.list() });
-            setShowCreate(false);
-          }}
-        />
-      )}
+
     </>
   );
 }

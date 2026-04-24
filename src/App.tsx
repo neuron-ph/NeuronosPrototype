@@ -56,6 +56,7 @@ const DesignSystemGuide = lazy(() => import("./components/DesignSystemGuide").th
 const Settings = lazy(() => import("./components/settings/Settings").then((m) => ({ default: m.Settings })));
 const UserManagement = lazy(() => import("./components/admin/UserManagement").then((m) => ({ default: m.UserManagement })));
 const UserDetailPage = lazy(() => import("./components/admin/UserDetailPage").then((m) => ({ default: m.UserDetailPage })));
+const CreateUserPage = lazy(() => import("./components/admin/CreateUserPage").then((m) => ({ default: m.CreateUserPage })));
 const CalendarModule = lazy(() => import("./components/calendar/CalendarModule").then((m) => ({ default: m.CalendarModule })));
 
 function RouteLoadingState() {
@@ -980,6 +981,14 @@ function UserDetailPageWrapper() {
   );
 }
 
+function CreateUserPageWrapper() {
+  return (
+    <RouteWrapper page="admin-users">
+      <CreateUserPage />
+    </RouteWrapper>
+  );
+}
+
 function DesignSystemPage() {
   return (
     <RouteWrapper page="design-system">
@@ -1167,6 +1176,7 @@ function AppContent() {
         {/* Executive only routes */}
         <Route element={<GuardedLayout allowedDepartments={["Executive"]} requiredPermission={{ moduleId: "exec_users", action: "view" }} />}>
           <Route path="/admin/users" element={<UserManagementPage />} />
+          <Route path="/admin/users/new" element={<CreateUserPageWrapper />} />
           <Route path="/admin/users/:userId" element={<UserDetailPageWrapper />} />
         </Route>
 
