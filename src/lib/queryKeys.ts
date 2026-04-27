@@ -162,4 +162,14 @@ export const queryKeys = {
     all: () => ["workflowTickets"] as const,
     pendingForDept: (dept: string) => ["workflowTickets", "pending", dept] as const,
   },
+  assignments: {
+    all: () => ["assignments"] as const,
+    services: () => ["assignments", "services"] as const,
+    rolesForService: (serviceType: string) => ["assignments", "roles", serviceType] as const,
+    bookingAssignments: (bookingId: string) => ["assignments", "booking", bookingId] as const,
+    visibilityForUser: (userId: string) => ["assignments", "visibility", userId] as const,
+    defaultsForCustomer: (customerId: string) => ["assignments", "defaults", "customer", customerId] as const,
+    resolved: (params: { customerId?: string | null; tradePartyProfileId?: string | null; serviceType: string }) =>
+      ["assignments", "resolved", params] as const,
+  },
 };

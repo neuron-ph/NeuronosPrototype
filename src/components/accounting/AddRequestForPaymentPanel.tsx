@@ -1,10 +1,10 @@
-import { X, Plus, Printer, Download, Calendar as CalendarIcon, CreditCard, Clock, Tag, ChevronDown, RefreshCw, FileText, Banknote, Receipt, ArrowRight, CheckSquare, Square, Loader2, Save, Zap, Trash2 } from "lucide-react";
+import { X, Plus, Printer, Download, Calendar as CalendarIcon, CreditCard, Clock, Tag, ChevronDown, ChevronRight, RefreshCw, FileText, Banknote, Receipt, ArrowRight, CheckSquare, Square, Loader2, Save, Zap, Trash2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { NeuronLogo } from "../NeuronLogo";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { CatalogItemCombobox } from "../shared/pricing/CatalogItemCombobox";
-import { GroupedDropdown } from "../bd/GroupedDropdown";
+import { CategoryDropdown } from "../pricing/quotations/CategoryDropdown";
 import type { EVoucher, EVoucherTransactionType, LinkedBilling } from "../../types/evoucher";
 import { useEVoucherSubmit } from "../../hooks/useEVoucherSubmit";
 import { useUser } from "../../hooks/useUser";
@@ -19,7 +19,15 @@ interface LineItem {
   particular: string;
   description: string;
   amount: number;
-  catalog_item_id?: string;
+  catalog_item_id?: string | null;
+}
+
+interface CategorySection {
+  id: string;
+  category_name: string;
+  catalog_category_id?: string;
+  expanded: boolean;
+  items: LineItem[];
 }
 
 interface AddRequestForPaymentPanelProps {
@@ -40,22 +48,6 @@ interface AddRequestForPaymentPanelProps {
   footerActions?: React.ReactNode; // Custom footer actions for view mode
 }
 
-type ExpenseCategory = 
-  | "Brokerage - FCL"
-  | "Brokerage - LCL/AIR"
-  | "Forwarding" 
-  | "Trucking"
-  | "Miscellaneous"
-  | "Office";
-
-// Revenue Categories for Billing
-type RevenueCategory =
-  | "Brokerage Income"
-  | "Forwarding Income"
-  | "Trucking Income"
-  | "Warehousing Income"
-  | "Documentation Fees"
-  | "Other Service Income";
 
 type PaymentMethod = 
   | "Cash"
@@ -68,240 +60,8 @@ type PaymentMethod =
 
 type CreditTerm = "None" | "Net7" | "Net15" | "Net30";
 
-interface SubCategory {
-  label: string;
-  items: string[];
-}
-
 // UI Subtypes for Operations/Accounting to distinguish between expense types
 type TransactionSubtype = "regular_expense" | "billable_expense" | "cash_advance";
-
-const EXPENSE_CATEGORIES: ExpenseCategory[] = [
-  "Brokerage - FCL",
-  "Brokerage - LCL/AIR",
-  "Forwarding",
-  "Trucking",
-  "Miscellaneous",
-  "Office"
-];
-
-const REVENUE_CATEGORIES: RevenueCategory[] = [
-  "Brokerage Income",
-  "Forwarding Income",
-  "Trucking Income",
-  "Warehousing Income",
-  "Documentation Fees",
-  "Other Service Income"
-];
-
-// Hierarchical structure: Category -> Sub-Category -> Sub-Sub-Category
-const SUB_CATEGORIES: Record<ExpenseCategory, SubCategory[]> = {
-  "Brokerage - FCL": [
-    {
-      label: "Destination Local Charges",
-      items: [
-        "THC & Other Local Charges",
-        "Detention",
-        "Demurrage",
-        "Detention/Demurrage",
-        "Storage & Deposit",
-        "Late Payment Fee",
-        "Others"
-      ]
-    },
-    {
-      label: "Port Charges",
-      items: [
-        "THC",
-        "Arrastre, Wharfage Due & Storage Fee",
-        "Storage Fee",
-        "Reefer",
-        "Physical Examination",
-        "Spot-check Examination",
-        "O-LO",
-        "Others"
-      ]
-    },
-    {
-      label: "Trucking Charges",
-      items: [
-        "Delivery Fee",
-        "Booking Fee",
-        "Tricod",
-        "CY Fee",
-        "Others"
-      ]
-    }
-  ],
-  "Brokerage - LCL/AIR": [
-    {
-      label: "Warehouse Charges",
-      items: [
-        "Storage & Other Fees"
-      ]
-    },
-    {
-      label: "Clearance Charges",
-      items: [
-        "Assessment",
-        "Agents",
-        "Liquidation",
-        "Audit",
-        "District",
-        "X-Ray",
-        "Wharfinger",
-        "CNIU/CAIDTF",
-        "BAI",
-        "ISPM",
-        "BPI",
-        "Notary & Photocopies",
-        "Employee Particulars",
-        "Company Particulars",
-        "Brokerage Fee",
-        "Others"
-      ]
-    },
-    {
-      label: "Sales Commission",
-      items: [
-        "Sales Commission"
-      ]
-    }
-  ],
-  "Forwarding": [
-    {
-      label: "Freight Charges",
-      items: [
-        "Air Freight",
-        "Ocean Freight"
-      ]
-    },
-    {
-      label: "Origin Local Charges",
-      items: [
-        "EXW",
-        "FCA/FOB",
-        "Others"
-      ]
-    },
-    {
-      label: "Freight & Origin Local Charges",
-      items: [
-        "EXW/FCA/FOB"
-      ]
-    },
-    {
-      label: "Destination Local Charges",
-      items: [
-        "THC & Other Local Charges",
-        "Detention",
-        "Demurrage",
-        "Detention/Demurrage",
-        "Storage & Deposit",
-        "Late Payment Fee",
-        "Others"
-      ]
-    },
-    {
-      label: "Port Charges",
-      items: [
-        "Arrastre & Wharfage Due",
-        "Arrastre, Wharfage Due & Storage Fee",
-        "Storage Fee",
-        "Reefer",
-        "Physical Examination",
-        "Spot-check Examination",
-        "O-LO",
-        "Others"
-      ]
-    },
-    {
-      label: "Trucking Charges",
-      items: [
-        "Delivery Fee",
-        "Booking Fee",
-        "Tricod",
-        "CY Fee",
-        "Others"
-      ]
-    }
-  ],
-  "Trucking": [
-    {
-      label: "Transportation Charges",
-      items: [
-        "Gasoline",
-        "Toll",
-        "Pull-out",
-        "Empty Return",
-        "Facilitation",
-        "Documentation",
-        "Penalty",
-        "Others"
-      ]
-    }
-  ],
-  "Miscellaneous": [
-    {
-      label: "NTC Charges",
-      items: [
-        "Processing",
-        "Order of Payment"
-      ]
-    },
-    {
-      label: "FDA Charges",
-      items: [
-        "Processing",
-        "Order of Payment"
-      ]
-    },
-    {
-      label: "ATRIG Charges",
-      items: [
-        "Processing",
-        "Order of Payment"
-      ]
-    },
-    {
-      label: "SRA Charges",
-      items: [
-        "Processing",
-        "Order of Payment"
-      ]
-    },
-    {
-      label: "BOC AMO Charges",
-      items: [
-        "Processing",
-        "Order of Payment"
-      ]
-    },
-    {
-      label: "DTI Charges",
-      items: [
-        "Processing",
-        "Order of Payment"
-      ]
-    }
-  ],
-  "Office": [
-    {
-      label: "Office Expenses",
-      items: [
-        "Office Supplies",
-        "Utilities",
-        "Rent",
-        "Telecommunications",
-        "Professional Fees",
-        "Marketing & Advertising",
-        "Travel & Transportation",
-        "Representation",
-        "Others"
-      ]
-    }
-  ]
-};
 
 const PAYMENT_METHODS: PaymentMethod[] = [
   "Cash",
@@ -362,13 +122,9 @@ export function AddRequestForPaymentPanel({
   const [transactionSubtype, setTransactionSubtype] = useState<TransactionSubtype>("regular_expense");
   
   const [requestName, setRequestName] = useState("");
-  // We use "expenseCategory" as a generic "Category" state for both Expense and Revenue
-  const [expenseCategory, setExpenseCategory] = useState<string>("Brokerage - FCL");
-  const [subCategory, setSubCategory] = useState("");
   const [projectNumber, setProjectNumber] = useState("");
-  const [lineItems, setLineItems] = useState<LineItem[]>([
-    { id: "1", particular: "", description: "", amount: 0 }
-  ]);
+  const [categorySections, setCategorySections] = useState<CategorySection[]>([]);
+  const [showAddCategoryDropdown, setShowAddCategoryDropdown] = useState(false);
   const [preferredPayment, setPreferredPayment] = useState<PaymentMethod>("Bank Transfer");
   const [vendor, setVendor] = useState("");
   const [creditTerms, setCreditTerms] = useState<CreditTerm>("None");
@@ -442,34 +198,42 @@ export function AddRequestForPaymentPanel({
       
       setRequestName(dataToLoad.purpose || dataToLoad.description || "");
       // Only set category if provided, otherwise let defaults logic handle it
-      if (dataToLoad.expense_category || dataToLoad.gl_category) {
-        setExpenseCategory(dataToLoad.expense_category || dataToLoad.gl_category || "");
-      }
-      
-      if (dataToLoad.sub_category || dataToLoad.gl_sub_category) {
-        setSubCategory(dataToLoad.sub_category || dataToLoad.gl_sub_category || "");
-      }
       if (dataToLoad.project_number) setProjectNumber(dataToLoad.project_number || "");
-      
+
       // Handle line items — prefer relational, fall back to JSONB
       const lineItemsSource = (dataToLoad as any).evoucher_line_items?.length
         ? (dataToLoad as any).evoucher_line_items
         : dataToLoad.line_items;
       if (lineItemsSource && lineItemsSource.length > 0) {
-        setLineItems(lineItemsSource.map((item: any) => ({
-          id: item.id,
-          particular: item.particular || "",
-          description: item.description || "",
-          amount: item.amount || 0,
+        // Group by catalog_snapshot.category_name, fall back to gl_category
+        const fallbackCat = dataToLoad.expense_category || dataToLoad.gl_category || "Expenses";
+        const groupMap: Record<string, { name: string; items: LineItem[] }> = {};
+        lineItemsSource.forEach((item: any) => {
+          const catName = item.catalog_snapshot?.category_name || fallbackCat;
+          if (!groupMap[catName]) groupMap[catName] = { name: catName, items: [] };
+          groupMap[catName].items.push({
+            id: item.id,
+            particular: item.particular || "",
+            description: item.description || "",
+            amount: item.amount || 0,
+            catalog_item_id: item.catalog_item_id || undefined,
+          });
+        });
+        setCategorySections(Object.values(groupMap).map((g, i) => ({
+          id: `loaded-${i}`,
+          category_name: g.name,
+          expanded: true,
+          items: g.items,
         })));
       } else if (dataToLoad.amount) {
-        // Create single line item from total amount
-        setLineItems([{ 
-            id: "1", 
-            particular: dataToLoad.purpose || "Service Fee", 
-            description: dataToLoad.description || "", 
-            amount: dataToLoad.amount 
-        }]);
+        // Create single section from total amount
+        const fallbackCat = dataToLoad.expense_category || dataToLoad.gl_category || "Expenses";
+        setCategorySections([{ id: "loaded-0", category_name: fallbackCat, expanded: true, items: [{
+            id: "1",
+            particular: dataToLoad.purpose || "Service Fee",
+            description: dataToLoad.description || "",
+            amount: dataToLoad.amount,
+        }]}]);
       }
 
       if (dataToLoad.payment_method) setPreferredPayment((dataToLoad.payment_method as PaymentMethod) || "Bank Transfer");
@@ -488,24 +252,6 @@ export function AddRequestForPaymentPanel({
     if (bookingId || lockedProjectNumber) {
       setProjectNumber(lockedProjectNumber || "");
 
-      // Auto-select expense category based on bookingType
-      if (transactionType === "expense" || transactionType === "budget_request") {
-        if (bookingType === "forwarding") {
-          setExpenseCategory("Forwarding");
-        } else if (bookingType === "brokerage") {
-          setExpenseCategory("Brokerage - FCL");
-        } else if (bookingType === "trucking") {
-          setExpenseCategory("Trucking");
-        }
-      } else if (transactionType === "billing") {
-         if (bookingType === "forwarding") {
-          setExpenseCategory("Forwarding Income");
-        } else if (bookingType === "brokerage") {
-          setExpenseCategory("Brokerage Income");
-        } else if (bookingType === "trucking") {
-         setExpenseCategory("Trucking Income");
-        }
-      }
     }
   }, [bookingId, bookingType, lockedProjectNumber, transactionType]);
   
@@ -570,14 +316,13 @@ export function AddRequestForPaymentPanel({
     setVendor(statement.client || "");
     setProjectNumber(statement.project || "");
     
-    // Create Line Item
-    const newItem: LineItem = {
-      id: "1",
-      particular: `Payment for Statement ${statement.ref}`,
-      description: `${statement.items.length} items linked`,
-      amount: statement.remainingBalance
-    };
-    setLineItems([newItem]);
+    // Create single collection section
+    setCategorySections([{
+      id: "collection-1",
+      category_name: "Collection",
+      expanded: true,
+      items: [{ id: "1", particular: `Payment for Statement ${statement.ref}`, description: `${statement.items.length} items linked`, amount: statement.remainingBalance }],
+    }]);
     
     // Create Links
     const links: LinkedBilling[] = statement.items.map((item: any) => ({
@@ -601,27 +346,52 @@ export function AddRequestForPaymentPanel({
   const day = String(today.getDate()).padStart(2, '0');
   const evrnNumber = `EVRN${year}${month}${day}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
 
-  const handleAddLine = () => {
-    const newId = (Math.max(...lineItems.map(item => parseInt(item.id))) + 1).toString();
-    setLineItems([
-      ...lineItems,
-      { id: newId, particular: "", description: "", amount: 0 }
-    ]);
+  // Derived flat line items for submission
+  const allLineItems: (LineItem & { expense_category: string; catalog_category_id?: string })[] = categorySections.flatMap(s =>
+    s.items.map(item => ({ ...item, expense_category: s.category_name, catalog_category_id: s.catalog_category_id }))
+  );
+  const expenseCategory = categorySections[0]?.category_name || "";
+  const totalAmount = allLineItems.reduce((sum, item) => sum + (item.amount || 0), 0);
+
+  const handleAddSection = (name: string, catalogCategoryId?: string) => {
+    const newSection: CategorySection = {
+      id: `sec-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      category_name: name,
+      catalog_category_id: catalogCategoryId,
+      expanded: true,
+      items: [{ id: `item-${Date.now()}`, particular: "", description: "", amount: 0 }],
+    };
+    setCategorySections(prev => [...prev, newSection]);
   };
 
-  const handleRemoveLine = (id: string) => {
-    if (lineItems.length > 1) {
-      setLineItems(lineItems.filter(item => item.id !== id));
-    }
+  const handleDeleteSection = (sectionId: string) => {
+    setCategorySections(prev => prev.filter(s => s.id !== sectionId));
   };
 
-  const handleLineItemChange = (id: string, field: keyof LineItem, value: string | number) => {
-    setLineItems(lineItems.map(item => 
-      item.id === id ? { ...item, [field]: value } : item
+  const toggleSection = (sectionId: string) => {
+    setCategorySections(prev => prev.map(s => s.id === sectionId ? { ...s, expanded: !s.expanded } : s));
+  };
+
+  const handleAddItemToSection = (sectionId: string) => {
+    const newItem: LineItem = { id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`, particular: "", description: "", amount: 0 };
+    setCategorySections(prev => prev.map(s => s.id === sectionId ? { ...s, items: [...s.items, newItem] } : s));
+  };
+
+  const handleRemoveItemFromSection = (sectionId: string, itemId: string) => {
+    setCategorySections(prev => prev.map(s => {
+      if (s.id !== sectionId) return s;
+      if (s.items.length <= 1) return s; // keep at least one row
+      return { ...s, items: s.items.filter(i => i.id !== itemId) };
+    }));
+  };
+
+  const handleItemChange = (sectionId: string, itemId: string, field: string, value: any) => {
+    setCategorySections(prev => prev.map(s =>
+      s.id === sectionId
+        ? { ...s, items: s.items.map(i => i.id === itemId ? { ...i, [field]: value } : i) }
+        : s
     ));
   };
-
-  const totalAmount = lineItems.reduce((sum, item) => sum + (item.amount || 0), 0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -635,12 +405,12 @@ export function AddRequestForPaymentPanel({
       // Prepare form data
       const formData = {
         transactionType,
-        transactionSubtype, // For frontend metadata if needed
+        transactionSubtype,
         requestName,
         expenseCategory,
-        subCategory,
+        subCategory: "",
         projectNumber,
-        lineItems,
+        lineItems: allLineItems,
         totalAmount,
         preferredPayment,
         vendor,
@@ -756,10 +526,8 @@ export function AddRequestForPaymentPanel({
     onClose();
     // Reset form
     setRequestName("");
-    setExpenseCategory("Brokerage - FCL");
-    setSubCategory("");
     setProjectNumber("");
-    setLineItems([{ id: "1", particular: "", description: "", amount: 0 }]);
+    setCategorySections([]);
     setPreferredPayment("Bank Transfer");
     setVendor("");
     setCreditTerms("None");
@@ -799,15 +567,10 @@ export function AddRequestForPaymentPanel({
 
   if (!isOpen) return null;
 
-  const isFormValid = 
+  const isFormValid =
     requestName.trim() !== "" &&
-    (transactionType === "collection" || expenseCategory !== "") && // Category not strict for collections if statements used
-    // Sub-category is optional for some flows
-    lineItems.some(item => item.particular.trim() !== "" && item.amount > 0) &&
+    (isCollectionMode || categorySections.some(s => s.items.some(item => item.particular.trim() !== "" && item.amount > 0))) &&
     vendor.trim() !== "";
-
-  // Update sub-category when expense category changes
-  const availableSubCategories = SUB_CATEGORIES[expenseCategory as ExpenseCategory] || [];
 
   // Context-aware labels
   const isAccounting = context === "accounting";
@@ -1130,176 +893,115 @@ export function AddRequestForPaymentPanel({
                    </div>
                 )}
 
-                {/* Request Name */}
-                <div>
-                  <label style={{ 
-                    display: "block", 
-                    fontSize: "12px", 
-                    fontWeight: 500, 
-                    color: "var(--theme-text-secondary)", 
-                    marginBottom: "8px" 
-                  }}>
-                    {isBillingMode ? "Billing Description / Title" : 
-                     isCollectionMode ? "Collection Reference / Title" :
-                     "Description / Purpose"} {!isViewMode && <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>}
-                  </label>
-                  <input
-                    type="text"
-                    required={!isViewMode}
-                    readOnly={isViewMode}
-                    value={requestName}
-                    onChange={(e) => !isViewMode && setRequestName(e.target.value)}
-                    placeholder={isBillingMode ? "e.g., Import Brokerage Services - Ref 12345" : "e.g., Office Supplies, Cash Advance for Docking"}
-                    style={{
-                      width: "100%",
-                      padding: "10px 14px",
-                      fontSize: "14px",
-                      border: "1px solid var(--theme-border-default)",
-                      borderRadius: "6px",
-                      outline: "none",
-                      transition: "all 0.2s",
-                      backgroundColor: isViewMode ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface)",
-                      color: isViewMode ? "var(--theme-text-secondary)" : "inherit",
-                      cursor: isViewMode ? "default" : "text"
-                    }}
-                    onFocus={(e) => {
-                      if (!isViewMode) {
-                        e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
-                        e.currentTarget.style.boxShadow = "0 0 0 3px rgba(15, 118, 110, 0.1)";
-                      }
-                    }}
-                    onBlur={(e) => {
-                      e.currentTarget.style.borderColor = "var(--theme-border-default)";
-                      e.currentTarget.style.boxShadow = "none";
-                    }}
-                  />
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                  {/* Left Column: Transaction Type + Category */}
+                {/* Description / Purpose + Transaction Type on one row */}
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: (context === "operations" || context === "accounting" || context === "personal") ? "2fr 1fr" : "1fr",
+                  gap: "16px"
+                }}>
+                  {/* Request Name */}
                   <div>
-                    {/* Nested Grid to split Transaction Type and Category evenly within the same width as Project/Booking Ref */}
-                    <div style={{
-                      display: "grid",
-                      gridTemplateColumns: (context === "operations" || context === "accounting" || context === "personal") ? "1fr 1fr" : "1fr",
-                      gap: "16px"
+                    <label style={{
+                      display: "block",
+                      fontSize: "12px",
+                      fontWeight: 500,
+                      color: "var(--theme-text-secondary)",
+                      marginBottom: "8px"
                     }}>
-                      {/* Transaction Type — scoped to context */}
-                      {(context === "operations" || context === "accounting" || context === "personal") && (
-                        <div>
-                          <label style={{
-                            display: "block",
-                            fontSize: "12px",
-                            fontWeight: 500,
-                            color: "var(--theme-text-secondary)",
-                            marginBottom: "8px"
-                          }}>
-                            Transaction Type <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
-                          </label>
-                          <CustomDropdown
-                            value={
-                              context === "personal"
-                                ? transactionType
-                                : transactionType === "cash_advance" ? "cash_advance" : transactionSubtype === "billable_expense" ? "billable" : "expense"
-                            }
-                            onChange={(val) => {
-                              if (context === "personal") {
-                                setTransactionType(val as EVoucherTransactionType);
-                                setTransactionSubtype("regular_expense");
-                              } else if (val === "cash_advance") {
-                                setTransactionType("cash_advance");
-                                setTransactionSubtype("regular_expense");
-                              } else if (val === "billable") {
-                                setTransactionType("expense");
-                                setTransactionSubtype("billable_expense");
-                              } else {
-                                setTransactionType("expense");
-                                setTransactionSubtype("regular_expense");
-                              }
-                            }}
-                            options={
-                              context === "personal"
-                                ? [
-                                    { value: "reimbursement", label: "Reimbursement" },
-                                    { value: "direct_expense", label: "Direct Expense" }
-                                  ]
-                                : context === "operations"
-                                ? [
-                                    { value: "expense", label: "Regular Expense" },
-                                    { value: "billable", label: "Billable Expense" },
-                                    { value: "cash_advance", label: "Cash Advance" }
-                                  ]
-                                : [
-                                    { value: "expense", label: "Regular Expense" },
-                                    { value: "billable", label: "Billable Expense" },
-                                    { value: "cash_advance", label: "Cash Advance" },
-                                    { value: "reimbursement", label: "Reimbursement" },
-                                    { value: "direct_expense", label: "Direct Expense" }
-                                  ]
-                            }
-                            placeholder="Select type"
-                            disabled={isViewMode}
-                          />
-                        </div>
-                      )}
-
-                      {/* Category Dropdown */}
-                      <div>
-                        <label style={{ 
-                          display: "block", 
-                          fontSize: "12px", 
-                          fontWeight: 500, 
-                          color: "var(--theme-text-secondary)", 
-                          marginBottom: "8px" 
-                        }}>
-                          {categoryLabel} <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
-                        </label>
-                        <CustomDropdown
-                          options={
-                            transactionType === "billing" 
-                            ? REVENUE_CATEGORIES.map(cat => ({ value: cat, label: cat, icon: <Tag size={16} /> }))
-                            : EXPENSE_CATEGORIES.map(cat => ({ value: cat, label: cat, icon: <Tag size={16} /> }))
-                          }
-                          value={expenseCategory}
-                          onChange={(value) => {
-                            setExpenseCategory(value);
-                            setSubCategory(""); // Reset sub-category when category changes
-                          }}
-                          placeholder="Select category"
-                          disabled={isViewMode || isCollectionMode} // Disabled in collection mode (implied)
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right Column: Sub-Category */}
-                  <div>
-                    <label style={{ 
-                      display: "block", 
-                      fontSize: "12px", 
-                      fontWeight: 500, 
-                      color: "var(--theme-text-secondary)", 
-                      marginBottom: "8px" 
-                    }}>
-                      Sub-Category
+                      {isBillingMode ? "Billing Description / Title" :
+                       isCollectionMode ? "Collection Reference / Title" :
+                       "Description / Purpose"} {!isViewMode && <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>}
                     </label>
-                    {availableSubCategories.length > 0 ? (
-                      <GroupedDropdown
-                        options={availableSubCategories}
-                        value={subCategory}
-                        onChange={(value) => setSubCategory(value)}
-                        placeholder="Select sub-category"
-                        disabled={isViewMode || !expenseCategory || isCollectionMode}
-                      />
-                    ) : (
-                      <input
-                         type="text"
-                         readOnly
-                         placeholder="N/A"
-                         className="w-full px-3 py-2.5 bg-[var(--theme-bg-surface-subtle)] border border-[var(--theme-border-default)] rounded-md text-sm text-[var(--theme-text-muted)]"
-                      />
-                    )}
+                    <input
+                      type="text"
+                      required={!isViewMode}
+                      readOnly={isViewMode}
+                      value={requestName}
+                      onChange={(e) => !isViewMode && setRequestName(e.target.value)}
+                      placeholder={isBillingMode ? "e.g., Import Brokerage Services - Ref 12345" : "e.g., Office Supplies, Cash Advance for Docking"}
+                      style={{
+                        width: "100%",
+                        padding: "10px 14px",
+                        fontSize: "14px",
+                        border: "1px solid var(--theme-border-default)",
+                        borderRadius: "6px",
+                        outline: "none",
+                        transition: "all 0.2s",
+                        backgroundColor: isViewMode ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface)",
+                        color: isViewMode ? "var(--theme-text-secondary)" : "inherit",
+                        cursor: isViewMode ? "default" : "text"
+                      }}
+                      onFocus={(e) => {
+                        if (!isViewMode) {
+                          e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
+                          e.currentTarget.style.boxShadow = "0 0 0 3px rgba(15, 118, 110, 0.1)";
+                        }
+                      }}
+                      onBlur={(e) => {
+                        e.currentTarget.style.borderColor = "var(--theme-border-default)";
+                        e.currentTarget.style.boxShadow = "none";
+                      }}
+                    />
                   </div>
+
+                  {/* Transaction Type — scoped to context */}
+                  {(context === "operations" || context === "accounting" || context === "personal") && (
+                    <div>
+                      <label style={{
+                        display: "block",
+                        fontSize: "12px",
+                        fontWeight: 500,
+                        color: "var(--theme-text-secondary)",
+                        marginBottom: "8px"
+                      }}>
+                        Transaction Type <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
+                      </label>
+                      <CustomDropdown
+                        value={
+                          context === "personal"
+                            ? transactionType
+                            : transactionType === "cash_advance" ? "cash_advance" : transactionSubtype === "billable_expense" ? "billable" : "expense"
+                        }
+                        onChange={(val) => {
+                          if (context === "personal") {
+                            setTransactionType(val as EVoucherTransactionType);
+                            setTransactionSubtype("regular_expense");
+                          } else if (val === "cash_advance") {
+                            setTransactionType("cash_advance");
+                            setTransactionSubtype("regular_expense");
+                          } else if (val === "billable") {
+                            setTransactionType("expense");
+                            setTransactionSubtype("billable_expense");
+                          } else {
+                            setTransactionType("expense");
+                            setTransactionSubtype("regular_expense");
+                          }
+                        }}
+                        options={
+                          context === "personal"
+                            ? [
+                                { value: "reimbursement", label: "Reimbursement" },
+                                { value: "direct_expense", label: "Direct Expense" }
+                              ]
+                            : context === "operations"
+                            ? [
+                                { value: "expense", label: "Regular Expense" },
+                                { value: "billable", label: "Billable Expense" },
+                                { value: "cash_advance", label: "Cash Advance" }
+                              ]
+                            : [
+                                { value: "expense", label: "Regular Expense" },
+                                { value: "billable", label: "Billable Expense" },
+                                { value: "cash_advance", label: "Cash Advance" },
+                                { value: "reimbursement", label: "Reimbursement" },
+                                { value: "direct_expense", label: "Direct Expense" }
+                              ]
+                        }
+                        placeholder="Select type"
+                        disabled={isViewMode}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Project / Booking Number */}
@@ -1371,127 +1073,174 @@ export function AddRequestForPaymentPanel({
             {/* Line Items Section */}
             <div style={{ marginBottom: "32px" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
-                <h3 style={{ 
-                  fontSize: "14px", 
-                  fontWeight: 600, 
-                  color: "var(--theme-text-primary)", 
-                  textTransform: "uppercase",
-                  letterSpacing: "0.5px"
-                }}>
+                <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
                   Line Items
                 </h3>
                 {!isViewMode && !isCollectionMode && (
-                  <button
-                    type="button"
-                    onClick={handleAddLine}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      fontSize: "12px",
-                      fontWeight: 600,
-                      color: "var(--theme-action-primary-bg)",
-                      backgroundColor: "transparent",
-                      border: "1px solid var(--theme-border-default)",
-                      padding: "6px 12px",
-                      borderRadius: "6px",
-                      cursor: "pointer",
-                      transition: "all 0.2s"
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)"}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-                  >
-                    <Plus size={14} />
-                    Add Item
-                  </button>
+                  <div style={{ position: "relative" }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddCategoryDropdown(true)}
+                      style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 600, color: "var(--theme-action-primary-bg)", backgroundColor: "transparent", border: "1px solid var(--theme-border-default)", padding: "6px 12px", borderRadius: "6px", cursor: "pointer", transition: "all 0.2s" }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)"}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                    >
+                      <Plus size={14} /> Add Category
+                    </button>
+                    {showAddCategoryDropdown && (
+                      <CategoryDropdown
+                        side={isBillingMode ? "revenue" : "expense"}
+                        onAdd={(name, catalogCategoryId) => { handleAddSection(name, catalogCategoryId); setShowAddCategoryDropdown(false); }}
+                        onClose={() => setShowAddCategoryDropdown(false)}
+                      />
+                    )}
+                  </div>
                 )}
               </div>
 
-              <div style={{ border: "1px solid var(--theme-border-default)", borderRadius: "8px", overflow: "hidden" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead style={{ backgroundColor: "var(--theme-bg-surface)", borderBottom: "1px solid var(--theme-border-default)" }}>
-                    <tr>
-                      <th style={{ padding: "10px 16px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "var(--theme-text-muted)", width: "40%" }}>Particulars</th>
-                      <th style={{ padding: "10px 16px", textAlign: "left", fontSize: "12px", fontWeight: 600, color: "var(--theme-text-muted)", width: "30%" }}>Description</th>
-                      <th style={{ padding: "10px 16px", textAlign: "right", fontSize: "12px", fontWeight: 600, color: "var(--theme-text-muted)", width: "20%" }}>Amount</th>
-                      {!isViewMode && !isCollectionMode && <th style={{ padding: "10px 16px", width: "10%" }}></th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lineItems.map((item) => (
-                      <tr key={item.id} style={{ borderBottom: "1px solid var(--theme-border-subtle)" }}>
-                        <td style={{ padding: "10px 16px" }}>
-                          {isViewMode || isCollectionMode ? (
-                            <div style={{ fontSize: "14px" }}>{item.particular}</div>
-                          ) : (
-                            <CatalogItemCombobox
-                              value={item.particular}
-                              catalogItemId={item.catalog_item_id}
-                              side="expense"
-                              onChange={(name, catId) => {
-                                handleLineItemChange(item.id, "particular", name);
-                                if (catId !== undefined) {
-                                  setLineItems(prev => prev.map(li =>
-                                    li.id === item.id ? { ...li, catalog_item_id: catId } : li
-                                  ));
-                                }
-                              }}
-                              placeholder="Select or type item..."
-                            />
-                          )}
-                        </td>
-                        <td style={{ padding: "10px 16px" }}>
-                          <input
-                            type="text"
-                            readOnly={isViewMode || isCollectionMode}
-                            value={item.description}
-                            onChange={(e) => handleLineItemChange(item.id, "description", e.target.value)}
-                            placeholder="Optional description"
-                            style={{ width: "100%", border: "none", outline: "none", fontSize: "14px", backgroundColor: "transparent" }}
-                          />
-                        </td>
-                        <td style={{ padding: "10px 16px" }}>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "4px" }}>
-                            <span style={{ color: "var(--theme-text-muted)", fontSize: "14px" }}>₱</span>
-                            <input
-                              type="number"
-                              readOnly={isViewMode} // Allow editing amount in collection mode (partial payment)
-                              value={item.amount || ""}
-                              onChange={(e) => handleLineItemChange(item.id, "amount", parseFloat(e.target.value) || 0)}
-                              placeholder="0.00"
-                              style={{ width: "100px", textAlign: "right", border: "none", outline: "none", fontSize: "14px", backgroundColor: "transparent" }}
-                            />
-                          </div>
-                        </td>
-                        {!isViewMode && !isCollectionMode && (
-                          <td style={{ padding: "10px 16px", textAlign: "center" }}>
-                            {lineItems.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveLine(item.id)}
-                                style={{ color: "var(--theme-status-danger-fg)", background: "none", border: "none", cursor: "pointer" }}
-                              >
-                                <X size={16} />
-                              </button>
-                            )}
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot style={{ backgroundColor: "var(--theme-bg-page)", borderTop: "1px solid var(--theme-border-default)" }}>
-                    <tr>
-                      <td colSpan={2} style={{ padding: "12px 16px", textAlign: "right", fontWeight: 600, fontSize: "13px", color: "var(--theme-text-secondary)" }}>
-                        Total Amount
-                      </td>
-                      <td style={{ padding: "12px 16px", textAlign: "right", fontWeight: 700, fontSize: "14px", color: "var(--theme-text-primary)" }}>
-                        ₱ {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      {!isViewMode && !isCollectionMode && <td></td>}
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+              {/* Empty state */}
+              {categorySections.length === 0 && !isViewMode && !isCollectionMode && (
+                <div style={{ padding: "32px 24px", textAlign: "center", border: "1px dashed var(--theme-border-default)", borderRadius: "8px", color: "var(--theme-text-muted)" }}>
+                  <p style={{ fontSize: "13px", margin: 0 }}>Click "+ Add Category" to start adding expense items.</p>
+                </div>
+              )}
+
+              {/* Category sections */}
+              {categorySections.map(section => {
+                const sectionSubtotal = section.items.reduce((s, i) => s + (i.amount || 0), 0);
+                return (
+                  <div key={section.id} style={{ border: "1px solid var(--theme-border-default)", borderRadius: "8px", marginBottom: "12px", overflow: "visible" }}>
+                    {/* Section header */}
+                    <div
+                      onClick={() => toggleSection(section.id)}
+                      style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", backgroundColor: "var(--theme-bg-page)", borderRadius: section.expanded ? "8px 8px 0 0" : "8px", borderBottom: section.expanded ? "1px solid var(--theme-border-default)" : "none", cursor: "pointer", userSelect: "none" }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        {section.expanded ? <ChevronDown size={13} style={{ color: "var(--theme-text-muted)", flexShrink: 0 }} /> : <ChevronRight size={13} style={{ color: "var(--theme-text-muted)", flexShrink: 0 }} />}
+                        <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--theme-text-primary)" }}>{section.category_name}</span>
+                        <span style={{ fontSize: "11px", color: "var(--theme-text-muted)", backgroundColor: "var(--theme-bg-surface)", padding: "1px 7px", borderRadius: "3px", border: "1px solid var(--theme-border-default)" }}>
+                          {section.items.length} item{section.items.length !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                      {!isViewMode && !isCollectionMode && (
+                        <div style={{ display: "flex", gap: "6px" }} onClick={e => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => handleAddItemToSection(section.id)}
+                            style={{ display: "flex", alignItems: "center", gap: "3px", padding: "3px 9px", fontSize: "11px", fontWeight: 600, color: "var(--theme-action-primary-bg)", backgroundColor: "transparent", border: "1px solid var(--theme-action-primary-bg)", borderRadius: "5px", cursor: "pointer" }}
+                            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)"; e.currentTarget.style.color = "#fff"; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "var(--theme-action-primary-bg)"; }}
+                          >
+                            <Plus size={11} /> Add Item
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSection(section.id)}
+                            style={{ display: "flex", alignItems: "center", padding: "3px", background: "none", border: "none", cursor: "pointer", color: "var(--theme-text-muted)", opacity: 0.5 }}
+                            onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.color = "var(--theme-status-danger-fg)"; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.5"; e.currentTarget.style.color = "var(--theme-text-muted)"; }}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Items table */}
+                    {section.expanded && (
+                      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                        <thead style={{ backgroundColor: "var(--theme-bg-surface)", borderBottom: "1px solid var(--theme-border-default)" }}>
+                          <tr>
+                            <th style={{ padding: "8px 16px", textAlign: "left", fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", width: "40%" }}>Particulars</th>
+                            <th style={{ padding: "8px 16px", textAlign: "left", fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", width: "30%" }}>Description</th>
+                            <th style={{ padding: "8px 16px", textAlign: "right", fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", width: "20%" }}>Amount</th>
+                            {!isViewMode && !isCollectionMode && <th style={{ width: "10%" }} />}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {section.items.map(item => (
+                            <tr key={item.id} style={{ borderBottom: "1px solid var(--theme-border-subtle)" }}>
+                              <td style={{ padding: "10px 16px" }}>
+                                {isViewMode || isCollectionMode ? (
+                                  <div style={{ fontSize: "14px" }}>{item.particular}</div>
+                                ) : (
+                                  <CatalogItemCombobox
+                                    value={item.particular}
+                                    catalogItemId={item.catalog_item_id ?? undefined}
+                                    categoryId={section.catalog_category_id}
+                                    side={isBillingMode ? "revenue" : "expense"}
+                                    onChange={(name, catId) => {
+                                      handleItemChange(section.id, item.id, "particular", name);
+                                      handleItemChange(section.id, item.id, "catalog_item_id", catId ?? null);
+                                    }}
+                                    placeholder="Select or type item..."
+                                  />
+                                )}
+                              </td>
+                              <td style={{ padding: "10px 16px" }}>
+                                <input
+                                  type="text"
+                                  readOnly={isViewMode || isCollectionMode}
+                                  value={item.description}
+                                  onChange={e => handleItemChange(section.id, item.id, "description", e.target.value)}
+                                  placeholder="Optional description"
+                                  style={{ width: "100%", border: "none", outline: "none", fontSize: "14px", backgroundColor: "transparent" }}
+                                />
+                              </td>
+                              <td style={{ padding: "10px 16px" }}>
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "4px" }}>
+                                  <span style={{ color: "var(--theme-text-muted)", fontSize: "14px" }}>₱</span>
+                                  <input
+                                    type="number"
+                                    readOnly={isViewMode}
+                                    value={item.amount || ""}
+                                    onChange={e => handleItemChange(section.id, item.id, "amount", parseFloat(e.target.value) || 0)}
+                                    placeholder="0.00"
+                                    style={{ width: "100px", textAlign: "right", border: "none", outline: "none", fontSize: "14px", backgroundColor: "transparent" }}
+                                  />
+                                </div>
+                              </td>
+                              {!isViewMode && !isCollectionMode && (
+                                <td style={{ padding: "10px 16px", textAlign: "center" }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveItemFromSection(section.id, item.id)}
+                                    style={{ color: "var(--theme-status-danger-fg)", background: "none", border: "none", cursor: "pointer", opacity: section.items.length <= 1 ? 0.2 : 1 }}
+                                    disabled={section.items.length <= 1}
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                </td>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot style={{ backgroundColor: "var(--theme-bg-page)", borderTop: "1px solid var(--theme-border-default)" }}>
+                          <tr>
+                            <td colSpan={2} style={{ padding: "8px 16px", textAlign: "right", fontWeight: 500, fontSize: "12px", color: "var(--theme-text-muted)" }}>
+                              Subtotal ({section.category_name})
+                            </td>
+                            <td style={{ padding: "8px 16px", textAlign: "right", fontWeight: 600, fontSize: "13px", color: "var(--theme-text-secondary)" }}>
+                              ₱ {sectionSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            {!isViewMode && !isCollectionMode && <td />}
+                          </tr>
+                        </tfoot>
+                      </table>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Grand total */}
+              {(categorySections.length > 0 || isCollectionMode) && (
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "24px", padding: "12px 16px", backgroundColor: "var(--theme-bg-page)", borderRadius: "8px", border: "1px solid var(--theme-border-default)", marginTop: "4px" }}>
+                  <span style={{ fontWeight: 600, fontSize: "13px", color: "var(--theme-text-secondary)" }}>Total Amount</span>
+                  <span style={{ fontWeight: 700, fontSize: "14px", color: "var(--theme-text-primary)" }}>
+                    ₱ {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Payment & Terms Section */}

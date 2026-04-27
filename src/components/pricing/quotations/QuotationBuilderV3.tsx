@@ -86,6 +86,15 @@ import type { BookingQuantities } from "../../../utils/contractRateEngine";
 import { ContractRateToolbar } from "./ContractRateToolbar";
 import { normalizeQuotationStatus } from "../../../utils/quotationStatus";
 import { calculateSellingItemFromBuyingPrice } from "../../../utils/pricing/quotationSignedPricing";
+import { validateQuotation } from "../../../utils/quotation/quotationValidation";
+import { normalizeServicesMetadata } from "../../../utils/quotation/quotationNormalize";
+import {
+  buildBrokerageContext,
+  buildForwardingContext,
+  buildTruckingContext,
+  buildMarineInsuranceContext,
+  buildOthersContext,
+} from "../../../utils/quotation/quotationVisibility";
 
 interface ContainerEntry {
   id: string;
@@ -2002,6 +2011,11 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
       });
     }
 
+    // Normalize service_details to canonical keys (dual-write — legacy keys preserved).
+    const normalized_metadata = normalizeServicesMetadata(
+      services_metadata as Array<{ service_type: string; service_details: Record<string, unknown> }>
+    ) as typeof services_metadata;
+
     const quotation: QuotationNew = {
       id: initialData?.id || `quot-${Date.now()}`,
       quote_number: quoteNumber,
@@ -2029,7 +2043,7 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
       category: "SEA FREIGHT",
       shipment_freight: "LCL",
       services: selectedServices,
-      services_metadata: services_metadata, // Save scope metadata for both project and contract modes
+      services_metadata: normalized_metadata, // Save scope metadata with canonical keys
       incoterm: isContractMode ? "" : (forwardingData.incoterms || ""),
       carrier: isContractMode ? "" : (forwardingData.carrierAirline || "TBA"),
       transit_days: isContractMode ? 0 : parseInt(forwardingData.transitTime || "0"),
@@ -2068,7 +2082,8 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
   };
 
   const isFormValid = () => {
-    // ✨ CONTRACT: Validate contract-specific fields
+    // CONTRACT: Validate contract-specific fields — service-level validation skipped
+    // (contract mode hides shipment-specific fields so they cannot be required)
     if (isContractMode) {
       const hasRateRows = rateMatrices.some(m => m.rows.length > 0);
       return (
@@ -2079,24 +2094,63 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
         hasRateRows
       );
     }
-    
-    // In inquiry mode, don't require charge categories
+
+    // Inquiry mode: don't require charge categories, but still enforce the
+    // source quotation matrix for the selected service inputs.
     if (builderMode === "inquiry") {
-      return (
-        customerName &&
-        selectedServices.length > 0 &&
-        date
-      );
+      if (!customerName || !contactPersonName || !quotationName || selectedServices.length === 0 || !date) return false;
+
+      if (selectedServices.includes("Brokerage")) {
+        const ctx = buildBrokerageContext(brokerageData as Record<string, unknown>);
+        if (!validateQuotation("Brokerage", brokerageData as Record<string, unknown>, ctx).valid) return false;
+      }
+      if (selectedServices.includes("Forwarding")) {
+        const ctx = buildForwardingContext(forwardingData as Record<string, unknown>);
+        if (!validateQuotation("Forwarding", forwardingData as Record<string, unknown>, ctx).valid) return false;
+      }
+      if (selectedServices.includes("Trucking")) {
+        const ctx = buildTruckingContext();
+        if (!validateQuotation("Trucking", truckingData as Record<string, unknown>, ctx).valid) return false;
+      }
+      if (selectedServices.includes("Marine Insurance")) {
+        const ctx = buildMarineInsuranceContext();
+        if (!validateQuotation("Marine Insurance", marineInsuranceData as Record<string, unknown>, ctx).valid) return false;
+      }
+      if (selectedServices.includes("Others")) {
+        const ctx = buildOthersContext();
+        if (!validateQuotation("Others", othersData as Record<string, unknown>, ctx).valid) return false;
+      }
+
+      return true;
     }
-    
-    // In quotation mode, require charge categories (old format) OR selling price (new dual-pricing format)
+
+    // Quotation mode: existing checks + per-service matrix validation
     const hasCharges = chargeCategories.length > 0 || sellingPrice.length > 0;
-    return (
-      customerName &&
-      selectedServices.length > 0 &&
-      date &&
-      hasCharges
-    );
+    if (!customerName || !contactPersonName || !quotationName || selectedServices.length === 0 || !date || !hasCharges) return false;
+
+    // Per-service validation against the quotation schema
+    if (selectedServices.includes("Brokerage")) {
+      const ctx = buildBrokerageContext(brokerageData as Record<string, unknown>);
+      if (!validateQuotation("Brokerage", brokerageData as Record<string, unknown>, ctx).valid) return false;
+    }
+    if (selectedServices.includes("Forwarding")) {
+      const ctx = buildForwardingContext(forwardingData as Record<string, unknown>);
+      if (!validateQuotation("Forwarding", forwardingData as Record<string, unknown>, ctx).valid) return false;
+    }
+    if (selectedServices.includes("Trucking")) {
+      const ctx = buildTruckingContext();
+      if (!validateQuotation("Trucking", truckingData as Record<string, unknown>, ctx).valid) return false;
+    }
+    if (selectedServices.includes("Marine Insurance")) {
+      const ctx = buildMarineInsuranceContext();
+      if (!validateQuotation("Marine Insurance", marineInsuranceData as Record<string, unknown>, ctx).valid) return false;
+    }
+    if (selectedServices.includes("Others")) {
+      const ctx = buildOthersContext();
+      if (!validateQuotation("Others", othersData as Record<string, unknown>, ctx).valid) return false;
+    }
+
+    return true;
   };
 
   // DRY composed labels — builderMode (who) × quotationType (what) × mode (action)

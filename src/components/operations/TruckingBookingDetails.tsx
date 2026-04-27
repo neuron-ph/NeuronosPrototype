@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, MoreVertical, Lock, Clock, ChevronRight } from "lucide-react";
+import { ArrowLeft, MoreVertical, Clock, ChevronRight } from "lucide-react";
 import type { TruckingBooking, ExecutionStatus } from "../../types/operations";
 import { UnifiedBillingsTab } from "../shared/billings/UnifiedBillingsTab";
 import { BookingRateCardButton } from "../contracts/BookingRateCardButton";
@@ -9,18 +9,13 @@ import { BookingCommentsTab } from "../shared/BookingCommentsTab";
 import { useProjectFinancials } from "../../hooks/useProjectFinancials";
 import { StatusSelector } from "../StatusSelector";
 import { toast } from "../ui/toast-utils";
-import { EditableMultiInputField } from "../shared/EditableMultiInputField";
-import { EditableSectionCard, useSectionEdit } from "../shared/EditableSectionCard";
-import { EditableField } from "../shared/EditableField";
-import { ConsigneeInfoBadge } from "../shared/ConsigneeInfoBadge";
-import { normalizeTruckingLineItems } from "../../utils/contractQuantityExtractor";
 import { Truck as TruckIcon } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { assessBookingFinancialState, canTransitionBookingToCancelled, getBookingCancellationStatusMessage } from "../../utils/bookingCancellation";
 import { BookingCancelDeletePanel } from "./shared/BookingCancelDeletePanel";
 import { RequestBillingButton } from "../common/RequestBillingButton";
 import { loadBookingActivityLog, appendBookingActivity } from "../../utils/bookingActivityLog";
-import { BookingTeamSection } from "./shared/BookingTeamSection";
+import { BookingInfoTab } from "./shared/BookingInfoTab";
 import { useUser } from "../../hooks/useUser";
 import { usePermission } from "../../context/PermissionProvider";
 import { fireBillingTicketOnCompletion } from "../../utils/workflowTickets";
@@ -52,80 +47,6 @@ interface ActivityLogEntry {
 const initialActivityLog: ActivityLogEntry[] = [
   { id: "init-1", timestamp: new Date(), user: "System", action: "created" },
 ];
-
-const FIELD_LABELS: Record<string, string> = {
-  accountHandler: "Account Handler",
-  preferredDeliveryDate: "Preferred Delivery Date",
-  consignee: "Consignee",
-  driver: "Driver",
-  helper: "Helper",
-  vehicleReferenceNumber: "Vehicle Reference Number",
-  pullOut: "Pull Out Location",
-  deliveryAddress: "Delivery Address",
-  warehouseAddress: "Warehouse Address",
-  withGps: "With GPS",
-  deliveryInstructions: "Delivery Instructions",
-  dateDelivered: "Date Delivered",
-  tabsBooking: "TABS Booking",
-  emptyReturn: "Empty Return",
-  cyFee: "CY Fee",
-  eirAvailability: "EIR Availability",
-  earlyGateIn: "Early Gate In",
-  gateIn: "Gate In",
-  detDemValidity: "Det/Dem Validity",
-  storageValidity: "Storage Validity",
-  shippingLine: "Shipping Line",
-  assigned_manager_name: "Assigned Manager",
-  assigned_supervisor_name: "Assigned Supervisor",
-  assigned_handler_name: "Assigned Handler",
-};
-
-async function diffAndApply(
-  original: TruckingBooking,
-  draft: TruckingBooking,
-  fields: string[],
-  addActivity: (fieldName: string, oldValue: string, newValue: string) => void,
-  setEditedBooking: (fn: (prev: TruckingBooking) => TruckingBooking) => void,
-  onBookingUpdated: () => void,
-) {
-  const updates: Record<string, any> = {};
-  fields.forEach((field) => {
-    const oldVal = String((original as any)[field] ?? "");
-    const newVal = String((draft as any)[field] ?? "");
-    if (oldVal !== newVal) {
-      addActivity(FIELD_LABELS[field] || field, oldVal, newVal);
-      updates[field] = (draft as any)[field];
-    }
-  });
-  if (Object.keys(updates).length > 0) {
-    const existingDetails = (original as any).details || {};
-    const { error } = await supabase
-      .from('bookings')
-      .update({ details: { ...existingDetails, ...updates } })
-      .eq('id', original.bookingId || (original as any).id);
-    if (error) {
-      toast.error("Failed to save changes");
-      return;
-    }
-    setEditedBooking((prev: TruckingBooking) => ({ ...prev, ...updates }));
-    onBookingUpdated();
-    toast.success("Changes saved");
-  }
-}
-
-function LockedField({ label, value, tooltip }: { label: string; value: string; tooltip?: string }) {
-  return (
-    <div>
-      <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", fontWeight: 500, color: "var(--neuron-ink-base)", marginBottom: "8px" }}>
-        {label}
-        <Lock size={12} color="var(--theme-text-muted)" style={{ cursor: "help" }} />
-      </label>
-      <div style={{ padding: "10px 14px", backgroundColor: "var(--theme-bg-page)", border: "1px solid var(--theme-border-default)", borderRadius: "6px", fontSize: "14px", color: "var(--theme-text-muted)", cursor: "not-allowed" }}>
-        {value || "—"}
-      </div>
-    </div>
-  );
-}
 
 function ActivityTimeline({ activities }: { activities: ActivityLogEntry[] }) {
   return (
@@ -261,7 +182,7 @@ export function TruckingBookingDetails({ booking, onBack, onUpdate, currentUser,
 
   return (
     <div style={{ backgroundColor: "var(--theme-bg-surface)", display: "flex", flexDirection: "column", height: "100vh" }}>
-      <div style={{ padding: "20px 48px", borderBottom: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--theme-bg-surface)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div style={{ padding: "20px 48px", borderBottom: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--theme-bg-surface)", display: "flex", justifyContent: "space-between", alignItems: "center", position: "relative", zIndex: 30 }}>
         <div>
           <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: "8px", background: "none", border: "none", color: "var(--neuron-ink-secondary)", cursor: "pointer", fontSize: "13px", marginBottom: "12px", padding: "0" }}
             onMouseEnter={(e) => { e.currentTarget.style.color = "var(--neuron-brand-green)"; }}
@@ -290,7 +211,7 @@ export function TruckingBookingDetails({ booking, onBack, onUpdate, currentUser,
         </div>
       </div>
 
-      <div style={{ padding: "0 48px", borderBottom: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--theme-bg-surface)", display: "flex", justifyContent: "space-between", alignItems: "center", height: "56px" }}>
+      <div style={{ padding: "0 48px", borderBottom: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--theme-bg-surface)", display: "flex", justifyContent: "space-between", alignItems: "center", height: "56px", position: "relative", zIndex: 20 }}>
         <div style={{ display: "flex", gap: "24px", height: "100%" }}>
           <button onClick={() => setActiveTab("booking-info")} style={tabStyle("booking-info")}>Booking Information</button>
           {canViewBillings && <button onClick={() => setActiveTab("billings")} style={tabStyle("billings")}>Billings</button>}
@@ -345,9 +266,17 @@ export function TruckingBookingDetails({ booking, onBack, onUpdate, currentUser,
       />
 
 
-      <div style={{ flex: 1, overflow: "hidden", display: "flex" }}>
+      <div style={{ flex: 1, overflow: "hidden", display: "flex", position: "relative", zIndex: 0 }}>
         <div style={{ flex: showTimeline ? "0 0 65%" : "1", overflow: "auto", transition: "flex 0.3s ease" }}>
-          {activeTab === "booking-info" && <BookingInformationTab booking={editedBooking} onBookingUpdated={onUpdate} addActivity={addActivity} setEditedBooking={setEditedBooking} currentUser={currentUser} />}
+          {activeTab === "booking-info" && (
+            <BookingInfoTab
+              booking={editedBooking as Record<string, unknown>}
+              serviceType="Trucking"
+              bookingId={String((editedBooking as any).id || booking.bookingId)}
+              onUpdate={onUpdate}
+              currentUser={currentUser}
+            />
+          )}
           {activeTab === "billings" && canViewBillings && <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]"><UnifiedBillingsTab items={bookingBillingItems} projectId={booking.projectNumber || ""} bookingId={booking.bookingId} onRefresh={financials.refresh} isLoading={financials.isLoading} extraActions={<BookingRateCardButton booking={booking} serviceType="Trucking" existingBillingItems={bookingBillingItems} onRefresh={financials.refresh} />} pendingBillableCount={pendingBillableCount} /></div>}
           {activeTab === "expenses" && <ExpensesTab bookingId={booking.bookingId} bookingNumber={(booking as any).booking_number || booking.bookingId} bookingType="trucking" currentUser={currentUser} highlightId={activeTab === "expenses" ? highlightId : undefined} existingBillingItems={bookingBillingItems} onPendingCountChange={setPendingBillableCount} />}
           {activeTab === "comments" && <BookingCommentsTab bookingId={booking.bookingId} />}
@@ -358,176 +287,3 @@ export function TruckingBookingDetails({ booking, onBack, onUpdate, currentUser,
   );
 }
 
-function BookingInformationTab({ booking, onBookingUpdated, addActivity, setEditedBooking, currentUser }: {
-  booking: TruckingBooking; onBookingUpdated: () => void;
-  addActivity: (fieldName: string, oldValue: string, newValue: string) => void; setEditedBooking: any;
-  currentUser?: { name: string; email: string; department: string } | null;
-}) {
-  const generalSection = useSectionEdit(booking);
-  const shipmentSection = useSectionEdit(booking);
-  const fclSection = useSectionEdit(booking);
-
-  // ✨ Multi-line trucking: normalize line items for view-mode display
-  const lineItems = normalizeTruckingLineItems(booking);
-  const hasMultiLineItems = lineItems.length > 1;
-  // @deprecated: truckType LockedField shows comma-joined types from line items when multi-line
-  const truckTypeDisplay = hasMultiLineItems
-    ? [...new Set(lineItems.map(li => li.truckType).filter(Boolean))].join(", ") || "—"
-    : (booking.truckType || "");
-
-  const GENERAL_FIELDS = ["accountHandler", "preferredDeliveryDate"];
-  const SHIPMENT_FIELDS = ["consignee", "driver", "helper", "vehicleReferenceNumber", "pullOut", "deliveryAddress", "warehouseAddress", "withGps", "deliveryInstructions", "dateDelivered"];
-  const FCL_FIELDS = ["tabsBooking", "emptyReturn", "cyFee", "eirAvailability", "earlyGateIn", "gateIn", "detDemValidity", "storageValidity", "shippingLine"];
-
-  const gMode = generalSection.isEditing ? "edit" : "view";
-  const sMode = shipmentSection.isEditing ? "edit" : "view";
-  const fMode = fclSection.isEditing ? "edit" : "view";
-
-  return (
-    <div style={{ padding: "32px 48px", maxWidth: "1400px", margin: "0 auto" }}>
-
-      {/* ── Team Assignment ── */}
-      <BookingTeamSection
-        bookingId={(booking as any).id || booking.bookingId}
-        bookingNumber={(booking as any).booking_number || booking.bookingId}
-        serviceType="Trucking"
-        customerName={booking.customerName}
-        customerId={(booking as any).customer_id}
-        teamId={(booking as any).team_id}
-        teamName={(booking as any).team_name}
-        managerId={(booking as any).manager_id}
-        managerName={(booking as any).manager_name}
-        supervisorId={(booking as any).supervisor_id}
-        supervisorName={(booking as any).supervisor_name}
-        handlerId={(booking as any).handler_id}
-        handlerName={(booking as any).handler_name}
-        currentUser={currentUser}
-        onUpdate={onBookingUpdated}
-        addActivity={addActivity}
-      />
-
-      {/* ── General Information ── */}
-      <EditableSectionCard
-        title="General Information"
-        subtitle={`Last updated by ${booking.accountHandler || "System"}, ${new Date(booking.updatedAt).toLocaleString()}`}
-        isEditing={generalSection.isEditing}
-        onEdit={generalSection.startEditing}
-        onCancel={generalSection.cancel}
-        onSave={() => { const draft = generalSection.save(); diffAndApply(booking, draft, GENERAL_FIELDS, addActivity, setEditedBooking, onBookingUpdated); }}
-      >
-        <div style={{ display: "grid", gap: "20px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-            <LockedField label="Customer Name" value={booking.customerName} />
-            <LockedField label="Account Owner" value={booking.accountOwner || ""} />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px" }}>
-            <EditableField label="Account Handler" value={generalSection.draft.accountHandler || ""} mode={gMode} placeholder="Assign handler..." onChange={(v) => generalSection.updateField("accountHandler", v)} />
-            <LockedField label="Service/s" value={booking.service || ""} />
-            <LockedField label="Truck Type" value={truckTypeDisplay} />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px" }}>
-            <LockedField label="Mode" value={booking.mode || ""} />
-            <EditableField label="Preferred Delivery Date" value={generalSection.draft.preferredDeliveryDate || ""} type="date" mode={gMode} onChange={(v) => generalSection.updateField("preferredDeliveryDate", v)} />
-            <LockedField label="Quotation Reference" value={booking.quotationReferenceNumber || ""} />
-          </div>
-        </div>
-      </EditableSectionCard>
-
-      {/* ── Shipment Information ── */}
-      <EditableSectionCard
-        title="Shipment Information"
-        isEditing={shipmentSection.isEditing}
-        onEdit={shipmentSection.startEditing}
-        onCancel={shipmentSection.cancel}
-        onSave={() => { const draft = shipmentSection.save(); diffAndApply(booking, draft, SHIPMENT_FIELDS, addActivity, setEditedBooking, onBookingUpdated); }}
-      >
-        <div style={{ display: "grid", gap: "20px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-            <div>
-              <EditableField label="Consignee" value={shipmentSection.draft.consignee || ""} mode={sMode} placeholder="Enter consignee..." onChange={(v) => shipmentSection.updateField("consignee", v)} />
-              {!shipmentSection.isEditing && <ConsigneeInfoBadge consigneeId={(booking as any).consignee_id} />}
-            </div>
-            <EditableField label="Driver" value={shipmentSection.draft.driver || ""} mode={sMode} placeholder="Assign driver..." onChange={(v) => shipmentSection.updateField("driver", v)} />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px" }}>
-            <EditableField label="Helper" value={shipmentSection.draft.helper || ""} mode={sMode} placeholder="Assign helper..." onChange={(v) => shipmentSection.updateField("helper", v)} />
-            <EditableMultiInputField fieldName="vehicleReferenceNumber" label="Vehicle Reference Number" value={shipmentSection.draft.vehicleReferenceNumber || ""} status={booking.status} placeholder="Enter vehicle ref..." addButtonText="Add Vehicle Ref." mode={sMode} onChange={(v) => shipmentSection.updateField("vehicleReferenceNumber", v)} />
-            <EditableField label="Pull Out Location" value={shipmentSection.draft.pullOut || ""} mode={sMode} placeholder="Enter pull out location..." onChange={(v) => shipmentSection.updateField("pullOut", v)} />
-          </div>
-          {/* ✨ Multi-line trucking: Destinations read-only display */}
-          {hasMultiLineItems && (
-            <div>
-              <label style={{ display: "block", fontSize: "13px", fontWeight: 500, color: "var(--neuron-ink-base)", marginBottom: "8px" }}>
-                Destinations ({lineItems.length})
-              </label>
-              <div style={{ border: "1px solid var(--theme-border-default)", borderRadius: "8px", overflow: "hidden" }}>
-                {/* Header */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 60px", backgroundColor: "var(--theme-bg-page)", borderBottom: "1px solid var(--theme-border-default)", padding: "6px 12px" }}>
-                  <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Destination</span>
-                  <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Truck Type</span>
-                  <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.5px", textAlign: "center" }}>Qty</span>
-                </div>
-                {/* Rows */}
-                {lineItems.map((li) => (
-                  <div key={li.id} style={{ display: "grid", gridTemplateColumns: "1fr 100px 60px", padding: "8px 12px", borderBottom: "1px solid var(--theme-border-subtle)", alignItems: "center" }}>
-                    <span style={{ fontSize: "13px", color: "var(--theme-text-primary)" }}>{li.destination || "—"}</span>
-                    <span style={{ fontSize: "13px", color: "var(--theme-text-primary)" }}>{li.truckType || "—"}</span>
-                    <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--theme-text-primary)", textAlign: "center" }}>{li.quantity}</span>
-                  </div>
-                ))}
-                {/* Total */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 60px", padding: "8px 12px", backgroundColor: "var(--theme-bg-page)" }}>
-                  <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-text-muted)" }}>Total</span>
-                  <span />
-                  <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--theme-text-primary)", textAlign: "center" }}>{lineItems.reduce((s, li) => s + li.quantity, 0)}</span>
-                </div>
-              </div>
-            </div>
-          )}
-          {/* @deprecated — Delivery Address shown for backward compat / single-line bookings */}
-          <EditableField label="Delivery Address" value={shipmentSection.draft.deliveryAddress || ""} type="textarea" mode={sMode} placeholder="Enter delivery address..." onChange={(v) => shipmentSection.updateField("deliveryAddress", v)} />
-          {booking.movement === "EXPORT" && (
-            <>
-              <EditableField label="Warehouse Address" value={shipmentSection.draft.warehouseAddress || ""} type="textarea" mode={sMode} placeholder="Enter warehouse address..." onChange={(v) => shipmentSection.updateField("warehouseAddress", v)} />
-              <EditableField label="With GPS?" value={shipmentSection.draft.withGps ? "Yes" : "No"} type="select" options={["Yes", "No"]} mode={sMode} onChange={(v) => shipmentSection.updateField("withGps", (v === "Yes") as any)} />
-            </>
-          )}
-          <EditableField label="Delivery Instructions" value={shipmentSection.draft.deliveryInstructions || ""} type="textarea" mode={sMode} placeholder="Enter special instructions..." onChange={(v) => shipmentSection.updateField("deliveryInstructions", v)} />
-          {booking.dateDelivered && (
-            <EditableField label="Date Delivered" value={shipmentSection.draft.dateDelivered || ""} type="date" mode={sMode} onChange={(v) => shipmentSection.updateField("dateDelivered", v)} />
-          )}
-        </div>
-      </EditableSectionCard>
-
-      {/* ── FCL Information ── */}
-      {(booking.tabsBooking || booking.emptyReturn || booking.cyFee || booking.eirAvailability ||
-        booking.earlyGateIn || booking.detDemValidity || booking.storageValidity || booking.shippingLine) && (
-        <EditableSectionCard
-          title="FCL Information"
-          isEditing={fclSection.isEditing}
-          onEdit={fclSection.startEditing}
-          onCancel={fclSection.cancel}
-          onSave={() => { const draft = fclSection.save(); diffAndApply(booking, draft, FCL_FIELDS, addActivity, setEditedBooking, onBookingUpdated); }}
-        >
-          <div style={{ display: "grid", gap: "20px" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px" }}>
-              {booking.tabsBooking && <EditableField label="TABS Booking" value={fclSection.draft.tabsBooking || ""} mode={fMode} onChange={(v) => fclSection.updateField("tabsBooking", v)} />}
-              {booking.emptyReturn && <EditableField label="Empty Return" value={fclSection.draft.emptyReturn || ""} mode={fMode} onChange={(v) => fclSection.updateField("emptyReturn", v)} />}
-              {booking.cyFee && <EditableField label="CY Fee" value={fclSection.draft.cyFee || ""} mode={fMode} onChange={(v) => fclSection.updateField("cyFee", v)} />}
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px" }}>
-              {booking.eirAvailability && <EditableField label="EIR Availability" value={fclSection.draft.eirAvailability || ""} type="date" mode={fMode} onChange={(v) => fclSection.updateField("eirAvailability", v)} />}
-              {booking.earlyGateIn && <EditableField label="Early Gate In" value={fclSection.draft.earlyGateIn || ""} type="date" mode={fMode} onChange={(v) => fclSection.updateField("earlyGateIn", v)} />}
-              {booking.movement === "EXPORT" && <EditableField label="Gate In" value={fclSection.draft.gateIn || ""} type="date" mode={fMode} onChange={(v) => fclSection.updateField("gateIn", v)} />}
-              {booking.detDemValidity && <EditableField label="Det/Dem Validity" value={fclSection.draft.detDemValidity || ""} type="date" mode={fMode} onChange={(v) => fclSection.updateField("detDemValidity", v)} />}
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px" }}>
-              {booking.storageValidity && <EditableField label="Storage Validity" value={fclSection.draft.storageValidity || ""} type="date" mode={fMode} onChange={(v) => fclSection.updateField("storageValidity", v)} />}
-              {booking.shippingLine && <EditableField label="Shipping Line" value={fclSection.draft.shippingLine || ""} mode={fMode} onChange={(v) => fclSection.updateField("shippingLine", v)} />}
-            </div>
-          </div>
-        </EditableSectionCard>
-      )}
-    </div>
-  );
-}

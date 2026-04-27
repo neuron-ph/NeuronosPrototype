@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../utils/supabase/client";
+import { buildCatalogSnapshot } from "../utils/catalogSnapshot";
 import { toast } from "../components/ui/toast-utils";
 import { queryKeys } from "../lib/queryKeys";
 import {
@@ -23,7 +24,8 @@ interface LineItem {
   particular: string;
   description: string;
   amount: number;
-  catalog_item_id?: string;
+  catalog_item_id?: string | null;
+  expense_category?: string;
 }
 
 interface EVoucherData {
@@ -259,6 +261,12 @@ export function useEVoucherSubmit(
       description: item.description,
       amount: item.amount,
       catalog_item_id: item.catalog_item_id || null,
+      catalog_snapshot: item.catalog_item_id
+        ? buildCatalogSnapshot(
+            { description: item.particular, amount: item.amount },
+            item.expense_category || null
+          )
+        : null,
       sort_order: index,
     }));
 

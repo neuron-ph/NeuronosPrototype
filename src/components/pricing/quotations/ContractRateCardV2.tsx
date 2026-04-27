@@ -15,9 +15,10 @@
  */
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import { Plus, Trash2, X, LayoutGrid } from "lucide-react";
+import { Plus, Trash2, X, LayoutGrid, ChevronDown, ChevronRight } from "lucide-react";
 import { PhilippinePeso } from "../../icons/PhilippinePeso";
-import { ChargeTypeCombobox } from "./ChargeTypeCombobox";
+import { CatalogItemCombobox } from "../../shared/pricing/CatalogItemCombobox";
+import { CategoryDropdown } from "./CategoryDropdown";
 import { TruckingDestinationBlocks } from "./TruckingDestinationBlocks";
 import { CustomDropdown } from "../../bd/CustomDropdown";
 import type {
@@ -106,14 +107,23 @@ export function ContractRateCardV2({
 }: ContractRateCardV2Props) {
   const displayLabel = serviceLabel || matrix.service_type;
   const columns = matrix.columns;
-  const rows = matrix.rows;
   const isTrucking = matrix.service_type === "Trucking";
+  const isBrokerage = matrix.service_type === "Brokerage";
+
+  // Derive active categories — auto-migrate flat rows for backward compat
+  const activeCategories: ContractRateCategory[] = useMemo(() => {
+    if (matrix.categories && matrix.categories.length > 0) return matrix.categories;
+    if (matrix.rows && matrix.rows.length > 0) return migrateFlatRowsToCategories(matrix.rows);
+    return [];
+  }, [matrix.categories, matrix.rows]);
+
+  // Trucking still reads flat rows
+  const truckingRows = matrix.rows;
 
   // Auto-migrate existing Trucking matrices to single "Cost" column
   useEffect(() => {
     if (isTrucking && (columns.length !== 1 || columns[0] !== "Cost")) {
-      // Collapse all rate columns → single "Cost" column, taking the first non-zero value per row
-      const migratedRows = rows.map((r) => {
+      const migratedRows = truckingRows.map((r) => {
         const firstNonZero = Object.values(r.rates).find((v) => v > 0) ?? 0;
         return { ...r, rates: { Cost: firstNonZero } };
       });
@@ -126,6 +136,24 @@ export function ContractRateCardV2({
   const [editingColumnValue, setEditingColumnValue] = useState("");
   const editInputRef = useRef<HTMLInputElement>(null);
 
+  // Category expand/collapse (all expanded by default)
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
+    () => new Set(activeCategories.map((c) => c.id))
+  );
+  const toggleCategory = (id: string) =>
+    setExpandedCategories((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  // Add category dropdown
+  const [showAddCategory, setShowAddCategory] = useState(false);
+  const addCategoryBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Trucking: New Destination Handling
+  const [newTruckingDestination, setNewTruckingDestination] = useState<string | null>(null);
+
   // Focus column rename input
   useEffect(() => {
     if (editingColumnIndex !== null && editInputRef.current) {
@@ -134,76 +162,84 @@ export function ContractRateCardV2({
     }
   }, [editingColumnIndex]);
 
-  // ---- Emit changes ----
-  const emit = useCallback(
-    (updatedRows: ContractRateRow[], updatedColumns?: string[]) => {
+  // ---- Emit helpers ----
+  const emitCategories = useCallback(
+    (updatedCategories: ContractRateCategory[], updatedColumns?: string[]) => {
       onChange({
         ...matrix,
         columns: updatedColumns || columns,
-        rows: updatedRows,
+        categories: updatedCategories,
+        rows: flattenCategoriesToRows(updatedCategories),
       });
     },
     [matrix, onChange, columns]
   );
 
-  // ---- Row CRUD ----
+  const emitTrucking = useCallback(
+    (updatedRows: ContractRateRow[], updatedColumns?: string[]) => {
+      onChange({ ...matrix, columns: updatedColumns || columns, rows: updatedRows });
+    },
+    [matrix, onChange, columns]
+  );
 
-  const addRow = (particular?: string) => {
+  // ---- Category CRUD ----
+  const handleAddCategory = (name: string, catalogCategoryId?: string) => {
+    const newCat: ContractRateCategory = {
+      id: generateCategoryId(),
+      category_name: name,
+      catalog_category_id: catalogCategoryId,
+      rows: [],
+    };
+    setExpandedCategories((prev) => new Set([...prev, newCat.id]));
+    emitCategories([...activeCategories, newCat]);
+  };
+
+  const handleDeleteCategory = (catId: string) => {
+    if (!confirm("Remove this category and all its charges?")) return;
+    emitCategories(activeCategories.filter((c) => c.id !== catId));
+  };
+
+  // ---- Row CRUD (per category) ----
+  const handleAddRow = (catId: string) => {
     const emptyRates: Record<string, number> = {};
     columns.forEach((col) => { emptyRates[col] = 0; });
-    const newRow: ContractRateRow = {
-      id: generateRowId(),
-      particular: particular || "",
-      rates: emptyRates,
-      unit: "per_container",
-      remarks: "",
-    };
-    emit([...rows, newRow]);
+    const newRow: ContractRateRow = { id: generateRowId(), particular: "", rates: emptyRates, unit: "per_container", remarks: "" };
+    emitCategories(activeCategories.map((c) => c.id === catId ? { ...c, rows: [...c.rows, newRow] } : c));
   };
 
-  const updateRow = (rowId: string, updates: Partial<ContractRateRow>) => {
-    emit(rows.map((r) => (r.id === rowId ? { ...r, ...updates } : r)));
-  };
+  const handleUpdateRow = (catId: string, rowId: string, updates: Partial<ContractRateRow>) =>
+    emitCategories(activeCategories.map((c) =>
+      c.id === catId ? { ...c, rows: c.rows.map((r) => r.id === rowId ? { ...r, ...updates } : r) } : c
+    ));
 
-  const updateRowRate = (rowId: string, column: string, value: number) => {
-    emit(
-      rows.map((r) =>
-        r.id === rowId ? { ...r, rates: { ...r.rates, [column]: value } } : r
-      )
-    );
-  };
+  const handleUpdateRowRate = (catId: string, rowId: string, col: string, val: number) =>
+    emitCategories(activeCategories.map((c) =>
+      c.id === catId ? { ...c, rows: c.rows.map((r) => r.id === rowId ? { ...r, rates: { ...r.rates, [col]: val } } : r) } : c
+    ));
 
-  const deleteRow = (rowId: string) => {
-    emit(rows.filter((r) => r.id !== rowId));
-  };
+  const handleDeleteRow = (catId: string, rowId: string) =>
+    emitCategories(activeCategories.map((c) =>
+      c.id === catId ? { ...c, rows: c.rows.filter((r) => r.id !== rowId) } : c
+    ));
 
-  const toggleSucceedingRule = (rowId: string) => {
-    emit(
-      rows.map((r) => {
-        if (r.id !== rowId) return r;
-        if (r.succeeding_rule) {
-          const { succeeding_rule, ...rest } = r;
-          return rest as ContractRateRow;
-        }
-        return { ...r, succeeding_rule: { rate: 0, after_qty: 1 } };
-      })
-    );
-  };
+  const handleToggleSucceeding = (catId: string, rowId: string) =>
+    emitCategories(activeCategories.map((c) =>
+      c.id === catId ? {
+        ...c,
+        rows: c.rows.map((r) => {
+          if (r.id !== rowId) return r;
+          if (r.succeeding_rule) { const { succeeding_rule, ...rest } = r; return rest as ContractRateRow; }
+          return { ...r, succeeding_rule: { rate: 0, after_qty: 1 } };
+        }),
+      } : c
+    ));
 
-  // ---- Column CRUD ----
-
+  // ---- Column CRUD (global — applies to all category rows) ----
   const addColumn = () => {
     const newName = `Mode ${columns.length + 1}`;
-    const updatedRows = rows.map((r) => ({
-      ...r,
-      rates: { ...r.rates, [newName]: 0 },
-    }));
-    emit(updatedRows, [...columns, newName]);
-    // Enter edit mode for the new column name
-    setTimeout(() => {
-      setEditingColumnIndex(columns.length);
-      setEditingColumnValue(newName);
-    }, 0);
+    const updatedCats = activeCategories.map((c) => ({ ...c, rows: c.rows.map((r) => ({ ...r, rates: { ...r.rates, [newName]: 0 } })) }));
+    emitCategories(updatedCats, [...columns, newName]);
+    setTimeout(() => { setEditingColumnIndex(columns.length); setEditingColumnValue(newName); }, 0);
   };
 
   const commitColumnRename = () => {
@@ -212,13 +248,11 @@ export function ContractRateCardV2({
     const newName = editingColumnValue.trim();
     if (newName && newName !== oldName && !columns.includes(newName)) {
       const updatedCols = columns.map((c) => (c === oldName ? newName : c));
-      const updatedRows = rows.map((r) => {
-        const newRates = { ...r.rates };
-        newRates[newName] = newRates[oldName] ?? 0;
-        delete newRates[oldName];
-        return { ...r, rates: newRates };
-      });
-      emit(updatedRows, updatedCols);
+      const updatedCats = activeCategories.map((c) => ({
+        ...c,
+        rows: c.rows.map((r) => { const nr = { ...r.rates }; nr[newName] = nr[oldName] ?? 0; delete nr[oldName]; return { ...r, rates: nr }; }),
+      }));
+      emitCategories(updatedCats, updatedCols);
     }
     setEditingColumnIndex(null);
     setEditingColumnValue("");
@@ -227,39 +261,23 @@ export function ContractRateCardV2({
   const deleteColumn = (colName: string) => {
     if (columns.length <= 1) return;
     const updatedCols = columns.filter((c) => c !== colName);
-    const updatedRows = rows.map((r) => {
-      const newRates = { ...r.rates };
-      delete newRates[colName];
-      return { ...r, rates: newRates };
-    });
-    emit(updatedRows, updatedCols);
+    const updatedCats = activeCategories.map((c) => ({
+      ...c,
+      rows: c.rows.map((r) => { const nr = { ...r.rates }; delete nr[colName]; return { ...r, rates: nr }; }),
+    }));
+    emitCategories(updatedCats, updatedCols);
   };
 
   // ---- Format helpers ----
-
-  const getUnitLabel = (unitValue: string) =>
-    UNIT_OPTIONS.find((u) => u.value === unitValue)?.label || unitValue;
-
+  const getUnitLabel = (unitValue: string) => UNIT_OPTIONS.find((u) => u.value === unitValue)?.label || unitValue;
   const formatCurrency = (val: number) =>
-    new Intl.NumberFormat("en-PH", {
-      style: "currency",
-      currency: "PHP",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(val);
-
-  // ---- Collect used charge_type_ids for duplicate prevention (Brokerage) ----
-  const usedChargeTypeIds = useMemo(
-    () => rows.map((r) => r.charge_type_id).filter(Boolean) as string[],
-    [rows]
-  );
-
-  // ---- Trucking: New Destination Handling ----
-  const [newTruckingDestination, setNewTruckingDestination] = useState<string | null>(null);
+    new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(val);
 
   // ============================================
   // RENDER
   // ============================================
+
+  const totalItems = isTrucking ? truckingRows.length : activeCategories.reduce((s, c) => s + c.rows.length, 0);
 
   return (
     <div
@@ -272,155 +290,71 @@ export function ContractRateCardV2({
       }}
     >
       {/* ── Header ── */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: "24px",
-          paddingBottom: "20px",
-          borderBottom: "2px solid var(--neuron-ui-border)",
-        }}
-      >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px", paddingBottom: "20px", borderBottom: "2px solid var(--neuron-ui-border)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <PhilippinePeso size={18} style={{ color: "var(--neuron-brand-green)" }} />
-          <h2
-            style={{
-              fontSize: "17px",
-              fontWeight: 600,
-              color: "var(--neuron-brand-green)",
-              margin: 0,
-              letterSpacing: "-0.01em",
-            }}
-          >
+          <h2 style={{ fontSize: "17px", fontWeight: 600, color: "var(--neuron-brand-green)", margin: 0, letterSpacing: "-0.01em" }}>
             {displayLabel} Charges
           </h2>
-          <span
-            style={{
-              fontSize: "11px",
-              fontWeight: 500,
-              color: "var(--theme-text-muted)",
-              backgroundColor: "var(--theme-bg-surface-subtle)",
-              padding: "2px 8px",
-              borderRadius: "4px",
-            }}
-          >
-            {rows.length} {rows.length === 1 ? "item" : "items"}
+          <span style={{ fontSize: "11px", fontWeight: 500, color: "var(--theme-text-muted)", backgroundColor: "var(--theme-bg-surface-subtle)", padding: "2px 8px", borderRadius: "4px" }}>
+            {totalItems} {totalItems === 1 ? "item" : "items"}
           </span>
         </div>
 
-        {/* Add Charge / Add Destination button — top right */}
         {!viewMode && (
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            {/* Hide "Add Mode" for Trucking — fixed single-column layout */}
-            {!isTrucking && (
-              <button
-                onClick={addColumn}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "4px",
-                  padding: "6px 14px",
-                  fontSize: "12px",
-                  fontWeight: 600,
-                  color: "var(--theme-text-muted)",
-                  backgroundColor: "transparent",
-                  border: "1px dashed var(--neuron-ui-border)",
-                  borderRadius: "6px",
-                  cursor: "pointer",
-                  transition: "all 0.15s ease",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
-                  e.currentTarget.style.color = "var(--theme-action-primary-bg)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
-                  e.currentTarget.style.color = "var(--theme-text-muted)";
-                }}
+            {/* Add Mode — non-trucking, non-brokerage only */}
+            {!isTrucking && !isBrokerage && (
+              <button onClick={addColumn} style={{ display: "flex", alignItems: "center", gap: "4px", padding: "6px 14px", fontSize: "12px", fontWeight: 600, color: "var(--theme-text-muted)", backgroundColor: "transparent", border: "1px dashed var(--neuron-ui-border)", borderRadius: "6px", cursor: "pointer", transition: "all 0.15s ease" }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)"; e.currentTarget.style.color = "var(--theme-action-primary-bg)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--neuron-ui-border)"; e.currentTarget.style.color = "var(--theme-text-muted)"; }}
               >
-                <Plus size={14} />
-                Add Mode
+                <Plus size={14} /> Add Mode
               </button>
             )}
+
+            {/* Trucking: Add Destination */}
             {isTrucking ? (
               <button
                 onClick={() => {
-                  // Create a new destination block immediately with a placeholder name
-                  const placeholder = `New Destination`;
-                  let finalName = placeholder;
+                  let finalName = "New Destination";
                   let counter = 2;
-                  const existingDests = new Set(rows.map((r) => r.remarks));
-                  while (existingDests.has(finalName)) {
-                    finalName = `New Destination ${counter}`;
-                    counter++;
-                  }
+                  const existingDests = new Set(truckingRows.map((r) => r.remarks));
+                  while (existingDests.has(finalName)) { finalName = `New Destination ${counter}`; counter++; }
                   const TRUCKING_PRESETS = ["20ft_40ft", "back_to_back", "4wheeler", "6wheeler"];
                   const TRUCKING_LABELS = ["20ft / 40ft", "Back to back", "4Wheeler", "6Wheeler"];
                   const newRows: ContractRateRow[] = TRUCKING_PRESETS.map((id, i) => ({
-                    id: generateRowId(),
-                    particular: TRUCKING_LABELS[i],
-                    charge_type_id: id,
-                    rates: { Cost: 0 },
-                    unit: "per_container",
-                    remarks: finalName,
-                    selection_group: finalName, // ✨ Auto-stamp for alternative row filtering
+                    id: generateRowId(), particular: TRUCKING_LABELS[i], charge_type_id: id,
+                    rates: { Cost: 0 }, unit: "per_container", remarks: finalName, selection_group: finalName,
                   }));
-                  emit([...rows, ...newRows]);
-                  // Signal the TruckingDestinationBlocks to auto-edit this new block's name
+                  emitTrucking([...truckingRows, ...newRows]);
                   setNewTruckingDestination(finalName);
                 }}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "4px",
-                  padding: "6px 14px",
-                  fontSize: "12px",
-                  fontWeight: 600,
-                  color: "var(--neuron-brand-green)",
-                  backgroundColor: "transparent",
-                  border: "1px solid var(--neuron-ui-border)",
-                  borderRadius: "6px",
-                  cursor: "pointer",
-                  transition: "all 0.15s ease",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "transparent";
-                }}
+                style={{ display: "flex", alignItems: "center", gap: "4px", padding: "6px 14px", fontSize: "12px", fontWeight: 600, color: "var(--neuron-brand-green)", backgroundColor: "transparent", border: "1px solid var(--neuron-ui-border)", borderRadius: "6px", cursor: "pointer", transition: "all 0.15s ease" }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
               >
-                <Plus size={14} />
-                Add Destination
+                <Plus size={14} /> Add Destination
               </button>
             ) : (
-            <button
-              onClick={() => addRow()}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "4px",
-                padding: "6px 14px",
-                fontSize: "12px",
-                fontWeight: 600,
-                color: "var(--neuron-brand-green)",
-                backgroundColor: "transparent",
-                border: "1px solid var(--neuron-ui-border)",
-                borderRadius: "6px",
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "transparent";
-              }}
-            >
-              <Plus size={14} />
-              Add Charge
-            </button>
+              /* Non-trucking: Add Category */
+              <div style={{ position: "relative" }}>
+                <button
+                  ref={addCategoryBtnRef}
+                  onClick={() => setShowAddCategory(true)}
+                  style={{ display: "flex", alignItems: "center", gap: "4px", padding: "6px 14px", fontSize: "12px", fontWeight: 600, color: "var(--neuron-brand-green)", backgroundColor: "transparent", border: "1px solid var(--neuron-ui-border)", borderRadius: "6px", cursor: "pointer", transition: "all 0.15s ease" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
+                >
+                  <Plus size={14} /> Add Category
+                </button>
+                {showAddCategory && (
+                  <CategoryDropdown
+                    onAdd={(name, catalogCategoryId) => { handleAddCategory(name, catalogCategoryId); setShowAddCategory(false); }}
+                    onClose={() => setShowAddCategory(false)}
+                  />
+                )}
+              </div>
             )}
           </div>
         )}
@@ -429,217 +363,134 @@ export function ContractRateCardV2({
       {/* ── Trucking: Destination Blocks ── */}
       {isTrucking ? (
         <TruckingDestinationBlocks
-          rows={rows}
-          onChangeRows={(updatedRows) => emit(updatedRows)}
+          rows={truckingRows}
+          onChangeRows={(updatedRows) => emitTrucking(updatedRows)}
           viewMode={viewMode}
           newDestination={newTruckingDestination}
           onNewDestinationCleared={() => setNewTruckingDestination(null)}
         />
       ) : (
-      <>
-      {/* ── Empty State ── */}
-      {rows.length === 0 && viewMode ? (
-        <div
-          style={{
-            padding: "48px 24px",
-            textAlign: "center",
-            backgroundColor: "var(--theme-bg-surface)",
-            border: "1px solid var(--neuron-ui-border)",
-            borderRadius: "10px",
-          }}
-        >
-          <LayoutGrid
-            size={48}
-            strokeWidth={1.2}
-            style={{
-              color: "var(--neuron-ink-muted)",
-              margin: "0 auto 12px auto",
-              display: "block",
-              opacity: 0.75,
-            }}
-          />
-          <h3
-            style={{
-              color: "var(--neuron-ink-primary)",
-              fontSize: "16px",
-              fontWeight: 500,
-              marginBottom: "4px",
-            }}
-          >
-            No charges defined
-          </h3>
-          <p style={{ color: "var(--neuron-ink-muted)", fontSize: "14px", margin: 0 }}>
-            No charge items have been added for this service.
-          </p>
-        </div>
-      ) : (
-        /* ── Rate Grid ── */
-        <div
-          style={{
-            border: "1px solid var(--neuron-ui-border)",
-            borderRadius: "10px",
-            overflow: "visible",
-            backgroundColor: "var(--theme-bg-surface)",
-          }}
-        >
-          <div style={{ overflowX: "visible" as any }}>
-            {/* Grid Header */}
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: buildGridTemplate(columns, viewMode, isTrucking),
-                gap: "0",
-                padding: "10px 16px",
-                backgroundColor: "var(--theme-bg-surface)",
-                borderBottom: "2px solid var(--neuron-ui-border)",
-                borderRadius: "10px 10px 0 0",
-                minWidth: "fit-content",
-                alignItems: "center",
-              }}
-            >
-              {/* Particular / Truck Config header */}
-              <div style={gridHeaderCell}>{isTrucking ? "Truck Config" : "Particular"}</div>
+        <>
+          {/* ── Empty state — no categories yet ── */}
+          {activeCategories.length === 0 && (
+            <div style={{ padding: "48px 24px", textAlign: "center", backgroundColor: "var(--theme-bg-surface)", border: "1px solid var(--neuron-ui-border)", borderRadius: "10px" }}>
+              <LayoutGrid size={48} strokeWidth={1.2} style={{ color: "var(--neuron-ink-muted)", margin: "0 auto 12px auto", display: "block", opacity: 0.75 }} />
+              <h3 style={{ color: "var(--neuron-ink-primary)", fontSize: "16px", fontWeight: 500, marginBottom: "4px" }}>No charge categories</h3>
+              <p style={{ color: "var(--neuron-ink-muted)", fontSize: "14px", margin: 0 }}>
+                {viewMode ? "No charges have been defined for this service." : "Click \"+ Add Category\" to start defining charges."}
+              </p>
+            </div>
+          )}
 
-              {/* Mode column headers */}
-              {columns.map((col, colIdx) => (
+          {/* ── Category sections ── */}
+          {activeCategories.map((cat) => {
+            const isExpanded = expandedCategories.has(cat.id);
+            const usedInCat = cat.rows.map((r) => r.catalog_item_id).filter(Boolean) as string[];
+            return (
+              <div key={cat.id} style={{ border: "1px solid var(--neuron-ui-border)", borderRadius: "10px", marginBottom: "12px", overflow: "visible", backgroundColor: "var(--theme-bg-surface)" }}>
+
+                {/* Category header */}
                 <div
-                  key={col}
-                  style={{
-                    ...gridHeaderCell,
-                    textAlign: "right",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "flex-end",
-                    gap: "6px",
-                  }}
+                  onClick={() => toggleCategory(cat.id)}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", backgroundColor: "var(--theme-bg-surface-subtle)", borderRadius: isExpanded ? "10px 10px 0 0" : "10px", borderBottom: isExpanded ? "1px solid var(--neuron-ui-border)" : "none", cursor: "pointer", userSelect: "none" }}
                 >
-                  {!isTrucking && editingColumnIndex === colIdx ? (
-                    <input
-                      ref={editInputRef}
-                      value={editingColumnValue}
-                      onChange={(e) => setEditingColumnValue(e.target.value)}
-                      onBlur={commitColumnRename}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") commitColumnRename();
-                        if (e.key === "Escape") {
-                          setEditingColumnIndex(null);
-                          setEditingColumnValue("");
-                        }
-                      }}
-                      style={{
-                        width: "80px",
-                        padding: "2px 6px",
-                        fontSize: "11px",
-                        fontWeight: 600,
-                        border: "1px solid var(--neuron-brand-green)",
-                        borderRadius: "4px",
-                        outline: "none",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--theme-action-primary-bg)",
-                        textAlign: "right",
-                        letterSpacing: "0.5px",
-                        textTransform: "uppercase",
-                      }}
-                    />
-                  ) : (
-                    <span
-                      style={{ cursor: viewMode || isTrucking ? "default" : "pointer" }}
-                      onDoubleClick={() => {
-                        if (!viewMode && !isTrucking) {
-                          setEditingColumnIndex(colIdx);
-                          setEditingColumnValue(col);
-                        }
-                      }}
-                      title={viewMode || isTrucking ? col : "Double-click to rename"}
-                    >
-                      {col} (PHP)
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    {isExpanded ? <ChevronDown size={13} style={{ color: "var(--theme-text-muted)", flexShrink: 0 }} /> : <ChevronRight size={13} style={{ color: "var(--theme-text-muted)", flexShrink: 0 }} />}
+                    <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)" }}>{cat.category_name}</span>
+                    <span style={{ fontSize: "11px", color: "var(--theme-text-muted)", backgroundColor: "var(--theme-bg-surface)", padding: "1px 7px", borderRadius: "3px", border: "1px solid var(--neuron-ui-border)" }}>
+                      {cat.rows.length} {cat.rows.length === 1 ? "item" : "items"}
                     </span>
-                  )}
-                  {!viewMode && !isTrucking && columns.length > 1 && editingColumnIndex !== colIdx && (
-                    <button
-                      onClick={() => deleteColumn(col)}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        padding: "1px",
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        color: "var(--theme-text-muted)",
-                        opacity: 0.6,
-                        lineHeight: 0,
-                      }}
-                      title={`Remove "${col}" mode`}
-                    >
-                      <X size={11} />
-                    </button>
+                  </div>
+                  {!viewMode && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }} onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => handleAddRow(cat.id)}
+                        style={{ display: "flex", alignItems: "center", gap: "3px", padding: "4px 10px", fontSize: "12px", fontWeight: 600, color: "var(--theme-action-primary-bg)", backgroundColor: "transparent", border: "1px solid var(--theme-action-primary-bg)", borderRadius: "5px", cursor: "pointer", transition: "all 0.15s ease" }}
+                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)"; e.currentTarget.style.color = "#fff"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "var(--theme-action-primary-bg)"; }}
+                      >
+                        <Plus size={11} /> Add Charge
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCategory(cat.id)}
+                        style={{ display: "flex", alignItems: "center", padding: "4px", background: "none", border: "none", cursor: "pointer", color: "var(--theme-text-muted)", opacity: 0.5, transition: "opacity 0.15s ease" }}
+                        onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.color = "var(--neuron-semantic-danger)"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.5"; e.currentTarget.style.color = "var(--theme-text-muted)"; }}
+                        title="Remove category"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   )}
                 </div>
-              ))}
 
-              {/* Destination header (Trucking) or Unit header (other services) */}
-              <div style={gridHeaderCell}>{isTrucking ? "Destination" : "Unit"}</div>
+                {/* Category body — grid + rows */}
+                {isExpanded && (
+                  <div style={{ overflowX: "visible" as any }}>
+                    {/* Grid Header */}
+                    <div style={{ display: "grid", gridTemplateColumns: buildGridTemplate(columns, viewMode, false), gap: "0", padding: "10px 16px", backgroundColor: "var(--theme-bg-surface)", borderBottom: "2px solid var(--neuron-ui-border)", minWidth: "fit-content", alignItems: "center" }}>
+                      <div style={gridHeaderCell}>Particular</div>
+                      {columns.map((col, colIdx) => (
+                        <div key={col} style={{ ...gridHeaderCell, textAlign: "right", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "6px" }}>
+                          {editingColumnIndex === colIdx ? (
+                            <input ref={editInputRef} value={editingColumnValue} onChange={(e) => setEditingColumnValue(e.target.value)}
+                              onBlur={commitColumnRename}
+                              onKeyDown={(e) => { if (e.key === "Enter") commitColumnRename(); if (e.key === "Escape") { setEditingColumnIndex(null); setEditingColumnValue(""); } }}
+                              style={{ width: "80px", padding: "2px 6px", fontSize: "11px", fontWeight: 600, border: "1px solid var(--neuron-brand-green)", borderRadius: "4px", outline: "none", backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-action-primary-bg)", textAlign: "right", letterSpacing: "0.5px", textTransform: "uppercase" }}
+                            />
+                          ) : (
+                            <span style={{ cursor: viewMode ? "default" : "pointer" }} onDoubleClick={() => { if (!viewMode) { setEditingColumnIndex(colIdx); setEditingColumnValue(col); } }} title={viewMode ? col : "Double-click to rename"}>
+                              {col} (PHP)
+                            </span>
+                          )}
+                          {!viewMode && columns.length > 1 && editingColumnIndex !== colIdx && (
+                            <button onClick={() => deleteColumn(col)} style={{ display: "flex", alignItems: "center", padding: "1px", background: "none", border: "none", cursor: "pointer", color: "var(--theme-text-muted)", opacity: 0.6, lineHeight: 0 }} title={`Remove "${col}" mode`}>
+                              <X size={11} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      <div style={gridHeaderCell}>Unit</div>
+                      {!viewMode && <div style={gridHeaderCell} />}
+                    </div>
 
-              {/* Delete header (empty) */}
-              {!viewMode && <div style={gridHeaderCell}></div>}
-            </div>
+                    {/* Empty category */}
+                    {cat.rows.length === 0 ? (
+                      <div style={{ padding: "24px 16px", textAlign: "center", color: "var(--neuron-ink-muted)", fontSize: "13px" }}>
+                        {viewMode ? "No charges defined." : "Click \"+ Add Charge\" above to add the first charge."}
+                      </div>
+                    ) : (
+                      cat.rows.map((row, idx) => (
+                        <RateLineItem
+                          key={row.id}
+                          row={row}
+                          columns={columns}
+                          viewMode={viewMode}
+                          isLast={idx === cat.rows.length - 1}
+                          isTrucking={false}
+                          serviceType={matrix.service_type}
+                          usedCatalogItemIds={usedInCat}
+                          catalogCategoryId={cat.catalog_category_id}
+                          onUpdate={(updates) => handleUpdateRow(cat.id, row.id, updates)}
+                          onUpdateRate={(col, val) => handleUpdateRowRate(cat.id, row.id, col, val)}
+                          onDelete={() => handleDeleteRow(cat.id, row.id)}
+                          onToggleSucceeding={() => handleToggleSucceeding(cat.id, row.id)}
+                          formatCurrency={formatCurrency}
+                          getUnitLabel={getUnitLabel}
+                        />
+                      ))
+                    )}
 
-            {/* Rows */}
-            {rows.length === 0 ? (
-              <div
-                style={{
-                  padding: "32px 16px",
-                  textAlign: "center",
-                  color: "var(--neuron-ink-muted)",
-                  fontSize: "13px",
-                }}
-              >
-                No charge items yet. Click "+ Add Charge" above to get started.
+                    {/* Category footer */}
+                    <div style={{ padding: "6px 16px", backgroundColor: "var(--theme-bg-surface)", borderTop: cat.rows.length > 0 ? "1px solid var(--neuron-ui-border)" : "none", borderRadius: "0 0 10px 10px", fontSize: "11px", fontWeight: 500, color: "var(--neuron-ink-muted)" }}>
+                      {cat.rows.length} charge item{cat.rows.length !== 1 ? "s" : ""} · {columns.length} mode{columns.length !== 1 ? "s" : ""}
+                    </div>
+                  </div>
+                )}
               </div>
-            ) : (
-              rows.map((row, idx) => (
-                <RateLineItem
-                  key={row.id}
-                  row={row}
-                  columns={columns}
-                  viewMode={viewMode}
-                  isLast={idx === rows.length - 1}
-                  isTrucking={isTrucking}
-                  serviceType={matrix.service_type}
-                  usedChargeTypeIds={usedChargeTypeIds}
-                  onUpdate={(updates) => updateRow(row.id, updates)}
-                  onUpdateRate={(col, val) => updateRowRate(row.id, col, val)}
-                  onDelete={() => deleteRow(row.id)}
-                  onToggleSucceeding={() => toggleSucceedingRule(row.id)}
-                  formatCurrency={formatCurrency}
-                  getUnitLabel={getUnitLabel}
-                />
-              ))
-            )}
-
-            {/* Footer */}
-            <div
-              style={{
-                padding: "8px 16px",
-                backgroundColor: "var(--theme-bg-surface)",
-                borderTop: "1px solid var(--neuron-ui-border)",
-                borderRadius: "0 0 10px 10px",
-                fontSize: "11px",
-                fontWeight: 500,
-                color: "var(--neuron-ink-muted)",
-              }}
-            >
-              {rows.length} {rows.length === 1 ? "charge item" : "charge items"}
-              {!isTrucking && (
-                <>
-                  {" "}&middot; {columns.length} {columns.length === 1 ? "mode" : "modes"}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-      </>
+            );
+          })}
+        </>
       )}
     </div>
   );
@@ -690,6 +541,8 @@ const cellInputStyle: React.CSSProperties = {
   fontFamily: "inherit",
 };
 
+// CatalogCategoryPicker removed — category-first enforced via CategoryDropdown at section level.
+
 // ============================================
 // RATE LINE ITEM (2-row block)
 // ============================================
@@ -701,7 +554,8 @@ function RateLineItem({
   isLast,
   isTrucking,
   serviceType,
-  usedChargeTypeIds,
+  usedCatalogItemIds,
+  catalogCategoryId,
   onUpdate,
   onUpdateRate,
   onDelete,
@@ -715,7 +569,8 @@ function RateLineItem({
   isLast?: boolean;
   isTrucking?: boolean;
   serviceType: ServiceType;
-  usedChargeTypeIds: string[];
+  usedCatalogItemIds: string[];
+  catalogCategoryId?: string;
   onUpdate: (updates: Partial<ContractRateRow>) => void;
   onUpdateRate: (column: string, value: number) => void;
   onDelete: () => void;
@@ -762,21 +617,15 @@ function RateLineItem({
               {row.particular || "\u2014"}
             </span>
           ) : (
-            <ChargeTypeCombobox
+            <CatalogItemCombobox
               value={row.particular}
-              chargeTypeId={row.charge_type_id}
-              serviceType={serviceType}
-              onChange={({ particular, charge_type_id, unit }) => {
-                const updates: Partial<ContractRateRow> = {
-                  particular,
-                  charge_type_id,
-                };
-                if (unit) updates.unit = unit;
-                onUpdate(updates);
+              catalogItemId={row.catalog_item_id}
+              categoryId={catalogCategoryId}
+              side="revenue"
+              onChange={(description, catalogItemId) => {
+                onUpdate({ particular: description, catalog_item_id: catalogItemId ?? undefined });
               }}
-              placeholder={isTrucking ? "e.g., 20ft/40ft, 4Wheeler" : "Select or type a charge..."}
-              usedChargeTypeIds={usedChargeTypeIds}
-              allowDuplicates={isTrucking}
+              placeholder="Select or type a charge..."
             />
           )}
         </div>

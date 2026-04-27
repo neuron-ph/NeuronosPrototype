@@ -1,22 +1,24 @@
-import { Package, Ship, Box, Warehouse, Link as LinkIcon, Users } from "lucide-react";
-import { useState, useEffect } from "react";
-import type { ForwardingBooking, ExecutionStatus } from "../../../types/operations";
-import type { Project } from "../../../types/pricing";
+import React, { useState, useEffect } from "react";
+import { Package, Users } from "lucide-react";
 import { supabase } from "../../../utils/supabase/client";
 import { toast } from "../../ui/toast-utils";
-import { ProjectAutofillSection } from "../shared/ProjectAutofillSection";
-import { ServicesMultiSelect } from "../shared/ServicesMultiSelect";
-import { autofillForwardingFromProject, linkBookingToProject } from "../../../utils/projectAutofill";
-import { TeamAssignmentForm, type TeamAssignment } from "../../pricing/TeamAssignmentForm";
-import type { User } from "../../../hooks/useUser";
-import { CustomDropdown } from "../../bd/CustomDropdown";
-import { SearchableDropdown } from "../../shared/SearchableDropdown";
-import { MovementToggle } from "../shared/MovementToggle";
-import { ContractDetectionBanner } from "../shared/ContractDetectionBanner";
-import { MultiInputField } from "../../shared/MultiInputField";
+import {
+  ServiceRoleAssignmentForm,
+  type ServiceRoleAssignmentPayload,
+} from "../assignments/ServiceRoleAssignmentForm";
 import { BookingCreationPanel } from "../shared/BookingCreationPanel";
-import { useCustomerOptions } from "../shared/useCustomerOptions";
-import { ConsigneePicker } from "../../shared/ConsigneePicker";
+import { BookingDynamicForm } from "../shared/BookingDynamicForm";
+import { useBookingFormState } from "../shared/useBookingFormState";
+import { validateBookingForm, hasErrors } from "../shared/bookingFormValidation";
+import { buildBookingPayload, toSupabaseRow } from "../../../utils/bookings/bookingPayload";
+import {
+  legacyProjectionFromAssignment,
+  persistAssignmentsForNewBooking,
+} from "../../../utils/assignments/applyAssignmentToBookingPayload";
+import { ContractDetectionBanner } from "../shared/ContractDetectionBanner";
+import { ProjectAutofillSection } from "../shared/ProjectAutofillSection";
+import { autofillForwardingFromProject, linkBookingToProject } from "../../../utils/projectAutofill";
+import type { Project } from "../../../types/pricing";
 import { logCreation } from "../../../utils/activityLog";
 import { fireBookingAssignmentTickets } from "../../../utils/workflowTickets";
 import { generateBookingNumber } from "../../../utils/bookingNumberUtils";
@@ -24,14 +26,13 @@ import { generateBookingNumber } from "../../../utils/bookingNumberUtils";
 interface CreateForwardingBookingPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  onBookingCreated: (bookingData?: any) => void; // Updated to accept optional booking data
+  onBookingCreated: (bookingData?: Record<string, unknown>) => void;
   currentUser?: { id?: string; name: string; email: string; department: string } | null;
-  prefillData?: any; // NEW: For auto-fill from project
-  source?: "operations" | "pricing"; // NEW: Indicates where the panel is being used
-  customerId?: string; // NEW: For team assignment
-  serviceType?: string; // NEW: For team assignment
+  prefillData?: Record<string, unknown>;
+  source?: "operations" | "pricing";
+  customerId?: string;
+  serviceType?: string;
 }
-
 
 export function CreateForwardingBookingPanel({
   isOpen,
@@ -41,1825 +42,198 @@ export function CreateForwardingBookingPanel({
   prefillData,
   source = "operations",
   customerId,
-  serviceType = "Forwarding",
 }: CreateForwardingBookingPanelProps) {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [bookingName, setBookingName] = useState("");
-  const [bookingNumber, setBookingNumber] = useState("");
-  const [projectNumber, setProjectNumber] = useState("");
-  const [fetchedProject, setFetchedProject] = useState<Project | null>(null);
-  const [teamAssignment, setTeamAssignment] = useState<TeamAssignment | null>(null);
-  
-  // ✨ CONTRACT: Detected contract ID for auto-linking
+  const [loading, setLoading] = useState(false);
+  const [assignmentPayload, setAssignmentPayload] = useState<ServiceRoleAssignmentPayload | null>(null);
   const [detectedContractId, setDetectedContractId] = useState<string | null>(null);
-  const customerOptions = useCustomerOptions(isOpen);
-  
-  // General Information
-  const [customerName, setCustomerName] = useState("");
-  const [movement, setMovement] = useState<"IMPORT" | "EXPORT">("IMPORT");
-  const [accountOwner, setAccountOwner] = useState(currentUser?.name || "");
-  const [accountHandler, setAccountHandler] = useState("");
-  const [services, setServices] = useState<string[]>([]);
-  const [subServices, setSubServices] = useState<string[]>([]);
-  const [mode, setMode] = useState<"FCL" | "LCL" | "AIR">("FCL");
-  const [typeOfEntry, setTypeOfEntry] = useState("");
-  const [cargoType, setCargoType] = useState("");
-  const [stackability, setStackability] = useState("");
-  const [deliveryAddress, setDeliveryAddress] = useState("");
-  const [quotationReferenceNumber, setQuotationReferenceNumber] = useState("");
-  const [status, setStatus] = useState<ExecutionStatus>("Draft");
-  
-  // Expected Volume
-  const [qty20ft, setQty20ft] = useState("");
-  const [qty40ft, setQty40ft] = useState("");
-  const [qty45ft, setQty45ft] = useState("");
-  const [volumeGrossWeight, setVolumeGrossWeight] = useState("");
-  const [volumeDimensions, setVolumeDimensions] = useState("");
-  const [volumeChargeableWeight, setVolumeChargeableWeight] = useState("");
+  const [fetchedProject, setFetchedProject] = useState<Project | null>(null);
+  const [submitErrors, setSubmitErrors] = useState<Record<string, string>>({});
 
-  // Status-dependent fields
-  const [pendingReason, setPendingReason] = useState("");
-  const [completionDate, setCompletionDate] = useState("");
-  const [cancellationReason, setCancellationReason] = useState("");
-  const [cancelledDate, setCancelledDate] = useState("");
+  const { formState, setField, initFromPrefill, context } = useBookingFormState("Forwarding", {
+    status: "Draft",
+    movement_type: "Import",
+    mode: "FCL",
+    account_owner: currentUser?.name ?? "",
+  });
 
-  // Shipment Information
-  const [consignee, setConsignee] = useState("");
-  const [consigneeId, setConsigneeId] = useState<string | undefined>(undefined);
-  const [shipper, setShipper] = useState("");
-  const [mblMawb, setMblMawb] = useState("");
-  const [hblHawb, setHblHawb] = useState("");
-  const [registryNumber, setRegistryNumber] = useState("");
-  const [carrier, setCarrier] = useState("");
-  const [aolPol, setAolPol] = useState("");
-  const [aodPod, setAodPod] = useState("");
-  const [forwarder, setForwarder] = useState("");
-  const [commodityDescription, setCommodityDescription] = useState("");
-  const [countryOfOrigin, setCountryOfOrigin] = useState("");
-  const [preferentialTreatment, setPreferentialTreatment] = useState("");
-  const [grossWeight, setGrossWeight] = useState("");
-  const [dimensions, setDimensions] = useState("");
-  const [eta, setEta] = useState("");
-
-  // Export Specific Fields
-  const [incoterms, setIncoterms] = useState("");
-  const [cargoNature, setCargoNature] = useState("");
-  const [bookingReferenceNumber, setBookingReferenceNumber] = useState("");
-  const [lct, setLct] = useState("");
-  const [transitTime, setTransitTime] = useState("");
-  const [route, setRoute] = useState("");
-  const [tareWeight, setTareWeight] = useState("");
-  const [vgm, setVgm] = useState("");
-  const [truckingName, setTruckingName] = useState("");
-  const [plateNumber, setPlateNumber] = useState("");
-  const [warehouseAddress, setWarehouseAddress] = useState("");
-  const [pickupLocation, setPickupLocation] = useState("");
-
-  // FCL-specific
-  const [containerNumbers, setContainerNumbers] = useState("");
-  const [containerDeposit, setContainerDeposit] = useState(false);
-  const [emptyReturn, setEmptyReturn] = useState("");
-  const [detDemValidity, setDetDemValidity] = useState("");
-  const [storageValidity, setStorageValidity] = useState("");
-  const [croAvailability, setCroAvailability] = useState("");
-
-  // LCL/AIR-specific
-  const [warehouseLocation, setWarehouseLocation] = useState("");
-
-  // Apply prefill data when component mounts or prefillData changes
   useEffect(() => {
-    if (prefillData && source === "pricing") {
-      // General information
-      if (prefillData.name) setBookingName((prev) => prev || prefillData.name);
-      if (prefillData.customerName) setCustomerName(prefillData.customerName);
-      if (prefillData.movement) setMovement(prefillData.movement);
-      if (prefillData.projectNumber) setProjectNumber(prefillData.projectNumber);
-      if (prefillData.quotationReferenceNumber) setQuotationReferenceNumber(prefillData.quotationReferenceNumber);
-      if (prefillData.accountOwner) setAccountOwner(prefillData.accountOwner);
-      if (prefillData.accountHandler) setAccountHandler(prefillData.accountHandler);
-      if (prefillData.mode) setMode(prefillData.mode as "FCL" | "LCL" | "AIR");
-      if (prefillData.typeOfEntry) setTypeOfEntry(prefillData.typeOfEntry);
-      if (prefillData.cargoType) setCargoType(prefillData.cargoType);
-      if (prefillData.stackability) setStackability(prefillData.stackability);
-      if (prefillData.deliveryAddress) setDeliveryAddress(prefillData.deliveryAddress);
-      // Shipment information
-      if (prefillData.consignee) setConsignee(prefillData.consignee);
-      if (prefillData.shipper) setShipper(prefillData.shipper);
-      if (prefillData.carrier) setCarrier(prefillData.carrier);
-      if (prefillData.aolPol) setAolPol(prefillData.aolPol);
-      if (prefillData.aodPod) setAodPod(prefillData.aodPod);
-      if (prefillData.commodityDescription) setCommodityDescription(prefillData.commodityDescription);
-      if (prefillData.countryOfOrigin) setCountryOfOrigin(prefillData.countryOfOrigin);
-      if (prefillData.preferentialTreatment) setPreferentialTreatment(prefillData.preferentialTreatment);
-      if (prefillData.grossWeight) setGrossWeight(prefillData.grossWeight);
-      if (prefillData.dimensions) setDimensions(prefillData.dimensions);
-      // Expected volume
-      if (prefillData.qty20ft) setQty20ft(prefillData.qty20ft);
-      if (prefillData.qty40ft) setQty40ft(prefillData.qty40ft);
-      if (prefillData.qty45ft) setQty45ft(prefillData.qty45ft);
-      if (prefillData.volumeGrossWeight) setVolumeGrossWeight(prefillData.volumeGrossWeight);
-      if (prefillData.volumeDimensions) setVolumeDimensions(prefillData.volumeDimensions);
-      if (prefillData.volumeChargeableWeight) setVolumeChargeableWeight(prefillData.volumeChargeableWeight);
-    }
-  }, [prefillData, source]);
+    if (prefillData && isOpen) initFromPrefill(prefillData);
+  }, [prefillData, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleProjectAutofill = (project: Project) => {
+  // Project autofill: when a project is selected, pre-fill form from project data
+  function handleProjectAutofill(project: Project) {
     setFetchedProject(project);
-    
-    // Autofill fields from project
-    const autofilled = autofillForwardingFromProject(project);
-    
-    setCustomerName(autofilled.customerName || "");
-    if (autofilled.movement) setMovement(autofilled.movement);
-    setQuotationReferenceNumber(autofilled.quotationReferenceNumber || "");
-    setCommodityDescription(autofilled.commodityDescription || "");
-    setDeliveryAddress(autofilled.deliveryAddress || "");
-    setAolPol(autofilled.aolPol || "");
-    setAodPod(autofilled.aodPod || "");
-    
-    if (autofilled.cargoType) {
-      setCargoType(autofilled.cargoType);
-    }
-    
-    if (autofilled.mode) {
-      setMode(autofilled.mode as "FCL" | "LCL" | "AIR");
-    }
-    
-    toast.success(`Autofilled from project ${project.project_number}`);
-  };
-
-  const validateForm = () => {
-    if (!bookingName.trim()) {
-      toast.error("Booking Name is required");
-      return false;
-    }
-    if (!customerName) {
-      toast.error("Customer Name is required");
-      return false;
-    }
-    if (!consignee) {
-      toast.error("Consignee is required");
-      return false;
-    }
-    if (!aolPol) {
-      toast.error("Port of Loading is required");
-      return false;
-    }
-    if (!aodPod) {
-      toast.error("Port of Discharge is required");
-      return false;
-    }
-
-    // Team assignment is optional
-
-    if (status === "Pending" && !pendingReason) {
-      toast.error("Pending Reason is required for Pending status");
-      return false;
-    }
-    if (status === "Completed" && !completionDate) {
-      toast.error("Completion Date is required for Completed status");
-      return false;
-    }
-    if (status === "Cancelled") {
-      if (!cancellationReason) {
-        toast.error("Cancellation Reason is required for Cancelled status");
-        return false;
-      }
-      if (!cancelledDate) {
-        toast.error("Cancelled Date is required for Cancelled status");
-        return false;
-      }
-    }
-
-    return true;
-  };
+    const autofillData = autofillForwardingFromProject(project);
+    initFromPrefill(autofillData as Record<string, unknown>);
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!validateForm()) {
+    const errors = validateBookingForm(formState, "Forwarding", context);
+    if (hasErrors(errors)) {
+      setSubmitErrors(errors);
+      toast.error("Please fill in all required fields");
       return;
     }
-
-    setIsSubmitting(true);
+    if (assignmentPayload?.hasMissingRequired) {
+      toast.error("Please fill in all required role assignments");
+      return;
+    }
+    setSubmitErrors({});
+    setLoading(true);
 
     try {
-      const autoBookingNumber = bookingNumber.trim() || await generateBookingNumber("Forwarding");
+      const bookingNumber = await generateBookingNumber("Forwarding");
+      const { topLevel, details } = buildBookingPayload(formState, "Forwarding");
 
-      const details: Record<string, any> = {
-        project_number: projectNumber || undefined,
-        account_owner: accountOwner,
-        account_handler: accountHandler,
-        services,
-        sub_services: subServices,
-        type_of_entry: typeOfEntry,
-        cargo_type: cargoType,
-        stackability,
-        delivery_address: deliveryAddress,
-        quotation_reference_number: quotationReferenceNumber,
-        consignee,
-        consignee_id: consigneeId,
-        shipper,
-        mbl_mawb: mblMawb,
-        hbl_hawb: hblHawb,
-        registry_number: registryNumber,
-        carrier,
-        aol_pol: aolPol,
-        aod_pod: aodPod,
-        forwarder,
-        commodity_description: commodityDescription,
-        country_of_origin: countryOfOrigin,
-        preferential_treatment: preferentialTreatment,
-        gross_weight: grossWeight,
-        dimensions,
-        eta,
-        pending_reason: status === "Pending" ? pendingReason : undefined,
-        completion_date: status === "Completed" ? completionDate : undefined,
-        cancellation_reason: status === "Cancelled" ? cancellationReason : undefined,
-        cancelled_date: status === "Cancelled" ? cancelledDate : undefined,
-        ...(movement === "EXPORT" && {
-          incoterms,
-          cargo_nature: cargoNature,
-          booking_reference_number: bookingReferenceNumber,
-          lct,
-          transit_time: transitTime,
-          route,
-        }),
-        ...(movement === "EXPORT" && mode === "FCL" && {
-          tare_weight: tareWeight,
-          vgm,
-          trucking_name: truckingName,
-          plate_number: plateNumber,
-          warehouse_address: warehouseAddress,
-          pickup_location: pickupLocation,
-        }),
-        ...(mode === "FCL" && {
-          container_numbers: containerNumbers.split(",").map((c: string) => c.trim()).filter(Boolean),
-          container_deposit: containerDeposit,
-          empty_return: emptyReturn,
-          det_dem_validity: detDemValidity,
-          storage_validity: storageValidity,
-          cro_availability: croAvailability,
-          qty_20ft: qty20ft,
-          qty_40ft: qty40ft,
-          qty_45ft: qty45ft,
-          volume_gross_weight: volumeGrossWeight,
-          volume_dimensions: volumeDimensions,
-          volume_chargeable_weight: volumeChargeableWeight,
-        }),
-        ...((mode === "LCL" || mode === "AIR") && {
-          warehouse_location: warehouseLocation,
-        }),
-      };
-
-      const insertPayload: Record<string, any> = {
-        id: crypto.randomUUID(),
-        booking_number: autoBookingNumber,
-        name: bookingName.trim(),
-        service_type: 'Forwarding',
-        customer_name: customerName,
-        movement_type: movement,
-        mode,
-        status,
+      const row = toSupabaseRow(
+        {
+          id: crypto.randomUUID(),
+          ...topLevel,
+          booking_number: bookingNumber,
+          ...(detectedContractId ? { contract_id: detectedContractId } : {}),
+          ...(fetchedProject ? { project_id: fetchedProject.id } : {}),
+          ...legacyProjectionFromAssignment(assignmentPayload),
+        },
         details,
-        ...(fetchedProject?.id && { project_id: fetchedProject.id }),
-        ...(detectedContractId && { contract_id: detectedContractId }),
-      };
+      );
 
-      if (teamAssignment) {
-        insertPayload.manager_id = teamAssignment.manager.id;
-        insertPayload.manager_name = teamAssignment.manager.name;
-        insertPayload.team_id = teamAssignment.team.id;
-        insertPayload.team_name = teamAssignment.team.name;
-        if (teamAssignment.supervisor) {
-          insertPayload.supervisor_id = teamAssignment.supervisor.id;
-          insertPayload.supervisor_name = teamAssignment.supervisor.name;
-        }
-        if (teamAssignment.handler) {
-          insertPayload.handler_id = teamAssignment.handler.id;
-          insertPayload.handler_name = teamAssignment.handler.name;
-        }
-      }
-
-      const { data: createdBooking, error } = await supabase.from('bookings').insert(insertPayload).select().single();
-
+      const { data, error } = await supabase.from("bookings").insert(row).select().single();
       if (error) throw new Error(error.message);
 
-      if (fetchedProject && projectNumber) {
-        try {
-          await linkBookingToProject(
-            fetchedProject.id,
-            createdBooking.id,
-            createdBooking.booking_number,
-            "Forwarding",
-            createdBooking.status,
-          );
-        } catch (linkError) {
-          console.error("Error linking booking to project:", linkError);
-        }
+      const assignRes = await persistAssignmentsForNewBooking({
+        bookingId: data.id,
+        payload: assignmentPayload,
+        customerId: customerId ?? null,
+        assignedBy: currentUser?.id ?? null,
+      });
+      if (!assignRes.ok) {
+        await supabase.from("bookings").delete().eq("id", data.id);
+        throw new Error(assignRes.error);
       }
 
-      if (teamAssignment?.saveAsDefault && customerId) {
-        try {
-          await supabase.from('client_handler_preferences').upsert({
-            customer_id: customerId,
-            preferred_team_id: teamAssignment.team.id,
-            preferred_team_name: teamAssignment.team.name,
-            preferred_manager_id: teamAssignment.manager.id,
-            preferred_manager_name: teamAssignment.manager.name,
-            preferred_supervisor_id: teamAssignment.supervisor?.id,
-            preferred_supervisor_name: teamAssignment.supervisor?.name,
-            preferred_handler_id: teamAssignment.handler?.id,
-            preferred_handler_name: teamAssignment.handler?.name,
-          });
-        } catch (prefError) {
-          console.error("Error saving team preference:", prefError);
-        }
+      // Link to project if autofilled from one
+      if (fetchedProject) {
+        await linkBookingToProject(
+          fetchedProject.id,
+          data.id,
+          data.booking_number ?? data.id,
+          "Forwarding",
+          String(formState.status ?? "Draft"),
+        ).catch(console.error);
       }
 
-      logCreation("booking", createdBooking.id, createdBooking.booking_number ?? createdBooking.id, { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
+      logCreation("booking", data.id, data.booking_number ?? data.id, {
+        id: currentUser?.id ?? "",
+        name: currentUser?.name ?? "",
+        department: currentUser?.department ?? "",
+      });
 
-      if (teamAssignment) {
+      if (assignmentPayload && assignmentPayload.assignments.length > 0) {
+        const handler = assignmentPayload.assignments.find(
+          (a) => a.role_key === "handler" || a.role_key === "customs_declarant",
+        );
+        const supervisor = assignmentPayload.assignments.find(
+          (a) =>
+            a.role_key === "team_leader" ||
+            a.role_key === "operations_supervisor" ||
+            a.role_key === "impex_supervisor",
+        );
         void fireBookingAssignmentTickets({
-          bookingId: createdBooking.id,
-          bookingNumber: createdBooking.booking_number,
+          bookingId: data.id,
+          bookingNumber: data.booking_number,
           serviceType: "Forwarding",
-          customerName,
+          customerName: String(formState.customer_name ?? ""),
           createdBy: currentUser?.id ?? "",
           createdByName: currentUser?.name ?? "",
           createdByDept: currentUser?.department ?? "",
-          manager: teamAssignment.manager,
-          supervisor: teamAssignment.supervisor,
-          handler: teamAssignment.handler,
+          manager: assignmentPayload.service?.default_manager_id
+            ? {
+                id: assignmentPayload.service.default_manager_id,
+                name: assignmentPayload.service.default_manager_name ?? "",
+              }
+            : { id: "", name: "" },
+          supervisor: supervisor ? { id: supervisor.user_id, name: supervisor.user_name } : null,
+          handler: handler ? { id: handler.user_id, name: handler.user_name } : null,
         });
       }
 
-      toast.success(`Forwarding booking ${createdBooking.booking_number} created successfully`);
-      onBookingCreated(createdBooking);
+      toast.success("Forwarding booking created successfully");
+      onBookingCreated(data);
       onClose();
-    } catch (error) {
-      console.error('Error creating booking:', error);
-      toast.error('Unable to create booking');
+    } catch (err) {
+      console.error("CreateForwardingBookingPanel:", err);
+      toast.error("Failed to create booking. Please try again.");
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
-  };
-
-  const handleClose = () => {
-    onClose();
   };
 
   if (!isOpen) return null;
 
-  const isFormValid = customerName.trim() !== "" &&
-    consignee.trim() !== "" &&
-    aolPol.trim() !== "" &&
-    aodPod.trim() !== "";
+  const customerName = String(formState.customer_name ?? "");
+  const isFormValid = customerName.trim() !== "";
 
   return (
     <BookingCreationPanel
       isOpen={isOpen}
-      onClose={handleClose}
-      icon={<Ship size={20} />}
+      onClose={onClose}
+      icon={<Package size={20} />}
       title="New Forwarding Booking"
-      subtitle="Create a new freight forwarding booking for shipment management"
+      subtitle={
+        source === "pricing"
+          ? "Create a forwarding booking from project specifications"
+          : "Create a new freight forwarding booking"
+      }
       formId="create-forwarding-form"
       onSubmit={handleSubmit}
-      isSubmitting={isSubmitting}
+      isSubmitting={loading}
       isFormValid={isFormValid}
       submitLabel="Create Booking"
-      submitIcon={<Ship size={16} />}
+      submitIcon={<Package size={16} />}
     >
-            {/* Project Reference - Autofill Section - Only show when from Operations */}
-            {source === "operations" && (
-              <ProjectAutofillSection
-                projectNumber={projectNumber}
-                onProjectNumberChange={setProjectNumber}
-                onAutofill={handleProjectAutofill}
-                serviceType="Forwarding"
-              />
-            )}
-
-            {/* Booking Number */}
-            <div className="mb-8">
-              <label
-                className="block mb-1.5"
-                style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-              >
-                Booking Number (Auto-generated)
-              </label>
-              <input
-                type="text"
-                value={bookingNumber}
-                onChange={(e) => setBookingNumber(e.target.value)}
-                placeholder="Auto-generated on save (e.g. FWD-2026-0001)"
-                className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                style={{
-                  border: "1px solid var(--neuron-ui-border)",
-                  backgroundColor: "var(--theme-bg-surface)",
-                  color: "var(--neuron-ink-primary)",
-                }}
-              />
-              <p className="text-xs mt-1" style={{ color: "var(--theme-text-muted)" }}>
-                Leave blank to auto-generate (e.g., FWD-2026-0001) or enter a custom number
-              </p>
-            </div>
-
-            {/* General Information */}
-            <div className="mb-8">
-              <div className="flex items-center gap-2 mb-4">
-                <Package size={16} style={{ color: "var(--theme-action-primary-bg)" }} />
-                <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                  General Information
-                </h3>
-              </div>
-
-              <div className="space-y-4">
-                {/* Movement Toggle */}
-                <div>
-                  <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                    Movement <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
-                  </label>
-                  <MovementToggle
-                    value={movement}
-                    onChange={setMovement}
-                    layoutIdPrefix="forwarding-movement-pill"
-                  />
-                </div>
-
-                <div>
-                  <SearchableDropdown
-                    label="Customer Name"
-                    required
-                    value={customerName}
-                    onChange={(value) => setCustomerName(value)}
-                    options={customerOptions}
-                    placeholder="Search customer..."
-                    fullWidth
-                  />
-                  {/* ✨ CONTRACT: Detection banner */}
-                  <ContractDetectionBanner
-                    customerName={customerName}
-                    serviceType="Forwarding"
-                    onContractDetected={setDetectedContractId}
-                  />
-                </div>
-
-                <div>
-                  <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                    Booking Name <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={bookingName}
-                    onChange={(e) => setBookingName(e.target.value)}
-                    placeholder="e.g. BSFI Steel Import BL1, Split Shipment Leg 2"
-                    className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                    style={{
-                      border: "1px solid var(--theme-border-default)",
-                      backgroundColor: "var(--theme-bg-surface)",
-                      color: "var(--theme-text-primary)",
-                    }}
-                  />
-                  <p className="text-xs mt-1" style={{ color: "var(--theme-text-muted)" }}>
-                    A short label to identify this booking, especially useful when a project has multiple bookings of the same type.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label
-                      className="block mb-1.5"
-                      style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                    >
-                      Account Owner
-                    </label>
-                    <input
-                      type="text"
-                      value={accountOwner}
-                      onChange={(e) => setAccountOwner(e.target.value)}
-                      placeholder="Account owner"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      className="block mb-1.5"
-                      style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                    >
-                      Account Handler
-                    </label>
-                    <input
-                      type="text"
-                      value={accountHandler}
-                      onChange={(e) => setAccountHandler(e.target.value)}
-                      placeholder="Account handler"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* Services/Sub-services Multi-select */}
-                <div className="grid grid-cols-2 gap-4">
-                  <ServicesMultiSelect
-                    label="Services"
-                    selectedServices={services}
-                    onServicesChange={setServices}
-                    availableServices={[
-                      "Freight Forwarding",
-                      "Documentation",
-                      "Cargo Insurance",
-                      "Port Handling",
-                      "Custom Clearance",
-                    ]}
-                    placeholder="Select services..."
-                  />
-                  
-                  <ServicesMultiSelect
-                    label="Sub-services"
-                    selectedServices={subServices}
-                    onServicesChange={setSubServices}
-                    availableServices={[
-                      "Door-to-Door",
-                      "Port-to-Port",
-                      "Warehouse Storage",
-                      "Container Stuffing",
-                      "Palletization",
-                    ]}
-                    placeholder="Select sub-services..."
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <CustomDropdown
-                    label="Mode"
-                    value={mode}
-                    onChange={(value) => setMode(value as "FCL" | "LCL" | "AIR")}
-                    options={[
-                      { value: "FCL", label: "FCL" },
-                      { value: "LCL", label: "LCL" },
-                      { value: "AIR", label: "AIR" },
-                    ]}
-                    placeholder="Select Mode..."
-                    fullWidth
-                  />
-
-                  <div>
-                    <label
-                      className="block mb-1.5"
-                      style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                    >
-                      Type of Entry
-                    </label>
-                    <input
-                      type="text"
-                      value={typeOfEntry}
-                      onChange={(e) => setTypeOfEntry(e.target.value)}
-                      placeholder="e.g., Import, Export"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {movement === "EXPORT" && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <CustomDropdown
-                      label="Incoterms"
-                      value={incoterms}
-                      onChange={setIncoterms}
-                      options={[
-                        { value: "EXW", label: "EXW - Ex Works" },
-                        { value: "FCA", label: "FCA - Free Carrier" },
-                        { value: "CPT", label: "CPT - Carriage Paid To" },
-                        { value: "CIP", label: "CIP - Carriage and Insurance Paid To" },
-                        { value: "DAP", label: "DAP - Delivered at Place" },
-                        { value: "DPU", label: "DPU - Delivered at Place Unloaded" },
-                        { value: "DDP", label: "DDP - Delivered Duty Paid" },
-                        { value: "FAS", label: "FAS - Free Alongside Ship" },
-                        { value: "FOB", label: "FOB - Free on Board" },
-                        { value: "CFR", label: "CFR - Cost and Freight" },
-                        { value: "CIF", label: "CIF - Cost, Insurance and Freight" },
-                      ]}
-                      placeholder="Select Incoterms..."
-                      fullWidth
-                    />
-
-                    <div>
-                      <label
-                        className="block mb-1.5"
-                        style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                      >
-                        Cargo Nature
-                      </label>
-                      <input
-                        type="text"
-                        value={cargoNature}
-                        onChange={(e) => setCargoNature(e.target.value)}
-                        placeholder="e.g. Hazardous, Perishable"
-                        className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                        style={{
-                          border: "1px solid var(--neuron-ui-border)",
-                          backgroundColor: "var(--theme-bg-surface)",
-                          color: "var(--neuron-ink-primary)",
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div>
-                  <label
-                    className="block mb-1.5"
-                    style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                  >
-                    Cargo Type
-                  </label>
-                  <input
-                    type="text"
-                    value={cargoType}
-                    onChange={(e) => setCargoType(e.target.value)}
-                    placeholder="e.g., General, Hazardous"
-                    className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                    style={{
-                      border: "1px solid var(--neuron-ui-border)",
-                      backgroundColor: "var(--theme-bg-surface)",
-                      color: "var(--neuron-ink-primary)",
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label
-                    className="block mb-1.5"
-                    style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                  >
-                    Stackability
-                  </label>
-                  <input
-                    type="text"
-                    value={stackability}
-                    onChange={(e) => setStackability(e.target.value)}
-                    placeholder="e.g., Stackable, Non-Stackable"
-                    className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                    style={{
-                      border: "1px solid var(--neuron-ui-border)",
-                      backgroundColor: "var(--theme-bg-surface)",
-                      color: "var(--neuron-ink-primary)",
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label
-                    className="block mb-1.5"
-                    style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                  >
-                    Delivery Address
-                  </label>
-                  <textarea
-                    value={deliveryAddress}
-                    onChange={(e) => setDeliveryAddress(e.target.value)}
-                    rows={2}
-                    placeholder="Enter delivery address"
-                    className="w-full px-3.5 py-2.5 rounded-lg text-[13px] resize-none"
-                    style={{
-                      border: "1px solid var(--neuron-ui-border)",
-                      backgroundColor: "var(--theme-bg-surface)",
-                      color: "var(--neuron-ink-primary)",
-                    }}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label
-                      className="block mb-1.5"
-                      style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                    >
-                      Quotation Reference
-                    </label>
-                    <input
-                      type="text"
-                      value={quotationReferenceNumber}
-                      onChange={(e) => setQuotationReferenceNumber(e.target.value)}
-                      placeholder="Quotation reference number"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <CustomDropdown
-                      label="Status"
-                      value={status}
-                      onChange={(value) => setStatus(value as ExecutionStatus)}
-                      options={[
-                        { value: "Draft", label: "Draft" },
-                        { value: "Confirmed", label: "Confirmed" },
-                        { value: "In Progress", label: "In Progress" },
-                        { value: "Pending", label: "Pending" },
-                        { value: "On Hold", label: "On Hold" },
-                        { value: "Completed", label: "Completed" },
-                        { value: "Cancelled", label: "Cancelled" },
-                      ]}
-                      placeholder="Select Status..."
-                      fullWidth
-                    />
-                  </div>
-                </div>
-
-                {/* Status-dependent fields */}
-                {status === "Pending" && (
-                  <div>
-                    <label
-                      className="block mb-1.5"
-                      style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                    >
-                      Pending Reason <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
-                    </label>
-                    <textarea
-                      required
-                      value={pendingReason}
-                      onChange={(e) => setPendingReason(e.target.value)}
-                      rows={2}
-                      placeholder="Explain why this booking is pending..."
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px] resize-none"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-                )}
-
-                {status === "Completed" && (
-                  <div>
-                    <label
-                      className="block mb-1.5"
-                      style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                    >
-                      Completion Date <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      value={completionDate}
-                      onChange={(e) => setCompletionDate(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-                )}
-
-                {status === "Cancelled" && (
-                  <>
-                    <div>
-                      <label
-                        className="block mb-1.5"
-                        style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                      >
-                        Cancellation Reason <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
-                      </label>
-                      <textarea
-                        required
-                        value={cancellationReason}
-                        onChange={(e) => setCancellationReason(e.target.value)}
-                        rows={2}
-                        placeholder="Explain why this booking was cancelled..."
-                        className="w-full px-3.5 py-2.5 rounded-lg text-[13px] resize-none"
-                        style={{
-                          border: "1px solid var(--neuron-ui-border)",
-                          backgroundColor: "var(--theme-bg-surface)",
-                          color: "var(--neuron-ink-primary)",
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <label
-                        className="block mb-1.5"
-                        style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                      >
-                        Cancelled Date <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
-                      </label>
-                      <input
-                        type="date"
-                        required
-                        value={cancelledDate}
-                        onChange={(e) => setCancelledDate(e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                        style={{
-                          border: "1px solid var(--neuron-ui-border)",
-                          backgroundColor: "var(--theme-bg-surface)",
-                          color: "var(--neuron-ink-primary)",
-                        }}
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Expected Volume */}
-            <div className="mb-8">
-              <div className="flex items-center gap-2 mb-4">
-                <Box size={16} style={{ color: "var(--theme-action-primary-bg)" }} />
-                <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                  Expected Volume
-                </h3>
-              </div>
-
-              <div className="space-y-4">
-                {mode === "FCL" && (
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <label
-                        className="block mb-1.5"
-                        style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                      >
-                        20ft Quantity
-                      </label>
-                      <input
-                        type="text"
-                        value={qty20ft}
-                        onChange={(e) => setQty20ft(e.target.value)}
-                        placeholder="e.g., 2"
-                        className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                        style={{
-                          border: "1px solid var(--neuron-ui-border)",
-                          backgroundColor: "var(--theme-bg-surface)",
-                          color: "var(--neuron-ink-primary)",
-                        }}
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        className="block mb-1.5"
-                        style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                      >
-                        40ft Quantity
-                      </label>
-                      <input
-                        type="text"
-                        value={qty40ft}
-                        onChange={(e) => setQty40ft(e.target.value)}
-                        placeholder="e.g., 1"
-                        className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                        style={{
-                          border: "1px solid var(--neuron-ui-border)",
-                          backgroundColor: "var(--theme-bg-surface)",
-                          color: "var(--neuron-ink-primary)",
-                        }}
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        className="block mb-1.5"
-                        style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                      >
-                        45ft Quantity
-                      </label>
-                      <input
-                        type="text"
-                        value={qty45ft}
-                        onChange={(e) => setQty45ft(e.target.value)}
-                        placeholder="e.g., 0"
-                        className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                        style={{
-                          border: "1px solid var(--neuron-ui-border)",
-                          backgroundColor: "var(--theme-bg-surface)",
-                          color: "var(--neuron-ink-primary)",
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {(mode === "LCL" || mode === "AIR") && (
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <label
-                        className="block mb-1.5"
-                        style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                      >
-                        Gross Weight (kg)
-                      </label>
-                      <input
-                        type="text"
-                        value={volumeGrossWeight}
-                        onChange={(e) => setVolumeGrossWeight(e.target.value)}
-                        placeholder="e.g., 1000"
-                        className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                        style={{
-                          border: "1px solid var(--neuron-ui-border)",
-                          backgroundColor: "var(--theme-bg-surface)",
-                          color: "var(--neuron-ink-primary)",
-                        }}
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        className="block mb-1.5"
-                        style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                      >
-                        {mode === "LCL" ? "Dimensions (CBM)" : "Chargeable Weight (kg)"}
-                      </label>
-                      <input
-                        type="text"
-                        value={mode === "LCL" ? volumeDimensions : volumeChargeableWeight}
-                        onChange={(e) => mode === "LCL" ? setVolumeDimensions(e.target.value) : setVolumeChargeableWeight(e.target.value)}
-                        placeholder={mode === "LCL" ? "e.g., 10" : "e.g., 1200"}
-                        className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                        style={{
-                          border: "1px solid var(--neuron-ui-border)",
-                          backgroundColor: "var(--theme-bg-surface)",
-                          color: "var(--neuron-ink-primary)",
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Shipment Information */}
-            <div className="mb-8">
-              <div className="flex items-center gap-2 mb-4">
-                <Ship size={16} style={{ color: "var(--theme-action-primary-bg)" }} />
-                <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                  Shipment Information
-                </h3>
-              </div>
-
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label
-                      className="block mb-1.5"
-                      style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                    >
-                      Consignee <span style={{ color: "var(--theme-action-primary-bg)" }}>*</span>
-                    </label>
-                    <ConsigneePicker
-                      value={consignee}
-                      onChange={setConsignee}
-                      onConsigneeIdChange={setConsigneeId}
-                      customerName={customerName}
-                      customerId={customerId}
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      className="block mb-1.5"
-                      style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                    >
-                      Shipper
-                    </label>
-                    <input
-                      type="text"
-                      value={shipper}
-                      onChange={(e) => setShipper(e.target.value)}
-                      placeholder="Shipper name"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <MultiInputField
-                    label={movement === "EXPORT" ? "Booking Reference No." : "MBL/MAWB"}
-                    value={movement === "EXPORT" ? bookingReferenceNumber : mblMawb}
-                    onChange={(v) => movement === "EXPORT" ? setBookingReferenceNumber(v) : setMblMawb(v)}
-                    placeholder={movement === "EXPORT" ? "Booking reference" : "Master bill of lading"}
-                    addButtonText={movement === "EXPORT" ? "Add Reference No." : "Add MBL/MAWB"}
-                    inputStyle={{
-                      border: "1px solid var(--neuron-ui-border)",
-                      backgroundColor: "var(--theme-bg-surface)",
-                      color: "var(--neuron-ink-primary)",
-                    }}
-                  />
-
-                  <div>
-                    <label
-                      className="block mb-1.5"
-                      style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                    >
-                      HBL/HAWB
-                    </label>
-                    <input
-                      type="text"
-                      value={hblHawb}
-                      onChange={(e) => setHblHawb(e.target.value)}
-                      placeholder="House bill of lading"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label
-                      className="block mb-1.5"
-                      style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                    >
-                      Registry Number
-                    </label>
-                    <input
-                      type="text"
-                      value={registryNumber}
-                      onChange={(e) => setRegistryNumber(e.target.value)}
-                      placeholder="Registry number"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      className="block mb-1.5"
-                      style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                    >
-                      Carrier
-                    </label>
-                    <input
-                      type="text"
-                      value={carrier}
-                      onChange={(e) => setCarrier(e.target.value)}
-                      placeholder="Carrier name"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label
-                      className="block mb-1.5"
-                      style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                    >
-                      AOL/POL <span style={{ color: "var(--theme-action-primary-bg)" }}>*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={aolPol}
-                      onChange={(e) => setAolPol(e.target.value)}
-                      placeholder="Airport/Port of Loading"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      className="block mb-1.5"
-                      style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                    >
-                      AOD/POD <span style={{ color: "var(--theme-action-primary-bg)" }}>*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={aodPod}
-                      onChange={(e) => setAodPod(e.target.value)}
-                      placeholder="Airport/Port of Discharge"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label
-                      className="block mb-1.5"
-                      style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                    >
-                      Forwarder
-                    </label>
-                    <input
-                      type="text"
-                      value={forwarder}
-                      onChange={(e) => setForwarder(e.target.value)}
-                      placeholder="Forwarder name"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      className="block mb-1.5"
-                      style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                    >
-                      Country of Origin
-                    </label>
-                    <input
-                      type="text"
-                      value={countryOfOrigin}
-                      onChange={(e) => setCountryOfOrigin(e.target.value)}
-                      placeholder="Country of origin"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label
-                    className="block mb-1.5"
-                    style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                  >
-                    Commodity Description
-                  </label>
-                  <textarea
-                    value={commodityDescription}
-                    onChange={(e) => setCommodityDescription(e.target.value)}
-                    rows={2}
-                    placeholder="Describe the commodity"
-                    className="w-full px-3.5 py-2.5 rounded-lg text-[13px] resize-none"
-                    style={{
-                      border: "1px solid var(--neuron-ui-border)",
-                      backgroundColor: "var(--theme-bg-surface)",
-                      color: "var(--neuron-ink-primary)",
-                    }}
-                  />
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label
-                      className="block mb-1.5"
-                      style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                    >
-                      Preferential Treatment
-                    </label>
-                    <input
-                      type="text"
-                      value={preferentialTreatment}
-                      onChange={(e) => setPreferentialTreatment(e.target.value)}
-                      placeholder="e.g., GSP"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      className="block mb-1.5"
-                      style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                    >
-                      Gross Weight
-                    </label>
-                    <input
-                      type="text"
-                      value={grossWeight}
-                      onChange={(e) => setGrossWeight(e.target.value)}
-                      placeholder="e.g., 1000 kg"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      className="block mb-1.5"
-                      style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                    >
-                      Dimensions
-                    </label>
-                    <input
-                      type="text"
-                      value={dimensions}
-                      onChange={(e) => setDimensions(e.target.value)}
-                      placeholder="e.g., 10x5x3 m"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label
-                      className="block mb-1.5"
-                      style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                    >
-                      ETA (Estimated Time of Arrival)
-                    </label>
-                    <input
-                      type="date"
-                      value={eta}
-                      onChange={(e) => setEta(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-
-                  {movement === "EXPORT" && (
-                    <div>
-                      <label
-                        className="block mb-1.5"
-                        style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                      >
-                        LCT (Last Cargo Time)
-                      </label>
-                      <input
-                        type="datetime-local"
-                        value={lct}
-                        onChange={(e) => setLct(e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                        style={{
-                          border: "1px solid var(--neuron-ui-border)",
-                          backgroundColor: "var(--theme-bg-surface)",
-                          color: "var(--neuron-ink-primary)",
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {movement === "EXPORT" && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label
-                        className="block mb-1.5"
-                        style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                      >
-                        Transit Time
-                      </label>
-                      <input
-                        type="text"
-                        value={transitTime}
-                        onChange={(e) => setTransitTime(e.target.value)}
-                        placeholder="e.g., 25 days"
-                        className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                        style={{
-                          border: "1px solid var(--neuron-ui-border)",
-                          backgroundColor: "var(--theme-bg-surface)",
-                          color: "var(--neuron-ink-primary)",
-                        }}
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        className="block mb-1.5"
-                        style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                      >
-                        Route
-                      </label>
-                      <input
-                        type="text"
-                        value={route}
-                        onChange={(e) => setRoute(e.target.value)}
-                        placeholder="e.g., Direct / Transshipment"
-                        className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                        style={{
-                          border: "1px solid var(--neuron-ui-border)",
-                          backgroundColor: "var(--theme-bg-surface)",
-                          color: "var(--neuron-ink-primary)",
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* FCL Container Details */}
-            {mode === "FCL" && (
-              <div className="mb-8">
-                <div className="flex items-center gap-2 mb-4">
-                  <Box size={16} style={{ color: "var(--theme-action-primary-bg)" }} />
-                  <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                    Container Details (FCL)
-                  </h3>
-                </div>
-
-                <div className="space-y-4">
-                  {movement === "EXPORT" && (
-                    <>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label
-                            className="block mb-1.5"
-                            style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                          >
-                            Tare Weight
-                          </label>
-                          <input
-                            type="text"
-                            value={tareWeight}
-                            onChange={(e) => setTareWeight(e.target.value)}
-                            placeholder="Tare weight"
-                            className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                            style={{
-                              border: "1px solid var(--neuron-ui-border)",
-                              backgroundColor: "var(--theme-bg-surface)",
-                              color: "var(--neuron-ink-primary)",
-                            }}
-                          />
-                        </div>
-
-                        <div>
-                          <label
-                            className="block mb-1.5"
-                            style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                          >
-                            VGM
-                          </label>
-                          <input
-                            type="text"
-                            value={vgm}
-                            onChange={(e) => setVgm(e.target.value)}
-                            placeholder="Verified Gross Mass"
-                            className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                            style={{
-                              border: "1px solid var(--neuron-ui-border)",
-                              backgroundColor: "var(--theme-bg-surface)",
-                              color: "var(--neuron-ink-primary)",
-                            }}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label
-                            className="block mb-1.5"
-                            style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                          >
-                            Trucking Name
-                          </label>
-                          <input
-                            type="text"
-                            value={truckingName}
-                            onChange={(e) => setTruckingName(e.target.value)}
-                            placeholder="Trucking company"
-                            className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                            style={{
-                              border: "1px solid var(--neuron-ui-border)",
-                              backgroundColor: "var(--theme-bg-surface)",
-                              color: "var(--neuron-ink-primary)",
-                            }}
-                          />
-                        </div>
-
-                        <div>
-                          <label
-                            className="block mb-1.5"
-                            style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                          >
-                            Plate Number
-                          </label>
-                          <input
-                            type="text"
-                            value={plateNumber}
-                            onChange={(e) => setPlateNumber(e.target.value)}
-                            placeholder="Vehicle plate number"
-                            className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                            style={{
-                              border: "1px solid var(--neuron-ui-border)",
-                              backgroundColor: "var(--theme-bg-surface)",
-                              color: "var(--neuron-ink-primary)",
-                            }}
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label
-                          className="block mb-1.5"
-                          style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                        >
-                          Warehouse Address
-                        </label>
-                        <textarea
-                          value={warehouseAddress}
-                          onChange={(e) => setWarehouseAddress(e.target.value)}
-                          rows={2}
-                          placeholder="Warehouse address"
-                          className="w-full px-3.5 py-2.5 rounded-lg text-[13px] resize-none"
-                          style={{
-                            border: "1px solid var(--neuron-ui-border)",
-                            backgroundColor: "var(--theme-bg-surface)",
-                            color: "var(--neuron-ink-primary)",
-                          }}
-                        />
-                      </div>
-                      
-                      {incoterms === "EXW" && (
-                        <div>
-                          <label
-                            className="block mb-1.5"
-                            style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                          >
-                            Collection Address (EXW)
-                          </label>
-                          <textarea
-                            value={pickupLocation}
-                            onChange={(e) => setPickupLocation(e.target.value)}
-                            rows={2}
-                            placeholder="Address for pickup"
-                            className="w-full px-3.5 py-2.5 rounded-lg text-[13px] resize-none"
-                            style={{
-                              border: "1px solid var(--neuron-ui-border)",
-                              backgroundColor: "var(--theme-bg-surface)",
-                              color: "var(--neuron-ink-primary)",
-                            }}
-                          />
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  <MultiInputField
-                    label="Container Number/s"
-                    value={containerNumbers}
-                    onChange={(v) => setContainerNumbers(v)}
-                    placeholder="Container number"
-                    addButtonText="Add Container"
-                    inputStyle={{
-                      border: "1px solid var(--neuron-ui-border)",
-                      backgroundColor: "var(--theme-bg-surface)",
-                      color: "var(--neuron-ink-primary)",
-                    }}
-                  />
-
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="containerDeposit"
-                      checked={containerDeposit}
-                      onChange={(e) => setContainerDeposit(e.target.checked)}
-                      className="w-4 h-4"
-                    />
-                    <label
-                      htmlFor="containerDeposit"
-                      style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)", cursor: "pointer" }}
-                    >
-                      Container Deposit Required
-                    </label>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label
-                        className="block mb-1.5"
-                        style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                      >
-                        Empty Return
-                      </label>
-                      <input
-                        type="text"
-                        value={emptyReturn}
-                        onChange={(e) => setEmptyReturn(e.target.value)}
-                        placeholder="Empty return location"
-                        className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                        style={{
-                          border: "1px solid var(--neuron-ui-border)",
-                          backgroundColor: "var(--theme-bg-surface)",
-                          color: "var(--neuron-ink-primary)",
-                        }}
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        className="block mb-1.5"
-                        style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                      >
-                        Det/Dem Validity
-                      </label>
-                      <input
-                        type="date"
-                        value={detDemValidity}
-                        onChange={(e) => setDetDemValidity(e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                        style={{
-                          border: "1px solid var(--neuron-ui-border)",
-                          backgroundColor: "var(--theme-bg-surface)",
-                          color: "var(--neuron-ink-primary)",
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label
-                        className="block mb-1.5"
-                        style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                      >
-                        Storage Validity
-                      </label>
-                      <input
-                        type="date"
-                        value={storageValidity}
-                        onChange={(e) => setStorageValidity(e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                        style={{
-                          border: "1px solid var(--neuron-ui-border)",
-                          backgroundColor: "var(--theme-bg-surface)",
-                          color: "var(--neuron-ink-primary)",
-                        }}
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        className="block mb-1.5"
-                        style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                      >
-                        CRO Availability
-                      </label>
-                      <input
-                        type="date"
-                        value={croAvailability}
-                        onChange={(e) => setCroAvailability(e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                        style={{
-                          border: "1px solid var(--neuron-ui-border)",
-                          backgroundColor: "var(--theme-bg-surface)",
-                          color: "var(--neuron-ink-primary)",
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <label
-                        className="block mb-1.5"
-                        style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                      >
-                        20ft Quantity
-                      </label>
-                      <input
-                        type="text"
-                        value={qty20ft}
-                        onChange={(e) => setQty20ft(e.target.value)}
-                        placeholder="e.g., 2"
-                        className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                        style={{
-                          border: "1px solid var(--neuron-ui-border)",
-                          backgroundColor: "var(--theme-bg-surface)",
-                          color: "var(--neuron-ink-primary)",
-                        }}
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        className="block mb-1.5"
-                        style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                      >
-                        40ft Quantity
-                      </label>
-                      <input
-                        type="text"
-                        value={qty40ft}
-                        onChange={(e) => setQty40ft(e.target.value)}
-                        placeholder="e.g., 1"
-                        className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                        style={{
-                          border: "1px solid var(--neuron-ui-border)",
-                          backgroundColor: "var(--theme-bg-surface)",
-                          color: "var(--neuron-ink-primary)",
-                        }}
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        className="block mb-1.5"
-                        style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                      >
-                        45ft Quantity
-                      </label>
-                      <input
-                        type="text"
-                        value={qty45ft}
-                        onChange={(e) => setQty45ft(e.target.value)}
-                        placeholder="e.g., 0"
-                        className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                        style={{
-                          border: "1px solid var(--neuron-ui-border)",
-                          backgroundColor: "var(--theme-bg-surface)",
-                          color: "var(--neuron-ink-primary)",
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <label
-                        className="block mb-1.5"
-                        style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                      >
-                        Volume Gross Weight
-                      </label>
-                      <input
-                        type="text"
-                        value={volumeGrossWeight}
-                        onChange={(e) => setVolumeGrossWeight(e.target.value)}
-                        placeholder="e.g., 1000 kg"
-                        className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                        style={{
-                          border: "1px solid var(--neuron-ui-border)",
-                          backgroundColor: "var(--theme-bg-surface)",
-                          color: "var(--neuron-ink-primary)",
-                        }}
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        className="block mb-1.5"
-                        style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                      >
-                        Volume Dimensions
-                      </label>
-                      <input
-                        type="text"
-                        value={volumeDimensions}
-                        onChange={(e) => setVolumeDimensions(e.target.value)}
-                        placeholder="e.g., 10x5x3 m"
-                        className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                        style={{
-                          border: "1px solid var(--neuron-ui-border)",
-                          backgroundColor: "var(--theme-bg-surface)",
-                          color: "var(--neuron-ink-primary)",
-                        }}
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        className="block mb-1.5"
-                        style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                      >
-                        Volume Chargeable Weight
-                      </label>
-                      <input
-                        type="text"
-                        value={volumeChargeableWeight}
-                        onChange={(e) => setVolumeChargeableWeight(e.target.value)}
-                        placeholder="e.g., 1000 kg"
-                        className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                        style={{
-                          border: "1px solid var(--neuron-ui-border)",
-                          backgroundColor: "var(--theme-bg-surface)",
-                          color: "var(--neuron-ink-primary)",
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* LCL/AIR Warehouse Details */}
-            {(mode === "LCL" || mode === "AIR") && (
-              <div className="mb-8">
-                <div className="flex items-center gap-2 mb-4">
-                  <Warehouse size={16} style={{ color: "var(--theme-action-primary-bg)" }} />
-                  <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                    Warehouse Details ({mode})
-                  </h3>
-                </div>
-
-                <div>
-                  <label
-                    className="block mb-1.5"
-                    style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}
-                  >
-                    Warehouse Location
-                  </label>
-                  <input
-                    type="text"
-                    value={warehouseLocation}
-                    onChange={(e) => setWarehouseLocation(e.target.value)}
-                    placeholder="Warehouse location"
-                    className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                    style={{
-                      border: "1px solid var(--neuron-ui-border)",
-                      backgroundColor: "var(--theme-bg-surface)",
-                      color: "var(--neuron-ink-primary)",
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Team Assignment */}
-            {customerName && (
-              <div className="mb-8">
-                <div className="flex items-center gap-2 mb-4">
-                  <Users size={16} style={{ color: "var(--theme-action-primary-bg)" }} />
-                  <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                    Team Assignment
-                  </h3>
-                </div>
-                
-                <div style={{
-                  padding: "20px",
-                  backgroundColor: "var(--theme-bg-page)",
-                  border: "1px solid var(--neuron-ui-border)",
-                  borderRadius: "8px"
-                }}>
-                  <TeamAssignmentForm
-                    customerId={customerId}
-                    onChange={setTeamAssignment}
-                  />
-                </div>
-              </div>
-            )}
+      {/* Project autofill — operations source only */}
+      {source === "operations" && (
+        <ProjectAutofillSection
+          serviceType="Forwarding"
+          onProjectSelected={handleProjectAutofill}
+        />
+      )}
+
+      <BookingDynamicForm
+        serviceType="Forwarding"
+        formState={formState}
+        onChange={setField}
+        ctx={context}
+        errors={submitErrors}
+      />
+
+      {customerName && (
+        <ContractDetectionBanner
+          customerName={customerName}
+          serviceType="Forwarding"
+          onContractDetected={setDetectedContractId}
+        />
+      )}
+
+      {customerName && (
+        <div style={{ marginBottom: "32px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
+            <Users size={16} style={{ color: "var(--theme-action-primary-bg)" }} />
+            <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)", textTransform: "uppercase", letterSpacing: "0.5px", margin: 0 }}>
+              Assignments
+            </h3>
+          </div>
+          <div style={{ padding: "20px", backgroundColor: "var(--theme-bg-page)", border: "1px solid var(--neuron-ui-border)", borderRadius: "8px" }}>
+            <ServiceRoleAssignmentForm
+              customerId={customerId ?? null}
+              serviceType="Forwarding"
+              onChange={setAssignmentPayload}
+            />
+          </div>
+        </div>
+      )}
     </BookingCreationPanel>
   );
 }

@@ -57,10 +57,8 @@ export function ForwardingServiceForm({ data, onChange, builderMode = "quotation
   const isExport = movement === "EXPORT";
   const incoterm = data.incoterms || "";
 
-  // Address Logic
-  // Import: Always show Delivery Address
-  // Export: Show Delivery Address only if DAP, DDU, DDP
-  const showDeliveryAddress = !isExport || ["DAP", "DDU", "DDP"].includes(incoterm);
+  // Matrix: Delivery Address shows only for DAP, DDU, DDP regardless of movement direction.
+  const showDeliveryAddress = ["DAP", "DDU", "DDP"].includes(incoterm);
 
   return (
     <div style={{
@@ -146,33 +144,31 @@ export function ForwardingServiceForm({ data, onChange, builderMode = "quotation
         </div>
         )}
 
-        {/* Cargo Nature — scope field, shown in both modes (Hide for Export) */}
-        {!isExport && (
-          <div>
-            <label style={{
-              display: "block",
-              fontSize: "13px",
-              fontWeight: 500,
-              color: "var(--neuron-ink-base)",
-              marginBottom: "8px"
-            }}>
-              Cargo Nature
-            </label>
-            <FormSelect
-              value={data.cargoNature || ""}
-              onChange={(value) => updateField("cargoNature", value)}
-              options={[
-                { value: "General Cargo", label: "General Cargo" },
-                { value: "Dangerous Goods (DG)", label: "Dangerous Goods (DG)" },
-                { value: "Perishables", label: "Perishables" },
-                { value: "Valuables", label: "Valuables" },
-                { value: "Temperature Controlled", label: "Temperature Controlled" }
-              ]}
-              placeholder="Select cargo nature..."
-              disabled={viewMode}
-            />
-          </div>
-        )}
+        {/* Cargo Nature — matrix: all incoterms, all movements */}
+        <div>
+          <label style={{
+            display: "block",
+            fontSize: "13px",
+            fontWeight: 500,
+            color: "var(--neuron-ink-base)",
+            marginBottom: "8px"
+          }}>
+            Cargo Nature
+          </label>
+          <FormSelect
+            value={data.cargoNature || ""}
+            onChange={(value) => updateField("cargoNature", value)}
+            options={[
+              { value: "General Cargo", label: "General Cargo" },
+              { value: "Dangerous Goods (DG)", label: "Dangerous Goods (DG)" },
+              { value: "Perishables", label: "Perishables" },
+              { value: "Valuables", label: "Valuables" },
+              { value: "Temperature Controlled", label: "Temperature Controlled" }
+            ]}
+            placeholder="Select cargo nature..."
+            disabled={viewMode}
+          />
+        </div>
 
         {/* Commodity Description & Delivery Address */}
         {!contractMode && (
@@ -584,8 +580,8 @@ export function ForwardingServiceForm({ data, onChange, builderMode = "quotation
           </div>
         )}
 
-        {/* Carrier/Transit/Route/Stackable - Hide for Export — hidden in contract mode */}
-        {!contractMode && !isExport && (data.incoterms === "EXW" || data.incoterms === "FOB" || data.incoterms === "FCA") && (
+        {/* Carrier/Transit/Route/Stackable — matrix: EXW/FOB/FCA, all movements */}
+        {!contractMode && (data.incoterms === "EXW" || data.incoterms === "FOB" || data.incoterms === "FCA") && (
           <div style={{
             padding: "16px",
             backgroundColor: "var(--theme-bg-surface-subtle)",

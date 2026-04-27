@@ -10,6 +10,8 @@ import { SkeletonTable } from "../../shared/NeuronSkeleton";
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "../../../lib/queryKeys";
 import { useDataScope } from "../../../hooks/useDataScope";
+import { useBookingAssignmentVisibility } from "../../../hooks/useBookingAssignmentVisibility";
+import { filterBookingsByScope } from "../../../utils/assignments/applyAssignmentVisibility";
 import { NeuronRefreshButton } from "../../shared/NeuronRefreshButton";
 import { usePermission } from "../../../context/PermissionProvider";
 import { logDeletion } from "../../../utils/activityLog";
@@ -93,6 +95,9 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
   const [pendingDelete, setPendingDelete] = useState<{ id: string; label: string } | null>(null);
 
   const { scope, isLoaded: scopeLoaded } = useDataScope('bookings');
+  const { index: assignmentIndex, isLoaded: assignmentIndexLoaded } = useBookingAssignmentVisibility({
+    userIds: scope.type === 'userIds' ? scope.ids : null,
+  });
 
   // ── Bookings fetch ────────────────────────────────────────
   const { data: rawBookings = [], isLoading, refetch } = useQuery<ForwardingBooking[]>({
@@ -111,21 +116,9 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
   const fetchBookings = () => { refetch(); };
 
   const bookings = useMemo(() => {
-    if (!scopeLoaded) return [];
-    if (scope.type === 'all') return rawBookings;
-    if (scope.type === 'userIds') return rawBookings.filter(b =>
-      scope.ids.includes((b as any).created_by || '') ||
-      scope.ids.includes((b as any).manager_id || '') ||
-      scope.ids.includes((b as any).supervisor_id || '') ||
-      scope.ids.includes((b as any).handler_id || '')
-    );
-    return rawBookings.filter(b =>
-      (b as any).created_by === scope.userId ||
-      (b as any).manager_id === scope.userId ||
-      (b as any).supervisor_id === scope.userId ||
-      (b as any).handler_id === scope.userId
-    );
-  }, [rawBookings, scope, scopeLoaded]);
+    if (!scopeLoaded || !assignmentIndexLoaded) return [];
+    return filterBookingsByScope(rawBookings, scope, assignmentIndex);
+  }, [rawBookings, scope, scopeLoaded, assignmentIndex, assignmentIndexLoaded]);
 
   // Deep-link: auto-select booking from pendingBookingId
   useEffect(() => {

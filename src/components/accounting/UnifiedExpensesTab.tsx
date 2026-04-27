@@ -5,6 +5,9 @@ import { CustomDatePicker } from "../common/CustomDatePicker";
 import { ExpensesTable } from "./ExpensesTable";
 import { CreateEVoucherForm } from "./evouchers/CreateEVoucherForm";
 import { AddRequestForPaymentPanel } from "./AddRequestForPaymentPanel";
+import { SidePanel } from "../common/SidePanel";
+import { CatalogItemCombobox } from "../shared/pricing/CatalogItemCombobox";
+import { buildCatalogSnapshot } from "../../utils/catalogSnapshot";
 import { toast } from "../ui/toast-utils";
 import { supabase } from "../../utils/supabase/client";
 // Expenses received here are raw Supabase evoucher rows, not the OperationsExpense type
@@ -63,6 +66,9 @@ export function UnifiedExpensesTab({
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const [showBillablePending, setShowBillablePending] = useState(false);
   const [convertingId, setConvertingId] = useState<string | null>(null);
+  const [pendingConversion, setPendingConversion] = useState<Record<string, unknown> | null>(null);
+  const [conversionBillingItemName, setConversionBillingItemName] = useState("");
+  const [conversionBillingItemId, setConversionBillingItemId] = useState<string | undefined>(undefined);
 
   const BILLABLE_ELIGIBLE_STATUSES = ["approved", "posted", "paid", "partial"];
 
@@ -86,35 +92,60 @@ export function UnifiedExpensesTab({
     return ids;
   }, [expenses, billedSourceIds]);
 
-  const handleConvert = async (expenseData: any) => {
+  const handleConvert = (expenseData: any) => {
     const expenseId: string = expenseData?.id;
-    if (!expenseId) return;
-    if (convertingId === expenseId) return; // prevent double-click
-    setConvertingId(expenseId);
+    if (!expenseId || convertingId === expenseId) return;
 
     const resolvedBookingId = expenseData?.bookingId || expenseData?.booking_id || bookingId;
     if (!resolvedBookingId) {
       toast.error("Cannot convert: expense has no linked booking.");
-      setConvertingId(null);
       return;
     }
 
+    // Stage the conversion — user must pick a Billing catalog item before committing
+    setPendingConversion(expenseData);
+    setConversionBillingItemName("");
+    setConversionBillingItemId(undefined);
+  };
+
+  const handleConfirmConvert = async () => {
+    if (!pendingConversion) return;
+    if (!conversionBillingItemId) {
+      toast.error("Select a billing catalog item before converting.");
+      return;
+    }
+
+    const expenseData = pendingConversion;
+    const expenseId: string = str(expenseData.id);
+    setConvertingId(expenseId);
+
+    const resolvedBookingId = str(expenseData.bookingId || expenseData.booking_id) || bookingId || "";
+    const category = str(expenseData.expenseCategory || expenseData.expense_category) || "Billable Expenses";
+    const amount = num(expenseData.amount);
+    const currency = str(expenseData.currency) || "PHP";
+
     const { error } = await supabase.from("billing_line_items").insert({
       booking_id: resolvedBookingId,
-      project_number: expenseData?.projectNumber || expenseData?.project_number || projectNumber,
-      source_id: expenseData?.id,
+      project_number: str(expenseData.projectNumber || expenseData.project_number) || projectNumber,
+      source_id: expenseId,
       source_type: "billable_expense",
-      description: expenseData?.description || expenseData?.expenseName || "Billable Expense",
+      description: conversionBillingItemName || str(expenseData.description || expenseData.expenseName) || "Billable Expense",
       service_type: "Reimbursable Expense",
-      amount: expenseData?.amount || 0,
-      currency: expenseData?.currency || "PHP",
+      amount,
+      currency,
       status: "unbilled",
-      category: expenseData?.expenseCategory || expenseData?.expense_category || "Billable Expenses",
+      category,
+      catalog_item_id: conversionBillingItemId,
+      catalog_snapshot: buildCatalogSnapshot(
+        { description: conversionBillingItemName, amount, currency },
+        category
+      ),
     });
 
     setConvertingId(null);
+    setPendingConversion(null);
+
     if (error) {
-      // Unique index violation means auto-billing already created it on approval
       if (error.code === "23505") {
         toast.info("Already converted to a billing item");
         onRefresh?.();
@@ -443,6 +474,65 @@ export function UnifiedExpensesTab({
           }}
         />
       )}
+
+      {/* Conversion Panel — Rule C: user must choose a Billing catalog item */}
+      <SidePanel
+        isOpen={!!pendingConversion}
+        onClose={() => setPendingConversion(null)}
+        title="Convert to Billing Item"
+        size="sm"
+        footer={
+          <div className="flex items-center justify-end gap-3">
+            <button
+              onClick={() => setPendingConversion(null)}
+              className="px-4 py-2 text-[13px] font-medium border border-[var(--theme-border-default)] text-[var(--theme-text-secondary)] rounded-lg hover:bg-[var(--theme-bg-page)] transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirmConvert}
+              disabled={!conversionBillingItemId || convertingId !== null}
+              className="px-4 py-2 text-[13px] font-medium bg-[var(--theme-action-primary-bg)] text-white rounded-lg hover:bg-[#0D6559] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {convertingId ? "Converting…" : "Confirm Convert"}
+            </button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-6 p-6">
+          {/* Expense summary */}
+          <div className="p-4 rounded-lg bg-[var(--theme-bg-page)] border border-[var(--theme-border-default)]">
+            <p className="text-[12px] text-[var(--theme-text-muted)] mb-1 font-medium uppercase tracking-wide">Expense being converted</p>
+            <p className="text-[14px] font-semibold text-[var(--theme-text-primary)]">
+              {str(pendingConversion?.description || pendingConversion?.expenseName) || "Billable Expense"}
+            </p>
+            <p className="text-[13px] text-[var(--theme-text-muted)] mt-0.5">
+              {new Intl.NumberFormat("en-PH", { style: "currency", currency: str(pendingConversion?.currency) || "PHP" }).format(num(pendingConversion?.amount))}
+              {" · "}{str(pendingConversion?.expenseCategory) || "Billable Expenses"}
+            </p>
+          </div>
+
+          {/* Billing catalog item picker */}
+          <div className="flex flex-col gap-2">
+            <label className="text-[13px] font-medium text-[var(--theme-text-primary)]">
+              Billing Catalog Item <span className="text-[var(--theme-status-danger-fg)]">*</span>
+            </label>
+            <p className="text-[12px] text-[var(--theme-text-muted)]">
+              Choose the billing catalog item this expense maps to. This links the billing record to your revenue catalog.
+            </p>
+            <CatalogItemCombobox
+              value={conversionBillingItemName}
+              catalogItemId={conversionBillingItemId}
+              side="revenue"
+              onChange={(name, id) => {
+                setConversionBillingItemName(name);
+                setConversionBillingItemId(id ?? undefined);
+              }}
+              placeholder="Search or create billing item…"
+            />
+          </div>
+        </div>
+      </SidePanel>
     </div>
   );
 }

@@ -162,6 +162,7 @@ export function instantiateRates(
       quantity,
       subtotal,
       rule_applied,
+      catalog_item_id: row.catalog_item_id,
     });
   }
 

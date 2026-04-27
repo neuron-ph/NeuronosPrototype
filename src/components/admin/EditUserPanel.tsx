@@ -65,10 +65,7 @@ export function EditUserPanel({ isOpen, user, onClose, onSaved }: Props) {
           department,
           role,
           position: position.trim() || null,
-          team_id: teamId || null,
-          // team_role and service_type are Operations-only — clear for other departments
           service_type: department === "Operations" ? (serviceType || null) : null,
-          team_role: department === "Operations" ? (teamRole || null) : null,
           ev_approval_authority: evApprovalAuthority,
           is_active: isActive,
         })

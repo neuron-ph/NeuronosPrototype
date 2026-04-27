@@ -490,7 +490,8 @@ export type QuotationType = "project" | "contract";
 export interface ContractRateRow {
   id: string;
   particular: string;                  // "Container", "Clearance", "Documentation", "Stamps"
-  charge_type_id?: string;             // Stable ID from ChargeTypeRegistry — used for downstream matching (Contract → Project, Contract → Booking)
+  charge_type_id?: string;             // Legacy: stable ID from ChargeTypeRegistry — kept for trucking selection groups
+  catalog_item_id?: string;            // Billing Catalog item UUID — canonical identity after Phase 4 migration
   rates: Record<string, number>;       // { "FCL": 4500, "LCL / AIR": 3500 }
   unit: string;                        // "per_container", "per_shipment", "per_bl", "per_set"
   succeeding_rule?: {
@@ -514,6 +515,7 @@ export interface ContractRateRow {
 export interface ContractRateCategory {
   id: string;
   category_name: string;               // "Container Handling", "Documentation", etc.
+  catalog_category_id?: string;        // Billing Catalog category UUID — enforces category-first UX
   rows: ContractRateRow[];
 }
 
@@ -555,6 +557,7 @@ export interface AppliedRate {
   quantity: number;
   subtotal: number;
   rule_applied?: string;               // Human-readable breakdown
+  catalog_item_id?: string;            // Carried from ContractRateRow for billing generation
 }
 
 // ============================================

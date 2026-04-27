@@ -6,6 +6,7 @@ import { supabase } from "../../../utils/supabase/client";
 interface CategoryDropdownProps {
   onAdd: (name: string, catalogCategoryId?: string) => void;
   onClose: () => void;
+  side?: "revenue" | "expense" | "both";
 }
 
 interface CategoryOption {
@@ -13,7 +14,7 @@ interface CategoryOption {
   name: string;
 }
 
-export function CategoryDropdown({ onAdd, onClose }: CategoryDropdownProps) {
+export function CategoryDropdown({ onAdd, onClose, side = "revenue" }: CategoryDropdownProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [isCustomMode, setIsCustomMode] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -26,7 +27,7 @@ export function CategoryDropdown({ onAdd, onClose }: CategoryDropdownProps) {
     supabase
       .from("catalog_categories")
       .select("id, name")
-      .in("side", ["revenue", "both"])
+      .in("side", side === "both" ? ["revenue", "expense", "both"] : [side, "both"])
       .order("sort_order")
       .then(({ data }) => {
         if (data) setPredefinedCategories(data);
@@ -70,7 +71,7 @@ export function CategoryDropdown({ onAdd, onClose }: CategoryDropdownProps) {
         .insert({
           id: `cat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           name,
-          side: "revenue",
+          side,
           sort_order: 100,
           is_default: false,
         })

@@ -134,52 +134,55 @@ export function OperationsTeamProfileEditor({
 
       {selectedTeamId && (
         <>
-          <div>
-            <label
-              className="block text-[11px] font-medium uppercase tracking-wide mb-1.5"
+          {/* Manager chip */}
+          <div
+            className="flex items-center gap-2 px-3 py-2 rounded-lg"
+            style={{ border: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--theme-bg-page)" }}
+          >
+            <span
+              className="text-[11px] font-medium uppercase tracking-wide"
               style={{ color: "var(--neuron-ink-muted)" }}
             >
-              Manager <span style={{ color: "var(--theme-action-primary-bg)", textTransform: "none" }}>(auto-assigned)</span>
-            </label>
-            <input
-              type="text"
-              value={isLoadingMembers ? "Loading..." : (manager?.name ?? "No manager in this team")}
-              disabled
-              className="w-full px-3 py-2 rounded-lg text-[13px]"
-              style={{
-                border: "1px solid var(--neuron-ui-border)",
-                backgroundColor: "var(--theme-bg-page)",
-                color: manager ? "var(--neuron-ink-primary)" : "var(--theme-text-muted)",
-                cursor: "not-allowed",
-              }}
-            />
+              Manager
+            </span>
+            <span className="text-[11px]" style={{ color: "var(--theme-action-primary-bg)" }}>
+              (auto-assigned)
+            </span>
+            <span
+              className="ml-auto text-[13px] font-medium"
+              style={{ color: manager ? "var(--neuron-ink-primary)" : "var(--theme-text-muted)" }}
+            >
+              {isLoadingMembers ? "Loading…" : (manager?.name ?? "No manager in this team")}
+            </span>
           </div>
 
-          <CustomDropdown
-            label="Supervisor (Optional)"
-            value={selectedSupervisorId}
-            onChange={setSelectedSupervisorId}
-            options={[
-              { value: "", label: "None" },
-              ...supervisors.map((s) => ({ value: s.id, label: s.name })),
-            ]}
-            placeholder={isLoadingMembers ? "Loading..." : (supervisors.length === 0 ? "No supervisors" : "Select supervisor...")}
-            disabled={isLoadingMembers || supervisors.length === 0}
-            fullWidth
-          />
-
-          <CustomDropdown
-            label="Handler (Optional)"
-            value={selectedHandlerId}
-            onChange={setSelectedHandlerId}
-            options={[
-              { value: "", label: "None" },
-              ...handlers.map((h) => ({ value: h.id, label: h.name })),
-            ]}
-            placeholder={isLoadingMembers ? "Loading..." : (handlers.length === 0 ? "No handlers" : "Select handler...")}
-            disabled={isLoadingMembers || handlers.length === 0}
-            fullWidth
-          />
+          {/* Supervisor + Handler side by side */}
+          <div className="grid grid-cols-2 gap-3">
+            <CustomDropdown
+              label="Supervisor (Optional)"
+              value={selectedSupervisorId}
+              onChange={setSelectedSupervisorId}
+              options={[
+                { value: "", label: "None" },
+                ...supervisors.map((s) => ({ value: s.id, label: s.name })),
+              ]}
+              placeholder={isLoadingMembers ? "Loading..." : (supervisors.length === 0 ? "No supervisors" : "Select supervisor...")}
+              disabled={isLoadingMembers || supervisors.length === 0}
+              fullWidth
+            />
+            <CustomDropdown
+              label="Handler (Optional)"
+              value={selectedHandlerId}
+              onChange={setSelectedHandlerId}
+              options={[
+                { value: "", label: "None" },
+                ...handlers.map((h) => ({ value: h.id, label: h.name })),
+              ]}
+              placeholder={isLoadingMembers ? "Loading..." : (handlers.length === 0 ? "No handlers" : "Select handler...")}
+              disabled={isLoadingMembers || handlers.length === 0}
+              fullWidth
+            />
+          </div>
         </>
       )}
     </div>

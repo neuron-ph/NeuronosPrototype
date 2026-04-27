@@ -30,7 +30,8 @@ import {
   Receipt,
   BookOpen,
   ScrollText,
-  TrendingUp
+  TrendingUp,
+  Database
 } from "lucide-react";
 import { NeuronLogo } from "./NeuronLogo";
 import { usePermission } from "../context/PermissionProvider";
@@ -46,7 +47,7 @@ const prefetchOperations = () => void import("./Operations");
 const prefetchAccounting = () => void import("./accounting/FinancialsModule");
 const prefetchInbox      = () => void import("./InboxPage");
 
-type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" |"pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" |"ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" |"operations" | "acct-transactions" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-journal" | "acct-coa" | "acct-reports" | "acct-statements" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "calendar" | "inbox" | "my-evouchers" | "ticket-queue" | "settings" | "admin-users" | "admin" | "ticket-testing" | "activity-log" | "design-system";
+type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" |"pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" |"ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" |"operations" | "acct-transactions" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-journal" | "acct-coa" | "acct-reports" | "acct-statements" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "calendar" | "inbox" | "my-evouchers" | "ticket-queue" | "settings" | "admin-users" | "admin-profiling" | "admin" | "ticket-testing" | "activity-log" | "design-system";
 
 const sidebarPermissionMap: Partial<Record<Page, ModuleId>> = {
   "bd-contacts": "bd_contacts",
@@ -64,6 +65,7 @@ const sidebarPermissionMap: Partial<Record<Page, ModuleId>> = {
   "hr": "hr",
   "activity-log": "exec_activity_log",
   "admin-users": "exec_users",
+  "admin-profiling": "exec_profiling",
 };
 
 // SVG for Philippine Peso icon
@@ -341,6 +343,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
   const showHRItem = showHR && canViewPage("hr");
   const showActivityLog = isExecutive && canViewPage("activity-log");
   const showAdminUsers = isExecutive && canViewPage("admin-users");
+  const showAdminProfiling = isExecutive && canViewPage("admin-profiling");
   
   // Check if any section page is active
   const isBDActive = currentPage.startsWith("bd-");
@@ -1080,7 +1083,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
         {otherItems.map(item => renderNavButton(item))}
 
         {/* Executive Section */}
-        {(showActivityLog || showAdminUsers) && (
+        {(showActivityLog || showAdminUsers || showAdminProfiling) && (
           <>
             {renderSectionHeader("EXECUTIVE")}
             {showActivityLog && renderNavButton({ id: "activity-log" as Page, label: "Activity Log", icon: Activity })}
@@ -1120,6 +1123,48 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
                         style={{ fontSize: "14px", lineHeight: "20px" }}
                       >
                         Users
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </button>
+              );
+            })()}
+            {showAdminProfiling && (() => {
+              const isActive = currentPage === "admin-profiling";
+              return (
+                <button
+                  onClick={() => onNavigate("admin-profiling")}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuron-ui-active-border)]"
+                  style={{
+                    position: "relative",
+                    height: "40px",
+                    backgroundColor: isActive ? "var(--neuron-state-selected)" : "transparent",
+                    border: "1.5px solid transparent",
+                    color: isActive ? "var(--neuron-ink-primary)" : "var(--neuron-ink-secondary)",
+                    fontWeight: isActive ? 500 : 400,
+                    justifyContent: isCollapsed ? "center" : "flex-start",
+                    paddingLeft: isCollapsed ? "0" : "12px",
+                    paddingRight: isCollapsed ? "0" : "12px",
+                  }}
+                  onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)"; }}
+                  onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = "transparent"; }}
+                  title={isCollapsed ? "Profiling" : undefined}
+                >
+                  <Database
+                    size={20}
+                    style={{ color: isActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)", flexShrink: 0 }}
+                  />
+                  <AnimatePresence initial={false}>
+                    {!isCollapsed && (
+                      <motion.span
+                        key="profiling-label"
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -6 }}
+                        transition={{ duration: 0.18, ease: [0.25, 1, 0.5, 1] }}
+                        style={{ fontSize: "14px", lineHeight: "20px" }}
+                      >
+                        Profiling
                       </motion.span>
                     )}
                   </AnimatePresence>

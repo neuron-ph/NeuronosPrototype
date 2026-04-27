@@ -185,9 +185,7 @@ export function ContractDetailView({
   const [isActivating, setIsActivating] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
 
-  // ✨ CONTRACT PARITY Phase 3: Booking drill-down + Generate Billing state
   const [selectedBooking, setSelectedBooking] = useState<{ bookingId: string; bookingType: string } | null>(null);
-  const [generatingBillingId, setGeneratingBillingId] = useState<string | null>(null);
 
   const financialContainer = useMemo<FinancialContainer>(
     () => ({
@@ -289,37 +287,6 @@ export function ContractDetailView({
     }
   };
 
-  // ✨ CONTRACT PARITY Phase 3: Generate billing for a specific booking
-  const handleGenerateBilling = async (bookingId: string, serviceType: string) => {
-    try {
-      setGeneratingBillingId(bookingId);
-      toast.loading(`Generating billing for ${serviceType}...`, { id: "gen-billing" });
-
-      // Generate billing: create an evoucher for this booking
-      const billingData = {
-        id: `ev-${Date.now()}`,
-        contract_id: quotation.id,
-        booking_id: bookingId,
-        service_type: serviceType,
-        transaction_type: 'billing',
-        status: 'Draft',
-        created_at: new Date().toISOString(),
-      };
-      const { error: billingError } = await supabase.from('evouchers').insert(billingData);
-
-      if (!billingError) {
-        toast.success("Billing generated successfully!", { id: "gen-billing" });
-        contractFinancials.refresh();
-      } else {
-        toast.error(billingError.message || "Failed to generate billing", { id: "gen-billing" });
-      }
-    } catch (error) {
-      console.error("Error generating billing:", error);
-      toast.error("An error occurred", { id: "gen-billing" });
-    } finally {
-      setGeneratingBillingId(null);
-    }
-  };
 
   // ✨ PHASE 3: Get contract services as InquiryService array
   // Contracts only support Brokerage, Trucking, and Others — exclude Forwarding & Marine Insurance
@@ -441,8 +408,6 @@ export function ContractDetailView({
         bookings={linkedBookings}
         isLoading={isLoadingBookings}
         onViewBooking={(bookingId, bookingType) => setSelectedBooking({ bookingId, bookingType })}
-        onGenerateBilling={handleGenerateBilling}
-        generatingBillingId={generatingBillingId}
         emptyState={
           <div style={{ padding: "48px 24px", textAlign: "center", color: "var(--neuron-ink-muted)" }}>
             <FileText size={40} style={{ marginBottom: "12px", opacity: 0.3, margin: "0 auto 12px" }} />

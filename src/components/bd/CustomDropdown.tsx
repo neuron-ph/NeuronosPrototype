@@ -30,6 +30,7 @@ interface CustomDropdownProps {
   multiSelect?: boolean;
   multiValue?: string[];
   onMultiChange?: (values: string[]) => void;
+  portalZIndex?: number;
 }
 
 export function CustomDropdown({
@@ -49,6 +50,7 @@ export function CustomDropdown({
   multiSelect = false,
   multiValue = [],
   onMultiChange,
+  portalZIndex = 9999,
 }: CustomDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -59,10 +61,16 @@ export function CustomDropdown({
   const computeMenuPos = () => {
     if (!buttonRef.current) return null;
     const rect = buttonRef.current.getBoundingClientRect();
+
+    // Trigger scrolled out of viewport — don't reposition to a bad coordinate.
+    if (rect.bottom < 0 || rect.top > window.innerHeight) return null;
+
     const maxMenuHeight = 240;
     const gap = 4;
     const spaceBelow = window.innerHeight - rect.bottom - gap;
-    const openUpward = spaceBelow < maxMenuHeight && rect.top > maxMenuHeight;
+    // Only flip upward when there's critically little space below (<80px),
+    // not whenever the space is less than the full max height.
+    const openUpward = spaceBelow < 80 && rect.top > maxMenuHeight;
     return {
       top: openUpward ? rect.top - gap - maxMenuHeight : rect.bottom + gap,
       left: rect.left,
@@ -97,10 +105,22 @@ export function CustomDropdown({
     };
   }, [isOpen]);
 
-  // Reposition menu on scroll so it stays anchored to the button
+  // Reposition menu on scroll so it stays anchored to the button.
+  // Close if the trigger has scrolled mostly off-screen (< 40px visible)
+  // to avoid positioning the menu in the header or toolbar area.
   useEffect(() => {
     if (!isOpen || !buttonRef.current) return;
-    const updatePosition = () => setMenuPos(computeMenuPos());
+    const updatePosition = () => {
+      if (!buttonRef.current) return;
+      const rect = buttonRef.current.getBoundingClientRect();
+      const triggerOffScreen = rect.bottom < 40 || rect.top > window.innerHeight - 40;
+      if (triggerOffScreen) {
+        setIsOpen(false);
+        return;
+      }
+      const pos = computeMenuPos();
+      if (pos) setMenuPos(pos);
+    };
     window.addEventListener("scroll", updatePosition, true);
     return () => window.removeEventListener("scroll", updatePosition, true);
   }, [isOpen]);
@@ -221,7 +241,7 @@ export function CustomDropdown({
                 boxShadow: "0px 4px 6px -2px rgba(16, 24, 40, 0.03), 0px 12px 16px -4px rgba(16, 24, 40, 0.08)",
                 maxHeight: "240px",
                 overflowY: "auto",
-                zIndex: 9999,
+                zIndex: portalZIndex,
                 top: menuPos.top,
                 left: menuPos.left,
                 minWidth: menuPos.minWidth,
@@ -346,7 +366,7 @@ export function CustomDropdown({
                 boxShadow: "0px 4px 6px -2px rgba(16, 24, 40, 0.03), 0px 12px 16px -4px rgba(16, 24, 40, 0.08)",
                 maxHeight: "240px",
                 overflowY: "auto",
-                zIndex: 9999,
+                zIndex: portalZIndex,
                 top: menuPos.top,
                 left: menuPos.left,
                 minWidth: menuPos.minWidth,

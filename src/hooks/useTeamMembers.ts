@@ -10,11 +10,11 @@ export function useTeamMembers(teamId: string | null | undefined): {
     queryKey: queryKeys.users.teamMembers(teamId ?? ""),
     queryFn: async () => {
       const { data } = await supabase
-        .from("users")
-        .select("id")
+        .from("team_memberships")
+        .select("user_id")
         .eq("team_id", teamId!)
         .eq("is_active", true);
-      return data?.map((u) => u.id) ?? [];
+      return data?.map((u) => u.user_id) ?? [];
     },
     enabled: !!teamId,
     staleTime: 5 * 60 * 1000,

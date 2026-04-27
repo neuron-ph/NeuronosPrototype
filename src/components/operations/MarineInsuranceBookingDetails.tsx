@@ -1,11 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, MoreVertical, Lock, Clock, ChevronRight } from "lucide-react";
+import { ArrowLeft, MoreVertical, Clock, ChevronRight } from "lucide-react";
 import { ExpensesTab } from "./shared/ExpensesTab";
 import { useProjectFinancials } from "../../hooks/useProjectFinancials";
 import { StatusSelector } from "../StatusSelector";
-import { EditableSectionCard, useSectionEdit } from "../shared/EditableSectionCard";
-import { EditableField } from "../shared/EditableField";
 import type { MarineInsuranceBooking, ExecutionStatus } from "../../types/operations";
 import { UnifiedBillingsTab } from "../shared/billings/UnifiedBillingsTab";
 import { BookingRateCardButton } from "../contracts/BookingRateCardButton";
@@ -16,7 +14,7 @@ import { assessBookingFinancialState, canTransitionBookingToCancelled, getBookin
 import { BookingCancelDeletePanel } from "./shared/BookingCancelDeletePanel";
 import { RequestBillingButton } from "../common/RequestBillingButton";
 import { loadBookingActivityLog, appendBookingActivity } from "../../utils/bookingActivityLog";
-import { BookingTeamSection } from "./shared/BookingTeamSection";
+import { BookingInfoTab } from "./shared/BookingInfoTab";
 import { useUser } from "../../hooks/useUser";
 import { usePermission } from "../../context/PermissionProvider";
 import { fireBillingTicketOnCompletion } from "../../utils/workflowTickets";
@@ -49,82 +47,6 @@ interface ActivityLogEntry {
 const initialActivityLog: ActivityLogEntry[] = [
   { id: "init-1", timestamp: new Date(), user: "System", action: "created" },
 ];
-
-const FIELD_LABELS: Record<string, string> = {
-  accountHandler: "Account Handler",
-  policyNumber: "Policy Number",
-  insuranceCompany: "Insurance Company",
-  coverageType: "Coverage Type",
-  insuredValue: "Insured Value",
-  currency: "Currency",
-  effectiveDate: "Effective Date",
-  expiryDate: "Expiry Date",
-  commodityDescription: "Commodity Description",
-  hsCode: "HS Code",
-  invoiceNumber: "Invoice Number",
-  invoiceValue: "Invoice Value",
-  packagingType: "Packaging Type",
-  numberOfPackages: "Number of Packages",
-  grossWeight: "Gross Weight",
-  aol: "AOL",
-  pol: "POL",
-  mode: "Mode",
-  aod: "AOD",
-  pod: "POD",
-  vesselVoyage: "Vessel/Voyage",
-  specialConditions: "Special Conditions",
-  remarks: "Remarks",
-  assigned_manager_name: "Assigned Manager",
-  assigned_supervisor_name: "Assigned Supervisor",
-  assigned_handler_name: "Assigned Handler",
-};
-
-async function diffAndApply(
-  original: MarineInsuranceBooking,
-  draft: MarineInsuranceBooking,
-  fields: string[],
-  addActivity: (fieldName: string, oldValue: string, newValue: string) => void,
-  setEditedBooking: (fn: (prev: MarineInsuranceBooking) => MarineInsuranceBooking) => void,
-  onBookingUpdated: () => void,
-) {
-  const updates: Record<string, any> = {};
-  fields.forEach((field) => {
-    const oldVal = String((original as any)[field] ?? "");
-    const newVal = String((draft as any)[field] ?? "");
-    if (oldVal !== newVal) {
-      addActivity(FIELD_LABELS[field] || field, oldVal, newVal);
-      updates[field] = (draft as any)[field];
-    }
-  });
-  if (Object.keys(updates).length > 0) {
-    const existingDetails = (original as any).details || {};
-    const { error } = await supabase
-      .from('bookings')
-      .update({ details: { ...existingDetails, ...updates } })
-      .eq('id', original.bookingId || (original as any).id);
-    if (error) {
-      toast.error("Failed to save changes");
-      return;
-    }
-    setEditedBooking((prev: MarineInsuranceBooking) => ({ ...prev, ...updates }));
-    onBookingUpdated();
-    toast.success("Changes saved");
-  }
-}
-
-function LockedField({ label, value, tooltip }: { label: string; value: string; tooltip?: string }) {
-  return (
-    <div>
-      <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", fontWeight: 500, color: "var(--neuron-ink-base)", marginBottom: "8px" }}>
-        {label}
-        <Lock size={12} color="var(--theme-text-muted)" style={{ cursor: "help" }} />
-      </label>
-      <div style={{ padding: "10px 14px", backgroundColor: "var(--theme-bg-page)", border: "1px solid var(--theme-border-default)", borderRadius: "6px", fontSize: "14px", color: "var(--theme-text-muted)", cursor: "not-allowed" }}>
-        {value || "—"}
-      </div>
-    </div>
-  );
-}
 
 function ActivityTimeline({ activities }: { activities: ActivityLogEntry[] }) {
   return (
@@ -260,7 +182,7 @@ export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, curre
 
   return (
     <div style={{ backgroundColor: "var(--theme-bg-surface)", display: "flex", flexDirection: "column", height: "100vh" }}>
-      <div style={{ padding: "20px 48px", borderBottom: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--theme-bg-surface)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div style={{ padding: "20px 48px", borderBottom: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--theme-bg-surface)", display: "flex", justifyContent: "space-between", alignItems: "center", position: "relative", zIndex: 30 }}>
         <div>
           <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: "8px", background: "none", border: "none", color: "var(--neuron-ink-secondary)", cursor: "pointer", fontSize: "13px", marginBottom: "12px", padding: "0" }}
             onMouseEnter={(e) => { e.currentTarget.style.color = "var(--neuron-brand-green)"; }}
@@ -289,7 +211,7 @@ export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, curre
         </div>
       </div>
 
-      <div style={{ padding: "0 48px", borderBottom: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--theme-bg-surface)", display: "flex", justifyContent: "space-between", alignItems: "center", height: "56px" }}>
+      <div style={{ padding: "0 48px", borderBottom: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--theme-bg-surface)", display: "flex", justifyContent: "space-between", alignItems: "center", height: "56px", position: "relative", zIndex: 20 }}>
         <div style={{ display: "flex", gap: "24px", height: "100%" }}>
           <button onClick={() => setActiveTab("booking-info")} style={tabStyle("booking-info")}>Booking Information</button>
           {canViewBillings && <button onClick={() => setActiveTab("billings")} style={tabStyle("billings")}>Billings</button>}
@@ -341,9 +263,17 @@ export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, curre
       />
 
 
-      <div style={{ flex: 1, overflow: "hidden", display: "flex" }}>
+      <div style={{ flex: 1, overflow: "hidden", display: "flex", position: "relative", zIndex: 0 }}>
         <div style={{ flex: showTimeline ? "0 0 65%" : "1", overflow: "auto", transition: "flex 0.3s ease" }}>
-          {activeTab === "booking-info" && <BookingInformationTab booking={editedBooking} onBookingUpdated={onUpdate} addActivity={addActivity} setEditedBooking={setEditedBooking} currentUser={currentUser} />}
+          {activeTab === "booking-info" && (
+            <BookingInfoTab
+              booking={editedBooking as Record<string, unknown>}
+              serviceType="Marine Insurance"
+              bookingId={String((editedBooking as any).id || booking.bookingId)}
+              onUpdate={onUpdate}
+              currentUser={currentUser}
+            />
+          )}
           {activeTab === "billings" && canViewBillings && <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]"><UnifiedBillingsTab items={bookingBillingItems} projectId={booking.projectNumber || ""} bookingId={booking.bookingId} onRefresh={financials.refresh} isLoading={financials.isLoading} pendingBillableCount={pendingBillableCount} extraActions={<BookingRateCardButton booking={booking} serviceType="Marine Insurance" existingBillingItems={bookingBillingItems} onRefresh={financials.refresh} />} /></div>}
           {activeTab === "expenses" && <ExpensesTab bookingId={booking.bookingId} bookingNumber={(booking as any).booking_number || booking.bookingId} bookingType="marine-insurance" currentUser={currentUser} highlightId={activeTab === "expenses" ? highlightId : undefined} existingBillingItems={bookingBillingItems} onPendingCountChange={setPendingBillableCount} />}
           {activeTab === "comments" && <BookingCommentsTab bookingId={booking.bookingId} />}
@@ -354,159 +284,3 @@ export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, curre
   );
 }
 
-function BookingInformationTab({ booking, onBookingUpdated, addActivity, setEditedBooking, currentUser }: {
-  booking: MarineInsuranceBooking; onBookingUpdated: () => void;
-  addActivity: (fieldName: string, oldValue: string, newValue: string) => void; setEditedBooking: any;
-  currentUser?: { name: string; email: string; department: string } | null;
-}) {
-  const generalSection = useSectionEdit(booking);
-  const policySection = useSectionEdit(booking);
-  const shipmentSection = useSectionEdit(booking);
-  const routeSection = useSectionEdit(booking);
-  const additionalSection = useSectionEdit(booking);
-
-  const GENERAL_FIELDS = ["accountHandler"];
-  const POLICY_FIELDS = ["policyNumber", "insuranceCompany", "coverageType", "insuredValue", "currency", "effectiveDate", "expiryDate"];
-  const SHIPMENT_FIELDS = ["commodityDescription", "hsCode", "invoiceNumber", "invoiceValue", "packagingType", "numberOfPackages", "grossWeight"];
-  const ROUTE_FIELDS = ["aol", "pol", "mode", "aod", "pod", "vesselVoyage"];
-  const ADDITIONAL_FIELDS = ["specialConditions", "remarks"];
-
-  const gMode = generalSection.isEditing ? "edit" : "view";
-  const pMode = policySection.isEditing ? "edit" : "view";
-  const sMode = shipmentSection.isEditing ? "edit" : "view";
-  const rMode = routeSection.isEditing ? "edit" : "view";
-  const aMode = additionalSection.isEditing ? "edit" : "view";
-
-  return (
-    <div style={{ padding: "32px 48px", maxWidth: "1400px", margin: "0 auto" }}>
-
-      {/* ── Team Assignment ── */}
-      <BookingTeamSection
-        bookingId={(booking as any).id || booking.bookingId}
-        bookingNumber={(booking as any).booking_number || booking.bookingId}
-        serviceType="Marine Insurance"
-        customerName={booking.customerName}
-        customerId={(booking as any).customer_id}
-        teamId={(booking as any).team_id}
-        teamName={(booking as any).team_name}
-        managerId={(booking as any).manager_id}
-        managerName={(booking as any).manager_name}
-        supervisorId={(booking as any).supervisor_id}
-        supervisorName={(booking as any).supervisor_name}
-        handlerId={(booking as any).handler_id}
-        handlerName={(booking as any).handler_name}
-        currentUser={currentUser}
-        onUpdate={onBookingUpdated}
-        addActivity={addActivity}
-      />
-
-      {/* ── General Information ── */}
-      <EditableSectionCard
-        title="General Information"
-        subtitle={`Last updated by ${booking.accountHandler || "System"}, ${new Date(booking.updatedAt).toLocaleString()}`}
-        isEditing={generalSection.isEditing}
-        onEdit={generalSection.startEditing}
-        onCancel={generalSection.cancel}
-        onSave={() => { const draft = generalSection.save(); diffAndApply(booking, draft, GENERAL_FIELDS, addActivity, setEditedBooking, onBookingUpdated); }}
-      >
-        <div style={{ display: "grid", gap: "20px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-            <LockedField label="Customer Name" value={booking.customerName} />
-            <LockedField label="Account Owner" value={booking.accountOwner || ""} />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px" }}>
-            <EditableField label="Account Handler" value={generalSection.draft.accountHandler || ""} mode={gMode} placeholder="Assign handler..." onChange={(v) => generalSection.updateField("accountHandler", v)} />
-            <LockedField label="Service/s" value={booking.service || ""} />
-            <LockedField label="Quotation Reference" value={booking.quotationReferenceNumber || ""} />
-          </div>
-        </div>
-      </EditableSectionCard>
-
-      {/* ── Policy Information ── */}
-      <EditableSectionCard
-        title="Policy Information"
-        isEditing={policySection.isEditing}
-        onEdit={policySection.startEditing}
-        onCancel={policySection.cancel}
-        onSave={() => { const draft = policySection.save(); diffAndApply(booking, draft, POLICY_FIELDS, addActivity, setEditedBooking, onBookingUpdated); }}
-      >
-        <div style={{ display: "grid", gap: "20px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px" }}>
-            <EditableField label="Policy Number" value={policySection.draft.policyNumber || ""} mode={pMode} placeholder="Enter policy number..." onChange={(v) => policySection.updateField("policyNumber", v)} />
-            <EditableField label="Insurance Company" value={policySection.draft.insuranceCompany || ""} mode={pMode} placeholder="Enter insurer..." onChange={(v) => policySection.updateField("insuranceCompany", v)} />
-            <EditableField label="Coverage Type" value={policySection.draft.coverageType || ""} mode={pMode} placeholder="Enter coverage type..." onChange={(v) => policySection.updateField("coverageType", v)} />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px" }}>
-            <EditableField label="Insured Value" value={policySection.draft.insuredValue || ""} mode={pMode} placeholder="Enter amount..." onChange={(v) => policySection.updateField("insuredValue", v)} />
-            <EditableField label="Currency" value={policySection.draft.currency || ""} mode={pMode} placeholder="e.g., PHP, USD..." onChange={(v) => policySection.updateField("currency", v)} />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-            <EditableField label="Effective Date" value={policySection.draft.effectiveDate || ""} type="date" mode={pMode} onChange={(v) => policySection.updateField("effectiveDate", v)} />
-            <EditableField label="Expiry Date" value={policySection.draft.expiryDate || ""} type="date" mode={pMode} onChange={(v) => policySection.updateField("expiryDate", v)} />
-          </div>
-        </div>
-      </EditableSectionCard>
-
-      {/* ── Shipment Information ── */}
-      <EditableSectionCard
-        title="Shipment Information"
-        isEditing={shipmentSection.isEditing}
-        onEdit={shipmentSection.startEditing}
-        onCancel={shipmentSection.cancel}
-        onSave={() => { const draft = shipmentSection.save(); diffAndApply(booking, draft, SHIPMENT_FIELDS, addActivity, setEditedBooking, onBookingUpdated); }}
-      >
-        <div style={{ display: "grid", gap: "20px" }}>
-          <EditableField label="Commodity Description" value={shipmentSection.draft.commodityDescription || ""} type="textarea" mode={sMode} placeholder="Describe the goods..." onChange={(v) => shipmentSection.updateField("commodityDescription", v)} />
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px" }}>
-            <EditableField label="HS Code" value={shipmentSection.draft.hsCode || ""} mode={sMode} placeholder="Enter HS code..." onChange={(v) => shipmentSection.updateField("hsCode", v)} />
-            <EditableField label="Invoice Number" value={shipmentSection.draft.invoiceNumber || ""} mode={sMode} placeholder="Enter invoice number..." onChange={(v) => shipmentSection.updateField("invoiceNumber", v)} />
-            <EditableField label="Invoice Value" value={shipmentSection.draft.invoiceValue || ""} mode={sMode} placeholder="Enter invoice value..." onChange={(v) => shipmentSection.updateField("invoiceValue", v)} />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px" }}>
-            <EditableField label="Packaging Type" value={shipmentSection.draft.packagingType || ""} mode={sMode} placeholder="e.g., Pallets, Cartons..." onChange={(v) => shipmentSection.updateField("packagingType", v)} />
-            <EditableField label="Number of Packages" value={shipmentSection.draft.numberOfPackages || ""} mode={sMode} placeholder="Enter quantity..." onChange={(v) => shipmentSection.updateField("numberOfPackages", v)} />
-            <EditableField label="Gross Weight" value={shipmentSection.draft.grossWeight || ""} mode={sMode} placeholder="Enter weight..." onChange={(v) => shipmentSection.updateField("grossWeight", v)} />
-          </div>
-        </div>
-      </EditableSectionCard>
-
-      {/* ── Route Information ── */}
-      <EditableSectionCard
-        title="Route Information"
-        isEditing={routeSection.isEditing}
-        onEdit={routeSection.startEditing}
-        onCancel={routeSection.cancel}
-        onSave={() => { const draft = routeSection.save(); diffAndApply(booking, draft, ROUTE_FIELDS, addActivity, setEditedBooking, onBookingUpdated); }}
-      >
-        <div style={{ display: "grid", gap: "20px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px" }}>
-            <EditableField label="AOL (Airport of Loading)" value={routeSection.draft.aol || ""} mode={rMode} placeholder="Enter AOL..." onChange={(v) => routeSection.updateField("aol", v)} />
-            <EditableField label="POL (Port of Loading)" value={routeSection.draft.pol || ""} mode={rMode} placeholder="Enter POL..." onChange={(v) => routeSection.updateField("pol", v)} />
-            <EditableField label="Mode" value={routeSection.draft.mode || ""} mode={rMode} placeholder="e.g., FCL, AIR..." onChange={(v) => routeSection.updateField("mode", v)} />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px" }}>
-            <EditableField label="AOD (Airport of Discharge)" value={routeSection.draft.aod || ""} mode={rMode} placeholder="Enter AOD..." onChange={(v) => routeSection.updateField("aod", v)} />
-            <EditableField label="POD (Port of Discharge)" value={routeSection.draft.pod || ""} mode={rMode} placeholder="Enter POD..." onChange={(v) => routeSection.updateField("pod", v)} />
-            <EditableField label="Vessel/Voyage" value={routeSection.draft.vesselVoyage || ""} mode={rMode} placeholder="Enter vessel/voyage..." onChange={(v) => routeSection.updateField("vesselVoyage", v)} />
-          </div>
-        </div>
-      </EditableSectionCard>
-
-      {/* ── Additional Information ── */}
-      {(booking.specialConditions || booking.remarks) && (
-        <EditableSectionCard
-          title="Additional Information"
-          isEditing={additionalSection.isEditing}
-          onEdit={additionalSection.startEditing}
-          onCancel={additionalSection.cancel}
-          onSave={() => { const draft = additionalSection.save(); diffAndApply(booking, draft, ADDITIONAL_FIELDS, addActivity, setEditedBooking, onBookingUpdated); }}
-        >
-          <div style={{ display: "grid", gap: "20px" }}>
-            {booking.specialConditions && <EditableField label="Special Conditions" value={additionalSection.draft.specialConditions || ""} type="textarea" mode={aMode} placeholder="Enter special conditions..." onChange={(v) => additionalSection.updateField("specialConditions", v)} />}
-            {booking.remarks && <EditableField label="Remarks" value={additionalSection.draft.remarks || ""} type="textarea" mode={aMode} placeholder="Enter remarks..." onChange={(v) => additionalSection.updateField("remarks", v)} />}
-          </div>
-        </EditableSectionCard>
-      )}
-    </div>
-  );
-}

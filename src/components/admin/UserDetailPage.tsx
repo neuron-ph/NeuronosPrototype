@@ -266,7 +266,6 @@ export function UserDetailPage() {
         .update({
           department: editDept,
           role: editRole,
-          team_id: editTeamId || null,
           service_type: editDept === "Operations" ? (editServiceType || null) : null,
         })
         .eq("id", user.id);

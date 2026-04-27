@@ -1,5 +1,6 @@
 // App entrypoint — Neuron OS
 // Force recompilation: cache-bust 2026-03-12b
+import * as Sentry from "@sentry/react";
 import { useState, useEffect, Suspense, lazy } from "react";
 import { supabase } from "./utils/supabase/client";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation, useParams, useSearchParams, Outlet } from "react-router";
@@ -19,6 +20,7 @@ import { resolveThemeMode } from "./theme/themeBootstrap";
 import { Moon, Sun } from "lucide-react";
 import { useReferenceDataPrefetch } from "./hooks/useReferenceDataPrefetch";
 import { BetaWelcomeScreen } from "./components/onboarding/BetaWelcomeScreen";
+import { ErrorPage } from "./components/ErrorPage";
 import { FeedbackButton } from "./components/feedback/FeedbackButton";
 import { FeedbackPositionProvider } from "./contexts/FeedbackPositionContext";
 import posthog from "posthog-js";
@@ -57,6 +59,7 @@ const Settings = lazy(() => import("./components/settings/Settings").then((m) =>
 const UserManagement = lazy(() => import("./components/admin/UserManagement").then((m) => ({ default: m.UserManagement })));
 const UserDetailPage = lazy(() => import("./components/admin/UserDetailPage").then((m) => ({ default: m.UserDetailPage })));
 const CreateUserPage = lazy(() => import("./components/admin/CreateUserPage").then((m) => ({ default: m.CreateUserPage })));
+const ProfilingModule = lazy(() => import("./components/admin/profiling/ProfilingModule").then((m) => ({ default: m.ProfilingModule })));
 const CalendarModule = lazy(() => import("./components/calendar/CalendarModule").then((m) => ({ default: m.CalendarModule })));
 
 function RouteLoadingState() {
@@ -261,6 +264,7 @@ function RouteWrapper({ children, page }: { children: React.ReactNode; page: str
     if (path.startsWith("/activity-log")) return "activity-log";
     if (path.startsWith("/settings")) return "settings";
     if (path.startsWith("/admin/users")) return "admin-users";
+    if (path.startsWith("/admin/profiling")) return "admin-profiling";
     if (path.startsWith("/design-system")) return "design-system";
     return "dashboard";
   };
@@ -314,6 +318,7 @@ function RouteWrapper({ children, page }: { children: React.ReactNode; page: str
       "activity-log": "/activity-log",
       "settings": "/settings",
       "admin-users": "/admin/users",
+      "admin-profiling": "/admin/profiling",
       "design-system": "/design-system"
     };
     
@@ -1054,7 +1059,7 @@ function AppContent() {
   return (
     <FeedbackPositionProvider>
     <FeedbackButton />
-    <>
+<>
       <RouteTracker />
       {showWelcome && user && (
         <BetaWelcomeScreen userId={user.id} onDone={() => setShowWelcome(false)} />
@@ -1179,6 +1184,9 @@ function AppContent() {
           <Route path="/admin/users/new" element={<CreateUserPageWrapper />} />
           <Route path="/admin/users/:userId" element={<UserDetailPageWrapper />} />
         </Route>
+        <Route element={<GuardedLayout allowedDepartments={["Executive"]} requiredPermission={{ moduleId: "exec_profiling", action: "view" }} />}>
+          <Route path="/admin/profiling" element={<RouteWrapper page="admin-profiling"><ProfilingModule /></RouteWrapper>} />
+        </Route>
 
         {/* Open to all authenticated users */}
         <Route path="/calendar" element={<CalendarPage />} />
@@ -1188,12 +1196,11 @@ function AppContent() {
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/design-system" element={<DesignSystemPage />} />
         
-        {/* Diagnostics (hidden utility page) */}
+        {/* Diagnostics (hidden utility pages) */}
         <Route path="/diagnostics" element={<DiagnosticsPage />} />
         <Route path="/supabase-debug" element={<RouteWrapper page="admin"><SupabaseDebug /></RouteWrapper>} />
-        
-        {/* 404 fallback */}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+{/* 404 fallback */}
+        <Route path="*" element={<ErrorPage errorType="404" />} />
       </Routes>
       </Suspense>
     </>
@@ -1227,8 +1234,12 @@ export default function App() {
     <UserProvider>
       <PermissionProvider>
         <BrowserRouter>
-          <PostHogPageView />
-          <AppContent />
+          <Sentry.ErrorBoundary fallback={({ error }) => (
+            <ErrorPage errorType="500" message={error instanceof Error ? error.message : String(error)} />
+          )}>
+            <PostHogPageView />
+            <AppContent />
+          </Sentry.ErrorBoundary>
         </BrowserRouter>
       </PermissionProvider>
     </UserProvider>

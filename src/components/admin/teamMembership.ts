@@ -1,4 +1,4 @@
-export type TeamRoleLabel = "Team Leader" | "Supervisor" | "Representative";
+export type TeamRoleLabel = string;
 
 export type TeamMembershipUser = {
   id: string;
@@ -11,14 +11,8 @@ export type TeamMembershipUpdatePlan = {
   assignments: { userId: string; role: TeamRoleLabel }[];
 };
 
-const TEAM_ROLE_LABELS = new Set<string>([
-  "Team Leader",
-  "Supervisor",
-  "Representative",
-]);
-
 export function isTeamRoleLabel(value: unknown): value is TeamRoleLabel {
-  return typeof value === "string" && TEAM_ROLE_LABELS.has(value);
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 export function buildTeamMembershipUpdatePlan({

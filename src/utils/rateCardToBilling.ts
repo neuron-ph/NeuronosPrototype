@@ -17,6 +17,7 @@ import {
   type BookingQuantities,
 } from "./contractRateEngine";
 import type { BillingItem } from "../components/shared/billings/UnifiedBillingsTab";
+import { buildCatalogSnapshot } from "./catalogSnapshot";
 
 // ============================================
 // TYPES
@@ -137,6 +138,15 @@ export function generateRateCardBillingItems(
     applied_quantity: rate.quantity,
     rule_applied: rate.rule_applied,
     mode_column: modeColumn,
+
+    // Catalog identity — carried from the contract row via the rate engine
+    catalog_item_id: rate.catalog_item_id || null,
+    catalog_snapshot: rate.catalog_item_id
+      ? buildCatalogSnapshot(
+          { description: rate.particular, amount: rate.subtotal, currency },
+          `${ctx.serviceType} Charges`
+        )
+      : null,
 
     // Extended fields for UniversalPricingRow editing
     quantity: rate.quantity,

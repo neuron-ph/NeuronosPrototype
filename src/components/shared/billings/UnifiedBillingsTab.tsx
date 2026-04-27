@@ -12,6 +12,7 @@ import type { QuotationNew } from "../../../types/pricing";
 import { buildServiceToBookingMap, resolveBookingIdForService } from "../../../utils/financialSelectors";
 import { getBillingDisplayCategory } from "../../../utils/billingCategory";
 import { findNegativeBillingAmountItems } from "../../../utils/pricing/quotationSignedPricing";
+import { buildCatalogSnapshot } from "../../../utils/catalogSnapshot";
 
 // Interface matching the backend response for billing items
 export interface BillingItem {
@@ -534,15 +535,11 @@ export function UnifiedBillingsTab({
             // Snapshot: preserve catalog metadata at creation time so renames
             // don't alter historical billing line descriptions.
             catalog_snapshot: item.catalog_item_id
-              ? {
-                  name: item.description || "",
-                  unit_type: item.unit_type || null,
-                  tax_code: item.tax_code || null,
-                  category_name: persistedCategory,
-                  default_price: item.amount || 0,
-                  currency: item.currency || "PHP",
-                }
-              : (item.catalog_snapshot || {}),
+              ? buildCatalogSnapshot(
+                  { description: item.description, unit_type: item.unit_type, tax_code: item.tax_code, amount: item.amount, currency: item.currency },
+                  persistedCategory
+                )
+              : (item.catalog_snapshot || null),
             created_at: item.created_at || new Date().toISOString(),
             });
           };
@@ -695,15 +692,11 @@ export function UnifiedBillingsTab({
       source_type: item.source_type || (item.source_quotation_item_id ? "quotation_item" : "manual"),
       catalog_item_id: item.catalog_item_id || null,
       catalog_snapshot: item.catalog_item_id
-        ? {
-            name: item.description || "",
-            unit_type: item.unit_type || null,
-            tax_code: item.tax_code || null,
-            category_name: persistedCategory,
-            default_price: item.amount || 0,
-            currency: item.currency || "PHP",
-          }
-        : (item.catalog_snapshot || {}),
+        ? buildCatalogSnapshot(
+            { description: item.description, unit_type: item.unit_type, tax_code: item.tax_code, amount: item.amount, currency: item.currency },
+            persistedCategory
+          )
+        : (item.catalog_snapshot || null),
       created_at: item.created_at || new Date().toISOString(),
       });
     });

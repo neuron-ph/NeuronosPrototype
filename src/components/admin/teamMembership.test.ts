@@ -23,4 +23,24 @@ describe("buildTeamMembershipUpdatePlan", () => {
       { userId: "added", role: "Representative" },
     ]);
   });
+
+  it("supports configurable service-specific team role labels", () => {
+    const plan = buildTeamMembershipUpdatePlan({
+      teamId: "team-ops-1",
+      currentMembers: [
+        { id: "john", team_id: "team-ops-1", team_role: "Customs Declarant" },
+        { id: "mike", team_id: "team-ops-1", team_role: "ImpEx Supervisor" },
+      ],
+      memberRoles: {
+        john: "Customs Declarant",
+        anna: "ImpEx Supervisor",
+      },
+    });
+
+    expect(plan.removals).toEqual(["mike"]);
+    expect(plan.assignments).toEqual([
+      { userId: "john", role: "Customs Declarant" },
+      { userId: "anna", role: "ImpEx Supervisor" },
+    ]);
+  });
 });
