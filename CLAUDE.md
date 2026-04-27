@@ -216,6 +216,25 @@ Do not write a new Edge Function for anything achievable with the Supabase JS cl
    // use adminClient.from("users").eq("auth_id", callerAuthId).maybeSingle() to verify caller
    ```
 
+## Catalog Architecture (enforced — do not regress)
+
+All line-item entry across billing, expenses, and contracts is catalog-first. These rules are non-negotiable:
+
+- **No new revenue-side line item form** may use free-text item selection outside the Billing Catalog (`side="revenue"`)
+- **No new expense-side line item form** may use free-text item selection outside the Expense Catalog (`side="expense"`)
+- **No billing insert** into `billing_line_items` may omit `catalog_item_id`
+- **No expense insert** into `evoucher_line_items` may omit `catalog_item_id`
+- Every save path that writes a catalog item must also write a `catalog_snapshot` (use `buildCatalogSnapshot()` from `src/utils/catalogSnapshot.ts`)
+- Category-first UX is enforced structurally — users must create/select a category section before adding items. Use `CategoryDropdown` for the section header, pass `categoryId` to `CatalogItemCombobox`
+- Usage counts are RPC-based (`get_catalog_usage_counts()`) — never increment a counter manually
+- Archived items (`is_active = false`) are filtered at the DB layer in both `CatalogItemCombobox` and `CategoryDropdown`
+
+Key components:
+- `src/utils/catalogSnapshot.ts` — `buildCatalogSnapshot()` — always use this, never inline a snapshot object
+- `src/types/catalogLineItems.ts` — `CatalogSnapshot`, `BillingLineItemPayload`, `ExpenseLineItemPayload`
+- `src/components/shared/pricing/CatalogItemCombobox.tsx` — universal item picker (pass `side` + `categoryId`)
+- `src/components/pricing/quotations/CategoryDropdown.tsx` — category picker (pass `side`)
+
 ## Things to Avoid
 
 - Don't use `apiFetch`, `fetchWithRetry`, or `API_URL` — migration to `supabase.from()` is complete
@@ -227,6 +246,9 @@ Do not write a new Edge Function for anything achievable with the Supabase JS cl
 - Don't leak `SUPABASE_SERVICE_ROLE_KEY` to the frontend
 - Don't create a `tailwind.config.js` — Tailwind v4 uses `@theme inline` in `globals.css`
 - Don't create mock data when real Supabase tables exist
+- Don't add hardcoded category or sub-category lists — all categories come from `catalog_categories` table
+- Don't use `ChargeTypeCombobox` or `chargeTypeRegistry` for billing-side items — replaced by `CatalogItemCombobox`
+- Don't use the old `expenseCategory` / `subCategory` state pattern in E-Voucher forms — replaced by `categorySections`
 
 ## Design Tokens
 

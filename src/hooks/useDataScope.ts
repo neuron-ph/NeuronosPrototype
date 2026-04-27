@@ -112,20 +112,61 @@ export function useDataScope(resource?: string): DataScopeResult {
       const deptUsersPromise =
         effectiveRole === 'manager'
           ? supabase.from('users').select('id, role').eq('department', effectiveDepartment).eq('is_active', true)
-          : isTeamRole && user.team_id
-          ? supabase.from('users').select('id, role').eq('team_id', user.team_id).eq('is_active', true)
           : Promise.resolve({ data: null, error: null });
+
+      const membershipPromise = isTeamRole
+        ? supabase
+            .from('team_memberships')
+            .select('team_id')
+            .eq('user_id', user.id)
+            .eq('is_active', true)
+        : Promise.resolve({ data: null, error: null });
 
       const [
         { data: override, error: overrideError },
         { data: roleUsers, error: roleUsersError },
-      ] = await Promise.all([overridePromise, deptUsersPromise]);
+        { data: membershipRows, error: membershipError },
+      ] = await Promise.all([overridePromise, deptUsersPromise, membershipPromise]);
 
       if (overrideError) {
         console.warn('[DataScope] permission_override fetch failed:', overrideError.message);
       }
       if (roleUsersError) {
         console.warn('[DataScope] role users fetch failed:', roleUsersError.message);
+      }
+      if (membershipError) {
+        console.warn('[DataScope] team memberships fetch failed:', membershipError.message);
+      }
+
+      let teamRoleUsers: ScopedUser[] | null = null;
+      const teamIds = Array.from(
+        new Set(((membershipRows ?? []) as Array<{ team_id: string | null }>).map((row) => row.team_id).filter(Boolean)),
+      ) as string[];
+      if (isTeamRole && teamIds.length > 0) {
+        const { data: teamUserLinks, error: teamUserLinkError } = await supabase
+          .from('team_memberships')
+          .select('user_id')
+          .eq('is_active', true)
+          .in('team_id', teamIds);
+        if (teamUserLinkError) {
+          console.warn('[DataScope] team member links fetch failed:', teamUserLinkError.message);
+        } else {
+          const visibleUserIds = Array.from(
+            new Set((teamUserLinks ?? []).map((row) => row.user_id)),
+          );
+          if (visibleUserIds.length > 0) {
+            const { data: scopedUsers, error: scopedUsersError } = await supabase
+              .from('users')
+              .select('id, role')
+              .in('id', visibleUserIds)
+              .eq('is_active', true);
+            if (scopedUsersError) {
+              console.warn('[DataScope] scoped team users fetch failed:', scopedUsersError.message);
+            } else {
+              teamRoleUsers = (scopedUsers ?? []) as ScopedUser[];
+            }
+          }
+        }
       }
 
       const permissionOverride = override as PermissionOverrideScope | null;
@@ -177,11 +218,11 @@ export function useDataScope(resource?: string): DataScopeResult {
       }
 
       // 4. Team leader or supervisor — all active users in same team
-      if (isTeamRole && user.team_id) {
-        return { type: 'userIds', ids: visibleIds(roleUsers as ScopedUser[] | null) };
+      if (isTeamRole && teamRoleUsers) {
+        return { type: 'userIds', ids: visibleIds(teamRoleUsers) };
       }
 
-      // 5. Staff, supervisor with no team, or team_leader with no team — own records only
+      // 5. Staff, supervisor with no memberships, or team_leader with no memberships — own records only
       return { type: 'own', userId: user.id };
     },
   });

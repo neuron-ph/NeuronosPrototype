@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useLocation } from "react-router";
+import { useNavigate, useLocation, useSearchParams } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import { supabase } from "../../utils/supabase/client";
 import { queryKeys } from "../../lib/queryKeys";
@@ -22,8 +22,13 @@ import { AccessConfiguration, type ConfigUser } from "./AccessConfiguration";
 import { AccessProfiles, ProfileEditor } from "./accessProfiles/AccessProfiles";
 import type { AccessProfile } from "./accessProfiles/accessProfileTypes";
 import type { UserRow } from "./userFormShared";
-import { buildTeamMembershipUpdatePlan } from "./teamMembership";
 import { usePermission } from "../../context/PermissionProvider";
+import { OperationsTeamsSection } from "./OperationsTeamsSection";
+import {
+  clearTeamMemberships,
+  listActiveTeamMemberships,
+  replaceTeamMemberships,
+} from "../../utils/teamMemberships";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -36,10 +41,18 @@ interface Team {
   name: string;
   department: string;
   leader_id: string | null;
+  service_type: string | null;
 }
 
 interface TeamWithMembers extends Team {
-  members: { id: string; name: string; role: Role; email: string; avatar_url?: string | null }[];
+  members: {
+    id: string;
+    name: string;
+    role: Role;
+    team_role?: string | null;
+    email: string;
+    avatar_url?: string | null;
+  }[];
 }
 
 type OverrideScope = "department_wide" | "cross_department" | "full";
@@ -97,6 +110,12 @@ const TEAM_ROLE_COLORS: Record<string, { bg: string; text: string }> = {
   "Supervisor":     { bg: "var(--theme-status-warning-bg)",   text: "var(--theme-status-warning-fg)" },
   "Representative": { bg: "var(--neuron-bg-surface-subtle)",  text: "var(--theme-text-secondary)" },
 };
+
+const DEFAULT_TEAM_ROLE_OPTIONS = [
+  { roleKey: "team_leader", roleLabel: "Team Leader" },
+  { roleKey: "supervisor", roleLabel: "Supervisor" },
+  { roleKey: "representative", roleLabel: "Representative" },
+];
 
 const STATUS_BADGE: Record<UserStatus, { bg: string; text: string; dot: string }> = {
   active:    { bg: "var(--theme-status-success-bg)", text: "var(--theme-status-success-fg)", dot: "var(--theme-status-success-fg)" },
@@ -545,19 +564,32 @@ function InlineTeamCreateRow({
       return;
     }
 
-    const memberEntries = Object.entries(memberRoles).filter(([, r]) => r);
-    for (const [userId, role] of memberEntries) {
-      const { error: memberError } = await supabase
-        .from("users")
-        .update({ team_id: newTeam.id, team_role: role })
-        .eq("id", userId);
-
-      if (memberError) {
-        await supabase.from("teams").delete().eq("id", newTeam.id);
-        setSaving(false);
-        toast.error(`Team member assignment failed: ${memberError.message}`);
-        return;
-      }
+    try {
+      await replaceTeamMemberships({
+        teamId: newTeam.id,
+        memberRoles: Object.fromEntries(
+          Object.entries(memberRoles).map(([userId, roleLabel]) => [
+            userId,
+            roleLabel
+              ? {
+                  roleKey:
+                    DEFAULT_TEAM_ROLE_OPTIONS.find((option) => option.roleLabel === roleLabel)?.roleKey ??
+                    roleLabel.toLowerCase().replace(/[^a-z0-9]+/g, "_"),
+                  roleLabel,
+                }
+              : null,
+          ]),
+        ),
+      });
+    } catch (memberError) {
+      await supabase.from("teams").delete().eq("id", newTeam.id);
+      setSaving(false);
+      toast.error(
+        `Team member assignment failed: ${
+          memberError instanceof Error ? memberError.message : "Unknown error"
+        }`,
+      );
+      return;
     }
     const actor = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
     logCreation("team", newTeam.id, newTeam.name ?? newTeam.id, actor);
@@ -645,7 +677,7 @@ function InlineTeamEditRow({
   onSaved,
   onCancel,
 }: {
-  team: Team;
+  team: TeamWithMembers;
   users: { id: string; name: string; department: string; team_id: string | null; team_role?: string | null }[];
   onSaved: () => void;
   onCancel: () => void;
@@ -659,13 +691,11 @@ function InlineTeamEditRow({
   // Init member roles from current DB state
   useEffect(() => {
     const initial: Record<string, string> = {};
-    for (const u of users) {
-      if (u.team_id === team.id) {
-        initial[u.id] = u.team_role ?? "Representative";
-      }
+    for (const member of team.members) {
+      initial[member.id] = member.team_role ?? "Representative";
     }
     setMemberRoles(initial);
-  }, [team.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [team.id, team.members]);
 
   const handleSave = async () => {
     if (!name.trim()) { toast.error("Team name is required."); return; }
@@ -677,36 +707,31 @@ function InlineTeamEditRow({
       return;
     }
 
-    const plan = buildTeamMembershipUpdatePlan({
-      teamId: team.id,
-      currentMembers: users,
-      memberRoles,
-    });
-
-    for (const userId of plan.removals) {
-      const { error: removeError } = await supabase
-        .from("users")
-        .update({ team_id: null, team_role: null })
-        .eq("id", userId);
-
-      if (removeError) {
-        setSaving(false);
-        toast.error(`Failed to remove team member: ${removeError.message}`);
-        return;
-      }
-    }
-
-    for (const { userId, role } of plan.assignments) {
-      const { error: assignError } = await supabase
-        .from("users")
-        .update({ team_id: team.id, team_role: role })
-        .eq("id", userId);
-
-      if (assignError) {
-        setSaving(false);
-        toast.error(`Failed to save team member: ${assignError.message}`);
-        return;
-      }
+    try {
+      await replaceTeamMemberships({
+        teamId: team.id,
+        memberRoles: Object.fromEntries(
+          Object.entries(memberRoles).map(([userId, roleLabel]) => [
+            userId,
+            roleLabel
+              ? {
+                  roleKey:
+                    DEFAULT_TEAM_ROLE_OPTIONS.find((option) => option.roleLabel === roleLabel)?.roleKey ??
+                    roleLabel.toLowerCase().replace(/[^a-z0-9]+/g, "_"),
+                  roleLabel,
+                }
+              : null,
+          ]),
+        ),
+      });
+    } catch (assignError) {
+      setSaving(false);
+      toast.error(
+        `Failed to save team member: ${
+          assignError instanceof Error ? assignError.message : "Unknown error"
+        }`,
+      );
+      return;
     }
 
     setSaving(false);
@@ -799,7 +824,7 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
   const { data: teams = [], refetch: fetchTeams } = useQuery({
     queryKey: queryKeys.teams.list(),
     queryFn: async () => {
-      const { data } = await supabase.from("teams").select("id, name, department, leader_id").order("department").order("name");
+      const { data } = await supabase.from("teams").select("id, name, department, leader_id, service_type").order("department").order("name");
       return (data ?? []) as Team[];
     },
     staleTime: 5 * 60 * 1000,
@@ -814,10 +839,29 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
     staleTime: 5 * 60 * 1000,
   });
 
-  const teamsWithMembers = useMemo<TeamWithMembers[]>(() => teams.map(t => ({
-    ...t,
-    members: allUsers.filter(u => u.team_id === t.id).map(u => ({ id: u.id, name: u.name, role: u.role, email: u.email, avatar_url: u.avatar_url })),
-  })), [teams, allUsers]);
+  const { data: membershipRows = [], refetch: fetchMemberships } = useQuery({
+    queryKey: ["team_memberships", "active-roster"],
+    queryFn: listActiveTeamMemberships,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const teamsWithMembers = useMemo<TeamWithMembers[]>(
+    () =>
+      teams.map((t) => ({
+        ...t,
+        members: membershipRows
+          .filter((row) => row.teamId === t.id)
+          .map((row) => ({
+            id: row.userId,
+            name: row.userName,
+            role: row.userRole as Role,
+            team_role: row.roleLabel,
+            email: row.userEmail,
+            avatar_url: row.avatarUrl,
+          })),
+      })),
+    [membershipRows, teams],
+  );
 
   // Update parent with teams count
   useEffect(() => {
@@ -835,18 +879,24 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
     await Promise.all([
       fetchTeams(),
       fetchActiveUsers(),
+      fetchMemberships(),
       queryClient.invalidateQueries({ queryKey: queryKeys.teams.all() }),
       queryClient.invalidateQueries({ queryKey: queryKeys.users.all() }),
     ]);
-  }, [fetchActiveUsers, fetchTeams, queryClient]);
+  }, [fetchActiveUsers, fetchMemberships, fetchTeams, queryClient]);
 
   const handleDeleteConfirmed = async (teamId: string, teamName: string) => {
     setConfirmDeleteId(null);
     setDeletingId(teamId);
-    const { error: memberError } = await supabase.from("users").update({ team_id: null, team_role: null }).eq("team_id", teamId);
-    if (memberError) {
+    try {
+      await clearTeamMemberships(teamId);
+    } catch (memberError) {
       setDeletingId(null);
-      toast.error(`Failed to clear team members: ${memberError.message}`);
+      toast.error(
+        `Failed to clear team members: ${
+          memberError instanceof Error ? memberError.message : "Unknown error"
+        }`,
+      );
       return;
     }
     const { error } = await supabase.from("teams").delete().eq("id", teamId);
@@ -859,7 +909,7 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
   };
 
   const totalTeams = teams.length;
-  const totalMembers = allUsers.filter(u => u.team_id !== null).length;
+  const totalMembers = new Set(membershipRows.map((row) => row.userId)).size;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -880,6 +930,18 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
       {DEPARTMENTS.map(dept => {
         const deptTeams = byDept[dept] ?? [];
         const colors = DEPT_BADGE[dept] ?? { bg: "var(--neuron-pill-inactive-bg)", text: "var(--theme-text-secondary)" };
+        if (dept === "Operations") {
+          return (
+            <div key={dept} style={{ border: "1px solid var(--neuron-ui-border)", borderRadius: 12, overflow: "hidden", background: "var(--neuron-bg-elevated)" }}>
+              <OperationsTeamsSection
+                teams={deptTeams}
+                users={allUsers}
+                currentUser={currentUser}
+                onRefresh={refreshTeamsData}
+              />
+            </div>
+          );
+        }
         return (
           <div key={dept} style={{ border: "1px solid var(--neuron-ui-border)", borderRadius: 12, overflow: "hidden", background: "var(--neuron-bg-elevated)" }}>
             {/* Dept header */}
@@ -948,7 +1010,7 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
                         }}
 
                       >
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1, overflow: "hidden" }}>
                           <motion.div
                             animate={{ rotate: isExpanded ? 90 : 0 }}
                             transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
@@ -956,12 +1018,12 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
                           >
                             <ChevronRight size={13} style={{ color: "var(--neuron-ink-muted)" }} />
                           </motion.div>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--neuron-ink-primary)" }}>{team.name}</span>
-                          <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--neuron-ink-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 1 }}>{team.name}</span>
+                          <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)", flexShrink: 0 }}>
                             {team.members.length} {team.members.length === 1 ? "member" : "members"}
                           </span>
                           {leader && (
-                            <span style={{ fontSize: 11, fontWeight: 500, color: "var(--theme-action-primary-bg)", background: "var(--theme-status-success-bg)", padding: "2px 8px", borderRadius: 999 }}>
+                            <span style={{ fontSize: 11, fontWeight: 500, color: "var(--theme-action-primary-bg)", background: "var(--theme-status-success-bg)", padding: "2px 8px", borderRadius: 999, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 160, flexShrink: 1 }}>
                               {leader.name}
                             </span>
                           )}
@@ -1057,7 +1119,7 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
                                     background: "var(--neuron-bg-elevated)",
                                   }}
                                 >
-                                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
                                     {/* Avatar */}
                                     <div style={{
                                       width: 32, height: 32, borderRadius: "50%",
@@ -1072,9 +1134,9 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
                                       }
                                     </div>
                                     {/* Name + email */}
-                                    <div>
-                                      <p style={{ fontSize: 13, fontWeight: 500, color: "var(--neuron-ink-primary)", margin: 0, lineHeight: 1.3 }}>{m.name}</p>
-                                      <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: 0, lineHeight: 1.3 }}>{m.email}</p>
+                                    <div style={{ minWidth: 0 }}>
+                                      <p style={{ fontSize: 13, fontWeight: 500, color: "var(--neuron-ink-primary)", margin: 0, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</p>
+                                      <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: 0, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.email}</p>
                                     </div>
                                   </div>
                                   {/* Role badge */}
@@ -1472,11 +1534,16 @@ interface TabCounts {
 export function UserManagement() {
   const { can } = usePermission();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const canViewUsersTab          = can("admin_users_tab", "view");
   const canViewTeamsTab          = can("admin_teams_tab", "view");
   const canViewAccessProfilesTab = can("admin_access_profiles_tab", "view");
 
   const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const requestedTab = searchParams.get("tab");
+    if (requestedTab === "users" && canViewUsersTab) return "users";
+    if (requestedTab === "teams" && canViewTeamsTab) return "teams";
+    if (requestedTab === "profiles" && canViewAccessProfilesTab) return "profiles";
     if (canViewUsersTab)          return "users";
     if (canViewTeamsTab)          return "teams";
     if (canViewAccessProfilesTab) return "profiles";
@@ -1489,6 +1556,14 @@ export function UserManagement() {
   const [editingProfile, setEditingProfile] = useState<Partial<AccessProfile> | null | undefined>(undefined);
   const handleUsersCount = useCallback((count: number) => setTabCounts(prev => ({ ...prev, users: count })), []);
   const handleTeamsCount = useCallback((count: number) => setTabCounts(prev => ({ ...prev, teams: count })), []);
+
+  useEffect(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("tab", activeTab);
+      return next;
+    }, { replace: true });
+  }, [activeTab, setSearchParams]);
 
   if (configuringUser) {
     return (

@@ -3,6 +3,7 @@ import type { AppliedRate } from "./pricing";
 // ==================== STATUS TYPES ====================
 
 export type ExecutionStatus =
+  // Generic statuses (legacy)
   | "Draft"
   | "Pending"
   | "Confirmed"
@@ -11,7 +12,17 @@ export type ExecutionStatus =
   | "Completed"
   | "On Hold"
   | "Cancelled"
-  | "Closed";
+  | "Closed"
+  // Service-specific statuses (new schema)
+  | "Waiting for Arrival"  // Brokerage
+  | "Ongoing"              // Brokerage, Forwarding, Trucking, Marine Insurance, Others
+  | "In Transit"           // Forwarding
+  | "Audited"              // Brokerage
+  | "Empty Return"         // Trucking
+  | "Liquidated"           // Trucking
+  | "Issued"               // Marine Insurance
+  | "Billed"               // All services
+  | "Paid";                // All services
 
 // ==================== SERVICE TYPES ====================
 

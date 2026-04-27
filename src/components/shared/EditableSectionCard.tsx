@@ -78,6 +78,8 @@ interface EditableSectionCardProps {
   onCancel: () => void;
   isSaving?: boolean;
   children: React.ReactNode;
+  /** When true, renders as a borderless sheet slice (no card chrome). Default: false. */
+  sheet?: boolean;
 }
 
 export function EditableSectionCard({
@@ -89,7 +91,132 @@ export function EditableSectionCard({
   onCancel,
   isSaving = false,
   children,
+  sheet = false,
 }: EditableSectionCardProps) {
+  if (sheet) {
+    return (
+      <div style={{ backgroundColor: "var(--theme-bg-surface)" }}>
+        {/* ── Header ── */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            padding: "20px 24px 0",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <h2
+              style={{
+                fontSize: "13px",
+                fontWeight: 600,
+                color: "var(--neuron-ink-muted)",
+                textTransform: "uppercase",
+                letterSpacing: "0.5px",
+                margin: 0,
+              }}
+            >
+              {title}
+            </h2>
+            {isEditing && (
+              <span
+                style={{
+                  fontSize: "11px",
+                  fontWeight: 500,
+                  padding: "2px 8px",
+                  backgroundColor: "var(--theme-state-selected)",
+                  color: "var(--theme-action-primary-bg)",
+                  borderRadius: "4px",
+                }}
+              >
+                Editing
+              </span>
+            )}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {isEditing ? (
+              <>
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  disabled={isSaving}
+                  style={{
+                    padding: "6px 14px",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    backgroundColor: "var(--theme-bg-surface)",
+                    border: "1px solid var(--theme-border-default)",
+                    borderRadius: "6px",
+                    color: "var(--neuron-ink-secondary)",
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={onSave}
+                  disabled={isSaving}
+                  style={{
+                    padding: "6px 14px",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    backgroundColor: "var(--theme-action-primary-bg)",
+                    border: "1px solid var(--theme-action-primary-bg)",
+                    borderRadius: "6px",
+                    color: "white",
+                    cursor: isSaving ? "wait" : "pointer",
+                    opacity: isSaving ? 0.7 : 1,
+                  }}
+                >
+                  {isSaving ? "Saving..." : "Save"}
+                </button>
+              </>
+            ) : (
+              <>
+                {subtitle && (
+                  <span style={{ fontSize: "12px", color: "var(--neuron-ink-muted)" }}>
+                    {subtitle}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={onEdit}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "6px 14px",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    backgroundColor: "var(--theme-bg-surface)",
+                    border: "1px solid var(--theme-border-default)",
+                    borderRadius: "6px",
+                    color: "var(--neuron-ink-secondary)",
+                    cursor: "pointer",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
+                    e.currentTarget.style.color = "var(--theme-action-primary-bg)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = "var(--theme-border-default)";
+                    e.currentTarget.style.color = "var(--neuron-ink-secondary)";
+                  }}
+                >
+                  <Pencil size={13} />
+                  Edit
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+        {/* ── Body ── */}
+        <div style={{ padding: "16px 24px 24px" }}>{children}</div>
+      </div>
+    );
+  }
+
   return (
     <div
       style={{

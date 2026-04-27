@@ -129,9 +129,15 @@ export async function fetchDeptQueue(dept: string, userId: string): Promise<Dept
   }
 
   if (dept === "Operations") {
-    const orFilter = userId ? `handler_id.eq.${userId},supervisor_id.eq.${userId},manager_id.eq.${userId}` : undefined;
-    const query = supabase.from("bookings").select("id, booking_number, service_type, customer_name, status, created_at").not("status", "in", '("Completed","Cancelled")').order("created_at", { ascending: false }).limit(10);
-    const { data } = orFilter ? await query.or(orFilter) : await query;
+    // RLS already constrains visible bookings for the current user using
+    // booking_assignments and compatibility projections, so the dashboard can
+    // rely on the main bookings query instead of legacy handler/supervisor/manager filters.
+    const { data } = await supabase
+      .from("bookings")
+      .select("id, booking_number, service_type, customer_name, status, created_at")
+      .not("status", "in", '("Completed","Cancelled")')
+      .order("created_at", { ascending: false })
+      .limit(10);
     return { ...empty, activeBookings: (data ?? []) as BookingItem[] };
   }
 

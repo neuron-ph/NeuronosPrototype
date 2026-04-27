@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, MoreVertical, Lock, Clock, ChevronRight } from "lucide-react";
+import { ArrowLeft, MoreVertical, Clock, ChevronRight } from "lucide-react";
 import type { OthersBooking, ExecutionStatus } from "../../types/operations";
 import { UnifiedBillingsTab } from "../shared/billings/UnifiedBillingsTab";
 import { BookingRateCardButton } from "../contracts/BookingRateCardButton";
@@ -9,14 +9,12 @@ import { BookingCommentsTab } from "../shared/BookingCommentsTab";
 import { useProjectFinancials } from "../../hooks/useProjectFinancials";
 import { StatusSelector } from "../StatusSelector";
 import { toast } from "../ui/toast-utils";
-import { EditableSectionCard, useSectionEdit } from "../shared/EditableSectionCard";
-import { EditableField } from "../shared/EditableField";
 import { supabase } from "../../utils/supabase/client";
 import { assessBookingFinancialState, canTransitionBookingToCancelled, getBookingCancellationStatusMessage } from "../../utils/bookingCancellation";
 import { BookingCancelDeletePanel } from "./shared/BookingCancelDeletePanel";
 import { RequestBillingButton } from "../common/RequestBillingButton";
 import { loadBookingActivityLog, appendBookingActivity } from "../../utils/bookingActivityLog";
-import { BookingTeamSection } from "./shared/BookingTeamSection";
+import { BookingInfoTab } from "./shared/BookingInfoTab";
 import { useUser } from "../../hooks/useUser";
 import { usePermission } from "../../context/PermissionProvider";
 import { fireBillingTicketOnCompletion } from "../../utils/workflowTickets";
@@ -48,66 +46,6 @@ interface ActivityLogEntry {
 const initialActivityLog: ActivityLogEntry[] = [
   { id: "init-1", timestamp: new Date(), user: "System", action: "created" },
 ];
-
-const FIELD_LABELS: Record<string, string> = {
-  accountHandler: "Account Handler",
-  serviceDescription: "Service Description",
-  deliveryAddress: "Delivery Address",
-  specialRequirements: "Special Requirements",
-  requestedDate: "Requested Date",
-  completionDate: "Completion Date",
-  notes: "Notes",
-  assigned_manager_name: "Assigned Manager",
-  assigned_supervisor_name: "Assigned Supervisor",
-  assigned_handler_name: "Assigned Handler",
-};
-
-async function diffAndApply(
-  original: OthersBooking,
-  draft: OthersBooking,
-  fields: string[],
-  addActivity: (fieldName: string, oldValue: string, newValue: string) => void,
-  setEditedBooking: (fn: (prev: OthersBooking) => OthersBooking) => void,
-  onBookingUpdated: () => void,
-) {
-  const updates: Record<string, any> = {};
-  fields.forEach((field) => {
-    const oldVal = String((original as any)[field] ?? "");
-    const newVal = String((draft as any)[field] ?? "");
-    if (oldVal !== newVal) {
-      addActivity(FIELD_LABELS[field] || field, oldVal, newVal);
-      updates[field] = (draft as any)[field];
-    }
-  });
-  if (Object.keys(updates).length > 0) {
-    const existingDetails = (original as any).details || {};
-    const { error } = await supabase
-      .from('bookings')
-      .update({ details: { ...existingDetails, ...updates } })
-      .eq('id', original.bookingId || (original as any).id);
-    if (error) {
-      toast.error("Failed to save changes");
-      return;
-    }
-    setEditedBooking((prev: OthersBooking) => ({ ...prev, ...updates }));
-    onBookingUpdated();
-    toast.success("Changes saved");
-  }
-}
-
-function LockedField({ label, value, tooltip }: { label: string; value: string; tooltip?: string }) {
-  return (
-    <div>
-      <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", fontWeight: 500, color: "var(--neuron-ink-base)", marginBottom: "8px" }}>
-        {label}
-        <Lock size={12} color="var(--theme-text-muted)" style={{ cursor: "help" }} />
-      </label>
-      <div style={{ padding: "10px 14px", backgroundColor: "var(--theme-bg-page)", border: "1px solid var(--theme-border-default)", borderRadius: "6px", fontSize: "14px", color: "var(--theme-text-muted)", cursor: "not-allowed" }}>
-        {value || "—"}
-      </div>
-    </div>
-  );
-}
 
 function ActivityTimeline({ activities }: { activities: ActivityLogEntry[] }) {
   return (
@@ -243,7 +181,7 @@ export function OthersBookingDetails({ booking, onBack, onUpdate, currentUser, i
 
   return (
     <div style={{ backgroundColor: "var(--theme-bg-surface)", display: "flex", flexDirection: "column", height: "100vh" }}>
-      <div style={{ padding: "20px 48px", borderBottom: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--theme-bg-surface)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div style={{ padding: "20px 48px", borderBottom: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--theme-bg-surface)", display: "flex", justifyContent: "space-between", alignItems: "center", position: "relative", zIndex: 30 }}>
         <div>
           <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: "8px", background: "none", border: "none", color: "var(--neuron-ink-secondary)", cursor: "pointer", fontSize: "13px", marginBottom: "12px", padding: "0" }}
             onMouseEnter={(e) => { e.currentTarget.style.color = "var(--neuron-brand-green)"; }}
@@ -272,7 +210,7 @@ export function OthersBookingDetails({ booking, onBack, onUpdate, currentUser, i
         </div>
       </div>
 
-      <div style={{ padding: "0 48px", borderBottom: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--theme-bg-surface)", display: "flex", justifyContent: "space-between", alignItems: "center", height: "56px" }}>
+      <div style={{ padding: "0 48px", borderBottom: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--theme-bg-surface)", display: "flex", justifyContent: "space-between", alignItems: "center", height: "56px", position: "relative", zIndex: 20 }}>
         <div style={{ display: "flex", gap: "24px", height: "100%" }}>
           <button onClick={() => setActiveTab("booking-info")} style={tabStyle("booking-info")}>Booking Information</button>
           {canViewBillings && <button onClick={() => setActiveTab("billings")} style={tabStyle("billings")}>Billings</button>}
@@ -324,9 +262,17 @@ export function OthersBookingDetails({ booking, onBack, onUpdate, currentUser, i
       />
 
 
-      <div style={{ flex: 1, overflow: "hidden", display: "flex" }}>
+      <div style={{ flex: 1, overflow: "hidden", display: "flex", position: "relative", zIndex: 0 }}>
         <div style={{ flex: showTimeline ? "0 0 65%" : "1", overflow: "auto", transition: "flex 0.3s ease" }}>
-          {activeTab === "booking-info" && <BookingInformationTab booking={editedBooking} onBookingUpdated={onUpdate} addActivity={addActivity} setEditedBooking={setEditedBooking} currentUser={currentUser} />}
+          {activeTab === "booking-info" && (
+            <BookingInfoTab
+              booking={editedBooking as Record<string, unknown>}
+              serviceType="Others"
+              bookingId={String((editedBooking as any).id || booking.bookingId)}
+              onUpdate={onUpdate}
+              currentUser={currentUser}
+            />
+          )}
           {activeTab === "billings" && canViewBillings && <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]"><UnifiedBillingsTab items={bookingBillingItems} projectId={booking.projectNumber || ""} bookingId={booking.bookingId} onRefresh={financials.refresh} isLoading={financials.isLoading} pendingBillableCount={pendingBillableCount} extraActions={<BookingRateCardButton booking={booking} serviceType="Others" existingBillingItems={bookingBillingItems} onRefresh={financials.refresh} />} /></div>}
           {activeTab === "expenses" && <ExpensesTab bookingId={booking.bookingId} bookingNumber={(booking as any).booking_number || booking.bookingId} bookingType="others" currentUser={currentUser} highlightId={activeTab === "expenses" ? highlightId : undefined} existingBillingItems={bookingBillingItems} onPendingCountChange={setPendingBillableCount} />}
           {activeTab === "comments" && <BookingCommentsTab bookingId={booking.bookingId} />}
@@ -337,101 +283,3 @@ export function OthersBookingDetails({ booking, onBack, onUpdate, currentUser, i
   );
 }
 
-function BookingInformationTab({ booking, onBookingUpdated, addActivity, setEditedBooking, currentUser }: {
-  booking: OthersBooking; onBookingUpdated: () => void;
-  addActivity: (fieldName: string, oldValue: string, newValue: string) => void; setEditedBooking: any;
-  currentUser?: { name: string; email: string; department: string } | null;
-}) {
-  const generalSection = useSectionEdit(booking);
-  const serviceSection = useSectionEdit(booking);
-  const notesSection = useSectionEdit(booking);
-
-  const GENERAL_FIELDS = ["accountHandler"];
-  const SERVICE_FIELDS = ["serviceDescription", "deliveryAddress", "specialRequirements", "requestedDate", "completionDate"];
-  const NOTES_FIELDS = ["notes"];
-
-  const gMode = generalSection.isEditing ? "edit" : "view";
-  const sMode = serviceSection.isEditing ? "edit" : "view";
-  const nMode = notesSection.isEditing ? "edit" : "view";
-
-  return (
-    <div style={{ padding: "32px 48px", maxWidth: "1400px", margin: "0 auto" }}>
-
-      {/* ── Team Assignment ── */}
-      <BookingTeamSection
-        bookingId={(booking as any).id || booking.bookingId}
-        bookingNumber={(booking as any).booking_number || booking.bookingId}
-        serviceType="Others"
-        customerName={booking.customerName}
-        customerId={(booking as any).customer_id}
-        teamId={(booking as any).team_id}
-        teamName={(booking as any).team_name}
-        managerId={(booking as any).manager_id}
-        managerName={(booking as any).manager_name}
-        supervisorId={(booking as any).supervisor_id}
-        supervisorName={(booking as any).supervisor_name}
-        handlerId={(booking as any).handler_id}
-        handlerName={(booking as any).handler_name}
-        currentUser={currentUser}
-        onUpdate={onBookingUpdated}
-        addActivity={addActivity}
-      />
-
-      {/* ── General Information ── */}
-      <EditableSectionCard
-        title="General Information"
-        subtitle={`Last updated by ${booking.accountHandler || "System"}, ${new Date(booking.updatedAt).toLocaleString()}`}
-        isEditing={generalSection.isEditing}
-        onEdit={generalSection.startEditing}
-        onCancel={generalSection.cancel}
-        onSave={() => { const draft = generalSection.save(); diffAndApply(booking, draft, GENERAL_FIELDS, addActivity, setEditedBooking, onBookingUpdated); }}
-      >
-        <div style={{ display: "grid", gap: "20px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-            <LockedField label="Customer Name" value={booking.customerName} />
-            <LockedField label="Account Owner" value={booking.accountOwner || ""} />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px" }}>
-            <EditableField label="Account Handler" value={generalSection.draft.accountHandler || ""} mode={gMode} placeholder="Assign handler..." onChange={(v) => generalSection.updateField("accountHandler", v)} />
-            <LockedField label="Service/s" value={booking.service || ""} />
-            <LockedField label="Quotation Reference" value={booking.quotationReferenceNumber || ""} />
-          </div>
-        </div>
-      </EditableSectionCard>
-
-      {/* ── Service Details ── */}
-      <EditableSectionCard
-        title="Service Details"
-        isEditing={serviceSection.isEditing}
-        onEdit={serviceSection.startEditing}
-        onCancel={serviceSection.cancel}
-        onSave={() => { const draft = serviceSection.save(); diffAndApply(booking, draft, SERVICE_FIELDS, addActivity, setEditedBooking, onBookingUpdated); }}
-      >
-        <div style={{ display: "grid", gap: "20px" }}>
-          <EditableField label="Service Description" value={serviceSection.draft.serviceDescription || ""} type="textarea" mode={sMode} placeholder="Describe the service being provided..." onChange={(v) => serviceSection.updateField("serviceDescription", v)} />
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-            <EditableField label="Delivery Address" value={serviceSection.draft.deliveryAddress || ""} type="textarea" mode={sMode} placeholder="Enter delivery address..." onChange={(v) => serviceSection.updateField("deliveryAddress", v)} />
-            <EditableField label="Special Requirements" value={serviceSection.draft.specialRequirements || ""} type="textarea" mode={sMode} placeholder="Enter any special requirements..." onChange={(v) => serviceSection.updateField("specialRequirements", v)} />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-            <EditableField label="Requested Date" value={serviceSection.draft.requestedDate || ""} type="date" mode={sMode} onChange={(v) => serviceSection.updateField("requestedDate", v)} />
-            <EditableField label="Completion Date" value={serviceSection.draft.completionDate || ""} type="date" mode={sMode} onChange={(v) => serviceSection.updateField("completionDate", v)} />
-          </div>
-        </div>
-      </EditableSectionCard>
-
-      {/* ── Additional Notes ── */}
-      {booking.notes && (
-        <EditableSectionCard
-          title="Additional Notes"
-          isEditing={notesSection.isEditing}
-          onEdit={notesSection.startEditing}
-          onCancel={notesSection.cancel}
-          onSave={() => { const draft = notesSection.save(); diffAndApply(booking, draft, NOTES_FIELDS, addActivity, setEditedBooking, onBookingUpdated); }}
-        >
-          <EditableField label="Notes" value={notesSection.draft.notes || ""} type="textarea" mode={nMode} placeholder="Enter additional notes..." onChange={(v) => notesSection.updateField("notes", v)} />
-        </EditableSectionCard>
-      )}
-    </div>
-  );
-}

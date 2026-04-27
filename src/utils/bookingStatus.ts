@@ -30,16 +30,16 @@ export function getBookingStatusStyles(status: ExecutionStatus): StatusStyle {
     case "In Progress":
       return {
         bg: "var(--neuron-dept-ops-bg)",
-        text: "#F25C05",
+        text: "var(--neuron-dept-ops-text)",
         icon: Truck,
-        borderColor: "#FFEDD5"
+        borderColor: "var(--neuron-dept-ops-bg)"
       };
 
     case "Delivered":
     case "Completed":
       return {
         bg: "var(--theme-status-success-bg)",
-        text: "#059669",
+        text: "var(--theme-status-success-fg)",
         icon: CheckCircle2,
         borderColor: "var(--theme-status-success-bg)"
       };

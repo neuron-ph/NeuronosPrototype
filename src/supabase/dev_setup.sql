@@ -4839,3 +4839,492 @@ CREATE POLICY "access_profiles_manage"
   TO authenticated
   USING (public.is_executive())
   WITH CHECK (public.is_executive());
+
+-- ────────────────────────────────────────────────────────────
+-- MIGRATIONS 058–062: Profiling Module
+-- ────────────────────────────────────────────────────────────
+
+-- 058: Core profiling tables + service_providers tag column
+ALTER TABLE service_providers
+  ADD COLUMN IF NOT EXISTS booking_profile_tags text[] NOT NULL DEFAULT '{}';
+
+CREATE TABLE IF NOT EXISTS trade_parties (
+  id             text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  name           text NOT NULL,
+  role_scope     text NOT NULL CHECK (role_scope IN ('consignee', 'shipper', 'both')),
+  customer_id    text REFERENCES customers(id) ON DELETE SET NULL,
+  address        text,
+  tin            text,
+  contact_person text,
+  contact_number text,
+  aliases        text[] NOT NULL DEFAULT '{}',
+  is_active      boolean NOT NULL DEFAULT true,
+  created_by     text REFERENCES users(id) ON DELETE SET NULL,
+  updated_by     text REFERENCES users(id) ON DELETE SET NULL,
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  updated_at     timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS trade_parties_name_idx        ON trade_parties USING gin(to_tsvector('simple', name));
+CREATE INDEX IF NOT EXISTS trade_parties_role_scope_idx  ON trade_parties(role_scope);
+CREATE INDEX IF NOT EXISTS trade_parties_is_active_idx   ON trade_parties(is_active);
+CREATE INDEX IF NOT EXISTS trade_parties_customer_id_idx ON trade_parties(customer_id);
+
+CREATE TABLE IF NOT EXISTS profile_locations (
+  id              text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  kind            text NOT NULL CHECK (kind IN ('port', 'warehouse')),
+  name            text NOT NULL,
+  code            text,
+  country_id      text,
+  transport_modes text[] NOT NULL DEFAULT '{}',
+  aliases         text[] NOT NULL DEFAULT '{}',
+  is_active       boolean NOT NULL DEFAULT true,
+  created_by      text REFERENCES users(id) ON DELETE SET NULL,
+  updated_by      text REFERENCES users(id) ON DELETE SET NULL,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS profile_locations_kind_idx      ON profile_locations(kind);
+CREATE INDEX IF NOT EXISTS profile_locations_name_idx      ON profile_locations USING gin(to_tsvector('simple', name));
+CREATE INDEX IF NOT EXISTS profile_locations_is_active_idx ON profile_locations(is_active);
+
+CREATE TABLE IF NOT EXISTS profile_countries (
+  id         text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  iso_code   text NOT NULL UNIQUE,
+  name       text NOT NULL,
+  aliases    text[] NOT NULL DEFAULT '{}',
+  sort_order integer NOT NULL DEFAULT 999,
+  is_active  boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS profile_countries_iso_code_idx  ON profile_countries(iso_code);
+CREATE INDEX IF NOT EXISTS profile_countries_name_idx      ON profile_countries USING gin(to_tsvector('simple', name));
+CREATE INDEX IF NOT EXISTS profile_countries_sort_order_idx ON profile_countries(sort_order);
+
+-- 059: Dispatch tables
+CREATE TABLE IF NOT EXISTS dispatch_people (
+  id             text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  name           text NOT NULL,
+  type           text NOT NULL CHECK (type IN ('driver', 'helper')),
+  phone          text,
+  license_number text,
+  is_active      boolean NOT NULL DEFAULT true,
+  created_by     text REFERENCES users(id) ON DELETE SET NULL,
+  updated_by     text REFERENCES users(id) ON DELETE SET NULL,
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  updated_at     timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS dispatch_people_type_idx      ON dispatch_people(type);
+CREATE INDEX IF NOT EXISTS dispatch_people_is_active_idx ON dispatch_people(is_active);
+CREATE INDEX IF NOT EXISTS dispatch_people_name_idx      ON dispatch_people USING gin(to_tsvector('simple', name));
+
+CREATE TABLE IF NOT EXISTS vehicles (
+  id           text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  plate_number text NOT NULL,
+  vehicle_type text,
+  capacity     text,
+  is_active    boolean NOT NULL DEFAULT true,
+  created_by   text REFERENCES users(id) ON DELETE SET NULL,
+  updated_by   text REFERENCES users(id) ON DELETE SET NULL,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  updated_at   timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS vehicles_is_active_idx    ON vehicles(is_active);
+CREATE INDEX IF NOT EXISTS vehicles_plate_number_idx ON vehicles(plate_number);
+
+-- 060: Booking service catalog tables
+CREATE TABLE IF NOT EXISTS booking_service_catalog (
+  id           text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  service_type text NOT NULL,
+  name         text NOT NULL,
+  sort_order   integer NOT NULL DEFAULT 999,
+  is_active    boolean NOT NULL DEFAULT true,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  updated_at   timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (service_type, name)
+);
+
+CREATE INDEX IF NOT EXISTS bsc_service_type_idx ON booking_service_catalog(service_type);
+CREATE INDEX IF NOT EXISTS bsc_is_active_idx    ON booking_service_catalog(is_active);
+
+CREATE TABLE IF NOT EXISTS booking_subservice_catalog (
+  id           text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  service_type text NOT NULL,
+  name         text NOT NULL,
+  sort_order   integer NOT NULL DEFAULT 999,
+  is_active    boolean NOT NULL DEFAULT true,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  updated_at   timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (service_type, name)
+);
+
+CREATE INDEX IF NOT EXISTS bssc_service_type_idx ON booking_subservice_catalog(service_type);
+CREATE INDEX IF NOT EXISTS bssc_is_active_idx    ON booking_subservice_catalog(is_active);
+
+-- 061: Governance helpers + RLS (requires is_executive / is_manager_or_above from earlier migrations)
+ALTER TABLE trade_parties            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profile_locations        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profile_countries        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE dispatch_people          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE vehicles                 ENABLE ROW LEVEL SECURITY;
+ALTER TABLE booking_service_catalog  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE booking_subservice_catalog ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "trade_parties_read"           ON trade_parties FOR SELECT TO authenticated
+  USING (EXISTS (SELECT 1 FROM users WHERE auth_id = auth.uid() AND department != 'HR'));
+CREATE POLICY "trade_parties_write_exec"     ON trade_parties FOR ALL    TO authenticated
+  USING (is_executive()) WITH CHECK (is_executive());
+CREATE POLICY "trade_parties_write_manager"  ON trade_parties FOR INSERT TO authenticated
+  WITH CHECK (is_manager_or_above());
+CREATE POLICY "trade_parties_update_manager" ON trade_parties FOR UPDATE TO authenticated
+  USING (is_manager_or_above()) WITH CHECK (is_manager_or_above());
+
+CREATE POLICY "profile_locations_read"           ON profile_locations FOR SELECT TO authenticated
+  USING (EXISTS (SELECT 1 FROM users WHERE auth_id = auth.uid() AND department != 'HR'));
+CREATE POLICY "profile_locations_write_exec"     ON profile_locations FOR ALL    TO authenticated
+  USING (is_executive()) WITH CHECK (is_executive());
+CREATE POLICY "profile_locations_write_manager"  ON profile_locations FOR INSERT TO authenticated
+  WITH CHECK (is_manager_or_above());
+CREATE POLICY "profile_locations_update_manager" ON profile_locations FOR UPDATE TO authenticated
+  USING (is_manager_or_above()) WITH CHECK (is_manager_or_above());
+
+CREATE POLICY "profile_countries_read"       ON profile_countries FOR SELECT TO authenticated
+  USING (EXISTS (SELECT 1 FROM users WHERE auth_id = auth.uid() AND department != 'HR'));
+CREATE POLICY "profile_countries_write_exec" ON profile_countries FOR ALL    TO authenticated
+  USING (is_executive()) WITH CHECK (is_executive());
+
+CREATE POLICY "dispatch_people_read"           ON dispatch_people FOR SELECT TO authenticated
+  USING (EXISTS (SELECT 1 FROM users WHERE auth_id = auth.uid() AND department != 'HR'));
+CREATE POLICY "dispatch_people_write_exec"     ON dispatch_people FOR ALL    TO authenticated
+  USING (is_executive()) WITH CHECK (is_executive());
+CREATE POLICY "dispatch_people_write_manager"  ON dispatch_people FOR INSERT TO authenticated
+  WITH CHECK (is_manager_or_above());
+CREATE POLICY "dispatch_people_update_manager" ON dispatch_people FOR UPDATE TO authenticated
+  USING (is_manager_or_above()) WITH CHECK (is_manager_or_above());
+
+CREATE POLICY "vehicles_read"           ON vehicles FOR SELECT TO authenticated
+  USING (EXISTS (SELECT 1 FROM users WHERE auth_id = auth.uid() AND department != 'HR'));
+CREATE POLICY "vehicles_write_exec"     ON vehicles FOR ALL    TO authenticated
+  USING (is_executive()) WITH CHECK (is_executive());
+CREATE POLICY "vehicles_write_manager"  ON vehicles FOR INSERT TO authenticated
+  WITH CHECK (is_manager_or_above());
+CREATE POLICY "vehicles_update_manager" ON vehicles FOR UPDATE TO authenticated
+  USING (is_manager_or_above()) WITH CHECK (is_manager_or_above());
+
+CREATE POLICY "bsc_read"        ON booking_service_catalog    FOR SELECT TO authenticated USING (true);
+CREATE POLICY "bsc_write_exec"  ON booking_service_catalog    FOR ALL    TO authenticated
+  USING (is_executive()) WITH CHECK (is_executive());
+CREATE POLICY "bssc_read"       ON booking_subservice_catalog FOR SELECT TO authenticated USING (true);
+CREATE POLICY "bssc_write_exec" ON booking_subservice_catalog FOR ALL    TO authenticated
+  USING (is_executive()) WITH CHECK (is_executive());
+
+CREATE OR REPLACE FUNCTION get_profile_booking_usage(p_profile_id text)
+RETURNS bigint LANGUAGE sql STABLE SECURITY DEFINER AS $$
+  SELECT COUNT(*)
+  FROM bookings
+  WHERE status NOT IN ('Cancelled', 'Closed')
+    AND details IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM jsonb_each(details->'profile_refs') AS refs(key, val)
+      WHERE val->>'profile_id' = p_profile_id
+    );
+$$;
+
+CREATE OR REPLACE FUNCTION get_manual_profile_usage()
+RETURNS TABLE(profile_type text, manual_value text, booking_count bigint)
+LANGUAGE sql STABLE SECURITY DEFINER AS $$
+  SELECT val->>'profile_type', val->>'label_snapshot', COUNT(*)
+  FROM bookings, jsonb_each(details->'profile_refs') AS refs(key, val)
+  WHERE status NOT IN ('Cancelled', 'Closed')
+    AND val->>'source' = 'manual'
+    AND val->>'label_snapshot' IS NOT NULL
+    AND val->>'label_snapshot' != ''
+  GROUP BY 1, 2
+  ORDER BY 3 DESC;
+$$;
+
+-- 062: service_providers profiling RLS
+ALTER TABLE service_providers ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Authenticated full access" ON service_providers;
+
+CREATE POLICY "service_providers_read"
+  ON service_providers FOR SELECT TO authenticated
+  USING (EXISTS (SELECT 1 FROM users WHERE auth_id = auth.uid() AND department != 'HR'));
+CREATE POLICY "service_providers_write_exec"
+  ON service_providers FOR ALL TO authenticated
+  USING (is_executive()) WITH CHECK (is_executive());
+CREATE POLICY "service_providers_write_mgr"
+  ON service_providers FOR INSERT TO authenticated
+  WITH CHECK (is_manager_or_above());
+CREATE POLICY "service_providers_update_mgr"
+  ON service_providers FOR UPDATE TO authenticated
+  USING (is_manager_or_above()) WITH CHECK (is_manager_or_above());
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- 063: V1 team structure overhaul (compatibility-first)
+-- Mirrors migrations/063_v1_team_structure_overhaul.sql so local rebuilds work.
+-- Backfill blocks that depend on customer_team_profiles / existing bookings are
+-- guarded so this section is safe to run on a freshly-seeded local DB.
+-- ════════════════════════════════════════════════════════════════════════════
+
+-- 063.1 operational_services
+CREATE TABLE IF NOT EXISTS operational_services (
+  id                    uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  service_type          text        NOT NULL UNIQUE,
+  label                 text        NOT NULL,
+  department            text        NOT NULL DEFAULT 'Operations',
+  default_manager_id    text        REFERENCES users(id) ON DELETE SET NULL,
+  default_manager_name  text,
+  sort_order            integer     NOT NULL DEFAULT 0,
+  is_active             boolean     NOT NULL DEFAULT true,
+  created_at            timestamptz NOT NULL DEFAULT now(),
+  updated_at            timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS operational_services_active_idx
+  ON operational_services(is_active, sort_order);
+SELECT add_updated_at_trigger('operational_services');
+
+INSERT INTO operational_services (service_type, label, department, sort_order) VALUES
+  ('Forwarding',       'Forwarding',       'Operations', 10),
+  ('Brokerage',        'Brokerage',        'Operations', 20),
+  ('Trucking',         'Trucking',         'Operations', 30),
+  ('Marine Insurance', 'Marine Insurance', 'Operations', 40),
+  ('Others',           'Others',           'Operations', 50)
+ON CONFLICT (service_type) DO NOTHING;
+
+-- 063.2 service_assignment_roles
+CREATE TABLE IF NOT EXISTS service_assignment_roles (
+  id             uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  service_type   text        NOT NULL,
+  role_key       text        NOT NULL,
+  role_label     text        NOT NULL,
+  required       boolean     NOT NULL DEFAULT false,
+  allow_multiple boolean     NOT NULL DEFAULT false,
+  sort_order     integer     NOT NULL DEFAULT 0,
+  is_active      boolean     NOT NULL DEFAULT true,
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  updated_at     timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT service_assignment_roles_role_key_format
+    CHECK (role_key ~ '^[a-z][a-z0-9_]*$')
+);
+CREATE UNIQUE INDEX IF NOT EXISTS service_assignment_roles_active_uidx
+  ON service_assignment_roles (service_type, role_key) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS service_assignment_roles_service_idx
+  ON service_assignment_roles(service_type, sort_order);
+SELECT add_updated_at_trigger('service_assignment_roles');
+
+INSERT INTO service_assignment_roles
+  (service_type, role_key, role_label, required, allow_multiple, sort_order) VALUES
+  ('Brokerage',        'impex_supervisor',      'ImpEx Supervisor',      true,  false, 10),
+  ('Brokerage',        'team_leader',           'Team Leader',           false, false, 20),
+  ('Brokerage',        'customs_declarant',     'Customs Declarant',     true,  false, 30),
+  ('Forwarding',       'impex_supervisor',      'ImpEx Supervisor',      true,  false, 10),
+  ('Forwarding',       'team_leader',           'Team Leader',           false, false, 20),
+  ('Forwarding',       'customs_declarant',     'Customs Declarant',     true,  false, 30),
+  ('Trucking',         'operations_supervisor', 'Operations Supervisor', true,  false, 10),
+  ('Trucking',         'handler',               'Handler',               true,  false, 20),
+  ('Marine Insurance', 'operations_supervisor', 'Operations Supervisor', true,  false, 10),
+  ('Marine Insurance', 'handler',               'Handler',               true,  false, 20),
+  ('Others',           'operations_supervisor', 'Operations Supervisor', true,  false, 10),
+  ('Others',           'handler',               'Handler',               true,  false, 20)
+ON CONFLICT DO NOTHING;
+
+-- 063.3 teams.service_type
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS service_type text;
+UPDATE teams SET service_type = name
+ WHERE department = 'Operations'
+   AND service_type IS NULL
+   AND name IN ('Forwarding', 'Brokerage', 'Trucking', 'Marine Insurance', 'Others');
+CREATE INDEX IF NOT EXISTS teams_service_type_idx
+  ON teams(service_type) WHERE service_type IS NOT NULL;
+
+-- 063.4 assignment_default_profiles
+CREATE TABLE IF NOT EXISTS assignment_default_profiles (
+  id             uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  subject_type   text        NOT NULL,
+  subject_id     text        NOT NULL,
+  customer_id    text        REFERENCES customers(id) ON DELETE CASCADE,
+  service_type   text        NOT NULL,
+  team_id        uuid        REFERENCES teams(id) ON DELETE SET NULL,
+  source_label   text,
+  notes          text,
+  is_active      boolean     NOT NULL DEFAULT true,
+  created_by     text        REFERENCES users(id) ON DELETE SET NULL,
+  updated_by     text        REFERENCES users(id) ON DELETE SET NULL,
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  updated_at     timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT assignment_default_profiles_subject_type_chk
+    CHECK (subject_type IN ('customer', 'trade_party'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS assignment_default_profiles_subject_uidx
+  ON assignment_default_profiles (subject_type, subject_id, service_type) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS assignment_default_profiles_customer_idx
+  ON assignment_default_profiles(customer_id, service_type) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS assignment_default_profiles_subject_lookup_idx
+  ON assignment_default_profiles(subject_type, subject_id) WHERE is_active = true;
+SELECT add_updated_at_trigger('assignment_default_profiles');
+
+-- 063.5 assignment_default_items
+CREATE TABLE IF NOT EXISTS assignment_default_items (
+  id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id  uuid        NOT NULL REFERENCES assignment_default_profiles(id) ON DELETE CASCADE,
+  role_key    text        NOT NULL,
+  role_label  text        NOT NULL,
+  user_id     text        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_name   text        NOT NULL,
+  sort_order  integer     NOT NULL DEFAULT 0,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT assignment_default_items_role_key_format
+    CHECK (role_key ~ '^[a-z][a-z0-9_]*$')
+);
+CREATE UNIQUE INDEX IF NOT EXISTS assignment_default_items_role_uidx
+  ON assignment_default_items (profile_id, role_key);
+CREATE INDEX IF NOT EXISTS assignment_default_items_profile_idx
+  ON assignment_default_items(profile_id, sort_order);
+CREATE INDEX IF NOT EXISTS assignment_default_items_user_idx
+  ON assignment_default_items(user_id);
+SELECT add_updated_at_trigger('assignment_default_items');
+
+-- 063.6 booking_assignments
+CREATE TABLE IF NOT EXISTS booking_assignments (
+  id            uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  booking_id    text        NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+  service_type  text        NOT NULL,
+  role_key      text        NOT NULL,
+  role_label    text        NOT NULL,
+  user_id       text        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_name     text        NOT NULL,
+  source        text        NOT NULL DEFAULT 'manual',
+  assigned_by   text        REFERENCES users(id) ON DELETE SET NULL,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT booking_assignments_source_chk
+    CHECK (source IN ('service_default', 'customer_default', 'trade_party_default', 'manual', 'legacy')),
+  CONSTRAINT booking_assignments_role_key_format
+    CHECK (role_key ~ '^[a-z][a-z0-9_]*$')
+);
+CREATE UNIQUE INDEX IF NOT EXISTS booking_assignments_role_uidx
+  ON booking_assignments (booking_id, role_key);
+CREATE INDEX IF NOT EXISTS booking_assignments_booking_idx
+  ON booking_assignments(booking_id);
+CREATE INDEX IF NOT EXISTS booking_assignments_user_idx
+  ON booking_assignments(user_id);
+CREATE INDEX IF NOT EXISTS booking_assignments_service_idx
+  ON booking_assignments(service_type);
+SELECT add_updated_at_trigger('booking_assignments');
+
+-- 063.7 RLS
+ALTER TABLE operational_services        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE service_assignment_roles    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE assignment_default_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE assignment_default_items    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE booking_assignments         ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS operational_services_read ON operational_services;
+CREATE POLICY operational_services_read ON operational_services
+  FOR SELECT TO authenticated USING (true);
+
+DROP POLICY IF EXISTS service_assignment_roles_read ON service_assignment_roles;
+CREATE POLICY service_assignment_roles_read ON service_assignment_roles
+  FOR SELECT TO authenticated USING (true);
+
+DROP POLICY IF EXISTS operational_services_write_exec ON operational_services;
+CREATE POLICY operational_services_write_exec ON operational_services
+  FOR ALL TO authenticated
+  USING     (is_executive() OR get_my_department() = 'Executive' OR get_my_role() = 'executive')
+  WITH CHECK(is_executive() OR get_my_department() = 'Executive' OR get_my_role() = 'executive');
+
+DROP POLICY IF EXISTS service_assignment_roles_write_exec ON service_assignment_roles;
+CREATE POLICY service_assignment_roles_write_exec ON service_assignment_roles
+  FOR ALL TO authenticated
+  USING     (is_executive() OR get_my_department() = 'Executive' OR get_my_role() = 'executive')
+  WITH CHECK(is_executive() OR get_my_department() = 'Executive' OR get_my_role() = 'executive');
+
+DROP POLICY IF EXISTS assignment_default_profiles_select ON assignment_default_profiles;
+CREATE POLICY assignment_default_profiles_select ON assignment_default_profiles
+  FOR SELECT TO authenticated USING (get_my_department() != 'HR');
+DROP POLICY IF EXISTS assignment_default_profiles_write ON assignment_default_profiles;
+CREATE POLICY assignment_default_profiles_write ON assignment_default_profiles
+  FOR ALL TO authenticated
+  USING (get_my_department() IN ('Business Development','Operations','Pricing','Accounting','Executive') OR is_executive())
+  WITH CHECK (get_my_department() IN ('Business Development','Operations','Pricing','Accounting','Executive') OR is_executive());
+
+DROP POLICY IF EXISTS assignment_default_items_select ON assignment_default_items;
+CREATE POLICY assignment_default_items_select ON assignment_default_items
+  FOR SELECT TO authenticated USING (get_my_department() != 'HR');
+DROP POLICY IF EXISTS assignment_default_items_write ON assignment_default_items;
+CREATE POLICY assignment_default_items_write ON assignment_default_items
+  FOR ALL TO authenticated
+  USING (get_my_department() IN ('Business Development','Operations','Pricing','Accounting','Executive') OR is_executive())
+  WITH CHECK (get_my_department() IN ('Business Development','Operations','Pricing','Accounting','Executive') OR is_executive());
+
+DROP POLICY IF EXISTS booking_assignments_select ON booking_assignments;
+CREATE POLICY booking_assignments_select ON booking_assignments
+  FOR SELECT TO authenticated
+  USING (EXISTS (SELECT 1 FROM bookings b WHERE b.id = booking_assignments.booking_id));
+DROP POLICY IF EXISTS booking_assignments_write ON booking_assignments;
+CREATE POLICY booking_assignments_write ON booking_assignments
+  FOR ALL TO authenticated
+  USING (get_my_department() IN ('Operations','Executive') OR is_executive())
+  WITH CHECK (get_my_department() IN ('Operations','Executive') OR is_executive());
+
+-- 063.8 can_access_booking — assignment-aware
+DROP FUNCTION IF EXISTS can_access_booking(text, text, text, text, text);
+CREATE OR REPLACE FUNCTION can_access_booking(
+  p_created_by    text,
+  p_assigned_to   text DEFAULT NULL,
+  p_manager_id    text DEFAULT NULL,
+  p_supervisor_id text DEFAULT NULL,
+  p_handler_id    text DEFAULT NULL,
+  p_booking_id    text DEFAULT NULL
+)
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+AS $$
+  SELECT
+    is_executive()
+    OR get_my_role() = 'executive'
+    OR get_my_override_scope() = 'full'
+    OR p_created_by    = get_my_profile_id()
+    OR p_assigned_to   = get_my_profile_id()
+    OR p_manager_id    = get_my_profile_id()
+    OR p_supervisor_id = get_my_profile_id()
+    OR p_handler_id    = get_my_profile_id()
+    OR (
+      p_booking_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM booking_assignments ba
+        WHERE ba.booking_id = p_booking_id AND ba.user_id = get_my_profile_id()
+      )
+    )
+    OR (
+      get_my_role() IN ('team_leader', 'supervisor')
+      AND p_created_by = ANY(get_my_team_member_ids())
+      AND NOT (
+        get_org_block_higher_rank()
+        AND get_owner_role_level(p_created_by) > get_my_role_level()
+      )
+    )
+    OR (
+      get_my_role() = 'manager'
+      AND NOT (
+        get_org_block_higher_rank()
+        AND get_owner_role_level(p_created_by) > get_my_role_level()
+      )
+    );
+$$;
+
+DROP POLICY IF EXISTS bookings_select ON bookings;
+CREATE POLICY bookings_select ON bookings
+  FOR SELECT TO authenticated
+  USING (
+    get_my_department() IN ('Operations', 'Accounting', 'Executive')
+    AND can_access_booking(created_by, NULL, manager_id, supervisor_id, handler_id, id)
+  );

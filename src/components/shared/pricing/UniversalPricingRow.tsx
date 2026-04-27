@@ -175,9 +175,7 @@ export function UniversalPricingRow({
               categoryId={categoryId}
               onChange={(description, catalogItemId) => {
                 handleFieldChange('description', description);
-                if (catalogItemId !== undefined) {
-                  handleFieldChange('catalog_item_id', catalogItemId);
-                }
+                handleFieldChange('catalog_item_id', catalogItemId ?? null);
               }}
               placeholder="Item description"
             />

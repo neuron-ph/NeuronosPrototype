@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useTeams } from "../../hooks/useTeams";
 import { Eye, EyeOff, AlertCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { supabase } from "../../utils/supabase/client";
@@ -48,9 +47,6 @@ export function CreateUserPanel({ isOpen, onClose, onCreated }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Only fetch teams when Operations is selected
-  const { teams } = useTeams(department === "Operations");
-
   // Reset Operations-specific fields when department changes away from Operations
   useEffect(() => {
     if (department !== "Operations") {
@@ -86,7 +82,7 @@ export function CreateUserPanel({ isOpen, onClose, onCreated }: Props) {
           password,
           department,
           role,
-          team_id: teamId || null,
+          team_id: null,
         },
       });
 
@@ -95,14 +91,13 @@ export function CreateUserPanel({ isOpen, onClose, onCreated }: Props) {
         return;
       }
 
-      // Edge Function sets name/dept/role/team_id. Apply remaining fields via follow-up update.
+      // Edge Function sets name/dept/role. Apply remaining fields via follow-up update.
       if (data.user?.id && (position.trim() || serviceType || teamRole || status !== "active")) {
         await supabase
           .from("users")
           .update({
             position: position.trim() || null,
             service_type: serviceType || null,
-            team_role: teamRole || null,
             status,
             is_active: status === "active",
           })
@@ -261,8 +256,7 @@ export function CreateUserPanel({ isOpen, onClose, onCreated }: Props) {
           />
         </div>
 
-        {/* Operations-only: grouped into a card so Team, Team Title, and Service Type
-            read as one cohesive assignment rather than three unrelated fields. */}
+        {/* Operations-only: service context lives here; team pool membership is managed from Teams. */}
         {department === "Operations" && (
           <div className="mb-5 rounded-xl border border-[var(--neuron-ui-border)] overflow-hidden">
             {/* Card header */}
@@ -271,10 +265,10 @@ export function CreateUserPanel({ isOpen, onClose, onCreated }: Props) {
               style={{ backgroundColor: "var(--neuron-bg-subtle)" }}
             >
               <p className="text-[13px] font-medium text-[var(--neuron-ink-primary)]">
-                Team Assignment
+                Operations Context
               </p>
               <p className="text-[12px] text-[var(--neuron-ink-muted)]">
-                Operations team, position, and service lane
+                Service lane lives here. Team pool membership is managed from Users &gt; Teams &gt; Operations.
               </p>
             </div>
 
@@ -283,20 +277,9 @@ export function CreateUserPanel({ isOpen, onClose, onCreated }: Props) {
               className="p-4 flex flex-col gap-4"
               style={{ backgroundColor: "var(--neuron-bg-elevated)" }}
             >
-              <div>
-                <FieldLabel>Team</FieldLabel>
-                <CustomDropdown
-                  label=""
-                  value={teamId}
-                  onChange={setTeamId}
-                  fullWidth
-                  triggerAriaLabel="Team"
-                  options={[
-                    { value: "", label: "No team" },
-                    ...teams.map((t) => ({ value: t.id, label: t.name })),
-                  ]}
-                />
-              </div>
+              <p className="text-[12px] text-[var(--neuron-ink-muted)] m-0">
+                Add the account first, then place them into a service team pool from the Teams tab.
+              </p>
 
               <div>
                 <FieldLabel>Team Title</FieldLabel>

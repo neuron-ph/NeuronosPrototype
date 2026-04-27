@@ -78,7 +78,7 @@ export type ModuleId =
   // ─── HR ──────────────────────────────────────────────────────────────────────
   | "hr"
   // ─── Executive / Admin ────────────────────────────────────────────────────────
-  | "exec_activity_log" | "exec_users"
+  | "exec_activity_log" | "exec_users" | "exec_profiling"
   | "admin_users_tab" | "admin_teams_tab" | "admin_overrides_tab" | "admin_access_profiles_tab"
   // ─── Inbox ───────────────────────────────────────────────────────────────────
   | "inbox" | "inbox_entity_picker"
@@ -319,6 +319,7 @@ export const PERM_MODULES: PermModule[] = [
   // ─── Executive / Admin ────────────────────────────────────────────────────────
   { id: "exec_activity_log", label: "Activity Log",    group: EXC, dept: EXC, applicableActions: A.viewExport },
   { id: "exec_users",        label: "User Management", group: EXC, dept: EXC, applicableActions: A.listOnly },
+  { id: "exec_profiling",    label: "Profiling",        group: EXC, dept: EXC, applicableActions: A.listOnly },
   { id: "admin_users_tab",     label: "↳ Users",            group: EXC, dept: EXC, applicableActions: A.viewOnly },
   { id: "admin_teams_tab",     label: "↳ Teams",            group: EXC, dept: EXC, applicableActions: A.viewOnly },
   { id: "admin_overrides_tab", label: "↳ Access Overrides", group: EXC, dept: EXC, applicableActions: A.viewOnly },

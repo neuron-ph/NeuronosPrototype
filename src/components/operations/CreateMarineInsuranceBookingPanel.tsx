@@ -1,221 +1,141 @@
-import { Shield, Package, FileText } from "lucide-react";
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
+import { Shield, Users } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
-import { CustomDropdown } from "../bd/CustomDropdown";
-import { SearchableDropdown } from "../shared/SearchableDropdown";
-import { MovementToggle } from "./shared/MovementToggle";
-import { ContractDetectionBanner } from "./shared/ContractDetectionBanner";
+import {
+  ServiceRoleAssignmentForm,
+  type ServiceRoleAssignmentPayload,
+} from "./assignments/ServiceRoleAssignmentForm";
 import { BookingCreationPanel } from "./shared/BookingCreationPanel";
-import { useCustomerOptions } from "./shared/useCustomerOptions";
+import { BookingDynamicForm } from "./shared/BookingDynamicForm";
+import { useBookingFormState } from "./shared/useBookingFormState";
+import { validateBookingForm, hasErrors } from "./shared/bookingFormValidation";
+import { buildBookingPayload, toSupabaseRow } from "../../utils/bookings/bookingPayload";
+import {
+  legacyProjectionFromAssignment,
+  persistAssignmentsForNewBooking,
+} from "../../utils/assignments/applyAssignmentToBookingPayload";
+import { ContractDetectionBanner } from "./shared/ContractDetectionBanner";
 import { logCreation } from "../../utils/activityLog";
 import { fireBookingAssignmentTickets } from "../../utils/workflowTickets";
 import { generateBookingNumber } from "../../utils/bookingNumberUtils";
-import { useUser } from "../../hooks/useUser";
-import { TeamAssignmentForm, type TeamAssignment } from "../pricing/TeamAssignmentForm";
 
 interface CreateMarineInsuranceBookingPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: (bookingData?: any) => void;
-  onBookingCreated?: (bookingData?: any) => void;
-  prefillData?: any;
+  onSuccess?: (bookingData?: Record<string, unknown>) => void;
+  onBookingCreated?: (bookingData?: Record<string, unknown>) => void;
+  prefillData?: Record<string, unknown>;
   source?: string;
   customerId?: string;
   serviceType?: string;
-  currentUser?: any;
+  currentUser?: { id?: string; name?: string; department?: string } | null;
 }
 
 export function CreateMarineInsuranceBookingPanel({
   isOpen,
   onClose,
   onSuccess,
+  onBookingCreated,
+  prefillData,
   source = "operations",
   customerId,
-  prefillData,
   currentUser,
 }: CreateMarineInsuranceBookingPanelProps) {
-  const { user } = useUser();
   const [loading, setLoading] = useState(false);
-  const [teamAssignment, setTeamAssignment] = useState<TeamAssignment | null>(null);
-  // ✨ CONTRACT: Detected contract ID for auto-linking
+  const [assignmentPayload, setAssignmentPayload] = useState<ServiceRoleAssignmentPayload | null>(null);
   const [detectedContractId, setDetectedContractId] = useState<string | null>(null);
-  const customerOptions = useCustomerOptions(isOpen);
-  const [formData, setFormData] = useState({
-    customerName: "",
-    name: "",
-    movement: "IMPORT",
-    accountOwner: "",
-    accountHandler: "",
-    policyNumber: "",
-    insuranceProvider: "",
-    coverageType: "",
-    sumInsured: "",
-    premium: "",
-    quotationReferenceNumber: "",
+  const [submitErrors, setSubmitErrors] = useState<Record<string, string>>({});
+
+  const { formState, setField, initFromPrefill, context } = useBookingFormState("Marine Insurance", {
     status: "Draft",
-    insuredParty: "",
-    commodityDescription: "",
-    invoiceValue: "",
-    voyage: "",
-    vesselName: "",
-    departurePort: "",
-    arrivalPort: "",
-    departureDate: "",
-    arrivalDate: "",
-    policyStartDate: "",
-    policyEndDate: "",
-    claimStatus: "",
-    remarks: "",
   });
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
-  ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
   useEffect(() => {
-    if (!prefillData) return;
-    setFormData((prev) => ({
-      ...prev,
-      name: prev.name || prefillData.name || "",
-      customerName: prefillData.customerName || prev.customerName,
-      movement: prefillData.movement || prev.movement,
-      quotationReferenceNumber: prefillData.quotationReferenceNumber || prev.quotationReferenceNumber,
-      accountOwner: prefillData.accountOwner || currentUser?.name || prev.accountOwner,
-      accountHandler: prefillData.accountHandler || currentUser?.name || prev.accountHandler,
-      commodityDescription: prefillData.commodityDescription || prev.commodityDescription,
-      invoiceValue: prefillData.invoiceValue || prev.invoiceValue,
-      departurePort: prefillData.departurePort || prev.departurePort,
-      arrivalPort: prefillData.arrivalPort || prev.arrivalPort,
-      vesselName: prefillData.vesselName || prev.vesselName,
-      // Field name mappings: autofill key → form field name
-      voyage: prefillData.voyageNumber || prev.voyage,
-      coverageType: prefillData.insuranceType || prev.coverageType,
-      departureDate: prefillData.estimatedDeparture || prev.departureDate,
-      arrivalDate: prefillData.estimatedArrival || prev.arrivalDate,
-    }));
-  }, [prefillData]);
+    if (prefillData && isOpen) initFromPrefill(prefillData);
+  }, [prefillData, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!formData.name.trim()) {
-      toast.error("Booking Name is required");
+
+    const errors = validateBookingForm(formState, "Marine Insurance", context);
+    if (hasErrors(errors)) {
+      setSubmitErrors(errors);
+      toast.error("Please fill in all required fields");
       return;
     }
-    if (!formData.customerName) {
-      toast.error("Customer Name is required");
+    if (assignmentPayload?.hasMissingRequired) {
+      toast.error("Please fill in all required role assignments");
       return;
     }
-    if (!formData.commodityDescription) {
-      toast.error("Commodity description is required");
-      return;
-    }
-    if (!formData.sumInsured) {
-      toast.error("Sum insured is required");
-      return;
-    }
-    
+    setSubmitErrors({});
     setLoading(true);
 
     try {
       const bookingNumber = await generateBookingNumber("Marine Insurance");
-      const insertPayload: Record<string, any> = {
-        id: crypto.randomUUID(),
-        service_type: "Marine Insurance",
-        booking_number: bookingNumber,
-        name: formData.name.trim(),
-        customer_name: formData.customerName,
-        status: formData.status || "Draft",
-        movement_type: formData.movement,
-        ...(detectedContractId && { contract_id: detectedContractId }),
-        details: {
-          accountOwner: formData.accountOwner,
-          accountHandler: formData.accountHandler,
-          policyNumber: formData.policyNumber,
-          insuranceProvider: formData.insuranceProvider,
-          coverageType: formData.coverageType,
-          sumInsured: formData.sumInsured,
-          premium: formData.premium,
-          quotationReferenceNumber: formData.quotationReferenceNumber,
-          insuredParty: formData.insuredParty,
-          commodityDescription: formData.commodityDescription,
-          invoiceValue: formData.invoiceValue,
-          voyage: formData.voyage,
-          vesselName: formData.vesselName,
-          departurePort: formData.departurePort,
-          arrivalPort: formData.arrivalPort,
-          departureDate: formData.departureDate,
-          arrivalDate: formData.arrivalDate,
-          policyStartDate: formData.policyStartDate,
-          policyEndDate: formData.policyEndDate,
-          claimStatus: formData.claimStatus,
-          remarks: formData.remarks,
+      const { topLevel, details } = buildBookingPayload(formState, "Marine Insurance");
+
+      const row = toSupabaseRow(
+        {
+          id: crypto.randomUUID(),
+          ...topLevel,
+          booking_number: bookingNumber,
+          ...(detectedContractId ? { contract_id: detectedContractId } : {}),
+          ...legacyProjectionFromAssignment(assignmentPayload),
         },
-      };
+        details,
+      );
 
-      if (teamAssignment) {
-        insertPayload.manager_id = teamAssignment.manager.id;
-        insertPayload.manager_name = teamAssignment.manager.name;
-        insertPayload.team_id = teamAssignment.team.id;
-        insertPayload.team_name = teamAssignment.team.name;
-        if (teamAssignment.supervisor) {
-          insertPayload.supervisor_id = teamAssignment.supervisor.id;
-          insertPayload.supervisor_name = teamAssignment.supervisor.name;
-        }
-        if (teamAssignment.handler) {
-          insertPayload.handler_id = teamAssignment.handler.id;
-          insertPayload.handler_name = teamAssignment.handler.name;
-        }
-      }
-
-      const { data, error } = await supabase.from('bookings').insert(insertPayload).select().single();
-
+      const { data, error } = await supabase.from("bookings").insert(row).select().single();
       if (error) throw new Error(error.message);
 
-      if (teamAssignment?.saveAsDefault && customerId) {
-        try {
-          await supabase.from('client_handler_preferences').upsert({
-            customer_id: customerId,
-            preferred_team_id: teamAssignment.team.id,
-            preferred_team_name: teamAssignment.team.name,
-            preferred_manager_id: teamAssignment.manager.id,
-            preferred_manager_name: teamAssignment.manager.name,
-            preferred_supervisor_id: teamAssignment.supervisor?.id,
-            preferred_supervisor_name: teamAssignment.supervisor?.name,
-            preferred_handler_id: teamAssignment.handler?.id,
-            preferred_handler_name: teamAssignment.handler?.name,
-          });
-        } catch (prefError) {
-          console.error("Error saving team preference:", prefError);
-        }
+      const assignRes = await persistAssignmentsForNewBooking({
+        bookingId: data.id,
+        payload: assignmentPayload,
+        customerId: customerId ?? null,
+        assignedBy: currentUser?.id ?? null,
+      });
+      if (!assignRes.ok) {
+        await supabase.from("bookings").delete().eq("id", data.id);
+        throw new Error(assignRes.error);
       }
 
-      logCreation("booking", data.id, data.booking_number ?? data.id, { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" });
+      logCreation("booking", data.id, data.booking_number ?? data.id, {
+        id: currentUser?.id ?? "",
+        name: currentUser?.name ?? "",
+        department: currentUser?.department ?? "",
+      });
 
-      if (teamAssignment) {
+      if (assignmentPayload && assignmentPayload.assignments.length > 0) {
+        const handler = assignmentPayload.assignments.find((a) => a.role_key === "handler");
+        const supervisor = assignmentPayload.assignments.find(
+          (a) => a.role_key === "operations_supervisor",
+        );
         void fireBookingAssignmentTickets({
           bookingId: data.id,
           bookingNumber: data.booking_number,
           serviceType: "Marine Insurance",
-          customerName: formData.customerName,
-          createdBy: user?.id ?? "",
-          createdByName: user?.name ?? "",
-          createdByDept: user?.department ?? "",
-          manager: teamAssignment.manager,
-          supervisor: teamAssignment.supervisor,
-          handler: teamAssignment.handler,
+          customerName: String(formState.customer_name ?? ""),
+          createdBy: currentUser?.id ?? "",
+          createdByName: currentUser?.name ?? "",
+          createdByDept: currentUser?.department ?? "",
+          manager: assignmentPayload.service?.default_manager_id
+            ? {
+                id: assignmentPayload.service.default_manager_id,
+                name: assignmentPayload.service.default_manager_name ?? "",
+              }
+            : { id: "", name: "" },
+          supervisor: supervisor ? { id: supervisor.user_id, name: supervisor.user_name } : null,
+          handler: handler ? { id: handler.user_id, name: handler.user_name } : null,
         });
       }
 
-      toast.success("Marine insurance booking created successfully");
+      toast.success("Marine Insurance booking created successfully");
       onSuccess?.(data);
+      onBookingCreated?.(data);
       onClose();
-    } catch (error) {
-      console.error("Error creating marine insurance booking:", error);
+    } catch (err) {
+      console.error("CreateMarineInsuranceBookingPanel:", err);
       toast.error("Failed to create booking. Please try again.");
     } finally {
       setLoading(false);
@@ -224,9 +144,8 @@ export function CreateMarineInsuranceBookingPanel({
 
   if (!isOpen) return null;
 
-  const isFormValid = formData.customerName.trim() !== "" &&
-    formData.commodityDescription.trim() !== "" &&
-    formData.sumInsured.trim() !== "";
+  const customerName = String(formState.customer_name ?? "");
+  const isFormValid = customerName.trim() !== "";
 
   return (
     <BookingCreationPanel
@@ -234,552 +153,51 @@ export function CreateMarineInsuranceBookingPanel({
       onClose={onClose}
       icon={<Shield size={20} />}
       title="New Marine Insurance Booking"
-      subtitle="Create a new marine insurance policy for cargo coverage"
-      formId="create-marine-insurance-form"
+      subtitle={
+        source === "pricing"
+          ? "Create a marine insurance booking from project specifications"
+          : "Create a new marine cargo insurance booking"
+      }
+      formId="create-marine-form"
       onSubmit={handleSubmit}
       isSubmitting={loading}
       isFormValid={isFormValid}
       submitLabel="Create Booking"
       submitIcon={<Shield size={16} />}
     >
-            {/* General Information */}
-            <div className="mb-8">
-              <div className="flex items-center gap-2 mb-4">
-                <Package size={16} style={{ color: "var(--theme-action-primary-bg)" }} />
-                <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                  General Information
-                </h3>
-              </div>
+      <BookingDynamicForm
+        serviceType="Marine Insurance"
+        formState={formState}
+        onChange={setField}
+        ctx={context}
+        errors={submitErrors}
+      />
 
-              <div className="space-y-4">
-                {/* Movement Toggle */}
-                <div>
-                  <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                    Movement <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
-                  </label>
-                  <MovementToggle
-                    value={formData.movement as "IMPORT" | "EXPORT"}
-                    onChange={(value) => handleChange({ target: { name: "movement", value } } as any)}
-                    layoutIdPrefix="marine-movement-pill"
-                  />
-                </div>
+      {customerName && (
+        <ContractDetectionBanner
+          customerName={customerName}
+          serviceType="Marine Insurance"
+          onContractDetected={setDetectedContractId}
+        />
+      )}
 
-                <div>
-                  <SearchableDropdown
-                    label="Customer Name"
-                    required
-                    value={formData.customerName}
-                    onChange={(value) => setFormData(prev => ({ ...prev, customerName: value }))}
-                    options={customerOptions}
-                    placeholder="Search customer..."
-                    fullWidth
-                  />
-                  {/* ✨ CONTRACT: Detection banner */}
-                  <ContractDetectionBanner
-                    customerName={formData.customerName}
-                    serviceType="Marine Insurance"
-                    onContractDetected={setDetectedContractId}
-                  />
-                </div>
-
-                <div>
-                  <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                    Booking Name <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
-                  </label>
-                  <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    placeholder="e.g. BSFI Steel Import Policy, Q2 Cargo Insurance"
-                    className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                    style={{
-                      border: "1px solid var(--neuron-ui-border)",
-                      backgroundColor: "var(--theme-bg-surface)",
-                      color: "var(--neuron-ink-primary)",
-                    }}
-                  />
-                  <p className="text-xs mt-1" style={{ color: "var(--theme-text-muted)" }}>
-                    A short label to identify this booking, especially useful when a project has multiple bookings of the same type.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Account Owner
-                    </label>
-                    <input
-                      type="text"
-                      name="accountOwner"
-                      value={formData.accountOwner}
-                      onChange={handleChange}
-                      placeholder="Account owner"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Account Handler
-                    </label>
-                    <input
-                      type="text"
-                      name="accountHandler"
-                      value={formData.accountHandler}
-                      onChange={handleChange}
-                      placeholder="Account handler"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Quotation Reference
-                    </label>
-                    <input
-                      type="text"
-                      name="quotationReferenceNumber"
-                      value={formData.quotationReferenceNumber}
-                      onChange={handleChange}
-                      placeholder="Quotation reference"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-
-                  <CustomDropdown
-                    label="Status"
-                    value={formData.status}
-                    onChange={(value) => handleChange({ target: { name: "status", value } } as any)}
-                    options={[
-                      { value: "Draft", label: "Draft" },
-                      { value: "Confirmed", label: "Confirmed" },
-                      { value: "In Progress", label: "In Progress" },
-                      { value: "Pending", label: "Pending" },
-                      { value: "On Hold", label: "On Hold" },
-                      { value: "Completed", label: "Completed" },
-                      { value: "Cancelled", label: "Cancelled" },
-                    ]}
-                    placeholder="Select Status..."
-                    fullWidth
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Policy Details */}
-            <div className="mb-8">
-              <div className="flex items-center gap-2 mb-4">
-                <Shield size={16} style={{ color: "var(--theme-action-primary-bg)" }} />
-                <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                  Policy Details
-                </h3>
-              </div>
-
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Policy Number
-                    </label>
-                    <input
-                      type="text"
-                      name="policyNumber"
-                      value={formData.policyNumber}
-                      onChange={handleChange}
-                      placeholder="Policy number"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Insurance Provider
-                    </label>
-                    <input
-                      type="text"
-                      name="insuranceProvider"
-                      value={formData.insuranceProvider}
-                      onChange={handleChange}
-                      placeholder="Insurance provider"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Coverage Type
-                    </label>
-                    <input
-                      type="text"
-                      name="coverageType"
-                      value={formData.coverageType}
-                      onChange={handleChange}
-                      placeholder="e.g., All Risks, WA, FPA"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Insured Party
-                    </label>
-                    <input
-                      type="text"
-                      name="insuredParty"
-                      value={formData.insuredParty}
-                      onChange={handleChange}
-                      placeholder="Insured party name"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Sum Insured
-                    </label>
-                    <input
-                      type="text"
-                      name="sumInsured"
-                      value={formData.sumInsured}
-                      onChange={handleChange}
-                      placeholder="e.g., USD 100,000"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Premium
-                    </label>
-                    <input
-                      type="text"
-                      name="premium"
-                      value={formData.premium}
-                      onChange={handleChange}
-                      placeholder="e.g., USD 500"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Policy Start Date
-                    </label>
-                    <input
-                      type="date"
-                      name="policyStartDate"
-                      value={formData.policyStartDate}
-                      onChange={handleChange}
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Policy End Date
-                    </label>
-                    <input
-                      type="date"
-                      name="policyEndDate"
-                      value={formData.policyEndDate}
-                      onChange={handleChange}
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Cargo & Voyage Details */}
-            <div className="mb-8">
-              <div className="flex items-center gap-2 mb-4">
-                <FileText size={16} style={{ color: "var(--theme-action-primary-bg)" }} />
-                <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                  Cargo & Voyage Details
-                </h3>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                    Commodity Description
-                  </label>
-                  <textarea
-                    name="commodityDescription"
-                    value={formData.commodityDescription}
-                    onChange={handleChange}
-                    rows={2}
-                    placeholder="Describe the insured cargo"
-                    className="w-full px-3.5 py-2.5 rounded-lg text-[13px] resize-none"
-                    style={{
-                      border: "1px solid var(--neuron-ui-border)",
-                      backgroundColor: "var(--theme-bg-surface)",
-                      color: "var(--neuron-ink-primary)",
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                    Invoice Value
-                  </label>
-                  <input
-                    type="text"
-                    name="invoiceValue"
-                    value={formData.invoiceValue}
-                    onChange={handleChange}
-                    placeholder="e.g., USD 95,000"
-                    className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                    style={{
-                      border: "1px solid var(--neuron-ui-border)",
-                      backgroundColor: "var(--theme-bg-surface)",
-                      color: "var(--neuron-ink-primary)",
-                    }}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Voyage
-                    </label>
-                    <input
-                      type="text"
-                      name="voyage"
-                      value={formData.voyage}
-                      onChange={handleChange}
-                      placeholder="Voyage number/name"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Vessel Name
-                    </label>
-                    <input
-                      type="text"
-                      name="vesselName"
-                      value={formData.vesselName}
-                      onChange={handleChange}
-                      placeholder="Vessel name"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Departure Port
-                    </label>
-                    <input
-                      type="text"
-                      name="departurePort"
-                      value={formData.departurePort}
-                      onChange={handleChange}
-                      placeholder="Port of departure"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Arrival Port
-                    </label>
-                    <input
-                      type="text"
-                      name="arrivalPort"
-                      value={formData.arrivalPort}
-                      onChange={handleChange}
-                      placeholder="Port of arrival"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Departure Date
-                    </label>
-                    <input
-                      type="date"
-                      name="departureDate"
-                      value={formData.departureDate}
-                      onChange={handleChange}
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Arrival Date
-                    </label>
-                    <input
-                      type="date"
-                      name="arrivalDate"
-                      value={formData.arrivalDate}
-                      onChange={handleChange}
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Claim Status
-                    </label>
-                    <input
-                      type="text"
-                      name="claimStatus"
-                      value={formData.claimStatus}
-                      onChange={handleChange}
-                      placeholder="e.g., No Claim, Pending, Settled"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                    Remarks
-                  </label>
-                  <textarea
-                    name="remarks"
-                    value={formData.remarks}
-                    onChange={handleChange}
-                    rows={2}
-                    placeholder="Additional notes or remarks"
-                    className="w-full px-3.5 py-2.5 rounded-lg text-[13px] resize-none"
-                    style={{
-                      border: "1px solid var(--neuron-ui-border)",
-                      backgroundColor: "var(--theme-bg-surface)",
-                      color: "var(--neuron-ink-primary)",
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Team Assignment */}
-            {formData.customerName && (
-              <div className="mb-8">
-                <div
-                  style={{
-                    background: "var(--theme-bg-page)",
-                    border: "1px solid var(--theme-border-default)",
-                    borderRadius: "12px",
-                    padding: "20px",
-                  }}
-                >
-                  <TeamAssignmentForm
-                    customerId={customerId}
-                    onChange={setTeamAssignment}
-                  />
-                </div>
-              </div>
-            )}
+      {customerName && (
+        <div style={{ marginBottom: "32px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
+            <Users size={16} style={{ color: "var(--theme-action-primary-bg)" }} />
+            <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)", textTransform: "uppercase", letterSpacing: "0.5px", margin: 0 }}>
+              Assignments
+            </h3>
+          </div>
+          <div style={{ padding: "20px", backgroundColor: "var(--theme-bg-page)", border: "1px solid var(--neuron-ui-border)", borderRadius: "8px" }}>
+            <ServiceRoleAssignmentForm
+              customerId={customerId ?? null}
+              serviceType="Marine Insurance"
+              onChange={setAssignmentPayload}
+            />
+          </div>
+        </div>
+      )}
     </BookingCreationPanel>
   );
 }

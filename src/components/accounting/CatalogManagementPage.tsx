@@ -45,7 +45,7 @@ export function CatalogManagementPage() {
   const [activeTab, setActiveTab] = useState<PrimaryTab>(canItems ? "items" : canMatrix ? "matrix" : "items");
 
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "var(--theme-bg-page)" }}>
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "var(--theme-bg-surface)" }}>
       <div style={{ padding: "32px 48px", display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
 
         {/* ── Page Header ── */}
@@ -756,10 +756,10 @@ function ItemsTab() {
       </div>
 
       {showTopFade && (
-        <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-8" style={{ background: "linear-gradient(to top, transparent, var(--theme-bg-page) 88%)" }} />
+        <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-8" style={{ background: "linear-gradient(to top, transparent, var(--theme-bg-surface) 88%)" }} />
       )}
       {showBottomFade && (
-        <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-12" style={{ background: "linear-gradient(to bottom, transparent, var(--theme-bg-page) 78%)" }} />
+        <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-12" style={{ background: "linear-gradient(to bottom, transparent, var(--theme-bg-surface) 78%)" }} />
       )}
       </div>
     </>

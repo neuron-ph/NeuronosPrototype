@@ -1524,4 +1524,100 @@ SELECT table_name, rows FROM (
   SELECT 'collections',                    COUNT(*)          FROM collections    UNION ALL
   SELECT 'expenses',                       COUNT(*)          FROM expenses
 ) t
+
+-- ============================================================================
+-- Profiling Module Seeds (migrations 058–060)
+-- ============================================================================
+
+-- Tier 11 — profile_countries
+INSERT INTO profile_countries (iso_code, name, sort_order) VALUES
+  ('PH','Philippines',1),('CN','China',2),('US','United States',3),('JP','Japan',4),
+  ('KR','South Korea',5),('SG','Singapore',6),('DE','Germany',7),('GB','United Kingdom',8),
+  ('AU','Australia',9),('MY','Malaysia',10),('TH','Thailand',11),('VN','Vietnam',12),
+  ('ID','Indonesia',13),('TW','Taiwan',14),('HK','Hong Kong',15),('NL','Netherlands',16),
+  ('BE','Belgium',17),('FR','France',18),('IT','Italy',19),('CA','Canada',20),
+  ('AF','Afghanistan',999),('AL','Albania',999),('DZ','Algeria',999),('AO','Angola',999),
+  ('AR','Argentina',999),('AT','Austria',999),('AZ','Azerbaijan',999),('BH','Bahrain',999),
+  ('BD','Bangladesh',999),('BR','Brazil',999),('BN','Brunei',999),('KH','Cambodia',999),
+  ('CL','Chile',999),('CO','Colombia',999),('HR','Croatia',999),('CZ','Czech Republic',999),
+  ('DK','Denmark',999),('DO','Dominican Republic',999),('EC','Ecuador',999),
+  ('EG','Egypt',999),('EE','Estonia',999),('ET','Ethiopia',999),('FI','Finland',999),
+  ('GE','Georgia',999),('GH','Ghana',999),('GR','Greece',999),('GT','Guatemala',999),
+  ('HU','Hungary',999),('IS','Iceland',999),('IN','India',999),('IR','Iran',999),
+  ('IQ','Iraq',999),('IE','Ireland',999),('IL','Israel',999),('JO','Jordan',999),
+  ('KZ','Kazakhstan',999),('KE','Kenya',999),('KW','Kuwait',999),('LA','Laos',999),
+  ('LV','Latvia',999),('LB','Lebanon',999),('LT','Lithuania',999),('LU','Luxembourg',999),
+  ('MO','Macau',999),('MX','Mexico',999),('MN','Mongolia',999),('MA','Morocco',999),
+  ('MM','Myanmar',999),('NP','Nepal',999),('NZ','New Zealand',999),('NG','Nigeria',999),
+  ('NO','Norway',999),('OM','Oman',999),('PK','Pakistan',999),('PA','Panama',999),
+  ('PG','Papua New Guinea',999),('PE','Peru',999),('PL','Poland',999),('PT','Portugal',999),
+  ('QA','Qatar',999),('RO','Romania',999),('RU','Russia',999),('RW','Rwanda',999),
+  ('SA','Saudi Arabia',999),('RS','Serbia',999),('SK','Slovakia',999),('SI','Slovenia',999),
+  ('ZA','South Africa',999),('ES','Spain',999),('LK','Sri Lanka',999),('SD','Sudan',999),
+  ('SE','Sweden',999),('CH','Switzerland',999),('SY','Syria',999),('TZ','Tanzania',999),
+  ('TH','Thailand',999),('TN','Tunisia',999),('TR','Turkey',999),('UA','Ukraine',999),
+  ('AE','United Arab Emirates',999),('UY','Uruguay',999),('VE','Venezuela',999),
+  ('YE','Yemen',999),('ZM','Zambia',999),('ZW','Zimbabwe',999)
+ON CONFLICT (iso_code) DO NOTHING;
+
+-- Tier 12 — profile_locations (ports + airports)
+INSERT INTO profile_locations (kind, name, code, transport_modes) VALUES
+  ('port','Manila International Container Terminal','PHMNL',ARRAY['sea']),
+  ('port','Manila South Harbor','PHMNL',ARRAY['sea']),
+  ('port','Batangas Port','PHBAT',ARRAY['sea']),
+  ('port','Cebu Port','PHCEB',ARRAY['sea']),
+  ('port','Davao Port','PHDVO',ARRAY['sea']),
+  ('port','Subic Bay Port','PHSFS',ARRAY['sea']),
+  ('port','Cagayan de Oro Port','PHCGY',ARRAY['sea']),
+  ('port','Iloilo Port','PHILO',ARRAY['sea']),
+  ('port','Ninoy Aquino International Airport','IATA:MNL',ARRAY['air']),
+  ('port','Mactan-Cebu International Airport','IATA:CEB',ARRAY['air']),
+  ('port','Francisco Bangoy International Airport (Davao)','IATA:DVO',ARRAY['air']),
+  ('port','Clark International Airport','IATA:CRK',ARRAY['air']),
+  ('port','Port of Singapore','SGSIN',ARRAY['sea']),
+  ('port','Port of Shanghai','CNSHA',ARRAY['sea']),
+  ('port','Port of Hong Kong','HKHKG',ARRAY['sea']),
+  ('port','Port of Busan','KRPUS',ARRAY['sea']),
+  ('port','Port of Tokyo','JPTYO',ARRAY['sea']),
+  ('port','Port Klang','MYPKG',ARRAY['sea']),
+  ('port','Port of Jakarta (Tanjung Priok)','IDJKT',ARRAY['sea']),
+  ('port','Port of Dubai (Jebel Ali)','AEJEA',ARRAY['sea']),
+  ('port','Port of Rotterdam','NLRTM',ARRAY['sea']),
+  ('port','Port of Antwerp','BEANR',ARRAY['sea']),
+  ('port','Port of Los Angeles','USLAX',ARRAY['sea']),
+  ('port','Port of Long Beach','USLGB',ARRAY['sea']),
+  ('port','Port of New York / New Jersey','USNYC',ARRAY['sea']),
+  ('port','Singapore Changi Airport','IATA:SIN',ARRAY['air']),
+  ('port','Hong Kong International Airport','IATA:HKG',ARRAY['air']),
+  ('port','Dubai International Airport','IATA:DXB',ARRAY['air']),
+  ('port','Los Angeles International Airport','IATA:LAX',ARRAY['air']),
+  ('port','JFK International Airport','IATA:JFK',ARRAY['air'])
+ON CONFLICT DO NOTHING;
+
+-- Tier 13 — booking service catalog
+INSERT INTO booking_service_catalog (service_type, name, sort_order) VALUES
+  ('Brokerage','Customs Brokerage',1),('Brokerage','Import Brokerage',2),
+  ('Brokerage','Export Brokerage',3),('Brokerage','All-Inclusive Brokerage',4),
+  ('Brokerage','Documentation',5),('Brokerage','Permit Processing',6),
+  ('Forwarding','Freight Forwarding',1),('Forwarding','Import Forwarding',2),
+  ('Forwarding','Export Forwarding',3),('Forwarding','FCL Forwarding',4),
+  ('Forwarding','LCL Forwarding',5),('Forwarding','Air Freight Forwarding',6),
+  ('Forwarding','Door-to-Door Forwarding',7),
+  ('Trucking','Container Trucking',1),('Trucking','Loose Cargo Trucking',2),
+  ('Trucking','Pull-out',3),('Trucking','Delivery',4),
+  ('Trucking','Empty Return',5),('Trucking','Domestic Trucking',6),
+  ('Marine Insurance','Marine Cargo Insurance',1),('Marine Insurance','Policy Issuance',2),
+  ('Marine Insurance','Certificate Issuance',3),('Marine Insurance','Claims Assistance',4),
+  ('Others','Other Services',1),('Others','Documentation',2),
+  ('Others','Permit Processing',3),('Others','Warehousing',4),('Others','Special Handling',5)
+ON CONFLICT (service_type, name) DO NOTHING;
+
+INSERT INTO booking_subservice_catalog (service_type, name, sort_order) VALUES
+  ('Brokerage','Customs Clearance',1),('Brokerage','Duties and Taxes Processing',2),
+  ('Brokerage','Examination Coordination',3),('Brokerage','Permit Coordination',4),
+  ('Brokerage','Delivery Coordination',5),('Brokerage','PEZA Processing',6),
+  ('Forwarding','Origin Handling',1),('Forwarding','Destination Handling',2),
+  ('Forwarding','Consolidation',3),('Forwarding','Pickup',4),
+  ('Forwarding','Delivery',5),('Forwarding','Documentation',6)
+ON CONFLICT (service_type, name) DO NOTHING;
 ORDER BY table_name;

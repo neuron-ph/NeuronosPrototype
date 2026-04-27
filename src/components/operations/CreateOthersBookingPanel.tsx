@@ -1,196 +1,141 @@
-import { Briefcase, Package, FileText } from "lucide-react";
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
+import { Briefcase, Users } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
-import { CustomDropdown } from "../bd/CustomDropdown";
-import { SearchableDropdown } from "../shared/SearchableDropdown";
-import { MovementToggle } from "./shared/MovementToggle";
-import { ContractDetectionBanner } from "./shared/ContractDetectionBanner";
+import {
+  ServiceRoleAssignmentForm,
+  type ServiceRoleAssignmentPayload,
+} from "./assignments/ServiceRoleAssignmentForm";
 import { BookingCreationPanel } from "./shared/BookingCreationPanel";
-import { useCustomerOptions } from "./shared/useCustomerOptions";
+import { BookingDynamicForm } from "./shared/BookingDynamicForm";
+import { useBookingFormState } from "./shared/useBookingFormState";
+import { validateBookingForm, hasErrors } from "./shared/bookingFormValidation";
+import { buildBookingPayload, toSupabaseRow } from "../../utils/bookings/bookingPayload";
+import {
+  legacyProjectionFromAssignment,
+  persistAssignmentsForNewBooking,
+} from "../../utils/assignments/applyAssignmentToBookingPayload";
+import { ContractDetectionBanner } from "./shared/ContractDetectionBanner";
 import { logCreation } from "../../utils/activityLog";
 import { fireBookingAssignmentTickets } from "../../utils/workflowTickets";
 import { generateBookingNumber } from "../../utils/bookingNumberUtils";
-import { useUser } from "../../hooks/useUser";
-import { TeamAssignmentForm, type TeamAssignment } from "../pricing/TeamAssignmentForm";
 
 interface CreateOthersBookingPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: (bookingData?: any) => void;
-  onBookingCreated?: (bookingData?: any) => void;
-  prefillData?: any;
+  onSuccess?: (bookingData?: Record<string, unknown>) => void;
+  onBookingCreated?: (bookingData?: Record<string, unknown>) => void;
+  prefillData?: Record<string, unknown>;
   source?: string;
   customerId?: string;
   serviceType?: string;
-  currentUser?: any;
+  currentUser?: { id?: string; name?: string; department?: string } | null;
 }
 
 export function CreateOthersBookingPanel({
   isOpen,
   onClose,
   onSuccess,
+  onBookingCreated,
+  prefillData,
   source = "operations",
   customerId,
-  prefillData,
   currentUser,
 }: CreateOthersBookingPanelProps) {
-  const { user } = useUser();
   const [loading, setLoading] = useState(false);
-  const [teamAssignment, setTeamAssignment] = useState<TeamAssignment | null>(null);
-  // ✨ CONTRACT: Detected contract ID for auto-linking
+  const [assignmentPayload, setAssignmentPayload] = useState<ServiceRoleAssignmentPayload | null>(null);
   const [detectedContractId, setDetectedContractId] = useState<string | null>(null);
-  const customerOptions = useCustomerOptions(isOpen);
-  const [formData, setFormData] = useState({
-    customerName: "",
-    name: "",
-    movement: "IMPORT",
-    accountOwner: "",
-    accountHandler: "",
-    serviceType: "",
-    serviceDescription: "",
-    quotationReferenceNumber: "",
+  const [submitErrors, setSubmitErrors] = useState<Record<string, string>>({});
+
+  const { formState, setField, initFromPrefill, context } = useBookingFormState("Others", {
     status: "Draft",
-    deliveryLocation: "",
-    scheduleDate: "",
-    completionDate: "",
-    contactPerson: "",
-    contactNumber: "",
-    specialInstructions: "",
-    estimatedCost: "",
-    actualCost: "",
-    remarks: "",
   });
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
-  ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
   useEffect(() => {
-    if (!prefillData) return;
-    setFormData((prev) => ({
-      ...prev,
-      name: prev.name || prefillData.name || "",
-      customerName: prefillData.customerName || prev.customerName,
-      movement: prefillData.movement || prev.movement,
-      quotationReferenceNumber: prefillData.quotationReferenceNumber || prev.quotationReferenceNumber,
-      accountOwner: prefillData.accountOwner || currentUser?.name || prev.accountOwner,
-      accountHandler: prefillData.accountHandler || currentUser?.name || prev.accountHandler,
-      serviceType: prefillData.serviceType || prev.serviceType,
-      serviceDescription: prefillData.serviceDescription || prev.serviceDescription,
-      // Field name mapping: autofill key `deliveryAddress` → form field `deliveryLocation`
-      deliveryLocation: prefillData.deliveryAddress || prev.deliveryLocation,
-      specialInstructions: prefillData.specialInstructions || prev.specialInstructions,
-      contactPerson: prefillData.contactPerson || prev.contactPerson,
-      contactNumber: prefillData.contactNumber || prev.contactNumber,
-    }));
-  }, [prefillData]);
+    if (prefillData && isOpen) initFromPrefill(prefillData);
+  }, [prefillData, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!formData.name.trim()) {
-      toast.error("Booking Name is required");
-      return;
-    }
-    if (!formData.customerName) {
-      toast.error("Customer Name is required");
-      return;
-    }
 
+    const errors = validateBookingForm(formState, "Others", context);
+    if (hasErrors(errors)) {
+      setSubmitErrors(errors);
+      toast.error("Please fill in all required fields");
+      return;
+    }
+    if (assignmentPayload?.hasMissingRequired) {
+      toast.error("Please fill in all required role assignments");
+      return;
+    }
+    setSubmitErrors({});
     setLoading(true);
 
     try {
       const bookingNumber = await generateBookingNumber("Others");
-      const insertPayload: Record<string, any> = {
-        id: crypto.randomUUID(),
-        service_type: "Others",
-        booking_number: bookingNumber,
-        name: formData.name.trim(),
-        customer_name: formData.customerName,
-        status: formData.status || "Draft",
-        movement_type: formData.movement,
-        ...(detectedContractId && { contract_id: detectedContractId }),
-        details: {
-          accountOwner: formData.accountOwner,
-          accountHandler: formData.accountHandler,
-          serviceType: formData.serviceType,
-          serviceDescription: formData.serviceDescription,
-          quotationReferenceNumber: formData.quotationReferenceNumber,
-          deliveryLocation: formData.deliveryLocation,
-          scheduleDate: formData.scheduleDate,
-          completionDate: formData.completionDate,
-          contactPerson: formData.contactPerson,
-          contactNumber: formData.contactNumber,
-          specialInstructions: formData.specialInstructions,
-          estimatedCost: formData.estimatedCost,
-          actualCost: formData.actualCost,
-          remarks: formData.remarks,
+      const { topLevel, details } = buildBookingPayload(formState, "Others");
+
+      const row = toSupabaseRow(
+        {
+          id: crypto.randomUUID(),
+          ...topLevel,
+          booking_number: bookingNumber,
+          ...(detectedContractId ? { contract_id: detectedContractId } : {}),
+          ...legacyProjectionFromAssignment(assignmentPayload),
         },
-      };
+        details,
+      );
 
-      if (teamAssignment) {
-        insertPayload.manager_id = teamAssignment.manager.id;
-        insertPayload.manager_name = teamAssignment.manager.name;
-        insertPayload.team_id = teamAssignment.team.id;
-        insertPayload.team_name = teamAssignment.team.name;
-        if (teamAssignment.supervisor) {
-          insertPayload.supervisor_id = teamAssignment.supervisor.id;
-          insertPayload.supervisor_name = teamAssignment.supervisor.name;
-        }
-        if (teamAssignment.handler) {
-          insertPayload.handler_id = teamAssignment.handler.id;
-          insertPayload.handler_name = teamAssignment.handler.name;
-        }
-      }
-
-      const { data, error } = await supabase.from('bookings').insert(insertPayload).select().single();
-
+      const { data, error } = await supabase.from("bookings").insert(row).select().single();
       if (error) throw new Error(error.message);
 
-      if (teamAssignment?.saveAsDefault && customerId) {
-        try {
-          await supabase.from('client_handler_preferences').upsert({
-            customer_id: customerId,
-            preferred_team_id: teamAssignment.team.id,
-            preferred_team_name: teamAssignment.team.name,
-            preferred_manager_id: teamAssignment.manager.id,
-            preferred_manager_name: teamAssignment.manager.name,
-            preferred_supervisor_id: teamAssignment.supervisor?.id,
-            preferred_supervisor_name: teamAssignment.supervisor?.name,
-            preferred_handler_id: teamAssignment.handler?.id,
-            preferred_handler_name: teamAssignment.handler?.name,
-          });
-        } catch (prefError) {
-          console.error("Error saving team preference:", prefError);
-        }
+      const assignRes = await persistAssignmentsForNewBooking({
+        bookingId: data.id,
+        payload: assignmentPayload,
+        customerId: customerId ?? null,
+        assignedBy: currentUser?.id ?? null,
+      });
+      if (!assignRes.ok) {
+        await supabase.from("bookings").delete().eq("id", data.id);
+        throw new Error(assignRes.error);
       }
 
-      logCreation("booking", data.id, data.booking_number ?? data.id, { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" });
+      logCreation("booking", data.id, data.booking_number ?? data.id, {
+        id: currentUser?.id ?? "",
+        name: currentUser?.name ?? "",
+        department: currentUser?.department ?? "",
+      });
 
-      if (teamAssignment) {
+      if (assignmentPayload && assignmentPayload.assignments.length > 0) {
+        const handler = assignmentPayload.assignments.find((a) => a.role_key === "handler");
+        const supervisor = assignmentPayload.assignments.find(
+          (a) => a.role_key === "operations_supervisor",
+        );
         void fireBookingAssignmentTickets({
           bookingId: data.id,
           bookingNumber: data.booking_number,
           serviceType: "Others",
-          customerName: formData.customerName,
-          createdBy: user?.id ?? "",
-          createdByName: user?.name ?? "",
-          createdByDept: user?.department ?? "",
-          manager: teamAssignment.manager,
-          supervisor: teamAssignment.supervisor,
-          handler: teamAssignment.handler,
+          customerName: String(formState.customer_name ?? ""),
+          createdBy: currentUser?.id ?? "",
+          createdByName: currentUser?.name ?? "",
+          createdByDept: currentUser?.department ?? "",
+          manager: assignmentPayload.service?.default_manager_id
+            ? {
+                id: assignmentPayload.service.default_manager_id,
+                name: assignmentPayload.service.default_manager_name ?? "",
+              }
+            : { id: "", name: "" },
+          supervisor: supervisor ? { id: supervisor.user_id, name: supervisor.user_name } : null,
+          handler: handler ? { id: handler.user_id, name: handler.user_name } : null,
         });
       }
 
-      toast.success("Service booking created successfully");
+      toast.success("Others booking created successfully");
       onSuccess?.(data);
+      onBookingCreated?.(data);
       onClose();
-    } catch (error) {
-      console.error("Error creating others booking:", error);
+    } catch (err) {
+      console.error("CreateOthersBookingPanel:", err);
       toast.error("Failed to create booking. Please try again.");
     } finally {
       setLoading(false);
@@ -199,15 +144,20 @@ export function CreateOthersBookingPanel({
 
   if (!isOpen) return null;
 
-  const isFormValid = formData.customerName.trim() !== "";
+  const customerName = String(formState.customer_name ?? "");
+  const isFormValid = customerName.trim() !== "";
 
   return (
     <BookingCreationPanel
       isOpen={isOpen}
       onClose={onClose}
       icon={<Briefcase size={20} />}
-      title="New Service Booking"
-      subtitle="Create a new booking for other services and specialized operations"
+      title="New Others Booking"
+      subtitle={
+        source === "pricing"
+          ? "Create a miscellaneous booking from project specifications"
+          : "Create a new miscellaneous service booking"
+      }
       formId="create-others-form"
       onSubmit={handleSubmit}
       isSubmitting={loading}
@@ -215,404 +165,39 @@ export function CreateOthersBookingPanel({
       submitLabel="Create Booking"
       submitIcon={<Briefcase size={16} />}
     >
-            {/* General Information */}
-            <div className="mb-8">
-              <div className="flex items-center gap-2 mb-4">
-                <Package size={16} style={{ color: "var(--theme-action-primary-bg)" }} />
-                <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                  General Information
-                </h3>
-              </div>
+      <BookingDynamicForm
+        serviceType="Others"
+        formState={formState}
+        onChange={setField}
+        ctx={context}
+        errors={submitErrors}
+      />
 
-              <div className="space-y-4">
-                {/* Movement Toggle */}
-                <div>
-                  <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                    Movement <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
-                  </label>
-                  <MovementToggle
-                    value={formData.movement as "IMPORT" | "EXPORT"}
-                    onChange={(value) => handleChange({ target: { name: "movement", value } } as any)}
-                    layoutIdPrefix="others-movement-pill"
-                  />
-                </div>
+      {customerName && (
+        <ContractDetectionBanner
+          customerName={customerName}
+          serviceType="Others"
+          onContractDetected={setDetectedContractId}
+        />
+      )}
 
-                <div>
-                  <SearchableDropdown
-                    label="Customer Name"
-                    required
-                    value={formData.customerName}
-                    onChange={(value) => setFormData(prev => ({ ...prev, customerName: value }))}
-                    options={customerOptions}
-                    placeholder="Search customer..."
-                    fullWidth
-                  />
-                  {/* ✨ CONTRACT: Detection banner */}
-                  <ContractDetectionBanner
-                    customerName={formData.customerName}
-                    serviceType="Others"
-                    onContractDetected={setDetectedContractId}
-                  />
-
-                </div>
-
-                <div>
-                  <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                    Booking Name <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
-                  </label>
-                  <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    placeholder="e.g. Annual Survey, Special Inspection Run"
-                    className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                    style={{
-                      border: "1px solid var(--neuron-ui-border)",
-                      backgroundColor: "var(--theme-bg-surface)",
-                      color: "var(--neuron-ink-primary)",
-                    }}
-                  />
-                  <p className="text-xs mt-1" style={{ color: "var(--theme-text-muted)" }}>
-                    A short label to identify this booking, especially useful when a project has multiple bookings of the same type.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Account Owner
-                    </label>
-                    <input
-                      type="text"
-                      name="accountOwner"
-                      value={formData.accountOwner}
-                      onChange={handleChange}
-                      placeholder="Account owner"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Account Handler
-                    </label>
-                    <input
-                      type="text"
-                      name="accountHandler"
-                      value={formData.accountHandler}
-                      onChange={handleChange}
-                      placeholder="Account handler"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                    Service Type
-                  </label>
-                  <input
-                    type="text"
-                    name="serviceType"
-                    value={formData.serviceType}
-                    onChange={handleChange}
-                    placeholder="e.g., Warehousing, Consulting, Documentation"
-                    className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                    style={{
-                      border: "1px solid var(--neuron-ui-border)",
-                      backgroundColor: "var(--theme-bg-surface)",
-                      color: "var(--neuron-ink-primary)",
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                    Service Description
-                  </label>
-                  <textarea
-                    name="serviceDescription"
-                    value={formData.serviceDescription}
-                    onChange={handleChange}
-                    rows={3}
-                    placeholder="Describe the service to be provided"
-                    className="w-full px-3.5 py-2.5 rounded-lg text-[13px] resize-none"
-                    style={{
-                      border: "1px solid var(--neuron-ui-border)",
-                      backgroundColor: "var(--theme-bg-surface)",
-                      color: "var(--neuron-ink-primary)",
-                    }}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Quotation Reference
-                    </label>
-                    <input
-                      type="text"
-                      name="quotationReferenceNumber"
-                      value={formData.quotationReferenceNumber}
-                      onChange={handleChange}
-                      placeholder="Quotation reference"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-
-                  <CustomDropdown
-                    label="Status"
-                    value={formData.status}
-                    onChange={(value) => handleChange({ target: { name: "status", value } } as any)}
-                    options={[
-                      { value: "Draft", label: "Draft" },
-                      { value: "Confirmed", label: "Confirmed" },
-                      { value: "In Progress", label: "In Progress" },
-                      { value: "Pending", label: "Pending" },
-                      { value: "On Hold", label: "On Hold" },
-                      { value: "Completed", label: "Completed" },
-                      { value: "Cancelled", label: "Cancelled" },
-                    ]}
-                    placeholder="Select Status..."
-                    fullWidth
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Service Details */}
-            <div className="mb-8">
-              <div className="flex items-center gap-2 mb-4">
-                <Briefcase size={16} style={{ color: "var(--theme-action-primary-bg)" }} />
-                <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                  Service Details
-                </h3>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                    Delivery/Service Location
-                  </label>
-                  <input
-                    type="text"
-                    name="deliveryLocation"
-                    value={formData.deliveryLocation}
-                    onChange={handleChange}
-                    placeholder="Location where service will be performed"
-                    className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                    style={{
-                      border: "1px solid var(--neuron-ui-border)",
-                      backgroundColor: "var(--theme-bg-surface)",
-                      color: "var(--neuron-ink-primary)",
-                    }}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Schedule Date
-                    </label>
-                    <input
-                      type="date"
-                      name="scheduleDate"
-                      value={formData.scheduleDate}
-                      onChange={handleChange}
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Completion Date
-                    </label>
-                    <input
-                      type="date"
-                      name="completionDate"
-                      value={formData.completionDate}
-                      onChange={handleChange}
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Contact Person
-                    </label>
-                    <input
-                      type="text"
-                      name="contactPerson"
-                      value={formData.contactPerson}
-                      onChange={handleChange}
-                      placeholder="Primary contact person"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Contact Number
-                    </label>
-                    <input
-                      type="text"
-                      name="contactNumber"
-                      value={formData.contactNumber}
-                      onChange={handleChange}
-                      placeholder="Phone number"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                    Special Instructions
-                  </label>
-                  <textarea
-                    name="specialInstructions"
-                    value={formData.specialInstructions}
-                    onChange={handleChange}
-                    rows={3}
-                    placeholder="Any special requirements or instructions"
-                    className="w-full px-3.5 py-2.5 rounded-lg text-[13px] resize-none"
-                    style={{
-                      border: "1px solid var(--neuron-ui-border)",
-                      backgroundColor: "var(--theme-bg-surface)",
-                      color: "var(--neuron-ink-primary)",
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Cost Information */}
-            <div className="mb-8">
-              <div className="flex items-center gap-2 mb-4">
-                <FileText size={16} style={{ color: "var(--theme-action-primary-bg)" }} />
-                <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                  Cost Information
-                </h3>
-              </div>
-
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Estimated Cost
-                    </label>
-                    <input
-                      type="text"
-                      name="estimatedCost"
-                      value={formData.estimatedCost}
-                      onChange={handleChange}
-                      placeholder="e.g., PHP 25,000"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                      Actual Cost
-                    </label>
-                    <input
-                      type="text"
-                      name="actualCost"
-                      value={formData.actualCost}
-                      onChange={handleChange}
-                      placeholder="e.g., PHP 24,500"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-[13px]"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)",
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block mb-1.5" style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
-                    Remarks
-                  </label>
-                  <textarea
-                    name="remarks"
-                    value={formData.remarks}
-                    onChange={handleChange}
-                    rows={2}
-                    placeholder="Additional notes or remarks"
-                    className="w-full px-3.5 py-2.5 rounded-lg text-[13px] resize-none"
-                    style={{
-                      border: "1px solid var(--neuron-ui-border)",
-                      backgroundColor: "var(--theme-bg-surface)",
-                      color: "var(--neuron-ink-primary)",
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Team Assignment */}
-            {formData.customerName && (
-              <div className="mb-8">
-                <div
-                  style={{
-                    background: "var(--theme-bg-page)",
-                    border: "1px solid var(--theme-border-default)",
-                    borderRadius: "12px",
-                    padding: "20px",
-                  }}
-                >
-                  <TeamAssignmentForm
-                    customerId={customerId}
-                    onChange={setTeamAssignment}
-                  />
-                </div>
-              </div>
-            )}
+      {customerName && (
+        <div style={{ marginBottom: "32px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
+            <Users size={16} style={{ color: "var(--theme-action-primary-bg)" }} />
+            <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)", textTransform: "uppercase", letterSpacing: "0.5px", margin: 0 }}>
+              Assignments
+            </h3>
+          </div>
+          <div style={{ padding: "20px", backgroundColor: "var(--theme-bg-page)", border: "1px solid var(--neuron-ui-border)", borderRadius: "8px" }}>
+            <ServiceRoleAssignmentForm
+              customerId={customerId ?? null}
+              serviceType="Others"
+              onChange={setAssignmentPayload}
+            />
+          </div>
+        </div>
+      )}
     </BookingCreationPanel>
   );
 }

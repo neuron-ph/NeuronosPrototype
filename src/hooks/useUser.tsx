@@ -5,7 +5,7 @@ import { supabase } from '../utils/supabase/client';
 import { logActivity } from '../utils/activityLog';
 import type { Session } from '@supabase/supabase-js';
 
-export type TeamRole = 'Team Leader' | 'Supervisor' | 'Representative';
+export type TeamRole = string;
 
 export interface User {
   id: string;

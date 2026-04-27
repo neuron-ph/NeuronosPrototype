@@ -21,6 +21,7 @@ import { fireBookingAssignmentTickets } from "../../../utils/workflowTickets";
 import { useUser } from "../../../hooks/useUser";
 import { operationsAssignmentToProfileInput } from "../../../utils/teamProfileMapping";
 import { upsertCustomerTeamProfile } from "../../../utils/teamProfilePersistence";
+import { getTeamRoleLabel } from "../../../config/booking/teamRoles";
 
 interface BookingTeamSectionProps {
   bookingId: string;
@@ -40,6 +41,7 @@ interface BookingTeamSectionProps {
   currentUser?: { name: string; email: string; department: string } | null;
   onUpdate: () => void;
   addActivity: (fieldName: string, oldValue: string, newValue: string) => void;
+  sheet?: boolean;
 }
 
 function LockedField({ label, value }: { label: string; value: string }) {
@@ -93,6 +95,7 @@ export function BookingTeamSection({
   currentUser,
   onUpdate,
   addActivity,
+  sheet = false,
 }: BookingTeamSectionProps) {
   const { user } = useUser();
   const [isEditing, setIsEditing] = useState(false);
@@ -227,6 +230,7 @@ export function BookingTeamSection({
   return (
     <EditableSectionCard
       title="Team Assignment"
+      sheet={sheet}
       subtitle={
         !isEditing && !hasAssignment
           ? "No team assigned yet"
@@ -247,6 +251,8 @@ export function BookingTeamSection({
       {isEditing ? (
         <TeamAssignmentForm
           customerId={customerId || ""}
+          customerName={customerName}
+          serviceType={serviceType}
           onChange={setPendingAssignment}
           initialAssignments={initialAssignment}
         />
@@ -267,13 +273,13 @@ export function BookingTeamSection({
               }}
             >
               <Users size={16} color="var(--theme-text-muted)" />
-              No team assigned. Click Edit to assign a manager, supervisor, or handler.
+              No team assigned — this booking needs one before it can be handled.
             </div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px" }}>
-              <LockedField label="Manager" value={managerName || ""} />
-              <LockedField label="Supervisor" value={supervisorName || ""} />
-              <LockedField label="Handler" value={handlerName || ""} />
+              <LockedField label={getTeamRoleLabel('manager', serviceType)} value={managerName || ""} />
+              <LockedField label={getTeamRoleLabel('supervisor', serviceType)} value={supervisorName || ""} />
+              <LockedField label={getTeamRoleLabel('handler', serviceType)} value={handlerName || ""} />
             </div>
           )}
         </div>

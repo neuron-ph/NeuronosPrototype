@@ -15,17 +15,29 @@ interface StatusSelectorProps {
   showIcon?: boolean;
 }
 
-// Valid transitions per status — only allowed next states are shown
+// Valid transitions per status — only allowed next states are shown.
+// Service-specific statuses follow their own lifecycle chains.
 const BOOKING_STATUS_TRANSITIONS: Record<ExecutionStatus, ExecutionStatus[]> = {
-  "Draft":       ["Confirmed", "Cancelled"],
+  // Generic statuses
+  "Draft":       ["Confirmed", "Ongoing", "Cancelled"],
   "Pending":     ["Confirmed", "Cancelled"],
-  "Confirmed":   ["In Progress", "On Hold", "Cancelled"],
+  "Confirmed":   ["In Progress", "Ongoing", "On Hold", "Cancelled"],
   "In Progress": ["Delivered", "On Hold", "Cancelled"],
-  "Delivered":   ["Completed", "Closed"],
-  "Completed":   ["Closed"],
+  "Delivered":   ["Completed", "Billed", "Closed"],
+  "Completed":   ["Billed", "Closed"],
   "On Hold":     ["Confirmed", "Cancelled"],
   "Cancelled":   [],
   "Closed":      [],
+  // Service-specific statuses
+  "Waiting for Arrival": ["Ongoing", "Cancelled"],         // Brokerage
+  "Ongoing":             ["Delivered", "In Transit", "Issued", "Completed", "Billed", "Cancelled"],
+  "In Transit":          ["Delivered", "Completed", "Cancelled"],  // Forwarding
+  "Audited":             ["Billed", "Closed"],             // Brokerage
+  "Empty Return":        ["Liquidated", "Billed", "Cancelled"], // Trucking
+  "Liquidated":          ["Billed"],                       // Trucking
+  "Issued":              ["Billed", "Cancelled"],          // Marine Insurance
+  "Billed":              ["Paid", "Cancelled"],
+  "Paid":                ["Audited", "Closed"],
 };
 
 export function StatusSelector({
