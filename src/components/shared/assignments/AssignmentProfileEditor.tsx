@@ -297,17 +297,25 @@ function FreeformEditor({
     initialItems.length > 0 ? initialItems.map((i) => ({ ...i })) : [emptyRow()],
   );
 
-  const [canonicalRoles, setCanonicalRoles] = useState<CanonicalRole[]>([]);
-  const [teams, setTeams]                   = useState<TeamOption[]>([]);
-  const [teamId, setTeamId]                 = useState<string | null>(initialTeamId);
-  const [allDeptUsers, setAllDeptUsers]     = useState<UserOption[]>([]);
-  const [eligibleByRole, setEligibleByRole] = useState<Record<string, UserOption[]>>({});
+  const [canonicalRoles, setCanonicalRoles]           = useState<CanonicalRole[]>([]);
+  const [teams, setTeams]                             = useState<TeamOption[]>([]);
+  const [teamId, setTeamId]                           = useState<string | null>(initialTeamId);
+  // Users in any dept team with any eligible role (canonical pool)
+  const [eligibleDeptUsers, setEligibleDeptUsers]     = useState<UserOption[]>([]);
+  // Eligible users per role across ALL dept teams (no team selected)
+  const [eligibleAnyTeamByRole, setEligibleAnyTeamByRole] = useState<Record<string, UserOption[]>>({});
+  // Eligible users per role for the SELECTED team
+  const [eligibleByRole, setEligibleByRole]           = useState<Record<string, UserOption[]>>({});
+  // True once we know whether teams exist; false means fall back to all dept users
+  const [hasDeptTeams, setHasDeptTeams]               = useState(false);
+  // Fallback when no teams are defined yet
+  const [allDeptUsers, setAllDeptUsers]               = useState<UserOption[]>([]);
 
-  // Load canonical roles and dept teams
+  // Load canonical roles, dept teams, and cross-team eligibilities
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const [{ data: roleData }, deptTeams, { data: userData }] = await Promise.all([
+      const [{ data: roleData }, deptTeams, { data: fallbackUsers }] = await Promise.all([
         supabase
           .from('department_assignment_roles')
           .select('role_key, role_label')
@@ -325,12 +333,49 @@ function FreeformEditor({
       if (cancelled) return;
       setCanonicalRoles((roleData ?? []) as CanonicalRole[]);
       setTeams(deptTeams);
-      setAllDeptUsers((userData ?? []) as UserOption[]);
+      setAllDeptUsers((fallbackUsers ?? []) as UserOption[]);
+      setHasDeptTeams(deptTeams.length > 0);
+
+      if (deptTeams.length === 0) return;
+
+      // Load all memberships across every dept team to build eligibility maps
+      const { data: memberData } = await supabase
+        .from('team_memberships')
+        .select('user_id, users!inner(id, name), team_role_eligibilities(role_key)')
+        .in('team_id', deptTeams.map((t) => t.id))
+        .eq('is_active', true);
+
+      if (cancelled) return;
+
+      const byRole  = new Map<string, Map<string, UserOption>>();
+      const allSeen = new Map<string, UserOption>();
+
+      for (const row of (memberData ?? []) as unknown as Array<{
+        users: { id: string; name: string };
+        team_role_eligibilities?: Array<{ role_key: string }> | null;
+      }>) {
+        const u = { id: row.users.id, name: row.users.name };
+        allSeen.set(u.id, u);
+        for (const e of row.team_role_eligibilities ?? []) {
+          if (!byRole.has(e.role_key)) byRole.set(e.role_key, new Map());
+          byRole.get(e.role_key)!.set(u.id, u);
+        }
+      }
+
+      const toArr = (m: Map<string, UserOption>) =>
+        Array.from(m.values()).sort((a, b) => a.name.localeCompare(b.name));
+
+      setEligibleAnyTeamByRole(
+        Object.fromEntries(Array.from(byRole.entries()).map(([rk, um]) => [rk, toArr(um)])),
+      );
+      setEligibleDeptUsers(
+        Array.from(allSeen.values()).sort((a, b) => a.name.localeCompare(b.name)),
+      );
     })();
     return () => { cancelled = true; };
   }, [department]);
 
-  // When team changes, reload eligible users per role
+  // When team changes, reload per-team eligibilities
   useEffect(() => {
     if (!teamId) { setEligibleByRole({}); return; }
     let cancelled = false;
@@ -341,13 +386,25 @@ function FreeformEditor({
   }, [teamId]);
 
   const usersForRow = (row: FreeformRow): UserOption[] => {
-    if (!teamId) return allDeptUsers;
-    const eligible = eligibleByRole[row.role_key] ?? [];
-    // Include current pick even if no longer in eligible list (data guard)
-    if (row.user_id && !eligible.some((u) => u.id === row.user_id)) {
-      return [{ id: row.user_id, name: row.user_name }, ...eligible];
+    let pool: UserOption[];
+    if (!hasDeptTeams) {
+      // No teams defined yet — fall back to all dept users
+      pool = allDeptUsers;
+    } else if (teamId) {
+      // Team selected — show only users eligible for this role in that team
+      pool = eligibleByRole[row.role_key] ?? [];
+    } else if (row.role_key) {
+      // No team selected — show users eligible for this role in any dept team
+      pool = eligibleAnyTeamByRole[row.role_key] ?? eligibleDeptUsers;
+    } else {
+      // No role set yet — show all users who are in any dept team
+      pool = eligibleDeptUsers;
     }
-    return eligible;
+    // Always include the current pick even if it no longer matches (data guard)
+    if (row.user_id && !pool.some((u) => u.id === row.user_id)) {
+      return [{ id: row.user_id, name: row.user_name }, ...pool];
+    }
+    return pool;
   };
 
   const emit = (updated: FreeformRow[], nextTeamId: string | null) => {
@@ -390,6 +447,13 @@ function FreeformEditor({
 
   return (
     <div className="space-y-3">
+      {/* Warning: no canonical teams defined yet */}
+      {!hasDeptTeams && (
+        <p style={{ fontSize: 12, color: 'var(--theme-status-warning-fg)', background: 'var(--theme-status-warning-bg)', padding: '6px 10px', borderRadius: 6, margin: 0 }}>
+          No teams are defined for {department} yet. Set up teams in Users → Teams to enforce canonical membership.
+        </p>
+      )}
+
       {/* Team picker */}
       {teams.length > 0 && (
         <CustomDropdown

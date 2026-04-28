@@ -5328,3 +5328,189 @@ CREATE POLICY bookings_select ON bookings
     get_my_department() IN ('Operations', 'Accounting', 'Executive')
     AND can_access_booking(created_by, NULL, manager_id, supervisor_id, handler_id, id)
   );
+
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- Migrations 066-069: canonical team structure + assignment engine
+-- Added to keep dev_setup.sql current for fresh environment bootstrap.
+-- ═══════════════════════════════════════════════════════════════════════════════
+
+-- 066: team_memberships + team_role_eligibilities
+
+CREATE TABLE IF NOT EXISTS team_memberships (
+  id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  team_id     uuid        NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  user_id     text        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  is_active   boolean     NOT NULL DEFAULT true,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS team_memberships_team_user_uidx ON team_memberships(team_id, user_id) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS team_memberships_user_idx ON team_memberships(user_id) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS team_memberships_team_idx ON team_memberships(team_id) WHERE is_active = true;
+SELECT add_updated_at_trigger('team_memberships');
+
+CREATE TABLE IF NOT EXISTS team_role_eligibilities (
+  id                  uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  team_membership_id  uuid        NOT NULL REFERENCES team_memberships(id) ON DELETE CASCADE,
+  role_key            text        NOT NULL,
+  role_label          text        NOT NULL,
+  sort_order          integer     NOT NULL DEFAULT 0,
+  created_at          timestamptz NOT NULL DEFAULT now(),
+  updated_at          timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT team_role_eligibilities_role_key_format CHECK (role_key ~ '^[a-z][a-z0-9_]*$')
+);
+CREATE UNIQUE INDEX IF NOT EXISTS team_role_eligibilities_membership_role_uidx ON team_role_eligibilities(team_membership_id, role_key);
+CREATE INDEX IF NOT EXISTS team_role_eligibilities_membership_idx ON team_role_eligibilities(team_membership_id, sort_order);
+CREATE INDEX IF NOT EXISTS team_role_eligibilities_role_key_idx ON team_role_eligibilities(role_key);
+SELECT add_updated_at_trigger('team_role_eligibilities');
+
+ALTER TABLE team_memberships ENABLE ROW LEVEL SECURITY;
+ALTER TABLE team_role_eligibilities ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS team_memberships_read ON team_memberships;
+CREATE POLICY team_memberships_read ON team_memberships FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS team_role_eligibilities_read ON team_role_eligibilities;
+CREATE POLICY team_role_eligibilities_read ON team_role_eligibilities FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS team_memberships_write_admin ON team_memberships;
+CREATE POLICY team_memberships_write_admin ON team_memberships FOR ALL TO authenticated
+  USING (get_my_department() IN ('Executive','HR') OR is_executive() OR get_my_role() = 'executive')
+  WITH CHECK (get_my_department() IN ('Executive','HR') OR is_executive() OR get_my_role() = 'executive');
+DROP POLICY IF EXISTS team_role_eligibilities_write_admin ON team_role_eligibilities;
+CREATE POLICY team_role_eligibilities_write_admin ON team_role_eligibilities FOR ALL TO authenticated
+  USING (get_my_department() IN ('Executive','HR') OR is_executive() OR get_my_role() = 'executive')
+  WITH CHECK (get_my_department() IN ('Executive','HR') OR is_executive() OR get_my_role() = 'executive');
+
+-- 067: assignment_profiles + assignment_profile_items
+
+CREATE TABLE IF NOT EXISTS assignment_profiles (
+  id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  subject_type text        NOT NULL,
+  subject_id   text        NOT NULL,
+  customer_id  text        REFERENCES customers(id) ON DELETE CASCADE,
+  department   text        NOT NULL,
+  service_type text,
+  team_id      uuid        REFERENCES teams(id) ON DELETE SET NULL,
+  scope_kind   text        NOT NULL DEFAULT 'default',
+  source_label text,
+  notes        text,
+  is_active    boolean     NOT NULL DEFAULT true,
+  created_by   text        REFERENCES users(id) ON DELETE SET NULL,
+  updated_by   text        REFERENCES users(id) ON DELETE SET NULL,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  updated_at   timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT assignment_profiles_subject_type_chk CHECK (subject_type IN ('customer','contact','trade_party')),
+  CONSTRAINT assignment_profiles_scope_kind_chk CHECK (scope_kind IN ('default','override','ownership'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS assignment_profiles_scope_uidx
+  ON assignment_profiles (subject_type, subject_id, department, COALESCE(service_type,''), scope_kind)
+  WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS assignment_profiles_customer_idx ON assignment_profiles(customer_id, department, service_type) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS assignment_profiles_subject_lookup_idx ON assignment_profiles(subject_type, subject_id, department) WHERE is_active = true;
+SELECT add_updated_at_trigger('assignment_profiles');
+
+CREATE TABLE IF NOT EXISTS assignment_profile_items (
+  id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id  uuid        NOT NULL REFERENCES assignment_profiles(id) ON DELETE CASCADE,
+  role_key    text        NOT NULL,
+  role_label  text        NOT NULL,
+  user_id     text        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_name   text        NOT NULL,
+  sort_order  integer     NOT NULL DEFAULT 0,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS assignment_profile_items_role_uidx ON assignment_profile_items (profile_id, role_key);
+CREATE INDEX IF NOT EXISTS assignment_profile_items_profile_idx ON assignment_profile_items(profile_id, sort_order);
+CREATE INDEX IF NOT EXISTS assignment_profile_items_user_idx ON assignment_profile_items(user_id);
+SELECT add_updated_at_trigger('assignment_profile_items');
+
+ALTER TABLE assignment_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE assignment_profile_items ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS assignment_profiles_select ON assignment_profiles;
+CREATE POLICY assignment_profiles_select ON assignment_profiles FOR SELECT TO authenticated USING (get_my_department() != 'HR');
+DROP POLICY IF EXISTS assignment_profile_items_select ON assignment_profile_items;
+CREATE POLICY assignment_profile_items_select ON assignment_profile_items FOR SELECT TO authenticated USING (get_my_department() != 'HR');
+DROP POLICY IF EXISTS assignment_profiles_write ON assignment_profiles;
+CREATE POLICY assignment_profiles_write ON assignment_profiles FOR ALL TO authenticated
+  USING (get_my_department() IN ('Business Development','Operations','Pricing','Accounting','Executive') OR is_executive())
+  WITH CHECK (get_my_department() IN ('Business Development','Operations','Pricing','Accounting','Executive') OR is_executive());
+DROP POLICY IF EXISTS assignment_profile_items_write ON assignment_profile_items;
+CREATE POLICY assignment_profile_items_write ON assignment_profile_items FOR ALL TO authenticated
+  USING (get_my_department() IN ('Business Development','Operations','Pricing','Accounting','Executive') OR is_executive())
+  WITH CHECK (get_my_department() IN ('Business Development','Operations','Pricing','Accounting','Executive') OR is_executive());
+
+CREATE OR REPLACE FUNCTION replace_assignment_profile_atomic(
+  p_subject_type text, p_subject_id text, p_customer_id text,
+  p_department text, p_service_type text DEFAULT NULL,
+  p_scope_kind text DEFAULT 'default', p_team_id uuid DEFAULT NULL,
+  p_assignments jsonb DEFAULT '[]'::jsonb, p_updated_by text DEFAULT NULL
+) RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_profile_id uuid; v_idx integer := 0; v_item jsonb;
+BEGIN
+  IF p_subject_type NOT IN ('customer','contact','trade_party') THEN RAISE EXCEPTION 'Invalid subject_type: %', p_subject_type; END IF;
+  IF p_scope_kind NOT IN ('default','override','ownership') THEN RAISE EXCEPTION 'Invalid scope_kind: %', p_scope_kind; END IF;
+  IF NOT (get_my_department() IN ('Business Development','Operations','Pricing','Accounting','Executive') OR is_executive())
+    THEN RAISE EXCEPTION 'replace_assignment_profile_atomic: insufficient permissions'; END IF;
+  SELECT id INTO v_profile_id FROM assignment_profiles
+    WHERE subject_type=p_subject_type AND subject_id=p_subject_id AND department=p_department
+      AND COALESCE(service_type,'')=COALESCE(p_service_type,'') AND scope_kind=p_scope_kind AND is_active=true LIMIT 1;
+  IF v_profile_id IS NULL THEN
+    INSERT INTO assignment_profiles (subject_type,subject_id,customer_id,department,service_type,team_id,scope_kind,is_active,created_by,updated_by)
+    VALUES (p_subject_type,p_subject_id,p_customer_id,p_department,p_service_type,p_team_id,p_scope_kind,true,p_updated_by,p_updated_by)
+    RETURNING id INTO v_profile_id;
+  ELSE
+    UPDATE assignment_profiles SET customer_id=p_customer_id,team_id=p_team_id,updated_by=p_updated_by,updated_at=now() WHERE id=v_profile_id;
+  END IF;
+  DELETE FROM assignment_profile_items WHERE profile_id=v_profile_id;
+  FOR v_item IN SELECT value FROM jsonb_array_elements(COALESCE(p_assignments,'[]'::jsonb)) LOOP
+    IF COALESCE(v_item->>'role_key','') <> '' AND COALESCE(v_item->>'user_id','') <> '' THEN
+      INSERT INTO assignment_profile_items (profile_id,role_key,role_label,user_id,user_name,sort_order)
+      VALUES (v_profile_id, v_item->>'role_key',
+              COALESCE(NULLIF(v_item->>'role_label',''),v_item->>'role_key'),
+              v_item->>'user_id', COALESCE(v_item->>'user_name',''), v_idx);
+      v_idx := v_idx + 1;
+    END IF;
+  END LOOP;
+  RETURN v_profile_id;
+END; $$;
+GRANT EXECUTE ON FUNCTION replace_assignment_profile_atomic(text,text,text,text,text,text,uuid,jsonb,text) TO authenticated;
+
+-- 068: department_assignment_roles
+
+CREATE TABLE IF NOT EXISTS department_assignment_roles (
+  id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  department  text        NOT NULL,
+  role_key    text        NOT NULL,
+  role_label  text        NOT NULL,
+  description text,
+  sort_order  integer     NOT NULL DEFAULT 0,
+  is_active   boolean     NOT NULL DEFAULT true,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT department_assignment_roles_dept_key_uidx UNIQUE (department, role_key)
+);
+CREATE INDEX IF NOT EXISTS department_assignment_roles_dept_idx ON department_assignment_roles(department, sort_order) WHERE is_active = true;
+SELECT add_updated_at_trigger('department_assignment_roles');
+ALTER TABLE department_assignment_roles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS department_assignment_roles_select ON department_assignment_roles;
+CREATE POLICY department_assignment_roles_select ON department_assignment_roles FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS department_assignment_roles_write ON department_assignment_roles;
+CREATE POLICY department_assignment_roles_write ON department_assignment_roles FOR ALL TO authenticated
+  USING (is_executive()) WITH CHECK (is_executive());
+INSERT INTO department_assignment_roles (department, role_key, role_label, sort_order) VALUES
+  ('Business Development', 'account_rep',    'Account Rep',     0),
+  ('Business Development', 'bd_manager',     'BD Manager',      1),
+  ('Pricing',              'pricing_analyst', 'Pricing Analyst', 0),
+  ('Pricing',              'pricing_owner',   'Pricing Owner',   1),
+  ('Accounting',           'ar_handler',      'AR Handler',      0),
+  ('Accounting',           'billing_owner',   'Billing Owner',   1),
+  ('HR',                   'hr_contact',      'HR Contact',      0),
+  ('Executive',            'exec_sponsor',    'Exec Sponsor',    0)
+ON CONFLICT (department, role_key) DO NOTHING;
+
+-- 069: drop legacy tables superseded by assignment_profiles
+DROP TABLE IF EXISTS contact_team_overrides CASCADE;
+DROP TABLE IF EXISTS customer_team_profiles CASCADE;
+DROP TABLE IF EXISTS client_handler_preferences CASCADE;
+DROP TABLE IF EXISTS assignment_default_items CASCADE;
+DROP TABLE IF EXISTS assignment_default_profiles CASCADE;

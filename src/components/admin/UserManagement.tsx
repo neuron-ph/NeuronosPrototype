@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "../ui/select";
 import { PermissionsMatrix } from "./PermissionsMatrix";
 import { AccessConfiguration, type ConfigUser } from "./AccessConfiguration";
@@ -51,6 +52,7 @@ interface TeamWithMembers extends Team {
     name: string;
     role: Role;
     team_role?: string | null;
+    team_roles: Array<{ roleKey: string; roleLabel: string }>;
     email: string;
     avatar_url?: string | null;
   }[];
@@ -543,9 +545,9 @@ function InlineTeamCreateRow({
 }) {
   const { user: currentUser } = useUser();
   const { data: deptRoles = [] } = useDepartmentRoles(dept);
-  const [name, setName]             = useState("");
-  const [memberRoles, setMemberRoles] = useState<Record<string, string>>({});
-  const [saving, setSaving]         = useState(false);
+  const [name, setName]               = useState("");
+  const [memberRoles, setMemberRoles] = useState<Record<string, string[]>>({});
+  const [saving, setSaving]           = useState(false);
 
   const handleCreate = async () => {
     if (!name.trim()) { toast.error("Team name is required."); return; }
@@ -565,14 +567,12 @@ function InlineTeamCreateRow({
       await replaceTeamMemberships({
         teamId: newTeam.id,
         memberRoles: Object.fromEntries(
-          Object.entries(memberRoles).map(([userId, roleLabel]) => {
-            const canonical = deptRoles.find((r) => r.role_label === roleLabel);
-            return [
-              userId,
-              roleLabel
-                ? { roleKey: canonical?.role_key ?? roleLabel.toLowerCase().replace(/[^a-z0-9]+/g, "_"), roleLabel }
-                : null,
-            ];
+          Object.entries(memberRoles).map(([userId, roleLabels]) => {
+            const roles = roleLabels.map(label => {
+              const canonical = deptRoles.find((r) => r.role_label === label);
+              return { roleKey: canonical?.role_key ?? label.toLowerCase().replace(/[^a-z0-9]+/g, "_"), roleLabel: label };
+            });
+            return [userId, roles.length > 0 ? roles : null];
           }),
         ),
       });
@@ -593,11 +593,11 @@ function InlineTeamCreateRow({
     onSaved(newTeam.id);
   };
 
-  const assignedIds = Object.keys(memberRoles).filter(id => memberRoles[id]);
+  const assignedIds = Object.keys(memberRoles).filter(id => (memberRoles[id] ?? []).length > 0);
   const availableToAdd = users.filter(u => !assignedIds.includes(u.id));
 
   const addMember = (userId: string) => {
-    setMemberRoles(prev => ({ ...prev, [userId]: deptRoles[0]?.role_label ?? "Member" }));
+    setMemberRoles(prev => ({ ...prev, [userId]: deptRoles[0] ? [deptRoles[0].role_label] : [] }));
   };
 
   const removeMember = (userId: string) => {
@@ -619,17 +619,26 @@ function InlineTeamCreateRow({
           {assignedIds.map((uid, idx) => {
             const u = users.find(x => x.id === uid);
             if (!u) return null;
+            const checked = memberRoles[uid] ?? [];
             return (
-              <div key={uid} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", borderTop: idx > 0 ? "1px solid var(--neuron-ui-border)" : undefined }}>
-                <span style={{ fontSize: 13, color: "var(--neuron-ink-primary)", flex: 1 }}>{u.name}</span>
-                <Select value={memberRoles[uid]} onValueChange={v => setMemberRoles(prev => ({ ...prev, [uid]: v }))}>
-                  <SelectTrigger style={{ height: 28, fontSize: 12, width: 148 }}><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {deptRoles.map(r => (
-                      <SelectItem key={r.role_key} value={r.role_label}>{r.role_label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div key={uid} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "8px 14px", borderTop: idx > 0 ? "1px solid var(--neuron-ui-border)" : undefined }}>
+                <span style={{ fontSize: 13, color: "var(--neuron-ink-primary)", flex: 1, paddingTop: 2 }}>{u.name}</span>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px" }}>
+                  {deptRoles.map(r => (
+                    <label key={r.role_key} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, cursor: "pointer", userSelect: "none", color: "var(--neuron-ink-primary)" }}>
+                      <Checkbox
+                        checked={checked.includes(r.role_label)}
+                        onCheckedChange={(v) => {
+                          setMemberRoles(prev => {
+                            const cur = prev[uid] ?? [];
+                            return { ...prev, [uid]: v ? [...cur, r.role_label] : cur.filter(x => x !== r.role_label) };
+                          });
+                        }}
+                      />
+                      {r.role_label}
+                    </label>
+                  ))}
+                </div>
                 <button
                   onClick={() => removeMember(uid)}
                   style={{ padding: 4, background: "none", border: "none", cursor: "pointer", color: "var(--neuron-ink-muted)", display: "flex", alignItems: "center", borderRadius: 4, flexShrink: 0 }}
@@ -679,19 +688,19 @@ function InlineTeamEditRow({
 }) {
   const { data: deptRoles = [] } = useDepartmentRoles(team.department);
   const [name, setName]               = useState(team.name);
-  const [memberRoles, setMemberRoles] = useState<Record<string, string>>({});
+  const [memberRoles, setMemberRoles] = useState<Record<string, string[]>>({});
   const [saving, setSaving]           = useState(false);
 
   const deptUsers = users.filter(u => u.department === team.department);
 
-  // Init member roles from current DB state
+  // Init from all canonical roles for each member
   useEffect(() => {
-    const initial: Record<string, string> = {};
+    const initial: Record<string, string[]> = {};
     for (const member of team.members) {
-      initial[member.id] = member.team_role ?? deptRoles[0]?.role_label ?? "Member";
+      initial[member.id] = member.team_roles?.map(r => r.roleLabel) ?? (member.team_role ? [member.team_role] : []);
     }
     setMemberRoles(initial);
-  }, [team.id, team.members, deptRoles]);
+  }, [team.id, team.members]);
 
   const handleSave = async () => {
     if (!name.trim()) { toast.error("Team name is required."); return; }
@@ -707,14 +716,12 @@ function InlineTeamEditRow({
       await replaceTeamMemberships({
         teamId: team.id,
         memberRoles: Object.fromEntries(
-          Object.entries(memberRoles).map(([userId, roleLabel]) => {
-            const canonical = deptRoles.find((r) => r.role_label === roleLabel);
-            return [
-              userId,
-              roleLabel
-                ? { roleKey: canonical?.role_key ?? roleLabel.toLowerCase().replace(/[^a-z0-9]+/g, "_"), roleLabel }
-                : null,
-            ];
+          Object.entries(memberRoles).map(([userId, roleLabels]) => {
+            const roles = roleLabels.map(label => {
+              const canonical = deptRoles.find((r) => r.role_label === label);
+              return { roleKey: canonical?.role_key ?? label.toLowerCase().replace(/[^a-z0-9]+/g, "_"), roleLabel: label };
+            });
+            return [userId, roles.length > 0 ? roles : null];
           }),
         ),
       });
@@ -733,11 +740,11 @@ function InlineTeamEditRow({
     onSaved();
   };
 
-  const assignedIds = Object.keys(memberRoles).filter(id => memberRoles[id]);
+  const assignedIds = Object.keys(memberRoles).filter(id => (memberRoles[id] ?? []).length > 0);
   const availableToAdd = deptUsers.filter(u => !assignedIds.includes(u.id));
 
   const addMember = (userId: string) => {
-    setMemberRoles(prev => ({ ...prev, [userId]: deptRoles[0]?.role_label ?? "Member" }));
+    setMemberRoles(prev => ({ ...prev, [userId]: deptRoles[0] ? [deptRoles[0].role_label] : [] }));
   };
 
   const removeMember = (userId: string) => {
@@ -759,17 +766,26 @@ function InlineTeamEditRow({
           {assignedIds.map((uid, idx) => {
             const u = deptUsers.find(x => x.id === uid);
             if (!u) return null;
+            const checked = memberRoles[uid] ?? [];
             return (
-              <div key={uid} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", borderTop: idx > 0 ? "1px solid var(--neuron-ui-border)" : undefined }}>
-                <span style={{ fontSize: 13, color: "var(--neuron-ink-primary)", flex: 1 }}>{u.name}</span>
-                <Select value={memberRoles[uid]} onValueChange={v => setMemberRoles(prev => ({ ...prev, [uid]: v }))}>
-                  <SelectTrigger style={{ height: 28, fontSize: 12, width: 148 }}><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {deptRoles.map(r => (
-                      <SelectItem key={r.role_key} value={r.role_label}>{r.role_label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div key={uid} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "8px 14px", borderTop: idx > 0 ? "1px solid var(--neuron-ui-border)" : undefined }}>
+                <span style={{ fontSize: 13, color: "var(--neuron-ink-primary)", flex: 1, paddingTop: 2 }}>{u.name}</span>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px" }}>
+                  {deptRoles.map(r => (
+                    <label key={r.role_key} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, cursor: "pointer", userSelect: "none", color: "var(--neuron-ink-primary)" }}>
+                      <Checkbox
+                        checked={checked.includes(r.role_label)}
+                        onCheckedChange={(v) => {
+                          setMemberRoles(prev => {
+                            const cur = prev[uid] ?? [];
+                            return { ...prev, [uid]: v ? [...cur, r.role_label] : cur.filter(x => x !== r.role_label) };
+                          });
+                        }}
+                      />
+                      {r.role_label}
+                    </label>
+                  ))}
+                </div>
                 <button
                   onClick={() => removeMember(uid)}
                   style={{ padding: 4, background: "none", border: "none", cursor: "pointer", color: "var(--neuron-ink-muted)", display: "flex", alignItems: "center", borderRadius: 4, flexShrink: 0 }}
@@ -846,11 +862,12 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
         members: membershipRows
           .filter((row) => row.teamId === t.id)
           .map((row) => ({
-            id: row.userId,
-            name: row.userName,
-            role: row.userRole as Role,
-            team_role: row.roleLabel,
-            email: row.userEmail,
+            id:         row.userId,
+            name:       row.userName,
+            role:       row.userRole as Role,
+            team_role:  row.roleLabel,
+            team_roles: row.roles,
+            email:      row.userEmail,
             avatar_url: row.avatarUrl,
           })),
       })),

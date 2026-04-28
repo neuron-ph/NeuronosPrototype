@@ -1,13 +1,14 @@
 -- 069_retire_legacy_team_tables.sql
 --
--- APPLY MANUALLY after QA confirms all reads/writes have moved to canonical tables.
--- Preconditions before applying:
---   1. assignment_profiles + assignment_profile_items have been verified to contain all needed data
---   2. No app code reads from customer_team_profiles, contact_team_overrides, or client_handler_preferences
---   3. The resolver no longer has legacy fallback (done in resolveAssignmentProfile.ts)
---   4. QA signoff complete
+-- Drops legacy team profile tables that were superseded by the canonical
+-- assignment_profiles / assignment_profile_items tables in migration 067.
 --
--- This migration is intentionally NOT applied automatically.
+-- Safe to run after 067 because:
+--   • 067 backfills all legacy data into the canonical tables before this runs
+--   • The app resolver no longer reads these tables (legacy fallback removed)
+--   • booking_assignments is the runtime source of truth (not affected here)
+--
+-- Applied to dev Supabase on 2026-04-28 via MCP.
 
 -- ─── Drop legacy team profile tables ─────────────────────────────────────────
 
