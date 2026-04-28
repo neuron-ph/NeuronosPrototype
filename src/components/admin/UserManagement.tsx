@@ -29,6 +29,7 @@ import {
   listActiveTeamMemberships,
   replaceTeamMemberships,
 } from "../../utils/teamMemberships";
+import { useDepartmentRoles } from "../../hooks/useDepartmentRoles";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -111,11 +112,6 @@ const TEAM_ROLE_COLORS: Record<string, { bg: string; text: string }> = {
   "Representative": { bg: "var(--neuron-bg-surface-subtle)",  text: "var(--theme-text-secondary)" },
 };
 
-const DEFAULT_TEAM_ROLE_OPTIONS = [
-  { roleKey: "team_leader", roleLabel: "Team Leader" },
-  { roleKey: "supervisor", roleLabel: "Supervisor" },
-  { roleKey: "representative", roleLabel: "Representative" },
-];
 
 const STATUS_BADGE: Record<UserStatus, { bg: string; text: string; dot: string }> = {
   active:    { bg: "var(--theme-status-success-bg)", text: "var(--theme-status-success-fg)", dot: "var(--theme-status-success-fg)" },
@@ -546,6 +542,7 @@ function InlineTeamCreateRow({
   onCancel: () => void;
 }) {
   const { user: currentUser } = useUser();
+  const { data: deptRoles = [] } = useDepartmentRoles(dept);
   const [name, setName]             = useState("");
   const [memberRoles, setMemberRoles] = useState<Record<string, string>>({});
   const [saving, setSaving]         = useState(false);
@@ -568,17 +565,15 @@ function InlineTeamCreateRow({
       await replaceTeamMemberships({
         teamId: newTeam.id,
         memberRoles: Object.fromEntries(
-          Object.entries(memberRoles).map(([userId, roleLabel]) => [
-            userId,
-            roleLabel
-              ? {
-                  roleKey:
-                    DEFAULT_TEAM_ROLE_OPTIONS.find((option) => option.roleLabel === roleLabel)?.roleKey ??
-                    roleLabel.toLowerCase().replace(/[^a-z0-9]+/g, "_"),
-                  roleLabel,
-                }
-              : null,
-          ]),
+          Object.entries(memberRoles).map(([userId, roleLabel]) => {
+            const canonical = deptRoles.find((r) => r.role_label === roleLabel);
+            return [
+              userId,
+              roleLabel
+                ? { roleKey: canonical?.role_key ?? roleLabel.toLowerCase().replace(/[^a-z0-9]+/g, "_"), roleLabel }
+                : null,
+            ];
+          }),
         ),
       });
     } catch (memberError) {
@@ -602,7 +597,7 @@ function InlineTeamCreateRow({
   const availableToAdd = users.filter(u => !assignedIds.includes(u.id));
 
   const addMember = (userId: string) => {
-    setMemberRoles(prev => ({ ...prev, [userId]: "Representative" }));
+    setMemberRoles(prev => ({ ...prev, [userId]: deptRoles[0]?.role_label ?? "Member" }));
   };
 
   const removeMember = (userId: string) => {
@@ -630,9 +625,9 @@ function InlineTeamCreateRow({
                 <Select value={memberRoles[uid]} onValueChange={v => setMemberRoles(prev => ({ ...prev, [uid]: v }))}>
                   <SelectTrigger style={{ height: 28, fontSize: 12, width: 148 }}><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Team Leader">Team Leader</SelectItem>
-                    <SelectItem value="Supervisor">Supervisor</SelectItem>
-                    <SelectItem value="Representative">Representative</SelectItem>
+                    {deptRoles.map(r => (
+                      <SelectItem key={r.role_key} value={r.role_label}>{r.role_label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <button
@@ -682,6 +677,7 @@ function InlineTeamEditRow({
   onSaved: () => void;
   onCancel: () => void;
 }) {
+  const { data: deptRoles = [] } = useDepartmentRoles(team.department);
   const [name, setName]               = useState(team.name);
   const [memberRoles, setMemberRoles] = useState<Record<string, string>>({});
   const [saving, setSaving]           = useState(false);
@@ -692,10 +688,10 @@ function InlineTeamEditRow({
   useEffect(() => {
     const initial: Record<string, string> = {};
     for (const member of team.members) {
-      initial[member.id] = member.team_role ?? "Representative";
+      initial[member.id] = member.team_role ?? deptRoles[0]?.role_label ?? "Member";
     }
     setMemberRoles(initial);
-  }, [team.id, team.members]);
+  }, [team.id, team.members, deptRoles]);
 
   const handleSave = async () => {
     if (!name.trim()) { toast.error("Team name is required."); return; }
@@ -711,17 +707,15 @@ function InlineTeamEditRow({
       await replaceTeamMemberships({
         teamId: team.id,
         memberRoles: Object.fromEntries(
-          Object.entries(memberRoles).map(([userId, roleLabel]) => [
-            userId,
-            roleLabel
-              ? {
-                  roleKey:
-                    DEFAULT_TEAM_ROLE_OPTIONS.find((option) => option.roleLabel === roleLabel)?.roleKey ??
-                    roleLabel.toLowerCase().replace(/[^a-z0-9]+/g, "_"),
-                  roleLabel,
-                }
-              : null,
-          ]),
+          Object.entries(memberRoles).map(([userId, roleLabel]) => {
+            const canonical = deptRoles.find((r) => r.role_label === roleLabel);
+            return [
+              userId,
+              roleLabel
+                ? { roleKey: canonical?.role_key ?? roleLabel.toLowerCase().replace(/[^a-z0-9]+/g, "_"), roleLabel }
+                : null,
+            ];
+          }),
         ),
       });
     } catch (assignError) {
@@ -743,7 +737,7 @@ function InlineTeamEditRow({
   const availableToAdd = deptUsers.filter(u => !assignedIds.includes(u.id));
 
   const addMember = (userId: string) => {
-    setMemberRoles(prev => ({ ...prev, [userId]: "Representative" }));
+    setMemberRoles(prev => ({ ...prev, [userId]: deptRoles[0]?.role_label ?? "Member" }));
   };
 
   const removeMember = (userId: string) => {
@@ -771,9 +765,9 @@ function InlineTeamEditRow({
                 <Select value={memberRoles[uid]} onValueChange={v => setMemberRoles(prev => ({ ...prev, [uid]: v }))}>
                   <SelectTrigger style={{ height: 28, fontSize: 12, width: 148 }}><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Team Leader">Team Leader</SelectItem>
-                    <SelectItem value="Supervisor">Supervisor</SelectItem>
-                    <SelectItem value="Representative">Representative</SelectItem>
+                    {deptRoles.map(r => (
+                      <SelectItem key={r.role_key} value={r.role_label}>{r.role_label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <button
