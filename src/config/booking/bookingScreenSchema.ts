@@ -148,7 +148,7 @@ const SHARED_GENERAL_INFORMATION: SectionDef = {
     {
       // Matrix: Customs Entry Procedure = Yes for BR, FWD, and TKG.
       key: 'customs_entry_procedure',
-      label: 'Customs Entry Procedure',
+      label: 'Customs Entry Procedure Code',
       control: 'dropdown',
       required: 'yes',
       storage: 'details',
@@ -280,6 +280,14 @@ const BROKERAGE_GENERAL_SPECIFIC: SectionDef = {
       options: CARGO_TYPE_OPTIONS,
     },
     {
+      // Spec: Commodity Description moves to General Information at booking time.
+      key: 'description_of_goods',
+      label: 'Commodity Description',
+      control: 'textarea',
+      required: 'yes',
+      storage: 'details',
+    },
+    {
       key: 'incoterms',
       label: 'Incoterms',
       control: 'dropdown',
@@ -312,20 +320,17 @@ const BROKERAGE_BOOKING_DETAILS: SectionDef = {
     },
     {
       key: 'carrier',
-      label: 'Carrier',
+      label: 'Carrier / Airline',
       control: 'profile-lookup',
       profileType: 'carrier',
       required: 'yes',
       storage: 'details',
+      dynamicLabels: [
+        { when: [{ field: 'mode', op: 'eq', value: 'Air Freight' }], label: 'Airline' },
+        { when: [{ field: 'mode', op: 'in', value: ['FCL', 'LCL'] }], label: 'Carrier' },
+      ],
     },
-    // Cargo
-    {
-      key: 'description_of_goods',
-      label: 'Description of Goods',
-      control: 'textarea',
-      required: 'yes',
-      storage: 'details',
-    },
+    // Cargo (description_of_goods moved to General Information per spec)
     {
       key: 'gross_weight',
       label: 'Gross Weight',
@@ -411,15 +416,13 @@ const BROKERAGE_BOOKING_DETAILS: SectionDef = {
       storage: 'details',
     },
     {
+      // Spec: ETB Y/Y/N for FCL/LCL/AIR — gated only by mode, not movement.
       key: 'etb',
       label: 'ETB',
       control: 'date',
       required: 'conditional',
       storage: 'details',
-      showWhen: [
-        { field: 'movement_type', op: 'eq', value: 'Import' },
-        { field: 'mode', op: 'in', value: ['FCL', 'LCL'] },
-      ],
+      showWhen: [{ field: 'mode', op: 'in', value: ['FCL', 'LCL'] }],
     },
     {
       key: 'lct',
@@ -480,13 +483,30 @@ const BROKERAGE_FCL_DETAILS: SectionDef = {
       showWhen: [{ field: 'movement_type', op: 'eq', value: 'Export' }],
     },
     {
+      // Spec: brokerage container deposit applies to all FCL bookings, not just Import.
       key: 'container_deposit',
       label: 'Container Deposit',
       control: 'boolean-dropdown',
       required: 'conditional',
       storage: 'details',
       options: BOOLEAN_OPTIONS,
-      showWhen: [{ field: 'movement_type', op: 'eq', value: 'Import' }],
+    },
+    {
+      // Spec: Stripping Date / Date of Discharge — Brokerage FCL Y.
+      key: 'stripping_date',
+      label: 'Stripping Date / Date of Discharge',
+      control: 'date',
+      required: 'conditional',
+      storage: 'details',
+    },
+    {
+      // Spec: Location of Goods — Brokerage FCL Y.
+      key: 'location_of_goods',
+      label: 'Location of Goods',
+      control: 'profile-lookup',
+      profileType: 'warehouse',
+      required: 'yes',
+      storage: 'details',
     },
     {
       key: 'empty_return',
@@ -597,12 +617,12 @@ const BROKERAGE_LCL_DETAILS: SectionDef = {
       storage: 'details',
     },
     {
+      // Spec: Stripping Date / Date of Discharge — Brokerage LCL Y (no movement gate).
       key: 'stripping_date',
-      label: 'Stripping Date',
+      label: 'Stripping Date / Date of Discharge',
       control: 'date',
       required: 'conditional',
       storage: 'details',
-      showWhen: [{ field: 'movement_type', op: 'eq', value: 'Import' }],
     },
   ],
 };
@@ -632,9 +652,11 @@ const BROKERAGE_AIR_DETAILS: SectionDef = {
 };
 
 const BROKERAGE_IMPORT_CUSTOMS: SectionDef = {
+  // Spec: customs fields (Selectivity Color, Entry Number, Examinations, Customs
+  // Duties, Brokerage Fee SAD, etc.) apply to all Brokerage modes regardless of
+  // Import/Export. Section is no longer movement-gated.
   key: 'brokerage_import_customs',
   title: 'Customs Details',
-  showWhen: [{ field: 'movement_type', op: 'eq', value: 'Import' }],
   fields: [
     {
       key: 'selectivity_color',
@@ -653,7 +675,7 @@ const BROKERAGE_IMPORT_CUSTOMS: SectionDef = {
     },
     {
       key: 'examinations',
-      label: 'Examination/s',
+      label: 'Examinations',
       control: 'repeater',
       required: 'no',
       storage: 'details',
@@ -665,7 +687,7 @@ const BROKERAGE_IMPORT_CUSTOMS: SectionDef = {
     },
     {
       key: 'customs_duties_taxes_paid',
-      label: 'Customs Duties and Taxes Paid',
+      label: 'Customs Duties & Taxes Paid',
       control: 'currency',
       required: 'yes',
       storage: 'details',
@@ -762,6 +784,14 @@ const FORWARDING_GENERAL_SPECIFIC: SectionDef = {
       options: CARGO_NATURE_OPTIONS,
     },
     {
+      // Spec: Commodity Description moves to General Information at booking time.
+      key: 'commodity_description',
+      label: 'Commodity Description',
+      control: 'textarea',
+      required: 'yes',
+      storage: 'details',
+    },
+    {
       key: 'sub_services',
       label: 'Sub-Service/s',
       control: 'multi-value',
@@ -794,14 +824,7 @@ const FORWARDING_BOOKING_DETAILS: SectionDef = {
       required: 'yes',
       storage: 'details',
     },
-    // Cargo — commodity and weight are required and operationally critical
-    {
-      key: 'commodity_description',
-      label: 'Commodity Description',
-      control: 'textarea',
-      required: 'yes',
-      storage: 'details',
-    },
+    // Cargo — commodity_description moved to General Information per spec.
     {
       key: 'gross_weight',
       label: 'Gross Weight',
@@ -889,22 +912,21 @@ const FORWARDING_BOOKING_DETAILS: SectionDef = {
       storage: 'details',
     },
     {
+      // Spec: ETA / ATA on forwarding bookings.
       key: 'eta',
-      label: 'ETA',
+      label: 'ETA / ATA',
       control: 'date',
       required: 'yes',
       storage: 'details',
     },
     {
+      // Spec: ETB Y/Y/N for FCL/LCL/AIR — gated only by mode.
       key: 'etb',
       label: 'ETB',
       control: 'date',
       required: 'conditional',
       storage: 'details',
-      showWhen: [
-        { field: 'movement_type', op: 'eq', value: 'Import' },
-        { field: 'mode', op: 'in', value: ['FCL', 'LCL'] },
-      ],
+      showWhen: [{ field: 'mode', op: 'in', value: ['FCL', 'LCL'] }],
     },
     {
       // Matrix: Tagging Time = Yes for all forwarding modes.
@@ -918,7 +940,7 @@ const FORWARDING_BOOKING_DETAILS: SectionDef = {
     {
       // Matrix: Forwarder (if any). Key 'agent' is canonical (forwarder aliased via SERVICE_LEGACY_MAP).
       key: 'agent',
-      label: 'Forwarder (if any)',
+      label: 'Forwarder',
       control: 'profile-lookup',
       profileType: 'agent',
       required: 'no',
@@ -965,18 +987,35 @@ const FORWARDING_FCL_DETAILS: SectionDef = {
       storage: 'details',
     },
     {
+      // Spec: Container Deposit Y for FCL (no movement gate).
       key: 'container_deposit',
       label: 'Container Deposit',
       control: 'boolean-dropdown',
       required: 'yes',
       storage: 'details',
       options: BOOLEAN_OPTIONS,
-      showWhen: [{ field: 'movement_type', op: 'eq', value: 'Import' }],
     },
     {
       key: 'det_dem_validity',
       label: 'Det/Dem Validity',
       control: 'date',
+      required: 'yes',
+      storage: 'details',
+    },
+    {
+      // Spec: Stripping Date / Date of Discharge — Forwarding FCL Y.
+      key: 'stripping_date',
+      label: 'Stripping Date / Date of Discharge',
+      control: 'date',
+      required: 'yes',
+      storage: 'details',
+    },
+    {
+      // Spec: Location of Goods — Forwarding FCL Y.
+      key: 'location_of_goods',
+      label: 'Location of Goods',
+      control: 'profile-lookup',
+      profileType: 'warehouse',
       required: 'yes',
       storage: 'details',
     },
@@ -1043,12 +1082,12 @@ const FORWARDING_LCL_DETAILS: SectionDef = {
       storage: 'details',
     },
     {
+      // Spec: Stripping Date / Date of Discharge — Forwarding LCL Y (no movement gate).
       key: 'stripping_date',
-      label: 'Stripping Date',
+      label: 'Stripping Date / Date of Discharge',
       control: 'date',
       required: 'yes',
       storage: 'details',
-      showWhen: [{ field: 'movement_type', op: 'eq', value: 'Import' }],
     },
     {
       key: 'cut_off_time',

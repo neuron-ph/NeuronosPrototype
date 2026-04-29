@@ -15,7 +15,7 @@ export type ModuleId =
   | "pricing_quotations" | "pricing_contracts" | "pricing_network_partners"
   | "pricing_quotations_details_tab" | "pricing_quotations_comments_tab"
   | "pricing_contracts_all_tab" | "pricing_contracts_active_tab" | "pricing_contracts_expiring_tab"
-  | "pricing_contracts_financial_overview_tab" | "pricing_contracts_rate_card_tab"
+  | "pricing_contracts_financial_overview_tab" | "pricing_contracts_quotation_tab" | "pricing_contracts_rate_card_tab"
   | "pricing_contracts_bookings_tab" | "pricing_contracts_billings_tab"
   | "pricing_contracts_invoices_tab" | "pricing_contracts_collections_tab"
   | "pricing_contracts_expenses_tab" | "pricing_contracts_attachments_tab"
@@ -166,6 +166,7 @@ export const PERM_MODULES: PermModule[] = [
   { id: "pricing_contracts_active_tab",   label: "↳ Active",   group: PRC, dept: PRC, applicableActions: A.viewOnly },
   { id: "pricing_contracts_expiring_tab", label: "↳ Expiring", group: PRC, dept: PRC, applicableActions: A.viewOnly },
   { id: "pricing_contracts_financial_overview_tab", label: "↳ Financial Overview", group: PRC, dept: PRC, applicableActions: A.viewOnly },
+  { id: "pricing_contracts_quotation_tab",          label: "↳ Quotation",          group: PRC, dept: PRC, applicableActions: A.viewOnly },
   { id: "pricing_contracts_rate_card_tab",          label: "↳ Rate Card",          group: PRC, dept: PRC, applicableActions: A.tabInfo },
   { id: "pricing_contracts_bookings_tab",           label: "↳ Bookings",           group: PRC, dept: PRC, applicableActions: A.viewOnly },
   { id: "pricing_contracts_billings_tab",           label: "↳ Billings",           group: PRC, dept: PRC, applicableActions: A.viewOnly },

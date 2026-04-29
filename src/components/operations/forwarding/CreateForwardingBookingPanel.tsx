@@ -10,7 +10,7 @@ import { BookingCreationPanel } from "../shared/BookingCreationPanel";
 import { BookingDynamicForm } from "../shared/BookingDynamicForm";
 import { useBookingFormState } from "../shared/useBookingFormState";
 import {
-  MINIMAL_CREATE_REQUIRED_FIELDS,
+  getMinimalCreateRequiredFields,
   validateBookingForm,
   hasErrors,
 } from "../shared/bookingFormValidation";
@@ -91,7 +91,7 @@ export function CreateForwardingBookingPanel({
     e.preventDefault();
 
     const errors = validateBookingForm(formState, "Forwarding", context, {
-      requiredFieldKeys: MINIMAL_CREATE_REQUIRED_FIELDS,
+      requiredFieldKeys: getMinimalCreateRequiredFields("Forwarding"),
     });
     if (hasErrors(errors)) {
       setSubmitErrors(errors);
@@ -228,7 +228,7 @@ export function CreateForwardingBookingPanel({
         onChange={setField}
         ctx={context}
         errors={submitErrors}
-        requiredFieldKeys={MINIMAL_CREATE_REQUIRED_FIELDS}
+        requiredFieldKeys={getMinimalCreateRequiredFields("Forwarding")}
       />
 
       {customerName && (

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Plus, Search, X } from 'lucide-react';
 import type { ProfileSelectionValue, ProfileLookupRecord } from '../../../types/profiles';
@@ -80,7 +80,11 @@ export function ProfileLookupCombobox({
   const canQuickCreate = !!onQuickCreate && (registryEntry?.quickCreateAllowed ?? false) && isPrivileged(user);
 
   // ---- adapter lookup ----
-  const adapterInfo = getAdapterForType(profileType);
+  // Memoize: getAdapterForType returns a fresh object literal every call.
+  // Without this, doSearch (and downstream effects) get a new identity every
+  // render, which re-schedules debounced searches and causes the dropdown to
+  // flicker as loading/results.length thrash.
+  const adapterInfo = useMemo(() => getAdapterForType(profileType), [profileType]);
 
   // ---- position dropdown ----
   const positionDropdown = useCallback(() => {

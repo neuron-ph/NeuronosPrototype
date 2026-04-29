@@ -43,12 +43,13 @@ export function ForwardingFormV2({ data, onChange }: ForwardingFormV2Props) {
             options={[
               { value: "EXW", label: "EXW", icon: <FileText size={16} /> },
               { value: "FOB", label: "FOB", icon: <FileText size={16} /> },
+              { value: "CFR", label: "CFR", icon: <FileText size={16} /> },
               { value: "CIF", label: "CIF", icon: <FileText size={16} /> },
               { value: "FCA", label: "FCA", icon: <FileText size={16} /> },
               { value: "CPT", label: "CPT", icon: <FileText size={16} /> },
               { value: "CIP", label: "CIP", icon: <FileText size={16} /> },
               { value: "DAP", label: "DAP", icon: <FileText size={16} /> },
-              { value: "DPU", label: "DPU", icon: <FileText size={16} /> },
+              { value: "DDU", label: "DDU", icon: <FileText size={16} /> },
               { value: "DDP", label: "DDP", icon: <FileText size={16} /> }
             ]}
             placeholder="Select incoterms"

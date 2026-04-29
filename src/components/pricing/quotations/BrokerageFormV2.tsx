@@ -71,7 +71,7 @@ export function BrokerageFormV2({ data, onChange }: BrokerageFormV2Props) {
         {/* Type of Entry */}
         <div>
           <label style={{ display: "block", fontSize: "11px", fontWeight: 500, color: "var(--theme-text-muted)", marginBottom: "4px" }}>
-            Type of Entry
+            Customs Entry Procedure Code
           </label>
           <input
             type="text"

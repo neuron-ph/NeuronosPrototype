@@ -563,22 +563,30 @@ export function countEntries(text?: string | string[]): number {
 export function deriveQuantitiesFromBooking(
   booking: {
     containerNumbers?: string | string[];
+    container_numbers?: string | string[];
     containers?: ContainerEntry[];
     mblMawb?: string;
+    mbl_mawb?: string;
     hblHawb?: string;
     vehicleReferenceNumber?: string;
+    vehicle_reference_number?: string;
     qty20ft?: string;
     qty40ft?: string;
     qty45ft?: string;
     mode?: string;
-  },
+  } & Record<string, any>,
   serviceType: string
 ): BookingQuantities {
   const type = serviceType.toLowerCase();
 
+  // Read either camelCase or snake_case (records merge both shapes)
+  const containerNumbersField = booking.containerNumbers ?? booking.container_numbers;
+  const mblField = booking.mblMawb ?? booking.mbl_mawb;
+  const vehicleField = booking.vehicleReferenceNumber ?? booking.vehicle_reference_number;
+
   if (type === "brokerage" || type === "forwarding") {
     // Tier 1: Count actual container numbers entered by Ops
-    let containers = countEntries(booking.containerNumbers);
+    let containers = countEntries(containerNumbersField);
 
     // Tier 2: Try containers[] array (used by booking creation forms)
     if (containers === 0) {
@@ -594,31 +602,24 @@ export function deriveQuantitiesFromBooking(
       });
     }
 
-    // Tier 4: If mode is FCL and all counting approaches returned 0,
-    // default to 1 so per_container rate rows aren't zero-suppressed
-    const mode = (booking.mode || "").toUpperCase();
-    const isFCL = mode === "FCL" || mode === "MULTI-MODAL" || mode === "MULTIMODAL" || mode === "";
-    if (containers === 0 && isFCL) {
-      containers = 1;
-    }
-
-    const bls = countEntries(booking.mblMawb);
+    // Reflect actual booking data — zero is a valid signal of "info missing".
+    const bls = countEntries(mblField);
 
     return {
       containers,
-      bls: bls || 1, // Default to 1 if MBL field is empty
-      sets: 1,
+      bls,
+      sets: 1, // Entry is per-booking (intrinsic to brokerage filing)
       shipments: 1,
     };
   }
 
   if (type === "trucking") {
     // Trucking: count vehicle reference entries as truck/container count
-    const trucks = countEntries(booking.vehicleReferenceNumber);
+    const trucks = countEntries(vehicleField);
 
     return {
-      containers: trucks || 1, // Default to 1 if no vehicle refs yet
-      bls: 1,
+      containers: trucks,
+      bls: 0,
       sets: 1,
       shipments: 1,
     };

@@ -35,6 +35,13 @@ interface RateBreakdownTableProps {
   heading?: string;
   /** When true, suppress the heading and total footer row (used inside grouped multi-line display) */
   hideTotal?: boolean;
+  /** Optional per-rate status — when provided, decorates rows with an "Applied" or "X of Y applied" badge. */
+  rateStatus?: (rate: AppliedRate) => {
+    state: "none" | "applied" | "partial";
+    appliedQty: number;
+    deltaQty: number;
+    deltaAmount: number;
+  };
 }
 
 // ============================================
@@ -47,6 +54,7 @@ export function RateBreakdownTable({
   currency,
   heading = "Rate Breakdown",
   hideTotal = false,
+  rateStatus,
 }: RateBreakdownTableProps) {
   return (
     <div>
@@ -75,7 +83,7 @@ export function RateBreakdownTable({
 
             {/* Header */}
             <thead>
-              <tr className="text-[11px] font-semibold text-[var(--theme-text-muted)] uppercase tracking-wide bg-[#F8FAFC] border-b border-[var(--theme-border-default)]">
+              <tr className="text-[11px] font-semibold text-[var(--theme-text-muted)] uppercase tracking-wide border-b border-[var(--theme-border-default)]">
                 <th className="text-left px-4 py-2.5 font-semibold">Particular</th>
                 <th className="text-right px-4 py-2.5 font-semibold">Unit Rate</th>
                 <th className="text-center px-2 py-2.5 font-semibold">Qty</th>
@@ -89,10 +97,32 @@ export function RateBreakdownTable({
                 const rows = [
                   <tr
                     key={`rate-${rate.particular}-${idx}`}
-                    className="border-b border-[var(--theme-border-default)] hover:bg-[#FAFBFC] transition-colors"
+                    className="border-b border-[var(--theme-border-default)] hover:bg-[var(--theme-bg-surface-tint)] transition-colors"
                   >
                     <td className="px-4 py-3 font-medium text-[var(--theme-text-primary)] truncate">
-                      {rate.particular}
+                      <span className="inline-flex items-center gap-2">
+                        {rate.particular}
+                        {(() => {
+                          const s = rateStatus?.(rate);
+                          if (!s || s.state === "none") return null;
+                          if (s.state === "applied") {
+                            return (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--theme-bg-surface-tint)] border border-[var(--theme-status-success-border)] text-[var(--theme-status-success-fg)] font-medium uppercase tracking-wide">
+                                Applied
+                              </span>
+                            );
+                          }
+                          // Partial: existing X of new Y
+                          return (
+                            <span
+                              className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--theme-status-warning-bg)] border border-[var(--theme-status-warning-border)] text-[var(--theme-status-warning-fg)] font-medium uppercase tracking-wide"
+                              title={`Already applied for ${s.appliedQty} unit${s.appliedQty !== 1 ? "s" : ""}. ${s.deltaQty} new unit${s.deltaQty !== 1 ? "s" : ""} (${formatCurrency(s.deltaAmount, currency)}) pending.`}
+                            >
+                              {s.appliedQty} of {rate.quantity} applied
+                            </span>
+                          );
+                        })()}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-right text-[var(--theme-text-muted)] whitespace-nowrap">
                       {formatCurrency(rate.rate, currency)}
@@ -128,7 +158,7 @@ export function RateBreakdownTable({
             {/* Footer — total */}
             {!hideTotal && (
             <tfoot>
-              <tr className="bg-[#F8FAFC] border-t border-[var(--theme-border-default)]">
+              <tr className="border-t border-[var(--theme-border-default)]">
                 <td className="px-4 py-3 font-semibold text-[var(--theme-text-primary)]">Total</td>
                 <td />
                 <td />

@@ -10,6 +10,20 @@ import { profileValueToLabel } from '../../../utils/bookings/profileSerialize';
 export type ValidationErrors = Record<string, string>;
 export const MINIMAL_CREATE_REQUIRED_FIELDS = ['customer_name', 'booking_name'] as const;
 
+const MODE_REQUIRED_SERVICES = new Set(['Brokerage', 'Forwarding', 'Trucking']);
+
+/**
+ * Mode (FCL/LCL/Air) gates a wide chunk of the schema (Container Number/s, Det/Dem,
+ * Stripping Date, etc.). Without it set at create time, those sections are unreachable
+ * and the user sees a "missing field" bug. Brokerage/Forwarding/Trucking therefore
+ * require `mode` at create; Marine Insurance and Others do not.
+ */
+export function getMinimalCreateRequiredFields(serviceType: string): readonly string[] {
+  return MODE_REQUIRED_SERVICES.has(serviceType)
+    ? [...MINIMAL_CREATE_REQUIRED_FIELDS, 'mode']
+    : MINIMAL_CREATE_REQUIRED_FIELDS;
+}
+
 interface ValidateBookingFormOptions {
   requiredFieldKeys?: readonly string[];
 }

@@ -219,7 +219,7 @@ export function BrokerageServiceForm({
             {/* Type of Entry — Standard and Non-Regular only (matrix: All-Inclusive = No) */}
             {isFieldVisible("type_of_entry", "Brokerage", ctx) && (
               <div>
-                <label style={labelStyle}>Type of Entry</label>
+                <label style={labelStyle}>Customs Entry Procedure Code</label>
                 <div style={{ display: "flex", gap: "16px" }}>
                   <FormCheckbox
                     checked={data.consumption || false}
@@ -363,7 +363,7 @@ export function BrokerageServiceForm({
                 {data.mode === "LCL" && (
                   <div style={{ ...modeOverlayContainerStyle, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                     <div>
-                      <label style={{ ...labelStyle, fontSize: "12px" }}>Gross Weight (GWT)</label>
+                      <label style={{ ...labelStyle, fontSize: "12px" }}>Gross Weight</label>
                       <input
                         type="text"
                         value={data.lclGwt || ""}
@@ -376,7 +376,7 @@ export function BrokerageServiceForm({
                       />
                     </div>
                     <div>
-                      <label style={{ ...labelStyle, fontSize: "12px" }}>Measurement (DIMS)</label>
+                      <label style={{ ...labelStyle, fontSize: "12px" }}>Measurement</label>
                       <input
                         type="text"
                         value={data.lclDims || ""}
@@ -395,7 +395,7 @@ export function BrokerageServiceForm({
                 {data.mode === "AIR" && (
                   <div style={{ ...modeOverlayContainerStyle, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                     <div>
-                      <label style={{ ...labelStyle, fontSize: "12px" }}>Gross Weight (GWT)</label>
+                      <label style={{ ...labelStyle, fontSize: "12px" }}>Gross Weight</label>
                       <input
                         type="text"
                         value={data.airGwt || ""}
@@ -408,7 +408,7 @@ export function BrokerageServiceForm({
                       />
                     </div>
                     <div>
-                      <label style={{ ...labelStyle, fontSize: "12px" }}>Chargeable Weight (CWT)</label>
+                      <label style={{ ...labelStyle, fontSize: "12px" }}>Chargeable Weight</label>
                       <input
                         type="text"
                         value={data.airCwt || ""}

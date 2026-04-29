@@ -116,7 +116,7 @@ function QuotationTableRow({ item, index, totalItems, onItemClick, gridTemplateC
         gap: "12px",
         padding: "10px 16px",
         borderBottom: "none",
-        backgroundColor: index % 2 === 0 ? "var(--theme-bg-surface)" : "var(--theme-bg-surface-subtle)",
+        backgroundColor: "var(--theme-bg-surface)",
         position: "relative",
         ...getQuotationTypeAccentStyle(item.quotation_type),
       }}
@@ -125,7 +125,7 @@ function QuotationTableRow({ item, index, totalItems, onItemClick, gridTemplateC
         e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)";
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = index % 2 === 0 ? "var(--theme-bg-surface)" : "var(--theme-bg-surface-subtle)";
+        e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
       }}
     >
       {/* Icon — type-aware (Project vs Contract) */}
