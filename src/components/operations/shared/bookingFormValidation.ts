@@ -7,6 +7,11 @@ import {
 import type { BookingFormContext } from '../../../config/booking/bookingFieldTypes';
 
 export type ValidationErrors = Record<string, string>;
+export const MINIMAL_CREATE_REQUIRED_FIELDS = ['customer_name', 'booking_name'] as const;
+
+interface ValidateBookingFormOptions {
+  requiredFieldKeys?: readonly string[];
+}
 
 /**
  * Validates all visible required fields in the form state.
@@ -16,12 +21,16 @@ export function validateBookingForm(
   formState: Record<string, unknown>,
   serviceType: string,
   ctx: BookingFormContext,
+  options: ValidateBookingFormOptions = {},
 ): ValidationErrors {
   const schema = getServiceSchema(serviceType);
   if (!schema) return {};
 
   const errors: ValidationErrors = {};
   const seen = new Set<string>();
+  const requiredFieldOverride = options.requiredFieldKeys
+    ? new Set(options.requiredFieldKeys)
+    : null;
 
   for (const section of getVisibleSections(schema.sections, ctx)) {
     for (const field of section.fields) {
@@ -32,7 +41,10 @@ export function validateBookingForm(
       if (field.control === 'team-assignment') continue;
       // Skip invisible fields — they are never required
       if (!isFieldVisible(field, ctx)) continue;
-      if (!isFieldRequired(field, ctx)) continue;
+      const isRequired = requiredFieldOverride
+        ? requiredFieldOverride.has(field.key)
+        : isFieldRequired(field, ctx);
+      if (!isRequired) continue;
 
       const val = formState[field.key];
       const isEmpty =

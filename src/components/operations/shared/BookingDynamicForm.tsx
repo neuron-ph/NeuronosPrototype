@@ -15,6 +15,7 @@ interface Props {
   errors?: ValidationErrors;
   disabled?: boolean;
   resolvedOptions?: Record<string, string[]>;
+  requiredFieldKeys?: readonly string[];
 }
 
 /**
@@ -30,6 +31,7 @@ export function BookingDynamicForm({
   errors = {},
   disabled,
   resolvedOptions,
+  requiredFieldKeys,
 }: Props) {
   const schema = getServiceSchema(serviceType);
   const { services, subServices } = useBookingServiceOptions(serviceType);
@@ -58,6 +60,7 @@ export function BookingDynamicForm({
         disabled={disabled}
         resolvedOptions={resolvedOptions}
         catalogOptions={catalogOptions}
+        requiredFieldKeys={requiredFieldKeys}
       />
 
       <BookingSectionGroupCard
@@ -70,6 +73,7 @@ export function BookingDynamicForm({
         disabled={disabled}
         resolvedOptions={resolvedOptions}
         catalogOptions={catalogOptions}
+        requiredFieldKeys={requiredFieldKeys}
       />
     </>
   );

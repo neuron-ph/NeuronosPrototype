@@ -9,7 +9,7 @@ import { logCreation, logDeletion, logActivity } from "../../utils/activityLog";
 import { toast } from "sonner@2.0.3";
 import {
   Plus, Users, Shield, UsersRound, BookMarked,
-  ChevronRight, Edit, Trash2, Search, X,
+  ChevronRight, Edit, Edit2, Trash2, Search, X, ArrowUp, ArrowDown, Save,
 } from "lucide-react";
 import { DataTable, ColumnDef } from "../common/DataTable";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
@@ -30,7 +30,19 @@ import {
   listActiveTeamMemberships,
   replaceTeamMemberships,
 } from "../../utils/teamMemberships";
-import { useDepartmentRoles } from "../../hooks/useDepartmentRoles";
+import { normalizeRoleKey } from "../../utils/assignments/normalizeRoleKey";
+import { useDepartmentRoles, type DepartmentRole } from "../../hooks/useDepartmentRoles";
+import {
+  insertDepartmentRole,
+  updateDepartmentRole,
+} from "../../utils/departmentAssignmentRoles";
+import {
+  buildInitialMemberRoleSelections,
+  buildRoleInputsFromLabels,
+  mergeRoleOptions,
+  TeamAssignmentRoleChips,
+  TeamPoolEditor,
+} from "./TeamPoolEditor";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -98,6 +110,17 @@ const DEPT_BADGE: Record<string, { bg: string; text: string }> = {
   Accounting:            { bg: "var(--neuron-dept-accounting-bg)", text: "var(--neuron-dept-accounting-text)" },
   HR:                    { bg: "var(--neuron-dept-hr-bg)",         text: "var(--neuron-dept-hr-text)" },
   Executive:             { bg: "var(--neuron-dept-executive-bg)",  text: "var(--neuron-dept-executive-text)" },
+};
+
+const LINEAR_GHOST_BUTTON_STYLE = {
+  height: 30,
+  borderRadius: 8,
+  border: "1px solid rgba(148, 163, 184, 0.14)",
+  background: "rgba(255,255,255,0.02)",
+  color: "var(--neuron-ink-secondary)",
+  fontSize: 12,
+  fontWeight: 600,
+  letterSpacing: "-0.01em",
 };
 
 const ROLE_COLORS: Record<Role, { bg: string; text: string }> = {
@@ -544,10 +567,18 @@ function InlineTeamCreateRow({
   onCancel: () => void;
 }) {
   const { user: currentUser } = useUser();
-  const { data: deptRoles = [] } = useDepartmentRoles(dept);
+  const { data: deptRolesData } = useDepartmentRoles(dept);
   const [name, setName]               = useState("");
   const [memberRoles, setMemberRoles] = useState<Record<string, string[]>>({});
   const [saving, setSaving]           = useState(false);
+  const roleOptions = useMemo(
+    () =>
+      (deptRolesData?.roles ?? []).map((role) => ({
+        roleKey: role.role_key,
+        roleLabel: role.role_label,
+      })),
+    [deptRolesData?.roles],
+  );
 
   const handleCreate = async () => {
     if (!name.trim()) { toast.error("Team name is required."); return; }
@@ -567,13 +598,10 @@ function InlineTeamCreateRow({
       await replaceTeamMemberships({
         teamId: newTeam.id,
         memberRoles: Object.fromEntries(
-          Object.entries(memberRoles).map(([userId, roleLabels]) => {
-            const roles = roleLabels.map(label => {
-              const canonical = deptRoles.find((r) => r.role_label === label);
-              return { roleKey: canonical?.role_key ?? label.toLowerCase().replace(/[^a-z0-9]+/g, "_"), roleLabel: label };
-            });
-            return [userId, roles.length > 0 ? roles : null];
-          }),
+          Object.entries(memberRoles).map(([userId, roleLabels]) => [
+            userId,
+            buildRoleInputsFromLabels(roleLabels, roleOptions),
+          ]),
         ),
       });
     } catch (memberError) {
@@ -593,11 +621,13 @@ function InlineTeamCreateRow({
     onSaved(newTeam.id);
   };
 
-  const assignedIds = Object.keys(memberRoles).filter(id => (memberRoles[id] ?? []).length > 0);
-  const availableToAdd = users.filter(u => !assignedIds.includes(u.id));
-
   const addMember = (userId: string) => {
-    setMemberRoles(prev => ({ ...prev, [userId]: deptRoles[0] ? [deptRoles[0].role_label] : [] }));
+    const defaultRole = roleOptions[0];
+    if (!defaultRole) {
+      toast.error("Define assignment roles for this department before adding team members.");
+      return;
+    }
+    setMemberRoles((prev) => ({ ...prev, [userId]: [defaultRole.roleLabel] }));
   };
 
   const removeMember = (userId: string) => {
@@ -605,73 +635,34 @@ function InlineTeamCreateRow({
   };
 
   return (
-    <div style={{ padding: "14px 20px", borderTop: "1px solid var(--neuron-ui-border)", background: "var(--neuron-bg-page)", display: "flex", flexDirection: "column", gap: 12 }}>
-      <div>
-        <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>Team Name</Label>
-        <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g., North Luzon BD Team" autoFocus style={{ height: 34, fontSize: 13 }} />
-      </div>
-      <div>
-        <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>Members</Label>
-        <div style={{ border: "1px solid var(--neuron-ui-border)", borderRadius: 8, overflow: "hidden" }}>
-          {assignedIds.length === 0 && (
-            <p style={{ padding: "10px 14px", fontSize: 13, color: "var(--neuron-ink-muted)" }}>No members added yet.</p>
-          )}
-          {assignedIds.map((uid, idx) => {
-            const u = users.find(x => x.id === uid);
-            if (!u) return null;
-            const checked = memberRoles[uid] ?? [];
-            return (
-              <div key={uid} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "8px 14px", borderTop: idx > 0 ? "1px solid var(--neuron-ui-border)" : undefined }}>
-                <span style={{ fontSize: 13, color: "var(--neuron-ink-primary)", flex: 1, paddingTop: 2 }}>{u.name}</span>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px" }}>
-                  {deptRoles.map(r => (
-                    <label key={r.role_key} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, cursor: "pointer", userSelect: "none", color: "var(--neuron-ink-primary)" }}>
-                      <Checkbox
-                        checked={checked.includes(r.role_label)}
-                        onCheckedChange={(v) => {
-                          setMemberRoles(prev => {
-                            const cur = prev[uid] ?? [];
-                            return { ...prev, [uid]: v ? [...cur, r.role_label] : cur.filter(x => x !== r.role_label) };
-                          });
-                        }}
-                      />
-                      {r.role_label}
-                    </label>
-                  ))}
-                </div>
-                <button
-                  onClick={() => removeMember(uid)}
-                  style={{ padding: 4, background: "none", border: "none", cursor: "pointer", color: "var(--neuron-ink-muted)", display: "flex", alignItems: "center", borderRadius: 4, flexShrink: 0 }}
-                  title="Remove from team"
-                >
-                  <X size={13} />
-                </button>
-              </div>
-            );
-          })}
-          {availableToAdd.length > 0 && (
-            <div style={{ padding: "8px 14px", borderTop: assignedIds.length > 0 ? "1px solid var(--neuron-ui-border)" : undefined, background: "var(--neuron-bg-page)" }}>
-              <Select value="" onValueChange={addMember}>
-                <SelectTrigger style={{ height: 28, fontSize: 12, color: "var(--neuron-ink-muted)" }}>
-                  <SelectValue placeholder="Add a member…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableToAdd.map(u => (
-                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-        </div>
-      </div>
-      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-        <Button variant="outline" onClick={onCancel} disabled={saving} style={{ height: 32, fontSize: 13 }}>Cancel</Button>
-        <Button onClick={handleCreate} disabled={saving} style={{ height: 32, fontSize: 13, background: "var(--neuron-action-primary)", color: "var(--neuron-action-primary-text)", border: "none" }}>
-          {saving ? "Creating…" : "Create Team"}
-        </Button>
-      </div>
-    </div>
+    <TeamPoolEditor
+      contextLabel="Department"
+      contextValue={dept}
+      teamName={name}
+      onTeamNameChange={setName}
+      teamNamePlaceholder="e.g., North Luzon BD Team"
+      users={users}
+      roleOptions={roleOptions}
+      memberRoles={memberRoles}
+      onAddMember={addMember}
+      onRemoveMember={removeMember}
+      onRoleToggle={(userId, roleLabel, checked) =>
+        setMemberRoles((prev) => {
+          const current = prev[userId] ?? [];
+          return {
+            ...prev,
+            [userId]: checked
+              ? Array.from(new Set([...current, roleLabel]))
+              : current.filter((label) => label !== roleLabel),
+          };
+        })
+      }
+      onCancel={onCancel}
+      onSubmit={handleCreate}
+      submitLabel="Create Team"
+      submitPendingLabel="Creating..."
+      saving={saving}
+    />
   );
 }
 
@@ -686,20 +677,31 @@ function InlineTeamEditRow({
   onSaved: () => void;
   onCancel: () => void;
 }) {
-  const { data: deptRoles = [] } = useDepartmentRoles(team.department);
+  const { data: deptRolesData } = useDepartmentRoles(team.department);
   const [name, setName]               = useState(team.name);
   const [memberRoles, setMemberRoles] = useState<Record<string, string[]>>({});
   const [saving, setSaving]           = useState(false);
 
-  const deptUsers = users.filter(u => u.department === team.department);
+  const deptUsers = useMemo(
+    () => users.filter((user) => user.department === team.department),
+    [team.department, users],
+  );
+  const roleOptions = useMemo(
+    () =>
+      (deptRolesData?.roles ?? []).map((role) => ({
+        roleKey: role.role_key,
+        roleLabel: role.role_label,
+      })),
+    [deptRolesData?.roles],
+  );
+  const mergedRoleOptions = useMemo(
+    () => mergeRoleOptions(roleOptions, memberRoles),
+    [memberRoles, roleOptions],
+  );
 
   // Init from all canonical roles for each member
   useEffect(() => {
-    const initial: Record<string, string[]> = {};
-    for (const member of team.members) {
-      initial[member.id] = member.team_roles?.map(r => r.roleLabel) ?? (member.team_role ? [member.team_role] : []);
-    }
-    setMemberRoles(initial);
+    setMemberRoles(buildInitialMemberRoleSelections(team.members));
   }, [team.id, team.members]);
 
   const handleSave = async () => {
@@ -716,13 +718,10 @@ function InlineTeamEditRow({
       await replaceTeamMemberships({
         teamId: team.id,
         memberRoles: Object.fromEntries(
-          Object.entries(memberRoles).map(([userId, roleLabels]) => {
-            const roles = roleLabels.map(label => {
-              const canonical = deptRoles.find((r) => r.role_label === label);
-              return { roleKey: canonical?.role_key ?? label.toLowerCase().replace(/[^a-z0-9]+/g, "_"), roleLabel: label };
-            });
-            return [userId, roles.length > 0 ? roles : null];
-          }),
+          Object.entries(memberRoles).map(([userId, roleLabels]) => [
+            userId,
+            buildRoleInputsFromLabels(roleLabels, mergedRoleOptions),
+          ]),
         ),
       });
     } catch (assignError) {
@@ -740,11 +739,13 @@ function InlineTeamEditRow({
     onSaved();
   };
 
-  const assignedIds = Object.keys(memberRoles).filter(id => (memberRoles[id] ?? []).length > 0);
-  const availableToAdd = deptUsers.filter(u => !assignedIds.includes(u.id));
-
   const addMember = (userId: string) => {
-    setMemberRoles(prev => ({ ...prev, [userId]: deptRoles[0] ? [deptRoles[0].role_label] : [] }));
+    const defaultRole = roleOptions[0];
+    if (!defaultRole) {
+      toast.error("Define assignment roles for this department before adding team members.");
+      return;
+    }
+    setMemberRoles((prev) => ({ ...prev, [userId]: [defaultRole.roleLabel] }));
   };
 
   const removeMember = (userId: string) => {
@@ -752,72 +753,769 @@ function InlineTeamEditRow({
   };
 
   return (
-    <div style={{ padding: "14px 20px", borderTop: "1px solid var(--neuron-ui-border)", background: "var(--neuron-bg-page)", display: "flex", flexDirection: "column", gap: 12 }}>
-      <div>
-        <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>Team Name</Label>
-        <Input value={name} onChange={e => setName(e.target.value)} autoFocus style={{ height: 34, fontSize: 13 }} />
+    <TeamPoolEditor
+      contextLabel="Department"
+      contextValue={team.department}
+      teamName={name}
+      onTeamNameChange={setName}
+      users={deptUsers}
+      roleOptions={mergedRoleOptions}
+      memberRoles={memberRoles}
+      onAddMember={addMember}
+      onRemoveMember={removeMember}
+      onRoleToggle={(userId, roleLabel, checked) =>
+        setMemberRoles((prev) => {
+          const current = prev[userId] ?? [];
+          return {
+            ...prev,
+            [userId]: checked
+              ? Array.from(new Set([...current, roleLabel]))
+              : current.filter((label) => label !== roleLabel),
+          };
+        })
+      }
+      onCancel={onCancel}
+      onSubmit={handleSave}
+      submitLabel="Save Changes"
+      submitPendingLabel="Saving..."
+      saving={saving}
+    />
+  );
+}
+
+function DepartmentAssignmentRoleRow({
+  role,
+  isEditing,
+  isFirst,
+  isLast,
+  canEdit,
+  supportsRequired,
+  onStartEdit,
+  onCancelEdit,
+  onSave,
+  onMoveUp,
+  onMoveDown,
+  onDeactivate,
+}: {
+  role: DepartmentRole;
+  isEditing: boolean;
+  isFirst: boolean;
+  isLast: boolean;
+  canEdit: boolean;
+  supportsRequired: boolean;
+  onStartEdit: () => void;
+  onCancelEdit: () => void;
+  onSave: (patch: Partial<DepartmentRole>) => Promise<void>;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onDeactivate: () => void;
+}) {
+  const [label, setLabel] = useState(role.role_label);
+  const [required, setRequired] = useState(role.required);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setLabel(role.role_label);
+    setRequired(role.required);
+  }, [role.role_label, role.required, isEditing]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    await onSave({ role_label: label.trim(), required });
+    setSaving(false);
+  };
+
+  if (isEditing) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "10px 12px",
+          border: "1px solid rgba(15, 118, 110, 0.24)",
+          borderRadius: 10,
+          background: "linear-gradient(180deg, rgba(15, 118, 110, 0.08) 0%, rgba(15, 118, 110, 0.04) 100%)",
+        }}
+      >
+        <Input
+          value={label}
+          onChange={(event) => setLabel(event.target.value)}
+          style={{
+            height: 36,
+            borderRadius: 9,
+            border: "1px solid rgba(148, 163, 184, 0.16)",
+            background: "rgba(255,255,255,0.04)",
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") handleSave();
+            if (event.key === "Escape") onCancelEdit();
+          }}
+        />
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--theme-text-secondary)", flexShrink: 0 }}>
+          <Checkbox
+            checked={required}
+            disabled={!supportsRequired}
+            onCheckedChange={(checked: boolean | "indeterminate") => setRequired(checked === true)}
+          />
+          required
+        </label>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          aria-label="Save role"
+          style={{ width: 30, height: 30, padding: 0, borderRadius: 8, border: "1px solid rgba(148, 163, 184, 0.16)", background: "rgba(255,255,255,0.10)", color: "var(--neuron-ink-primary)", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.6 : 1, flexShrink: 0 }}
+        >
+          <Save size={12} />
+        </button>
+        <button
+          onClick={onCancelEdit}
+          disabled={saving}
+          aria-label="Cancel editing role"
+          style={{ width: 30, height: 30, padding: 0, borderRadius: 8, border: "1px solid rgba(148, 163, 184, 0.16)", background: "transparent", color: "var(--theme-text-muted)", cursor: "pointer", flexShrink: 0 }}
+        >
+          <X size={12} />
+        </button>
       </div>
-      <div>
-        <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>Members</Label>
-        <div style={{ border: "1px solid var(--neuron-ui-border)", borderRadius: 8, overflow: "hidden" }}>
-          {assignedIds.length === 0 && (
-            <p style={{ padding: "10px 14px", fontSize: 13, color: "var(--neuron-ink-muted)" }}>No members assigned yet.</p>
-          )}
-          {assignedIds.map((uid, idx) => {
-            const u = deptUsers.find(x => x.id === uid);
-            if (!u) return null;
-            const checked = memberRoles[uid] ?? [];
-            return (
-              <div key={uid} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "8px 14px", borderTop: idx > 0 ? "1px solid var(--neuron-ui-border)" : undefined }}>
-                <span style={{ fontSize: 13, color: "var(--neuron-ink-primary)", flex: 1, paddingTop: 2 }}>{u.name}</span>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px" }}>
-                  {deptRoles.map(r => (
-                    <label key={r.role_key} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, cursor: "pointer", userSelect: "none", color: "var(--neuron-ink-primary)" }}>
-                      <Checkbox
-                        checked={checked.includes(r.role_label)}
-                        onCheckedChange={(v) => {
-                          setMemberRoles(prev => {
-                            const cur = prev[uid] ?? [];
-                            return { ...prev, [uid]: v ? [...cur, r.role_label] : cur.filter(x => x !== r.role_label) };
-                          });
-                        }}
-                      />
-                      {r.role_label}
-                    </label>
-                  ))}
-                </div>
-                <button
-                  onClick={() => removeMember(uid)}
-                  style={{ padding: 4, background: "none", border: "none", cursor: "pointer", color: "var(--neuron-ink-muted)", display: "flex", alignItems: "center", borderRadius: 4, flexShrink: 0 }}
-                  title="Remove from team"
-                >
-                  <X size={13} />
-                </button>
-              </div>
-            );
-          })}
-          {availableToAdd.length > 0 && (
-            <div style={{ padding: "8px 14px", borderTop: assignedIds.length > 0 ? "1px solid var(--neuron-ui-border)" : undefined, background: "var(--neuron-bg-page)" }}>
-              <Select value="" onValueChange={addMember}>
-                <SelectTrigger style={{ height: 28, fontSize: 12, color: "var(--neuron-ink-muted)" }}>
-                  <SelectValue placeholder="Add a member…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableToAdd.map(u => (
-                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "9px 12px",
+        borderRadius: 10,
+        border: "1px solid rgba(148, 163, 184, 0.10)",
+        background: "rgba(255,255,255,0.018)",
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span
+            style={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: "var(--neuron-ink-primary)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              display: "block",
+            }}
+          >
+            {role.role_label}
+          </span>
+          {role.required && (
+            <span style={{ display: "inline-flex", alignItems: "center", minHeight: 22, fontSize: 10, fontWeight: 600, color: "var(--theme-action-primary-bg)", background: "rgba(15, 118, 110, 0.10)", border: "1px solid rgba(15, 118, 110, 0.14)", borderRadius: 999, padding: "0 8px", flexShrink: 0 }}>
+              Required
+            </span>
           )}
         </div>
       </div>
-      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-        <Button variant="outline" onClick={onCancel} disabled={saving} style={{ height: 32, fontSize: 13 }}>Cancel</Button>
-        <Button onClick={handleSave} disabled={saving} style={{ height: 32, fontSize: 13, background: "var(--neuron-action-primary)", color: "var(--neuron-action-primary-text)", border: "none" }}>
-          {saving ? "Saving…" : "Save Changes"}
-        </Button>
+      {canEdit && (
+        <>
+          <button
+            onClick={onMoveUp}
+            disabled={isFirst}
+            aria-label="Move role up"
+            onMouseEnter={(e) => { if (!isFirst) e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+            style={{ width: 28, height: 28, padding: 0, borderRadius: 7, border: "1px solid transparent", background: "transparent", color: "var(--theme-text-muted)", cursor: isFirst ? "default" : "pointer", opacity: isFirst ? 0.35 : 1, flexShrink: 0, transition: "background-color 0.12s", display: "flex", alignItems: "center", justifyContent: "center" }}
+          >
+            <ArrowUp size={12} />
+          </button>
+          <button
+            onClick={onMoveDown}
+            disabled={isLast}
+            aria-label="Move role down"
+            onMouseEnter={(e) => { if (!isLast) e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+            style={{ width: 28, height: 28, padding: 0, borderRadius: 7, border: "1px solid transparent", background: "transparent", color: "var(--theme-text-muted)", cursor: isLast ? "default" : "pointer", opacity: isLast ? 0.35 : 1, flexShrink: 0, transition: "background-color 0.12s", display: "flex", alignItems: "center", justifyContent: "center" }}
+          >
+            <ArrowDown size={12} />
+          </button>
+          <button
+            onClick={onStartEdit}
+            aria-label={`Edit role ${role.role_label}`}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+            style={{ width: 28, height: 28, padding: 0, borderRadius: 7, border: "1px solid transparent", background: "transparent", color: "var(--theme-text-muted)", cursor: "pointer", flexShrink: 0, transition: "background-color 0.12s", display: "flex", alignItems: "center", justifyContent: "center" }}
+          >
+            <Edit2 size={12} />
+          </button>
+          <button
+            onClick={onDeactivate}
+            aria-label={`Deactivate role ${role.role_label}`}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(220,38,38,0.08)"; e.currentTarget.style.color = "var(--theme-status-danger-fg)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--theme-text-muted)"; }}
+            style={{ width: 28, height: 28, padding: 0, borderRadius: 7, border: "1px solid transparent", background: "transparent", color: "var(--theme-text-muted)", cursor: "pointer", flexShrink: 0, transition: "background-color 0.12s, color 0.12s", display: "flex", alignItems: "center", justifyContent: "center" }}
+          >
+            <Trash2 size={12} />
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function DepartmentTeamsSection({
+  dept,
+  deptTeams,
+  colors,
+  allUsers,
+  currentUser,
+  expanded,
+  setExpanded,
+  creatingInDept,
+  setCreatingInDept,
+  editingTeamId,
+  setEditingTeamId,
+  deletingId,
+  confirmDeleteId,
+  setConfirmDeleteId,
+  handleDeleteConfirmed,
+  deptUsersFor,
+  refreshTeamsData,
+}: {
+  dept: Department;
+  deptTeams: TeamWithMembers[];
+  colors: { bg: string; text: string };
+  allUsers: { id: string; name: string; role: Role; department: string; email: string; team_id: string | null; team_role?: string | null; avatar_url?: string | null }[];
+  currentUser?: { id?: string; name?: string; department?: string; role?: string } | null;
+  expanded: string | null;
+  setExpanded: (value: string | null) => void;
+  creatingInDept: string | null;
+  setCreatingInDept: (value: string | null) => void;
+  editingTeamId: string | null;
+  setEditingTeamId: (value: string | null) => void;
+  deletingId: string | null;
+  confirmDeleteId: string | null;
+  setConfirmDeleteId: (value: string | null) => void;
+  handleDeleteConfirmed: (teamId: string, teamName: string) => Promise<void>;
+  deptUsersFor: (dept: Department) => { id: string; name: string; role: Role; department: string; email: string; team_id: string | null; team_role?: string | null; avatar_url?: string | null }[];
+  refreshTeamsData: () => Promise<void>;
+}) {
+  const queryClient = useQueryClient();
+  const {
+    data: deptRolesData,
+    error: deptRolesError,
+  } = useDepartmentRoles(dept);
+  const [isAddingRole, setIsAddingRole] = useState(false);
+  const [newRoleLabel, setNewRoleLabel] = useState("");
+  const [newRoleRequired, setNewRoleRequired] = useState(false);
+  const [savingRole, setSavingRole] = useState(false);
+  const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
+  const [confirmDeactivateRoleId, setConfirmDeactivateRoleId] = useState<string | null>(null);
+  const deptRoles = deptRolesData?.roles ?? [];
+  const supportsRequiredRoles = deptRolesData?.supportsRequired ?? true;
+
+  const canEditRoleConfig =
+    currentUser?.department === "Executive" || currentUser?.role === "executive";
+
+  const activeRoles = useMemo(
+    () => deptRoles.filter((role) => role.is_active).sort((a, b) => a.sort_order - b.sort_order),
+    [deptRoles],
+  );
+  const assignedMembersCount = useMemo(
+    () => new Set(deptTeams.flatMap((team) => team.members.map((member) => member.id))).size,
+    [deptTeams],
+  );
+
+  const usedKeys = useMemo(
+    () => new Set(activeRoles.map((role) => role.role_key)),
+    [activeRoles],
+  );
+
+  const invalidateDepartmentRoles = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["department_assignment_roles", dept] });
+  };
+
+  const handleAddRole = async () => {
+    if (!newRoleLabel.trim()) {
+      toast.error("Enter a role label");
+      return;
+    }
+    const roleKey = normalizeRoleKey(newRoleLabel);
+    if (usedKeys.has(roleKey)) {
+      toast.error("That role already exists for this department");
+      return;
+    }
+    const sortOrder =
+      activeRoles.length === 0 ? 10 : Math.max(...activeRoles.map((role) => role.sort_order)) + 10;
+    setSavingRole(true);
+    try {
+      const result = await insertDepartmentRole({
+        department: dept,
+        role_key: roleKey,
+        role_label: newRoleLabel.trim(),
+        required: newRoleRequired,
+        sort_order: sortOrder,
+      });
+      setSavingRole(false);
+      toast.success(
+        !result.supportsRequired && newRoleRequired
+          ? "Role added. Required flags are unavailable until the latest team-role migration is applied."
+          : "Role added",
+      );
+    } catch (error) {
+      setSavingRole(false);
+      toast.error(`Failed to add role: ${error instanceof Error ? error.message : "Unknown error"}`);
+      return;
+    }
+    setNewRoleLabel("");
+    setNewRoleRequired(false);
+    setIsAddingRole(false);
+    await invalidateDepartmentRoles();
+  };
+
+  const handleSaveRole = async (id: string, patch: Partial<DepartmentRole>) => {
+    try {
+      const result = await updateDepartmentRole({
+        id,
+        role_label: patch.role_label?.trim() ?? "",
+        required: patch.required ?? false,
+      });
+      toast.success(
+        !result.supportsRequired && patch.required
+          ? "Role updated. Required flags are unavailable until the latest team-role migration is applied."
+          : "Role updated",
+      );
+    } catch (error) {
+      toast.error(
+        `Failed to update role: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+      return;
+    }
+    setEditingRoleId(null);
+    await invalidateDepartmentRoles();
+  };
+
+  const handleMoveRole = async (id: string, direction: -1 | 1) => {
+    const index = activeRoles.findIndex((role) => role.id === id);
+    const swapIndex = index + direction;
+    if (swapIndex < 0 || swapIndex >= activeRoles.length) return;
+    const current = activeRoles[index];
+    const target = activeRoles[swapIndex];
+    await supabase.from("department_assignment_roles").update({ sort_order: target.sort_order }).eq("id", current.id);
+    await supabase.from("department_assignment_roles").update({ sort_order: current.sort_order }).eq("id", target.id);
+    await invalidateDepartmentRoles();
+  };
+
+  const handleDeactivateRole = async () => {
+    if (!confirmDeactivateRoleId) return;
+    const { error } = await supabase
+      .from("department_assignment_roles")
+      .update({ is_active: false })
+      .eq("id", confirmDeactivateRoleId);
+    if (error) {
+      toast.error("Failed to deactivate role");
+      return;
+    }
+    toast.success("Role deactivated");
+    setConfirmDeactivateRoleId(null);
+    await invalidateDepartmentRoles();
+  };
+
+  return (
+    <div style={{ border: "1px solid var(--neuron-ui-border)", borderRadius: 12, overflow: "hidden", background: "var(--neuron-bg-elevated)" }}>
+      <div style={{ padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--neuron-ui-border)", background: "var(--neuron-bg-page)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ display: "inline-flex", padding: "2px 10px", borderRadius: 999, fontSize: 12, fontWeight: 500, backgroundColor: colors.bg, color: colors.text }}>
+            {dept}
+          </span>
+          <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>
+            {deptTeams.length} {deptTeams.length === 1 ? "team" : "teams"} · {assignedMembersCount} assigned member{assignedMembersCount !== 1 ? "s" : ""}
+          </span>
+        </div>
       </div>
+
+      <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 16 }}>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Assignment Roles
+            </span>
+            {canEditRoleConfig && !isAddingRole && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsAddingRole(true)}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.borderColor = "rgba(148,163,184,0.28)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; e.currentTarget.style.borderColor = "rgba(148,163,184,0.14)"; }}
+                style={{ ...LINEAR_GHOST_BUTTON_STYLE, transition: "background-color 0.12s, border-color 0.12s" }}
+              >
+                <Plus size={12} />
+                New role
+              </Button>
+            )}
+          </div>
+
+          {deptRolesError && (
+            <div
+              style={{
+                marginBottom: 10,
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "1px solid rgba(185, 28, 28, 0.18)",
+                background: "rgba(185, 28, 28, 0.06)",
+                color: "var(--theme-status-danger-fg)",
+                fontSize: 12,
+              }}
+            >
+              Failed to load canonical roles for {dept}:{" "}
+              {deptRolesError instanceof Error ? deptRolesError.message : "Unknown error"}
+            </div>
+          )}
+
+          {isAddingRole && (
+            <div
+              style={{
+                border: "1px solid rgba(148, 163, 184, 0.14)",
+                borderRadius: 12,
+                padding: 14,
+                marginBottom: 10,
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+                background: "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.015) 100%)",
+              }}
+            >
+              <Input
+                value={newRoleLabel}
+                onChange={(event) => setNewRoleLabel(event.target.value)}
+                placeholder={`Role label (e.g. ${dept === "Pricing" ? "Pricing Analyst" : "Account Rep"})`}
+                style={{
+                  height: 38,
+                  borderRadius: 10,
+                  border: "1px solid rgba(148, 163, 184, 0.16)",
+                  background: "rgba(255,255,255,0.02)",
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") handleAddRole();
+                }}
+              />
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--theme-text-secondary)" }}>
+                <Checkbox
+                  checked={newRoleRequired}
+                  disabled={!supportsRequiredRoles}
+                  onCheckedChange={(checked: boolean | "indeterminate") => setNewRoleRequired(checked === true)}
+                />
+                Required
+              </label>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                <Button
+                  variant="outline"
+                  disabled={savingRole}
+                  style={LINEAR_GHOST_BUTTON_STYLE}
+                  onClick={() => {
+                    setIsAddingRole(false);
+                    setNewRoleLabel("");
+                    setNewRoleRequired(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleAddRole}
+                  disabled={savingRole}
+                  style={{
+                    ...LINEAR_GHOST_BUTTON_STYLE,
+                    background: "rgba(255,255,255,0.08)",
+                    color: "var(--neuron-ink-primary)",
+                  }}
+                >
+                  {savingRole ? "Saving..." : "Save"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {activeRoles.length === 0 && !isAddingRole && (
+              <p style={{ fontSize: 12, fontStyle: "italic", color: "var(--theme-text-muted)", margin: 0 }}>
+                No roles configured.
+              </p>
+            )}
+            {activeRoles.map((role, index) => (
+              <DepartmentAssignmentRoleRow
+                key={role.id}
+                role={role}
+                canEdit={canEditRoleConfig}
+                isEditing={editingRoleId === role.id}
+                isFirst={index === 0}
+                isLast={index === activeRoles.length - 1}
+                supportsRequired={supportsRequiredRoles}
+                onStartEdit={() => setEditingRoleId(role.id)}
+                onCancelEdit={() => setEditingRoleId(null)}
+                onSave={(patch) => handleSaveRole(role.id, patch)}
+                onMoveUp={() => handleMoveRole(role.id, -1)}
+                onMoveDown={() => handleMoveRole(role.id, 1)}
+                onDeactivate={() => setConfirmDeactivateRoleId(role.id)}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Teams
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCreatingInDept(creatingInDept === dept ? null : dept)}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.borderColor = "rgba(148,163,184,0.28)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; e.currentTarget.style.borderColor = "rgba(148,163,184,0.14)"; }}
+              style={{ ...LINEAR_GHOST_BUTTON_STYLE, transition: "background-color 0.12s, border-color 0.12s" }}
+            >
+              <Plus size={12} />
+              New team
+            </Button>
+          </div>
+
+          <AnimatePresence>
+            {creatingInDept === dept && (
+              <motion.div
+                key={`create-${dept}`}
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                style={{ overflow: "hidden", marginBottom: 10 }}
+              >
+                <InlineTeamCreateRow
+                  dept={dept}
+                  users={deptUsersFor(dept)}
+                  onSaved={() => {
+                    setCreatingInDept(null);
+                    void refreshTeamsData();
+                  }}
+                  onCancel={() => setCreatingInDept(null)}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {deptTeams.length === 0 && creatingInDept !== dept && (
+            <div style={{ padding: "12px 12px", border: "1px solid rgba(148, 163, 184, 0.12)", borderRadius: 10, background: "rgba(255,255,255,0.02)", fontSize: 12, color: "var(--theme-text-muted)" }}>
+              No teams yet for {dept}.
+            </div>
+          )}
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {deptTeams.map((team) => {
+              const isEditing = editingTeamId === team.id;
+              const isExpanded = expanded === team.id && !isEditing;
+              const leader = allUsers.find((user) => user.id === team.leader_id);
+              return (
+                <div key={team.id} style={{ border: "1px solid var(--neuron-ui-border)", borderRadius: 8, overflow: "hidden" }}>
+                  {isEditing ? (
+                    <InlineTeamEditRow
+                      team={team}
+                      users={allUsers}
+                      onSaved={() => {
+                        setEditingTeamId(null);
+                        void refreshTeamsData();
+                      }}
+                      onCancel={() => setEditingTeamId(null)}
+                    />
+                  ) : (
+                    <>
+                      <button
+                        aria-expanded={isExpanded}
+                        aria-controls={`team-members-${team.id}`}
+                        onClick={() => setExpanded(isExpanded ? null : team.id)}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = "var(--neuron-bg-page)"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = ""; }}
+                        style={{
+                          width: "100%",
+                          padding: "11px 12px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          textAlign: "left",
+                          minWidth: 0,
+                          transition: "background-color 0.12s cubic-bezier(0.16,1,0.3,1)",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, overflow: "hidden" }}>
+                          <motion.div
+                            animate={{ rotate: isExpanded ? 90 : 0 }}
+                            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                            style={{ display: "flex", alignItems: "center", flexShrink: 0 }}
+                          >
+                            <ChevronRight size={13} style={{ color: "var(--neuron-ink-muted)" }} />
+                          </motion.div>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--neuron-ink-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {team.name}
+                          </span>
+                          <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)", flexShrink: 0 }}>
+                            {team.members.length} member{team.members.length !== 1 ? "s" : ""}
+                          </span>
+                          {leader && (
+                            <span style={{ fontSize: 11, fontWeight: 500, color: "var(--theme-action-primary-bg)", background: "var(--theme-status-success-bg)", padding: "2px 8px", borderRadius: 999, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 160, flexShrink: 1 }}>
+                              {leader.name}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ display: "flex", gap: 4, flexShrink: 0 }} onClick={(event) => event.stopPropagation()}>
+                          <button
+                            onClick={() => {
+                              setEditingTeamId(team.id);
+                              setExpanded(null);
+                            }}
+                            aria-label={`Edit team ${team.name}`}
+                            title="Edit team"
+                            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.color = "var(--neuron-ink-primary)"; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--neuron-ink-muted)"; }}
+                            style={{ padding: "8px 10px", background: "transparent", border: "none", cursor: "pointer", color: "var(--neuron-ink-muted)", borderRadius: 6, transition: "background-color 0.12s, color 0.12s" }}
+                          >
+                            <Edit size={13} />
+                          </button>
+                          {confirmDeleteId === team.id ? (
+                            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                              <button
+                                onClick={() => handleDeleteConfirmed(team.id, team.name)}
+                                disabled={deletingId === team.id}
+                                style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--theme-status-danger-fg)", background: "var(--theme-status-danger-bg, #fef2f2)", color: "var(--theme-status-danger-fg)", fontSize: 11, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}
+                              >
+                                {deletingId === team.id ? "Deleting..." : "Delete"}
+                              </button>
+                              <button
+                                onClick={() => setConfirmDeleteId(null)}
+                                style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid var(--neuron-ui-border)", background: "none", color: "var(--neuron-ink-muted)", fontSize: 11, cursor: "pointer" }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmDeleteId(team.id)}
+                              aria-label={`Delete team ${team.name}`}
+                              title="Delete team"
+                              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(220,38,38,0.08)"; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                              style={{ padding: "8px 10px", background: "transparent", border: "none", cursor: "pointer", color: "var(--theme-status-danger-fg)", borderRadius: 6, transition: "background-color 0.12s" }}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
+                        </div>
+                      </button>
+
+                      <AnimatePresence initial={false}>
+                        {isExpanded && (
+                          <motion.div
+                            key="members"
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                            style={{ overflow: "hidden" }}
+                          >
+                            <div id={`team-members-${team.id}`} style={{ borderTop: "1px solid var(--neuron-ui-border)" }}>
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 180px", padding: "8px 20px 8px 44px", background: "var(--neuron-bg-page)" }}>
+                                <span style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Name</span>
+                                <span style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Role</span>
+                              </div>
+                              {team.members.length === 0 ? (
+                                <div style={{ padding: "16px 20px 16px 44px", fontSize: 13, color: "var(--neuron-ink-muted)" }}>No members assigned yet.</div>
+                              ) : (
+                                team.members.map((member, memberIndex) => {
+                                  const isLeader = member.id === team.leader_id;
+                                  const initial = (member.name || member.email || "?").charAt(0).toUpperCase();
+                                  return (
+                                    <div
+                                      key={member.id}
+                                      style={{
+                                        display: "grid",
+                                        gridTemplateColumns: "1fr 180px",
+                                        padding: "10px 20px 10px 44px",
+                                        alignItems: "center",
+                                        borderTop: memberIndex > 0 ? "1px solid var(--neuron-ui-border)" : undefined,
+                                        background: "var(--neuron-bg-elevated)",
+                                      }}
+                                    >
+                                      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                                        <div style={{
+                                          width: 32,
+                                          height: 32,
+                                          borderRadius: "50%",
+                                          backgroundColor: isLeader ? "var(--theme-status-success-bg)" : "var(--neuron-bg-surface-subtle)",
+                                          display: "flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                          flexShrink: 0,
+                                          border: "1px solid var(--neuron-ui-border)",
+                                          overflow: "hidden",
+                                        }}>
+                                          {member.avatar_url
+                                            ? <img src={member.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                            : <span style={{ fontSize: 12, fontWeight: 600, color: isLeader ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-muted)" }}>{initial}</span>}
+                                        </div>
+                                        <div style={{ minWidth: 0 }}>
+                                          <p style={{ fontSize: 13, fontWeight: 500, color: "var(--neuron-ink-primary)", margin: 0, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{member.name}</p>
+                                          <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: 0, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{member.email}</p>
+                                        </div>
+                                      </div>
+                                      <div style={{ justifySelf: "start" }}>
+                                        <TeamAssignmentRoleChips
+                                          roles={member.team_roles}
+                                          fallbackLabel={member.team_role ?? (ROLES.find((role) => role.value === member.role)?.label ?? member.role)}
+                                        />
+                                      </div>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {confirmDeactivateRoleId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(15, 23, 42, 0.35)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 50,
+            }}
+          >
+            <div style={{ width: 420, background: "var(--theme-bg-surface)", borderRadius: 12, padding: 20, border: "1px solid var(--neuron-ui-border)" }}>
+              <h4 style={{ margin: "0 0 6px", fontSize: 16, color: "var(--neuron-ink-primary)" }}>Deactivate role?</h4>
+              <p style={{ margin: "0 0 14px", fontSize: 13, color: "var(--theme-text-muted)" }}>
+                Existing teams keep their saved assignments, but this role will no longer be offered for new edits.
+              </p>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                <Button variant="outline" onClick={() => setConfirmDeactivateRoleId(null)}>Cancel</Button>
+                <Button onClick={handleDeactivateRole}>Deactivate</Button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -954,246 +1652,32 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
           );
         }
         return (
-          <div key={dept} style={{ border: "1px solid var(--neuron-ui-border)", borderRadius: 12, overflow: "hidden", background: "var(--neuron-bg-elevated)" }}>
-            {/* Dept header */}
-            <div style={{ padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--neuron-ui-border)", background: "var(--neuron-bg-page)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ display: "inline-flex", padding: "2px 10px", borderRadius: 999, fontSize: 12, fontWeight: 500, backgroundColor: colors.bg, color: colors.text }}>
-                  {dept}
-                </span>
-                <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>
-                  {deptTeams.length} {deptTeams.length === 1 ? "team" : "teams"}
-                </span>
-              </div>
-              <button
-                onClick={() => setCreatingInDept(dept)}
-                style={{ fontSize: 12, fontWeight: 500, color: "var(--neuron-action-primary)", background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 4 }}
-              >
-                <Plus size={12} /> Add Team
-              </button>
-            </div>
-
-            {/* Teams list */}
-            {deptTeams.length === 0 && creatingInDept !== dept && (
-              <div style={{ padding: "20px", fontSize: 13, color: "var(--neuron-ink-muted)", textAlign: "center" }}>No teams yet.</div>
-            )}
-
-            {deptTeams.map((team, idx) => {
-              const isEditing = editingTeamId === team.id;
-              const isExpanded = expanded === team.id && !isEditing;
-              const leader = allUsers.find(u => u.id === team.leader_id);
-              return (
-                <div key={team.id} style={{ borderTop: idx > 0 || deptTeams.length > 0 ? "1px solid var(--neuron-ui-border)" : undefined }}>
-                  {isEditing ? (
-                    <motion.div
-                      key={`edit-${team.id}`}
-                      initial={{ opacity: 0, y: -6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-                    >
-                      <InlineTeamEditRow
-                        team={team}
-                        users={allUsers}
-                        onSaved={() => { setEditingTeamId(null); void refreshTeamsData(); }}
-                        onCancel={() => setEditingTeamId(null)}
-                      />
-                    </motion.div>
-                  ) : (
-                    <>
-                      {/* Team header row */}
-                      <button
-                        aria-expanded={isExpanded}
-                        aria-controls={`team-members-${team.id}`}
-                        onClick={() => setExpanded(isExpanded ? null : team.id)}
-                        onMouseEnter={e => { e.currentTarget.style.background = "var(--neuron-bg-page)"; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = ""; }}
-                        style={{
-                          width: "100%",
-                          padding: "11px 20px",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          cursor: "pointer",
-                          background: "none",
-                          border: "none",
-                          textAlign: "left",
-                          transition: "background-color 0.12s cubic-bezier(0.16,1,0.3,1)",
-                        }}
-
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1, overflow: "hidden" }}>
-                          <motion.div
-                            animate={{ rotate: isExpanded ? 90 : 0 }}
-                            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-                            style={{ display: "flex", alignItems: "center", flexShrink: 0 }}
-                          >
-                            <ChevronRight size={13} style={{ color: "var(--neuron-ink-muted)" }} />
-                          </motion.div>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--neuron-ink-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 1 }}>{team.name}</span>
-                          <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)", flexShrink: 0 }}>
-                            {team.members.length} {team.members.length === 1 ? "member" : "members"}
-                          </span>
-                          {leader && (
-                            <span style={{ fontSize: 11, fontWeight: 500, color: "var(--theme-action-primary-bg)", background: "var(--theme-status-success-bg)", padding: "2px 8px", borderRadius: 999, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 160, flexShrink: 1 }}>
-                              {leader.name}
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ display: "flex", gap: 2 }} onClick={e => e.stopPropagation()}>
-                          <button
-                            onClick={() => { setEditingTeamId(team.id); setExpanded(null); }}
-                            aria-label={`Edit ${team.name}`}
-                            style={{ padding: "8px 10px", background: "transparent", border: "none", cursor: "pointer", color: "var(--neuron-ink-muted)", borderRadius: 6, display: "flex", alignItems: "center" }}
-                            title="Edit team"
-                          >
-                            <Edit size={13} />
-                          </button>
-                          <AnimatePresence mode="wait" initial={false}>
-                            {confirmDeleteId === team.id ? (
-                              <motion.div
-                                key="confirm"
-                                initial={{ opacity: 0, scale: 0.9 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.9 }}
-                                transition={{ duration: 0.12, ease: [0.16, 1, 0.3, 1] }}
-                                style={{ display: "flex", alignItems: "center", gap: 4 }}
-                              >
-                                <button
-                                  onClick={() => handleDeleteConfirmed(team.id, team.name)}
-                                  disabled={deletingId === team.id}
-                                  style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--theme-status-danger-fg)", background: "var(--theme-status-danger-bg, #fef2f2)", color: "var(--theme-status-danger-fg)", fontSize: 11, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}
-                                >
-                                  {deletingId === team.id ? "Deleting…" : "Delete"}
-                                </button>
-                                <button
-                                  onClick={() => setConfirmDeleteId(null)}
-                                  style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid var(--neuron-ui-border)", background: "none", color: "var(--neuron-ink-muted)", fontSize: 11, cursor: "pointer" }}
-                                  aria-label="Cancel delete"
-                                >
-                                  Cancel
-                                </button>
-                              </motion.div>
-                            ) : (
-                              <motion.button
-                                key="icon"
-                                initial={{ opacity: 0, scale: 0.9 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.9 }}
-                                transition={{ duration: 0.12, ease: [0.16, 1, 0.3, 1] }}
-                                onClick={() => setConfirmDeleteId(team.id)}
-                                disabled={deletingId === team.id}
-                                aria-label={`Delete ${team.name}`}
-                                title="Delete team"
-                                style={{ padding: "8px 10px", background: "transparent", border: "none", cursor: "pointer", color: "var(--theme-status-danger-fg)", borderRadius: 6, display: "flex", alignItems: "center" }}
-                              >
-                                <Trash2 size={13} />
-                              </motion.button>
-                            )}
-                          </AnimatePresence>
-                        </div>
-                      </button>
-
-                      {/* Expanded member table */}
-                      <AnimatePresence initial={false}>
-                      {isExpanded && (
-                        <motion.div
-                          key="members"
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: "auto", opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                          style={{ overflow: "hidden" }}
-                        >
-                        <div id={`team-members-${team.id}`} style={{ borderTop: "1px solid var(--neuron-ui-border)" }}>
-                          {/* Table header */}
-                          <div style={{ display: "grid", gridTemplateColumns: "1fr 140px", padding: "8px 20px 8px 44px", background: "var(--neuron-bg-page)" }}>
-                            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Name</span>
-                            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Role</span>
-                          </div>
-                          {/* Member rows */}
-                          {team.members.length === 0 ? (
-                            <div style={{ padding: "16px 20px 16px 44px", fontSize: 13, color: "var(--neuron-ink-muted)" }}>No members assigned yet.</div>
-                          ) : (
-                            team.members.map((m, mIdx) => {
-                              const rc = ROLE_COLORS[m.role] ?? ROLE_COLORS.staff;
-                              const isLeader = m.id === team.leader_id;
-                              const initial = (m.name || m.email || "?").charAt(0).toUpperCase();
-                              return (
-                                <div
-                                  key={m.id}
-                                  style={{
-                                    display: "grid",
-                                    gridTemplateColumns: "1fr 140px",
-                                    padding: "10px 20px 10px 44px",
-                                    alignItems: "center",
-                                    borderTop: mIdx > 0 ? "1px solid var(--neuron-ui-border)" : undefined,
-                                    background: "var(--neuron-bg-elevated)",
-                                  }}
-                                >
-                                  <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                                    {/* Avatar */}
-                                    <div style={{
-                                      width: 32, height: 32, borderRadius: "50%",
-                                      backgroundColor: isLeader ? "var(--theme-status-success-bg)" : "var(--neuron-bg-surface-subtle)",
-                                      display: "flex", alignItems: "center", justifyContent: "center",
-                                      flexShrink: 0, border: "1px solid var(--neuron-ui-border)",
-                                      overflow: "hidden",
-                                    }}>
-                                      {m.avatar_url
-                                        ? <img src={m.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                                        : <span style={{ fontSize: 12, fontWeight: 600, color: isLeader ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-muted)" }}>{initial}</span>
-                                      }
-                                    </div>
-                                    {/* Name + email */}
-                                    <div style={{ minWidth: 0 }}>
-                                      <p style={{ fontSize: 13, fontWeight: 500, color: "var(--neuron-ink-primary)", margin: 0, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</p>
-                                      <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: 0, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.email}</p>
-                                    </div>
-                                  </div>
-                                  {/* Role badge */}
-                                  <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 999, backgroundColor: rc.bg, color: rc.text, justifySelf: "start" }}>
-                                    {ROLES.find(r => r.value === m.role)?.label ?? m.role}
-                                  </span>
-                                </div>
-                              );
-                            })
-                          )}
-                        </div>
-                        </motion.div>
-                      )}
-                      </AnimatePresence>
-                    </>
-                  )}
-                </div>
-              );
-            })}
-
-            {/* Inline create row (per dept) */}
-            <AnimatePresence>
-            {creatingInDept === dept && (
-              <motion.div
-                key={`create-${dept}`}
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                style={{ overflow: "hidden", borderTop: deptTeams.length > 0 ? "1px solid var(--neuron-ui-border)" : undefined }}
-              >
-                <InlineTeamCreateRow
-                  dept={dept as Department}
-                  users={deptUsersFor(dept as Department)}
-                  onSaved={() => { setCreatingInDept(null); void refreshTeamsData(); }}
-                  onCancel={() => setCreatingInDept(null)}
-                />
-              </motion.div>
-            )}
-            </AnimatePresence>
-          </div>
+          <DepartmentTeamsSection
+            key={dept}
+            dept={dept as Department}
+            deptTeams={deptTeams}
+            colors={colors}
+            allUsers={allUsers}
+            currentUser={currentUser}
+            expanded={expanded}
+            setExpanded={setExpanded}
+            creatingInDept={creatingInDept}
+            setCreatingInDept={setCreatingInDept}
+            editingTeamId={editingTeamId}
+            setEditingTeamId={setEditingTeamId}
+            deletingId={deletingId}
+            confirmDeleteId={confirmDeleteId}
+            setConfirmDeleteId={setConfirmDeleteId}
+            handleDeleteConfirmed={handleDeleteConfirmed}
+            deptUsersFor={deptUsersFor}
+            refreshTeamsData={refreshTeamsData}
+          />
         );
       })}
     </div>
   );
 }
+
 
 // ─── Access Overrides Tab ─────────────────────────────────────────────────────
 

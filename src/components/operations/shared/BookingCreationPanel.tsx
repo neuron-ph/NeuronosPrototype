@@ -56,6 +56,8 @@ export function BookingCreationPanel({
   submitIcon,
   children,
 }: BookingCreationPanelProps) {
+  const horizontalPadding = "clamp(24px, 3vw, 40px)";
+
   // Build the custom header ReactNode for SidePanel
   const headerContent = (
     <div>
@@ -95,8 +97,10 @@ export function BookingCreationPanel({
   // Build the sticky footer
   const footerContent = (
     <div
-      className="px-12 py-6 border-t flex items-center justify-end gap-3"
+      className="py-6 border-t flex items-center justify-end gap-3"
       style={{
+        paddingLeft: horizontalPadding,
+        paddingRight: horizontalPadding,
         borderColor: "var(--neuron-ui-border)",
         backgroundColor: "var(--theme-bg-surface)",
       }}
@@ -158,11 +162,17 @@ export function BookingCreationPanel({
       onClose={onClose}
       title={headerContent}
       footer={footerContent}
-      width="680px"
+      width="min(1120px, calc(100vw - 32px))"
       showCloseButton={false}
     >
       {/* Scrollable form area */}
-      <div className="flex-1 overflow-auto px-12 py-8 h-full">
+      <div
+        className="flex-1 overflow-auto py-8 h-full"
+        style={{
+          paddingLeft: horizontalPadding,
+          paddingRight: horizontalPadding,
+        }}
+      >
         <form onSubmit={onSubmit} id={formId}>
           {children}
         </form>

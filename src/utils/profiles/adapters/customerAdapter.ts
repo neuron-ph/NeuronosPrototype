@@ -10,7 +10,6 @@ export const customerAdapter: ProfileAdapter = {
     let req = supabase
       .from('customers')
       .select('id, name, status')
-      .eq('status', 'Active')
       .order('name');
 
     if (query.trim()) {

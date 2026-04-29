@@ -5483,6 +5483,7 @@ CREATE TABLE IF NOT EXISTS department_assignment_roles (
   role_key    text        NOT NULL,
   role_label  text        NOT NULL,
   description text,
+  required    boolean     NOT NULL DEFAULT false,
   sort_order  integer     NOT NULL DEFAULT 0,
   is_active   boolean     NOT NULL DEFAULT true,
   created_at  timestamptz NOT NULL DEFAULT now(),

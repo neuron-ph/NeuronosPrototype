@@ -16,14 +16,22 @@ import {
 import { toast } from "sonner@2.0.3";
 import { supabase } from "../../utils/supabase/client";
 import { queryKeys } from "../../lib/queryKeys";
-import { normalizeRoleKey } from "../../utils/assignments/normalizeRoleKey";
 import { logCreation, logDeletion } from "../../utils/activityLog";
 import type { OperationalService, ServiceAssignmentRole } from "../../types/assignments";
+import { normalizeRoleKey } from "../../utils/assignments/normalizeRoleKey";
 import {
   clearTeamMemberships,
   replaceTeamMemberships,
   type TeamMemberRoleInput,
 } from "../../utils/teamMemberships";
+import {
+  buildInitialMemberRoleSelections,
+  buildRoleInputsFromLabels,
+  mergeRoleOptions,
+  TeamAssignmentRoleChips,
+  TeamMemberRoleSelections,
+  TeamPoolEditor,
+} from "./TeamPoolEditor";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -80,6 +88,7 @@ interface OperationsTeamWithMembers extends OperationsTeam {
     email: string;
     role: string;
     team_role?: string | null;
+    team_roles?: Array<{ roleKey: string; roleLabel: string }>;
     avatar_url?: string | null;
   }[];
 }
@@ -555,22 +564,27 @@ function OperationsServiceRow({
                     Assignment Roles
                   </span>
                   {canEditServiceConfig && !isAddingRole && (
-                    <button
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => setIsAddingRole(true)}
-                      style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "var(--theme-action-primary-bg)", fontSize: 12, cursor: "pointer" }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.borderColor = "rgba(148,163,184,0.28)"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; e.currentTarget.style.borderColor = "rgba(148,163,184,0.14)"; }}
+                      style={{ height: 30, borderRadius: 8, border: "1px solid rgba(148, 163, 184, 0.14)", background: "rgba(255,255,255,0.02)", color: "var(--neuron-ink-secondary)", fontSize: 12, fontWeight: 600, letterSpacing: "-0.01em", transition: "background-color 0.12s, border-color 0.12s" }}
                     >
                       <Plus size={12} />
-                      add role
-                    </button>
+                      New role
+                    </Button>
                   )}
                 </div>
 
                 {isAddingRole && (
-                  <div style={{ border: "1px dashed var(--neuron-ui-border)", borderRadius: 8, padding: 12, marginBottom: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ border: "1px solid rgba(148, 163, 184, 0.14)", borderRadius: 12, padding: 14, marginBottom: 10, display: "flex", flexDirection: "column", gap: 10, background: "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.015) 100%)" }}>
                     <Input
                       value={newRoleLabel}
                       onChange={(event) => setNewRoleLabel(event.target.value)}
                       placeholder="Role label (e.g. Customs Declarant)"
+                      style={{ height: 38, borderRadius: 10, border: "1px solid rgba(148, 163, 184, 0.16)", background: "rgba(255,255,255,0.02)" }}
                       onKeyDown={(e) => { if (e.key === "Enter") handleAddRole(); }}
                     />
                     <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--theme-text-secondary)" }}>
@@ -578,14 +592,14 @@ function OperationsServiceRow({
                       Required
                     </label>
                     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                      <Button variant="outline" disabled={savingRole} onClick={() => {
+                      <Button variant="outline" disabled={savingRole} style={{ height: 30, borderRadius: 8, border: "1px solid rgba(148, 163, 184, 0.14)", background: "rgba(255,255,255,0.02)", color: "var(--neuron-ink-secondary)", fontSize: 12, fontWeight: 600, letterSpacing: "-0.01em" }} onClick={() => {
                         setIsAddingRole(false);
                         setNewRoleLabel("");
                         setNewRoleRequired(false);
                       }}>
                         Cancel
                       </Button>
-                      <Button onClick={handleAddRole} disabled={savingRole}>
+                      <Button onClick={handleAddRole} disabled={savingRole} style={{ height: 30, borderRadius: 8, border: "1px solid rgba(148, 163, 184, 0.14)", background: "rgba(255,255,255,0.08)", color: "var(--neuron-ink-primary)", fontSize: 12, fontWeight: 600, letterSpacing: "-0.01em" }}>
                         {savingRole ? "Saving…" : "Save"}
                       </Button>
                     </div>
@@ -623,13 +637,17 @@ function OperationsServiceRow({
                   <span style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                     Teams
                   </span>
-                  <button
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => setCreatingTeamPool((current) => !current)}
-                    style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "var(--theme-action-primary-bg)", fontSize: 12, cursor: "pointer" }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.borderColor = "rgba(148,163,184,0.28)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; e.currentTarget.style.borderColor = "rgba(148,163,184,0.14)"; }}
+                    style={{ height: 30, borderRadius: 8, border: "1px solid rgba(148, 163, 184, 0.14)", background: "rgba(255,255,255,0.02)", color: "var(--neuron-ink-secondary)", fontSize: 12, fontWeight: 600, letterSpacing: "-0.01em", transition: "background-color 0.12s, border-color 0.12s" }}
                   >
                     <Plus size={12} />
-                    add team
-                  </button>
+                    New team
+                  </Button>
                 </div>
 
                 {creatingTeamPool && (
@@ -649,7 +667,7 @@ function OperationsServiceRow({
                 )}
 
                 {teamPools.length === 0 && !creatingTeamPool && (
-                  <div style={{ padding: "14px 12px", border: "1px dashed var(--neuron-ui-border)", borderRadius: 8, fontSize: 12, color: "var(--theme-text-muted)" }}>
+                  <div style={{ padding: "12px 12px", border: "1px solid rgba(148, 163, 184, 0.12)", borderRadius: 10, background: "rgba(255,255,255,0.02)", fontSize: 12, color: "var(--theme-text-muted)" }}>
                     No teams yet for {service.label}.
                   </div>
                 )}
@@ -678,17 +696,20 @@ function OperationsServiceRow({
                               aria-expanded={isTeamExpanded}
                               aria-controls={`ops-team-members-${team.id}`}
                               onClick={() => setExpandedTeamId(isTeamExpanded ? null : team.id)}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--neuron-bg-page)"; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = ""; }}
                               style={{
                                 width: "100%",
                                 padding: "11px 12px",
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "space-between",
-                                background: "var(--theme-bg-page)",
+                                background: "none",
                                 border: "none",
                                 cursor: "pointer",
                                 textAlign: "left",
                                 minWidth: 0,
+                                transition: "background-color 0.12s cubic-bezier(0.16,1,0.3,1)",
                               }}
                             >
                               <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, overflow: "hidden" }}>
@@ -723,7 +744,9 @@ function OperationsServiceRow({
                                   }}
                                   aria-label={`Edit team ${team.name}`}
                                   title="Edit team"
-                                  style={{ padding: "8px 10px", background: "transparent", border: "none", cursor: "pointer", color: "var(--neuron-ink-muted)", borderRadius: 6 }}
+                                  onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.color = "var(--neuron-ink-primary)"; }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--neuron-ink-muted)"; }}
+                                  style={{ padding: "8px 10px", background: "transparent", border: "none", cursor: "pointer", color: "var(--neuron-ink-muted)", borderRadius: 6, transition: "background-color 0.12s, color 0.12s" }}
                                 >
                                   <Edit size={13} />
                                 </button>
@@ -749,7 +772,9 @@ function OperationsServiceRow({
                                     onClick={() => setConfirmDeleteTeamId(team.id)}
                                     aria-label={`Delete team ${team.name}`}
                                     title="Delete team"
-                                    style={{ padding: "8px 10px", background: "transparent", border: "none", cursor: "pointer", color: "var(--theme-status-danger-fg)", borderRadius: 6 }}
+                                    onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(220,38,38,0.08)"; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                                    style={{ padding: "8px 10px", background: "transparent", border: "none", cursor: "pointer", color: "var(--theme-status-danger-fg)", borderRadius: 6, transition: "background-color 0.12s" }}
                                   >
                                     <Trash2 size={13} />
                                   </button>
@@ -778,7 +803,6 @@ function OperationsServiceRow({
                                   ) : (
                                     team.members.map((member, mIdx) => {
                                           const initial = (member.name || member.email || "?").charAt(0).toUpperCase();
-                                          const roleChipLabel = member.team_role ?? OPS_ROLE_LABELS[member.role] ?? member.role;
                                           return (
                                             <div
                                           key={member.id}
@@ -809,23 +833,12 @@ function OperationsServiceRow({
                                               <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: 0, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{member.email}</p>
                                             </div>
                                           </div>
-                                          <span
-                                            style={{
-                                              fontSize: 11,
-                                              fontWeight: 500,
-                                              padding: "2px 8px",
-                                              borderRadius: 999,
-                                              backgroundColor: member.team_role
-                                                ? "rgba(15, 118, 110, 0.08)"
-                                                : (OPS_ROLE_COLORS[member.role] ?? OPS_ROLE_COLORS.staff).bg,
-                                              color: member.team_role
-                                                ? "var(--theme-action-primary-bg)"
-                                                : (OPS_ROLE_COLORS[member.role] ?? OPS_ROLE_COLORS.staff).text,
-                                              justifySelf: "start",
-                                            }}
-                                          >
-                                            {roleChipLabel}
-                                          </span>
+                                          <div style={{ justifySelf: "start" }}>
+                                            <TeamAssignmentRoleChips
+                                              roles={member.team_roles}
+                                              fallbackLabel={member.team_role ?? OPS_ROLE_LABELS[member.role] ?? member.role}
+                                            />
+                                          </div>
                                         </div>
                                       );
                                     })
@@ -920,10 +933,11 @@ function ServiceRoleRow({
 
   if (isEditing) {
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", border: "1px solid var(--theme-action-primary-bg)", borderRadius: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", border: "1px solid rgba(15, 118, 110, 0.24)", borderRadius: 10, background: "linear-gradient(180deg, rgba(15, 118, 110, 0.08) 0%, rgba(15, 118, 110, 0.04) 100%)" }}>
         <Input
           value={label}
           onChange={(event) => setLabel(event.target.value)}
+          style={{ height: 36, borderRadius: 9, border: "1px solid rgba(148, 163, 184, 0.16)", background: "rgba(255,255,255,0.04)" }}
           onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") onCancelEdit(); }}
         />
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--theme-text-secondary)", flexShrink: 0 }}>
@@ -934,7 +948,7 @@ function ServiceRoleRow({
           onClick={handleSave}
           disabled={saving}
           aria-label="Save role"
-          style={{ padding: 6, borderRadius: 6, border: "none", background: "var(--theme-action-primary-bg)", color: "white", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.6 : 1, flexShrink: 0 }}
+          style={{ width: 30, height: 30, padding: 0, borderRadius: 8, border: "1px solid rgba(148, 163, 184, 0.16)", background: "rgba(255,255,255,0.10)", color: "var(--neuron-ink-primary)", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.6 : 1, flexShrink: 0 }}
         >
           <Save size={12} />
         </button>
@@ -942,7 +956,7 @@ function ServiceRoleRow({
           onClick={onCancelEdit}
           disabled={saving}
           aria-label="Cancel editing role"
-          style={{ padding: 6, borderRadius: 6, border: "1px solid var(--neuron-ui-border)", background: "none", color: "var(--theme-text-muted)", cursor: "pointer", flexShrink: 0 }}
+          style={{ width: 30, height: 30, padding: 0, borderRadius: 8, border: "1px solid rgba(148, 163, 184, 0.16)", background: "transparent", color: "var(--theme-text-muted)", cursor: "pointer", flexShrink: 0 }}
         >
           <X size={12} />
         </button>
@@ -951,13 +965,13 @@ function ServiceRoleRow({
   }
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 8, background: "var(--theme-bg-page)" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 10, border: "1px solid rgba(148, 163, 184, 0.10)", background: "rgba(255,255,255,0.018)" }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span
             style={{
               fontSize: 13,
-              fontWeight: 500,
+              fontWeight: 600,
               color: "var(--neuron-ink-primary)",
               overflow: "hidden",
               textOverflow: "ellipsis",
@@ -967,8 +981,8 @@ function ServiceRoleRow({
             {role.role_label}
           </span>
           {role.required && (
-            <span style={{ fontSize: 10, color: "var(--theme-action-primary-bg)", background: "rgba(15, 118, 110, 0.08)", borderRadius: 999, padding: "2px 8px", flexShrink: 0 }}>
-              required
+            <span style={{ display: "inline-flex", alignItems: "center", minHeight: 22, fontSize: 10, fontWeight: 600, color: "var(--theme-action-primary-bg)", background: "rgba(15, 118, 110, 0.10)", border: "1px solid rgba(15, 118, 110, 0.14)", borderRadius: 999, padding: "0 8px", flexShrink: 0 }}>
+              Required
             </span>
           )}
         </div>
@@ -979,7 +993,9 @@ function ServiceRoleRow({
             onClick={onMoveUp}
             disabled={isFirst}
             aria-label="Move role up"
-            style={{ padding: 6, border: "none", background: "none", color: "var(--theme-text-muted)", cursor: "pointer", opacity: isFirst ? 0.35 : 1, flexShrink: 0 }}
+            onMouseEnter={(e) => { if (!isFirst) e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+            style={{ width: 28, height: 28, padding: 0, borderRadius: 7, border: "1px solid transparent", background: "transparent", color: "var(--theme-text-muted)", cursor: isFirst ? "default" : "pointer", opacity: isFirst ? 0.35 : 1, flexShrink: 0, transition: "background-color 0.12s", display: "flex", alignItems: "center", justifyContent: "center" }}
           >
             <ArrowUp size={12} />
           </button>
@@ -987,21 +1003,27 @@ function ServiceRoleRow({
             onClick={onMoveDown}
             disabled={isLast}
             aria-label="Move role down"
-            style={{ padding: 6, border: "none", background: "none", color: "var(--theme-text-muted)", cursor: "pointer", opacity: isLast ? 0.35 : 1, flexShrink: 0 }}
+            onMouseEnter={(e) => { if (!isLast) e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+            style={{ width: 28, height: 28, padding: 0, borderRadius: 7, border: "1px solid transparent", background: "transparent", color: "var(--theme-text-muted)", cursor: isLast ? "default" : "pointer", opacity: isLast ? 0.35 : 1, flexShrink: 0, transition: "background-color 0.12s", display: "flex", alignItems: "center", justifyContent: "center" }}
           >
             <ArrowDown size={12} />
           </button>
           <button
             onClick={onStartEdit}
             aria-label={`Edit role ${role.role_label}`}
-            style={{ padding: 6, border: "none", background: "none", color: "var(--theme-text-muted)", cursor: "pointer", flexShrink: 0 }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+            style={{ width: 28, height: 28, padding: 0, borderRadius: 7, border: "1px solid transparent", background: "transparent", color: "var(--theme-text-muted)", cursor: "pointer", flexShrink: 0, transition: "background-color 0.12s", display: "flex", alignItems: "center", justifyContent: "center" }}
           >
             <Edit2 size={12} />
           </button>
           <button
             onClick={onDeactivate}
             aria-label={`Deactivate role ${role.role_label}`}
-            style={{ padding: 6, border: "none", background: "none", color: "var(--theme-text-muted)", cursor: "pointer", flexShrink: 0 }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(220,38,38,0.08)"; e.currentTarget.style.color = "var(--theme-status-danger-fg)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--theme-text-muted)"; }}
+            style={{ width: 28, height: 28, padding: 0, borderRadius: 7, border: "1px solid transparent", background: "transparent", color: "var(--theme-text-muted)", cursor: "pointer", flexShrink: 0, transition: "background-color 0.12s, color 0.12s", display: "flex", alignItems: "center", justifyContent: "center" }}
           >
             <Trash2 size={12} />
           </button>
@@ -1027,11 +1049,8 @@ function OperationsTeamPoolCreateRow({
   onCancel: () => void;
 }) {
   const [name, setName] = useState("");
-  const [memberRoles, setMemberRoles] = useState<Record<string, string>>({});
+  const [memberRoles, setMemberRoles] = useState<TeamMemberRoleSelections>({});
   const [saving, setSaving] = useState(false);
-
-  const assignedIds = Object.keys(memberRoles).filter((id) => memberRoles[id]);
-  const availableToAdd = users.filter((user) => !assignedIds.includes(user.id));
 
   const addMember = (userId: string) => {
     const defaultRole = roleOptions[0];
@@ -1039,7 +1058,7 @@ function OperationsTeamPoolCreateRow({
       toast.error("Define assignment roles for this service before adding team members.");
       return;
     }
-    setMemberRoles((prev) => ({ ...prev, [userId]: defaultRole.roleLabel }));
+    setMemberRoles((prev) => ({ ...prev, [userId]: [defaultRole.roleLabel] }));
   };
 
   const removeMember = (userId: string) => {
@@ -1076,9 +1095,9 @@ function OperationsTeamPoolCreateRow({
       await replaceTeamMemberships({
         teamId: newTeam.id,
         memberRoles: Object.fromEntries(
-          Object.entries(memberRoles).map(([userId, roleLabel]) => [
+          Object.entries(memberRoles).map(([userId, roleLabels]) => [
             userId,
-            roleOptions.find((role) => role.roleLabel === roleLabel) ?? null,
+            buildRoleInputsFromLabels(roleLabels, roleOptions),
           ]),
         ),
       });
@@ -1104,36 +1123,35 @@ function OperationsTeamPoolCreateRow({
   };
 
   return (
-    <div style={{ padding: "14px 16px", border: "1px solid var(--neuron-ui-border)", borderRadius: 8, background: "var(--theme-bg-page)", display: "flex", flexDirection: "column", gap: 12 }}>
-      <div>
-        <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>Service</Label>
-        <Input value={service.label} readOnly style={{ height: 34, fontSize: 13, opacity: 0.8 }} />
-      </div>
-      <div>
-        <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>Team Name</Label>
-        <Input
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder={`e.g., ${service.label} Team A`}
-          autoFocus
-          style={{ height: 34, fontSize: 13 }}
-          onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); }}
-        />
-      </div>
-      <MemberRosterEditor
+    <div style={{ border: "1px solid var(--neuron-ui-border)", borderRadius: 8, overflow: "hidden" }}>
+      <TeamPoolEditor
+        contextLabel="Service"
+        contextValue={service.label}
+        teamName={name}
+        onTeamNameChange={setName}
+        teamNamePlaceholder={`e.g., ${service.label} Team A`}
         users={users}
         roleOptions={roleOptions}
-        assignedIds={assignedIds}
         memberRoles={memberRoles}
-        availableToAdd={availableToAdd}
         onAddMember={addMember}
         onRemoveMember={removeMember}
-        onRoleChange={(userId, role) => setMemberRoles((prev) => ({ ...prev, [userId]: role }))}
+        onRoleToggle={(userId, roleLabel, checked) =>
+          setMemberRoles((prev) => {
+            const current = prev[userId] ?? [];
+            return {
+              ...prev,
+              [userId]: checked
+                ? Array.from(new Set([...current, roleLabel]))
+                : current.filter((label) => label !== roleLabel),
+            };
+          })
+        }
+        onCancel={onCancel}
+        onSubmit={handleCreate}
+        submitLabel="Create Team"
+        submitPendingLabel="Creating..."
+        saving={saving}
       />
-      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-        <Button variant="outline" onClick={onCancel} disabled={saving}>Cancel</Button>
-        <Button onClick={handleCreate} disabled={saving}>{saving ? "Creating…" : "Create Team"}</Button>
-      </div>
     </div>
   );
 }
@@ -1154,19 +1172,12 @@ function OperationsTeamPoolEditRow({
   onCancel: () => void;
 }) {
   const [name, setName] = useState(team.name);
-  const [memberRoles, setMemberRoles] = useState<Record<string, string>>({});
+  const [memberRoles, setMemberRoles] = useState<TeamMemberRoleSelections>({});
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const initial: Record<string, string> = {};
-    for (const member of team.members) {
-      initial[member.id] = member.team_role ?? roleOptions[0]?.roleLabel ?? "Representative";
-    }
-    setMemberRoles(initial);
+    setMemberRoles(buildInitialMemberRoleSelections(team.members));
   }, [roleOptions, team.id, team.members]);
-
-  const assignedIds = Object.keys(memberRoles).filter((id) => memberRoles[id]);
-  const availableToAdd = users.filter((user) => !assignedIds.includes(user.id));
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -1188,9 +1199,9 @@ function OperationsTeamPoolEditRow({
       await replaceTeamMemberships({
         teamId: team.id,
         memberRoles: Object.fromEntries(
-          Object.entries(memberRoles).map(([userId, roleLabel]) => [
+          Object.entries(memberRoles).map(([userId, roleLabels]) => [
             userId,
-            roleOptions.find((role) => role.roleLabel === roleLabel) ?? null,
+            buildRoleInputsFromLabels(roleLabels, roleOptions),
           ]),
         ),
       });
@@ -1210,151 +1221,46 @@ function OperationsTeamPoolEditRow({
   };
 
   return (
-    <div style={{ padding: "14px 16px", background: "var(--theme-bg-page)", display: "flex", flexDirection: "column", gap: 12 }}>
-      <div>
-        <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>Service</Label>
-        <Input value={serviceLabel} readOnly style={{ height: 34, fontSize: 13, opacity: 0.8 }} />
-      </div>
-      <div>
-        <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>Team Name</Label>
-        <Input
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          autoFocus
-          style={{ height: 34, fontSize: 13 }}
-          onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
-        />
-      </div>
-      <MemberRosterEditor
-        users={users}
-        roleOptions={[
-          ...roleOptions,
-          ...Object.values(memberRoles)
-            .filter(Boolean)
-            .filter((roleLabel) => !roleOptions.some((role) => role.roleLabel === roleLabel))
-            .map((roleLabel) => ({
-              roleKey: normalizeRoleKey(roleLabel),
-              roleLabel,
-            })),
-        ]}
-        assignedIds={assignedIds}
-        memberRoles={memberRoles}
-        availableToAdd={availableToAdd}
-        onAddMember={(userId) => {
-          const defaultRole = roleOptions[0];
-          if (!defaultRole) {
-            toast.error("Define assignment roles for this service before adding team members.");
-            return;
-          }
-          setMemberRoles((prev) => ({ ...prev, [userId]: defaultRole.roleLabel }));
-        }}
-        onRemoveMember={(userId) =>
-          setMemberRoles((prev) => {
-            const next = { ...prev };
-            delete next[userId];
-            return next;
-          })
+    <TeamPoolEditor
+      contextLabel="Service"
+      contextValue={serviceLabel}
+      teamName={name}
+      onTeamNameChange={setName}
+      users={users}
+      roleOptions={mergeRoleOptions(roleOptions, memberRoles)}
+      memberRoles={memberRoles}
+      onAddMember={(userId) => {
+        const defaultRole = roleOptions[0];
+        if (!defaultRole) {
+          toast.error("Define assignment roles for this service before adding team members.");
+          return;
         }
-        onRoleChange={(userId, role) => setMemberRoles((prev) => ({ ...prev, [userId]: role }))}
-      />
-      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-        <Button variant="outline" onClick={onCancel} disabled={saving}>Cancel</Button>
-        <Button onClick={handleSave} disabled={saving}>{saving ? "Saving…" : "Save Changes"}</Button>
-      </div>
-    </div>
+        setMemberRoles((prev) => ({ ...prev, [userId]: [defaultRole.roleLabel] }));
+      }}
+      onRemoveMember={(userId) =>
+        setMemberRoles((prev) => {
+          const next = { ...prev };
+          delete next[userId];
+          return next;
+        })
+      }
+      onRoleToggle={(userId, roleLabel, checked) =>
+        setMemberRoles((prev) => {
+          const current = prev[userId] ?? [];
+          return {
+            ...prev,
+            [userId]: checked
+              ? Array.from(new Set([...current, roleLabel]))
+              : current.filter((label) => label !== roleLabel),
+          };
+        })
+      }
+      onCancel={onCancel}
+      onSubmit={handleSave}
+      submitLabel="Save Changes"
+      submitPendingLabel="Saving..."
+      saving={saving}
+    />
   );
 }
 
-function MemberRosterEditor({
-  users,
-  roleOptions,
-  assignedIds,
-  memberRoles,
-  availableToAdd,
-  onAddMember,
-  onRemoveMember,
-  onRoleChange,
-}: {
-  users: OperationsUser[];
-  roleOptions: TeamMemberRoleInput[];
-  assignedIds: string[];
-  memberRoles: Record<string, string>;
-  availableToAdd: OperationsUser[];
-  onAddMember: (userId: string) => void;
-  onRemoveMember: (userId: string) => void;
-  onRoleChange: (userId: string, role: string) => void;
-}) {
-  const canAssignRoles = roleOptions.length > 0;
-
-  return (
-    <div>
-      <Label style={{ fontSize: 12, marginBottom: 4, display: "block", color: "var(--neuron-ink-muted)" }}>Members</Label>
-      {!canAssignRoles && (
-        <p style={{ margin: "0 0 8px", fontSize: 12, color: "var(--theme-text-muted)" }}>
-          Add assignment roles above before assigning members to this team pool.
-        </p>
-      )}
-      <div style={{ border: "1px solid var(--neuron-ui-border)", borderRadius: 8, overflow: "hidden" }}>
-        {assignedIds.length === 0 && (
-          <p style={{ padding: "10px 14px", fontSize: 13, color: "var(--neuron-ink-muted)", margin: 0 }}>No members added yet.</p>
-        )}
-        {assignedIds.map((userId, index) => {
-          const user = users.find((entry) => entry.id === userId);
-          if (!user) return null;
-          return (
-            <div key={userId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", borderTop: index > 0 ? "1px solid var(--neuron-ui-border)" : undefined, minWidth: 0 }}>
-              <span
-                style={{
-                  fontSize: 13,
-                  color: "var(--neuron-ink-primary)",
-                  flex: 1,
-                  minWidth: 0,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {user.name}
-              </span>
-                <Select value={memberRoles[userId]} onValueChange={(value) => onRoleChange(userId, value)}>
-                  <SelectTrigger style={{ height: 28, fontSize: 12, width: 148, flexShrink: 0 }}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roleOptions.map((role) => (
-                    <SelectItem key={role.roleKey} value={role.roleLabel}>
-                      {role.roleLabel}
-                    </SelectItem>
-                  ))}
-                  </SelectContent>
-              </Select>
-              <button
-                onClick={() => onRemoveMember(userId)}
-                aria-label={`Remove ${user.name} from team`}
-                style={{ padding: 4, background: "none", border: "none", cursor: "pointer", color: "var(--neuron-ink-muted)", display: "flex", alignItems: "center", borderRadius: 4, flexShrink: 0 }}
-              >
-                <X size={13} />
-              </button>
-            </div>
-          );
-        })}
-        {availableToAdd.length > 0 && (
-          <div style={{ padding: "8px 14px", borderTop: assignedIds.length > 0 ? "1px solid var(--neuron-ui-border)" : undefined, background: "var(--neuron-bg-page)" }}>
-            <Select value="" onValueChange={onAddMember} disabled={!canAssignRoles}>
-              <SelectTrigger style={{ height: 28, fontSize: 12, color: "var(--neuron-ink-muted)" }}>
-                <SelectValue placeholder={canAssignRoles ? "Add a member…" : "Add roles first"} />
-              </SelectTrigger>
-              <SelectContent>
-                {availableToAdd.map((user) => (
-                  <SelectItem key={user.id} value={user.id}>
-                    {user.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}

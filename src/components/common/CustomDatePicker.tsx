@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from "react";
-import { Calendar, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { Calendar, ChevronDown } from "lucide-react";
 
 interface CustomDatePickerProps {
   label?: string;
@@ -9,6 +10,7 @@ interface CustomDatePickerProps {
   disabled?: boolean;
   minWidth?: string;
   className?: string;
+  portalZIndex?: number;
 }
 
 export function CustomDatePicker({
@@ -18,25 +20,64 @@ export function CustomDatePicker({
   placeholder = "dd/mm/yyyy",
   disabled = false,
   minWidth = "140px",
-  className = ""
+  className = "",
+  portalZIndex = 9999,
 }: CustomDatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [viewDate, setViewDate] = useState(new Date());
   const [showYearPicker, setShowYearPicker] = useState(false);
   const [showMonthPicker, setShowMonthPicker] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const calendarRef = useRef<HTMLDivElement>(null);
+  const [calendarPosition, setCalendarPosition] = useState<{
+    top: number;
+    left: number;
+    openUpward: boolean;
+  } | null>(null);
+
+  const closeCalendar = useCallback(() => {
+    setIsOpen(false);
+    setShowMonthPicker(false);
+    setShowYearPicker(false);
+  }, []);
+
+  const positionCalendar = useCallback(() => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const gap = 4;
+    const estimatedHeight = calendarRef.current?.offsetHeight ?? 360;
+    const spaceBelow = window.innerHeight - rect.bottom - gap;
+    const spaceAbove = rect.top - gap;
+    const openUpward = spaceBelow < estimatedHeight && spaceAbove > spaceBelow;
+    const top = openUpward
+      ? Math.max(gap, rect.top - estimatedHeight - gap)
+      : rect.bottom + gap;
+
+    setCalendarPosition({
+      top,
+      left: rect.left,
+      openUpward,
+    });
+  }, []);
 
   // Close dropdown when clicking outside
   useEffect(() => {
+    if (!isOpen) return;
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
+      const target = event.target as Node;
+      if (
+        containerRef.current?.contains(target) ||
+        calendarRef.current?.contains(target)
+      ) {
+        return;
       }
+      closeCalendar();
     };
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [isOpen, closeCalendar]);
 
   // Initialize viewDate when value changes
   useEffect(() => {
@@ -97,7 +138,7 @@ export function CustomDatePicker({
     const m = String(viewDate.getMonth() + 1).padStart(2, "0");
     const d = String(day).padStart(2, "0");
     onChange(`${y}-${m}-${d}`);
-    setIsOpen(false);
+    closeCalendar();
   };
 
   // Navigate months
@@ -117,13 +158,13 @@ export function CustomDatePicker({
     const d = String(today.getDate()).padStart(2, "0");
     onChange(`${y}-${m}-${d}`);
     setViewDate(today);
-    setIsOpen(false);
+    closeCalendar();
   };
 
   // Handle Clear button
   const handleClear = () => {
     onChange("");
-    setIsOpen(false);
+    closeCalendar();
   };
 
   // Handle year selection
@@ -170,10 +211,350 @@ export function CustomDatePicker({
 
   const dayNames = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
+  useEffect(() => {
+    if (!isOpen) return;
+    positionCalendar();
+    const rafId = window.requestAnimationFrame(positionCalendar);
+    return () => window.cancelAnimationFrame(rafId);
+  }, [isOpen, showMonthPicker, showYearPicker, value, viewDate, positionCalendar]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleReposition = () => positionCalendar();
+    window.addEventListener("scroll", handleReposition, true);
+    window.addEventListener("resize", handleReposition);
+    return () => {
+      window.removeEventListener("scroll", handleReposition, true);
+      window.removeEventListener("resize", handleReposition);
+    };
+  }, [isOpen, positionCalendar]);
+
+  const calendarDropdown = isOpen && !disabled && calendarPosition
+    ? createPortal(
+        <div
+          ref={calendarRef}
+          style={{
+            position: "fixed",
+            top: calendarPosition.top,
+            left: calendarPosition.left,
+            backgroundColor: "var(--theme-bg-surface)",
+            border: "1px solid var(--neuron-ui-border)",
+            borderRadius: "8px",
+            padding: "16px",
+            zIndex: portalZIndex,
+            minWidth: "280px",
+            boxShadow: "0px 4px 6px -2px rgba(16, 24, 40, 0.03), 0px 12px 16px -4px rgba(16, 24, 40, 0.08)"
+          }}
+        >
+          <div style={{
+            display: "flex",
+            gap: "12px",
+            marginBottom: "16px"
+          }}>
+            <div style={{ position: "relative", flex: 1 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMonthPicker(!showMonthPicker);
+                  setShowYearPicker(false);
+                }}
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "8px 12px",
+                  backgroundColor: "var(--theme-bg-page)",
+                  border: "1px solid var(--neuron-ui-border)",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontSize: "13px",
+                  fontWeight: 500,
+                  color: "var(--neuron-ink-primary)"
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
+                }}
+              >
+                {monthNames[viewDate.getMonth()]}
+                <ChevronDown size={14} style={{
+                  transition: "transform 0.2s",
+                  transform: showMonthPicker ? "rotate(180deg)" : "rotate(0deg)",
+                  color: "var(--neuron-ink-muted)"
+                }} />
+              </button>
+
+              {showMonthPicker && (
+                <div style={{
+                  position: "absolute",
+                  top: "100%",
+                  left: 0,
+                  right: 0,
+                  marginTop: "4px",
+                  backgroundColor: "var(--theme-bg-surface)",
+                  border: "1px solid var(--neuron-ui-border)",
+                  borderRadius: "6px",
+                  maxHeight: "200px",
+                  overflowY: "auto",
+                  zIndex: portalZIndex + 1,
+                  boxShadow: "0px 4px 6px -2px rgba(16, 24, 40, 0.03), 0px 12px 16px -4px rgba(16, 24, 40, 0.08)"
+                }}>
+                  {monthNames.map((month, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => {
+                        setViewDate(new Date(viewDate.getFullYear(), index, 1));
+                        setShowMonthPicker(false);
+                      }}
+                      style={{
+                        width: "100%",
+                        padding: "8px 12px",
+                        textAlign: "left",
+                        border: "none",
+                        backgroundColor: index === viewDate.getMonth() ? "var(--theme-state-selected)" : "var(--theme-bg-surface)",
+                        color: index === viewDate.getMonth() ? "var(--theme-action-primary-bg)" : "var(--theme-text-primary)",
+                        cursor: "pointer",
+                        fontSize: "13px",
+                        fontWeight: index === viewDate.getMonth() ? 600 : 400
+                      }}
+                      onMouseEnter={(e) => {
+                        if (index !== viewDate.getMonth()) {
+                          e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = index === viewDate.getMonth() ? "var(--theme-state-selected)" : "var(--theme-bg-surface)";
+                      }}
+                    >
+                      {month}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ position: "relative", flex: 1 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowYearPicker(!showYearPicker);
+                  setShowMonthPicker(false);
+                }}
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "8px 12px",
+                  backgroundColor: "var(--theme-bg-page)",
+                  border: "1px solid var(--neuron-ui-border)",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontSize: "13px",
+                  fontWeight: 500,
+                  color: "var(--neuron-ink-primary)"
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
+                }}
+              >
+                {viewDate.getFullYear()}
+                <ChevronDown size={14} style={{
+                  transition: "transform 0.2s",
+                  transform: showYearPicker ? "rotate(180deg)" : "rotate(0deg)",
+                  color: "var(--neuron-ink-muted)"
+                }} />
+              </button>
+
+              {showYearPicker && (
+                <div style={{
+                  position: "absolute",
+                  top: "100%",
+                  left: 0,
+                  right: 0,
+                  marginTop: "4px",
+                  backgroundColor: "var(--theme-bg-surface)",
+                  border: "1px solid var(--neuron-ui-border)",
+                  borderRadius: "6px",
+                  maxHeight: "200px",
+                  overflowY: "auto",
+                  zIndex: portalZIndex + 1,
+                  boxShadow: "0px 4px 6px -2px rgba(16, 24, 40, 0.03), 0px 12px 16px -4px rgba(16, 24, 40, 0.08)"
+                }}>
+                  {generateYearRange().map((year) => (
+                    <button
+                      key={year}
+                      type="button"
+                      onClick={() => handleYearChange(year)}
+                      style={{
+                        width: "100%",
+                        padding: "8px 12px",
+                        textAlign: "left",
+                        border: "none",
+                        backgroundColor: year === viewDate.getFullYear() ? "var(--theme-state-selected)" : "var(--theme-bg-surface)",
+                        color: year === viewDate.getFullYear() ? "var(--theme-action-primary-bg)" : "var(--theme-text-primary)",
+                        cursor: "pointer",
+                        fontSize: "13px",
+                        fontWeight: year === viewDate.getFullYear() ? 600 : 400
+                      }}
+                      onMouseEnter={(e) => {
+                        if (year !== viewDate.getFullYear()) {
+                          e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = year === viewDate.getFullYear() ? "var(--theme-state-selected)" : "var(--theme-bg-surface)";
+                      }}
+                    >
+                      {year}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(7, 1fr)",
+            gap: "4px",
+            marginBottom: "8px"
+          }}>
+            {dayNames.map((day) => (
+              <div
+                key={day}
+                style={{
+                  textAlign: "center",
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  color: "var(--neuron-ink-muted)",
+                  padding: "4px"
+                }}
+              >
+                {day}
+              </div>
+            ))}
+          </div>
+
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(7, 1fr)",
+            gap: "4px",
+            marginBottom: "12px"
+          }}>
+            {generateCalendarDays().map((day, index) => {
+              if (day === null) {
+                return <div key={`empty-${index}`} />;
+              }
+
+              const selected = isDateSelected(day);
+              const today = isToday(day);
+
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => handleDateSelect(day)}
+                  style={{
+                    padding: "8px",
+                    fontSize: "13px",
+                    fontWeight: selected ? 600 : 400,
+                    color: selected ? "white" : today ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-primary)",
+                    backgroundColor: selected ? "var(--theme-action-primary-bg)" : "transparent",
+                    border: today && !selected ? "1px solid var(--theme-action-primary-bg)" : "1px solid transparent",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    transition: "background-color 0.2s"
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!selected) {
+                      e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!selected) {
+                      e.currentTarget.style.backgroundColor = "transparent";
+                    }
+                  }}
+                >
+                  {day}
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={{
+            display: "flex",
+            justifyContent: "space-between",
+            paddingTop: "12px",
+            borderTop: "1px solid var(--neuron-ui-border)"
+          }}>
+            <button
+              type="button"
+              onClick={handleClear}
+              style={{
+                padding: "6px 12px",
+                fontSize: "12px",
+                fontWeight: 500,
+                color: "var(--neuron-ink-muted)",
+                backgroundColor: "transparent",
+                border: "none",
+                cursor: "pointer",
+                borderRadius: "4px"
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
+                e.currentTarget.style.color = "var(--neuron-ink-primary)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "transparent";
+                e.currentTarget.style.color = "var(--neuron-ink-muted)";
+              }}
+            >
+              Clear
+            </button>
+
+            <button
+              type="button"
+              onClick={handleToday}
+              style={{
+                padding: "6px 12px",
+                fontSize: "12px",
+                fontWeight: 500,
+                color: "white",
+                backgroundColor: "var(--theme-action-primary-bg)",
+                border: "none",
+                cursor: "pointer",
+                borderRadius: "4px"
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "#0d6660";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
+              }}
+            >
+              Today
+            </button>
+          </div>
+        </div>,
+        document.body
+      )
+    : null;
+
   return (
-    <div ref={dropdownRef} style={{ position: "relative" }}>
+    <div ref={containerRef} style={{ position: "relative" }}>
       {/* Input Trigger */}
       <button
+        ref={triggerRef}
+        type="button"
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
         className={className}
@@ -210,325 +591,7 @@ export function CustomDatePicker({
           {formatDisplayValue(value)}
         </span>
       </button>
-
-      {/* Calendar Dropdown */}
-      {isOpen && !disabled && (
-        <div
-          style={{
-            position: "absolute",
-            top: "100%",
-            left: 0,
-            marginTop: "4px",
-            backgroundColor: "var(--theme-bg-surface)",
-            border: "1px solid var(--neuron-ui-border)",
-            borderRadius: "8px",
-            padding: "16px",
-            zIndex: 1000,
-            minWidth: "280px",
-            boxShadow: "0px 4px 6px -2px rgba(16, 24, 40, 0.03), 0px 12px 16px -4px rgba(16, 24, 40, 0.08)"
-          }}
-        >
-          {/* Month/Year Header */}
-          <div style={{
-            display: "flex",
-            gap: "12px",
-            marginBottom: "16px"
-          }}>
-            {/* Month Dropdown */}
-            <div style={{ position: "relative", flex: 1 }}>
-              <button
-                onClick={() => {
-                  setShowMonthPicker(!showMonthPicker);
-                  setShowYearPicker(false);
-                }}
-                style={{
-                  width: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "8px 12px",
-                  backgroundColor: "var(--theme-bg-page)",
-                  border: "1px solid var(--neuron-ui-border)",
-                  borderRadius: "6px",
-                  cursor: "pointer",
-                  fontSize: "13px",
-                  fontWeight: 500,
-                  color: "var(--neuron-ink-primary)"
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
-                }}
-              >
-                {monthNames[viewDate.getMonth()]}
-                <ChevronDown size={14} style={{
-                  transition: "transform 0.2s",
-                  transform: showMonthPicker ? "rotate(180deg)" : "rotate(0deg)",
-                  color: "var(--neuron-ink-muted)"
-                }} />
-              </button>
-
-              {/* Month Picker Dropdown */}
-              {showMonthPicker && (
-                <div style={{
-                  position: "absolute",
-                  top: "100%",
-                  left: 0,
-                  right: 0,
-                  marginTop: "4px",
-                  backgroundColor: "var(--theme-bg-surface)",
-                  border: "1px solid var(--neuron-ui-border)",
-                  borderRadius: "6px",
-                  maxHeight: "200px",
-                  overflowY: "auto",
-                  zIndex: 1001,
-                  boxShadow: "0px 4px 6px -2px rgba(16, 24, 40, 0.03), 0px 12px 16px -4px rgba(16, 24, 40, 0.08)"
-                }}>
-                  {monthNames.map((month, index) => (
-                    <button
-                      key={index}
-                      onClick={() => {
-                        setViewDate(new Date(viewDate.getFullYear(), index, 1));
-                        setShowMonthPicker(false);
-                      }}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        textAlign: "left",
-                        border: "none",
-                        backgroundColor: index === viewDate.getMonth() ? "var(--theme-state-selected)" : "var(--theme-bg-surface)",
-                        color: index === viewDate.getMonth() ? "var(--theme-action-primary-bg)" : "var(--theme-text-primary)",
-                        cursor: "pointer",
-                        fontSize: "13px",
-                        fontWeight: index === viewDate.getMonth() ? 600 : 400
-                      }}
-                      onMouseEnter={(e) => {
-                        if (index !== viewDate.getMonth()) {
-                          e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = index === viewDate.getMonth() ? "var(--theme-state-selected)" : "var(--theme-bg-surface)";
-                      }}
-                    >
-                      {month}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            
-            {/* Year Dropdown */}
-            <div style={{ position: "relative", flex: 1 }}>
-              <button
-                onClick={() => {
-                  setShowYearPicker(!showYearPicker);
-                  setShowMonthPicker(false);
-                }}
-                style={{
-                  width: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "8px 12px",
-                  backgroundColor: "var(--theme-bg-page)",
-                  border: "1px solid var(--neuron-ui-border)",
-                  borderRadius: "6px",
-                  cursor: "pointer",
-                  fontSize: "13px",
-                  fontWeight: 500,
-                  color: "var(--neuron-ink-primary)"
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
-                }}
-              >
-                {viewDate.getFullYear()}
-                <ChevronDown size={14} style={{
-                  transition: "transform 0.2s",
-                  transform: showYearPicker ? "rotate(180deg)" : "rotate(0deg)",
-                  color: "var(--neuron-ink-muted)"
-                }} />
-              </button>
-
-              {/* Year Picker Dropdown */}
-              {showYearPicker && (
-                <div style={{
-                  position: "absolute",
-                  top: "100%",
-                  left: 0,
-                  right: 0,
-                  marginTop: "4px",
-                  backgroundColor: "var(--theme-bg-surface)",
-                  border: "1px solid var(--neuron-ui-border)",
-                  borderRadius: "6px",
-                  maxHeight: "200px",
-                  overflowY: "auto",
-                  zIndex: 1001,
-                  boxShadow: "0px 4px 6px -2px rgba(16, 24, 40, 0.03), 0px 12px 16px -4px rgba(16, 24, 40, 0.08)"
-                }}>
-                  {generateYearRange().map((year) => (
-                    <button
-                      key={year}
-                      onClick={() => handleYearChange(year)}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        textAlign: "left",
-                        border: "none",
-                        backgroundColor: year === viewDate.getFullYear() ? "var(--theme-state-selected)" : "var(--theme-bg-surface)",
-                        color: year === viewDate.getFullYear() ? "var(--theme-action-primary-bg)" : "var(--theme-text-primary)",
-                        cursor: "pointer",
-                        fontSize: "13px",
-                        fontWeight: year === viewDate.getFullYear() ? 600 : 400
-                      }}
-                      onMouseEnter={(e) => {
-                        if (year !== viewDate.getFullYear()) {
-                          e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = year === viewDate.getFullYear() ? "var(--theme-state-selected)" : "var(--theme-bg-surface)";
-                      }}
-                    >
-                      {year}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Day Names */}
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(7, 1fr)",
-            gap: "4px",
-            marginBottom: "8px"
-          }}>
-            {dayNames.map((day) => (
-              <div
-                key={day}
-                style={{
-                  textAlign: "center",
-                  fontSize: "11px",
-                  fontWeight: 600,
-                  color: "var(--neuron-ink-muted)",
-                  padding: "4px"
-                }}
-              >
-                {day}
-              </div>
-            ))}
-          </div>
-
-          {/* Calendar Days */}
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(7, 1fr)",
-            gap: "4px",
-            marginBottom: "12px"
-          }}>
-            {generateCalendarDays().map((day, index) => {
-              if (day === null) {
-                return <div key={`empty-${index}`} />;
-              }
-
-              const selected = isDateSelected(day);
-              const today = isToday(day);
-
-              return (
-                <button
-                  key={day}
-                  onClick={() => handleDateSelect(day)}
-                  style={{
-                    padding: "8px",
-                    fontSize: "13px",
-                    fontWeight: selected ? 600 : 400,
-                    color: selected ? "white" : today ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-primary)",
-                    backgroundColor: selected ? "var(--theme-action-primary-bg)" : "transparent",
-                    border: today && !selected ? "1px solid var(--theme-action-primary-bg)" : "1px solid transparent",
-                    borderRadius: "6px",
-                    cursor: "pointer",
-                    transition: "background-color 0.2s"
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!selected) {
-                      e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!selected) {
-                      e.currentTarget.style.backgroundColor = "transparent";
-                    }
-                  }}
-                >
-                  {day}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Action Buttons */}
-          <div style={{
-            display: "flex",
-            justifyContent: "space-between",
-            paddingTop: "12px",
-            borderTop: "1px solid var(--neuron-ui-border)"
-          }}>
-            <button
-              onClick={handleClear}
-              style={{
-                padding: "6px 12px",
-                fontSize: "12px",
-                fontWeight: 500,
-                color: "var(--neuron-ink-muted)",
-                backgroundColor: "transparent",
-                border: "none",
-                cursor: "pointer",
-                borderRadius: "4px"
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
-                e.currentTarget.style.color = "var(--neuron-ink-primary)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "transparent";
-                e.currentTarget.style.color = "var(--neuron-ink-muted)";
-              }}
-            >
-              Clear
-            </button>
-
-            <button
-              onClick={handleToday}
-              style={{
-                padding: "6px 12px",
-                fontSize: "12px",
-                fontWeight: 500,
-                color: "white",
-                backgroundColor: "var(--theme-action-primary-bg)",
-                border: "none",
-                cursor: "pointer",
-                borderRadius: "4px"
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "#0d6660";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
-              }}
-            >
-              Today
-            </button>
-          </div>
-        </div>
-      )}
+      {calendarDropdown}
     </div>
   );
 }

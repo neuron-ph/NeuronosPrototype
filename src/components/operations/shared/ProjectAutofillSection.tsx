@@ -4,7 +4,7 @@ import type { Project } from "../../../types/pricing";
 import { fetchProjectByNumber } from "../../../utils/projectAutofill";
 
 interface ProjectAutofillSectionProps {
-  projectNumber: string;
+  projectNumber?: string;
   onProjectNumberChange: (value: string) => void;
   onAutofill: (project: Project) => void;
   serviceType: string; // For validation
@@ -20,9 +20,10 @@ export function ProjectAutofillSection({
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [fetchedProject, setFetchedProject] = useState<Project | null>(null);
+  const normalizedProjectNumber = projectNumber ?? "";
 
   const handleAutofill = async () => {
-    if (!projectNumber.trim()) {
+    if (!normalizedProjectNumber.trim()) {
       setError("Please enter a project number");
       return;
     }
@@ -33,7 +34,7 @@ export function ProjectAutofillSection({
 
     try {
       const result = await fetchProjectByNumber(
-        projectNumber.trim(),
+        normalizedProjectNumber.trim(),
       );
 
       if (result.success && result.data) {
@@ -91,7 +92,7 @@ export function ProjectAutofillSection({
           <div className="flex gap-2">
             <input
               type="text"
-              value={projectNumber}
+              value={normalizedProjectNumber}
               onChange={(e) => {
                 onProjectNumberChange(e.target.value);
                 setError("");
@@ -105,7 +106,7 @@ export function ProjectAutofillSection({
             <button
               type="button"
               onClick={handleAutofill}
-              disabled={loading || !projectNumber.trim()}
+              disabled={loading || !normalizedProjectNumber.trim()}
               className="px-4 py-2 bg-[var(--theme-action-primary-bg)] text-white rounded-lg hover:bg-[var(--theme-action-primary-bg)]/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {loading ? (
@@ -156,7 +157,7 @@ export function ProjectAutofillSection({
           )}
 
           {/* Info Message */}
-          {!projectNumber && !error && !success && (
+          {!normalizedProjectNumber && !error && !success && (
             <p className="mt-2 text-xs text-[var(--theme-text-primary)]/60">
               Enter a project number to automatically populate customer details and service information from the quotation.
             </p>

@@ -279,6 +279,7 @@ interface FreeformRow {
 interface CanonicalRole {
   role_key:   string;
   role_label: string;
+  required:   boolean;
 }
 
 function FreeformEditor({
@@ -318,7 +319,7 @@ function FreeformEditor({
       const [{ data: roleData }, deptTeams, { data: fallbackUsers }] = await Promise.all([
         supabase
           .from('department_assignment_roles')
-          .select('role_key, role_label')
+          .select('role_key, role_label, required')
           .eq('department', department)
           .eq('is_active', true)
           .order('sort_order'),
@@ -395,7 +396,7 @@ function FreeformEditor({
       pool = eligibleByRole[row.role_key] ?? [];
     } else if (row.role_key) {
       // No team selected — show users eligible for this role in any dept team
-      pool = eligibleAnyTeamByRole[row.role_key] ?? eligibleDeptUsers;
+      pool = eligibleAnyTeamByRole[row.role_key] ?? [];
     } else {
       // No role set yet — show all users who are in any dept team
       pool = eligibleDeptUsers;
@@ -409,7 +410,13 @@ function FreeformEditor({
 
   const emit = (updated: FreeformRow[], nextTeamId: string | null) => {
     const items = updated.filter((r) => r.role_key && r.user_id);
-    onChange({ teamId: nextTeamId, items, isValid: items.length > 0 });
+    const requiredKeys = canonicalRoles
+      .filter((role) => role.required)
+      .map((role) => role.role_key);
+    const isValid =
+      items.length > 0 &&
+      requiredKeys.every((roleKey) => items.some((item) => item.role_key === roleKey));
+    onChange({ teamId: nextTeamId, items, isValid });
   };
 
   const updateRow = (idx: number, patch: Partial<FreeformRow>) => {
@@ -469,6 +476,7 @@ function FreeformEditor({
       {/* Role/person rows */}
       {rows.map((row, idx) => {
         const userOpts = [{ value: '', label: 'Select person…' }, ...usersForRow(row).map((u) => ({ value: u.id, label: u.name }))];
+        const canonicalRole = canonicalRoles.find((role) => role.role_key === row.role_key);
         return (
           <div key={idx} className="flex items-end gap-2">
             <div style={{ flex: '0 0 180px' }}>
@@ -519,7 +527,7 @@ function FreeformEditor({
 
             <div style={{ flex: 1 }}>
               <CustomDropdown
-                label={idx === 0 ? 'Assigned To' : undefined}
+                label={idx === 0 ? (canonicalRole?.required ? 'Assigned To *' : 'Assigned To') : undefined}
                 value={row.user_id}
                 options={userOpts}
                 onChange={(v) => {
