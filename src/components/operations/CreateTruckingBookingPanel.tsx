@@ -24,7 +24,9 @@ import { extractContractDestinations } from "../../utils/contractQuantityExtract
 import { fetchFullContract } from "../../utils/contractLookup";
 import { logCreation } from "../../utils/activityLog";
 import { fireBookingAssignmentTickets } from "../../utils/workflowTickets";
-import { generateBookingNumber } from "../../utils/bookingNumberUtils";
+import { generateBookingNumber, peekNextBookingNumber } from "../../utils/bookingNumberUtils";
+import { getSelectedCustomer } from "../../utils/bookings/selectedCustomer";
+import { useCustomerAccountOwnerAutofill } from "./shared/useCustomerAccountOwnerAutofill";
 
 interface CreateTruckingBookingPanelProps {
   isOpen: boolean;
@@ -59,10 +61,25 @@ export function CreateTruckingBookingPanel({
     // Seed one empty destination row so the repeater shows the right columns immediately
     trucking_line_items: [{ destination: "", truck_type: "", quantity: "1" }],
   });
+  const selectedCustomer = getSelectedCustomer(formState, customerId ?? null);
+  useCustomerAccountOwnerAutofill(selectedCustomer.customerId, setField);
 
   useEffect(() => {
     if (prefillData && isOpen) initFromPrefill(prefillData);
   }, [prefillData, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (formState.booking_number) return;
+    let cancelled = false;
+    void (async () => {
+      const preview = await peekNextBookingNumber("Trucking");
+      if (!cancelled && preview) setField("booking_number", preview);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // When a contract is detected, pre-fill destinations from its rate matrices
   useEffect(() => {
@@ -117,7 +134,7 @@ export function CreateTruckingBookingPanel({
       const assignRes = await persistAssignmentsForNewBooking({
         bookingId: data.id,
         payload: assignmentPayload,
-        customerId: customerId ?? null,
+        customerId: selectedCustomer.customerId,
         assignedBy: currentUser?.id ?? null,
       });
       if (!assignRes.ok) {
@@ -140,7 +157,7 @@ export function CreateTruckingBookingPanel({
           bookingId: data.id,
           bookingNumber: data.booking_number,
           serviceType: "Trucking",
-          customerName: String(formState.customer_name ?? ""),
+          customerName: selectedCustomer.customerName,
           createdBy: currentUser?.id ?? "",
           createdByName: currentUser?.name ?? "",
           createdByDept: currentUser?.department ?? "",
@@ -169,7 +186,7 @@ export function CreateTruckingBookingPanel({
 
   if (!isOpen) return null;
 
-  const customerName = String(formState.customer_name ?? "");
+  const customerName = selectedCustomer.customerName;
   const bookingName = String(formState.booking_name ?? "");
   const isFormValid = customerName.trim() !== "" && bookingName.trim() !== "";
 
@@ -218,7 +235,8 @@ export function CreateTruckingBookingPanel({
           </div>
           <div style={{ padding: "20px", backgroundColor: "var(--theme-bg-page)", border: "1px solid var(--neuron-ui-border)", borderRadius: "8px" }}>
             <ServiceRoleAssignmentForm
-              customerId={customerId ?? null}
+              key={`Trucking:${selectedCustomer.customerId ?? "no-customer"}`}
+              customerId={selectedCustomer.customerId}
               serviceType="Trucking"
               onChange={setAssignmentPayload}
             />

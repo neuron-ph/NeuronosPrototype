@@ -66,40 +66,30 @@ export function CreateBookingFromContractPanel({
       case "Brokerage":
         return {
           ...autofillBrokerageFromContract(contract),
-          accountOwner: currentUser?.name || "",
-          accountHandler: currentUser?.name || "",
           contract_id: contract.id,
         };
 
       case "Trucking":
         return {
           ...autofillTruckingFromContract(contract),
-          accountOwner: currentUser?.name || "",
-          accountHandler: currentUser?.name || "",
           contract_id: contract.id,
         };
 
       case "Others":
         return {
           ...autofillOthersFromContract(contract),
-          accountOwner: currentUser?.name || "",
-          accountHandler: currentUser?.name || "",
           contract_id: contract.id,
         };
 
       case "Forwarding":
         return {
           ...autofillForwardingFromContract(contract),
-          accountOwner: currentUser?.name || "",
-          accountHandler: currentUser?.name || "",
           contract_id: contract.id,
         };
 
       case "Marine Insurance":
         return {
           ...autofillMarineInsuranceFromContract(contract),
-          accountOwner: currentUser?.name || "",
-          accountHandler: currentUser?.name || "",
           contract_id: contract.id,
         };
 

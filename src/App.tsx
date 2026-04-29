@@ -1136,13 +1136,13 @@ function AppContent() {
             <Route path="/accounting/evouchers" element={<AccountingEVouchersPage />} />
           </Route>
           <Route path="/accounting/invoices" element={<AccountingInvoicesPage />} />
-          <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_billings", action: "view" }} />}>
+          <Route element={<GuardedLayout requiredPermission={{ moduleId: "accounting_financials_billings_tab", action: "view" }} />}>
             <Route path="/accounting/billings" element={<AccountingBillingsPage />} />
           </Route>
-          <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_collections", action: "view" }} />}>
+          <Route element={<GuardedLayout requiredPermission={{ moduleId: "accounting_financials_collections_tab", action: "view" }} />}>
             <Route path="/accounting/collections" element={<AccountingCollectionsPage />} />
           </Route>
-          <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_expenses", action: "view" }} />}>
+          <Route element={<GuardedLayout requiredPermission={{ moduleId: "accounting_financials_expenses_tab", action: "view" }} />}>
             <Route path="/accounting/expenses" element={<AccountingExpensesPage />} />
           </Route>
           <Route path="/accounting/coa" element={<AccountingCoaPage />} />

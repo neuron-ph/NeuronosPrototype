@@ -7,8 +7,6 @@ import { ProfilingProvidersTab } from './ProfilingProvidersTab';
 import { ProfilingLocationsTab } from './ProfilingLocationsTab';
 import { ProfilingCountriesTab } from './ProfilingCountriesTab';
 import { ProfilingDispatchTab } from './ProfilingDispatchTab';
-import { ProfilingServicesTab } from './ProfilingServicesTab';
-import { ProfilingSubServicesTab } from './ProfilingSubServicesTab';
 import { ProfilingGovernanceTab } from './ProfilingGovernanceTab';
 export type ProfilingTab =
   | 'overview'
@@ -17,8 +15,6 @@ export type ProfilingTab =
   | 'locations'
   | 'countries'
   | 'dispatch'
-  | 'services'
-  | 'subservices'
   | 'governance';
 
 const TABS: { id: ProfilingTab; label: string }[] = [
@@ -28,8 +24,6 @@ const TABS: { id: ProfilingTab; label: string }[] = [
   { id: 'locations', label: 'Locations' },
   { id: 'countries', label: 'Countries' },
   { id: 'dispatch', label: 'Dispatch' },
-  { id: 'services', label: 'Services' },
-  { id: 'subservices', label: 'Sub-Services' },
   { id: 'governance', label: 'Governance' },
 ];
 
@@ -134,8 +128,6 @@ export function ProfilingModule() {
       {activeTab === 'locations' && <ProfilingLocationsTab initialQuery={urlQuery} />}
       {activeTab === 'countries' && <ProfilingCountriesTab initialQuery={urlQuery} />}
       {activeTab === 'dispatch' && <ProfilingDispatchTab initialQuery={urlQuery} />}
-      {activeTab === 'services' && <ProfilingServicesTab initialQuery={urlQuery} />}
-      {activeTab === 'subservices' && <ProfilingSubServicesTab initialQuery={urlQuery} />}
       {activeTab === 'governance' && <ProfilingGovernanceTab />}
     </div>
   );

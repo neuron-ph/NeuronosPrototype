@@ -9,7 +9,6 @@ import { getVisibleSections } from "../../../config/booking/bookingVisibilityRul
 import { getServiceSchema } from "../../../config/booking/bookingScreenSchema";
 import { validateBookingForm, hasErrors, type ValidationErrors } from "./bookingFormValidation";
 import { BookingAssignmentSection } from "../assignments/BookingAssignmentSection";
-import { useBookingServiceOptions } from "../../../hooks/useBookingServiceOptions";
 import { groupBookingSections } from "../../../utils/bookings/groupBookingSections";
 import { BookingSectionGroupCard } from "./BookingSectionGroupCard";
 
@@ -33,11 +32,6 @@ export function BookingInfoTab({
   const [errors, setErrors] = useState<ValidationErrors>({});
 
   const { formState, setField, initFromRecord, context } = useBookingFormState(serviceType);
-  const { services, subServices } = useBookingServiceOptions(serviceType);
-  const catalogOptions = {
-    ...(services.length > 0 ? { service_catalog: services } : {}),
-    ...(subServices.length > 0 ? { sub_service_catalog: subServices } : {}),
-  };
 
   useEffect(() => {
     initFromRecord(booking);
@@ -191,7 +185,6 @@ export function BookingInfoTab({
         ctx={context}
         errors={errors}
         disabled={!isEditing}
-        catalogOptions={catalogOptions}
         headerAction={editControls}
       />
 
@@ -203,7 +196,6 @@ export function BookingInfoTab({
         ctx={context}
         errors={errors}
         disabled={!isEditing}
-        catalogOptions={catalogOptions}
       />
     </div>
   );

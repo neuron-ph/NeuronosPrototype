@@ -55,6 +55,7 @@ interface BrokerageServiceFormProps {
   movement?: "IMPORT" | "EXPORT";
   viewMode?: boolean;
   contractMode?: boolean;
+  lockToStandardType?: boolean;
   headerToolbar?: ReactNode;
 }
 
@@ -64,6 +65,7 @@ export function BrokerageServiceForm({
   movement = "IMPORT",
   viewMode = false,
   contractMode = false,
+  lockToStandardType = false,
   headerToolbar,
 }: BrokerageServiceFormProps) {
   const [hoveredType, setHoveredType] = useState<string | null>(null);
@@ -80,10 +82,11 @@ export function BrokerageServiceForm({
     : ["Standard", "All-Inclusive", "Non-Regular"];
 
   // Build schema context for visibility evaluation.
-  const ctx = buildBrokerageContext(data);
+  const effectiveBrokerageType = lockToStandardType ? "Standard" : data.brokerageType;
+  const ctx = buildBrokerageContext({ ...data, brokerageType: effectiveBrokerageType });
 
   // Whether any package is selected — gates the shared field sections.
-  const hasPackage = !!data.brokerageType;
+  const hasPackage = !!effectiveBrokerageType;
 
   const inputStyle = (extraStyle?: React.CSSProperties) => ({
     width: "100%",
@@ -145,7 +148,7 @@ export function BrokerageServiceForm({
       <div style={{ display: "grid", gap: "20px" }}>
 
         {/* ── Package selector (quotation mode) ───────────────────────────── */}
-        {!contractMode && (
+        {!contractMode && !lockToStandardType && (
           <div>
             <label style={labelStyle}>Brokerage Type *</label>
             <div style={{ display: "flex", gap: "8px" }}>
@@ -186,7 +189,6 @@ export function BrokerageServiceForm({
             </div>
           </div>
         )}
-
         {/* ── Contract mode: static badge ─────────────────────────────────── */}
         {contractMode && (
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
@@ -302,21 +304,6 @@ export function BrokerageServiceForm({
                     value={data.commodityDescription || ""}
                     onChange={(e) => updateField("commodityDescription", e.target.value)}
                     placeholder="Enter commodity description"
-                    disabled={viewMode}
-                    style={inputStyle()}
-                    onFocus={onFocusHandler}
-                    onBlur={onBlurHandler}
-                  />
-                </div>
-
-                {/* Delivery Address — all packages (matrix: no export restriction) */}
-                <div>
-                  <label style={labelStyle}>Delivery Address</label>
-                  <input
-                    type="text"
-                    value={data.deliveryAddress || ""}
-                    onChange={(e) => updateField("deliveryAddress", e.target.value)}
-                    placeholder="Enter delivery address"
                     disabled={viewMode}
                     style={inputStyle()}
                     onFocus={onFocusHandler}

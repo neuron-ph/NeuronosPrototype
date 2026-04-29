@@ -176,6 +176,65 @@ describe('Shared General Information', () => {
     expect(fields.some(f => f.key === 'quotation_reference_number')).toBe(true);
   });
 
+  it('does not show account_handler in shared general information', () => {
+    for (const st of ['Brokerage', 'Forwarding', 'Trucking', 'Marine Insurance', 'Others'] as const) {
+      const context = ctx({ service_type: st });
+      const sections = getVisibleSections(BOOKING_SCHEMA_MAP[st].sections, context);
+      const general = sections.find(s => s.key === 'general_information');
+      const fields = getVisibleFields(general!, context);
+      expect(fields.some(f => f.key === 'account_handler')).toBe(false);
+    }
+  });
+
+  it('shows Service/s before a full-width Booking Name for Brokerage', () => {
+    const context = ctx({ service_type: 'Brokerage' });
+    const sections = getVisibleSections(BOOKING_SCHEMA_MAP['Brokerage'].sections, context);
+    const general = sections.find(s => s.key === 'general_information');
+    const fields = getVisibleFields(general!, context);
+    const servicesIndex = fields.findIndex(f => f.key === 'services');
+    const bookingNameIndex = fields.findIndex(f => f.key === 'booking_name');
+
+    expect(servicesIndex).toBeGreaterThan(-1);
+    expect(bookingNameIndex).toBeGreaterThan(-1);
+    expect(servicesIndex).toBeLessThan(bookingNameIndex);
+    expect(fields[servicesIndex]?.gridSpan).toBe(1);
+    expect(fields[bookingNameIndex]?.gridSpan).toBe(3);
+  });
+
+  it('uses the fixed five-service options for every Service/s selector', () => {
+    const brokerageContext = ctx({ service_type: 'Brokerage' });
+    const brokerageSections = getVisibleSections(BOOKING_SCHEMA_MAP['Brokerage'].sections, brokerageContext);
+    const brokerageGeneral = brokerageSections.find(s => s.key === 'general_information');
+    const brokerageServices = getVisibleFields(brokerageGeneral!, brokerageContext).find(f => f.key === 'services');
+
+    expect(brokerageServices?.control).toBe('multi-select');
+    expect(brokerageServices?.optionKey).toBe('operation_services');
+
+    for (const st of ['Trucking', 'Marine Insurance', 'Others'] as const) {
+      const context = ctx({ service_type: st });
+      const sections = getVisibleSections(BOOKING_SCHEMA_MAP[st].sections, context);
+      const serviceField = sections
+        .flatMap(section => getVisibleFields(section, context))
+        .find(field => field.key === 'service');
+
+      expect(serviceField?.control).toBe('multi-select');
+      expect(serviceField?.optionKey).toBe('operation_services');
+    }
+  });
+
+  it('uses manual multi-value entry for Sub-Service/s fields', () => {
+    for (const st of ['Brokerage', 'Forwarding'] as const) {
+      const context = ctx({ service_type: st });
+      const sections = getVisibleSections(BOOKING_SCHEMA_MAP[st].sections, context);
+      const subServicesField = sections
+        .flatMap(section => getVisibleFields(section, context))
+        .find(field => field.key === 'sub_services');
+
+      expect(subServicesField?.control).toBe('multi-value');
+      expect(subServicesField?.profileType).toBeUndefined();
+    }
+  });
+
   it('shows movement_type for Brokerage, Forwarding, Trucking (matrix: BR=Yes FWD=Yes TKG=Yes)', () => {
     for (const st of ['Brokerage', 'Forwarding', 'Trucking'] as const) {
       const context = ctx({ service_type: st });

@@ -1,6 +1,7 @@
 export type ModuleId =
   // ─── Business Development ────────────────────────────────────────────────────
-  | "bd_contacts" | "bd_customers" | "bd_tasks" | "bd_activities" | "bd_budget_requests"
+  | "bd_contacts" | "bd_customers" | "bd_inquiries" | "bd_projects" | "bd_contracts"
+  | "bd_tasks" | "bd_activities" | "bd_budget_requests"
   | "bd_contacts_activities_tab" | "bd_contacts_tasks_tab" | "bd_contacts_inquiries_tab"
   | "bd_contacts_attachments_tab" | "bd_contacts_comments_tab"
   | "bd_customers_contacts_tab" | "bd_customers_activities_tab" | "bd_customers_tasks_tab"
@@ -10,6 +11,7 @@ export type ModuleId =
   | "bd_contacts_teams_tab"
   | "bd_budget_requests_all_tab" | "bd_budget_requests_my_requests_tab"
   // ─── Pricing ─────────────────────────────────────────────────────────────────
+  | "pricing_contacts" | "pricing_customers" | "pricing_projects"
   | "pricing_quotations" | "pricing_contracts" | "pricing_network_partners"
   | "pricing_quotations_details_tab" | "pricing_quotations_comments_tab"
   | "pricing_contracts_all_tab" | "pricing_contracts_active_tab" | "pricing_contracts_expiring_tab"
@@ -43,26 +45,21 @@ export type ModuleId =
   | "ops_invoices_items_tab" | "ops_invoices_details_tab"
   | "ops_invoices_legal_tab" | "ops_invoices_settings_tab"
   // ─── Accounting ──────────────────────────────────────────────────────────────
-  | "acct_billings" | "acct_collections" | "acct_expenses" | "acct_evouchers" | "acct_reports"
+  | "acct_evouchers" | "acct_reports"
+  | "acct_financials" | "acct_coa" | "acct_projects" | "acct_contracts" | "acct_bookings" | "acct_customers"
+  | "acct_catalog" | "acct_statements" | "acct_journal"
   | "accounting_evouchers_pending_disburse_tab" | "accounting_evouchers_waiting_on_rep_tab"
   | "accounting_evouchers_pending_verification_tab" | "accounting_evouchers_archive_tab"
-  // Accounting shell navigation (promoted to parent-level entries)
-  | "accounting_entries_module_tab" | "accounting_approvals_module_tab"
-  | "accounting_accounts_module_tab" | "accounting_categories_module_tab"
-  | "accounting_clients_module_tab" | "accounting_import_export_module_tab"
   | "accounting_financials_dashboard_tab" | "accounting_financials_billings_tab"
   | "accounting_financials_invoices_tab" | "accounting_financials_collections_tab"
   | "accounting_financials_expenses_tab"
   | "accounting_bookings_forwarding_tab" | "accounting_bookings_brokerage_tab"
   | "accounting_bookings_trucking_tab" | "accounting_bookings_marine_insurance_tab"
   | "accounting_bookings_others_tab"
-  | "accounting_approvals_expenses_tab" | "accounting_approvals_payments_tab"
   | "accounting_coa_all_tab" | "accounting_coa_balance_sheet_tab" | "accounting_coa_income_statement_tab"
   | "accounting_customer_ledger_overview_tab" | "accounting_customer_ledger_projects_tab"
   | "accounting_customer_ledger_billings_tab" | "accounting_customer_ledger_collections_tab"
   | "accounting_customer_ledger_expenses_tab"
-  // Accounting sub-modules
-  | "acct_catalog" | "acct_statements" | "acct_journal" | "acct_dashboard" | "acct_transactions"
   | "accounting_catalog_items_tab" | "accounting_catalog_matrix_tab"
   | "accounting_catalog_all_tab" | "accounting_catalog_billing_tab" | "accounting_catalog_expense_tab"
   | "accounting_financial_statements_income_statement_tab"
@@ -71,10 +68,6 @@ export type ModuleId =
   | "accounting_journal_all_sources_tab" | "accounting_journal_evoucher_tab"
   | "accounting_journal_invoice_tab" | "accounting_journal_collection_tab"
   | "accounting_journal_manual_tab"
-  | "accounting_breakdown_service_tab" | "accounting_breakdown_customer_tab"
-  | "accounting_breakdown_category_tab"
-  | "accounting_transactions_for_review_tab" | "accounting_transactions_categorized_tab"
-  | "accounting_transactions_excluded_tab"
   // ─── HR ──────────────────────────────────────────────────────────────────────
   | "hr"
   // ─── Executive / Admin ────────────────────────────────────────────────────────
@@ -147,6 +140,10 @@ export const PERM_MODULES: PermModule[] = [
   { id: "bd_customers_teams_tab",       label: "↳ Teams",       group: BD, dept: BD, applicableActions: A.tabInfo },
   { id: "bd_contacts_teams_tab",        label: "↳ Teams",       group: BD, dept: BD, applicableActions: A.tabInfo },
 
+  { id: "bd_inquiries", label: "Inquiries", group: BD, dept: BD, applicableActions: A.noApprove },
+  { id: "bd_projects",  label: "Projects",  group: BD, dept: BD, applicableActions: A.viewOnly },
+  { id: "bd_contracts", label: "Contracts", group: BD, dept: BD, applicableActions: A.viewOnly },
+
   { id: "bd_tasks",      label: "Tasks",      group: BD, dept: BD, applicableActions: A.listOnly },
   { id: "bd_activities", label: "Activities", group: BD, dept: BD, applicableActions: A.logStyle },
 
@@ -155,9 +152,14 @@ export const PERM_MODULES: PermModule[] = [
   { id: "bd_budget_requests_my_requests_tab", label: "↳ My Requests", group: BD, dept: BD, applicableActions: A.viewOnly },
 
   // ─── Pricing ──────────────────────────────────────────────────────────────────
+  { id: "pricing_contacts",  label: "Contacts",  group: PRC, dept: PRC, applicableActions: A.viewOnly },
+  { id: "pricing_customers", label: "Customers", group: PRC, dept: PRC, applicableActions: A.viewOnly },
+
   { id: "pricing_quotations", label: "Quotations", group: PRC, dept: PRC, applicableActions: A.all },
   { id: "pricing_quotations_details_tab",  label: "↳ Details",  group: PRC, dept: PRC, applicableActions: A.viewOnly },
   { id: "pricing_quotations_comments_tab", label: "↳ Comments", group: PRC, dept: PRC, applicableActions: A.viewOnly },
+
+  { id: "pricing_projects", label: "Projects", group: PRC, dept: PRC, applicableActions: A.viewOnly },
 
   { id: "pricing_contracts", label: "Contracts", group: PRC, dept: PRC, applicableActions: A.all },
   { id: "pricing_contracts_all_tab",      label: "↳ All",      group: PRC, dept: PRC, applicableActions: A.viewOnly },
@@ -174,7 +176,7 @@ export const PERM_MODULES: PermModule[] = [
   { id: "pricing_contracts_comments_tab",           label: "↳ Comments",           group: PRC, dept: PRC, applicableActions: A.viewOnly },
   { id: "pricing_contracts_activity_tab",           label: "↳ Activity",           group: PRC, dept: PRC, applicableActions: A.viewOnly },
 
-  { id: "pricing_network_partners", label: "Network Partners", group: PRC, dept: PRC, applicableActions: A.viewOnly },
+  { id: "pricing_network_partners", label: "Vendor", group: PRC, dept: PRC, applicableActions: A.viewOnly },
   { id: "pricing_network_partners_international_tab", label: "↳ International", group: PRC, dept: PRC, applicableActions: A.viewOnly },
   { id: "pricing_network_partners_co_loader_tab",     label: "↳ Co-Loader",     group: PRC, dept: PRC, applicableActions: A.viewOnly },
   { id: "pricing_network_partners_all_in_tab",        label: "↳ All-In",        group: PRC, dept: PRC, applicableActions: A.viewOnly },
@@ -239,62 +241,19 @@ export const PERM_MODULES: PermModule[] = [
   { id: "ops_invoices_legal_tab",    label: "↳ Builder · Legal",    group: OPS, dept: OPS, applicableActions: A.viewOnly },
   { id: "ops_invoices_settings_tab", label: "↳ Builder · Settings", group: OPS, dept: OPS, applicableActions: A.viewOnly },
 
-  // ─── Accounting — core data modules ───────────────────────────────────────────
-  { id: "acct_billings",    label: "Billings",    group: ACT, dept: ACT, applicableActions: A.all },
-  { id: "acct_collections", label: "Collections", group: ACT, dept: ACT, applicableActions: A.all },
-  { id: "acct_expenses",    label: "Expenses",    group: ACT, dept: ACT, applicableActions: A.all },
-  { id: "acct_reports",     label: "Reports",     group: ACT, dept: ACT, applicableActions: A.viewExport },
+  // ─── Accounting — sidebar-mapped modules (top-level, in sidebar order) ───────
+  { id: "acct_financials", label: "Finance Overview", group: ACT, dept: ACT, applicableActions: A.viewExport },
+  { id: "accounting_financials_dashboard_tab",   label: "↳ Dashboard",   group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "accounting_financials_billings_tab",    label: "↳ Billings",    group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "accounting_financials_invoices_tab",    label: "↳ Invoices",    group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "accounting_financials_collections_tab", label: "↳ Collections", group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "accounting_financials_expenses_tab",    label: "↳ Expenses",    group: ACT, dept: ACT, applicableActions: A.viewOnly },
 
   { id: "acct_evouchers", label: "E-Vouchers", group: ACT, dept: ACT, applicableActions: A.all },
   { id: "accounting_evouchers_pending_disburse_tab",    label: "↳ Pending Disbursement", group: ACT, dept: ACT, applicableActions: A.viewOnly },
   { id: "accounting_evouchers_waiting_on_rep_tab",      label: "↳ Waiting on Rep",       group: ACT, dept: ACT, applicableActions: A.viewOnly },
   { id: "accounting_evouchers_pending_verification_tab",label: "↳ Pending Verification", group: ACT, dept: ACT, applicableActions: A.viewOnly },
   { id: "accounting_evouchers_archive_tab",             label: "↳ Archive",              group: ACT, dept: ACT, applicableActions: A.viewOnly },
-
-  // Accounting — shell navigation (parent-level entries controlling which section is visible)
-  { id: "accounting_entries_module_tab",       label: "Entries",        group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_financials_dashboard_tab", label: "↳ Financials · Dashboard",   group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_financials_billings_tab",  label: "↳ Financials · Billings",    group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_financials_invoices_tab",  label: "↳ Financials · Invoices",    group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_financials_collections_tab",label: "↳ Financials · Collections",group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_financials_expenses_tab",  label: "↳ Financials · Expenses",    group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_bookings_forwarding_tab",      label: "↳ Bookings · Forwarding",       group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_bookings_brokerage_tab",       label: "↳ Bookings · Brokerage",        group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_bookings_trucking_tab",        label: "↳ Bookings · Trucking",         group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_bookings_marine_insurance_tab",label: "↳ Bookings · Marine Insurance", group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_bookings_others_tab",          label: "↳ Bookings · Others",           group: ACT, dept: ACT, applicableActions: A.viewOnly },
-
-  { id: "accounting_approvals_module_tab",    label: "Approvals",      group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_approvals_expenses_tab",  label: "↳ Expenses", group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_approvals_payments_tab",  label: "↳ Payments", group: ACT, dept: ACT, applicableActions: A.viewOnly },
-
-  { id: "accounting_accounts_module_tab",     label: "Accounts",       group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_coa_all_tab",              label: "↳ All",              group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_coa_balance_sheet_tab",    label: "↳ Balance Sheet",    group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_coa_income_statement_tab", label: "↳ Income Statement", group: ACT, dept: ACT, applicableActions: A.viewOnly },
-
-  { id: "accounting_clients_module_tab",      label: "Clients Ledger", group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_customer_ledger_overview_tab",    label: "↳ Overview",    group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_customer_ledger_projects_tab",    label: "↳ Projects",    group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_customer_ledger_billings_tab",    label: "↳ Billings",    group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_customer_ledger_collections_tab", label: "↳ Collections", group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_customer_ledger_expenses_tab",    label: "↳ Expenses",    group: ACT, dept: ACT, applicableActions: A.viewOnly },
-
-  { id: "accounting_categories_module_tab",    label: "Categories",     group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_import_export_module_tab", label: "Import / Export",group: ACT, dept: ACT, applicableActions: A.viewOnly },
-
-  // Accounting — sub-module views
-  { id: "acct_catalog", label: "Catalog Management", group: ACT, dept: ACT, applicableActions: A.listOnly },
-  { id: "accounting_catalog_items_tab",   label: "↳ Items",   group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_catalog_matrix_tab",  label: "↳ Matrix",  group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_catalog_all_tab",     label: "↳ All",     group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_catalog_billing_tab", label: "↳ Billing", group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_catalog_expense_tab", label: "↳ Expense", group: ACT, dept: ACT, applicableActions: A.viewOnly },
-
-  { id: "acct_statements", label: "Financial Statements", group: ACT, dept: ACT, applicableActions: A.viewExport },
-  { id: "accounting_financial_statements_income_statement_tab", label: "↳ Income Statement", group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_financial_statements_balance_sheet_tab",    label: "↳ Balance Sheet",    group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_financial_statements_cash_flow_tab",        label: "↳ Cash Flow",        group: ACT, dept: ACT, applicableActions: A.viewOnly },
 
   { id: "acct_journal", label: "General Journal", group: ACT, dept: ACT, applicableActions: A.viewExport },
   { id: "accounting_journal_all_sources_tab", label: "↳ All Sources", group: ACT, dept: ACT, applicableActions: A.viewOnly },
@@ -303,15 +262,42 @@ export const PERM_MODULES: PermModule[] = [
   { id: "accounting_journal_collection_tab",  label: "↳ Collection",  group: ACT, dept: ACT, applicableActions: A.viewOnly },
   { id: "accounting_journal_manual_tab",      label: "↳ Manual",      group: ACT, dept: ACT, applicableActions: A.viewOnly },
 
-  { id: "acct_dashboard", label: "Dashboard", group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_breakdown_service_tab",  label: "↳ By Service",  group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_breakdown_customer_tab", label: "↳ By Customer", group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_breakdown_category_tab", label: "↳ By Category", group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "acct_coa", label: "Chart of Accounts", group: ACT, dept: ACT, applicableActions: A.listOnly },
+  { id: "accounting_coa_all_tab",              label: "↳ All",              group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "accounting_coa_balance_sheet_tab",    label: "↳ Balance Sheet",    group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "accounting_coa_income_statement_tab", label: "↳ Income Statement", group: ACT, dept: ACT, applicableActions: A.viewOnly },
 
-  { id: "acct_transactions", label: "Transactions", group: ACT, dept: ACT, applicableActions: A.listOnly },
-  { id: "accounting_transactions_for_review_tab",  label: "↳ For Review",  group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_transactions_categorized_tab", label: "↳ Categorized", group: ACT, dept: ACT, applicableActions: A.viewOnly },
-  { id: "accounting_transactions_excluded_tab",    label: "↳ Excluded",    group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "acct_projects",  label: "Projects",  group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "acct_contracts", label: "Contracts", group: ACT, dept: ACT, applicableActions: A.viewOnly },
+
+  { id: "acct_bookings", label: "Bookings", group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "accounting_bookings_forwarding_tab",      label: "↳ Forwarding",       group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "accounting_bookings_brokerage_tab",       label: "↳ Brokerage",        group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "accounting_bookings_trucking_tab",        label: "↳ Trucking",         group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "accounting_bookings_marine_insurance_tab",label: "↳ Marine Insurance", group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "accounting_bookings_others_tab",          label: "↳ Others",           group: ACT, dept: ACT, applicableActions: A.viewOnly },
+
+  { id: "acct_customers", label: "Customers", group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "accounting_customer_ledger_overview_tab",    label: "↳ Overview",    group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "accounting_customer_ledger_projects_tab",    label: "↳ Projects",    group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "accounting_customer_ledger_billings_tab",    label: "↳ Billings",    group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "accounting_customer_ledger_collections_tab", label: "↳ Collections", group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "accounting_customer_ledger_expenses_tab",    label: "↳ Expenses",    group: ACT, dept: ACT, applicableActions: A.viewOnly },
+
+  { id: "acct_catalog", label: "Catalog", group: ACT, dept: ACT, applicableActions: A.listOnly },
+  { id: "accounting_catalog_items_tab",   label: "↳ Items",   group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "accounting_catalog_matrix_tab",  label: "↳ Matrix",  group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "accounting_catalog_all_tab",     label: "↳ All",     group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "accounting_catalog_billing_tab", label: "↳ Billing", group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "accounting_catalog_expense_tab", label: "↳ Expense", group: ACT, dept: ACT, applicableActions: A.viewOnly },
+
+  { id: "acct_reports", label: "Reports", group: ACT, dept: ACT, applicableActions: A.viewExport },
+
+  { id: "acct_statements", label: "Financial Statements", group: ACT, dept: ACT, applicableActions: A.viewExport },
+  { id: "accounting_financial_statements_income_statement_tab", label: "↳ Income Statement", group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "accounting_financial_statements_balance_sheet_tab",    label: "↳ Balance Sheet",    group: ACT, dept: ACT, applicableActions: A.viewOnly },
+  { id: "accounting_financial_statements_cash_flow_tab",        label: "↳ Cash Flow",        group: ACT, dept: ACT, applicableActions: A.viewOnly },
+
 
   // ─── HR ──────────────────────────────────────────────────────────────────────
   { id: "hr", label: "HR", group: "HR", dept: "HR", applicableActions: A.listOnly },

@@ -11,14 +11,13 @@
  * @see /docs/blueprints/CONTRACT_FLOWCHART_INTEGRATION_BLUEPRINT.md - Phase 1, Task 1.3
  */
 
-import { useState, useEffect, useRef } from "react";
-import { FileText, CheckCircle, Link2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { AlertTriangle, Link2 } from "lucide-react";
 import type { ContractSummary } from "../../../types/pricing";
-import { fetchActiveContractsForCustomer } from "../../../utils/contractLookup";
-
-// ============================================
-// TYPES
-// ============================================
+import {
+  fetchActiveContractsForCustomer,
+  filterContractsForService,
+} from "../../../utils/contractLookup";
 
 interface ContractDetectionBannerProps {
   /** Customer name to check against -- triggers detection when changed */
@@ -27,26 +26,38 @@ interface ContractDetectionBannerProps {
   serviceType?: string;
   /** Callback when a contract is detected/cleared -- parent should store the contract_id */
   onContractDetected: (contractId: string | null) => void;
+  /** Callback fired with the full contract summary so the parent can autofill display fields. */
+  onContractInfo?: (contract: ContractSummary | null) => void;
+  /** Callback fired with the full list of selectable contracts. When provided and >1 contract
+   *  is found, the banner suppresses its built-in bullet picker so the parent can render its own. */
+  onContractsList?: (contracts: ContractSummary[]) => void;
+  /** Externally controlled selected contract id. When set, overrides the banner's internal selection. */
+  selectedContractId?: string | null;
+  /** When false, detection is disabled and no link is established. Defaults to true. */
+  enabled?: boolean;
+  /**
+   * When true, render an inline warning if no active contract is found for the
+   * customer (e.g. when "Standard" brokerage is selected but the customer has
+   * no active brokerage contract).
+   */
+  requireContract?: boolean;
+  /** Optional label for the missing-contract warning (defaults to serviceType). */
+  requireContractLabel?: string;
+  /** When true, only contracts covering serviceType are selectable. */
+  strictServiceMatch?: boolean;
 }
-
-// ============================================
-// HELPERS
-// ============================================
-
-const formatDate = (dateStr?: string) => {
-  if (!dateStr) return "--";
-  const d = new Date(dateStr);
-  return d.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
-};
-
-// ============================================
-// COMPONENT
-// ============================================
 
 export function ContractDetectionBanner({
   customerName,
   serviceType,
   onContractDetected,
+  onContractInfo,
+  onContractsList,
+  selectedContractId: externalSelectedId,
+  enabled = true,
+  requireContract = false,
+  requireContractLabel,
+  strictServiceMatch = false,
 }: ContractDetectionBannerProps) {
   const [contracts, setContracts] = useState<ContractSummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -54,81 +65,131 @@ export function ContractDetectionBanner({
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastCheckedName = useRef("");
 
-  // Debounced contract detection when customerName changes
   useEffect(() => {
-    // Clear if customer name is too short
+    if (!enabled) {
+      setContracts([]);
+      setSelectedContractId(null);
+      onContractDetected(null);
+      onContractInfo?.(null);
+      onContractsList?.([]);
+      lastCheckedName.current = "";
+    }
+  }, [enabled]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!enabled) return;
+
     if (!customerName || customerName.trim().length < 3) {
       setContracts([]);
       setSelectedContractId(null);
       onContractDetected(null);
+      onContractInfo?.(null);
+      onContractsList?.([]);
       lastCheckedName.current = "";
       return;
     }
 
     const trimmed = customerName.trim();
-
-    // Skip if we already checked this exact name
     if (trimmed === lastCheckedName.current) return;
 
-    // Debounce: wait 600ms after user stops typing
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(() => {
-      checkForContracts(trimmed);
+      void checkForContracts(trimmed);
     }, 600);
 
     return () => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
     };
-  }, [customerName]);
+  }, [customerName, enabled, serviceType, strictServiceMatch]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const checkForContracts = async (name: string) => {
+  async function checkForContracts(name: string) {
     setIsLoading(true);
     lastCheckedName.current = name;
 
     try {
       const found = await fetchActiveContractsForCustomer(name);
+      const selectableContracts = strictServiceMatch
+        ? filterContractsForService(found, serviceType)
+        : found;
 
-      setContracts(found);
+      setContracts(selectableContracts);
+      onContractsList?.(selectableContracts);
 
-      if (found.length > 0) {
-        const matching = serviceType
-          ? found.find((c) => c.services.includes(serviceType))
-          : null;
-        const autoSelected = matching || found[0];
+      if (selectableContracts.length > 0) {
+        const autoSelected = selectableContracts[0];
         setSelectedContractId(autoSelected.id);
         onContractDetected(autoSelected.id);
+        onContractInfo?.(autoSelected);
       } else {
         setSelectedContractId(null);
         onContractDetected(null);
+        onContractInfo?.(null);
       }
     } catch (err) {
       console.error("Contract detection error:", err);
     } finally {
       setIsLoading(false);
     }
-  };
+  }
 
-  // Nothing to render if no contracts detected and not loading
-  if (!isLoading && contracts.length === 0) return null;
+  // Sync internal selection to externally-controlled id (parent takeover).
+  useEffect(() => {
+    if (externalSelectedId !== undefined && externalSelectedId !== null) {
+      if (externalSelectedId !== selectedContractId) {
+        setSelectedContractId(externalSelectedId);
+      }
+    }
+  }, [externalSelectedId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Loading state — subtle inline shimmer
+  if (!enabled) return null;
+
+  if (!isLoading && contracts.length === 0) {
+    if (requireContract && (customerName?.trim().length ?? 0) >= 3) {
+      const label = requireContractLabel ?? serviceType ?? "this service";
+      return (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: "6px",
+            marginTop: "6px",
+            paddingLeft: "2px",
+          }}
+        >
+          <AlertTriangle size={12} style={{ color: "#B45309", flexShrink: 0, marginTop: "2px" }} />
+          <span style={{ fontSize: "12px", color: "var(--theme-text-muted)", lineHeight: 1.4 }}>
+            No active contract found for{" "}
+            <span style={{ fontWeight: 600, color: "var(--theme-text-primary)" }}>{customerName}</span>
+            {" "}covering {label}. Standard bookings normally link to a contract - confirm the
+            customer has one or switch to All-Inclusive / Non-Regular.
+          </span>
+        </div>
+      );
+    }
+    return null;
+  }
+
   if (isLoading) {
     return (
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "6px",
-        marginTop: "6px",
-        paddingLeft: "2px",
-      }}>
-        <div style={{
-          width: "12px",
-          height: "12px",
-          border: "1.5px solid var(--theme-border-default)",
-          borderTopColor: "var(--theme-action-primary-bg)",
-          borderRadius: "50%",
-          animation: "spin 0.8s linear infinite",
-        }} />
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+          marginTop: "6px",
+          paddingLeft: "2px",
+        }}
+      >
+        <div
+          style={{
+            width: "12px",
+            height: "12px",
+            border: "1.5px solid var(--theme-border-default)",
+            borderTopColor: "var(--theme-action-primary-bg)",
+            borderRadius: "50%",
+            animation: "spin 0.8s linear infinite",
+          }}
+        />
         <span style={{ fontSize: "12px", color: "var(--theme-text-muted)" }}>
           Checking contracts...
         </span>
@@ -137,19 +198,25 @@ export function ContractDetectionBanner({
     );
   }
 
-  // Contract detected — subtle single-line inline hint
-  const selected = contracts.find(c => c.id === selectedContractId) || contracts[0];
+  const selected = contracts.find((contract) => contract.id === selectedContractId) || contracts[0];
   if (!selected) return null;
 
-  // For multiple contracts, show a subtle selector
+  // When parent is handling multi-contract selection (via onContractsList), don't render
+  // our own bullet picker — just stay quiet so the parent's dropdown is the single source of truth.
+  if (contracts.length > 1 && onContractsList) {
+    return null;
+  }
+
   if (contracts.length > 1) {
     return (
       <div style={{ marginTop: "6px", paddingLeft: "2px" }}>
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "5px",
-        }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "5px",
+          }}
+        >
           <Link2 size={12} style={{ color: "var(--theme-action-primary-bg)", flexShrink: 0 }} />
           <span style={{ fontSize: "12px", color: "var(--theme-text-muted)" }}>
             Linked to{" "}
@@ -157,21 +224,22 @@ export function ContractDetectionBanner({
               {selected.quote_number}
             </span>
             {selected.quotation_name && (
-              <span style={{ color: "var(--theme-text-muted)" }}> — {selected.quotation_name}</span>
+              <span style={{ color: "var(--theme-text-muted)" }}> - {selected.quotation_name}</span>
             )}
           </span>
-          <span style={{
-            fontSize: "10px",
-            color: "var(--theme-text-muted)",
-            marginLeft: "4px",
-            cursor: "default",
-          }}>
+          <span
+            style={{
+              fontSize: "10px",
+              color: "var(--theme-text-muted)",
+              marginLeft: "4px",
+              cursor: "default",
+            }}
+          >
             ({contracts.length} contracts)
           </span>
         </div>
-        {/* Expandable list for multiple contracts */}
         <div style={{ marginTop: "4px", paddingLeft: "17px" }}>
-          {contracts.map(contract => {
+          {contracts.map((contract) => {
             const isActive = contract.id === selectedContractId;
             return (
               <button
@@ -180,6 +248,7 @@ export function ContractDetectionBanner({
                 onClick={() => {
                   setSelectedContractId(contract.id);
                   onContractDetected(contract.id);
+                  onContractInfo?.(contract);
                 }}
                 style={{
                   display: "flex",
@@ -196,17 +265,19 @@ export function ContractDetectionBanner({
                   textAlign: "left",
                 }}
               >
-                <div style={{
-                  width: "6px",
-                  height: "6px",
-                  borderRadius: "50%",
-                  backgroundColor: isActive ? "var(--theme-action-primary-bg)" : "var(--neuron-ui-muted)",
-                  flexShrink: 0,
-                }} />
+                <div
+                  style={{
+                    width: "6px",
+                    height: "6px",
+                    borderRadius: "50%",
+                    backgroundColor: isActive ? "var(--theme-action-primary-bg)" : "var(--neuron-ui-muted)",
+                    flexShrink: 0,
+                  }}
+                />
                 {contract.quote_number}
                 {contract.quotation_name && (
                   <span style={{ fontWeight: 400, color: "var(--theme-text-muted)" }}>
-                    — {contract.quotation_name}
+                    - {contract.quotation_name}
                   </span>
                 )}
               </button>
@@ -217,15 +288,16 @@ export function ContractDetectionBanner({
     );
   }
 
-  // Single contract — one-line hint
   return (
-    <div style={{
-      display: "flex",
-      alignItems: "center",
-      gap: "5px",
-      marginTop: "6px",
-      paddingLeft: "2px",
-    }}>
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "5px",
+        marginTop: "6px",
+        paddingLeft: "2px",
+      }}
+    >
       <Link2 size={12} style={{ color: "var(--theme-action-primary-bg)", flexShrink: 0 }} />
       <span style={{ fontSize: "12px", color: "var(--theme-text-muted)" }}>
         Linked to{" "}
@@ -233,7 +305,7 @@ export function ContractDetectionBanner({
           {selected.quote_number}
         </span>
         {selected.quotation_name && (
-          <span style={{ color: "var(--theme-text-muted)" }}> — {selected.quotation_name}</span>
+          <span style={{ color: "var(--theme-text-muted)" }}> - {selected.quotation_name}</span>
         )}
       </span>
     </div>

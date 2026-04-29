@@ -15,10 +15,11 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { usePermission } from "../../context/PermissionProvider";
 import { createPortal } from "react-dom";
 import {
-  Search, Plus, Pencil, X, Check, AlertTriangle,
+  Search, Plus, Pencil, X, Check,
   Tag, Grid3X3, ChevronDown, ChevronRight, MoreHorizontal,
   FolderOpen, ArrowRightLeft,
 } from "lucide-react";
+import { NeuronModal } from "../ui/NeuronModal";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../../lib/queryKeys";
 import { supabase } from "../../utils/supabase/client";
@@ -162,12 +163,11 @@ function ItemsTab() {
     return () => cancelAnimationFrame(raf);
   }, [updateScrollFade]);
 
-  // ── Delete side panel state ──
+  // ── Delete confirmation state ──
   const [deletePanel, setDeletePanel] = useState<{
     item: CatalogItem;
     counts: { billing: number; expenses: number } | null;
     loading: boolean;
-    relinkTarget: string;
   } | null>(null);
 
   // ── Query 1: catalog items with category join ──
@@ -348,7 +348,7 @@ function ItemsTab() {
   };
 
   const openDeletePanel = async (item: CatalogItem) => {
-    setDeletePanel({ item, counts: null, loading: true, relinkTarget: "" });
+    setDeletePanel({ item, counts: null, loading: true });
     try {
       const [{ count: billing }, { count: expenses }] = await Promise.all([
         supabase.from("billing_line_items").select("id", { count: "exact", head: true }).eq("catalog_item_id", item.id),
@@ -362,13 +362,7 @@ function ItemsTab() {
 
   const confirmDelete = async () => {
     if (!deletePanel) return;
-    const { item, relinkTarget } = deletePanel;
-    if (relinkTarget) {
-      await Promise.all([
-        supabase.from("billing_line_items").update({ catalog_item_id: relinkTarget }).eq("catalog_item_id", item.id),
-        supabase.from("evoucher_line_items").update({ catalog_item_id: relinkTarget }).eq("catalog_item_id", item.id),
-      ]);
-    }
+    const { item } = deletePanel;
     const { error } = await supabase.from("catalog_items").delete().eq("id", item.id);
     if (!error) {
       toast.success(`"${item.name}" deleted`);
@@ -399,8 +393,6 @@ function ItemsTab() {
     } else toast.error(error.message || "Error deleting");
   };
 
-  const otherItems = items.filter(i => i.id !== deletePanel?.item.id);
-
   // ── Sub-tab counts ──
   const tabCounts = useMemo(() => {
     const allCatIds = new Set(categoriesWithCount.map((c: any) => c.id));
@@ -418,19 +410,32 @@ function ItemsTab() {
   // ── Render ──
   return (
     <>
-      {/* ── Delete Side Panel ── */}
-      {deletePanel && (
-        <DeleteSidePanel
-          item={deletePanel.item}
-          counts={deletePanel.counts}
-          loading={deletePanel.loading}
-          relinkTarget={deletePanel.relinkTarget}
-          onRelinkChange={(val) => setDeletePanel(prev => prev ? { ...prev, relinkTarget: val } : null)}
-          otherItems={otherItems}
-          onConfirm={confirmDelete}
-          onClose={() => setDeletePanel(null)}
-        />
-      )}
+      {/* ── Delete Confirmation Modal ── */}
+      <NeuronModal
+        isOpen={!!deletePanel}
+        onClose={() => setDeletePanel(null)}
+        title={`Delete "${deletePanel?.item.name ?? ""}"?`}
+        description={
+          deletePanel?.loading
+            ? "Checking references..."
+            : (() => {
+                const c = deletePanel?.counts;
+                const refs = (c?.billing ?? 0) + (c?.expenses ?? 0);
+                if (!c || refs === 0) {
+                  return "No records reference this item. This action cannot be undone.";
+                }
+                const parts: string[] = [];
+                if (c.billing > 0) parts.push(`${c.billing} billing line${c.billing !== 1 ? "s" : ""}`);
+                if (c.expenses > 0) parts.push(`${c.expenses} expense${c.expenses !== 1 ? "s" : ""}`);
+                return `This item is referenced by ${parts.join(" and ")}. Deletion may fail or break those records. This action cannot be undone.`;
+              })()
+        }
+        confirmLabel="Delete Item"
+        onConfirm={confirmDelete}
+        isLoading={deletePanel?.loading}
+        variant="danger"
+      />
+
 
       {/* ── Sub-tabs: All | Billing | Expense ── */}
       <div style={{ display: "flex", alignItems: "center", gap: "4px", marginBottom: "16px", flexShrink: 0 }}>
@@ -1122,124 +1127,6 @@ function CategoryGroupMenu({
   );
 }
 
-// ==================== DELETE SIDE PANEL ====================
-
-function DeleteSidePanel({
-  item, counts, loading, relinkTarget, onRelinkChange, otherItems, onConfirm, onClose,
-}: {
-  item: CatalogItem;
-  counts: { billing: number; expenses: number } | null;
-  loading: boolean;
-  relinkTarget: string;
-  onRelinkChange: (val: string) => void;
-  otherItems: CatalogItem[];
-  onConfirm: () => void;
-  onClose: () => void;
-}) {
-  const hasRefs = counts && (counts.billing > 0 || counts.expenses > 0);
-
-  return createPortal(
-    <>
-      {/* Backdrop */}
-      <div
-        onClick={onClose}
-        style={{
-          position: "fixed", inset: 0, zIndex: 9998,
-          background: "rgba(0,0,0,0.25)",
-        }}
-      />
-      {/* Panel */}
-      <div style={{
-        position: "fixed", top: 0, right: 0, bottom: 0,
-        width: "420px", maxWidth: "90vw",
-        zIndex: 9999,
-        backgroundColor: "var(--theme-bg-surface)",
-        borderLeft: "1px solid var(--theme-border-default)",
-        display: "flex", flexDirection: "column",
-        animation: "slideInPanel 200ms ease-out",
-      }}>
-        {/* Panel Header */}
-        <div style={{
-          padding: "20px 24px",
-          borderBottom: "1px solid var(--theme-border-default)",
-          display: "flex", alignItems: "center", gap: "12px",
-        }}>
-          <AlertTriangle size={20} style={{ color: "var(--theme-status-danger-fg)", flexShrink: 0 }} />
-          <div style={{ flex: 1 }}>
-            <h2 style={{ fontSize: "15px", fontWeight: 600, color: "var(--theme-text-primary)", margin: 0 }}>
-              Delete "{item.name}"
-            </h2>
-          </div>
-          <button onClick={onClose} style={{ ...iconBtnStyle, color: "var(--theme-text-muted)" }}>
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Panel Body */}
-        <div style={{ flex: 1, padding: "24px", overflowY: "auto" }}>
-          {loading ? (
-            <p style={{ fontSize: "13px", color: "var(--theme-text-muted)" }}>Checking references...</p>
-          ) : hasRefs ? (
-            <div>
-              <p style={{ fontSize: "13px", color: "var(--theme-text-muted)", marginBottom: "16px" }}>
-                This item is referenced by:
-              </p>
-              <div style={{ display: "flex", gap: "8px", marginBottom: "24px" }}>
-                {counts!.billing > 0 && (
-                  <span style={impactChipStyle}>
-                    {counts!.billing} billing line{counts!.billing !== 1 ? "s" : ""}
-                  </span>
-                )}
-                {counts!.expenses > 0 && (
-                  <span style={impactChipStyle}>
-                    {counts!.expenses} expense{counts!.expenses !== 1 ? "s" : ""}
-                  </span>
-                )}
-              </div>
-              <label style={{ ...labelStyle, marginBottom: "6px" }}>
-                Re-link existing records to another item (optional)
-              </label>
-              <select
-                value={relinkTarget}
-                onChange={e => onRelinkChange(e.target.value)}
-                style={{ ...inputStyle, fontSize: "13px" }}
-              >
-                <option value="">— Keep as-is —</option>
-                {otherItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-              </select>
-            </div>
-          ) : (
-            <p style={{ fontSize: "13px", color: "var(--theme-text-muted)" }}>
-              No records reference this item. Safe to delete.
-            </p>
-          )}
-        </div>
-
-        {/* Panel Footer */}
-        <div style={{
-          padding: "16px 24px",
-          borderTop: "1px solid var(--theme-border-default)",
-          display: "flex", justifyContent: "flex-end", gap: "8px",
-        }}>
-          <button onClick={onClose} style={cancelBtnStyle}>Cancel</button>
-          <button
-            onClick={onConfirm}
-            disabled={loading}
-            style={{
-              ...saveBtnStyle,
-              backgroundColor: "var(--theme-status-danger-fg)",
-              opacity: loading ? 0.5 : 1,
-            }}
-          >
-            Delete
-          </button>
-        </div>
-      </div>
-    </>,
-    document.body
-  );
-}
-
 // ==================== CATEGORY FILTER POPOVER ====================
 
 function CategoryFilterPopover({
@@ -1567,12 +1454,3 @@ const inlineFormStyle: React.CSSProperties = {
   flexShrink: 0,
 };
 
-const impactChipStyle: React.CSSProperties = {
-  padding: "4px 12px",
-  borderRadius: "8px",
-  fontSize: "13px",
-  fontWeight: 500,
-  backgroundColor: "var(--theme-status-warning-bg)",
-  color: "var(--theme-status-warning-fg)",
-  border: "1px solid var(--theme-status-warning-border)",
-};

@@ -114,7 +114,7 @@ async function fetchCatalogItems(forceRefresh = false): Promise<CatalogItem[]> {
 async function doFetchCatalogItems(): Promise<CatalogItem[]> {
   try {
     const [itemsRes, catsRes] = await Promise.all([
-      supabase.from('catalog_items').select('id, name, category_id, created_at, updated_at').eq('is_active', true).order('name'),
+      supabase.from('catalog_items').select('id, name, category_id, created_at, updated_at').order('name'),
       supabase.from('catalog_categories').select('id, side'),
     ]);
 

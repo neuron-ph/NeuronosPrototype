@@ -70,7 +70,15 @@ export function ContractsModule({ currentUser, onCreateTicket, initialContract, 
 
       if (error) throw new Error(error.message);
       console.log(`ContractsModule: ${(data ?? []).length} activated contracts found`);
-      return data ?? [];
+      // Mirror the hydration done by Pricing/BD loaders so downstream components
+      // (ContractsList, QuotationBuilderV3 in edit mode) can rely on the canonical
+      // `contract_validity_*` fields rather than the raw DB columns.
+      return (data ?? []).map((row: any) => {
+        const m: any = { ...(row?.details ?? {}), ...(row?.pricing ?? {}), ...row };
+        if (!m.contract_validity_start && m.contract_start_date) m.contract_validity_start = m.contract_start_date;
+        if (!m.contract_validity_end && m.contract_end_date) m.contract_validity_end = m.contract_end_date;
+        return m;
+      });
     },
     // Inherits 5-minute staleTime from global QueryClient config
   });
@@ -124,7 +132,11 @@ export function ContractsModule({ currentUser, onCreateTicket, initialContract, 
       try {
         const { data, error } = await supabase.from('quotations').select('*').eq('id', selectedContract.id).single();
         if (!error && data) {
-          setSelectedContract(data);
+          const row: any = data;
+          const m: any = { ...(row?.details ?? {}), ...(row?.pricing ?? {}), ...row };
+          if (!m.contract_validity_start && m.contract_start_date) m.contract_validity_start = m.contract_start_date;
+          if (!m.contract_validity_end && m.contract_end_date) m.contract_validity_end = m.contract_end_date;
+          setSelectedContract(m);
         } else {
           console.error('Failed to fetch contract:', error?.message);
         }

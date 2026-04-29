@@ -7,7 +7,6 @@ import { locationAdapter } from './adapters/locationAdapter';
 import { countryAdapter } from './adapters/countryAdapter';
 import { dispatchPeopleAdapter } from './adapters/dispatchPeopleAdapter';
 import { vehicleAdapter } from './adapters/vehicleAdapter';
-import { serviceCatalogAdapter, subServiceCatalogAdapter } from './adapters/serviceCatalogAdapter';
 import { profileRegistry } from '../../config/profiles/profileRegistry';
 
 /**
@@ -38,10 +37,6 @@ export function getAdapterForType(profileType: string): {
       return { adapter: dispatchPeopleAdapter, providerTag: profileType };
     case 'vehicles':
       return { adapter: vehicleAdapter };
-    case 'booking_service_catalog':
-      return { adapter: serviceCatalogAdapter };
-    case 'booking_subservice_catalog':
-      return { adapter: subServiceCatalogAdapter };
     default:
       return null;
   }

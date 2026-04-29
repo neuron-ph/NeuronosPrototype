@@ -50,18 +50,45 @@ const prefetchInbox      = () => void import("./InboxPage");
 type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" |"pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" |"ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" |"operations" | "acct-transactions" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-journal" | "acct-coa" | "acct-reports" | "acct-statements" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "calendar" | "inbox" | "my-evouchers" | "ticket-queue" | "settings" | "admin-users" | "admin-profiling" | "admin" | "ticket-testing" | "activity-log" | "design-system";
 
 const sidebarPermissionMap: Partial<Record<Page, ModuleId>> = {
+  // Business Development
   "bd-contacts": "bd_contacts",
   "bd-customers": "bd_customers",
+  "bd-inquiries": "bd_inquiries",
+  "bd-projects": "bd_projects",
+  "bd-contracts": "bd_contracts",
   "bd-tasks": "bd_tasks",
   "bd-activities": "bd_activities",
   "bd-budget-requests": "bd_budget_requests",
+  // Pricing
+  "pricing-contacts": "pricing_contacts",
+  "pricing-customers": "pricing_customers",
   "pricing-quotations": "pricing_quotations",
+  "pricing-projects": "pricing_projects",
   "pricing-contracts": "pricing_contracts",
+  "pricing-vendors": "pricing_network_partners",
+  // Operations
+  "ops-forwarding": "ops_forwarding",
+  "ops-brokerage": "ops_brokerage",
+  "ops-trucking": "ops_trucking",
+  "ops-marine-insurance": "ops_marine_insurance",
+  "ops-others": "ops_others",
+  // Accounting
+  "acct-financials": "acct_financials",
   "acct-evouchers": "acct_evouchers",
-  "acct-billings": "acct_billings",
-  "acct-collections": "acct_collections",
-  "acct-expenses": "acct_expenses",
+  "acct-journal": "acct_journal",
+  "acct-coa": "acct_coa",
+  "acct-projects": "acct_projects",
+  "acct-contracts": "acct_contracts",
+  "acct-bookings": "acct_bookings",
+  "acct-customers": "acct_customers",
+  "acct-catalog": "acct_catalog",
   "acct-reports": "acct_reports",
+  "acct-statements": "acct_statements",
+  // Legacy non-sidebar routes — kept for direct URL access; mapped to financials sub-tabs
+  "acct-billings": "accounting_financials_billings_tab",
+  "acct-collections": "accounting_financials_collections_tab",
+  "acct-expenses": "accounting_financials_expenses_tab",
+  // HR / Executive
   "hr": "hr",
   "activity-log": "exec_activity_log",
   "admin-users": "exec_users",

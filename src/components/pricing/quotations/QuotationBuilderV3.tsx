@@ -61,7 +61,6 @@ import { queryKeys } from "../../../lib/queryKeys";
 import { toast } from "sonner@2.0.3";
 import { X, Save, FileText, Handshake } from "lucide-react";
 import { GeneralDetailsSection } from "./GeneralDetailsSection";
-import { ContractGeneralDetailsSection } from "./ContractGeneralDetailsSection";
 import { BrokerageServiceForm } from "./BrokerageServiceForm";
 import { ForwardingServiceForm } from "./ForwardingServiceForm";
 import { TruckingServiceForm } from "./TruckingServiceForm";
@@ -84,6 +83,7 @@ import type { TruckingLineItem } from "../../../types/pricing";
 import { QuotationRateBreakdownSheet } from "./QuotationRateBreakdownSheet";
 import type { BookingQuantities } from "../../../utils/contractRateEngine";
 import { ContractRateToolbar } from "./ContractRateToolbar";
+import { RichTextEditor, RichTextDisplay } from "../../common/RichTextEditor";
 import { normalizeQuotationStatus } from "../../../utils/quotationStatus";
 import { calculateSellingItemFromBuyingPrice } from "../../../utils/pricing/quotationSignedPricing";
 import { validateQuotation } from "../../../utils/quotation/quotationValidation";
@@ -296,14 +296,33 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
 
   // ✨ CONTRACT: Quotation type and contract-specific state
   const [quotationType, setQuotationType] = useState<QuotationType>(initialData?.quotation_type || initialQuotationType || "project");
-  const [contractValidityStart, setContractValidityStart] = useState(initialData?.contract_validity_start || "");
-  const [contractValidityEnd, setContractValidityEnd] = useState(initialData?.contract_validity_end || "");
+  // Hydrate from either the canonical `contract_validity_*` fields (set by Pricing/BD
+  // loaders) or the raw DB columns `contract_start_date`/`contract_end_date` (used
+  // when ContractsModule passes the row through `select('*')` without remapping).
+  // Strip any time/timezone suffix so the date-only picker can parse it.
+  const initialValidityStart = (initialData as any)?.contract_validity_start || (initialData as any)?.contract_start_date || "";
+  const initialValidityEnd = (initialData as any)?.contract_validity_end || (initialData as any)?.contract_end_date || "";
+  const toDateOnly = (v: string) => (typeof v === "string" ? v.split(/[T\s]/)[0] : v);
+  const [contractValidityStart, setContractValidityStart] = useState(toDateOnly(initialValidityStart));
+  const [contractValidityEnd, setContractValidityEnd] = useState(toDateOnly(initialValidityEnd));
   const [rateMatrices, setRateMatrices] = useState<ContractRateMatrix[]>(initialData?.rate_matrices || []);
+  // Scope/Terms moved from plain-text-per-line to rich HTML.
+  // Hydrate from existing string[] data: if any item starts with "<", treat as HTML;
+  // otherwise wrap each plain line in a <p> tag for backward compatibility.
+  const hydrateRichText = (arr?: string[]): string => {
+    if (!arr || arr.length === 0) return "";
+    const looksHtml = arr.some((s) => typeof s === "string" && s.trimStart().startsWith("<"));
+    if (looksHtml) return arr.join("");
+    return arr
+      .filter((s) => typeof s === "string" && s.trim())
+      .map((s) => `<p>${s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>`)
+      .join("");
+  };
   const [scopeOfServices, setScopeOfServices] = useState<string>(
-    initialData?.scope_of_services?.join("\n") || ""
+    hydrateRichText(initialData?.scope_of_services)
   );
   const [termsAndConditions, setTermsAndConditions] = useState<string>(
-    initialData?.terms_and_conditions?.join("\n") || ""
+    hydrateRichText(initialData?.terms_and_conditions)
   );
   const [contractGeneralDetails, setContractGeneralDetails] = useState({
     port_of_entry: initialData?.contract_general_details?.port_of_entry || [] as string[],
@@ -2033,8 +2052,9 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
         contract_validity_start: date, // Auto-set to creation date (no longer a separate field)
         contract_validity_end: contractValidityEnd,
         contract_status: (initialData?.contract_status || "Draft") as any,
-        scope_of_services: scopeOfServices.split("\n").filter((s: string) => s.trim()),
-        terms_and_conditions: termsAndConditions.split("\n").filter((s: string) => s.trim()),
+        // Stored as a single-element array of HTML to preserve the existing string[] type.
+        scope_of_services: scopeOfServices.trim() ? [scopeOfServices] : [],
+        terms_and_conditions: termsAndConditions.trim() ? [termsAndConditions] : [],
         rate_matrices: rateMatrices,
         contract_general_details: contractGeneralDetails,
       }),
@@ -2044,13 +2064,13 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
       shipment_freight: "LCL",
       services: selectedServices,
       services_metadata: normalized_metadata, // Save scope metadata with canonical keys
-      incoterm: isContractMode ? "" : (forwardingData.incoterms || ""),
-      carrier: isContractMode ? "" : (forwardingData.carrierAirline || "TBA"),
-      transit_days: isContractMode ? 0 : parseInt(forwardingData.transitTime || "0"),
+      incoterm: forwardingData.incoterms || "",
+      carrier: forwardingData.carrierAirline || "TBA",
+      transit_days: parseInt(forwardingData.transitTime || "0"),
       
-      commodity: isContractMode ? "" : (brokerageData.commodityDescription || forwardingData.commodityDescription || marineInsuranceData.commodityDescription || ""),
-      pol_aol: isContractMode ? "" : (forwardingData.aolPol || marineInsuranceData.aolPol || ""),
-      pod_aod: isContractMode ? "" : (forwardingData.aodPod || marineInsuranceData.aodPod || ""),
+      commodity: brokerageData.commodityDescription || forwardingData.commodityDescription || marineInsuranceData.commodityDescription || "",
+      pol_aol: forwardingData.aolPol || marineInsuranceData.aolPol || truckingData.aolPol || "",
+      pod_aod: brokerageData.pod || forwardingData.aodPod || marineInsuranceData.aodPod || "",
       
       charge_categories: isContractMode ? [] : chargeCategories,
       currency,
@@ -2081,77 +2101,54 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
     onSave(quotation);
   };
 
-  const isFormValid = () => {
-    // CONTRACT: Validate contract-specific fields — service-level validation skipped
-    // (contract mode hides shipment-specific fields so they cannot be required)
+  // Returns a list of human-readable reasons the submit button is blocked.
+  // Empty list = form is valid.
+  const getSubmitBlockers = (): string[] => {
+    const reasons: string[] = [];
+    if (!customerName) reasons.push("Select a customer");
+    if (!contactPersonName) reasons.push("Select a contact person");
+    if (!quotationName) reasons.push(isContractMode ? "Enter a contract name" : "Enter a quotation name");
+    if (selectedServices.length === 0) reasons.push("Select at least one service");
+    if (!date) reasons.push("Set the date created");
+
+    if (isContractMode) {
+      if (!contractValidityEnd) reasons.push("Set the Valid Until date");
+    } else if (builderMode !== "inquiry") {
+      const hasCharges = chargeCategories.length > 0 || sellingPrice.length > 0;
+      if (!hasCharges) reasons.push("Add at least one charge category");
+    }
+
+    // Per-service field validation — skipped entirely in contract mode.
+    // Contracts are rate templates, not shipments: schema-required fields like
+    // commodity, delivery address, container counts, gross weight, etc. don't
+    // apply, and many aren't even rendered in the contract UI. Contract validity
+    // is enforced by the general fields above + the rate-row check below.
+    if (!isContractMode) {
+      const serviceContexts: Array<[string, () => any, Record<string, unknown>]> = [];
+      if (selectedServices.includes("Brokerage")) serviceContexts.push(["Brokerage", () => buildBrokerageContext(brokerageData as Record<string, unknown>), brokerageData as Record<string, unknown>]);
+      if (selectedServices.includes("Forwarding")) serviceContexts.push(["Forwarding", () => buildForwardingContext(forwardingData as Record<string, unknown>), forwardingData as Record<string, unknown>]);
+      if (selectedServices.includes("Trucking")) serviceContexts.push(["Trucking", () => buildTruckingContext(), truckingData as Record<string, unknown>]);
+      if (selectedServices.includes("Marine Insurance")) serviceContexts.push(["Marine Insurance", () => buildMarineInsuranceContext(), marineInsuranceData as Record<string, unknown>]);
+      if (selectedServices.includes("Others")) serviceContexts.push(["Others", () => buildOthersContext(), othersData as Record<string, unknown>]);
+
+      for (const [svc, ctxFn, data] of serviceContexts) {
+        const result = validateQuotation(svc as any, data, ctxFn());
+        if (!result.valid) {
+          for (const err of result.errors) reasons.push(`${svc}: ${err.label} is required`);
+        }
+      }
+    }
+
     if (isContractMode) {
       const hasRateRows = rateMatrices.some(m => m.rows.length > 0);
-      return (
-        customerName &&
-        selectedServices.length > 0 &&
-        date &&
-        contractValidityEnd &&
-        hasRateRows
-      );
+      if (!hasRateRows) reasons.push("Add at least one rate row to a service matrix");
     }
 
-    // Inquiry mode: don't require charge categories, but still enforce the
-    // source quotation matrix for the selected service inputs.
-    if (builderMode === "inquiry") {
-      if (!customerName || !contactPersonName || !quotationName || selectedServices.length === 0 || !date) return false;
-
-      if (selectedServices.includes("Brokerage")) {
-        const ctx = buildBrokerageContext(brokerageData as Record<string, unknown>);
-        if (!validateQuotation("Brokerage", brokerageData as Record<string, unknown>, ctx).valid) return false;
-      }
-      if (selectedServices.includes("Forwarding")) {
-        const ctx = buildForwardingContext(forwardingData as Record<string, unknown>);
-        if (!validateQuotation("Forwarding", forwardingData as Record<string, unknown>, ctx).valid) return false;
-      }
-      if (selectedServices.includes("Trucking")) {
-        const ctx = buildTruckingContext();
-        if (!validateQuotation("Trucking", truckingData as Record<string, unknown>, ctx).valid) return false;
-      }
-      if (selectedServices.includes("Marine Insurance")) {
-        const ctx = buildMarineInsuranceContext();
-        if (!validateQuotation("Marine Insurance", marineInsuranceData as Record<string, unknown>, ctx).valid) return false;
-      }
-      if (selectedServices.includes("Others")) {
-        const ctx = buildOthersContext();
-        if (!validateQuotation("Others", othersData as Record<string, unknown>, ctx).valid) return false;
-      }
-
-      return true;
-    }
-
-    // Quotation mode: existing checks + per-service matrix validation
-    const hasCharges = chargeCategories.length > 0 || sellingPrice.length > 0;
-    if (!customerName || !contactPersonName || !quotationName || selectedServices.length === 0 || !date || !hasCharges) return false;
-
-    // Per-service validation against the quotation schema
-    if (selectedServices.includes("Brokerage")) {
-      const ctx = buildBrokerageContext(brokerageData as Record<string, unknown>);
-      if (!validateQuotation("Brokerage", brokerageData as Record<string, unknown>, ctx).valid) return false;
-    }
-    if (selectedServices.includes("Forwarding")) {
-      const ctx = buildForwardingContext(forwardingData as Record<string, unknown>);
-      if (!validateQuotation("Forwarding", forwardingData as Record<string, unknown>, ctx).valid) return false;
-    }
-    if (selectedServices.includes("Trucking")) {
-      const ctx = buildTruckingContext();
-      if (!validateQuotation("Trucking", truckingData as Record<string, unknown>, ctx).valid) return false;
-    }
-    if (selectedServices.includes("Marine Insurance")) {
-      const ctx = buildMarineInsuranceContext();
-      if (!validateQuotation("Marine Insurance", marineInsuranceData as Record<string, unknown>, ctx).valid) return false;
-    }
-    if (selectedServices.includes("Others")) {
-      const ctx = buildOthersContext();
-      if (!validateQuotation("Others", othersData as Record<string, unknown>, ctx).valid) return false;
-    }
-
-    return true;
+    return reasons;
   };
+
+  const submitBlockers = getSubmitBlockers();
+  const isFormValid = () => submitBlockers.length === 0;
 
   // DRY composed labels — builderMode (who) × quotationType (what) × mode (action)
   const actionLabel = mode === "create" ? "Create" : "Edit";
@@ -2263,6 +2260,13 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
           <button
             onClick={handleSubmit}
             disabled={!isFormValid() || isLocked}
+            title={
+              isLocked
+                ? "This record is locked"
+                : submitBlockers.length > 0
+                  ? `Cannot submit yet:\n• ${submitBlockers.join("\n• ")}`
+                  : undefined
+            }
             style={{
               padding: "8px 24px",
               fontSize: "13px",
@@ -2395,12 +2399,63 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
             } : undefined}
           />
 
-          {/* ✨ CONTRACT: General Details Section (Port of Entry, Transportation, Type of Entry, Releasing) */}
-          {isContractMode && (
-            <ContractGeneralDetailsSection
-              data={contractGeneralDetails}
-              onChange={setContractGeneralDetails}
+          {/* Service-specific Forms */}
+          {selectedServices.includes("Brokerage") && (
+            <BrokerageServiceForm
+              data={brokerageData}
+              onChange={handleBrokerageChange}
               viewMode={viewMode}
+              movement={movement}
+              contractMode={false}
+              lockToStandardType={isContractMode}
+              headerToolbar={renderContractToolbar("Brokerage")}
+            />
+          )}
+
+          {/* Forwarding */}
+          {selectedServices.includes("Forwarding") && (
+            <ForwardingServiceForm
+              data={forwardingData}
+              onChange={handleForwardingChange}
+              builderMode={builderMode}
+              viewMode={viewMode}
+              movement={movement}
+              contractMode={false}
+              headerToolbar={renderContractToolbar("Forwarding")}
+            />
+          )}
+
+          {selectedServices.includes("Trucking") && (
+            <TruckingServiceForm
+              data={truckingData}
+              onChange={handleTruckingChange}
+              viewMode={viewMode}
+              movement={movement}
+              contractMode={false}
+              hideDestinations={isContractMode}
+              contractDestinations={cachedFullContract?.rate_matrices ? extractContractDestinations(cachedFullContract.rate_matrices) : undefined}
+              headerToolbar={renderContractToolbar("Trucking")}
+            />
+          )}
+
+          {/* Marine Insurance */}
+          {selectedServices.includes("Marine Insurance") && (
+            <MarineInsuranceServiceForm
+              data={marineInsuranceData}
+              onChange={handleMarineInsuranceChange}
+              viewMode={viewMode}
+              contractMode={false}
+              headerToolbar={renderContractToolbar("Marine Insurance")}
+            />
+          )}
+
+          {selectedServices.includes("Others") && (
+            <OthersServiceForm
+              data={othersData}
+              onChange={setOthersData}
+              viewMode={viewMode}
+              contractMode={false}
+              headerToolbar={renderContractToolbar("Others")}
             />
           )}
 
@@ -2433,64 +2488,6 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
             </div>
           )}
 
-          {/* Service-specific Forms — hidden in contract mode (contract scope removed) */}
-          {selectedServices.includes("Brokerage") && !isContractMode && (
-            <BrokerageServiceForm
-              data={brokerageData}
-              onChange={handleBrokerageChange}
-              viewMode={viewMode}
-              movement={movement}
-              contractMode={isContractMode}
-              headerToolbar={renderContractToolbar("Brokerage")}
-            />
-          )}
-
-          {/* Forwarding — hidden in contract mode (per-shipment service only) */}
-          {selectedServices.includes("Forwarding") && !isContractMode && (
-            <ForwardingServiceForm
-              data={forwardingData}
-              onChange={handleForwardingChange}
-              builderMode={builderMode}
-              viewMode={viewMode}
-              movement={movement}
-              contractMode={isContractMode}
-              headerToolbar={renderContractToolbar("Forwarding")}
-            />
-          )}
-
-          {selectedServices.includes("Trucking") && !isContractMode && (
-            <TruckingServiceForm
-              data={truckingData}
-              onChange={handleTruckingChange}
-              viewMode={viewMode}
-              movement={movement}
-              contractMode={isContractMode}
-              contractDestinations={cachedFullContract?.rate_matrices ? extractContractDestinations(cachedFullContract.rate_matrices) : undefined}
-              headerToolbar={renderContractToolbar("Trucking")}
-            />
-          )}
-
-          {/* Marine Insurance — hidden in contract mode (per-shipment service only) */}
-          {selectedServices.includes("Marine Insurance") && !isContractMode && (
-            <MarineInsuranceServiceForm
-              data={marineInsuranceData}
-              onChange={handleMarineInsuranceChange}
-              viewMode={viewMode}
-              contractMode={isContractMode}
-              headerToolbar={renderContractToolbar("Marine Insurance")}
-            />
-          )}
-
-          {selectedServices.includes("Others") && !isContractMode && (
-            <OthersServiceForm
-              data={othersData}
-              onChange={setOthersData}
-              viewMode={viewMode}
-              contractMode={isContractMode}
-              headerToolbar={renderContractToolbar("Others")}
-            />
-          )}
-
           {/* ✨ CONTRACT: Scope of Services + Terms & Conditions (shown only in contract mode) */}
           {isContractMode && builderMode === "quotation" && (
             <>
@@ -2511,52 +2508,13 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
                   Scope of Services
                 </h2>
                 {viewMode ? (
-                  scopeOfServices.trim() ? (
-                    <div style={{
-                      fontSize: "13px",
-                      color: "var(--neuron-ink-primary)",
-                      lineHeight: "1.7",
-                      whiteSpace: "pre-line",
-                    }}>
-                      {scopeOfServices}
-                    </div>
-                  ) : (
-                    <p style={{
-                      fontSize: "13px",
-                      color: "var(--neuron-ink-muted)",
-                      fontStyle: "italic",
-                      margin: 0,
-                    }}>
-                      No scope of services defined.
-                    </p>
-                  )
+                  <RichTextDisplay html={scopeOfServices} emptyText="No scope of services defined." />
                 ) : (
-                  <textarea
+                  <RichTextEditor
                     value={scopeOfServices}
-                    onChange={(e) => setScopeOfServices(e.target.value)}
-                    placeholder={"Enter scope of services (one item per line)...\n\ne.g.,\nChecking accuracy of draft documents\nArranging cargo insurance\nCoordinating with shipping lines"}
-                    rows={6}
-                    style={{
-                      width: "100%",
-                      padding: "10px 12px",
-                      fontSize: "13px",
-                      fontWeight: 400,
-                      color: "var(--neuron-ink-primary)",
-                      backgroundColor: "var(--theme-bg-surface)",
-                      border: "1px solid var(--neuron-ui-border)",
-                      borderRadius: "6px",
-                      outline: "none",
-                      fontFamily: "inherit",
-                      resize: "vertical",
-                      lineHeight: "1.7",
-                      boxSizing: "border-box",
-                    }}
-                    onFocus={(e) => {
-                      e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
-                    }}
-                    onBlur={(e) => {
-                      e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
-                    }}
+                    onChange={setScopeOfServices}
+                    placeholder="Describe the scope of services for this contract…"
+                    minHeight={160}
                   />
                 )}
               </div>
@@ -2578,52 +2536,13 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
                   Terms & Conditions
                 </h2>
                 {viewMode ? (
-                  termsAndConditions.trim() ? (
-                    <div style={{
-                      fontSize: "13px",
-                      color: "var(--neuron-ink-primary)",
-                      lineHeight: "1.7",
-                      whiteSpace: "pre-line",
-                    }}>
-                      {termsAndConditions}
-                    </div>
-                  ) : (
-                    <p style={{
-                      fontSize: "13px",
-                      color: "var(--neuron-ink-muted)",
-                      fontStyle: "italic",
-                      margin: 0,
-                    }}>
-                      No terms and conditions defined.
-                    </p>
-                  )
+                  <RichTextDisplay html={termsAndConditions} emptyText="No terms and conditions defined." />
                 ) : (
-                  <textarea
+                  <RichTextEditor
                     value={termsAndConditions}
-                    onChange={(e) => setTermsAndConditions(e.target.value)}
-                    placeholder={"Enter terms and conditions (one item per line)...\n\ne.g.,\nPayment terms: 15 days upon receipt of billing\nRates are subject to change without prior notice\nAll claims must be filed within 30 days"}
-                    rows={6}
-                    style={{
-                      width: "100%",
-                      padding: "10px 12px",
-                      fontSize: "13px",
-                      fontWeight: 400,
-                      color: "var(--neuron-ink-primary)",
-                      backgroundColor: "var(--theme-bg-surface)",
-                      border: "1px solid var(--neuron-ui-border)",
-                      borderRadius: "6px",
-                      outline: "none",
-                      fontFamily: "inherit",
-                      resize: "vertical",
-                      lineHeight: "1.7",
-                      boxSizing: "border-box",
-                    }}
-                    onFocus={(e) => {
-                      e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
-                    }}
-                    onBlur={(e) => {
-                      e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
-                    }}
+                    onChange={setTermsAndConditions}
+                    placeholder="Define payment, liability, and renewal terms…"
+                    minHeight={160}
                   />
                 )}
               </div>

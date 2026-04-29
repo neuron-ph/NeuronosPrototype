@@ -49,22 +49,24 @@ const SHARED_GENERAL_INFORMATION: SectionDef = {
       storage: 'top-level',
     },
     {
+      // Present for Brokerage and Forwarding; Trucking/Marine/Others use 'service' in their own General Specific section.
+      key: 'services',
+      label: 'Service/s',
+      control: 'multi-select',
+      optionKey: 'operation_services',
+      required: 'no',
+      storage: 'details',
+      gridSpan: 1,
+      showWhen: [{ field: 'service_type', op: 'in', value: ['Brokerage', 'Forwarding'] }],
+    },
+    {
       key: 'booking_name',
       label: 'Booking Name',
       control: 'free-text',
       required: 'no',
       storage: 'top-level',
       storageKey: 'name',
-    },
-    {
-      // Present for Brokerage and Forwarding; Trucking/Marine/Others use 'service' in their own General Specific section.
-      key: 'services',
-      label: 'Service/s',
-      control: 'multi-profile-lookup',
-      profileType: 'service_catalog',
-      required: 'no',
-      storage: 'details',
-      showWhen: [{ field: 'service_type', op: 'in', value: ['Brokerage', 'Forwarding'] }],
+      gridSpan: 3,
     },
     {
       key: 'account_owner',
@@ -72,14 +74,6 @@ const SHARED_GENERAL_INFORMATION: SectionDef = {
       control: 'profile-lookup',
       profileType: 'user',
       required: 'yes',
-      storage: 'details',
-    },
-    {
-      key: 'account_handler',
-      label: 'Account Handler',
-      control: 'profile-lookup',
-      profileType: 'user',
-      required: 'no',
       storage: 'details',
     },
     // Auto-generated references — already visible in page header; tertiary priority
@@ -296,8 +290,7 @@ const BROKERAGE_GENERAL_SPECIFIC: SectionDef = {
     {
       key: 'sub_services',
       label: 'Sub-Service/s',
-      control: 'multi-profile-lookup',
-      profileType: 'sub_service_catalog',
+      control: 'multi-value',
       required: 'conditional',
       storage: 'details',
     },
@@ -771,8 +764,7 @@ const FORWARDING_GENERAL_SPECIFIC: SectionDef = {
     {
       key: 'sub_services',
       label: 'Sub-Service/s',
-      control: 'multi-profile-lookup',
-      profileType: 'sub_service_catalog',
+      control: 'multi-value',
       required: 'conditional',
       storage: 'details',
     },
@@ -1212,8 +1204,8 @@ const TRUCKING_GENERAL_SPECIFIC: SectionDef = {
     {
       key: 'service',
       label: 'Service/s',
-      control: 'multi-profile-lookup',
-      profileType: 'service_catalog',
+      control: 'multi-select',
+      optionKey: 'operation_services',
       required: 'no',
       storage: 'details',
     },
@@ -1410,8 +1402,8 @@ const MARINE_GENERAL_SPECIFIC: SectionDef = {
     {
       key: 'service',
       label: 'Service/s',
-      control: 'multi-profile-lookup',
-      profileType: 'service_catalog',
+      control: 'multi-select',
+      optionKey: 'operation_services',
       required: 'no',
       storage: 'details',
     },
@@ -1568,8 +1560,8 @@ const OTHERS_GENERAL_SPECIFIC: SectionDef = {
     {
       key: 'service',
       label: 'Service/s',
-      control: 'multi-profile-lookup',
-      profileType: 'service_catalog',
+      control: 'multi-select',
+      optionKey: 'operation_services',
       required: 'no',
       storage: 'details',
     },

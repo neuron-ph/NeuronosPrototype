@@ -21,9 +21,13 @@ import {
   persistAssignmentsForNewBooking,
 } from "../../utils/assignments/applyAssignmentToBookingPayload";
 import { ContractDetectionBanner } from "./shared/ContractDetectionBanner";
+import { CustomDropdown } from "../bd/CustomDropdown";
+import type { ContractSummary } from "../../types/pricing";
 import { logCreation } from "../../utils/activityLog";
 import { fireBookingAssignmentTickets } from "../../utils/workflowTickets";
-import { generateBookingNumber } from "../../utils/bookingNumberUtils";
+import { generateBookingNumber, peekNextBookingNumber } from "../../utils/bookingNumberUtils";
+import { getSelectedCustomer } from "../../utils/bookings/selectedCustomer";
+import { useCustomerAccountOwnerAutofill } from "./shared/useCustomerAccountOwnerAutofill";
 
 interface CreateBrokerageBookingPanelProps {
   isOpen: boolean;
@@ -48,19 +52,38 @@ export function CreateBrokerageBookingPanel({
   const [loading, setLoading] = useState(false);
   const [assignmentPayload, setAssignmentPayload] = useState<ServiceRoleAssignmentPayload | null>(null);
   const [detectedContractId, setDetectedContractId] = useState<string | null>(null);
+  const [contractsList, setContractsList] = useState<ContractSummary[]>([]);
   const [submitErrors, setSubmitErrors] = useState<Record<string, string>>({});
 
   const { formState, setField, initFromPrefill, context } = useBookingFormState("Brokerage", {
     status: "Draft",
     movement_type: "Import",
   });
+  const selectedCustomer = getSelectedCustomer(formState, customerId ?? null);
+  useCustomerAccountOwnerAutofill(selectedCustomer.customerId, setField);
 
   useEffect(() => {
     if (prefillData && isOpen) initFromPrefill(prefillData);
   }, [prefillData, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Preview the upcoming booking number when the panel opens. Non-allocating —
+  // the actual number is still assigned atomically on submit.
+  useEffect(() => {
+    if (!isOpen) return;
+    if (formState.booking_number) return;
+    let cancelled = false;
+    void (async () => {
+      const preview = await peekNextBookingNumber("Brokerage");
+      if (!cancelled && preview) setField("booking_number", preview);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const isStandardBrokerage = String(formState.brokerage_type ?? "") === "Standard";
 
     const errors = validateBookingForm(formState, "Brokerage", context, {
       requiredFieldKeys: MINIMAL_CREATE_REQUIRED_FIELDS,
@@ -68,6 +91,10 @@ export function CreateBrokerageBookingPanel({
     if (hasErrors(errors)) {
       setSubmitErrors(errors);
       toast.error("Please fill in all required fields");
+      return;
+    }
+    if (isStandardBrokerage && !detectedContractId) {
+      toast.error("Standard brokerage requires an active Brokerage contract");
       return;
     }
     setSubmitErrors({});
@@ -94,7 +121,7 @@ export function CreateBrokerageBookingPanel({
       const assignRes = await persistAssignmentsForNewBooking({
         bookingId: data.id,
         payload: assignmentPayload,
-        customerId: customerId ?? null,
+        customerId: selectedCustomer.customerId,
         assignedBy: currentUser?.id ?? null,
       });
       if (!assignRes.ok) {
@@ -122,7 +149,7 @@ export function CreateBrokerageBookingPanel({
           bookingId: data.id,
           bookingNumber: data.booking_number,
           serviceType: "Brokerage",
-          customerName: String(formState.customer_name ?? ""),
+          customerName: selectedCustomer.customerName,
           createdBy: currentUser?.id ?? "",
           createdByName: currentUser?.name ?? "",
           createdByDept: currentUser?.department ?? "",
@@ -150,9 +177,13 @@ export function CreateBrokerageBookingPanel({
 
   if (!isOpen) return null;
 
-  const customerName = String(formState.customer_name ?? "");
+  const customerName = selectedCustomer.customerName;
   const bookingName = String(formState.booking_name ?? "");
-  const isFormValid = customerName.trim() !== "" && bookingName.trim() !== "";
+  const isStandardBrokerage = String(formState.brokerage_type ?? "") === "Standard";
+  const isFormValid =
+    customerName.trim() !== "" &&
+    bookingName.trim() !== "" &&
+    (!isStandardBrokerage || detectedContractId !== null);
 
   return (
     <BookingCreationPanel
@@ -179,14 +210,52 @@ export function CreateBrokerageBookingPanel({
         ctx={context}
         errors={submitErrors}
         requiredFieldKeys={MINIMAL_CREATE_REQUIRED_FIELDS}
+        fieldOverrides={
+          isStandardBrokerage && contractsList.length > 1
+            ? {
+                project_number: (
+                  <CustomDropdown
+                    label=""
+                    value={detectedContractId ?? ""}
+                    onChange={(id) => {
+                      const picked = contractsList.find((c) => c.id === id);
+                      if (!picked) return;
+                      setDetectedContractId(picked.id);
+                      setField("project_number", picked.quote_number ?? "");
+                    }}
+                    options={contractsList.map((c) => ({
+                      value: c.id,
+                      label: c.quotation_name
+                        ? `${c.quote_number} — ${c.quotation_name}`
+                        : c.quote_number ?? "(unnamed contract)",
+                    }))}
+                    placeholder="Select contract..."
+                    fullWidth
+                    portalZIndex={1125}
+                  />
+                ),
+              }
+            : undefined
+        }
       />
 
-      {/* Contract detection banner — triggers on customer name change */}
+      {/* Contract detection banner — only Standard brokerage links to a customer contract.
+          All-Inclusive and Non-Regular are spot-priced and remain unlinked. */}
       {customerName && (
         <ContractDetectionBanner
           customerName={customerName}
           serviceType="Brokerage"
           onContractDetected={setDetectedContractId}
+          onContractInfo={(contract) => {
+            // Autofill the read-only Project / Contract Number with the contract's quote number.
+            setField("project_number", contract?.quote_number ?? "");
+          }}
+          onContractsList={setContractsList}
+          selectedContractId={detectedContractId}
+          enabled={String(formState.brokerage_type ?? "") === "Standard"}
+          requireContract={String(formState.brokerage_type ?? "") === "Standard"}
+          requireContractLabel="Brokerage"
+          strictServiceMatch={String(formState.brokerage_type ?? "") === "Standard"}
         />
       )}
 
@@ -201,7 +270,8 @@ export function CreateBrokerageBookingPanel({
           </div>
           <div style={{ padding: "20px", backgroundColor: "var(--theme-bg-page)", border: "1px solid var(--neuron-ui-border)", borderRadius: "8px" }}>
             <ServiceRoleAssignmentForm
-              customerId={customerId ?? null}
+              key={`Brokerage:${selectedCustomer.customerId ?? "no-customer"}`}
+              customerId={selectedCustomer.customerId}
               serviceType="Brokerage"
               onChange={setAssignmentPayload}
             />

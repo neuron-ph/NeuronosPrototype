@@ -107,7 +107,7 @@ export function NeuronModal({
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor: "rgba(18, 51, 43, 0.35)",
+            backgroundColor: "rgba(0, 0, 0, 0.4)",
             backdropFilter: "blur(2px)",
             WebkitBackdropFilter: "blur(2px)",
           }}

@@ -46,13 +46,13 @@ const DEPT_PREVIEW: Partial<Record<string, Array<{ id: ModuleId; label: string }
   "Business Development": [
     { id: "bd_contacts",        label: "Contacts" },
     { id: "bd_customers",       label: "Customers" },
-    { id: "bd_tasks",           label: "Tasks" },
+    { id: "bd_inquiries",       label: "Inquiries" },
     { id: "bd_budget_requests", label: "Budget Requests" },
   ],
   "Pricing": [
     { id: "pricing_quotations",       label: "Quotations" },
     { id: "pricing_contracts",        label: "Contracts" },
-    { id: "pricing_network_partners", label: "Network Partners" },
+    { id: "pricing_network_partners", label: "Vendor" },
   ],
   "Operations": [
     { id: "ops_forwarding",            label: "Forwarding" },
@@ -62,9 +62,9 @@ const DEPT_PREVIEW: Partial<Record<string, Array<{ id: ModuleId; label: string }
     { id: "ops_projects",              label: "Projects" },
   ],
   "Accounting": [
-    { id: "acct_billings",    label: "Billings" },
+    { id: "acct_financials",  label: "Finance Overview" },
     { id: "acct_evouchers",   label: "E-Vouchers" },
-    { id: "acct_collections", label: "Collections" },
+    { id: "acct_journal",     label: "General Journal" },
     { id: "acct_statements",  label: "Financial Statements" },
   ],
   "HR": [

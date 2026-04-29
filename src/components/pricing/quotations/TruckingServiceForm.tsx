@@ -33,12 +33,13 @@ interface TruckingServiceFormProps {
   movement?: "IMPORT" | "EXPORT";
   viewMode?: boolean;
   contractMode?: boolean; // When true, show only scope fields (truckType), hide shipment-specific
+  hideDestinations?: boolean;
   /** Known contract destinations for combobox dropdown (@see DESTINATION_COMBOBOX_BLUEPRINT.md Phase 3) */
   contractDestinations?: string[];
   headerToolbar?: ReactNode; // Optional toolbar rendered right-aligned in header row
 }
 
-export function TruckingServiceForm({ data, onChange, movement = "IMPORT", viewMode = false, contractMode = false, contractDestinations, headerToolbar }: TruckingServiceFormProps) {
+export function TruckingServiceForm({ data, onChange, movement = "IMPORT", viewMode = false, contractMode = false, hideDestinations = false, contractDestinations, headerToolbar }: TruckingServiceFormProps) {
   const updateField = (field: keyof TruckingFormData, value: any) => {
     onChange({ ...data, [field]: value });
   };
@@ -199,7 +200,7 @@ export function TruckingServiceForm({ data, onChange, movement = "IMPORT", viewM
         )}
 
         {/* ✨ DESTINATIONS — Multi-line trucking repeater (non-contract mode) */}
-        {!contractMode && (
+        {!contractMode && !hideDestinations && (
           <div>
             <label style={{ ...labelStyle, marginBottom: "12px" }}>
               Destinations <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
