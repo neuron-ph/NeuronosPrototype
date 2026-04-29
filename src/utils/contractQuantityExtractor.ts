@@ -34,6 +34,27 @@ interface ContainerEntry {
   qty: number;
 }
 
+function isContainerEntry(value: unknown): value is ContainerEntry {
+  return !!value && typeof value === "object" && "qty" in value;
+}
+
+function normalizeContainerEntries(containers: unknown): ContainerEntry[] {
+  if (Array.isArray(containers)) {
+    return containers.filter(isContainerEntry);
+  }
+
+  if (typeof containers === "string") {
+    try {
+      const parsed = JSON.parse(containers);
+      return Array.isArray(parsed) ? parsed.filter(isContainerEntry) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
+}
+
 /**
  * Subset of BrokerageFormData relevant for quantity extraction.
  * Uses `Partial` semantics — all fields optional, we handle missing data gracefully.
@@ -100,9 +121,10 @@ interface BookingFormFields {
  * sumContainerEntries([])
  * // => 0
  */
-function sumContainerEntries(containers?: ContainerEntry[]): number {
-  if (!containers || containers.length === 0) return 0;
-  return containers.reduce((sum, entry) => sum + (entry.qty || 0), 0);
+function sumContainerEntries(containers?: ContainerEntry[] | string): number {
+  const entries = normalizeContainerEntries(containers);
+  if (entries.length === 0) return 0;
+  return entries.reduce((sum, entry) => sum + (entry.qty || 0), 0);
 }
 
 /**
