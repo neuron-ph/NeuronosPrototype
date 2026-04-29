@@ -1,8 +1,61 @@
 import { supabase } from './supabase/client';
 import { Account, AccountType } from '../types/accounting-core';
 import { Transaction } from '../types/accounting';
+import { freightForwardingCoASeed, SeedAccountRow } from './accounting-seed';
 
 console.log("Loading accounting-api.ts (Client Side - Direct Supabase)");
+
+function mapDbAccountToUi(row: Record<string, any>): Account {
+  return {
+    ...row,
+    type: row.type,
+    subtype: row.subtype ?? row.sub_type ?? "",
+    sub_type: row.sub_type ?? row.subtype ?? "",
+    category: row.category ?? null,
+    sub_category: row.sub_category ?? null,
+    normal_balance: row.normal_balance ?? "debit",
+    sort_order: row.sort_order ?? 0,
+    parent_id: row.parent_id ?? row.parent_account_id ?? null,
+    currency: row.currency ?? "PHP",
+    is_folder: Boolean(row.is_folder),
+    starting_amount: row.starting_amount ?? 0,
+    balance: row.balance ?? 0,
+    is_active: row.is_active ?? true,
+    is_system: row.is_system ?? false,
+  };
+}
+
+function mapUiAccountToDb(account: Partial<Account>): Record<string, any> {
+  return {
+    id: account.id,
+    code: account.code ?? "",
+    name: account.name ?? "",
+    type: account.type ?? "Expense",
+    sub_type: account.subtype ?? account.sub_type ?? null,
+    category: account.category ?? null,
+    sub_category: account.sub_category ?? null,
+    description: account.description ?? null,
+    parent_id: account.parent_id ?? account.parent_account_id ?? null,
+    balance: account.balance ?? 0,
+    starting_amount: account.starting_amount ?? 0,
+    normal_balance: account.normal_balance ?? "debit",
+    is_active: account.is_active ?? true,
+    is_system: account.is_system ?? false,
+    sort_order: account.sort_order ?? 0,
+    updated_at: account.updated_at ?? new Date().toISOString(),
+    created_at: account.created_at,
+  };
+}
+
+async function upsertSeedAccounts(rows: SeedAccountRow[]): Promise<void> {
+  const chunkSize = 75;
+
+  for (let index = 0; index < rows.length; index += chunkSize) {
+    const chunk = rows.slice(index, index + chunkSize);
+    const { error } = await supabase.from('accounts').upsert(chunk, { onConflict: 'id' });
+    if (error) throw new Error(error.message);
+  }
+}
 
 /**
  * Fetches all accounts from Supabase.
@@ -13,7 +66,7 @@ export const getAccounts = async (): Promise<Account[]> => {
     if (error) throw new Error(error.message);
     
     // Sort logic: Code then Name
-    return (data || []).sort((a: Account, b: Account) => {
+    return (data || []).map((row) => mapDbAccountToUi(row)).sort((a: Account, b: Account) => {
         const codeA = a.code || "";
         const codeB = b.code || "";
         return codeA.localeCompare(codeB) || a.name.localeCompare(b.name);
@@ -28,7 +81,7 @@ export const getAccounts = async (): Promise<Account[]> => {
  * Saves or updates an account.
  */
 export const saveAccount = async (account: Account): Promise<void> => {
-  const { error } = await supabase.from('accounts').upsert(account, { onConflict: 'id' });
+  const { error } = await supabase.from('accounts').upsert(mapUiAccountToDb(account), { onConflict: 'id' });
   if (error) throw new Error('Failed to save account: ' + error.message);
 };
 
@@ -45,7 +98,16 @@ export const deleteAccount = async (id: string): Promise<void> => {
  * For full COA seeding, use the Supabase SQL Editor with the seed scripts.
  */
 export const seedInitialAccounts = async (): Promise<void> => {
-  // No-op: seeding is handled via Supabase SQL Editor
+  const { data, error } = await supabase.from('accounts').select('id, code').limit(500);
+  if (error) throw new Error('Failed to inspect chart of accounts: ' + error.message);
+
+  const accounts = data || [];
+  const hasBaseFreightForwardingChart = accounts.some((account) => account.id === 'coa-1000' || account.code === '1000');
+  const hasExpenseDetailOnlySeed = accounts.some((account) => account.id === 'coa-6700' || account.code === '6700');
+
+  if (accounts.length === 0 || (!hasBaseFreightForwardingChart && hasExpenseDetailOnlySeed)) {
+    await upsertSeedAccounts(freightForwardingCoASeed);
+  }
 };
 
 /**
@@ -54,6 +116,7 @@ export const seedInitialAccounts = async (): Promise<void> => {
 export const resetChartOfAccounts = async (): Promise<void> => {
   const { error } = await supabase.from('accounts').delete().neq('id', '');
   if (error) throw new Error('Failed to reset chart of accounts: ' + error.message);
+  await upsertSeedAccounts(freightForwardingCoASeed);
 };
 
 /**

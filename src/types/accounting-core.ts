@@ -6,8 +6,13 @@ export interface Account {
   id: string;
   code: string; // e.g. "1000"
   name: string; // e.g. "Cash in Bank"
-  type: AccountType;
+  type: AccountType | "asset" | "liability" | "equity" | "income" | "expense" | "revenue" | "cost";
   subtype: string; // e.g. "Accounts Receivable"
+  sub_type?: string;
+  category?: string | null;
+  sub_category?: string | null;
+  normal_balance?: "debit" | "credit";
+  sort_order?: number;
   description?: string;
   parent_account_id?: string | null;
   is_system: boolean; // Cannot be deleted
