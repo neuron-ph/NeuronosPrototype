@@ -6,6 +6,111 @@
  * for older code paths during the rollout.
  */
 
+// ─── Canonical profile types (Phase 1 — 067_canonical_assignment_profiles) ───
+
+export type AssignmentProfileSubjectType = 'customer' | 'contact' | 'trade_party';
+export type AssignmentProfileScopeKind   = 'default' | 'override' | 'ownership';
+
+export type AssignmentProfileSource =
+  | 'contact_override'
+  | 'trade_party_default'
+  | 'customer_default'
+  | 'department_default'
+  | 'service_default'
+  | 'legacy_fallback'
+  | 'manual'
+  | 'none';
+
+export interface AssignmentProfile {
+  id:           string;
+  subject_type: AssignmentProfileSubjectType;
+  subject_id:   string;
+  customer_id:  string | null;
+  department:   string;
+  service_type: string | null;
+  team_id:      string | null;
+  scope_kind:   AssignmentProfileScopeKind;
+  source_label: string | null;
+  notes:        string | null;
+  is_active:    boolean;
+  created_by:   string | null;
+  updated_by:   string | null;
+  created_at:   string;
+  updated_at:   string;
+}
+
+export interface AssignmentProfileItem {
+  id:         string;
+  profile_id: string;
+  role_key:   string;
+  role_label: string;
+  user_id:    string;
+  user_name:  string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Input shape for the replace_assignment_profile_atomic RPC. */
+export interface AssignmentProfileUpsertInput {
+  subjectType:  AssignmentProfileSubjectType;
+  subjectId:    string;
+  customerId:   string | null;
+  department:   string;
+  serviceType?: string | null;
+  scopeKind?:   AssignmentProfileScopeKind;
+  teamId?:      string | null;
+  assignments:  Array<{ role_key: string; role_label: string; user_id: string; user_name: string }>;
+}
+
+/**
+ * Resolved profile shape returned by resolveAssignmentProfile.
+ * Covers both Ops (service-scoped, role-catalog slots) and non-Ops
+ * (dept-level, freeform slots).
+ */
+export interface AssignmentProfileResolution {
+  service: {
+    service_type:        string;
+    label:               string;
+    default_manager_id:   string | null;
+    default_manager_name: string | null;
+  } | null;
+  teamPool: { id: string | null; name: string | null };
+  /** Role catalog slots for Ops; freeform items for non-Ops. */
+  roles: Array<{
+    role_key:       string;
+    role_label:     string;
+    required:       boolean;
+    allow_multiple: boolean;
+    sort_order:     number;
+  }>;
+  assignments: Array<{
+    role_key:       string;
+    role_label:     string;
+    required:       boolean;
+    allow_multiple: boolean;
+    sort_order:     number;
+    user_id:        string | null;
+    user_name:      string | null;
+  }>;
+  source:    AssignmentProfileSource;
+  scopeMeta: {
+    profileId:   string | null;
+    subjectType: AssignmentProfileSubjectType | null;
+    scopeKind:   AssignmentProfileScopeKind | null;
+  };
+}
+
+export interface AssignmentProfileResolverInput {
+  department:          string;
+  serviceType?:        string | null;
+  customerId?:         string | null;
+  contactId?:          string | null;
+  tradePartyProfileId?: string | null;
+}
+
+// ─── Legacy types (kept for backward-compat during rollout) ──────────────────
+
 export type AssignmentSubjectType = 'customer' | 'trade_party';
 
 export type BookingAssignmentSource =
@@ -15,11 +120,11 @@ export type BookingAssignmentSource =
   | 'manual'
   | 'legacy';
 
+/** @deprecated — use AssignmentProfileSource from the canonical resolver */
 export type AssignmentResolutionSource =
   | 'trade_party_default'
   | 'customer_default'
   | 'service_default'
-  | 'legacy_customer_team_profile'
   | 'none';
 
 export interface OperationalService {

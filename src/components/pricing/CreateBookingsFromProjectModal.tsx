@@ -4,7 +4,14 @@ import { toast } from "sonner@2.0.3";
 import { supabase } from "../../utils/supabase/client";
 import { logCreation } from "../../utils/activityLog";
 import type { Project, ServiceType } from "../../types/pricing";
-import { TeamAssignmentForm, type TeamAssignment } from "./TeamAssignmentForm";
+import {
+  ServiceRoleAssignmentForm,
+  type ServiceRoleAssignmentPayload,
+} from "../operations/assignments/ServiceRoleAssignmentForm";
+import {
+  legacyProjectionFromAssignment,
+  persistAssignmentsForNewBooking,
+} from "../../utils/assignments/applyAssignmentToBookingPayload";
 
 interface CreateBookingsFromProjectModalProps {
   isOpen: boolean;
@@ -17,7 +24,7 @@ interface CreateBookingsFromProjectModalProps {
 interface ServiceBookingState {
   serviceType: ServiceType;
   serviceData: any;
-  assignment: TeamAssignment | null;
+  assignment: ServiceRoleAssignmentPayload | null;
   isCreating: boolean;
   isCreated: boolean;
   bookingId?: string;
@@ -51,7 +58,7 @@ export function CreateBookingsFromProjectModal({
     return initial;
   });
 
-  const handleAssignmentChange = (key: string, assignment: TeamAssignment) => {
+  const handleAssignmentChange = (key: string, assignment: ServiceRoleAssignmentPayload) => {
     setServiceStates(prev => ({
       ...prev,
       [key]: { ...prev[key], assignment },
@@ -71,8 +78,11 @@ export function CreateBookingsFromProjectModal({
 
   const buildBookingPayload = (serviceState: ServiceBookingState) => {
     const { serviceType, serviceData, assignment } = serviceState;
-    
+
     if (!assignment) return null;
+
+    // Derive legacy projection fields from the v1 assignment payload
+    const proj = legacyProjectionFromAssignment(assignment);
 
     // Common fields for all booking types
     const commonFields = {
@@ -82,14 +92,16 @@ export function CreateBookingsFromProjectModal({
       accountHandler: currentUser.name,
       quotationReferenceNumber: project.quotation_number,
       status: "Draft" as const,
-      
-      // Team assignments
-      assigned_manager_id: assignment.manager.id,
-      assigned_manager_name: assignment.manager.name,
-      assigned_supervisor_id: assignment.supervisor?.id,
-      assigned_supervisor_name: assignment.supervisor?.name,
-      assigned_handler_id: assignment.handler?.id,
-      assigned_handler_name: assignment.handler?.name,
+
+      // Team assignments — legacy projection columns
+      team_id: proj.team_id ?? null,
+      team_name: proj.team_name ?? null,
+      manager_id: proj.manager_id ?? null,
+      manager_name: proj.manager_name ?? null,
+      supervisor_id: proj.supervisor_id ?? null,
+      supervisor_name: proj.supervisor_name ?? null,
+      handler_id: proj.handler_id ?? null,
+      handler_name: proj.handler_name ?? null,
     };
 
     // Service-specific payload construction
@@ -222,23 +234,15 @@ export function CreateBookingsFromProjectModal({
       const _actorBk = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
       logCreation("booking", bookingResult.id, bookingResult.booking_number ?? bookingResult.id, _actorBk);
 
-      // Save handler preference if checkbox was checked
-      if (serviceState.assignment.saveAsDefault) {
-        try {
-          await supabase.from('client_handler_preferences').upsert({
-            customer_id: project.customer_id,
-            service_type: serviceState.serviceType,
-            preferred_manager_id: serviceState.assignment.manager.id,
-            preferred_manager_name: serviceState.assignment.manager.name,
-            preferred_supervisor_id: serviceState.assignment.supervisor?.id,
-            preferred_supervisor_name: serviceState.assignment.supervisor?.name,
-            preferred_handler_id: serviceState.assignment.handler?.id,
-            preferred_handler_name: serviceState.assignment.handler?.name,
-          });
-        } catch (error) {
-          console.error("Error saving preference:", error);
-          // Don't fail the booking creation if preference save fails
-        }
+      // Persist booking_assignments rows and optionally save as customer default
+      const persistResult = await persistAssignmentsForNewBooking({
+        bookingId: bookingResult.id,
+        payload: serviceState.assignment,
+        customerId: project.customer_id,
+        assignedBy: currentUser?.id ?? null,
+      });
+      if (!persistResult.ok) {
+        throw new Error(persistResult.error);
       }
 
       setServiceStates(prev => ({
@@ -325,10 +329,10 @@ export function CreateBookingsFromProjectModal({
                 )}
               </div>
 
-              {/* Team Assignment Form */}
+              {/* Assignment form */}
               {!state.isCreated && (
                 <>
-                  <TeamAssignmentForm
+                  <ServiceRoleAssignmentForm
                     serviceType={state.serviceType}
                     customerId={project.customer_id}
                     onChange={(assignment) => handleAssignmentChange(key, assignment)}
@@ -344,7 +348,7 @@ export function CreateBookingsFromProjectModal({
                   {/* Create Booking Button */}
                   <button
                     onClick={() => handleCreateBooking(key)}
-                    disabled={!state.assignment || state.isCreating}
+                    disabled={!state.assignment || state.assignment.hasMissingRequired || state.isCreating}
                     className="mt-6 w-full px-6 py-3 bg-[var(--theme-action-primary-bg)] text-white rounded-lg font-['Inter:Medium',sans-serif] font-medium hover:bg-[#0d6860] transition-colors disabled:bg-[var(--theme-bg-surface-tint)] disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {state.isCreating ? (
@@ -366,7 +370,8 @@ export function CreateBookingsFromProjectModal({
                     <span className="font-['Inter:Medium',sans-serif] font-medium">Booking ID:</span> {state.bookingId}
                   </p>
                   <p className="text-sm text-green-800 mt-1">
-                    <span className="font-['Inter:Medium',sans-serif] font-medium">Handler:</span> {state.assignment?.handler?.name}
+                    <span className="font-['Inter:Medium',sans-serif] font-medium">Assigned:</span>{" "}
+                    {state.assignment?.assignments.map((a) => a.user_name).join(", ") || "—"}
                   </p>
                 </div>
               )}

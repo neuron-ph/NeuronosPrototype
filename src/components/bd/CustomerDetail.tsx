@@ -12,8 +12,7 @@ import { ActivityTimelineTable } from "./ActivityTimelineTable";
 import { AddContactPanel } from "./AddContactPanel";
 import { CustomerProjectsTab } from "./CustomerProjectsTab";
 import { CustomerInquiriesTab } from "./CustomerInquiriesTab";
-import { CustomerTeamsTab } from "./CustomerTeamsTab";
-import { CustomerAssignmentDefaultsTab } from "./CustomerAssignmentDefaultsTab";
+import { CustomerAssignmentProfilesSection } from "./CustomerAssignmentProfilesSection";
 import { ConsigneeInlineSection } from "./ConsigneeInlineSection";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
@@ -1933,12 +1932,9 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
               </div>
             )}
 
-            {/* Teams Tab — V1 Operations defaults read from assignment_default_profiles;
-                legacy customer_team_profiles still surfaces for non-Operations departments. */}
             {activeTab === "teams" && canViewTeamsTab && (
-              <div style={{ paddingBottom: "32px", display: "flex", flexDirection: "column", gap: "32px" }}>
-                <CustomerAssignmentDefaultsTab customerId={customer.id} canEdit={canEditTeamsTab} />
-                <CustomerTeamsTab customerId={customer.id} canEdit={canEditTeamsTab} />
+              <div style={{ paddingBottom: "32px" }}>
+                <CustomerAssignmentProfilesSection customerId={customer.id} canEdit={canEditTeamsTab} />
               </div>
             )}
 

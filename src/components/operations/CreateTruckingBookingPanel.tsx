@@ -9,7 +9,11 @@ import {
 import { BookingCreationPanel } from "./shared/BookingCreationPanel";
 import { BookingDynamicForm } from "./shared/BookingDynamicForm";
 import { useBookingFormState } from "./shared/useBookingFormState";
-import { validateBookingForm, hasErrors } from "./shared/bookingFormValidation";
+import {
+  MINIMAL_CREATE_REQUIRED_FIELDS,
+  validateBookingForm,
+  hasErrors,
+} from "./shared/bookingFormValidation";
 import { buildBookingPayload, toSupabaseRow } from "../../utils/bookings/bookingPayload";
 import {
   legacyProjectionFromAssignment,
@@ -81,14 +85,12 @@ export function CreateTruckingBookingPanel({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const errors = validateBookingForm(formState, "Trucking", context);
+    const errors = validateBookingForm(formState, "Trucking", context, {
+      requiredFieldKeys: MINIMAL_CREATE_REQUIRED_FIELDS,
+    });
     if (hasErrors(errors)) {
       setSubmitErrors(errors);
       toast.error("Please fill in all required fields");
-      return;
-    }
-    if (assignmentPayload?.hasMissingRequired) {
-      toast.error("Please fill in all required role assignments");
       return;
     }
     setSubmitErrors({});
@@ -168,7 +170,8 @@ export function CreateTruckingBookingPanel({
   if (!isOpen) return null;
 
   const customerName = String(formState.customer_name ?? "");
-  const isFormValid = customerName.trim() !== "";
+  const bookingName = String(formState.booking_name ?? "");
+  const isFormValid = customerName.trim() !== "" && bookingName.trim() !== "";
 
   return (
     <BookingCreationPanel
@@ -194,6 +197,7 @@ export function CreateTruckingBookingPanel({
         onChange={setField}
         ctx={context}
         errors={submitErrors}
+        requiredFieldKeys={MINIMAL_CREATE_REQUIRED_FIELDS}
       />
 
       {customerName && (

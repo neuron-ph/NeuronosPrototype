@@ -10,7 +10,10 @@ const FULL_WIDTH_CONTROLS = new Set([
   'textarea', 'repeater', 'multi-select', 'multi-value', 'multi-profile-lookup',
 ]);
 
-const BOOKING_SHEET_DROPDOWN_Z_INDEX = 15;
+// SidePanel defaults to zIndexBase 1100 and renders the panel at 1110.
+// Booking field overlays are portaled to document.body, so they must sit
+// above the panel rather than inside the page stack.
+const BOOKING_SHEET_DROPDOWN_Z_INDEX = 1125;
 
 interface Props {
   section: SectionDef;
@@ -26,6 +29,7 @@ interface Props {
   headerAction?: React.ReactNode;
   /** When true, renders as a borderless sheet slice (no card chrome). Default: false. */
   sheet?: boolean;
+  requiredFieldKeys?: readonly string[];
 }
 
 export function BookingSectionRenderer({
@@ -39,10 +43,12 @@ export function BookingSectionRenderer({
   catalogOptions,
   headerAction,
   sheet = false,
+  requiredFieldKeys,
 }: Props) {
   const visibleFields = getVisibleFields(section, ctx).filter(
     f => f.control !== 'team-assignment',
   );
+  const requiredFieldOverride = requiredFieldKeys ? new Set(requiredFieldKeys) : null;
 
   if (visibleFields.length === 0) return null;
 
@@ -82,7 +88,9 @@ export function BookingSectionRenderer({
         >
           {visibleFields.map(field => {
             const label = resolveLabel(field, ctx);
-            const required = isFieldRequired(field, ctx);
+            const required = requiredFieldOverride
+              ? requiredFieldOverride.has(field.key)
+              : isFieldRequired(field, ctx);
             const error = errors[field.key];
             const isFullWidth = FULL_WIDTH_CONTROLS.has(field.control);
             const fieldWithResolvedOptions =
@@ -182,7 +190,9 @@ export function BookingSectionRenderer({
       >
         {visibleFields.map(field => {
           const label = resolveLabel(field, ctx);
-          const required = isFieldRequired(field, ctx);
+          const required = requiredFieldOverride
+            ? requiredFieldOverride.has(field.key)
+            : isFieldRequired(field, ctx);
           const error = errors[field.key];
           const isFullWidth = FULL_WIDTH_CONTROLS.has(field.control);
           const fieldWithResolvedOptions =

@@ -9,7 +9,11 @@ import {
 import { BookingCreationPanel } from "../shared/BookingCreationPanel";
 import { BookingDynamicForm } from "../shared/BookingDynamicForm";
 import { useBookingFormState } from "../shared/useBookingFormState";
-import { validateBookingForm, hasErrors } from "../shared/bookingFormValidation";
+import {
+  MINIMAL_CREATE_REQUIRED_FIELDS,
+  validateBookingForm,
+  hasErrors,
+} from "../shared/bookingFormValidation";
 import { buildBookingPayload, toSupabaseRow } from "../../../utils/bookings/bookingPayload";
 import {
   legacyProjectionFromAssignment,
@@ -70,14 +74,12 @@ export function CreateForwardingBookingPanel({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const errors = validateBookingForm(formState, "Forwarding", context);
+    const errors = validateBookingForm(formState, "Forwarding", context, {
+      requiredFieldKeys: MINIMAL_CREATE_REQUIRED_FIELDS,
+    });
     if (hasErrors(errors)) {
       setSubmitErrors(errors);
       toast.error("Please fill in all required fields");
-      return;
-    }
-    if (assignmentPayload?.hasMissingRequired) {
-      toast.error("Please fill in all required role assignments");
       return;
     }
     setSubmitErrors({});
@@ -173,7 +175,8 @@ export function CreateForwardingBookingPanel({
   if (!isOpen) return null;
 
   const customerName = String(formState.customer_name ?? "");
-  const isFormValid = customerName.trim() !== "";
+  const bookingName = String(formState.booking_name ?? "");
+  const isFormValid = customerName.trim() !== "" && bookingName.trim() !== "";
 
   return (
     <BookingCreationPanel
@@ -196,8 +199,10 @@ export function CreateForwardingBookingPanel({
       {/* Project autofill — operations source only */}
       {source === "operations" && (
         <ProjectAutofillSection
+          projectNumber={String(formState.project_number ?? "")}
+          onProjectNumberChange={(value) => setField("project_number", value)}
+          onAutofill={handleProjectAutofill}
           serviceType="Forwarding"
-          onProjectSelected={handleProjectAutofill}
         />
       )}
 
@@ -207,6 +212,7 @@ export function CreateForwardingBookingPanel({
         onChange={setField}
         ctx={context}
         errors={submitErrors}
+        requiredFieldKeys={MINIMAL_CREATE_REQUIRED_FIELDS}
       />
 
       {customerName && (

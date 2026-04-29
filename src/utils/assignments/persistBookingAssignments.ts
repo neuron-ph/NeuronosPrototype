@@ -57,7 +57,8 @@ export async function replaceBookingAssignments(params: {
 
 /**
  * Save the current booking assignments as the customer (or trade-party) default
- * for this service. Replaces the existing default if one exists.
+ * for this service. Writes to the canonical assignment_profiles table via
+ * replace_assignment_profile_atomic.
  */
 export async function saveAssignmentsAsDefault(params: {
   subjectType: 'customer' | 'trade_party';
@@ -87,14 +88,16 @@ export async function saveAssignmentsAsDefault(params: {
       user_name: a.user_name,
     }));
 
-  const { error } = await supabase.rpc('replace_assignment_default_atomic', {
+  const { error } = await supabase.rpc('replace_assignment_profile_atomic', {
     p_subject_type: subjectType,
-    p_subject_id: subjectId,
-    p_customer_id: customerId,
+    p_subject_id:   subjectId,
+    p_customer_id:  customerId,
+    p_department:   'Operations',
     p_service_type: serviceType,
-    p_team_id: teamId,
-    p_assignments: rows,
-    p_updated_by: updatedBy,
+    p_scope_kind:   'default',
+    p_team_id:      teamId,
+    p_assignments:  rows,
+    p_updated_by:   updatedBy,
   });
   if (error) return { ok: false, error: error.message };
 

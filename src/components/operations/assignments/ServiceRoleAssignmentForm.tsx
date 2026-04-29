@@ -6,9 +6,9 @@
  *   • Team                — optional assignment team (autofills + filters role pickers)
  *   • One row per service role — user picker per role
  *   • Source badge        — service / customer / trade-party / manual
- *   • Save as default     — writes assignment_default_profiles
+ *   • Save as default     — writes canonical assignment_profiles
  *
- * Reads via useAssignmentResolution and emits a flat payload up to the parent.
+ * Reads via useAssignmentProfileResolution and emits a flat payload up to the parent.
  * Parents (create panels, BookingAssignmentSection) own the persistence step.
  */
 
@@ -17,9 +17,10 @@ import { Lock, Users } from 'lucide-react';
 import { supabase } from '../../../utils/supabase/client';
 import { CustomDropdown } from '../../bd/CustomDropdown';
 import { Checkbox } from '../../ui/checkbox';
-import { useAssignmentResolution } from '../../../hooks/useAssignmentResolution';
+import { useAssignmentProfileResolution } from '../../../hooks/useAssignmentProfileResolution';
 import type {
-  AssignmentResolution,
+  AssignmentProfileResolution,
+  AssignmentProfileSource,
   BookingAssignmentInput,
   BookingAssignmentSource,
 } from '../../../types/assignments';
@@ -39,7 +40,7 @@ interface ServiceRoleAssignmentFormProps {
 
 export interface ServiceRoleAssignmentPayload {
   serviceType: string;
-  service: AssignmentResolution['service'];
+  service: AssignmentProfileResolution['service'];
   teamPool: { id: string | null; name: string | null };
   /** Booking-side rows (one per filled role). */
   assignments: BookingAssignmentInput[];
@@ -50,7 +51,7 @@ export interface ServiceRoleAssignmentPayload {
   /** v1: 'customer' or 'trade_party' if the user opted into saving. */
   saveAsDefault: false | 'customer' | 'trade_party';
   /** Source badge for the parent to display. */
-  source: AssignmentResolution['source'];
+  source: AssignmentProfileSource;
 }
 
 interface UserOption {
@@ -83,10 +84,11 @@ export function ServiceRoleAssignmentForm({
   hideSaveAsDefault,
   onChange,
 }: ServiceRoleAssignmentFormProps) {
-  const { resolution, isLoading } = useAssignmentResolution({
+  const { data: resolution, isLoading } = useAssignmentProfileResolution({
+    department: 'Operations',
+    serviceType,
     customerId,
     tradePartyProfileId,
-    serviceType,
   });
 
   // Picks are stored as role_key -> { user_id, user_name } so changes per-row
@@ -228,7 +230,7 @@ export function ServiceRoleAssignmentForm({
     setTeamId(nextTeamId);
 
     setPicks((current) => {
-      if (!nextTeamId) return current;
+      if (!nextTeamId || !resolution) return current;
 
       const next = { ...current };
       const changedKeys = new Set<string>();
@@ -290,7 +292,7 @@ export function ServiceRoleAssignmentForm({
 
     onChange({
       serviceType,
-      service: resolution.service,
+      service: resolution.service ?? null,
       teamPool: { id: teamId, name: teamName },
       assignments,
       isComplete: !hasMissingRequired,
@@ -489,7 +491,7 @@ export function ServiceRoleAssignmentForm({
 }
 
 function deriveSource(
-  resolutionSource: AssignmentResolution['source'],
+  resolutionSource: AssignmentProfileSource,
   touched: boolean,
 ): BookingAssignmentSource {
   if (touched) return 'manual';
@@ -497,25 +499,25 @@ function deriveSource(
     case 'trade_party_default':
       return 'trade_party_default';
     case 'customer_default':
+    case 'department_default':
+    case 'legacy_fallback':
       return 'customer_default';
     case 'service_default':
       return 'service_default';
-    case 'legacy_customer_team_profile':
-      return 'customer_default';
     default:
       return 'manual';
   }
 }
 
-function SourceBadge({ source }: { source: AssignmentResolution['source'] }) {
+function SourceBadge({ source }: { source: AssignmentProfileSource }) {
   const text =
     source === 'trade_party_default'
       ? 'Trade-party default'
-      : source === 'customer_default'
+      : source === 'customer_default' || source === 'department_default'
       ? 'Customer default'
       : source === 'service_default'
       ? 'Service default'
-      : source === 'legacy_customer_team_profile'
+      : source === 'legacy_fallback'
       ? 'Saved profile'
       : 'New';
   return (

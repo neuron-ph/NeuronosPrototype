@@ -225,18 +225,26 @@ export function ChartOfAccounts() {
     {
       header: "Type",
       width: "12%",
-      cell: (item) => (
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium capitalize
-          ${item.type === 'Asset' ? 'bg-emerald-50 text-emerald-700' :
-            item.type === 'Liability' ? 'bg-[var(--theme-status-warning-bg)] text-[var(--theme-status-warning-fg)]' :
-            item.type === 'Equity' ? 'bg-purple-50 text-purple-700' :
-            item.type === 'Income' ? 'bg-blue-50 text-blue-700' :
-            'bg-rose-50 text-rose-700' // Expense
-          }`}
-        >
-          {item.type}
-        </span>
-      )
+      cell: (item) => {
+        const typeColors: Record<string, { bg: string; fg: string }> = {
+          Asset:     { bg: "var(--theme-status-success-bg)", fg: "var(--theme-status-success-fg)" },
+          Liability: { bg: "var(--theme-status-warning-bg)", fg: "var(--theme-status-warning-fg)" },
+          Equity:    { bg: "var(--neuron-status-accent-bg)", fg: "var(--neuron-status-accent-fg)" },
+          Income:    { bg: "var(--theme-bg-surface-tint)",   fg: "var(--theme-action-primary-bg)" },
+          Expense:   { bg: "var(--theme-status-danger-bg)",  fg: "var(--theme-status-danger-fg)"  },
+        };
+        const c = typeColors[item.type] ?? { bg: "var(--theme-bg-surface-subtle)", fg: "var(--theme-text-muted)" };
+        return (
+          <span style={{
+            display: "inline-flex", alignItems: "center",
+            padding: "2px 10px", borderRadius: "9999px",
+            fontSize: "11px", fontWeight: 500, textTransform: "capitalize",
+            backgroundColor: c.bg, color: c.fg,
+          }}>
+            {item.type}
+          </span>
+        );
+      }
     },
     {
       header: "Detail Type",

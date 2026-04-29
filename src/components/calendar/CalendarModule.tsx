@@ -67,31 +67,38 @@ export function CalendarModule() {
     return () => clearInterval(timer);
   }, [user?.id]);
 
-  // Team members for sidebar
+  // Team members for sidebar — resolved via team_memberships (canonical)
   const { data: teamMembers = [] } = useQuery({
-    queryKey: ["calendar", "team", user?.team_id],
+    queryKey: ["calendar", "team", user?.id],
     queryFn: async (): Promise<TeamMemberAvailability[]> => {
-      if (!user?.team_id) return [];
-      const { data } = await supabase
-        .from("users")
-        .select("id, name, avatar_url, department, last_seen_at")
-        .eq("team_id", user.team_id)
-        .neq("id", user.id)
-        .eq("status", "Active");
+      if (!user?.id) return [];
+      const { data: myMembership } = await supabase
+        .from("team_memberships")
+        .select("team_id")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (!myMembership?.team_id) return [];
 
-      return (data ?? []).map((u: any) => ({
-        id: u.id,
-        name: u.name,
-        avatarUrl: u.avatar_url,
-        department: u.department,
-        isOnline:
-          u.last_seen_at &&
-          new Date(u.last_seen_at).getTime() > Date.now() - 5 * 60 * 1000,
-        lastSeenAt: u.last_seen_at ? new Date(u.last_seen_at) : null,
-        isCalendarVisible: visibleTeamMemberIds.has(u.id),
-      }));
+      const { data: members } = await supabase
+        .from("team_memberships")
+        .select("users!inner(id, name, avatar_url, department, last_seen_at, status)")
+        .eq("team_id", myMembership.team_id)
+        .eq("is_active", true)
+        .neq("user_id", user.id);
+
+      return ((members ?? []) as unknown as Array<{ users: { id: string; name: string; avatar_url: string | null; department: string; last_seen_at: string | null; status: string | null } }>)
+        .map((m) => ({
+          id:               m.users.id,
+          name:             m.users.name,
+          avatarUrl:        m.users.avatar_url,
+          department:       m.users.department,
+          isOnline:         !!m.users.last_seen_at && new Date(m.users.last_seen_at).getTime() > Date.now() - 5 * 60 * 1000,
+          lastSeenAt:       m.users.last_seen_at ? new Date(m.users.last_seen_at) : null,
+          isCalendarVisible: visibleTeamMemberIds.has(m.users.id),
+        }));
     },
-    enabled: !!user?.team_id,
+    enabled: !!user?.id,
     staleTime: 30_000,
   });
 
