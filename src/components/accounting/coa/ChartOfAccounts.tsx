@@ -13,6 +13,16 @@ import { ManualJournalEntryPanel } from "./ManualJournalEntryPanel";
 // Extended type for flattened tree
 type FlatAccount = Account & { level: number };
 
+const normalizeAccountType = (type?: string) => {
+  const normalized = (type || "").toLowerCase();
+  if (normalized === "asset") return "Asset";
+  if (normalized === "liability") return "Liability";
+  if (normalized === "equity") return "Equity";
+  if (normalized === "income" || normalized === "revenue") return "Income";
+  if (normalized === "expense" || normalized === "cost") return "Expense";
+  return type || "";
+};
+
 export function ChartOfAccounts() {
   const { can } = usePermission();
 
@@ -54,8 +64,14 @@ export function ChartOfAccounts() {
       const data = await getAccounts();
       setAccounts(data);
       
-      // Auto-expand all folders by default for better visibility
-      const allFolderIds = data.filter(a => a.is_folder).map(a => a.id);
+      // Expand all parents by default. The DB schema uses parent_id, not is_folder.
+      const allFolderIds = Array.from(
+        new Set(
+          data
+            .map((account) => account.parent_id)
+            .filter((parentId): parentId is string => Boolean(parentId))
+        )
+      );
       const initialExpanded: Record<string, boolean> = {};
       allFolderIds.forEach(id => initialExpanded[id] = true);
       setExpandedFolders(initialExpanded);
@@ -80,10 +96,11 @@ export function ChartOfAccounts() {
         (acc.code && acc.code.includes(searchQuery));
       
       let matchesTab = true;
+      const accountType = normalizeAccountType(acc.type);
       if (activeTab === "BalanceSheet") {
-        matchesTab = ["Asset", "Liability", "Equity"].includes(acc.type);
+        matchesTab = ["Asset", "Liability", "Equity"].includes(accountType);
       } else if (activeTab === "IncomeStatement") {
-        matchesTab = ["Income", "Expense"].includes(acc.type);
+        matchesTab = ["Income", "Expense"].includes(accountType);
       }
       
       return matchesSearch && matchesTab;
@@ -91,7 +108,7 @@ export function ChartOfAccounts() {
   }, [accounts, searchQuery, activeTab]);
 
   // Build Tree Structure helpers
-  const { roots, getChildren } = useMemo(() => {
+  const { roots, getChildren, parentIdsWithChildren } = useMemo(() => {
     const roots = filteredAccounts.filter(a => !a.parent_id); // Root nodes
     const childrenMap = new Map<string, Account[]>();
     
@@ -106,7 +123,8 @@ export function ChartOfAccounts() {
 
     return { 
       roots: roots.sort((a, b) => (a.code || "").localeCompare(b.code || "")),
-      getChildren: (id: string) => childrenMap.get(id) || []
+      getChildren: (id: string) => (childrenMap.get(id) || []).sort((a, b) => (a.code || "").localeCompare(b.code || "")),
+      parentIdsWithChildren: new Set(childrenMap.keys()),
     };
   }, [filteredAccounts]);
 
@@ -189,12 +207,15 @@ export function ChartOfAccounts() {
     {
       header: "Account Name",
       width: "35%",
-      cell: (item) => (
-        <div 
-          className="flex items-center gap-2"
-          style={{ paddingLeft: `${item.level * 24}px` }}
-        >
-          {item.is_folder ? (
+      cell: (item) => {
+        const hasChildren = parentIdsWithChildren.has(item.id);
+
+        return (
+          <div 
+            className="flex items-center gap-2"
+            style={{ paddingLeft: `${item.level * 24}px` }}
+          >
+            {hasChildren ? (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -204,23 +225,24 @@ export function ChartOfAccounts() {
             >
               {expandedFolders[item.id] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             </button>
-          ) : (
+            ) : (
             <div className="w-6" /> // Spacer
-          )}
+            )}
           
           <span className="font-mono text-[var(--theme-text-muted)] text-xs w-12">{item.code}</span>
 
-          {item.is_folder ? (
+            {hasChildren ? (
              <Folder size={16} className="text-[var(--theme-action-primary-bg)] fill-[var(--theme-action-primary-bg)]/10" />
-          ) : (
+            ) : (
              <FileText size={16} className="text-[var(--theme-text-muted)]" />
-          )}
+            )}
           
-          <span className={item.is_folder ? "font-semibold text-[var(--theme-text-primary)]" : "text-[var(--theme-text-secondary)]"}>
-            {item.name}
-          </span>
-        </div>
-      )
+            <span className={hasChildren ? "font-semibold text-[var(--theme-text-primary)]" : "text-[var(--theme-text-secondary)]"}>
+              {item.name}
+            </span>
+          </div>
+        );
+      }
     },
     {
       header: "Type",
@@ -233,7 +255,8 @@ export function ChartOfAccounts() {
           Income:    { bg: "var(--theme-bg-surface-tint)",   fg: "var(--theme-action-primary-bg)" },
           Expense:   { bg: "var(--theme-status-danger-bg)",  fg: "var(--theme-status-danger-fg)"  },
         };
-        const c = typeColors[item.type] ?? { bg: "var(--theme-bg-surface-subtle)", fg: "var(--theme-text-muted)" };
+        const accountType = normalizeAccountType(item.type);
+        const c = typeColors[accountType] ?? { bg: "var(--theme-bg-surface-subtle)", fg: "var(--theme-text-muted)" };
         return (
           <span style={{
             display: "inline-flex", alignItems: "center",
@@ -241,7 +264,7 @@ export function ChartOfAccounts() {
             fontSize: "11px", fontWeight: 500, textTransform: "capitalize",
             backgroundColor: c.bg, color: c.fg,
           }}>
-            {item.type}
+            {accountType}
           </span>
         );
       }
@@ -258,7 +281,7 @@ export function ChartOfAccounts() {
       width: "15%",
       align: "right",
       cell: (item) => {
-        if (item.is_folder) return <span className="text-[var(--theme-text-muted)] text-[12px]">—</span>;
+        if (parentIdsWithChildren.has(item.id)) return <span className="text-[var(--theme-text-muted)] text-[12px]">—</span>;
         const currency = item.currency || "PHP";
         return (
           <span className="font-mono text-[var(--theme-text-muted)] text-[12px]">
@@ -310,8 +333,8 @@ export function ChartOfAccounts() {
   // For now, simple counts
   const tabCounts = {
     "All": accounts.length,
-    "BalanceSheet": accounts.filter(a => ["Asset", "Liability", "Equity"].includes(a.type)).length,
-    "IncomeStatement": accounts.filter(a => ["Income", "Expense"].includes(a.type)).length
+    "BalanceSheet": accounts.filter(a => ["Asset", "Liability", "Equity"].includes(normalizeAccountType(a.type))).length,
+    "IncomeStatement": accounts.filter(a => ["Income", "Expense"].includes(normalizeAccountType(a.type))).length
   };
 
   return (
