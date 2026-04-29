@@ -85,19 +85,6 @@ export async function quickCreateProfileRecord(
         if (error || !data) return null;
         return { id: data.id, label: data.company_name, profileType, source: 'linked' };
       }
-
-      case 'booking_service_catalog':
-      case 'booking_subservice_catalog': {
-        if (!context.serviceType) return null;
-        const { data, error } = await supabase
-          .from(entry.source)
-          .insert({ service_type: context.serviceType, name: trimmed, sort_order: 999, is_active: true })
-          .select('id, name')
-          .single();
-        if (error || !data) return null;
-        return { id: data.id, label: data.name, profileType, source: 'linked' };
-      }
-
       default:
         return null;
     }

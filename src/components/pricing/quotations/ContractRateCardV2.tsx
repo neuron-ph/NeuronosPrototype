@@ -520,7 +520,7 @@ const gridHeaderCell: React.CSSProperties = {
   color: "var(--neuron-ink-muted)",
   textTransform: "uppercase",
   letterSpacing: "0.5px",
-  padding: "6px 10px",
+  padding: "6px 12px",
 };
 
 const gridDataCell: React.CSSProperties = {
@@ -606,16 +606,16 @@ function RateLineItem({
         {/* Particular */}
         <div style={gridDataCell}>
           {viewMode ? (
-            <span
+            <div
               style={{
-                fontSize: "13px",
+                ...cellInputStyle,
                 fontWeight: 500,
-                color: "var(--neuron-ink-primary)",
-                padding: "6px 8px",
+                cursor: "default",
+                color: row.particular ? "var(--neuron-ink-primary)" : "var(--neuron-ink-muted)",
               }}
             >
               {row.particular || "\u2014"}
-            </span>
+            </div>
           ) : (
             <CatalogItemCombobox
               value={row.particular}
@@ -649,11 +649,11 @@ function RateLineItem({
             ) : viewMode ? (
               <div
                 style={{
-                  fontSize: "13px",
-                  color: "var(--neuron-ink-primary)",
+                  ...cellInputStyle,
                   textAlign: "right",
                   fontVariantNumeric: "tabular-nums",
-                  padding: "6px 8px",
+                  cursor: "default",
+                  color: (row.rates[col] ?? 0) > 0 ? "var(--neuron-ink-primary)" : "var(--neuron-ink-muted)",
                 }}
               >
                 {(row.rates[col] ?? 0) > 0 ? formatCurrency(row.rates[col]) : "\u2014"}
@@ -704,26 +704,23 @@ function RateLineItem({
           ) : (
             /* Non-trucking: Unit selector */
             isAtCost ? (
-              <span
-                style={{
-                  fontSize: "12px",
-                  color: "var(--theme-text-muted)",
-                  fontStyle: "italic",
-                  padding: "6px 8px",
-                }}
-              >
-                &mdash;
-              </span>
+              <span style={{ padding: "6px 8px" }} aria-hidden />
             ) : viewMode ? (
-              <span
+              <div
                 style={{
-                  fontSize: "13px",
-                  color: "var(--neuron-ink-primary)",
+                  ...cellInputStyle,
                   padding: "6px 8px",
+                  fontSize: "12px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  cursor: "default",
+                  fontWeight: 500,
                 }}
               >
-                {getUnitLabel(row.unit)}
-              </span>
+                <span>{getUnitLabel(row.unit)}</span>
+                <ChevronDown size={14} style={{ color: "var(--neuron-ink-muted)", opacity: 0.5, flexShrink: 0 }} />
+              </div>
             ) : (
               <CustomDropdown
                 value={row.unit}
@@ -785,17 +782,67 @@ function RateLineItem({
           minWidth: "fit-content",
         }}
       >
-        {/* At Cost toggle */}
-        {!viewMode && (
+        {/* At Cost toggle — rendered in both edit and view; non-interactive in viewMode */}
+        <label
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "5px",
+            cursor: viewMode ? "default" : "pointer",
+            fontSize: "11px",
+            fontWeight: 600,
+            color: isAtCost ? "#3B82F6" : "var(--neuron-ink-muted)",
+            flexShrink: 0,
+            padding: "3px 8px",
+            borderRadius: "4px",
+            backgroundColor: "transparent",
+            border: "1px solid transparent",
+            transition: "all 0.15s ease",
+            letterSpacing: "0.3px",
+            userSelect: "none",
+            opacity: viewMode && !isAtCost ? 0.55 : 1,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={isAtCost}
+            onChange={viewMode ? undefined : () => onUpdate({ is_at_cost: !isAtCost })}
+            disabled={viewMode}
+            style={{ display: "none" }}
+          />
+          <span
+            style={{
+              display: "inline-block",
+              width: "12px",
+              height: "12px",
+              borderRadius: "3px",
+              border: isAtCost ? "1.5px solid #3B82F6" : "1.5px solid var(--neuron-ui-border)",
+              backgroundColor: isAtCost ? "#3B82F6" : "var(--theme-bg-surface)",
+              position: "relative",
+              flexShrink: 0,
+              transition: "all 0.15s ease",
+            }}
+          >
+            {isAtCost && (
+              <svg viewBox="0 0 12 12" width="12" height="12" style={{ position: "absolute", top: "-1px", left: "-1px" }}>
+                <path d="M3 6.5L5 8.5L9 4" stroke="white" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+          </span>
+          AT COST
+        </label>
+
+        {/* Tiered toggle — same checkbox UI in edit and view */}
+        {!isAtCost && (
           <label
             style={{
               display: "inline-flex",
               alignItems: "center",
               gap: "5px",
-              cursor: "pointer",
+              cursor: viewMode ? "default" : "pointer",
               fontSize: "11px",
               fontWeight: 600,
-              color: isAtCost ? "#3B82F6" : "var(--neuron-ink-muted)",
+              color: hasTiered ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)",
               flexShrink: 0,
               padding: "3px 8px",
               borderRadius: "4px",
@@ -804,12 +851,14 @@ function RateLineItem({
               transition: "all 0.15s ease",
               letterSpacing: "0.3px",
               userSelect: "none",
+              opacity: viewMode && !hasTiered ? 0.55 : 1,
             }}
           >
             <input
               type="checkbox"
-              checked={isAtCost}
-              onChange={() => onUpdate({ is_at_cost: !isAtCost })}
+              checked={hasTiered}
+              onChange={viewMode ? undefined : onToggleSucceeding}
+              disabled={viewMode}
               style={{ display: "none" }}
             />
             <span
@@ -818,94 +867,25 @@ function RateLineItem({
                 width: "12px",
                 height: "12px",
                 borderRadius: "3px",
-                border: isAtCost ? "1.5px solid #3B82F6" : "1.5px solid var(--neuron-ui-border)",
-                backgroundColor: isAtCost ? "#3B82F6" : "var(--theme-bg-surface)",
+                border: hasTiered ? "1.5px solid var(--neuron-brand-green)" : "1.5px solid var(--neuron-ui-border)",
+                backgroundColor: hasTiered ? "var(--neuron-brand-green)" : "var(--theme-bg-surface)",
                 position: "relative",
                 flexShrink: 0,
                 transition: "all 0.15s ease",
               }}
             >
-              {isAtCost && (
+              {hasTiered && (
                 <svg viewBox="0 0 12 12" width="12" height="12" style={{ position: "absolute", top: "-1px", left: "-1px" }}>
                   <path d="M3 6.5L5 8.5L9 4" stroke="white" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               )}
             </span>
-            AT COST
+            TIERED
           </label>
         )}
 
-        {/* Tiered toggle */}
-        {!isAtCost && (
-          viewMode ? (
-            hasTiered && row.succeeding_rule ? (
-              <span
-                style={{
-                  fontSize: "11px",
-                  fontWeight: 600,
-                  color: "var(--theme-action-primary-bg)",
-                  padding: "3px 8px",
-                  borderRadius: "4px",
-                  backgroundColor: "transparent",
-                  flexShrink: 0,
-                  letterSpacing: "0.3px",
-                }}
-              >
-                TIERED: After first {row.succeeding_rule.after_qty} &rarr; {formatCurrency(row.succeeding_rule.rate)}/unit
-              </span>
-            ) : null
-          ) : (
-            <label
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "5px",
-                cursor: "pointer",
-                fontSize: "11px",
-                fontWeight: 600,
-                color: hasTiered ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)",
-                flexShrink: 0,
-                padding: "3px 8px",
-                borderRadius: "4px",
-                backgroundColor: "transparent",
-                border: "1px solid transparent",
-                transition: "all 0.15s ease",
-                letterSpacing: "0.3px",
-                userSelect: "none",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={hasTiered}
-                onChange={onToggleSucceeding}
-                style={{ display: "none" }}
-              />
-              <span
-                style={{
-                  display: "inline-block",
-                  width: "12px",
-                  height: "12px",
-                  borderRadius: "3px",
-                  border: hasTiered ? "1.5px solid var(--neuron-brand-green)" : "1.5px solid var(--neuron-ui-border)",
-                  backgroundColor: hasTiered ? "var(--neuron-brand-green)" : "var(--theme-bg-surface)",
-                  position: "relative",
-                  flexShrink: 0,
-                  transition: "all 0.15s ease",
-                }}
-              >
-                {hasTiered && (
-                  <svg viewBox="0 0 12 12" width="12" height="12" style={{ position: "absolute", top: "-1px", left: "-1px" }}>
-                    <path d="M3 6.5L5 8.5L9 4" stroke="white" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )}
-              </span>
-              TIERED
-            </label>
-          )
-        )}
-
-        {/* Tiered config (when active) */}
-        {hasTiered && row.succeeding_rule && !viewMode && (
+        {/* Tiered config — rendered in both modes; inputs are read-only in viewMode */}
+        {hasTiered && row.succeeding_rule && (
           <div
             style={{
               display: "flex",
@@ -921,7 +901,8 @@ function RateLineItem({
               type="number"
               min={1}
               value={row.succeeding_rule.after_qty}
-              onChange={(e) =>
+              readOnly={viewMode}
+              onChange={viewMode ? undefined : (e) =>
                 onUpdate({
                   succeeding_rule: {
                     ...row.succeeding_rule!,
@@ -939,6 +920,8 @@ function RateLineItem({
                 color: "var(--neuron-ink-primary)",
                 outline: "none",
                 fontFamily: "inherit",
+                cursor: viewMode ? "default" : "text",
+                backgroundColor: "var(--theme-bg-surface)",
               }}
             />
             <span>&rarr;</span>
@@ -967,7 +950,8 @@ function RateLineItem({
                 min={0}
                 step={100}
                 value={row.succeeding_rule.rate || ""}
-                onChange={(e) =>
+                readOnly={viewMode}
+                onChange={viewMode ? undefined : (e) =>
                   onUpdate({
                     succeeding_rule: {
                       ...row.succeeding_rule!,
@@ -985,6 +969,8 @@ function RateLineItem({
                   textAlign: "right",
                   color: "var(--neuron-ink-primary)",
                   fontFamily: "inherit",
+                  cursor: viewMode ? "default" : "text",
+                  backgroundColor: "var(--theme-bg-surface)",
                 }}
               />
             </div>
@@ -1003,34 +989,22 @@ function RateLineItem({
                 flexShrink: 0,
               }}
             />
-            {viewMode ? (
-              row.remarks ? (
-                <span
-                  style={{
-                    fontSize: "12px",
-                    color: "var(--neuron-ink-muted)",
-                    fontStyle: "italic",
-                  }}
-                >
-                  {row.remarks}
-                </span>
-              ) : null
-            ) : (
-              <input
-                type="text"
-                value={row.remarks || ""}
-                onChange={(e) => onUpdate({ remarks: e.target.value })}
-                placeholder="Remarks (optional)"
-                style={{
-                  ...cellInputStyle,
-                  flex: 1,
-                  minWidth: "120px",
-                  fontSize: "12px",
-                  color: "var(--neuron-ink-muted)",
-                  fontStyle: "italic",
-                }}
-              />
-            )}
+            <input
+              type="text"
+              value={row.remarks || ""}
+              readOnly={viewMode}
+              onChange={viewMode ? undefined : (e) => onUpdate({ remarks: e.target.value })}
+              placeholder="Remarks (optional)"
+              style={{
+                ...cellInputStyle,
+                flex: 1,
+                minWidth: "120px",
+                fontSize: "12px",
+                color: "var(--neuron-ink-muted)",
+                fontStyle: "italic",
+                cursor: viewMode ? "default" : "text",
+              }}
+            />
           </>
         )}
       </div>

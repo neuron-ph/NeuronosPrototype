@@ -3,7 +3,6 @@ import { getVisibleSections } from '../../../config/booking/bookingVisibilityRul
 import { getServiceSchema } from '../../../config/booking/bookingScreenSchema';
 import type { BookingFormContext } from '../../../config/booking/bookingFieldTypes';
 import type { ValidationErrors } from './bookingFormValidation';
-import { useBookingServiceOptions } from '../../../hooks/useBookingServiceOptions';
 import { groupBookingSections } from '../../../utils/bookings/groupBookingSections';
 import { BookingSectionGroupCard } from './BookingSectionGroupCard';
 
@@ -16,12 +15,13 @@ interface Props {
   disabled?: boolean;
   resolvedOptions?: Record<string, string[]>;
   requiredFieldKeys?: readonly string[];
+  /** Replace the rendered control for specific field keys (e.g. project_number contract picker). */
+  fieldOverrides?: Record<string, React.ReactNode>;
 }
 
 /**
  * Renders all visible sections for a service type from the central booking schema,
  * grouped into General Information and Specific Booking Information.
- * Fetches DB-backed service/sub-service catalog options and injects them into each section.
  */
 export function BookingDynamicForm({
   serviceType,
@@ -32,16 +32,9 @@ export function BookingDynamicForm({
   disabled,
   resolvedOptions,
   requiredFieldKeys,
+  fieldOverrides,
 }: Props) {
   const schema = getServiceSchema(serviceType);
-  const { services, subServices } = useBookingServiceOptions(serviceType);
-
-  // Merge DB-backed catalog options with any caller-provided resolvedOptions
-  const catalogOptions: Record<string, string[]> = {
-    ...(resolvedOptions ?? {}),
-    ...(services.length > 0 ? { service_catalog: services } : {}),
-    ...(subServices.length > 0 ? { sub_service_catalog: subServices } : {}),
-  };
 
   if (!schema) return null;
 
@@ -59,8 +52,8 @@ export function BookingDynamicForm({
         errors={errors}
         disabled={disabled}
         resolvedOptions={resolvedOptions}
-        catalogOptions={catalogOptions}
         requiredFieldKeys={requiredFieldKeys}
+        fieldOverrides={fieldOverrides}
       />
 
       <BookingSectionGroupCard
@@ -72,8 +65,8 @@ export function BookingDynamicForm({
         errors={errors}
         disabled={disabled}
         resolvedOptions={resolvedOptions}
-        catalogOptions={catalogOptions}
         requiredFieldKeys={requiredFieldKeys}
+        fieldOverrides={fieldOverrides}
       />
     </>
   );

@@ -43,7 +43,7 @@ export type ProfileLookupRecord = {
  */
 export type ProfileRegistryEntry = {
   /** Which Supabase table or adapter provides records for this type. */
-  source: 'customers' | 'users' | 'service_providers' | 'trade_parties' | 'profile_locations' | 'profile_countries' | 'dispatch_people' | 'vehicles' | 'booking_service_catalog' | 'booking_subservice_catalog';
+  source: 'customers' | 'users' | 'service_providers' | 'trade_parties' | 'profile_locations' | 'profile_countries' | 'dispatch_people' | 'vehicles';
   /** Fields to search against in the lookup query. */
   searchFields: string[];
   /** Whether free-text entry is allowed as a fallback ('combo') or not ('strict'). */

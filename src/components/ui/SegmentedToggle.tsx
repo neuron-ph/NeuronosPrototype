@@ -15,17 +15,17 @@ interface SegmentedToggleProps<T extends string> {
   layoutIdPrefix?: string;
 }
 
-export function SegmentedToggle<T extends string>({ 
-  value, 
-  onChange, 
-  options, 
-  className, 
-  layoutIdPrefix = "toggle-pill" 
+export function SegmentedToggle<T extends string>({
+  value,
+  onChange,
+  options,
+  className,
+  layoutIdPrefix = "toggle-pill"
 }: SegmentedToggleProps<T>) {
   return (
-    <div 
+    <div
       className={className}
-      style={{ 
+      style={{
         display: "inline-flex",
         border: "1px solid var(--theme-border-default)",
         borderRadius: "10px",

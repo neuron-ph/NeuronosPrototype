@@ -12,9 +12,9 @@ interface Props {
   errors?: ValidationErrors;
   disabled?: boolean;
   resolvedOptions?: Record<string, string[]>;
-  catalogOptions?: Record<string, string[]>;
   headerAction?: React.ReactNode;
   requiredFieldKeys?: readonly string[];
+  fieldOverrides?: Record<string, React.ReactNode>;
 }
 
 export function BookingSectionGroupCard({
@@ -26,9 +26,9 @@ export function BookingSectionGroupCard({
   errors = {},
   disabled,
   resolvedOptions,
-  catalogOptions,
   headerAction,
   requiredFieldKeys,
+  fieldOverrides,
 }: Props) {
   if (sections.length === 0) return null;
 
@@ -84,8 +84,8 @@ export function BookingSectionGroupCard({
             errors={errors}
             disabled={disabled}
             resolvedOptions={resolvedOptions}
-            catalogOptions={catalogOptions}
             requiredFieldKeys={requiredFieldKeys}
+            fieldOverrides={fieldOverrides}
             sheet
           />
         </div>

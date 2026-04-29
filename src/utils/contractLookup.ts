@@ -49,17 +49,56 @@ export async function fetchActiveContractsForCustomer(
 
     return (data || []).map((q: any) => ({
       id: q.id,
-      quoteNumber: q.quote_number,
-      customerName: q.customer_name,
-      status: q.status,
-      services: q.services || [],
-      validFrom: q.valid_from,
-      validTo: q.valid_to,
-    })) as unknown as ContractSummary[];
+      quote_number: q.quote_number,
+      quotation_name: q.quotation_name,
+      customer_name: q.customer_name,
+      contract_status: q.contract_status,
+      contract_validity_start: q.contract_validity_start,
+      contract_validity_end: q.contract_validity_end,
+      services: Array.isArray(q.services) ? q.services : [],
+    })) as ContractSummary[];
   } catch (err) {
     console.error("[contractLookup] Error fetching active contracts:", err);
     return [];
   }
+}
+
+function serviceMatches(contractService: string, serviceType: string): boolean {
+  return contractService.trim().toLowerCase() === serviceType.trim().toLowerCase();
+}
+
+/**
+ * Filter contracts down to those covering the requested service.
+ * When no service type is provided, returns the original array unchanged.
+ */
+export function filterContractsForService(
+  contracts: ContractSummary[],
+  serviceType?: string
+): ContractSummary[] {
+  if (!serviceType) return contracts;
+  return contracts.filter((contract) =>
+    (contract.services || []).some((service) => serviceMatches(service, serviceType))
+  );
+}
+
+/**
+ * Pick the best contract for a service from an already-fetched contract list.
+ * When requireExactServiceMatch is enabled, returns null if no matching service contract exists.
+ */
+export function pickBestContractForService(
+  contracts: ContractSummary[],
+  serviceType?: string,
+  options?: { requireExactServiceMatch?: boolean }
+): ContractSummary | null {
+  if (contracts.length === 0) return null;
+
+  const matchingContracts = filterContractsForService(contracts, serviceType);
+  if (matchingContracts.length > 0) {
+    return matchingContracts[0];
+  }
+
+  if (options?.requireExactServiceMatch) return null;
+  return contracts[0];
 }
 
 /**
@@ -73,23 +112,11 @@ export async function fetchActiveContractsForCustomer(
  */
 export async function findContractForCustomerService(
   customerName: string,
-  serviceType?: string
+  serviceType?: string,
+  options?: { requireExactServiceMatch?: boolean }
 ): Promise<ContractSummary | null> {
   const contracts = await fetchActiveContractsForCustomer(customerName);
-
-  if (contracts.length === 0) return null;
-
-  if (serviceType) {
-    const serviceMatch = contracts.find((c) =>
-      c.services.some(
-        (s) => s.toLowerCase() === serviceType.toLowerCase()
-      )
-    );
-    if (serviceMatch) return serviceMatch;
-  }
-
-  // Fallback: return first active contract
-  return contracts[0];
+  return pickBestContractForService(contracts, serviceType, options);
 }
 
 // ============================================
@@ -149,7 +176,7 @@ export function contractCoversService(
 ): boolean {
   const services = contract.services || [];
   return services.some(
-    (s) => s.toLowerCase() === serviceType.toLowerCase()
+    (s) => serviceMatches(s, serviceType)
   );
 }
 

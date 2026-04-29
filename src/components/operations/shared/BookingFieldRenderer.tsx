@@ -54,8 +54,6 @@ interface Props {
   ctx: BookingFormContext;
   error?: string;
   disabled?: boolean;
-  /** DB-backed options for service_catalog and sub_service_catalog keys. Overrides static fallback. */
-  catalogOptions?: Record<string, string[]>;
   portalZIndex?: number;
 }
 
@@ -150,47 +148,32 @@ function MultiSelectInput({
   value,
   onChange,
   disabled,
+  placeholder,
+  portalZIndex,
 }: {
   options: string[];
   value: string[];
   onChange: (v: string[]) => void;
   disabled?: boolean;
+  placeholder?: string;
+  portalZIndex?: number;
 }) {
-  function toggle(opt: string) {
-    if (value.includes(opt)) onChange(value.filter(v => v !== opt));
-    else onChange([...value, opt]);
-  }
-
   const displayOptions = Array.from(new Set([...options, ...value]));
+  const dropdownOptions = displayOptions.map(opt => ({ value: opt, label: opt }));
 
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-      {displayOptions.map(opt => {
-        const active = value.includes(opt);
-        return (
-          <button
-            key={opt}
-            type="button"
-            disabled={disabled}
-            onClick={() => toggle(opt)}
-            style={{
-              padding: '5px 12px',
-              fontSize: '12px',
-              fontWeight: 500,
-              borderRadius: '6px',
-              border: '1px solid',
-              cursor: disabled ? 'not-allowed' : 'pointer',
-              transition: 'all 0.15s',
-              backgroundColor: active ? 'var(--theme-action-primary-bg)' : 'var(--theme-bg-surface)',
-              borderColor: active ? 'var(--theme-action-primary-bg)' : 'var(--theme-border-default)',
-              color: active ? 'white' : 'var(--neuron-ink-base)',
-            }}
-          >
-            {opt}
-          </button>
-        );
-      })}
-    </div>
+    <CustomDropdown
+      value=""
+      options={dropdownOptions}
+      onChange={() => { /* no-op in multi-select mode */ }}
+      multiSelect
+      multiValue={value}
+      onMultiChange={onChange}
+      placeholder={placeholder ?? 'Select...'}
+      disabled={disabled}
+      fullWidth
+      portalZIndex={portalZIndex}
+    />
   );
 }
 
@@ -308,7 +291,7 @@ function GenericRepeater({
 // Main renderer
 // ---------------------------------------------------------------------------
 
-export function BookingFieldRenderer({ field, value, onChange, ctx, error, disabled, catalogOptions, portalZIndex }: Props) {
+export function BookingFieldRenderer({ field, value, onChange, ctx, error, disabled, portalZIndex }: Props) {
   const { user } = useUser();
   const label = resolveLabel(field, ctx);
   const required = isFieldRequired(field, ctx);
@@ -318,10 +301,7 @@ export function BookingFieldRenderer({ field, value, onChange, ctx, error, disab
   const handleQuickCreate = useCallback(async (name: string, profileType: string): Promise<ProfileSelectionValue | null> => {
     return quickCreateProfileRecord(name, profileType, user?.id ?? null, { serviceType: ctx.service_type });
   }, [user?.id, ctx.service_type]);
-  // Prefer DB-backed catalog options when available, fall back to static
-  const options = (field.optionKey && catalogOptions?.[field.optionKey])
-    ? catalogOptions[field.optionKey]
-    : staticOptions;
+  const options = staticOptions;
 
   function set(val: unknown) {
     onChange(field.key, val);
@@ -498,6 +478,8 @@ export function BookingFieldRenderer({ field, value, onChange, ctx, error, disab
           value={arr as string[]}
           onChange={set}
           disabled={disabled}
+          placeholder={`Select ${label.toLowerCase()}...`}
+          portalZIndex={portalZIndex}
         />
       );
 
@@ -536,20 +518,14 @@ export function BookingFieldRenderer({ field, value, onChange, ctx, error, disab
       );
 
     case 'multi-profile-lookup': {
-      const profileType = field.profileType ?? 'unknown';
-      // service_catalog / sub_service_catalog are scoped by the booking's service_type
-      const serviceTypeFilter = (profileType === 'service_catalog' || profileType === 'sub_service_catalog')
-        ? ctx.service_type
-        : undefined;
       return (
         <ProfileMultiLookupCombobox
-          profileType={profileType}
+          profileType={field.profileType ?? 'unknown'}
           value={value as Array<ProfileSelectionValue | string> | null}
           onChange={sel => set(sel)}
           disabled={disabled}
           placeholder={label}
           error={!!error}
-          serviceTypeFilter={serviceTypeFilter}
           onQuickCreate={handleQuickCreate}
           portalZIndex={portalZIndex}
         />

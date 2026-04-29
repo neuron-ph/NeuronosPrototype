@@ -48,16 +48,12 @@ export function CreateBookingFromProjectPanel({
       case "Forwarding":
         return {
           ...autofillForwardingFromProject(project),
-          accountOwner: currentUser?.name || "",
-          accountHandler: currentUser?.name || "",
           projectNumber: project.project_number,
         };
       
       case "Brokerage":
         return {
           ...autofillBrokerageFromProject(project),
-          accountOwner: currentUser?.name || "",
-          accountHandler: currentUser?.name || "",
           projectNumber: project.project_number,
           brokerageType: (service.service_details as any)?.subtype || "Standard",
         };
@@ -65,24 +61,18 @@ export function CreateBookingFromProjectPanel({
       case "Trucking":
         return {
           ...autofillTruckingFromProject(project),
-          accountOwner: currentUser?.name || "",
-          accountHandler: currentUser?.name || "",
           projectNumber: project.project_number,
         };
       
       case "Marine Insurance":
         return {
           ...autofillMarineInsuranceFromProject(project),
-          accountOwner: currentUser?.name || "",
-          accountHandler: currentUser?.name || "",
           projectNumber: project.project_number,
         };
       
       case "Others":
         return {
           ...autofillOthersFromProject(project),
-          accountOwner: currentUser?.name || "",
-          accountHandler: currentUser?.name || "",
           projectNumber: project.project_number,
         };
       

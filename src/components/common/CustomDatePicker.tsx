@@ -25,9 +25,27 @@ export function CustomDatePicker({
 }: CustomDatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [viewDate, setViewDate] = useState(new Date());
+  const [pendingDate, setPendingDate] = useState<string>(""); // YYYY-MM-DD, staged until Confirm
   const [showYearPicker, setShowYearPicker] = useState(false);
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const currentYearButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Sync the staged pendingDate with the committed value whenever the calendar opens.
+  useEffect(() => {
+    if (isOpen) setPendingDate(value ?? "");
+  }, [isOpen, value]);
+
+  // When the year picker opens, scroll the current view year into view so it's
+  // immediately visible (default browser behavior shows the top of the list).
+  useEffect(() => {
+    if (showYearPicker) {
+      // Defer until after the dropdown has mounted.
+      requestAnimationFrame(() => {
+        currentYearButtonRef.current?.scrollIntoView({ block: "center" });
+      });
+    }
+  }, [showYearPicker]);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const calendarRef = useRef<HTMLDivElement>(null);
   const [calendarPosition, setCalendarPosition] = useState<{
@@ -86,9 +104,13 @@ export function CustomDatePicker({
     }
   }, [value]);
 
-  // Parse an ISO date string (YYYY-MM-DD) as a local date (no timezone shift)
+  // Parse an ISO date string (YYYY-MM-DD) as a local date (no timezone shift).
+  // Tolerates full timestamps from Postgres (e.g. "2027-04-29 00:00:00+00" or
+  // "2027-04-29T00:00:00.000Z") by taking only the date portion before
+  // any "T" or whitespace.
   const parseLocalDate = (dateStr: string): Date => {
-    const [y, m, d] = dateStr.split("-").map(Number);
+    const datePart = dateStr.split(/[T\s]/)[0];
+    const [y, m, d] = datePart.split("-").map(Number);
     return new Date(y, m - 1, d);
   };
 
@@ -132,13 +154,12 @@ export function CustomDatePicker({
     return days;
   };
 
-  // Handle date selection
+  // Handle date selection — stages the date as pending; commit happens on Confirm.
   const handleDateSelect = (day: number) => {
     const y = viewDate.getFullYear();
     const m = String(viewDate.getMonth() + 1).padStart(2, "0");
     const d = String(day).padStart(2, "0");
-    onChange(`${y}-${m}-${d}`);
-    closeCalendar();
+    setPendingDate(`${y}-${m}-${d}`);
   };
 
   // Navigate months
@@ -150,20 +171,19 @@ export function CustomDatePicker({
     setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1));
   };
 
-  // Handle Today button
+  // Handle Today button — stages today's date and jumps the view to today; does not commit.
   const handleToday = () => {
     const today = new Date();
     const y = today.getFullYear();
     const m = String(today.getMonth() + 1).padStart(2, "0");
     const d = String(today.getDate()).padStart(2, "0");
-    onChange(`${y}-${m}-${d}`);
+    setPendingDate(`${y}-${m}-${d}`);
     setViewDate(today);
-    closeCalendar();
   };
 
-  // Handle Clear button
-  const handleClear = () => {
-    onChange("");
+  // Handle Confirm button — commits the currently staged pendingDate.
+  const handleConfirm = () => {
+    onChange(pendingDate);
     closeCalendar();
   };
 
@@ -173,20 +193,21 @@ export function CustomDatePicker({
     setShowYearPicker(false);
   };
 
-  // Generate year range (current year ± 50 years)
+  // Generate year range (current year ± 10 years)
   const generateYearRange = () => {
     const currentYear = new Date().getFullYear();
     const years: number[] = [];
-    for (let i = currentYear - 50; i <= currentYear + 50; i++) {
+    for (let i = currentYear - 10; i <= currentYear + 10; i++) {
       years.push(i);
     }
     return years;
   };
 
-  // Check if a day is selected
+  // Check if a day is selected — reflects the staged pendingDate while the calendar is open.
   const isDateSelected = (day: number) => {
-    if (!value) return false;
-    const selectedDate = parseLocalDate(value);
+    const source = pendingDate || value;
+    if (!source) return false;
+    const selectedDate = parseLocalDate(source);
     return (
       selectedDate.getDate() === day &&
       selectedDate.getMonth() === viewDate.getMonth() &&
@@ -391,6 +412,7 @@ export function CustomDatePicker({
                   {generateYearRange().map((year) => (
                     <button
                       key={year}
+                      ref={year === viewDate.getFullYear() ? currentYearButtonRef : undefined}
                       type="button"
                       onClick={() => handleYearChange(year)}
                       style={{
@@ -498,7 +520,7 @@ export function CustomDatePicker({
           }}>
             <button
               type="button"
-              onClick={handleClear}
+              onClick={handleToday}
               style={{
                 padding: "6px 12px",
                 fontSize: "12px",
@@ -518,12 +540,13 @@ export function CustomDatePicker({
                 e.currentTarget.style.color = "var(--neuron-ink-muted)";
               }}
             >
-              Clear
+              Today
             </button>
 
             <button
               type="button"
-              onClick={handleToday}
+              onClick={handleConfirm}
+              disabled={!pendingDate}
               style={{
                 padding: "6px 12px",
                 fontSize: "12px",
@@ -531,17 +554,18 @@ export function CustomDatePicker({
                 color: "white",
                 backgroundColor: "var(--theme-action-primary-bg)",
                 border: "none",
-                cursor: "pointer",
-                borderRadius: "4px"
+                cursor: pendingDate ? "pointer" : "not-allowed",
+                borderRadius: "4px",
+                opacity: pendingDate ? 1 : 0.5
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "#0d6660";
+                if (pendingDate) e.currentTarget.style.backgroundColor = "#0d6660";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
               }}
             >
-              Today
+              Confirm
             </button>
           </div>
         </div>,
@@ -586,7 +610,7 @@ export function CustomDatePicker({
           }
         }}
       >
-        <Calendar size={16} style={{ color: "var(--neuron-ink-muted)", flexShrink: 0 }} />
+        <Calendar size={16} style={{ color: "currentColor", flexShrink: 0 }} />
         <span style={{ flex: 1, textAlign: "left" }}>
           {formatDisplayValue(value)}
         </span>

@@ -239,10 +239,16 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
       project_id: d.project_id,
       // Pack all pricing sub-fields into the JSONB column
       pricing: Object.keys(mergedPricing).length > 0 ? mergedPricing : undefined,
-      // Contract rate matrices live in details (spread on load via { ...details, ...row })
-      details: d.rate_matrices !== undefined
-        ? { ...(d.details ?? {}), rate_matrices: d.rate_matrices }
-        : d.details ?? undefined,
+      // Contract overflow fields live in details (spread on load via { ...details, ...row }):
+      // rate_matrices, scope_of_services, terms_and_conditions, contract_general_details.
+      details: (() => {
+        const overflow: Record<string, unknown> = { ...(d.details ?? {}) };
+        if (d.rate_matrices !== undefined) overflow.rate_matrices = d.rate_matrices;
+        if (d.scope_of_services !== undefined) overflow.scope_of_services = d.scope_of_services;
+        if (d.terms_and_conditions !== undefined) overflow.terms_and_conditions = d.terms_and_conditions;
+        if (d.contract_general_details !== undefined) overflow.contract_general_details = d.contract_general_details;
+        return Object.keys(overflow).length > 0 ? overflow : undefined;
+      })(),
     };
 
     // Date fields — null out anything Postgres can't parse as a timestamp

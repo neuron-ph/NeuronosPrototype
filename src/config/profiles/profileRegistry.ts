@@ -136,18 +136,4 @@ export const profileRegistry: Record<string, ProfileRegistryEntry> = {
     strictness: 'combo',
     quickCreateAllowed: true,
   },
-
-  // ---- Booking service catalogs (per-booking-type, multi-select) ----
-  service_catalog: {
-    source: 'booking_service_catalog',
-    searchFields: ['name'],
-    strictness: 'combo',
-    quickCreateAllowed: true,
-  },
-  sub_service_catalog: {
-    source: 'booking_subservice_catalog',
-    searchFields: ['name'],
-    strictness: 'combo',
-    quickCreateAllowed: true,
-  },
 };

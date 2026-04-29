@@ -472,10 +472,11 @@ export function GeneralDetailsSection({
                   <label htmlFor="general-contract-date" style={{ display: "block", fontSize: "13px", fontWeight: 500, color: "var(--neuron-ink-base)", marginBottom: "8px" }}>
                     Date Created *
                   </label>
-                  <input id="general-contract-date" type="date" value={date} onChange={(e) => setDate(e.target.value)}
-                    style={{ width: "100%", padding: "10px 12px", fontSize: "13px", color: "var(--neuron-ink-base)", backgroundColor: "var(--theme-bg-surface)", border: "1px solid var(--neuron-ui-border)", borderRadius: "6px", outline: "none" }}
-                    onFocus={(e) => { e.currentTarget.style.borderColor = "var(--neuron-brand-teal)"; }}
-                    onBlur={(e) => { e.currentTarget.style.borderColor = "var(--neuron-ui-border)"; }}
+                  <CustomDatePicker
+                    value={date || ""}
+                    onChange={setDate}
+                    placeholder="dd/mm/yyyy"
+                    minWidth="100%"
                   />
                 </div>
                 <div>

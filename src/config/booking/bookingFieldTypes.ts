@@ -69,6 +69,7 @@ export type FieldDef = {
   label: string;
   control: ControlType;
   required: RequiredRule;
+  gridSpan?: 1 | 2 | 3;                           // optional grid-column span override in 3-col layouts
   // Conditions that make this field required (only meaningful when required = 'conditional')
   requiredWhen?: VisibilityCondition[];
   storage: StorageTarget;

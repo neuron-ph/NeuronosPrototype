@@ -22,7 +22,9 @@ import {
 import { ContractDetectionBanner } from "./shared/ContractDetectionBanner";
 import { logCreation } from "../../utils/activityLog";
 import { fireBookingAssignmentTickets } from "../../utils/workflowTickets";
-import { generateBookingNumber } from "../../utils/bookingNumberUtils";
+import { generateBookingNumber, peekNextBookingNumber } from "../../utils/bookingNumberUtils";
+import { getSelectedCustomer } from "../../utils/bookings/selectedCustomer";
+import { useCustomerAccountOwnerAutofill } from "./shared/useCustomerAccountOwnerAutofill";
 
 interface CreateMarineInsuranceBookingPanelProps {
   isOpen: boolean;
@@ -54,10 +56,25 @@ export function CreateMarineInsuranceBookingPanel({
   const { formState, setField, initFromPrefill, context } = useBookingFormState("Marine Insurance", {
     status: "Draft",
   });
+  const selectedCustomer = getSelectedCustomer(formState, customerId ?? null);
+  useCustomerAccountOwnerAutofill(selectedCustomer.customerId, setField);
 
   useEffect(() => {
     if (prefillData && isOpen) initFromPrefill(prefillData);
   }, [prefillData, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (formState.booking_number) return;
+    let cancelled = false;
+    void (async () => {
+      const preview = await peekNextBookingNumber("Marine Insurance");
+      if (!cancelled && preview) setField("booking_number", preview);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,7 +111,7 @@ export function CreateMarineInsuranceBookingPanel({
       const assignRes = await persistAssignmentsForNewBooking({
         bookingId: data.id,
         payload: assignmentPayload,
-        customerId: customerId ?? null,
+        customerId: selectedCustomer.customerId,
         assignedBy: currentUser?.id ?? null,
       });
       if (!assignRes.ok) {
@@ -117,7 +134,7 @@ export function CreateMarineInsuranceBookingPanel({
           bookingId: data.id,
           bookingNumber: data.booking_number,
           serviceType: "Marine Insurance",
-          customerName: String(formState.customer_name ?? ""),
+          customerName: selectedCustomer.customerName,
           createdBy: currentUser?.id ?? "",
           createdByName: currentUser?.name ?? "",
           createdByDept: currentUser?.department ?? "",
@@ -146,7 +163,7 @@ export function CreateMarineInsuranceBookingPanel({
 
   if (!isOpen) return null;
 
-  const customerName = String(formState.customer_name ?? "");
+  const customerName = selectedCustomer.customerName;
   const bookingName = String(formState.booking_name ?? "");
   const isFormValid = customerName.trim() !== "" && bookingName.trim() !== "";
 
@@ -195,7 +212,8 @@ export function CreateMarineInsuranceBookingPanel({
           </div>
           <div style={{ padding: "20px", backgroundColor: "var(--theme-bg-page)", border: "1px solid var(--neuron-ui-border)", borderRadius: "8px" }}>
             <ServiceRoleAssignmentForm
-              customerId={customerId ?? null}
+              key={`Marine Insurance:${selectedCustomer.customerId ?? "no-customer"}`}
+              customerId={selectedCustomer.customerId}
               serviceType="Marine Insurance"
               onChange={setAssignmentPayload}
             />

@@ -7,7 +7,7 @@ import type { ValidationErrors } from './bookingFormValidation';
 
 // Controls that should span the full 3-column grid (too wide for a single column)
 const FULL_WIDTH_CONTROLS = new Set([
-  'textarea', 'repeater', 'multi-select', 'multi-value', 'multi-profile-lookup',
+  'textarea', 'repeater', 'multi-value', 'multi-profile-lookup',
 ]);
 
 // SidePanel defaults to zIndexBase 1100 and renders the panel at 1110.
@@ -23,13 +23,12 @@ interface Props {
   errors?: ValidationErrors;
   disabled?: boolean;
   resolvedOptions?: Record<string, string[]>;
-  /** DB-backed catalog options forwarded to BookingFieldRenderer (service_catalog, sub_service_catalog). */
-  catalogOptions?: Record<string, string[]>;
   /** Rendered on the right side of the section header — used for Edit/Save/Cancel controls */
   headerAction?: React.ReactNode;
   /** When true, renders as a borderless sheet slice (no card chrome). Default: false. */
   sheet?: boolean;
   requiredFieldKeys?: readonly string[];
+  fieldOverrides?: Record<string, React.ReactNode>;
 }
 
 export function BookingSectionRenderer({
@@ -40,15 +39,27 @@ export function BookingSectionRenderer({
   errors = {},
   disabled,
   resolvedOptions,
-  catalogOptions,
   headerAction,
   sheet = false,
   requiredFieldKeys,
+  fieldOverrides,
 }: Props) {
+  const getFieldGridColumn = (field: SectionDef['fields'][number]) => {
+    if (field.gridSpan) return `span ${field.gridSpan}`;
+    return FULL_WIDTH_CONTROLS.has(field.control) ? 'span 3' : undefined;
+  };
+
   const visibleFields = getVisibleFields(section, ctx).filter(
     f => f.control !== 'team-assignment',
   );
   const requiredFieldOverride = requiredFieldKeys ? new Set(requiredFieldKeys) : null;
+
+  // When a segmented toggle leads the section, give its column intrinsic width so it
+  // sits flush against the next field instead of being stranded in a 1fr cell.
+  const leadingIsSegmented = visibleFields[0]?.control === 'segmented';
+  const gridTemplateColumns = leadingIsSegmented
+    ? 'auto 1fr 1fr'
+    : 'repeat(3, 1fr)';
 
   if (visibleFields.length === 0) return null;
 
@@ -81,8 +92,8 @@ export function BookingSectionRenderer({
           style={{
             padding: '16px 24px 24px',
             display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: '16px 20px',
+            gridTemplateColumns,
+            gap: '20px 24px',
             alignItems: 'start',
           }}
         >
@@ -92,7 +103,7 @@ export function BookingSectionRenderer({
               ? requiredFieldOverride.has(field.key)
               : isFieldRequired(field, ctx);
             const error = errors[field.key];
-            const isFullWidth = FULL_WIDTH_CONTROLS.has(field.control);
+            const gridColumn = getFieldGridColumn(field);
             const fieldWithResolvedOptions =
               resolvedOptions && field.optionKey && resolvedOptions[field.optionKey]
                 ? { ...field, options: resolvedOptions[field.optionKey] }
@@ -108,7 +119,7 @@ export function BookingSectionRenderer({
                 : { fontSize: '13px', fontWeight: 500, color: 'var(--neuron-ink-base)' };
 
             return (
-              <div key={field.key} style={{ gridColumn: isFullWidth ? 'span 3' : undefined }}>
+              <div key={field.key} style={{ gridColumn }}>
                 <label
                   style={{
                     display: 'flex', alignItems: 'center', gap: '5px',
@@ -120,16 +131,19 @@ export function BookingSectionRenderer({
                   {required && <span style={{ color: 'var(--theme-status-danger-fg)' }}>*</span>}
                   {disabled && <Lock size={11} color="var(--theme-text-muted)" style={{ flexShrink: 0, marginTop: 1 }} />}
                 </label>
-                <BookingFieldRenderer
-                  field={fieldWithResolvedOptions}
-                  value={formState[field.key]}
-                  onChange={onChange}
-                  ctx={ctx}
-                  error={error}
-                  disabled={disabled}
-                  catalogOptions={catalogOptions}
-                  portalZIndex={BOOKING_SHEET_DROPDOWN_Z_INDEX}
-                />
+                {fieldOverrides && fieldOverrides[field.key] !== undefined ? (
+                  fieldOverrides[field.key]
+                ) : (
+                  <BookingFieldRenderer
+                    field={fieldWithResolvedOptions}
+                    value={formState[field.key]}
+                    onChange={onChange}
+                    ctx={ctx}
+                    error={error}
+                    disabled={disabled}
+                    portalZIndex={BOOKING_SHEET_DROPDOWN_Z_INDEX}
+                  />
+                )}
                 {error && (
                   <p style={{ fontSize: '12px', color: 'var(--theme-status-danger-fg)', marginTop: '4px' }}>
                     {error}
@@ -181,10 +195,10 @@ export function BookingSectionRenderer({
       {/* Fields — 3-column responsive grid; full-width controls span all columns */}
       <div
         style={{
-          padding: '20px',
+          padding: '20px 24px',
           display: 'grid',
           gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: '16px 20px',
+          gap: '20px 24px',
           alignItems: 'start',
         }}
       >
@@ -194,7 +208,7 @@ export function BookingSectionRenderer({
             ? requiredFieldOverride.has(field.key)
             : isFieldRequired(field, ctx);
           const error = errors[field.key];
-          const isFullWidth = FULL_WIDTH_CONTROLS.has(field.control);
+          const gridColumn = getFieldGridColumn(field);
           const fieldWithResolvedOptions =
             resolvedOptions && field.optionKey && resolvedOptions[field.optionKey]
               ? { ...field, options: resolvedOptions[field.optionKey] }
@@ -203,7 +217,7 @@ export function BookingSectionRenderer({
           return (
             <div
               key={field.key}
-              style={{ gridColumn: isFullWidth ? 'span 3' : undefined }}
+              style={{ gridColumn }}
             >
               <label
                 style={{
@@ -225,16 +239,19 @@ export function BookingSectionRenderer({
                 )}
               </label>
 
-              <BookingFieldRenderer
-                field={fieldWithResolvedOptions}
-                value={formState[field.key]}
-                onChange={onChange}
-                ctx={ctx}
-                error={error}
-                disabled={disabled}
-                catalogOptions={catalogOptions}
-                portalZIndex={sheet ? BOOKING_SHEET_DROPDOWN_Z_INDEX : undefined}
-              />
+              {fieldOverrides && fieldOverrides[field.key] !== undefined ? (
+                fieldOverrides[field.key]
+              ) : (
+                <BookingFieldRenderer
+                  field={fieldWithResolvedOptions}
+                  value={formState[field.key]}
+                  onChange={onChange}
+                  ctx={ctx}
+                  error={error}
+                  disabled={disabled}
+                  portalZIndex={sheet ? BOOKING_SHEET_DROPDOWN_Z_INDEX : undefined}
+                />
+              )}
 
               {error && (
                 <p style={{ fontSize: '12px', color: 'var(--theme-status-danger-fg)', marginTop: '4px' }}>

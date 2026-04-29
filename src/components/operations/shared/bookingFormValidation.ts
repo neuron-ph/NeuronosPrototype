@@ -5,6 +5,7 @@ import {
   isFieldRequired,
 } from '../../../config/booking/bookingVisibilityRules';
 import type { BookingFormContext } from '../../../config/booking/bookingFieldTypes';
+import { profileValueToLabel } from '../../../utils/bookings/profileSerialize';
 
 export type ValidationErrors = Record<string, string>;
 export const MINIMAL_CREATE_REQUIRED_FIELDS = ['customer_name', 'booking_name'] as const;
@@ -51,7 +52,11 @@ export function validateBookingForm(
         val === undefined ||
         val === null ||
         val === '' ||
-        (Array.isArray(val) && val.length === 0);
+        (Array.isArray(val) && val.length === 0) ||
+        (field.control === 'profile-lookup' && profileValueToLabel(val).trim().length === 0) ||
+        (field.control === 'multi-profile-lookup' &&
+          (!Array.isArray(val) ||
+            val.every((item) => profileValueToLabel(item).trim().length === 0)));
 
       if (isEmpty) {
         errors[field.key] = `${field.label} is required`;
