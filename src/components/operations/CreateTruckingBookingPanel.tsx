@@ -10,7 +10,7 @@ import { BookingCreationPanel } from "./shared/BookingCreationPanel";
 import { BookingDynamicForm } from "./shared/BookingDynamicForm";
 import { useBookingFormState } from "./shared/useBookingFormState";
 import {
-  MINIMAL_CREATE_REQUIRED_FIELDS,
+  getMinimalCreateRequiredFields,
   validateBookingForm,
   hasErrors,
 } from "./shared/bookingFormValidation";
@@ -103,7 +103,7 @@ export function CreateTruckingBookingPanel({
     e.preventDefault();
 
     const errors = validateBookingForm(formState, "Trucking", context, {
-      requiredFieldKeys: MINIMAL_CREATE_REQUIRED_FIELDS,
+      requiredFieldKeys: getMinimalCreateRequiredFields("Trucking"),
     });
     if (hasErrors(errors)) {
       setSubmitErrors(errors);
@@ -214,7 +214,7 @@ export function CreateTruckingBookingPanel({
         onChange={setField}
         ctx={context}
         errors={submitErrors}
-        requiredFieldKeys={MINIMAL_CREATE_REQUIRED_FIELDS}
+        requiredFieldKeys={getMinimalCreateRequiredFields("Trucking")}
       />
 
       {customerName && (

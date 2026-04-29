@@ -558,6 +558,7 @@ export interface AppliedRate {
   subtotal: number;
   rule_applied?: string;               // Human-readable breakdown
   catalog_item_id?: string;            // Carried from ContractRateRow for billing generation
+  category?: string;                   // Carried from ContractRateCategory.category_name for grouped rendering
 }
 
 // ============================================

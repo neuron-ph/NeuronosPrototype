@@ -79,10 +79,10 @@ export function SidePanel({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black/20 backdrop-blur-[2px]"
+            className="fixed inset-0 backdrop-blur-[2px]"
             onClick={onClose}
-            style={{ 
-              backgroundColor: "rgba(18, 51, 43, 0.15)",
+            style={{
+              backgroundColor: "rgba(0, 0, 0, 0.4)",
               zIndex: zIndexBase,
             }}
           />

@@ -383,7 +383,7 @@ export function ForwardingServiceForm({ data, onChange, builderMode = "quotation
                   color: "var(--neuron-ink-base)",
                   marginBottom: "6px"
                 }}>
-                  GWT
+                  Gross Weight
                 </label>
                 <input
                   type="text"
@@ -419,7 +419,7 @@ export function ForwardingServiceForm({ data, onChange, builderMode = "quotation
                   color: "var(--neuron-ink-base)",
                   marginBottom: "6px"
                 }}>
-                  DIMS
+                  Measurement
                 </label>
                 <input
                   type="text"
@@ -467,7 +467,7 @@ export function ForwardingServiceForm({ data, onChange, builderMode = "quotation
                   color: "var(--neuron-ink-base)",
                   marginBottom: "6px"
                 }}>
-                  GWT
+                  Gross Weight
                 </label>
                 <input
                   type="text"
@@ -503,7 +503,7 @@ export function ForwardingServiceForm({ data, onChange, builderMode = "quotation
                   color: "var(--neuron-ink-base)",
                   marginBottom: "6px"
                 }}>
-                  CWT
+                  Chargeable Weight
                 </label>
                 <input
                   type="text"
@@ -746,7 +746,7 @@ export function ForwardingServiceForm({ data, onChange, builderMode = "quotation
                       color: "var(--neuron-ink-base)",
                       marginBottom: "6px"
                     }}>
-                      Route
+                      Routing
                     </label>
                     <input
                       type="text"
@@ -823,6 +823,70 @@ export function ForwardingServiceForm({ data, onChange, builderMode = "quotation
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {/* Stackable — spec adds DAP/DDU/DDP on top of EXW/FOB/FCA. EXW/FOB/FCA
+            are handled in the block above; this block fills in DAP/DDU/DDP. */}
+        {!contractMode && (data.incoterms === "DAP" || data.incoterms === "DDU" || data.incoterms === "DDP") && (
+          <div style={{
+            padding: "16px",
+            backgroundColor: "var(--theme-bg-surface-subtle)",
+            border: "1px solid var(--neuron-ui-border)",
+            borderRadius: "6px",
+            maxWidth: "200px",
+          }}>
+            <label style={{
+              display: "block",
+              fontSize: "12px",
+              fontWeight: 500,
+              color: "var(--neuron-ink-base)",
+              marginBottom: "6px"
+            }}>
+              Stackable?
+            </label>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                type="button"
+                onClick={() => !viewMode && updateField("stackable", true)}
+                style={{
+                  flex: 1,
+                  padding: "8px 12px",
+                  fontSize: "12px",
+                  fontWeight: 500,
+                  color: data.stackable === true ? "white" : "var(--neuron-ink-secondary)",
+                  backgroundColor: data.stackable === true ? (viewMode ? "var(--theme-text-muted)" : "var(--theme-action-primary-bg)") : (viewMode ? "var(--neuron-pill-inactive-bg)" : "var(--theme-bg-surface)"),
+                  border: `1px solid ${data.stackable === true ? (viewMode ? "var(--theme-text-muted)" : "var(--theme-action-primary-bg)") : "var(--neuron-ui-border)"}`,
+                  borderRadius: "6px",
+                  cursor: viewMode ? "default" : "pointer",
+                  transition: "all 0.2s ease",
+                  opacity: viewMode ? 0.7 : 1
+                }}
+                disabled={viewMode}
+              >
+                Yes
+              </button>
+              <button
+                type="button"
+                onClick={() => !viewMode && updateField("stackable", false)}
+                style={{
+                  flex: 1,
+                  padding: "8px 12px",
+                  fontSize: "12px",
+                  fontWeight: 500,
+                  color: data.stackable === false ? "white" : "var(--neuron-ink-secondary)",
+                  backgroundColor: data.stackable === false ? (viewMode ? "var(--theme-text-muted)" : "var(--theme-action-primary-bg)") : (viewMode ? "var(--neuron-pill-inactive-bg)" : "var(--theme-bg-surface)"),
+                  border: `1px solid ${data.stackable === false ? (viewMode ? "var(--theme-text-muted)" : "var(--theme-action-primary-bg)") : "var(--neuron-ui-border)"}`,
+                  borderRadius: "6px",
+                  cursor: viewMode ? "default" : "pointer",
+                  transition: "all 0.2s ease",
+                  opacity: viewMode ? 0.7 : 1
+                }}
+                disabled={viewMode}
+              >
+                No
+              </button>
+            </div>
           </div>
         )}
       </div>

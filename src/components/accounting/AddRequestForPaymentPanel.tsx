@@ -1,5 +1,6 @@
 import { X, Plus, Printer, Download, Calendar as CalendarIcon, CreditCard, Clock, Tag, ChevronDown, ChevronRight, RefreshCw, FileText, Banknote, Receipt, ArrowRight, CheckSquare, Square, Loader2, Save, Zap, Trash2 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { NeuronLogo } from "../NeuronLogo";
 import { CustomDropdown } from "../bd/CustomDropdown";
@@ -683,7 +684,7 @@ export function AddRequestForPaymentPanel({
   const displayEvrnNumber = existingData?.voucher_number || evrnNumber;
   const displayRequestor = existingData?.requestor_name || defaultRequestor || user?.name || "Current User";
 
-  return (
+  return createPortal(
     <>
       {/* Backdrop */}
       <motion.div
@@ -691,11 +692,12 @@ export function AddRequestForPaymentPanel({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
-        className="fixed inset-0 bg-black z-40"
+        className="fixed inset-0 bg-black"
         onClick={handleClose}
-        style={{ 
+        style={{
           backdropFilter: "blur(2px)",
-          backgroundColor: "rgba(18, 51, 43, 0.15)"
+          backgroundColor: "rgba(0, 0, 0, 0.4)",
+          zIndex: 9998,
         }}
       />
 
@@ -704,15 +706,16 @@ export function AddRequestForPaymentPanel({
         initial={{ x: "100%", opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         exit={{ x: "100%", opacity: 0 }}
-        transition={{ 
+        transition={{
           type: "spring",
           damping: 30,
           stiffness: 300,
           duration: 0.3
         }}
-        className="fixed right-0 top-0 h-full w-[920px] bg-[var(--theme-bg-surface)] shadow-2xl z-50 flex flex-col"
+        className="fixed right-0 top-0 h-full w-[920px] bg-[var(--theme-bg-surface)] shadow-2xl flex flex-col"
         style={{
           borderLeft: "1px solid var(--neuron-ui-border)",
+          zIndex: 9999,
         }}
       >
         {/* Header */}
@@ -1583,6 +1586,7 @@ export function AddRequestForPaymentPanel({
           </div>
         )}
       </motion.div>
-    </>
+    </>,
+    document.body,
   );
 }

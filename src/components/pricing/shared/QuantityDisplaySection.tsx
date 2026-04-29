@@ -11,9 +11,45 @@
  * @see /docs/blueprints/RATE_TABLE_DRY_BLUEPRINT.md
  */
 
+import { useState, useEffect } from "react";
 import { Container, Ship, FileText, Stamp, RefreshCw, MapPin, Truck } from "lucide-react";
 import type { BookingQuantities } from "../../../utils/contractRateEngine";
 import type { TruckingLineItem } from "../../../types/pricing";
+
+/** Number input that allows the field to be cleared while still propagating 0 upstream. */
+function QuantityInput({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (next: number) => void;
+}) {
+  const [draft, setDraft] = useState<string>(String(value));
+
+  // Re-sync when external value changes (e.g., Reset) — but don't fight the user mid-type.
+  useEffect(() => {
+    if (draft === "" && value === 0) return;
+    if (Number(draft) !== value) setDraft(String(value));
+  }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      pattern="[0-9]*"
+      value={draft}
+      onChange={(e) => {
+        const next = e.target.value.replace(/[^0-9]/g, "");
+        setDraft(next);
+        onChange(next === "" ? 0 : parseInt(next, 10));
+      }}
+      onBlur={() => {
+        if (draft === "") setDraft("0");
+      }}
+      className="w-16 h-8 text-center text-[13px] font-medium text-[var(--theme-text-primary)] border border-[var(--theme-border-default)] rounded-[4px] bg-[var(--theme-bg-surface)] focus:border-[var(--theme-action-primary-bg)] focus:ring-1 focus:ring-[var(--theme-action-primary-bg)] outline-none"
+    />
+  );
+}
 
 // ============================================
 // TYPES
@@ -56,53 +92,82 @@ interface QuantityDisplaySectionProps {
 // HELPERS
 // ============================================
 
+/** Pick first defined field across camelCase / snake_case variants */
+function pickField(booking: any, ...keys: string[]): any {
+  for (const k of keys) {
+    if (booking?.[k] !== undefined && booking?.[k] !== null && booking?.[k] !== "") return booking[k];
+  }
+  return undefined;
+}
+
+/** Parse raw booking field into chip entries (handles arrays and delimited strings) */
+function parseEntries(field: unknown): string[] {
+  if (!field) return [];
+  if (Array.isArray(field)) return field.map((s) => String(s).trim()).filter(Boolean);
+  if (typeof field === "string") return field.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
+  return [];
+}
+
 /** Describe where a quantity was derived from (editable mode) */
 function describeSource(key: string, booking: any): string {
-  if (!booking) return "Default";
+  if (!booking) return "";
   switch (key) {
     case "containers": {
-      if (booking.containerNumbers) {
-        const count = Array.isArray(booking.containerNumbers)
-          ? booking.containerNumbers.length
-          : booking.containerNumbers.split(/[,;\n]/).filter((s: string) => s.trim()).length;
-        if (count > 0) return `Counted from Container Numbers field (${count} entries)`;
+      const containerField = pickField(booking, "containerNumbers", "container_numbers");
+      if (containerField) {
+        const count = parseEntries(containerField).length;
+        if (count > 0) return `${count} container number${count !== 1 ? "s" : ""} on this booking`;
       }
-      if (booking.containers?.length > 0) return "From containers array";
+      if (Array.isArray(booking.containers) && booking.containers.length > 0) {
+        const c = booking.containers.length;
+        return `${c} container${c !== 1 ? "s" : ""} on this booking`;
+      }
       if (booking.qty20ft || booking.qty40ft || booking.qty45ft) return "Sum of qty20ft + qty40ft + qty45ft";
-      if (booking.vehicleReferenceNumber) return "Counted from Vehicle Reference Numbers";
-      return "Default (1 for FCL)";
+      const vehField = pickField(booking, "vehicleReferenceNumber", "vehicle_reference_number");
+      if (vehField) {
+        const count = parseEntries(vehField).length;
+        return `${count} vehicle reference${count !== 1 ? "s" : ""} on this booking`;
+      }
+      return "No container numbers on this booking";
     }
     case "bls": {
-      if (booking.mblMawb) {
-        const count = booking.mblMawb.split(/[,;\n]/).filter((s: string) => s.trim()).length;
-        if (count > 0) return `Counted from MBL/MAWB field (${count} entries)`;
+      const mblField = pickField(booking, "mblMawb", "mbl_mawb");
+      if (mblField) {
+        const count = parseEntries(mblField).length;
+        if (count > 0) return `${count} MBL/MAWB${count !== 1 ? "s" : ""} on this booking`;
       }
-      return "Default (1)";
+      return "No MBL/MAWB on this booking";
     }
     case "sets":
-      return "Default (1)";
+      return "One entry per booking";
     case "shipments":
-      return "Default (1 per booking)";
+      return "One shipment per booking";
     default:
-      return "Default";
+      return "";
   }
 }
 
 /** Parse raw booking field into chip entries */
 function extractSourceEntries(key: string, booking: any): string[] {
   if (!booking) return [];
-  const parseField = (field?: string | string[]): string[] => {
-    if (!field) return [];
-    if (Array.isArray(field)) return field.map((s) => s.trim()).filter(Boolean);
-    return field.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
-  };
   switch (key) {
-    case "containers":
-      if (booking.containerNumbers) return parseField(booking.containerNumbers);
-      if (booking.vehicleReferenceNumber) return parseField(booking.vehicleReferenceNumber);
+    case "containers": {
+      const containerField = pickField(booking, "containerNumbers", "container_numbers");
+      if (containerField) return parseEntries(containerField);
+      if (Array.isArray(booking.containers) && booking.containers.length > 0) {
+        return booking.containers
+          .map((c: any) => {
+            const type = c?.type ? String(c.type) : "";
+            const qty = c?.qty ?? 1;
+            return type ? `${qty}× ${type}` : `${qty}× container`;
+          });
+      }
+      const vehField = pickField(booking, "vehicleReferenceNumber", "vehicle_reference_number");
+      if (vehField) return parseEntries(vehField);
       return [];
+    }
     case "bls":
-      return parseField(booking.mblMawb);
+      return parseEntries(pickField(booking, "mblMawb", "mbl_mawb"));
     default:
       return [];
   }
@@ -132,7 +197,7 @@ function buildQuantityInputs(
     inputs.push({
       label: "Bills of Lading",
       key: "bls",
-      value: quantities.bls ?? 1,
+      value: quantities.bls ?? 0,
       icon: <FileText size={14} className="text-[var(--theme-action-primary-bg)]" />,
       ...(includeSource && {
         source: describeSource("bls", booking),
@@ -140,7 +205,7 @@ function buildQuantityInputs(
       }),
     });
     inputs.push({
-      label: "Document Sets",
+      label: "Entry",
       key: "sets",
       value: quantities.sets ?? 1,
       icon: <Stamp size={14} className="text-[var(--theme-action-primary-bg)]" />,
@@ -150,7 +215,7 @@ function buildQuantityInputs(
     inputs.push({
       label: "Trucks / Containers",
       key: "containers",
-      value: quantities.containers ?? 1,
+      value: quantities.containers ?? 0,
       icon: <Container size={14} className="text-[var(--theme-action-primary-bg)]" />,
       ...(includeSource && {
         source: describeSource("containers", booking),
@@ -231,17 +296,12 @@ export function QuantityDisplaySection({
 
               {/* Value display */}
               {isEditable ? (
-                <input
-                  type="number"
-                  min={0}
+                <QuantityInput
                   value={input.value}
-                  onChange={(e) =>
-                    onQuantityChange?.(input.key, parseInt(e.target.value) || 0)
-                  }
-                  className="w-16 h-8 text-center text-[13px] font-medium text-[var(--theme-text-primary)] border border-[var(--theme-border-default)] rounded-[4px] bg-[var(--theme-bg-surface)] focus:border-[var(--theme-action-primary-bg)] focus:ring-1 focus:ring-[var(--theme-action-primary-bg)] outline-none"
+                  onChange={(next) => onQuantityChange?.(input.key, next)}
                 />
               ) : (
-                <div className="w-16 h-8 flex items-center justify-center text-[13px] font-medium text-[var(--theme-text-primary)] border border-[var(--theme-border-default)] rounded-[4px] bg-[#F8FAFC]">
+                <div className="w-16 h-8 flex items-center justify-center text-[13px] font-medium text-[var(--theme-text-primary)] border border-[var(--theme-border-default)] rounded-[4px] bg-[var(--neuron-pill-inactive-bg)]">
                   {input.value}
                 </div>
               )}
@@ -249,7 +309,7 @@ export function QuantityDisplaySection({
 
             {/* Source entry chips (editable mode only) */}
             {isEditable && input.sourceEntries && input.sourceEntries.length > 0 && (
-              <div className="ml-11 mt-1.5 px-3 py-2.5 rounded-[6px] bg-[#F8FAFC] border border-[var(--theme-border-default)]">
+              <div className="ml-11 mt-1.5 px-3 py-2.5 rounded-[6px] bg-[var(--neuron-pill-inactive-bg)] border border-[var(--theme-border-default)]">
                 <div className="flex flex-wrap gap-1.5">
                   {input.sourceEntries.map((entry, idx) => (
                     <span
@@ -282,7 +342,7 @@ export function QuantityDisplaySection({
                     {li.destination || "—"}
                   </div>
                 </div>
-                <div className="h-8 flex items-center justify-center px-3 text-[12px] font-medium text-[var(--theme-text-primary)] border border-[var(--theme-border-default)] rounded-[4px] bg-[#F8FAFC] whitespace-nowrap">
+                <div className="h-8 flex items-center justify-center px-3 text-[12px] font-medium text-[var(--theme-text-primary)] border border-[var(--theme-border-default)] rounded-[4px] bg-[var(--neuron-pill-inactive-bg)] whitespace-nowrap">
                   {li.truckType || "—"} × {li.quantity}
                 </div>
               </div>
@@ -302,7 +362,7 @@ export function QuantityDisplaySection({
                 <div className="flex-1 min-w-0">
                   <div className="text-[13px] font-medium text-[var(--theme-text-primary)]">Truck Type</div>
                 </div>
-                <div className="h-8 flex items-center justify-center px-3 text-[13px] font-medium text-[var(--theme-text-primary)] border border-[var(--theme-border-default)] rounded-[4px] bg-[#F8FAFC]">
+                <div className="h-8 flex items-center justify-center px-3 text-[13px] font-medium text-[var(--theme-text-primary)] border border-[var(--theme-border-default)] rounded-[4px] bg-[var(--neuron-pill-inactive-bg)]">
                   {selectionContext.truckType}
                 </div>
               </div>
@@ -315,7 +375,7 @@ export function QuantityDisplaySection({
                 <div className="flex-1 min-w-0">
                   <div className="text-[13px] font-medium text-[var(--theme-text-primary)]">Destination</div>
                 </div>
-                <div className="h-8 flex items-center justify-center px-3 text-[13px] font-medium text-[var(--theme-text-primary)] border border-[var(--theme-border-default)] rounded-[4px] bg-[#F8FAFC]">
+                <div className="h-8 flex items-center justify-center px-3 text-[13px] font-medium text-[var(--theme-text-primary)] border border-[var(--theme-border-default)] rounded-[4px] bg-[var(--neuron-pill-inactive-bg)]">
                   {selectionContext.destination}
                 </div>
               </div>

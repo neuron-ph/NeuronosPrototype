@@ -117,6 +117,18 @@ export function instantiateRates(
 ): AppliedRate[] {
   const appliedRates: AppliedRate[] = [];
 
+  // Build row-id → category-name map for carry-through into AppliedRate.
+  // Falls back to "<ServiceType> Charges" if the matrix has no categories defined.
+  const rowCategoryMap = new Map<string, string>();
+  if (matrix.categories) {
+    for (const cat of matrix.categories) {
+      for (const r of cat.rows) {
+        rowCategoryMap.set(r.id, cat.category_name);
+      }
+    }
+  }
+  const fallbackCategory = `${matrix.service_type} Charges`;
+
   // Validate the mode column exists
   if (!matrix.columns.includes(modeColumn)) {
     console.warn(
@@ -163,6 +175,7 @@ export function instantiateRates(
       subtotal,
       rule_applied,
       catalog_item_id: row.catalog_item_id,
+      category: rowCategoryMap.get(row.id) ?? fallbackCategory,
     });
   }
 

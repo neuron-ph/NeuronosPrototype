@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Plus, Search, X } from 'lucide-react';
 import type { ProfileSelectionValue, ProfileLookupRecord } from '../../../types/profiles';
@@ -90,7 +90,11 @@ export function ProfileMultiLookupCombobox({
   const registryEntry = profileRegistry[profileType];
   const isCombo = registryEntry?.strictness === 'combo';
   const canQuickCreate = !!onQuickCreate && (registryEntry?.quickCreateAllowed ?? false) && isPrivileged(user);
-  const adapterInfo = getAdapterForType(profileType);
+  // Memoize: getAdapterForType returns a fresh object literal every call.
+  // Without this, doSearch gets a new identity every render and the debounced
+  // search effect re-fires constantly, flickering loading/results and
+  // re-positioning the dropdown.
+  const adapterInfo = useMemo(() => getAdapterForType(profileType), [profileType]);
 
   const positionDropdown = useCallback(() => {
     if (!containerRef.current) return;

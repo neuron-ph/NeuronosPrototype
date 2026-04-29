@@ -13,12 +13,10 @@
  * @see /docs/blueprints/RATE_CALCULATION_SHEET_BLUEPRINT.md
  */
 
-import { useState } from "react";
-import { FileSpreadsheet, Check, ChevronRight } from "lucide-react";
 import { useBookingRateCard } from "../../hooks/useBookingRateCard";
 import { hasExistingRateCardBilling } from "../../utils/rateCardToBilling";
 import { deriveQuantitiesFromBooking, extractTruckingSelections, normalizeTruckingLineItems, extractMultiLineSelectionsAndQuantities } from "../../utils/contractQuantityExtractor";
-import { RateCalculationSheet } from "./RateCalculationSheet";
+import { InlineRateCardSection } from "./InlineRateCardSection";
 import type { BillingItem } from "../shared/billings/UnifiedBillingsTab";
 import type { TruckingLineItem } from "../../types/pricing";
 
@@ -33,21 +31,12 @@ interface BookingRateCardButtonProps {
   onRefresh: () => void;
 }
 
-const formatCurrency = (amount: number, currency: string = "PHP") =>
-  new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-  }).format(amount);
-
 export function BookingRateCardButton({
   booking,
   serviceType,
   existingBillingItems,
   onRefresh,
 }: BookingRateCardButtonProps) {
-  const [isSheetOpen, setIsSheetOpen] = useState(false);
-
   const contractId = booking.contract_id || booking.contractId;
   const rateCard = useBookingRateCard(contractId);
 
@@ -86,65 +75,33 @@ export function BookingRateCardButton({
       )
     : undefined;
 
-  // Count existing rate card items and their total
-  const rateCardItems = existingBillingItems.filter(
-    (item) => item.source_type === "rate_card" && item.booking_id === bookingId
+  // Count items previously applied from this rate card (used by the inline
+  // section to render a "Applied" success state while still showing the calc).
+  const appliedRateCardItems = existingBillingItems.filter(
+    (item) =>
+      (item.source_type === "rate_card" || item.source_type === "contract_rate") &&
+      item.booking_id === bookingId
   );
-  const rateCardTotal = rateCardItems.reduce((sum, item) => sum + (item.amount || 0), 0);
+  const appliedTotal = appliedRateCardItems.reduce((sum, item) => sum + (item.amount || 0), 0);
 
-  // ── Already applied: subtle single-line note ──
-  if (alreadyGenerated) {
-    return (
-      <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--theme-bg-surface-tint)] border border-[var(--theme-status-success-border)]">
-        <Check size={14} className="text-[var(--theme-status-success-fg)] shrink-0" />
-        <span className="text-[12px] text-[var(--theme-status-success-fg)] font-medium">
-          Rates applied from {rateCard.contractNumber}
-        </span>
-        <span className="text-[12px] text-[var(--theme-text-muted)]">
-          &middot; {rateCardItems.length} item{rateCardItems.length !== 1 ? "s" : ""}
-          {rateCardTotal > 0 && ` · ${formatCurrency(rateCardTotal, rateCard.currency)}`}
-        </span>
-      </div>
-    );
-  }
-
-  // ── Not yet applied: contextual banner ──
   return (
-    <>
-      <div
-        onClick={() => setIsSheetOpen(true)}
-        className="flex items-center gap-3 px-4 py-3.5 rounded-lg border border-[var(--theme-border-default)] bg-[var(--neuron-pill-inactive-bg)] hover:bg-[var(--theme-bg-surface-tint)] hover:border-[var(--theme-status-success-border)] transition-all cursor-pointer group"
-      >
-        <div className="w-9 h-9 rounded-lg bg-[var(--theme-bg-surface-tint)] flex items-center justify-center shrink-0 group-hover:bg-[#CCFBF1] transition-colors">
-          <FileSpreadsheet size={18} className="text-[var(--theme-action-primary-bg)]" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-[13px] font-medium text-[var(--theme-text-primary)]">
-            Contract Rate Card Available
-          </div>
-          <div className="text-[12px] text-[var(--theme-text-muted)]">
-            Review and apply charges from {rateCard.contractNumber}
-          </div>
-        </div>
-        <ChevronRight size={16} className="text-[var(--theme-text-muted)] group-hover:text-[var(--theme-action-primary-bg)] transition-colors shrink-0" />
-      </div>
-
-      <RateCalculationSheet
-        isOpen={isSheetOpen}
-        onClose={() => setIsSheetOpen(false)}
-        booking={booking}
-        serviceType={serviceType}
-        rateMatrices={rateCard.rateMatrices}
-        contractId={rateCard.contractId}
-        contractNumber={rateCard.contractNumber}
-        customerName={rateCard.customerName}
-        currency={rateCard.currency}
-        initialQuantities={initialQuantities}
-        bookingMode={mode}
-        selections={selections}
-        truckingLineItems={truckingLineItems}
-        onRefresh={onRefresh}
-      />
-    </>
+    <InlineRateCardSection
+      booking={booking}
+      serviceType={serviceType}
+      rateMatrices={rateCard.rateMatrices}
+      contractId={rateCard.contractId}
+      contractNumber={rateCard.contractNumber}
+      customerName={rateCard.customerName}
+      currency={rateCard.currency}
+      initialQuantities={initialQuantities}
+      bookingMode={mode}
+      selections={selections}
+      truckingLineItems={truckingLineItems}
+      onRefresh={onRefresh}
+      alreadyApplied={alreadyGenerated}
+      appliedItemCount={appliedRateCardItems.length}
+      appliedTotal={appliedTotal}
+      appliedRateCardItems={appliedRateCardItems}
+    />
   );
 }

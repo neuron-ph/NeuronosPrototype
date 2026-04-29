@@ -109,7 +109,11 @@ export function generateRateCardBillingItems(
   const now = new Date().toISOString();
   const currency = ctx.currency || "PHP";
 
-  const items: BillingItem[] = appliedRates.map((rate, idx) => ({
+  const items: BillingItem[] = appliedRates.map((rate, idx) => {
+    // Category from the contract rate matrix carries through to the billing item
+    // so saved rows land into the same category section the user saw on apply.
+    const category = rate.category || `${ctx.serviceType} Charges`;
+    return {
     // Temporary ID — will be replaced by backend on batch save
     id: `rate-gen-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 6)}`,
     created_at: now,
@@ -121,8 +125,8 @@ export function generateRateCardBillingItems(
     currency,
     status: "unbilled" as const,
 
-    // Category = service type (appears as section header in BillingsTable)
-    quotation_category: `${ctx.serviceType} Charges`,
+    // Category from the contract rate matrix (mirrors the source structure)
+    quotation_category: category,
 
     // Booking link
     booking_id: ctx.bookingId,
@@ -144,7 +148,7 @@ export function generateRateCardBillingItems(
     catalog_snapshot: rate.catalog_item_id
       ? buildCatalogSnapshot(
           { description: rate.particular, amount: rate.subtotal, currency },
-          `${ctx.serviceType} Charges`
+          category
         )
       : null,
 
@@ -155,7 +159,8 @@ export function generateRateCardBillingItems(
     amount_added: 0,
     percentage_added: 0,
     base_cost: 0,
-  }));
+    };
+  });
 
   const total = items.reduce((sum, item) => sum + item.amount, 0);
 

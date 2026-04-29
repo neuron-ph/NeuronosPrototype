@@ -11,7 +11,7 @@ import { BookingCreationPanel } from "./shared/BookingCreationPanel";
 import { BookingDynamicForm } from "./shared/BookingDynamicForm";
 import { useBookingFormState } from "./shared/useBookingFormState";
 import {
-  MINIMAL_CREATE_REQUIRED_FIELDS,
+  getMinimalCreateRequiredFields,
   validateBookingForm,
   hasErrors,
 } from "./shared/bookingFormValidation";
@@ -86,7 +86,7 @@ export function CreateBrokerageBookingPanel({
     const isStandardBrokerage = String(formState.brokerage_type ?? "") === "Standard";
 
     const errors = validateBookingForm(formState, "Brokerage", context, {
-      requiredFieldKeys: MINIMAL_CREATE_REQUIRED_FIELDS,
+      requiredFieldKeys: getMinimalCreateRequiredFields("Brokerage"),
     });
     if (hasErrors(errors)) {
       setSubmitErrors(errors);
@@ -209,7 +209,7 @@ export function CreateBrokerageBookingPanel({
         onChange={setField}
         ctx={context}
         errors={submitErrors}
-        requiredFieldKeys={MINIMAL_CREATE_REQUIRED_FIELDS}
+        requiredFieldKeys={getMinimalCreateRequiredFields("Brokerage")}
         fieldOverrides={
           isStandardBrokerage && contractsList.length > 1
             ? {

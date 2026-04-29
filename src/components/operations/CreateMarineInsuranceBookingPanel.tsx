@@ -10,7 +10,7 @@ import { BookingCreationPanel } from "./shared/BookingCreationPanel";
 import { BookingDynamicForm } from "./shared/BookingDynamicForm";
 import { useBookingFormState } from "./shared/useBookingFormState";
 import {
-  MINIMAL_CREATE_REQUIRED_FIELDS,
+  getMinimalCreateRequiredFields,
   validateBookingForm,
   hasErrors,
 } from "./shared/bookingFormValidation";
@@ -80,7 +80,7 @@ export function CreateMarineInsuranceBookingPanel({
     e.preventDefault();
 
     const errors = validateBookingForm(formState, "Marine Insurance", context, {
-      requiredFieldKeys: MINIMAL_CREATE_REQUIRED_FIELDS,
+      requiredFieldKeys: getMinimalCreateRequiredFields("Marine Insurance"),
     });
     if (hasErrors(errors)) {
       setSubmitErrors(errors);
@@ -191,7 +191,7 @@ export function CreateMarineInsuranceBookingPanel({
         onChange={setField}
         ctx={context}
         errors={submitErrors}
-        requiredFieldKeys={MINIMAL_CREATE_REQUIRED_FIELDS}
+        requiredFieldKeys={getMinimalCreateRequiredFields("Marine Insurance")}
       />
 
       {customerName && (

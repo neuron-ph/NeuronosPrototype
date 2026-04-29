@@ -31,7 +31,9 @@ import { ProjectFinancialOverview } from "../projects/tabs/ProjectFinancialOverv
 import { UnifiedInvoicesTab } from "../shared/invoices/UnifiedInvoicesTab";
 import { UnifiedCollectionsTab } from "../shared/collections/UnifiedCollectionsTab";
 import { ProjectExpensesTab } from "../projects/ProjectExpensesTab";
+import { ProjectOverviewTab } from "../projects/ProjectOverviewTab";
 import { ProjectBookingReadOnlyView } from "../projects/ProjectBookingReadOnlyView";
+import type { Project } from "../../types/pricing";
 import { EntityAttachmentsTab } from "../shared/EntityAttachmentsTab";
 import { CommentsTab } from "../shared/CommentsTab";
 import { ContractStatusSelector } from "../contracts/ContractStatusSelector";
@@ -56,7 +58,7 @@ interface ContractDetailViewProps {
   highlightId?: string | null;
 }
 
-type ContractTab = "financial_overview" | "rate-card" | "bookings" | "billings" | "invoices" | "collections" | "expenses" | "attachments" | "comments" | "activity";
+type ContractTab = "financial_overview" | "quotation" | "rate-card" | "bookings" | "billings" | "invoices" | "collections" | "expenses" | "attachments" | "comments" | "activity";
 
 type TabCategory = "dashboard" | "operations" | "accounting" | "collaboration";
 
@@ -105,6 +107,7 @@ export function ContractDetailView({
 }: ContractDetailViewProps) {
   const { can } = usePermission();
   const canViewFinancialOverviewTab = can("pricing_contracts_financial_overview_tab", "view");
+  const canViewQuotationTab = can("pricing_contracts_quotation_tab", "view");
   const canViewRateCardTab = can("pricing_contracts_rate_card_tab", "view");
   const canViewBookingsTab = can("pricing_contracts_bookings_tab", "view");
   const canViewBillingsTab = can("pricing_contracts_billings_tab", "view");
@@ -118,6 +121,7 @@ export function ContractDetailView({
   const resolveInitialTab = (): ContractTab => {
     if (initialTab) return initialTab as ContractTab;
     if (canViewFinancialOverviewTab) return "financial_overview";
+    if (canViewQuotationTab) return "quotation";
     if (canViewRateCardTab) return "rate-card";
     if (canViewBookingsTab) return "bookings";
     if (canViewBillingsTab) return "billings";
@@ -146,17 +150,27 @@ export function ContractDetailView({
   });
 
   // Linked bookings (fetched when financial/ops tabs active)
-  const { data: linkedBookings = [], isFetching: isLoadingBookings } = useQuery({
+  // Bookings live in the unified `bookings` table — service_type discriminates.
+  const { data: linkedBookings = [], isFetching: isLoadingBookings, refetch: fetchLinkedBookings } = useQuery({
     queryKey: ["bookings", "contract_linked", quotation.id],
     queryFn: async () => {
-      const tables = ['forwarding_bookings', 'brokerage_bookings', 'trucking_bookings', 'marine_insurance_bookings', 'others_bookings'];
-      const allBookings: any[] = [];
-      for (const table of tables) {
-        const { data } = await supabase.from(table).select('*').eq('contract_id', quotation.id);
-        if (data) allBookings.push(...data);
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('contract_id', quotation.id);
+      if (error) {
+        console.error('[ContractDetailView] Failed to fetch linked bookings:', error);
+        return (quotation as any).linkedBookings || [];
       }
-      if (allBookings.length > 0) return allBookings;
-      return (quotation as any).linkedBookings || [];
+      const rows = data || [];
+      // Normalize into the shape BookingsTable expects.
+      return rows.map((b: any) => ({
+        ...b,
+        bookingId: b.id,
+        bookingNumber: b.booking_number,
+        bookingType: b.service_type,
+        serviceType: b.service_type,
+      }));
     },
     enabled: bookingsTabActive && !!quotation.id,
     staleTime: 30_000,
@@ -230,6 +244,63 @@ export function ContractDetailView({
       toast.error("Failed to activate contract");
     } finally {
       setIsActivating(false);
+    }
+  };
+
+  // Adapt the contract quotation into a Project-shaped wrapper so the shared
+  // ProjectOverviewTab (Form/PDF view + amend) can render it identically.
+  const contractAsProject = useMemo<Project>(() => ({
+    id: quotation.id,
+    project_number: quotation.quote_number ?? quotation.id,
+    quotation_id: quotation.id,
+    quotation_number: quotation.quote_number ?? "",
+    quotation_name: quotation.quotation_name,
+    customer_id: quotation.customer_id ?? "",
+    customer_name: quotation.customer_name ?? "",
+    contact_person_id: quotation.contact_person_id,
+    contact_person_name: quotation.contact_person_name,
+    movement: (quotation.movement as Project["movement"]) ?? "IMPORT",
+    services: quotation.services ?? [],
+    services_metadata: quotation.services_metadata ?? [],
+    charge_categories: quotation.charge_categories ?? [],
+    currency: quotation.currency ?? "PHP",
+    total: (quotation as any).total,
+    commodity: quotation.commodity,
+    status: "Active" as Project["status"],
+    booking_status: "Not Started" as Project["booking_status"],
+    created_at: quotation.created_at,
+    updated_at: quotation.updated_at,
+    quotation,
+  }), [quotation]);
+
+  const handleSaveContractQuotation = async (updates: any) => {
+    try {
+      const dateColumns = ['quotation_date', 'expiry_date', 'validity_date', 'contract_validity_start', 'contract_validity_end'];
+      const detailsKeys = new Set([
+        'quotation_name', 'movement', 'category', 'services', 'services_metadata',
+        'charge_categories', 'financial_summary', 'buying_price', 'selling_price',
+        'commodity', 'special_instructions',
+      ]);
+      const top: Record<string, unknown> = {};
+      const details: Record<string, unknown> = { ...(quotation as any).details };
+      Object.entries(updates).forEach(([key, value]) => {
+        if (key === 'id' || key === 'project_id' || key === 'project_number') return;
+        if (dateColumns.includes(key) && (!value || value === '')) return;
+        if (detailsKeys.has(key)) {
+          details[key] = value;
+        } else {
+          top[key] = value;
+        }
+      });
+      top.details = details;
+      top.updated_at = new Date().toISOString();
+      const { error } = await supabase.from('quotations').update(top).eq('id', quotation.id);
+      if (error) throw error;
+      toast.success("Contract updated successfully");
+      if (onUpdate) onUpdate({ ...quotation, ...updates } as QuotationNew);
+    } catch (err: any) {
+      console.error("Error saving contract quotation:", err);
+      toast.error(err?.message || "Failed to save contract");
     }
   };
 
@@ -588,6 +659,7 @@ export function ContractDetailView({
   const TAB_STRUCTURE = {
     dashboard: [
       { id: "financial_overview", label: "Financial Overview", icon: Layout },
+      { id: "quotation", label: "Quotation", icon: FileText },
       { id: "rate-card", label: "Rate Card", icon: FileText },
     ],
     operations: [
@@ -889,6 +961,7 @@ export function ContractDetailView({
         {TAB_STRUCTURE[activeCategory].map((tab) => {
           const tabPermMap: Record<string, boolean> = {
             financial_overview: canViewFinancialOverviewTab,
+            quotation: canViewQuotationTab,
             "rate-card": canViewRateCardTab,
             bookings: canViewBookingsTab,
             billings: canViewBillingsTab,
@@ -927,6 +1000,13 @@ export function ContractDetailView({
           <div className="max-w-7xl mx-auto">
             <ProjectFinancialOverview financials={contractFinancials} />
           </div>
+        )}
+        {activeTab === "quotation" && canViewQuotationTab && (
+          <ProjectOverviewTab
+            project={contractAsProject}
+            currentUser={currentUser ? { id: "current-user", ...currentUser } : null}
+            onSaveQuotation={handleSaveContractQuotation}
+          />
         )}
         {activeTab === "rate-card" && canViewRateCardTab && (
           <div style={{ padding: "0 48px" }}>{renderRateCardTab()}</div>

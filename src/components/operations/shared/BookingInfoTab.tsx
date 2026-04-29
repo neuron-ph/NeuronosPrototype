@@ -7,7 +7,6 @@ import { buildBookingPayload } from "../../../utils/bookings/bookingPayload";
 import { appendBookingActivity } from "../../../utils/bookingActivityLog";
 import { getVisibleSections } from "../../../config/booking/bookingVisibilityRules";
 import { getServiceSchema } from "../../../config/booking/bookingScreenSchema";
-import { validateBookingForm, hasErrors, type ValidationErrors } from "./bookingFormValidation";
 import { BookingAssignmentSection } from "../assignments/BookingAssignmentSection";
 import { groupBookingSections } from "../../../utils/bookings/groupBookingSections";
 import { BookingSectionGroupCard } from "./BookingSectionGroupCard";
@@ -29,7 +28,7 @@ export function BookingInfoTab({
 }: BookingInfoTabProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [errors, setErrors] = useState<ValidationErrors>({});
+  const errors = {};
 
   const { formState, setField, initFromRecord, context } = useBookingFormState(serviceType);
 
@@ -39,21 +38,12 @@ export function BookingInfoTab({
 
   function handleCancel() {
     initFromRecord(booking);
-    setErrors({});
     setIsEditing(false);
   }
 
   async function handleSave() {
-    const validationErrors = validateBookingForm(formState, serviceType, context);
-    delete validationErrors.status;
-
-    if (hasErrors(validationErrors)) {
-      setErrors(validationErrors);
-      toast.error("Please fill in all required fields");
-      return;
-    }
-
-    setErrors({});
+    // No required-field validation at the booking-edit stage — Ops fills info in
+    // iteratively as the shipment progresses. Save freely.
     setIsSaving(true);
     try {
       const { topLevel, details } = buildBookingPayload(formState, serviceType);
