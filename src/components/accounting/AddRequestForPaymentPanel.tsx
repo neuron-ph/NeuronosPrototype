@@ -62,6 +62,7 @@ type CreditTerm = "None" | "Net7" | "Net15" | "Net30";
 
 // UI Subtypes for Operations/Accounting to distinguish between expense types
 type TransactionSubtype = "regular_expense" | "billable_expense" | "cash_advance";
+type PanelTransactionType = EVoucherTransactionType | "collection" | "billing";
 
 const PAYMENT_METHODS: PaymentMethod[] = [
   "Cash",
@@ -118,7 +119,7 @@ export function AddRequestForPaymentPanel({
   const { createDraft, submitForApproval, autoApprove, deleteEVoucher, isSaving } = useEVoucherSubmit(context, currentActor);
   
   // Form state
-  const [transactionType, setTransactionType] = useState<EVoucherTransactionType>("expense");
+  const [transactionType, setTransactionType] = useState<PanelTransactionType>("expense");
   const [transactionSubtype, setTransactionSubtype] = useState<TransactionSubtype>("regular_expense");
   
   const [requestName, setRequestName] = useState("");
@@ -352,6 +353,7 @@ export function AddRequestForPaymentPanel({
   );
   const expenseCategory = categorySections[0]?.category_name || "";
   const totalAmount = allLineItems.reduce((sum, item) => sum + (item.amount || 0), 0);
+  const subCategory = "";
 
   const handleAddSection = (name: string, catalogCategoryId?: string) => {
     const newSection: CategorySection = {
@@ -455,7 +457,7 @@ export function AddRequestForPaymentPanel({
         expenseCategory,
         subCategory,
         projectNumber,
-        lineItems,
+        lineItems: allLineItems,
         totalAmount,
         preferredPayment,
         vendor,
@@ -495,7 +497,7 @@ export function AddRequestForPaymentPanel({
         expenseCategory,
         subCategory,
         projectNumber,
-        lineItems,
+        lineItems: allLineItems,
         totalAmount,
         preferredPayment,
         vendor,
@@ -567,6 +569,16 @@ export function AddRequestForPaymentPanel({
 
   if (!isOpen) return null;
 
+  // Logic for UI State
+  const isExpense = transactionType === "expense";
+  const isBudgetRequest = transactionType === "budget_request";
+  const isCashAdvance = transactionType === "cash_advance";
+  const isReimbursement = transactionType === "reimbursement";
+  const isDirectExpense = transactionType === "direct_expense";
+  const isCollectionMode = transactionType === "collection";
+  const isBillingMode = transactionType === "billing";
+  const isPersonal = context === "personal";
+  
   const isFormValid =
     requestName.trim() !== "" &&
     (isCollectionMode || categorySections.some(s => s.items.some(item => item.particular.trim() !== "" && item.amount > 0))) &&
@@ -578,16 +590,6 @@ export function AddRequestForPaymentPanel({
   const isBD = context === "bd";
   const isCollection = context === "collection";
   const isBilling = context === "billing";
-  
-  // Logic for UI State
-  const isExpense = transactionType === "expense";
-  const isBudgetRequest = transactionType === "budget_request";
-  const isCashAdvance = transactionType === "cash_advance";
-  const isReimbursement = transactionType === "reimbursement";
-  const isDirectExpense = transactionType === "direct_expense";
-  const isCollectionMode = (transactionType as string) === "collection";
-  const isBillingMode = (transactionType as string) === "billing";
-  const isPersonal = context === "personal";
   
   // Derived state for labels
   let panelTitle = "Request For Payment";
