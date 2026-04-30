@@ -47,6 +47,10 @@ export function ProfilingPartiesTab({ initialQuery = '' }: { initialQuery?: stri
   const [saving, setSaving] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<TradeParty | null>(null);
 
+  useEffect(() => {
+    setSearch(initialQuery);
+  }, [initialQuery]);
+
   const load = useCallback(async () => {
     setLoading(true);
     let q = supabase.from('trade_parties').select('*').order('name');
