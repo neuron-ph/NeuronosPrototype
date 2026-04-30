@@ -24,6 +24,10 @@ export function ProfilingCountriesTab({ initialQuery = '' }: { initialQuery?: st
   const [saving, setSaving] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<Country | null>(null);
 
+  useEffect(() => {
+    setSearch(initialQuery);
+  }, [initialQuery]);
+
   const load = useCallback(async () => {
     setLoading(true);
     let q = supabase.from('profile_countries').select('*').order('sort_order').order('name');

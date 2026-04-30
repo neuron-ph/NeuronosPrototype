@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "react-router";
 import { Plus, Search, Globe, MapPin, Building2 } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
@@ -19,8 +20,14 @@ interface NetworkVendor {
 }
 
 export function VendorsList() {
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchParams] = useSearchParams();
+  const querySeed = searchParams.get("q") ?? "";
+  const [searchQuery, setSearchQuery] = useState(querySeed);
   const [typeFilter, setTypeFilter] = useState<NetworkVendorType | "All">("All");
+
+  useEffect(() => {
+    setSearchQuery(querySeed);
+  }, [querySeed]);
 
   const { data: vendors = [], isLoading } = useQuery({
     queryKey: ["network_partners"],

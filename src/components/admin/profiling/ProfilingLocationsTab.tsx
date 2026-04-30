@@ -35,6 +35,10 @@ export function ProfilingLocationsTab({ initialQuery = '' }: { initialQuery?: st
   const [saving, setSaving] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<Location | null>(null);
 
+  useEffect(() => {
+    setSearch(initialQuery);
+  }, [initialQuery]);
+
   const load = useCallback(async () => {
     setLoading(true);
     let q = supabase.from('profile_locations').select('*').order('name');
