@@ -42,7 +42,12 @@ export type QuotationFieldDef = {
   storage: import('../booking/bookingFieldTypes').StorageTarget;
   // Top-level column name when it differs from key
   storageKey?: string;
+  // For profile-lookup fields: which master-data entity to search (e.g. 'port', 'country', 'carrier').
+  // Mirrors booking-side FieldDef.profileType so quotation forms can render the same lookup UI.
+  profileType?: string;
   options?: string[];
+  // DB-governed enum from migration 088, resolved at render time. Preferred over `options`.
+  optionsKind?: import('../../hooks/useEnumOptions').EnumKind;
   unit?: string;
   // ALL must be true; absent = always visible
   showWhen?: QuotationVisibilityCondition[];

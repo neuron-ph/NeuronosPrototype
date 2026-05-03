@@ -5,6 +5,14 @@ import type {
   SectionDef,
 } from './bookingFieldTypes';
 import { getOptionKeyOptions } from './bookingFieldOptions';
+import type { EnumBundle, EnumKind } from '../../hooks/useEnumOptions';
+
+export type ResolveOptionsContext = {
+  /** Full flat-enum bundle from useAllEnumOptions(). Used when field.optionsKind is set. */
+  enumBundle?: EnumBundle;
+  /** Per-service status options from useServiceStatusOptions(ctx.service_type). Used when optionKey === 'status'. */
+  statusOptions?: string[];
+};
 
 export function evaluateCondition(cond: VisibilityCondition, ctx: BookingFormContext): boolean {
   const val = ctx[cond.field] ?? '';
@@ -65,10 +73,34 @@ export function isFieldRequired(field: FieldDef, ctx: BookingFormContext): boole
   return allMatch(field.requiredWhen, ctx);
 }
 
-// Returns resolved option list, respecting per-service overrides
-export function resolveOptions(field: FieldDef, ctx: BookingFormContext): string[] {
+// Returns resolved option list, respecting per-service overrides.
+// Resolution order:
+//   1. optionsByService[service_type] — explicit per-service override in the schema
+//   2. field.optionsKind via enumBundle — DB-governed enum (migration 088)
+//   3. optionKey === 'status' via statusOptions (per-service-type DB list)
+//   4. legacy getOptionKeyOptions for 'operation_services' (still hardcoded)
+//   5. inline field.options
+export function resolveOptions(
+  field: FieldDef,
+  ctx: BookingFormContext,
+  rctx: ResolveOptionsContext = {},
+): string[] {
   if (field.optionsByService?.[ctx.service_type as never]) {
     return field.optionsByService[ctx.service_type as never]!;
+  }
+  if (field.optionsKind && rctx.enumBundle) {
+    const bundle = rctx.enumBundle;
+    if (field.optionsKind === 'movement') {
+      // Movement is filtered by service_type at the enum level; rely on the
+      // per-service status helper or the dedicated useEnumOptions('movement', { serviceType }).
+      // For convenience inside the renderer we keep the unscoped list here and
+      // let optionsByService overrides handle the Domestic case if needed.
+    }
+    const list = bundle[field.optionsKind as EnumKind];
+    if (list && list.length > 0) return list;
+  }
+  if (field.optionKey === 'status' && rctx.statusOptions && rctx.statusOptions.length > 0) {
+    return rctx.statusOptions;
   }
   const keyedOptions = getOptionKeyOptions(field.optionKey, ctx.service_type);
   if (keyedOptions.length > 0) return keyedOptions;

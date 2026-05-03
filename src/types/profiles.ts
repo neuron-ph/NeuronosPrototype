@@ -38,12 +38,41 @@ export type ProfileLookupRecord = {
   meta?: Record<string, unknown>;
 };
 
+import type { ProfileAdminConfig } from './profileSection';
+
 /**
  * Per-profile-type config entry in the profileRegistry.
  */
 export type ProfileRegistryEntry = {
   /** Which Supabase table or adapter provides records for this type. */
-  source: 'customers' | 'users' | 'service_providers' | 'trade_parties' | 'profile_locations' | 'profile_countries' | 'dispatch_people' | 'vehicles';
+  source:
+    | 'customers'
+    | 'users'
+    | 'service_providers'
+    | 'trade_parties'
+    | 'profile_locations'
+    | 'profile_countries'
+    | 'dispatch_people'
+    | 'vehicles'
+    // Enum-style governance tables (migration 088). Each holds a flat list of
+    // canonical values (`value`) for a previously-hardcoded dropdown.
+    | 'profile_modes'
+    | 'profile_movements'
+    | 'profile_incoterms'
+    | 'profile_cargo_types'
+    | 'profile_cargo_natures'
+    | 'profile_brokerage_types'
+    | 'profile_customs_entries'
+    | 'profile_customs_entry_procedures'
+    | 'profile_truck_types'
+    | 'profile_selectivity_colors'
+    | 'profile_examinations'
+    | 'profile_container_types'
+    | 'profile_package_types'
+    | 'profile_preferential_treatments'
+    | 'profile_credit_terms'
+    | 'profile_cpe_codes'
+    | 'profile_service_statuses';
   /** Fields to search against in the lookup query. */
   searchFields: string[];
   /** Whether free-text entry is allowed as a fallback ('combo') or not ('strict'). */
@@ -52,6 +81,16 @@ export type ProfileRegistryEntry = {
   quickCreateAllowed: boolean;
   /** Tag filter applied when source = 'service_providers'. */
   providerTag?: string;
+  /**
+   * Geographic scope filter for service_providers.
+   * 'overseas' → provider_type = 'international'.
+   * 'local'    → country = 'Philippines'.
+   * Used by local_agent / overseas_agent fields, which are the same Vendor
+   * dataset filtered by where the vendor is based.
+   */
+  providerScope?: 'local' | 'overseas';
   /** Seed strategy for this profile type, if applicable. */
   seedStrategy?: 'stable-list' | 'backfill' | 'none';
+  /** Admin Profiling UI metadata. Populated only for types that appear as a flat section. */
+  admin?: ProfileAdminConfig;
 };
