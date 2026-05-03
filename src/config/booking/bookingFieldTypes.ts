@@ -33,13 +33,17 @@ export type ServiceType =
   | 'Marine Insurance'
   | 'Others';
 
-// The context values that drive visibility and label switching
+// The context values that drive visibility, label switching, and lookup scope
 export type BookingFormContext = {
   service_type: string;
   movement_type: string;
   mode: string;
   incoterms: string;
   status: string;
+  type_of_package: string;
+  // Customer scope — used by per-customer profile lookups (e.g. consignees)
+  customer_id?: string | null;
+  customer_name?: string | null;
 };
 
 // A single visibility predicate. Multiple conditions in showWhen are AND'd together.
@@ -62,6 +66,8 @@ export type RepeaterColumn = {
   label: string;
   control?: 'free-text' | 'dropdown' | 'date' | 'number';
   options?: string[];
+  // DB-governed enum (migration 088) — preferred over `options` for repeater columns.
+  optionsKind?: import('../../hooks/useEnumOptions').EnumKind;
 };
 
 export type FieldDef = {
@@ -75,7 +81,8 @@ export type FieldDef = {
   storage: StorageTarget;
   storageKey?: string;                               // top-level column name when it differs from key
   profileType?: string;                              // profile-lookup: signals which master-data entity to search
-  optionKey?: string;                                // option-lookup / dropdown: named option set from bookingFieldOptions
+  optionKey?: string;                                // option-lookup / dropdown: named option set from bookingFieldOptions (legacy: status / operation_services)
+  optionsKind?: import('../../hooks/useEnumOptions').EnumKind; // governance-managed enum (migration 088). Resolved at render time from the corresponding profile_<plural> table.
   options?: string[];                                // inline closed option list
   optionsByService?: Partial<Record<ServiceType, string[]>>; // per-service option overrides
   unit?: string;                                     // label shown beside a number input

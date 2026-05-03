@@ -4,16 +4,6 @@ import type {
   QuotationServiceSchema,
 } from './quotationFieldTypes';
 import type { ServiceType } from '../booking/bookingFieldTypes';
-import {
-  BROKERAGE_TYPE_OPTIONS,
-  CARGO_NATURE_OPTIONS,
-  CARGO_TYPE_OPTIONS,
-  CONTAINER_TYPE_OPTIONS,
-  CREDIT_TERMS_OPTIONS,
-  INCOTERMS_OPTIONS,
-  MODE_OPTIONS,
-  TRUCK_TYPE_OPTIONS,
-} from './quotationFieldOptions';
 
 // ---------------------------------------------------------------------------
 // Incoterm groups used for Forwarding visibility rules
@@ -88,7 +78,7 @@ export const QUOTATION_GENERAL_SECTION: QuotationSectionDef = {
       control: 'dropdown',
       required: 'no',
       storage: 'top-level',
-      options: CREDIT_TERMS_OPTIONS,
+      optionsKind: 'credit_terms',
       legacyKeys: ['creditTerms'],
     },
     {
@@ -119,7 +109,7 @@ const BROKERAGE_PACKAGE_SECTION: QuotationSectionDef = {
       control: 'segmented',
       required: 'yes',
       storage: 'details',
-      options: BROKERAGE_TYPE_OPTIONS,
+      optionsKind: 'brokerage_type',
       legacyKeys: ['brokerageType', 'subtype'],
     },
   ],
@@ -137,14 +127,15 @@ const BROKERAGE_SHIPMENT_SECTION: QuotationSectionDef = {
       required: 'conditional',
       requiredWhen: [{ field: 'brokerage_type', op: 'in', value: ['Standard', 'Non-Regular'] }],
       storage: 'details',
-      options: ['Consumption', 'Warehousing', 'PEZA'],
+      optionsKind: 'customs_entry_procedure',
       showWhen: [{ field: 'brokerage_type', op: 'in', value: ['Standard', 'Non-Regular'] }],
       legacyKeys: ['typeOfEntry', 'type_of_entry', 'consumption', 'warehousing', 'peza'],
     },
     {
       key: 'pod_aod',
       label: 'AOD/POD',
-      control: 'free-text',
+      control: 'profile-lookup',
+      profileType: 'port',
       required: 'yes',
       storage: 'details',
       legacyKeys: ['pod', 'aodPod', 'aod_pod'],
@@ -155,7 +146,7 @@ const BROKERAGE_SHIPMENT_SECTION: QuotationSectionDef = {
       control: 'segmented',
       required: 'yes',
       storage: 'details',
-      options: MODE_OPTIONS,
+      optionsKind: 'mode',
     },
     {
       key: 'cargo_type',
@@ -163,7 +154,7 @@ const BROKERAGE_SHIPMENT_SECTION: QuotationSectionDef = {
       control: 'dropdown',
       required: 'yes',
       storage: 'details',
-      options: CARGO_TYPE_OPTIONS,
+      optionsKind: 'cargo_type',
       legacyKeys: ['cargoType'],
     },
     {
@@ -186,7 +177,8 @@ const BROKERAGE_SHIPMENT_SECTION: QuotationSectionDef = {
       // All-Inclusive: Yes — hidden for Standard and Non-Regular
       key: 'country_of_origin',
       label: 'Country of Origin',
-      control: 'free-text',
+      control: 'profile-lookup',
+      profileType: 'country',
       required: 'conditional',
       requiredWhen: [{ field: 'brokerage_type', op: 'eq', value: 'All-Inclusive' }],
       storage: 'details',
@@ -197,10 +189,11 @@ const BROKERAGE_SHIPMENT_SECTION: QuotationSectionDef = {
       // All-Inclusive: Yes — hidden for Standard and Non-Regular
       key: 'preferential_treatment',
       label: 'Preferential Treatment',
-      control: 'free-text',
+      control: 'dropdown',
       required: 'conditional',
       requiredWhen: [{ field: 'brokerage_type', op: 'eq', value: 'All-Inclusive' }],
       storage: 'details',
+      optionsKind: 'preferential_treatment',
       showWhen: [{ field: 'brokerage_type', op: 'eq', value: 'All-Inclusive' }],
       legacyKeys: ['preferentialTreatment'],
     },
@@ -221,7 +214,7 @@ const BROKERAGE_FCL_OVERLAY: QuotationSectionDef = {
       requiredWhen: [{ field: 'mode', op: 'eq', value: 'FCL' }],
       storage: 'details',
       repeaterColumns: [
-        { key: 'type', label: 'Container Type', control: 'dropdown', options: CONTAINER_TYPE_OPTIONS },
+        { key: 'type', label: 'Container Type', control: 'dropdown', optionsKind: 'container_type' },
         { key: 'qty', label: 'Quantity', control: 'number' },
       ],
       legacyKeys: ['containers', 'fcl_20ft', 'fcl_40ft', 'fcl_45ft'],
@@ -315,7 +308,7 @@ const FORWARDING_CORE_SECTION: QuotationSectionDef = {
       control: 'dropdown',
       required: 'yes',
       storage: 'details',
-      options: INCOTERMS_OPTIONS,
+      optionsKind: 'incoterms',
     },
     {
       // All incoterms: Yes
@@ -324,7 +317,7 @@ const FORWARDING_CORE_SECTION: QuotationSectionDef = {
       control: 'dropdown',
       required: 'yes',
       storage: 'details',
-      options: CARGO_TYPE_OPTIONS,
+      optionsKind: 'cargo_type',
       legacyKeys: ['cargoType'],
     },
     {
@@ -334,7 +327,7 @@ const FORWARDING_CORE_SECTION: QuotationSectionDef = {
       control: 'dropdown',
       required: 'yes',
       storage: 'details',
-      options: CARGO_NATURE_OPTIONS,
+      optionsKind: 'cargo_nature',
       legacyKeys: ['cargoNature'],
     },
     {
@@ -350,7 +343,8 @@ const FORWARDING_CORE_SECTION: QuotationSectionDef = {
       // All incoterms: Yes
       key: 'pol_aol',
       label: 'AOL/POL',
-      control: 'free-text',
+      control: 'profile-lookup',
+      profileType: 'port',
       required: 'yes',
       storage: 'details',
       legacyKeys: ['aolPol', 'aol_pol', 'pol'],
@@ -359,7 +353,8 @@ const FORWARDING_CORE_SECTION: QuotationSectionDef = {
       // All incoterms: Yes
       key: 'pod_aod',
       label: 'AOD/POD',
-      control: 'free-text',
+      control: 'profile-lookup',
+      profileType: 'port',
       required: 'yes',
       storage: 'details',
       legacyKeys: ['aodPod', 'aod_pod', 'pod'],
@@ -371,7 +366,7 @@ const FORWARDING_CORE_SECTION: QuotationSectionDef = {
       control: 'segmented',
       required: 'yes',
       storage: 'details',
-      options: MODE_OPTIONS,
+      optionsKind: 'mode',
     },
     {
       // EXW only: Yes — Collection Address (origin pickup)
@@ -409,7 +404,8 @@ const FORWARDING_CORE_SECTION: QuotationSectionDef = {
       // EXW / FOB / FCA: Yes
       key: 'carrier_airline',
       label: 'Carrier/Airline',
-      control: 'free-text',
+      control: 'profile-lookup',
+      profileType: 'carrier',
       required: 'no',
       storage: 'details',
       showWhen: [{ field: 'incoterms', op: 'in', value: INCOTERMS_WITH_CARRIER_ROUTING }],
@@ -452,7 +448,7 @@ const FORWARDING_FCL_OVERLAY: QuotationSectionDef = {
       requiredWhen: [{ field: 'mode', op: 'eq', value: 'FCL' }],
       storage: 'details',
       repeaterColumns: [
-        { key: 'type', label: 'Container Type', control: 'dropdown', options: CONTAINER_TYPE_OPTIONS },
+        { key: 'type', label: 'Container Type', control: 'dropdown', optionsKind: 'container_type' },
         { key: 'qty', label: 'Quantity', control: 'number' },
       ],
       legacyKeys: ['containers', 'fcl_20ft', 'fcl_40ft', 'fcl_45ft'],
@@ -558,7 +554,7 @@ const TRUCKING_DETAILS_SECTION: QuotationSectionDef = {
       storage: 'details',
       repeaterColumns: [
         { key: 'destination', label: 'Destination', control: 'free-text' },
-        { key: 'truck_type', label: 'Truck Type', control: 'dropdown', options: TRUCK_TYPE_OPTIONS },
+        { key: 'truck_type', label: 'Truck Type', control: 'dropdown', optionsKind: 'truck_type' },
         { key: 'quantity', label: 'Qty', control: 'number' },
       ],
       legacyKeys: ['truckingLineItems', 'destinations'],
@@ -610,7 +606,8 @@ const MARINE_INSURANCE_DETAILS_SECTION: QuotationSectionDef = {
     {
       key: 'pol_aol',
       label: 'AOL/POL',
-      control: 'free-text',
+      control: 'profile-lookup',
+      profileType: 'port',
       required: 'yes',
       storage: 'details',
       legacyKeys: ['aolPol', 'aol_pol', 'pol', 'departurePort'],
@@ -618,7 +615,8 @@ const MARINE_INSURANCE_DETAILS_SECTION: QuotationSectionDef = {
     {
       key: 'pod_aod',
       label: 'AOD/POD',
-      control: 'free-text',
+      control: 'profile-lookup',
+      profileType: 'port',
       required: 'yes',
       storage: 'details',
       legacyKeys: ['aodPod', 'aod_pod', 'pod', 'arrivalPort'],

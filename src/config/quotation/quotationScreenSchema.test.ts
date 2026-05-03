@@ -68,9 +68,7 @@ describe('Brokerage quotation schema', () => {
   it('defines a brokerage_type package selector', () => {
     const field = findField(BROKERAGE_QUOTATION_SCHEMA, 'brokerage_type');
     expect(field).toBeDefined();
-    expect(field!.options).toContain('Standard');
-    expect(field!.options).toContain('All-Inclusive');
-    expect(field!.options).toContain('Non-Regular');
+    expect(field!.optionsKind).toBe('brokerage_type');
   });
 
   const alwaysVisibleFields = ['pod_aod', 'mode', 'cargo_type', 'commodity_description', 'delivery_address'];
@@ -363,6 +361,54 @@ describe('Guardrails — no invented fields', () => {
       const found = schema.sections.flatMap(s => s.fields).find(f => f.key === 'agent_destination');
       expect(found).toBeUndefined();
     });
+  });
+
+  it('Brokerage pod_aod is profile-lookup with profileType=port', () => {
+    const f = findField(BROKERAGE_QUOTATION_SCHEMA, 'pod_aod');
+    expect(f!.control).toBe('profile-lookup');
+    expect(f!.profileType).toBe('port');
+  });
+
+  it('Brokerage country_of_origin is profile-lookup with profileType=country', () => {
+    const f = findField(BROKERAGE_QUOTATION_SCHEMA, 'country_of_origin');
+    expect(f!.control).toBe('profile-lookup');
+    expect(f!.profileType).toBe('country');
+  });
+
+  it('Brokerage preferential_treatment is dropdown sourced from profile_preferential_treatments', () => {
+    const f = findField(BROKERAGE_QUOTATION_SCHEMA, 'preferential_treatment');
+    expect(f!.control).toBe('dropdown');
+    expect(f!.optionsKind).toBe('preferential_treatment');
+  });
+
+  it('Forwarding pol_aol is profile-lookup with profileType=port', () => {
+    const f = findField(FORWARDING_QUOTATION_SCHEMA, 'pol_aol');
+    expect(f!.control).toBe('profile-lookup');
+    expect(f!.profileType).toBe('port');
+  });
+
+  it('Forwarding pod_aod is profile-lookup with profileType=port', () => {
+    const f = findField(FORWARDING_QUOTATION_SCHEMA, 'pod_aod');
+    expect(f!.control).toBe('profile-lookup');
+    expect(f!.profileType).toBe('port');
+  });
+
+  it('Forwarding carrier_airline is profile-lookup with profileType=carrier', () => {
+    const f = findField(FORWARDING_QUOTATION_SCHEMA, 'carrier_airline');
+    expect(f!.control).toBe('profile-lookup');
+    expect(f!.profileType).toBe('carrier');
+  });
+
+  it('Marine Insurance pol_aol is profile-lookup with profileType=port', () => {
+    const f = findField(MARINE_INSURANCE_QUOTATION_SCHEMA, 'pol_aol');
+    expect(f!.control).toBe('profile-lookup');
+    expect(f!.profileType).toBe('port');
+  });
+
+  it('Marine Insurance pod_aod is profile-lookup with profileType=port', () => {
+    const f = findField(MARINE_INSURANCE_QUOTATION_SCHEMA, 'pod_aod');
+    expect(f!.control).toBe('profile-lookup');
+    expect(f!.profileType).toBe('port');
   });
 
   it('does not define brokerage_fee_sad', () => {

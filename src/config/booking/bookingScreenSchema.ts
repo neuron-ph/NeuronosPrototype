@@ -1,21 +1,5 @@
 import type { FieldDef, SectionDef, ServiceSchema, ServiceType } from './bookingFieldTypes';
-import {
-  BOOLEAN_OPTIONS,
-  BROKERAGE_TYPE_OPTIONS,
-  CARGO_NATURE_OPTIONS,
-  CARGO_TYPE_OPTIONS,
-  CUSTOMS_ENTRY_OPTIONS,
-  CUSTOMS_ENTRY_PROCEDURE_OPTIONS,
-  EXAMINATION_OPTIONS,
-  FORWARDING_CPE_CODE_OPTIONS,
-  INCOTERMS_OPTIONS,
-  MODE_OPTIONS,
-  MOVEMENT_OPTIONS,
-  MOVEMENT_OPTIONS_WITH_DOMESTIC,
-  SELECTIVITY_COLOR_OPTIONS,
-  SERVICE_STATUS_OPTIONS,
-  TRUCK_TYPE_OPTIONS,
-} from './bookingFieldOptions';
+import { BOOLEAN_OPTIONS } from './bookingFieldOptions';
 
 // ---------------------------------------------------------------------------
 // Shared General Information — movement type first; auto-generated refs last
@@ -32,11 +16,10 @@ const SHARED_GENERAL_INFORMATION: SectionDef = {
       control: 'segmented',
       required: 'yes',
       storage: 'top-level',
-      options: MOVEMENT_OPTIONS,
-      optionsByService: {
-        Trucking: MOVEMENT_OPTIONS_WITH_DOMESTIC,
-        Forwarding: MOVEMENT_OPTIONS_WITH_DOMESTIC,
-      },
+      // Resolved at render time from profile_movements (migration 088).
+      // The DB column applicable_service_types[] handles the per-service
+      // Domestic visibility that used to live in optionsByService below.
+      optionsKind: 'movement',
       // Matrix: Movement shown for BR, FWD, TKG. MI = No.
       showWhen: [{ field: 'service_type', op: 'in', value: ['Brokerage', 'Forwarding', 'Trucking'] }],
     },
@@ -108,13 +91,15 @@ const SHARED_GENERAL_INFORMATION: SectionDef = {
       storage: 'details',
     },
     {
+      // Per-service status options come from profile_service_statuses
+      // (migration 088) via useServiceStatusOptions(ctx.service_type) at
+      // render time. optionKey: 'status' wires the renderer's status path.
       key: 'status',
       label: 'Status',
       control: 'option-lookup',
       optionKey: 'status',
       required: 'yes',
       storage: 'top-level',
-      optionsByService: SERVICE_STATUS_OPTIONS,
     },
     {
       key: 'team_assignment',
@@ -142,7 +127,7 @@ const SHARED_GENERAL_INFORMATION: SectionDef = {
       control: 'dropdown',
       required: 'yes',
       storage: 'details',
-      options: CUSTOMS_ENTRY_OPTIONS,
+      optionsKind: 'customs_entry',
       showWhen: [{ field: 'service_type', op: 'in', value: ['Brokerage', 'Forwarding'] }],
     },
     {
@@ -152,25 +137,27 @@ const SHARED_GENERAL_INFORMATION: SectionDef = {
       control: 'dropdown',
       required: 'yes',
       storage: 'details',
-      options: CUSTOMS_ENTRY_PROCEDURE_OPTIONS,
+      optionsKind: 'customs_entry_procedure',
       showWhen: [{ field: 'service_type', op: 'in', value: ['Brokerage', 'Forwarding', 'Trucking'] }],
     },
     {
       // Matrix: Overseas Agent = Yes for FWD and MI.
+      // Sources from Vendors where provider_type = 'international'.
       key: 'overseas_agent',
       label: 'Overseas Agent',
       control: 'profile-lookup',
-      profileType: 'agent',
+      profileType: 'overseas_agent',
       required: 'yes',
       storage: 'details',
       showWhen: [{ field: 'service_type', op: 'in', value: ['Forwarding', 'Marine Insurance'] }],
     },
     {
       // Matrix: Local Agent = Yes for FWD only.
+      // Sources from Vendors where country = 'Philippines'.
       key: 'local_agent',
       label: 'Local Agent',
       control: 'profile-lookup',
-      profileType: 'agent',
+      profileType: 'local_agent',
       required: 'yes',
       storage: 'details',
       showWhen: [{ field: 'service_type', op: 'eq', value: 'Forwarding' }],
@@ -258,7 +245,7 @@ const BROKERAGE_GENERAL_SPECIFIC: SectionDef = {
       control: 'segmented',
       required: 'no',
       storage: 'details',
-      options: BROKERAGE_TYPE_OPTIONS,
+      optionsKind: 'brokerage_type',
     },
     {
       key: 'mode',
@@ -267,7 +254,7 @@ const BROKERAGE_GENERAL_SPECIFIC: SectionDef = {
       optionKey: 'mode',
       required: 'yes',
       storage: 'top-level',
-      options: MODE_OPTIONS,
+      optionsKind: 'mode',
     },
     PRIMARY_TRADE_PARTY,
     {
@@ -277,7 +264,7 @@ const BROKERAGE_GENERAL_SPECIFIC: SectionDef = {
       optionKey: 'cargo_type',
       required: 'yes',
       storage: 'details',
-      options: CARGO_TYPE_OPTIONS,
+      optionsKind: 'cargo_type',
     },
     {
       // Spec: Commodity Description moves to General Information at booking time.
@@ -293,7 +280,7 @@ const BROKERAGE_GENERAL_SPECIFIC: SectionDef = {
       control: 'dropdown',
       required: 'conditional',
       storage: 'details',
-      options: INCOTERMS_OPTIONS,
+      optionsKind: 'incoterms',
     },
     {
       key: 'sub_services',
@@ -664,7 +651,7 @@ const BROKERAGE_IMPORT_CUSTOMS: SectionDef = {
       control: 'dropdown',
       required: 'yes',
       storage: 'details',
-      options: SELECTIVITY_COLOR_OPTIONS,
+      optionsKind: 'selectivity_color',
     },
     {
       key: 'entry_number',
@@ -680,7 +667,7 @@ const BROKERAGE_IMPORT_CUSTOMS: SectionDef = {
       required: 'no',
       storage: 'details',
       repeaterColumns: [
-        { key: 'type', label: 'Type', control: 'dropdown', options: EXAMINATION_OPTIONS },
+        { key: 'type', label: 'Type', control: 'dropdown', optionsKind: 'examination' },
         { key: 'date', label: 'Date', control: 'date' },
         { key: 'remarks', label: 'Remarks', control: 'free-text' },
       ],
@@ -755,7 +742,7 @@ const FORWARDING_GENERAL_SPECIFIC: SectionDef = {
       optionKey: 'mode',
       required: 'yes',
       storage: 'top-level',
-      options: MODE_OPTIONS,
+      optionsKind: 'mode',
     },
     PRIMARY_TRADE_PARTY,
     {
@@ -764,7 +751,7 @@ const FORWARDING_GENERAL_SPECIFIC: SectionDef = {
       control: 'dropdown',
       required: 'yes',
       storage: 'details',
-      options: INCOTERMS_OPTIONS,
+      optionsKind: 'incoterms',
     },
     {
       key: 'cargo_type',
@@ -773,7 +760,7 @@ const FORWARDING_GENERAL_SPECIFIC: SectionDef = {
       optionKey: 'cargo_type',
       required: 'yes',
       storage: 'details',
-      options: CARGO_TYPE_OPTIONS,
+      optionsKind: 'cargo_type',
     },
     {
       key: 'cargo_nature',
@@ -781,7 +768,7 @@ const FORWARDING_GENERAL_SPECIFIC: SectionDef = {
       control: 'dropdown',
       required: 'yes',
       storage: 'details',
-      options: CARGO_NATURE_OPTIONS,
+      optionsKind: 'cargo_nature',
     },
     {
       // Spec: Commodity Description moves to General Information at booking time.
@@ -868,11 +855,13 @@ const FORWARDING_BOOKING_DETAILS: SectionDef = {
       showWhen: [{ field: 'movement_type', op: 'eq', value: 'Export' }],
     },
     {
+      // Governed dropdown — Form E / Form D only in this pass (Forwarding).
       key: 'preferential_treatment',
       label: 'Preferential Treatment',
-      control: 'free-text',
+      control: 'dropdown',
       required: 'yes',
       storage: 'details',
+      optionsKind: 'preferential_treatment',
     },
     // Documents
     MBL_MAWB,
@@ -938,11 +927,12 @@ const FORWARDING_BOOKING_DETAILS: SectionDef = {
     },
     // Optional parties
     {
-      // Matrix: Forwarder (if any). Key 'agent' is canonical (forwarder aliased via SERVICE_LEGACY_MAP).
+      // Matrix: Forwarder (if any). Uses the dedicated 'forwarder' provider tag, not 'agent'.
+      // Key 'agent' is preserved for legacy SERVICE_LEGACY_MAP alias compatibility.
       key: 'agent',
       label: 'Forwarder',
       control: 'profile-lookup',
-      profileType: 'agent',
+      profileType: 'forwarder',
       required: 'no',
       storage: 'details',
     },
@@ -958,11 +948,22 @@ const FORWARDING_BOOKING_DETAILS: SectionDef = {
     // Supplementary
     {
       // Matrix: Type of Package = Yes for all forwarding modes (FCL, LCL, AIR).
+      // Governed dropdown with explicit "Other" fallback paired with type_of_package_other.
       key: 'type_of_package',
       label: 'Type of Package',
-      control: 'free-text',
+      control: 'dropdown',
       required: 'yes',
       storage: 'details',
+      optionsKind: 'package_type',
+    },
+    {
+      // Companion to type_of_package — only shown when the user picks "Other".
+      key: 'type_of_package_other',
+      label: 'Type of Package (Other)',
+      control: 'free-text',
+      required: 'no',
+      storage: 'details',
+      showWhen: [{ field: 'type_of_package', op: 'eq', value: 'Other' }],
     },
     {
       key: 'remarks',
@@ -1231,7 +1232,7 @@ const TRUCKING_GENERAL_SPECIFIC: SectionDef = {
       control: 'dropdown',
       required: 'yes',
       storage: 'details',
-      options: TRUCK_TYPE_OPTIONS,
+      optionsKind: 'truck_type',
     },
     {
       key: 'preferred_delivery_date',
@@ -1287,10 +1288,12 @@ const TRUCKING_DELIVERY_INFORMATION: SectionDef = {
       storage: 'details',
     },
     {
-      // Matrix: Vehicle Reference Number = Yes (FCL + LCL)
+      // Matrix: Vehicle Reference Number = Yes (FCL + LCL).
+      // Selected vehicle's plate number is used as the display label.
       key: 'vehicle_reference_number',
       label: 'Vehicle Reference Number',
-      control: 'free-text',
+      control: 'profile-lookup',
+      profileType: 'vehicle',
       required: 'yes',
       storage: 'details',
     },
@@ -1348,7 +1351,7 @@ const TRUCKING_DESTINATIONS: SectionDef = {
       storage: 'details',
       repeaterColumns: [
         { key: 'destination', label: 'Destination', control: 'free-text' },
-        { key: 'truck_type', label: 'Truck Type', control: 'dropdown', options: TRUCK_TYPE_OPTIONS },
+        { key: 'truck_type', label: 'Truck Type', control: 'dropdown', optionsKind: 'truck_type' },
         { key: 'quantity', label: 'Qty', control: 'number' },
       ],
     },
@@ -1370,13 +1373,24 @@ const TRUCKING_FCL_DETAILS: SectionDef = {
     {
       key: 'tabs_booking',
       label: 'TABS Booking',
-      control: 'free-text',
+      control: 'datetime',
       required: 'yes',
       storage: 'details',
     },
     {
-      key: 'empty_return',
-      label: 'Empty Return',
+      // Empty Return is split into a planned location (warehouse profile) and a planned date.
+      // The historical milestone field `date_empty_return` is kept separately on the
+      // delivery section for status-driven actuals.
+      key: 'empty_return_location',
+      label: 'Empty Return Location',
+      control: 'profile-lookup',
+      profileType: 'warehouse',
+      required: 'yes',
+      storage: 'details',
+    },
+    {
+      key: 'empty_return_date',
+      label: 'Empty Return Date',
       control: 'date',
       required: 'yes',
       storage: 'details',
@@ -1384,10 +1398,9 @@ const TRUCKING_FCL_DETAILS: SectionDef = {
     {
       key: 'cy_fee',
       label: 'CY Fee',
-      control: 'boolean-dropdown',
+      control: 'currency',
       required: 'yes',
       storage: 'details',
-      options: BOOLEAN_OPTIONS,
     },
     {
       key: 'eir_availability',

@@ -11,12 +11,13 @@ function ctx(overrides: Partial<BookingFormContext>): BookingFormContext {
     mode: '',
     incoterms: '',
     status: '',
+    type_of_package: '',
     ...overrides,
   };
 }
 
-describe('Brokerage import customs section', () => {
-  it('is visible when movement_type = Import', () => {
+describe('Brokerage customs section (no longer movement-gated)', () => {
+  it('is visible for Import', () => {
     const sections = getVisibleSections(
       BOOKING_SCHEMA_MAP['Brokerage'].sections,
       ctx({ service_type: 'Brokerage', movement_type: 'Import', mode: 'FCL' }),
@@ -24,12 +25,12 @@ describe('Brokerage import customs section', () => {
     expect(sections.some(s => s.key === 'brokerage_import_customs')).toBe(true);
   });
 
-  it('is hidden when movement_type = Export', () => {
+  it('is also visible for Export — customs fields apply to all Brokerage modes', () => {
     const sections = getVisibleSections(
       BOOKING_SCHEMA_MAP['Brokerage'].sections,
       ctx({ service_type: 'Brokerage', movement_type: 'Export', mode: 'FCL' }),
     );
-    expect(sections.some(s => s.key === 'brokerage_import_customs')).toBe(false);
+    expect(sections.some(s => s.key === 'brokerage_import_customs')).toBe(true);
   });
 });
 
@@ -327,6 +328,49 @@ describe('Shared General Information', () => {
     expect(errors.local_agent).toBeDefined();
   });
 
+  it('Forwarding Forwarder uses profileType: forwarder (not agent)', () => {
+    const schema = BOOKING_SCHEMA_MAP['Forwarding'];
+    const fwd = schema.sections.flatMap(s => s.fields).find(f => f.key === 'agent');
+    expect(fwd?.label).toBe('Forwarder');
+    expect(fwd?.profileType).toBe('forwarder');
+  });
+
+  it('Trucking vehicle_reference_number uses profileType: vehicle', () => {
+    const schema = BOOKING_SCHEMA_MAP['Trucking'];
+    const f = schema.sections.flatMap(s => s.fields).find(x => x.key === 'vehicle_reference_number');
+    expect(f?.control).toBe('profile-lookup');
+    expect(f?.profileType).toBe('vehicle');
+  });
+
+  it('Trucking tabs_booking is datetime', () => {
+    const schema = BOOKING_SCHEMA_MAP['Trucking'];
+    const f = schema.sections.flatMap(s => s.fields).find(x => x.key === 'tabs_booking');
+    expect(f?.control).toBe('datetime');
+  });
+
+  it('Trucking cy_fee is currency', () => {
+    const schema = BOOKING_SCHEMA_MAP['Trucking'];
+    const f = schema.sections.flatMap(s => s.fields).find(x => x.key === 'cy_fee');
+    expect(f?.control).toBe('currency');
+  });
+
+  it('Trucking FCL section includes empty_return_location and empty_return_date', () => {
+    const schema = BOOKING_SCHEMA_MAP['Trucking'];
+    const fcl = schema.sections.find(s => s.key === 'trucking_fcl');
+    expect(fcl).toBeDefined();
+    const keys = fcl!.fields.map(f => f.key);
+    expect(keys).toContain('empty_return_location');
+    expect(keys).toContain('empty_return_date');
+  });
+
+  it('Trucking FCL no longer exposes a single-field empty_return', () => {
+    const schema = BOOKING_SCHEMA_MAP['Trucking'];
+    const fcl = schema.sections.find(s => s.key === 'trucking_fcl');
+    expect(fcl).toBeDefined();
+    const keys = fcl!.fields.map(f => f.key);
+    expect(keys).not.toContain('empty_return');
+  });
+
   it('shows the trucking FCL section only when mode = FCL', () => {
     const fclContext = ctx({ service_type: 'Trucking', movement_type: 'Import', mode: 'FCL', status: 'Draft' });
     const fclSections = getVisibleSections(BOOKING_SCHEMA_MAP['Trucking'].sections, fclContext);
@@ -335,5 +379,34 @@ describe('Shared General Information', () => {
     const lclContext = ctx({ service_type: 'Trucking', movement_type: 'Import', mode: 'LCL', status: 'Draft' });
     const lclSections = getVisibleSections(BOOKING_SCHEMA_MAP['Trucking'].sections, lclContext);
     expect(lclSections.some(s => s.key === 'trucking_fcl')).toBe(false);
+  });
+});
+
+describe('Forwarding type_of_package governance', () => {
+  function findField(key: string) {
+    for (const section of BOOKING_SCHEMA_MAP['Forwarding'].sections) {
+      const f = section.fields.find(f => f.key === key);
+      if (f) return f;
+    }
+    return null;
+  }
+
+  it('declares a real package option list (not the degenerate Other-only list)', () => {
+    const field = findField('type_of_package');
+    expect(field).toBeDefined();
+    expect(field!.control).toBe('dropdown');
+    expect(field!.optionsKind).toBe('package_type');
+  });
+
+  it('hides type_of_package_other unless type_of_package = Other', () => {
+    const fwd = BOOKING_SCHEMA_MAP['Forwarding'];
+    const otherCtx = ctx({ service_type: 'Forwarding', movement_type: 'Import', mode: 'FCL', type_of_package: 'Other' });
+    const palletCtx = ctx({ service_type: 'Forwarding', movement_type: 'Import', mode: 'FCL', type_of_package: 'Pallet' });
+
+    const otherFields = fwd.sections.flatMap(s => getVisibleFields(s, otherCtx)).map(f => f.key);
+    const palletFields = fwd.sections.flatMap(s => getVisibleFields(s, palletCtx)).map(f => f.key);
+
+    expect(otherFields).toContain('type_of_package_other');
+    expect(palletFields).not.toContain('type_of_package_other');
   });
 });

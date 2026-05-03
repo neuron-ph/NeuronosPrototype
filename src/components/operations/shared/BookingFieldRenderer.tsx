@@ -1,10 +1,11 @@
-import React, { useState, useCallback } from 'react';
+import React, { useRef, useState } from 'react';
 import { X, Plus } from 'lucide-react';
 import { CustomDropdown } from '../../bd/CustomDropdown';
 import { CustomDatePicker } from '../../common/CustomDatePicker';
 import { SegmentedToggle } from '../../ui/SegmentedToggle';
 import { ProfileLookupCombobox } from '../../shared/profiles/ProfileLookupCombobox';
 import { ProfileMultiLookupCombobox } from '../../shared/profiles/ProfileMultiLookupCombobox';
+import { ConsigneePicker } from '../../shared/ConsigneePicker';
 import {
   isFieldRequired,
   resolveLabel,
@@ -12,8 +13,8 @@ import {
 } from '../../../config/booking/bookingVisibilityRules';
 import type { FieldDef, BookingFormContext, RepeaterColumn } from '../../../config/booking/bookingFieldTypes';
 import type { ProfileSelectionValue } from '../../../types/profiles';
-import { quickCreateProfileRecord } from '../../../utils/profiles/quickCreateProfile';
-import { useUser } from '../../../hooks/useUser';
+import { withLegacyStringOption } from '../../../utils/forms/legacyOption';
+import { useAllEnumOptions, useServiceStatusOptions, useEnumOptions } from '../../../hooks/useEnumOptions';
 
 const INPUT_STYLE: React.CSSProperties = {
   border: '1px solid var(--theme-border-default)',
@@ -182,12 +183,16 @@ function GenericRepeater({
   value,
   onChange,
   disabled,
+  serviceType,
 }: {
   columns: RepeaterColumn[];
   value: Record<string, unknown>[];
   onChange: (rows: Record<string, unknown>[]) => void;
   disabled?: boolean;
+  serviceType: string;
 }) {
+  const enumBundle = useAllEnumOptions();
+  const movementForService = useEnumOptions('movement', { serviceType });
   // Build a blank row from the column schema
   function blankRow(): Record<string, unknown> {
     return Object.fromEntries(columns.map(c => [c.key, '']));
@@ -232,14 +237,17 @@ function GenericRepeater({
         <div key={idx} style={{ display: 'grid', gridTemplateColumns: `repeat(${effectiveCols.length}, 1fr) 32px`, gap: '6px', marginBottom: '6px', alignItems: 'center' }}>
           {effectiveCols.map(col => {
             const cellVal = String(row[col.key] ?? '');
-            if ((col.control === 'dropdown') && col.options?.length) {
+            const colOptions = col.optionsKind
+              ? (col.optionsKind === 'movement' ? movementForService : enumBundle[col.optionsKind])
+              : col.options;
+            if ((col.control === 'dropdown') && colOptions?.length) {
               return (
                 <CustomDropdown
                   key={col.key}
                   label=""
                   value={cellVal}
                   onChange={v => updateCell(idx, col.key, v)}
-                  options={col.options.map(o => ({ value: o, label: o }))}
+                  options={colOptions.map(o => ({ value: o, label: o }))}
                   placeholder={col.label}
                   fullWidth
                   disabled={disabled}
@@ -292,15 +300,18 @@ function GenericRepeater({
 // ---------------------------------------------------------------------------
 
 export function BookingFieldRenderer({ field, value, onChange, ctx, error, disabled, portalZIndex }: Props) {
-  const { user } = useUser();
   const label = resolveLabel(field, ctx);
   const required = isFieldRequired(field, ctx);
   const disabledStyle = disabled ? getDisabledValueStyle(field) : {};
-  const staticOptions = resolveOptions(field, ctx);
+  const enumBundle = useAllEnumOptions();
+  // Movement is service-type-scoped at the DB level (applicable_service_types[]).
+  // Overlay the scoped list onto the bundle so optionsKind:'movement' fields
+  // honour the Domestic-only-for-Trucking/Forwarding rule.
+  const movementForService = useEnumOptions('movement', { serviceType: ctx.service_type });
+  const scopedBundle = { ...enumBundle, movement: movementForService };
+  const statusOptions = useServiceStatusOptions(ctx.service_type);
+  const staticOptions = resolveOptions(field, ctx, { enumBundle: scopedBundle, statusOptions });
 
-  const handleQuickCreate = useCallback(async (name: string, profileType: string): Promise<ProfileSelectionValue | null> => {
-    return quickCreateProfileRecord(name, profileType, user?.id ?? null, { serviceType: ctx.service_type });
-  }, [user?.id, ctx.service_type]);
   const options = staticOptions;
 
   function set(val: unknown) {
@@ -442,7 +453,15 @@ export function BookingFieldRenderer({ field, value, onChange, ctx, error, disab
     case 'dropdown':
     case 'option-lookup':
     case 'boolean-dropdown': {
-      const dropOptions = options.map(o => ({ value: o, label: o }));
+      // Append a synthetic option for legacy values not present in the schema's
+      // option list. Prevents a stored value from rendering as blank and being
+      // silently overwritten on save (e.g. preferential_treatment "Form A" before
+      // the option set was tightened to Form E / Form D).
+      const optionsWithLegacy = withLegacyStringOption(options, str);
+      const dropOptions = optionsWithLegacy.map(o => ({
+        value: o,
+        label: !options.includes(o) ? `${o} (legacy)` : o,
+      }));
       return (
         <CustomDropdown
           label=""
@@ -500,10 +519,29 @@ export function BookingFieldRenderer({ field, value, onChange, ctx, error, disab
           value={arr as Record<string, unknown>[]}
           onChange={set}
           disabled={disabled}
+          serviceType={ctx.service_type}
         />
       );
 
     case 'profile-lookup':
+      // Consignee/shipper fields read from the per-customer `consignees` table,
+      // not the global `trade_parties` adapter. The customer's saved consignees
+      // are managed in the Customer profile (BD module).
+      if (
+        field.profileType === 'consignee_or_shipper' ||
+        field.profileType === 'shipper' ||
+        field.profileType === 'consignee'
+      ) {
+        return (
+          <BookingConsigneePickerAdapter
+            value={value as ProfileSelectionValue | string | null}
+            customerId={ctx.customer_id ?? undefined}
+            customerName={ctx.customer_name ?? undefined}
+            label={label}
+            onChange={set}
+          />
+        );
+      }
       return (
         <ProfileLookupCombobox
           profileType={field.profileType ?? 'unknown'}
@@ -512,7 +550,6 @@ export function BookingFieldRenderer({ field, value, onChange, ctx, error, disab
           disabled={disabled}
           placeholder={label}
           error={!!error}
-          onQuickCreate={handleQuickCreate}
           portalZIndex={portalZIndex}
         />
       );
@@ -526,7 +563,6 @@ export function BookingFieldRenderer({ field, value, onChange, ctx, error, disab
           disabled={disabled}
           placeholder={label}
           error={!!error}
-          onQuickCreate={handleQuickCreate}
           portalZIndex={portalZIndex}
         />
       );
@@ -553,3 +589,50 @@ export function BookingFieldRenderer({ field, value, onChange, ctx, error, disab
 }
 
 export { isFieldRequired, resolveLabel };
+
+// ---------------------------------------------------------------------------
+// BookingConsigneePickerAdapter
+// Bridges ConsigneePicker (which calls `onChange(name)` then
+// `onConsigneeIdChange(id)` sequentially) into the form's single
+// ProfileSelectionValue update. A ref captures the latest text so the
+// id-callback can commit a unified value without closure staleness.
+// ---------------------------------------------------------------------------
+function BookingConsigneePickerAdapter({
+  value,
+  customerId,
+  customerName,
+  label,
+  onChange,
+}: {
+  value: ProfileSelectionValue | string | null;
+  customerId?: string;
+  customerName?: string;
+  label: string;
+  onChange: (next: ProfileSelectionValue) => void;
+}) {
+  const sel = value && typeof value === 'object' ? value : null;
+  const text = typeof value === 'string' ? value : sel?.label ?? '';
+  const lastTextRef = useRef(text);
+  lastTextRef.current = text;
+
+  return (
+    <ConsigneePicker
+      value={text}
+      customerId={customerId}
+      customerName={customerName}
+      placeholder={label}
+      onChange={name => {
+        // Capture the latest text so the id callback can commit with it.
+        lastTextRef.current = name;
+      }}
+      onConsigneeIdChange={id => {
+        onChange({
+          id: id ?? null,
+          label: lastTextRef.current,
+          profileType: 'consignee',
+          source: id ? 'linked' : 'manual',
+        });
+      }}
+    />
+  );
+}

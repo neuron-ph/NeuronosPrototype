@@ -1,9 +1,10 @@
 import { FormSelect } from "./FormSelect";
 import { FormComboBox } from "./FormComboBox";
 import { Plus, X } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useState, useMemo, type ReactNode } from "react";
 import type { TruckingLineItem } from "../../../types/pricing";
 import { normalizeTruckingLineItems } from "../../../utils/contractQuantityExtractor";
+import { useEnumOptions } from "../../../hooks/useEnumOptions";
 
 interface TruckingFormData {
   pullOut?: string;
@@ -17,15 +18,12 @@ interface TruckingFormData {
   aolPol?: string; // Location to drop off the container
 }
 
-// Truck type options — shared constant to avoid duplication
-const TRUCK_TYPE_OPTIONS = [
-  { value: "4W", label: "4W" },
-  { value: "6W", label: "6W" },
-  { value: "10W", label: "10W" },
-  { value: "20ft", label: "20ft" },
-  { value: "40ft", label: "40ft" },
-  { value: "45ft", label: "45ft" },
-];
+// Truck type options — sourced from profile_truck_types via useEnumOptions
+// (migration 088). Use useTruckTypeOptions() inside the component.
+function useTruckTypeOptions() {
+  const values = useEnumOptions('truck_type');
+  return useMemo(() => values.map(v => ({ value: v, label: v })), [values]);
+}
 
 interface TruckingServiceFormProps {
   data: TruckingFormData;
@@ -40,6 +38,8 @@ interface TruckingServiceFormProps {
 }
 
 export function TruckingServiceForm({ data, onChange, movement = "IMPORT", viewMode = false, contractMode = false, hideDestinations = false, contractDestinations, headerToolbar }: TruckingServiceFormProps) {
+  const TRUCK_TYPE_OPTIONS = useTruckTypeOptions();
+
   const updateField = (field: keyof TruckingFormData, value: any) => {
     onChange({ ...data, [field]: value });
   };
@@ -343,6 +343,7 @@ interface DispatchRowProps {
 }
 
 function DispatchRow({ li, isExport, viewMode, canRemove, showRemoveSlot, onFieldChange, onRemove, inputStyle, focusHandler, blurHandler, contractDestinations }: DispatchRowProps) {
+  const TRUCK_TYPE_OPTIONS = useTruckTypeOptions();
   // Convert contract destinations to combobox options
   const destinationOptions = contractDestinations && contractDestinations.length > 0
     ? contractDestinations.map(d => ({ value: d, label: d }))

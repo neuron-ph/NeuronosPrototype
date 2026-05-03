@@ -21,6 +21,7 @@ export const queryKeys = {
     list: () => ["customers", "list"] as const,
     detail: (id: string) => ["customers", id] as const,
     consignees: (customerId: string) => ["customers", customerId, "consignees"] as const,
+    contacts: (customerId: string) => ["customers", customerId, "contacts"] as const,
   },
   contacts: {
     all: () => ["contacts"] as const,
@@ -161,6 +162,10 @@ export const queryKeys = {
   workflowTickets: {
     all: () => ["workflowTickets"] as const,
     pendingForDept: (dept: string) => ["workflowTickets", "pending", dept] as const,
+  },
+  enumOptions: {
+    all: () => ["enumOptions"] as const,
+    kind: (kind: string) => ["enumOptions", kind] as const,
   },
   assignments: {
     all: () => ["assignments"] as const,
