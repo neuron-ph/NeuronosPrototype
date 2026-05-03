@@ -200,9 +200,13 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
     staleTime: 30_000,
   });
 
-  // Fetch contacts for this customer
+  // Fetch contacts for this customer.
+  // NOTE: this previously shared `queryKeys.customers.consignees(...)` with the
+  // useConsignees hook, causing the two queries (contacts table vs consignees
+  // table) to clobber each other's cache — which made the CONSIGNEES section
+  // render contact rows and made adding a consignee "delete" the others.
   const { data: contacts = [], isLoading: isLoadingContacts } = useQuery({
-    queryKey: queryKeys.customers.consignees(customer.id),
+    queryKey: queryKeys.customers.contacts(customer.id),
     queryFn: async () => {
       const { data, error } = await supabase.from('contacts').select('*').eq('customer_id', customer.id);
       if (error) throw error;
@@ -401,7 +405,6 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
     try {
       const updatePayload = {
         name: editedCustomer.name || editedCustomer.company_name,
-        company_name: editedCustomer.name || editedCustomer.company_name,
         client_type: editedCustomer.client_type,
         industry: editedCustomer.industry,
         registered_address: editedCustomer.registered_address,
@@ -2167,7 +2170,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
               created_at: new Date().toISOString(),
             });
             if (!error) {
-              queryClient.invalidateQueries({ queryKey: queryKeys.customers.consignees(customer.id) });
+              queryClient.invalidateQueries({ queryKey: queryKeys.customers.contacts(customer.id) });
               toast.success('Contact created successfully');
               setIsAddContactPanelOpen(false);
             } else {

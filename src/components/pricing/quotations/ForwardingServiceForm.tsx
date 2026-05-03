@@ -1,6 +1,8 @@
 import { FormSelect } from "./FormSelect";
 import { ContainerEntriesManager } from "./ContainerEntriesManager";
 import type { ReactNode } from "react";
+import { ProfileLookupCombobox } from "../../shared/profiles/ProfileLookupCombobox";
+import type { ProfileSelectionValue } from "../../../types/profiles";
 
 interface ContainerEntry {
   id: string;
@@ -13,9 +15,10 @@ interface ForwardingFormData {
   cargoType?: string;
   commodityDescription?: string;
   deliveryAddress?: string;
-  aodPod?: string;
+  // Profile-backed lookups (port). May hold ProfileSelectionValue or string snapshot.
+  aodPod?: string | ProfileSelectionValue;
   mode?: string;
-  aolPol?: string;
+  aolPol?: string | ProfileSelectionValue;
   cargoNature?: string;
   
   // Conditional fields based on mode - NEW: Using containers array
@@ -30,7 +33,8 @@ interface ForwardingFormData {
   
   // Conditional based on incoterm
   collectionAddress?: string; // EXW
-  carrierAirline?: string; // EXW/FOB/FCA
+  // Profile-backed (carrier). May hold ProfileSelectionValue or string snapshot.
+  carrierAirline?: string | ProfileSelectionValue; // EXW/FOB/FCA
   transitTime?: string; // EXW/FOB/FCA
   route?: string; // EXW/FOB/FCA
   stackable?: boolean; // EXW/FOB/FCA - Changed to boolean for checkbox
@@ -250,7 +254,7 @@ export function ForwardingServiceForm({ data, onChange, builderMode = "quotation
         </div>
         )}
 
-        {/* AOL/POL & AOD/POD */}
+        {/* AOL/POL & AOD/POD — port profile lookups */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
           <div>
             <label style={{
@@ -262,30 +266,12 @@ export function ForwardingServiceForm({ data, onChange, builderMode = "quotation
             }}>
               AOL/POL
             </label>
-            <input
-              type="text"
-              value={data.aolPol || ""}
-              onChange={(e) => updateField("aolPol", e.target.value)}
-              placeholder="Airport/Port of Loading"
-              style={{
-                width: "100%",
-                padding: "10px 12px",
-                fontSize: "13px",
-                color: "var(--neuron-ink-base)",
-                backgroundColor: viewMode ? "var(--neuron-pill-inactive-bg)" : "var(--theme-bg-surface)",
-                border: "1px solid var(--neuron-ui-border)",
-                borderRadius: "6px",
-                outline: "none",
-                transition: "border-color 0.15s ease",
-                cursor: viewMode ? "default" : "text"
-              }}
-              onFocus={(e) => {
-                if (!viewMode) e.currentTarget.style.borderColor = "var(--neuron-brand-teal)";
-              }}
-              onBlur={(e) => {
-                if (!viewMode) e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
-              }}
+            <ProfileLookupCombobox
+              profileType="port"
+              value={data.aolPol ?? null}
+              onChange={(v) => updateField("aolPol", v)}
               disabled={viewMode}
+              placeholder="Search Airport/Port of Loading…"
             />
           </div>
           <div>
@@ -298,30 +284,12 @@ export function ForwardingServiceForm({ data, onChange, builderMode = "quotation
             }}>
               AOD/POD
             </label>
-            <input
-              type="text"
-              value={data.aodPod || ""}
-              onChange={(e) => updateField("aodPod", e.target.value)}
-              placeholder="Airport/Port of Discharge"
-              style={{
-                width: "100%",
-                padding: "10px 12px",
-                fontSize: "13px",
-                color: "var(--neuron-ink-base)",
-                backgroundColor: viewMode ? "var(--neuron-pill-inactive-bg)" : "var(--theme-bg-surface)",
-                border: "1px solid var(--neuron-ui-border)",
-                borderRadius: "6px",
-                outline: "none",
-                transition: "border-color 0.15s ease",
-                cursor: viewMode ? "default" : "text"
-              }}
-              onFocus={(e) => {
-                if (!viewMode) e.currentTarget.style.borderColor = "var(--neuron-brand-teal)";
-              }}
-              onBlur={(e) => {
-                if (!viewMode) e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
-              }}
+            <ProfileLookupCombobox
+              profileType="port"
+              value={data.aodPod ?? null}
+              onChange={(v) => updateField("aodPod", v)}
               disabled={viewMode}
+              placeholder="Search Airport/Port of Discharge…"
             />
           </div>
         </div>
@@ -688,23 +656,12 @@ export function ForwardingServiceForm({ data, onChange, builderMode = "quotation
                     }}>
                       Carrier/Airline
                     </label>
-                    <input
-                      type="text"
-                      value={data.carrierAirline || ""}
-                      onChange={(e) => updateField("carrierAirline", e.target.value)}
-                      placeholder="Enter carrier"
-                      style={{
-                        width: "100%",
-                        padding: "8px 10px",
-                        fontSize: "13px",
-                        color: "var(--neuron-ink-base)",
-                        backgroundColor: viewMode ? "var(--neuron-pill-inactive-bg)" : "var(--theme-bg-surface)",
-                        border: "1px solid var(--neuron-ui-border)",
-                        borderRadius: "6px",
-                        outline: "none",
-                        cursor: viewMode ? "default" : "text"
-                      }}
+                    <ProfileLookupCombobox
+                      profileType="carrier"
+                      value={data.carrierAirline ?? null}
+                      onChange={(v) => updateField("carrierAirline", v)}
                       disabled={viewMode}
+                      placeholder="Search carrier…"
                     />
                   </div>
                   <div>

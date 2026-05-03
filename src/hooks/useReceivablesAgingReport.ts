@@ -9,6 +9,7 @@ import { isInScope } from "../components/accounting/aggregate/types";
 import type { DateScope } from "../components/accounting/aggregate/types";
 import { isInvoiceFinanciallyActive } from "../utils/invoiceReversal";
 import { isCollectionAppliedToInvoice } from "../utils/collectionResolution";
+import { pickReportingAmount } from "../utils/accountingCurrency";
 import { queryKeys } from "../lib/queryKeys";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -99,16 +100,29 @@ export function useReceivablesAgingReport(scope: DateScope) {
     const bookingMap = new Map<string, any>();
     bookings.forEach((b: any) => bookingMap.set(b.id as string, b));
 
-    // Collected-per-invoice map (applied collections only)
+    // Invoice rate lookup so cross-currency collections can be normalized to PHP base.
+    const invoiceRateById = new Map<string, number>();
+    invoices.forEach((inv: any) => {
+      const r = Number(inv.exchange_rate);
+      invoiceRateById.set(inv.id as string, Number.isFinite(r) && r > 0 ? r : 1);
+    });
+
+    // Collected-per-invoice map in PHP base. Direct hits use the collection's
+    // own base_amount; linked_billings entries are in invoice currency, so we
+    // multiply by the invoice's locked rate to normalize.
     const collectedByInvoice = new Map<string, number>();
     collections.filter(isCollectionAppliedToInvoice).forEach((c: any) => {
-      const add = (id: string | undefined) => {
-        if (!id) return;
-        collectedByInvoice.set(id, (collectedByInvoice.get(id) || 0) + (Number(c.amount) || 0));
-      };
-      add(c.invoice_id || c.invoiceId);
+      const directId = c.invoice_id || c.invoiceId;
+      const directBase = pickReportingAmount(c);
+      if (directId) {
+        collectedByInvoice.set(directId, (collectedByInvoice.get(directId) || 0) + directBase);
+      }
       (Array.isArray(c.linked_billings) ? c.linked_billings : []).forEach((entry: any) => {
-        add(entry?.id || entry?.invoice_id || entry?.invoiceId);
+        const id = entry?.id || entry?.invoice_id || entry?.invoiceId;
+        if (!id || id === directId) return;
+        const rate = invoiceRateById.get(id) ?? 1;
+        const entryAmtInvoiceCcy = Number(entry?.amount) || 0;
+        collectedByInvoice.set(id, (collectedByInvoice.get(id) || 0) + entryAmtInvoiceCcy * rate);
       });
     });
 
@@ -117,7 +131,10 @@ export function useReceivablesAgingReport(scope: DateScope) {
       .filter((inv: any) => isInScope(inv.created_at, scope))
       .map((inv: any): AgingRow | null => {
         const invoiceId = inv.id as string;
-        const totalAmount = Number(inv.total_amount) || Number(inv.subtotal) || 0;
+        // Aging aggregates in PHP base across the whole AR portfolio. Per-invoice
+        // figures here are PHP-normalized; per-row source-currency display is
+        // the consumer's responsibility.
+        const totalAmount = pickReportingAmount(inv) || Number(inv.subtotal) || 0;
         const collected   = collectedByInvoice.get(invoiceId) || 0;
         const outstanding = Math.max(0, totalAmount - collected);
         if (outstanding <= 0) return null;

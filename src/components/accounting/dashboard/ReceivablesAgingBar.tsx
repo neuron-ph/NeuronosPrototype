@@ -17,6 +17,7 @@ import { useState, useMemo } from "react";
 import { ChevronRight, Calendar } from "lucide-react";
 import { formatCurrencyCompact } from "../aggregate/types";
 import { calculateInvoiceBalance } from "../../../utils/accounting-math";
+import { formatMoney } from "../../../utils/accountingCurrency";
 
 interface AgingSegment {
   label: string;
@@ -81,8 +82,7 @@ function formatShortDate(date: Date): string {
 }
 
 /** Format PHP currency for drill-down rows */
-const fmtPHP = (amount: number) =>
-  new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", maximumFractionDigits: 0 }).format(amount);
+const fmtPHP = (amount: number) => formatMoney(amount, "PHP");
 
 // ── Inline Drill-Down Panel ──
 

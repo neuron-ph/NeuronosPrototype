@@ -10,12 +10,13 @@ import { vehicleAdapter } from './adapters/vehicleAdapter';
 import { profileRegistry } from '../../config/profiles/profileRegistry';
 
 /**
- * Returns the ProfileAdapter for a given profileType, plus any providerTag
- * that should be forwarded to the adapter's search/fetchById calls.
+ * Returns the ProfileAdapter for a given profileType, plus any providerTag /
+ * providerScope that should be forwarded to the adapter's search/fetchById calls.
  */
 export function getAdapterForType(profileType: string): {
   adapter: ProfileAdapter;
   providerTag?: string;
+  providerScope?: 'local' | 'overseas';
 } | null {
   const entry = profileRegistry[profileType];
   if (!entry) return null;
@@ -26,7 +27,11 @@ export function getAdapterForType(profileType: string): {
     case 'users':
       return { adapter: userAdapter };
     case 'service_providers':
-      return { adapter: serviceProviderAdapter, providerTag: entry.providerTag ?? profileType };
+      return {
+        adapter: serviceProviderAdapter,
+        providerTag: entry.providerTag,
+        providerScope: entry.providerScope,
+      };
     case 'trade_parties':
       return { adapter: tradePartyAdapter, providerTag: profileType };
     case 'profile_locations':

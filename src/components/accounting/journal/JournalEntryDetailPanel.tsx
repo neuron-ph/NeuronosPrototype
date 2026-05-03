@@ -6,6 +6,11 @@ import { useUser } from "../../../hooks/useUser";
 import { toast } from "sonner@2.0.3";
 import type { JournalEntry } from "./GeneralJournal";
 import { getSource } from "./GeneralJournal";
+import {
+  FUNCTIONAL_CURRENCY,
+  formatMoney,
+  type AccountingCurrency,
+} from "../../../utils/accountingCurrency";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -87,6 +92,12 @@ export function JournalEntryDetailPanel({
   const isBalanced = Math.abs(entry.total_debit - entry.total_credit) < 0.01;
   const lines = entry.lines ?? [];
   const hasLines = lines.length > 0;
+
+  // FX header. Legacy entries (pre-migration backfill) report PHP/1 here.
+  const txnCurrency: AccountingCurrency =
+    ((entry as any).transaction_currency as AccountingCurrency) ?? FUNCTIONAL_CURRENCY;
+  const exchangeRate = Number((entry as any).exchange_rate ?? 1);
+  const isUsdEntry = txnCurrency !== FUNCTIONAL_CURRENCY && exchangeRate > 0 && exchangeRate !== 1;
 
   // ── Posting state ──
   const [isPosting, setIsPosting] = useState(false);
@@ -257,6 +268,19 @@ export function JournalEntryDetailPanel({
           )}
         </div>
 
+        {/* Currency / FX header */}
+        {isUsdEntry && (
+          <div style={{ marginBottom: "16px" }}>
+            <label style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "4px" }}>
+              Transaction Currency
+            </label>
+            <span style={{ fontSize: "12px", color: "var(--theme-text-primary)", fontVariantNumeric: "tabular-nums" }}>
+              {txnCurrency} @ {exchangeRate} = {FUNCTIONAL_CURRENCY}
+              {(entry as any).exchange_rate_date ? ` (rate date ${(entry as any).exchange_rate_date})` : ""}
+            </span>
+          </div>
+        )}
+
         {/* Description */}
         {entry.description && (
           <div style={{ marginBottom: "16px" }}>
@@ -320,9 +344,19 @@ export function JournalEntryDetailPanel({
                         </td>
                         <td style={{ padding: "8px 10px", fontSize: "12px", color: line.debit > 0 ? "var(--theme-text-primary)" : "var(--neuron-ui-muted)", fontWeight: 500, textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
                           {line.debit > 0 ? PHP.format(line.debit) : "—"}
+                          {isUsdEntry && (line as any).foreign_debit > 0 && (
+                            <div style={{ fontSize: "10px", color: "var(--theme-text-muted)" }}>
+                              {formatMoney((line as any).foreign_debit, (line as any).currency ?? txnCurrency)}
+                            </div>
+                          )}
                         </td>
                         <td style={{ padding: "8px 10px", fontSize: "12px", color: line.credit > 0 ? "var(--theme-text-primary)" : "var(--neuron-ui-muted)", fontWeight: 500, textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
                           {line.credit > 0 ? PHP.format(line.credit) : "—"}
+                          {isUsdEntry && (line as any).foreign_credit > 0 && (
+                            <div style={{ fontSize: "10px", color: "var(--theme-text-muted)" }}>
+                              {formatMoney((line as any).foreign_credit, (line as any).currency ?? txnCurrency)}
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );

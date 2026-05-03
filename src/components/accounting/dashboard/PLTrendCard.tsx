@@ -9,6 +9,7 @@
 
 import { useMemo, useState } from "react";
 import { formatCurrencyCompact, createDateScope, isInScope } from "../aggregate/types";
+import { formatMoney } from "../../../utils/accountingCurrency";
 import type { DateScope } from "../aggregate/types";
 import { ScopeBar } from "../aggregate/ScopeBar";
 
@@ -59,12 +60,7 @@ function generateTicks(maxVal: number): number[] {
   return ticks.length > 1 ? ticks : [0, maxVal];
 }
 
-const fmtFull = (amount: number) =>
-  new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    maximumFractionDigits: 0,
-  }).format(amount);
+const fmtFull = (amount: number) => formatMoney(amount, "PHP");
 
 // ── Chart constants (from Figma) ──
 const CHART_AREA_HEIGHT = 220; // bar area height in px

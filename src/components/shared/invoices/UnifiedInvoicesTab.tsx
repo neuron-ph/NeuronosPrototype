@@ -8,6 +8,7 @@ import { CustomDropdown } from "../../bd/CustomDropdown";
 import { CustomDatePicker } from "../../common/CustomDatePicker";
 import { DataTable, ColumnDef } from "../../common/DataTable";
 import { calculateInvoiceBalance } from "../../../utils/accounting-math";
+import { formatMoney as formatMoneyHelper, pickReportingAmount } from "../../../utils/accountingCurrency";
 import { getInvoiceLifecycleStatus, isInvoiceFinanciallyActive } from "../../../utils/invoiceReversal";
 import { useBillingMerge } from "../../../hooks/useBillingMerge";
 
@@ -100,12 +101,8 @@ export function UnifiedInvoicesTab({
   }, [highlightId, invoices, highlightConsumed]);
 
   // -- Helpers --
-  const formatCurrency = (amount: number, currency: string = "PHP") => {
-    return new Intl.NumberFormat("en-PH", {
-      style: "currency",
-      currency: currency,
-    }).format(amount);
-  };
+  const formatCurrency = (amount: number, currency: string = "PHP") =>
+    formatMoneyHelper(amount, currency as any);
 
   const formatDate = (dateString: string) => {
     if (!dateString) return "-";
@@ -169,17 +166,22 @@ export function UnifiedInvoicesTab({
     [filteredInvoices],
   );
 
-  // -- Totals Calculation --
+  // -- Totals Calculation (PHP base — see balanceBase / pickReportingAmount) --
   const totalInvoiced = useMemo(() => {
-    return activeFilteredInvoices.reduce((sum, item) => sum + (item.total_amount || item.amount || 0), 0);
+    return activeFilteredInvoices.reduce((sum, item) => sum + pickReportingAmount(item as any), 0);
   }, [activeFilteredInvoices]);
 
   const totalOutstanding = useMemo(() => {
     return activeFilteredInvoices.reduce((sum, item) => {
-       const { balance } = calculateInvoiceBalance(item, collections);
-       return sum + balance;
+       const { balanceBase } = calculateInvoiceBalance(item, collections);
+       return sum + balanceBase;
     }, 0);
   }, [activeFilteredInvoices, collections]);
+
+  const hasMixedCurrency = useMemo(() => {
+    const ccys = new Set(activeFilteredInvoices.map((i: any) => i.original_currency || i.currency || "PHP"));
+    return ccys.size > 1;
+  }, [activeFilteredInvoices]);
 
   // -- Table Columns --
   const columns: ColumnDef<Invoice>[] = [
@@ -415,12 +417,12 @@ export function UnifiedInvoicesTab({
         rowClassName={() => "group"}
         icon={FileText}
         footerSummary={[
-          { 
-             label: "Total Outstanding", 
-             value: <span className="text-[var(--theme-status-danger-fg)]">{formatCurrency(totalOutstanding)}</span> 
+          {
+             label: hasMixedCurrency ? "Total Outstanding (PHP base)" : "Total Outstanding",
+             value: <span className="text-[var(--theme-status-danger-fg)]">{formatCurrency(totalOutstanding)}</span>
           },
-          { 
-             label: "Total Invoiced", 
+          {
+             label: hasMixedCurrency ? "Total Invoiced (PHP base)" : "Total Invoiced",
              value: <span className="text-[var(--theme-text-secondary)]">{formatCurrency(totalInvoiced)}</span>
           }
         ]}

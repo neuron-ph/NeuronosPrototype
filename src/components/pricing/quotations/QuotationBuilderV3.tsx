@@ -89,6 +89,18 @@ import { calculateSellingItemFromBuyingPrice } from "../../../utils/pricing/quot
 import { validateQuotation } from "../../../utils/quotation/quotationValidation";
 import { normalizeServicesMetadata } from "../../../utils/quotation/quotationNormalize";
 import {
+  quotationProfileValueToRef,
+  quotationProfileValueToLabel,
+} from "../../../utils/quotation/quotationProfileSerialize";
+import {
+  readProfileRefsFromDetails,
+  readNamespacedRef,
+  serviceTypeToScope,
+  type NamespacedProfileRefs,
+  type QuotationServiceScope,
+} from "../../../utils/quotation/profileRefsKey";
+import type { ProfileSelectionValue } from "../../../types/profiles";
+import {
   buildBrokerageContext,
   buildForwardingContext,
   buildTruckingContext,
@@ -108,7 +120,8 @@ interface BrokerageFormData {
   consumption?: boolean;
   warehousing?: boolean;
   peza?: boolean;
-  pod?: string;
+  // Profile-backed (port). Holds ProfileSelectionValue when linked, string when manual/legacy.
+  pod?: string | ProfileSelectionValue;
   pods?: string[]; // ✨ CONTRACT: Multiple ports for contract mode
   mode?: string;
   cargoType?: string;
@@ -125,7 +138,8 @@ interface BrokerageFormData {
   lclDims?: string;
   airGwt?: string;
   airCwt?: string;
-  countryOfOrigin?: string;
+  // Profile-backed (country); strict, no quick-create.
+  countryOfOrigin?: string | ProfileSelectionValue;
   preferentialTreatment?: string;
   shipmentType?: string; // Add shipmentType field
   declaredValue?: number;
@@ -146,9 +160,10 @@ interface ForwardingFormData {
   commodity?: string;
   commodityDescription?: string;
   deliveryAddress?: string;
-  aodPod?: string;
+  // Profile-backed (port).
+  aodPod?: string | ProfileSelectionValue;
   mode?: string;
-  aolPol?: string;
+  aolPol?: string | ProfileSelectionValue;
   cargoNature?: string;
   // Changed: Now using containers array instead of individual fields
   containers?: ContainerEntry[];
@@ -162,12 +177,13 @@ interface ForwardingFormData {
   airGwt?: string;
   airCwt?: string;
   collectionAddress?: string;
-  carrierAirline?: string;
+  // Profile-backed (carrier).
+  carrierAirline?: string | ProfileSelectionValue;
   transitTime?: string;
   route?: string;
   stackable?: boolean;
   // Cross-service fields that may also be in Brokerage
-  countryOfOrigin?: string;
+  countryOfOrigin?: string | ProfileSelectionValue;
   preferentialTreatment?: string;
   aol?: string;
   pol?: string;
@@ -202,8 +218,9 @@ interface TruckingFormData {
 interface MarineInsuranceFormData {
   commodityDescription?: string;
   hsCode?: string;
-  aolPol?: string;
-  aodPod?: string;
+  // Profile-backed (port).
+  aolPol?: string | ProfileSelectionValue;
+  aodPod?: string | ProfileSelectionValue;
   invoiceValue?: number;
   aol?: string;
   pol?: string;
@@ -503,11 +520,46 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
     }
   }, [selectedServices, isContractMode]);
 
+  // Compute the namespaced profile refs once from initialData. Legacy quotations
+  // (flat refs bag) are migrated into the per-service shape on read.
+  const loadedProfileRefs: NamespacedProfileRefs = (() => {
+    const servicesPresent: QuotationServiceScope[] = (initialData?.services_metadata ?? [])
+      .map(s => serviceTypeToScope(s.service_type))
+      .filter((s): s is QuotationServiceScope => s != null);
+    return readProfileRefsFromDetails((initialData as any)?.details ?? null, servicesPresent);
+  })();
+
+  // Hydrate a profile-backed quotation field. Prefer the linked ref from the
+  // namespaced refs bucket for this service; otherwise fall back to a manual
+  // ProfileSelectionValue carrying the snapshot label.
+  const hydrateProfileField = (
+    scope: QuotationServiceScope,
+    fieldKey: string,
+    profileType: string,
+    snapshotLabel: string | undefined | null,
+  ): ProfileSelectionValue => {
+    const ref = readNamespacedRef(loadedProfileRefs, scope, fieldKey);
+    if (ref) {
+      return {
+        id: ref.profile_id,
+        label: ref.label_snapshot || (snapshotLabel ?? ''),
+        profileType: ref.profile_type || profileType,
+        source: ref.source,
+      };
+    }
+    return {
+      id: null,
+      label: snapshotLabel ?? '',
+      profileType,
+      source: 'manual',
+    };
+  };
+
   // Load service-specific form data from initialData.services_metadata
   const loadServiceData = <T extends Record<string, any>>(serviceType: string, defaultData: T): T => {
     const serviceMetadata = initialData?.services_metadata?.find(s => s.service_type === serviceType);
     if (!serviceMetadata) return defaultData;
-    
+
     const details = serviceMetadata.service_details as any;
     
     // Handle backward compatibility: map snake_case (correct) to camelCase (form data)
@@ -521,14 +573,14 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
         consumption: details.consumption,
         warehousing: details.warehousing,
         peza: details.peza,
-        pod: details.pod,
+        pod: hydrateProfileField('brokerage', 'pod_aod', 'port', details.pod_aod || details.pod || details.aodPod),
         pods: details.pods, // ✨ CONTRACT: Multiple ports
         mode: details.mode,
         cargoType: details.cargo_type || details.cargoType,
         commodityDescription: details.commodity || details.commodityDescription,
         declaredValue: details.declared_value || details.declaredValue,
         deliveryAddress: details.delivery_address || details.deliveryAddress,
-        countryOfOrigin: details.country_of_origin || details.countryOfOrigin,
+        countryOfOrigin: hydrateProfileField('brokerage', 'country_of_origin', 'country', details.country_of_origin || details.countryOfOrigin),
         preferentialTreatment: details.preferential_treatment || details.preferentialTreatment,
         psic: details.psic,
         aeo: details.aeo,
@@ -554,10 +606,10 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
     }
     
     if (serviceType === "Forwarding") {
-      // Reconstruct compound fields from separate aol/pol and aod/pod
-      const aolPol = details.aolPol || (details.aol && details.pol ? `${details.aol} → ${details.pol}` : "");
-      const aodPod = details.aodPod || (details.aod && details.pod ? `${details.aod} → ${details.pod}` : "");
-      
+      // Snapshot string preserved for backward compatibility.
+      const aolPolLabel = details.pol_aol || details.aol_pol || details.aolPol || (details.aol && details.pol ? `${details.aol} → ${details.pol}` : "");
+      const aodPodLabel = details.pod_aod || details.aod_pod || details.aodPod || (details.aod && details.pod ? `${details.aod} → ${details.pod}` : "");
+
       return {
         ...defaultData,
         incoterms: details.incoterms,
@@ -566,17 +618,17 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
         commodityDescription: details.commodity || details.commodityDescription,
         deliveryAddress: details.delivery_address || details.deliveryAddress,
         mode: details.mode,
-        aolPol: aolPol,
-        aodPod: aodPod,
+        aolPol: hydrateProfileField('forwarding', 'pol_aol', 'port', aolPolLabel),
+        aodPod: hydrateProfileField('forwarding', 'pod_aod', 'port', aodPodLabel),
         aol: details.aol,
         pol: details.pol,
         aod: details.aod,
         pod: details.pod,
-        
+
         // Load conditional fields (Fix for missing EXW details and others)
         containers: details.containers,
         collectionAddress: details.collection_address || details.collectionAddress,
-        carrierAirline: details.carrier_airline || details.carrierAirline,
+        carrierAirline: hydrateProfileField('forwarding', 'carrier_airline', 'carrier', details.carrier_airline || details.carrierAirline),
         transitTime: details.transit_time || details.transitTime,
         route: details.route,
         stackable: details.stackable,
@@ -619,16 +671,15 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
     }
     
     if (serviceType === "Marine Insurance") {
-      // Check aol_pol (snake_case saved by builder), then camelCase, then reconstruct from separate fields
-      const aolPol = details.aol_pol || details.aolPol || (details.aol && details.pol ? `${details.aol} → ${details.pol}` : details.aol || "");
-      const aodPod = details.aod_pod || details.aodPod || (details.aod && details.pod ? `${details.aod} → ${details.pod}` : details.aod || "");
-      
+      const aolPolLabel = details.pol_aol || details.aol_pol || details.aolPol || (details.aol && details.pol ? `${details.aol} → ${details.pol}` : details.aol || "");
+      const aodPodLabel = details.pod_aod || details.aod_pod || details.aodPod || (details.aod && details.pod ? `${details.aod} → ${details.pod}` : details.aod || "");
+
       return {
         ...defaultData,
         commodityDescription: details.commodity_description || details.commodityDescription,
         hsCode: details.hs_code || details.hsCode,
-        aolPol: aolPol,
-        aodPod: aodPod,
+        aolPol: hydrateProfileField('marine_insurance', 'pol_aol', 'port', aolPolLabel),
+        aodPod: hydrateProfileField('marine_insurance', 'pod_aod', 'port', aodPodLabel),
         aol: details.aol,
         pol: details.pol,
         aod: details.aod,
@@ -1861,8 +1912,29 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
 
     // Build services_metadata from form data
     const services_metadata: InquiryService[] = [];
-    
+
+    // Profile-ref accumulator persisted at quotation.details.profile_refs.
+    // Namespaced by service so fields sharing a key across services (pod_aod,
+    // pol_aol) don't collide. Rebuilt from scratch on every save — the previous
+    // refs bag is NOT spread in, so clearing a linked field actually sticks.
+    const profile_refs: NamespacedProfileRefs = {};
+    const recordProfileRef = (
+      scope: QuotationServiceScope,
+      fieldKey: string,
+      profileType: string,
+      value: string | ProfileSelectionValue | undefined | null,
+    ) => {
+      if (value && typeof value !== 'string' && (value.label?.trim().length ?? 0) > 0) {
+        const bucket = (profile_refs[scope] ??= {});
+        bucket[fieldKey] = quotationProfileValueToRef(profileType, value);
+      }
+    };
+
     if (selectedServices.includes("Brokerage")) {
+      const brokeragePodLabel = quotationProfileValueToLabel(brokerageData.pod);
+      const brokerageCountryLabel = quotationProfileValueToLabel(brokerageData.countryOfOrigin);
+      recordProfileRef('brokerage', 'pod_aod', 'port', brokerageData.pod);
+      recordProfileRef('brokerage', 'country_of_origin', 'country', brokerageData.countryOfOrigin);
       services_metadata.push({
         service_type: "Brokerage",
         service_details: {
@@ -1873,14 +1945,15 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
           consumption: brokerageData.consumption,
           warehousing: brokerageData.warehousing,
           peza: brokerageData.peza,
-          pod: brokerageData.pod,
+          pod: brokeragePodLabel,
+          pod_aod: brokeragePodLabel,
           pods: brokerageData.pods, // ✨ CONTRACT: Multiple ports
           mode: brokerageData.mode,
           cargo_type: brokerageData.cargoType,
           commodity: brokerageData.commodityDescription, // commodityDescription maps to commodity
           declared_value: brokerageData.declaredValue,
           delivery_address: brokerageData.deliveryAddress,
-          country_of_origin: brokerageData.countryOfOrigin,
+          country_of_origin: brokerageCountryLabel,
           preferential_treatment: brokerageData.preferentialTreatment,
           psic: brokerageData.psic,
           aeo: brokerageData.aeo,
@@ -1907,20 +1980,27 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
     }
     
     if (selectedServices.includes("Forwarding")) {
-      // Parse aolPol and aodPod if they exist (they might be combined fields)
+      const forwardingAolPolLabel = quotationProfileValueToLabel(forwardingData.aolPol);
+      const forwardingAodPodLabel = quotationProfileValueToLabel(forwardingData.aodPod);
+      const forwardingCarrierLabel = quotationProfileValueToLabel(forwardingData.carrierAirline);
+      recordProfileRef('forwarding', 'pol_aol', 'port', forwardingData.aolPol);
+      recordProfileRef('forwarding', 'pod_aod', 'port', forwardingData.aodPod);
+      recordProfileRef('forwarding', 'carrier_airline', 'carrier', forwardingData.carrierAirline);
+
+      // Parse compound aol/pol or aod/pod arrows out of legacy snapshots only.
+      // Linked profile lookups carry a single port label, so splitting yields the same value.
       let aol = forwardingData.aol;
       let pol = forwardingData.pol;
       let aod = forwardingData.aod;
       let pod = forwardingData.pod;
-      
-      // Handle compound fields if they exist
-      if (forwardingData.aolPol && !aol && !pol) {
-        [aol, pol] = forwardingData.aolPol.split('→').map(s => s.trim());
+
+      if (forwardingAolPolLabel && !aol && !pol && forwardingAolPolLabel.includes('→')) {
+        [aol, pol] = forwardingAolPolLabel.split('→').map(s => s.trim());
       }
-      if (forwardingData.aodPod && !aod && !pod) {
-        [aod, pod] = forwardingData.aodPod.split('→').map(s => s.trim());
+      if (forwardingAodPodLabel && !aod && !pod && forwardingAodPodLabel.includes('→')) {
+        [aod, pod] = forwardingAodPodLabel.split('→').map(s => s.trim());
       }
-      
+
       services_metadata.push({
         service_type: "Forwarding",
         service_details: {
@@ -1931,17 +2011,19 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
           commodity: forwardingData.commodityDescription || forwardingData.commodity,
           delivery_address: forwardingData.deliveryAddress,
           mode: forwardingData.mode,
-          aolPol: forwardingData.aolPol, // ✨ ADDED: Save compound string
-          aodPod: forwardingData.aodPod, // ✨ ADDED: Save compound string
+          aolPol: forwardingAolPolLabel,
+          aodPod: forwardingAodPodLabel,
+          pol_aol: forwardingAolPolLabel,
+          pod_aod: forwardingAodPodLabel,
           aol: aol,
           pol: pol || forwardingData.pol,
           aod: aod,
           pod: pod || forwardingData.pod,
-          
+
           // Save conditional fields (Fix for missing EXW details and others)
           containers: forwardingData.containers,
           collection_address: forwardingData.collectionAddress,
-          carrier_airline: forwardingData.carrierAirline,
+          carrier_airline: forwardingCarrierLabel,
           transit_time: forwardingData.transitTime,
           route: forwardingData.route,
           stackable: forwardingData.stackable,
@@ -1989,27 +2071,35 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
     }
     
     if (selectedServices.includes("Marine Insurance")) {
-      // Parse aolPol and aodPod if they exist
+      const marineAolPolLabel = quotationProfileValueToLabel(marineInsuranceData.aolPol);
+      const marineAodPodLabel = quotationProfileValueToLabel(marineInsuranceData.aodPod);
+      // Namespaced refs — Marine Insurance and Forwarding can carry independent
+      // pol_aol / pod_aod selections without colliding.
+      recordProfileRef('marine_insurance', 'pol_aol', 'port', marineInsuranceData.aolPol);
+      recordProfileRef('marine_insurance', 'pod_aod', 'port', marineInsuranceData.aodPod);
+
       let aol = marineInsuranceData.aol;
       let pol = marineInsuranceData.pol;
       let aod = marineInsuranceData.aod;
       let pod = marineInsuranceData.pod;
-      
-      if (marineInsuranceData.aolPol && !aol && !pol) {
-        [aol, pol] = marineInsuranceData.aolPol.split('→').map(s => s.trim());
+
+      if (marineAolPolLabel && !aol && !pol && marineAolPolLabel.includes('→')) {
+        [aol, pol] = marineAolPolLabel.split('→').map(s => s.trim());
       }
-      if (marineInsuranceData.aodPod && !aod && !pod) {
-        [aod, pod] = marineInsuranceData.aodPod.split('→').map(s => s.trim());
+      if (marineAodPodLabel && !aod && !pod && marineAodPodLabel.includes('→')) {
+        [aod, pod] = marineAodPodLabel.split('→').map(s => s.trim());
       }
-      
+
       services_metadata.push({
         service_type: "Marine Insurance",
         service_details: {
           commodity_description: marineInsuranceData.commodityDescription,
           hs_code: marineInsuranceData.hsCode,
-          // Save compound fields directly so load can recover them without splitting
-          aol_pol: marineInsuranceData.aolPol,
-          aod_pod: marineInsuranceData.aodPod,
+          // Canonical + legacy aliases for the compound port snapshots.
+          pol_aol: marineAolPolLabel,
+          pod_aod: marineAodPodLabel,
+          aol_pol: marineAolPolLabel,
+          aod_pod: marineAodPodLabel,
           // Also save split fields for downstream consumers (e.g. invoices)
           aol: aol,
           pol: pol || marineInsuranceData.pol,
@@ -2065,12 +2155,22 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
       services: selectedServices,
       services_metadata: normalized_metadata, // Save scope metadata with canonical keys
       incoterm: forwardingData.incoterms || "",
-      carrier: forwardingData.carrierAirline || "TBA",
+      carrier: quotationProfileValueToLabel(forwardingData.carrierAirline) || "TBA",
       transit_days: parseInt(forwardingData.transitTime || "0"),
-      
+
       commodity: brokerageData.commodityDescription || forwardingData.commodityDescription || marineInsuranceData.commodityDescription || "",
-      pol_aol: forwardingData.aolPol || marineInsuranceData.aolPol || truckingData.aolPol || "",
-      pod_aod: brokerageData.pod || forwardingData.aodPod || marineInsuranceData.aodPod || "",
+      pol_aol: quotationProfileValueToLabel(forwardingData.aolPol) || quotationProfileValueToLabel(marineInsuranceData.aolPol) || truckingData.aolPol || "",
+      pod_aod: quotationProfileValueToLabel(brokerageData.pod) || quotationProfileValueToLabel(forwardingData.aodPod) || quotationProfileValueToLabel(marineInsuranceData.aodPod) || "",
+
+      // Persist linked profile metadata under details.profile_refs alongside any
+      // existing details payload (contract overflow, pricing-deadline metadata, etc.).
+      // profile_refs is rebuilt deterministically from current form state — the
+      // prior refs bag is intentionally NOT spread in, so clearing a linked
+      // selection actually persists.
+      details: {
+        ...((initialData as any)?.details ?? {}),
+        profile_refs,
+      } as any,
       
       charge_categories: isContractMode ? [] : chargeCategories,
       currency,

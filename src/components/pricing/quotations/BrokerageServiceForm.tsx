@@ -6,6 +6,9 @@ import {
   buildBrokerageContext,
   isFieldVisible,
 } from "../../../utils/quotation/quotationVisibility";
+import { ProfileLookupCombobox } from "../../shared/profiles/ProfileLookupCombobox";
+import { withLegacyOption } from "../../../utils/forms/legacyOption";
+import type { ProfileSelectionValue } from "../../../types/profiles";
 
 interface ContainerEntry {
   id: string;
@@ -23,7 +26,9 @@ interface BrokerageFormData {
   peza?: boolean;
 
   // Common fields
-  pod?: string;
+  // pod is a profile-backed lookup (port). May hold the linked ProfileSelectionValue
+  // or a plain string (legacy snapshot) — readers should coerce to label.
+  pod?: string | ProfileSelectionValue;
   pods?: string[]; // CONTRACT: Multiple ports for contract mode
   mode?: string;
   cargoType?: string;
@@ -45,7 +50,8 @@ interface BrokerageFormData {
   airCwt?: string;
 
   // All-Inclusive specific
-  countryOfOrigin?: string;
+  // countryOfOrigin is a profile-backed lookup (country); strict, no quick-create.
+  countryOfOrigin?: string | ProfileSelectionValue;
   preferentialTreatment?: string;
 }
 
@@ -243,19 +249,15 @@ export function BrokerageServiceForm({
               </div>
             )}
 
-            {/* AOD/POD — all packages */}
+            {/* AOD/POD — all packages — port profile lookup */}
             <div>
               <label style={labelStyle}>{isExport ? "AOL/POL" : "Port of Discharge (POD)"}</label>
-              <FormSelect
-                value={data.pod || ""}
-                onChange={(value) => updateField("pod", value)}
-                options={[
-                  { value: "NAIA", label: "NAIA" },
-                  { value: "MICP", label: "MICP" },
-                  { value: "POM", label: "POM" },
-                ]}
-                placeholder={isExport ? "Select AOL/POL..." : "Select POD..."}
+              <ProfileLookupCombobox
+                profileType="port"
+                value={data.pod ?? null}
+                onChange={(v) => updateField("pod", v)}
                 disabled={viewMode}
+                placeholder={isExport ? "Search AOL/POL…" : "Search POD…"}
               />
             </div>
 
@@ -311,37 +313,34 @@ export function BrokerageServiceForm({
                   />
                 </div>
 
-                {/* Country of Origin — All-Inclusive only (matrix: Standard=No, Non-Regular=No) */}
+                {/* Country of Origin — All-Inclusive only — country profile lookup */}
                 {isFieldVisible("country_of_origin", "Brokerage", ctx) && (
                   <div>
                     <label style={labelStyle}>Country of Origin</label>
-                    <input
-                      type="text"
-                      value={data.countryOfOrigin || ""}
-                      onChange={(e) => updateField("countryOfOrigin", e.target.value)}
-                      placeholder="Enter country of origin"
+                    <ProfileLookupCombobox
+                      profileType="country"
+                      value={data.countryOfOrigin ?? null}
+                      onChange={(v) => updateField("countryOfOrigin", v)}
                       disabled={viewMode}
-                      style={inputStyle()}
-                      onFocus={onFocusHandler}
-                      onBlur={onBlurHandler}
+                      placeholder="Search country…"
                     />
                   </div>
                 )}
 
-                {/* Preferential Treatment — All-Inclusive only */}
+                {/* Preferential Treatment — All-Inclusive only — closed dropdown (Form E / Form D) */}
                 {isFieldVisible("preferential_treatment", "Brokerage", ctx) && (
                   <div>
                     <label style={labelStyle}>Preferential Treatment</label>
                     <FormSelect
                       value={data.preferentialTreatment || ""}
                       onChange={(value) => updateField("preferentialTreatment", value)}
-                      options={[
-                        { value: "Form E", label: "Form E" },
-                        { value: "Form D", label: "Form D" },
-                        { value: "Form AI", label: "Form AI" },
-                        { value: "Form AK", label: "Form AK" },
-                        { value: "Form JP", label: "Form JP" },
-                      ]}
+                      options={withLegacyOption(
+                        [
+                          { value: "Form E", label: "Form E" },
+                          { value: "Form D", label: "Form D" },
+                        ],
+                        data.preferentialTreatment,
+                      )}
                       placeholder="Select preferential treatment..."
                       disabled={viewMode}
                     />

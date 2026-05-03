@@ -5,6 +5,16 @@ import { useUser } from "../../../hooks/useUser";
 import { logCreation } from "../../../utils/activityLog";
 import { toast } from "../../ui/toast-utils";
 import { SidePanel } from "../../common/SidePanel";
+import {
+  FUNCTIONAL_CURRENCY,
+  SUPPORTED_ACCOUNTING_CURRENCIES,
+  formatMoney,
+  resolvePostingRate,
+  roundMoney,
+  toBaseAmount,
+  type AccountingCurrency,
+} from "../../../utils/accountingCurrency";
+import { resolveExchangeRate } from "../../../utils/exchangeRates";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -124,6 +134,9 @@ export function ManualJournalEntryPanel({
   const [entryDate, setEntryDate] = useState<string>(today());
   const [memo, setMemo] = useState<string>("");
   const [lines, setLines] = useState<LineItem[]>([makeLineItem(), makeLineItem()]);
+  const [transactionCurrency, setTransactionCurrency] =
+    useState<AccountingCurrency>(FUNCTIONAL_CURRENCY);
+  const [exchangeRateInput, setExchangeRateInput] = useState<string>("");
 
   // Remote data
   const [accounts, setAccounts] = useState<COAAccount[]>([]);
@@ -140,8 +153,33 @@ export function ManualJournalEntryPanel({
       setMemo("");
       setLines([makeLineItem(), makeLineItem()]);
       setShowPostConfirm(false);
+      setTransactionCurrency(FUNCTIONAL_CURRENCY);
+      setExchangeRateInput("");
     }
   }, [isOpen]);
+
+  // Default the rate from the master table when the user picks USD.
+  useEffect(() => {
+    if (!isOpen) return;
+    if (transactionCurrency === FUNCTIONAL_CURRENCY) {
+      setExchangeRateInput("");
+      return;
+    }
+    let cancelled = false;
+    resolveExchangeRate({
+      fromCurrency: transactionCurrency,
+      toCurrency: FUNCTIONAL_CURRENCY,
+      rateDate: entryDate,
+    })
+      .then((row) => {
+        if (cancelled) return;
+        setExchangeRateInput((current) => current || String(row.rate));
+      })
+      .catch(() => {
+        // Force the user to enter one explicitly.
+      });
+    return () => { cancelled = true; };
+  }, [isOpen, transactionCurrency, entryDate]);
 
   // Load accounts when panel opens
   useEffect(() => {
@@ -197,10 +235,26 @@ export function ManualJournalEntryPanel({
   // Derived totals
   // ---------------------------------------------------------------------------
 
-  const totalDebits = lines.reduce((sum, l) => sum + parseAmount(l.debit), 0);
-  const totalCredits = lines.reduce((sum, l) => sum + parseAmount(l.credit), 0);
+  // Inputs are in `transactionCurrency`; PHP base totals drive GL balancing.
+  const parsedRate = parseFloat(exchangeRateInput);
+  const isPhp = transactionCurrency === FUNCTIONAL_CURRENCY;
+  const lockedRate = isPhp
+    ? 1
+    : Number.isFinite(parsedRate) && parsedRate > 0
+      ? parsedRate
+      : NaN;
+  const hasUsableRate = Number.isFinite(lockedRate) && lockedRate > 0;
+
+  const foreignTotalDebits = lines.reduce((sum, l) => sum + parseAmount(l.debit), 0);
+  const foreignTotalCredits = lines.reduce((sum, l) => sum + parseAmount(l.credit), 0);
+  const totalDebits = hasUsableRate ? roundMoney(foreignTotalDebits * lockedRate) : 0;
+  const totalCredits = hasUsableRate ? roundMoney(foreignTotalCredits * lockedRate) : 0;
   const difference = Math.abs(totalDebits - totalCredits);
-  const isBalanced = totalDebits > 0 && totalCredits > 0 && difference < 0.005;
+  const isBalanced =
+    hasUsableRate &&
+    totalDebits > 0 &&
+    totalCredits > 0 &&
+    difference < 0.005;
 
   // ---------------------------------------------------------------------------
   // Submit
@@ -210,12 +264,19 @@ export function ManualJournalEntryPanel({
     const activeLines = lines.filter((l) => parseAmount(l.debit) > 0 || parseAmount(l.credit) > 0);
     return activeLines.map((l) => {
       const acct = accounts.find((a) => a.id === l.account_id);
+      const foreignDebit = parseAmount(l.debit);
+      const foreignCredit = parseAmount(l.credit);
       return {
         account_id: l.account_id,
         account_code: acct?.code ?? "",
         account_name: acct?.name ?? "",
-        debit: parseAmount(l.debit),
-        credit: parseAmount(l.credit),
+        debit: roundMoney(foreignDebit * lockedRate),
+        credit: roundMoney(foreignCredit * lockedRate),
+        foreign_debit: foreignDebit,
+        foreign_credit: foreignCredit,
+        currency: transactionCurrency,
+        exchange_rate: lockedRate,
+        base_currency: FUNCTIONAL_CURRENCY,
         description: l.description.trim() || memo.trim() || "",
       };
     });
@@ -223,9 +284,31 @@ export function ManualJournalEntryPanel({
 
   const validateBeforeSubmit = () => {
     if (!user?.id) { toast.error("Cannot determine current user"); return false; }
+    if (!isPhp && !hasUsableRate) {
+      toast.error(`Enter a positive ${transactionCurrency}→${FUNCTIONAL_CURRENCY} rate`);
+      return false;
+    }
     if (!isBalanced) { toast.error("Entry is out of balance"); return false; }
     if (lines.some((l) => !l.account_id)) { toast.error("All line items must have an account selected"); return false; }
     return true;
+  };
+
+  const fxHeader = () => {
+    const postingRate = resolvePostingRate(transactionCurrency, lockedRate);
+    const sourceAmount = roundMoney(foreignTotalDebits);
+    const baseAmount = toBaseAmount({
+      amount: sourceAmount,
+      currency: transactionCurrency,
+      exchangeRate: postingRate,
+    });
+    return {
+      transaction_currency: transactionCurrency,
+      exchange_rate: postingRate,
+      base_currency: FUNCTIONAL_CURRENCY,
+      source_amount: sourceAmount,
+      base_amount: baseAmount,
+      exchange_rate_date: entryDate,
+    };
   };
 
   const handleSaveDraft = async () => {
@@ -237,6 +320,7 @@ export function ManualJournalEntryPanel({
         id: entryId, entry_number: entryId, entry_date: entryDate,
         description: memo.trim() || null, lines: buildJsonbLines(),
         total_debit: totalDebits, total_credit: totalCredits,
+        ...fxHeader(),
         status: "draft", created_by: user!.id,
         created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       });
@@ -262,6 +346,7 @@ export function ManualJournalEntryPanel({
         id: entryId, entry_number: entryId, entry_date: entryDate,
         description: memo.trim() || null, lines: buildJsonbLines(),
         total_debit: totalDebits, total_credit: totalCredits,
+        ...fxHeader(),
         status: "posted", created_by: user!.id,
         created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       });
@@ -295,7 +380,7 @@ export function ManualJournalEntryPanel({
           display: "flex", flexDirection: "column", gap: "10px",
         }}>
           <p style={{ margin: 0, fontSize: "12px", color: "#15803D", fontWeight: 500, lineHeight: 1.5 }}>
-            Post to General Ledger? This entry is balanced — Debits equal Credits ({PHP.format(totalDebits)}).
+            Post to General Ledger? This entry is balanced — Debits equal Credits ({formatMoney(totalDebits, FUNCTIONAL_CURRENCY)}).
             Once posted, this entry is <strong>permanent and cannot be edited or deleted</strong>.
           </p>
           <div style={{ display: "flex", gap: "8px" }}>
@@ -366,9 +451,9 @@ export function ManualJournalEntryPanel({
       <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "20px", overflowY: "auto", height: "100%" }}>
 
         {/* Header fields row */}
-        <div style={{ display: "flex", gap: "16px" }}>
+        <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
           {/* Date */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px", minWidth: "160px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px", minWidth: "150px" }}>
             <label style={{ fontSize: "12px", fontWeight: 500, color: "#667085" }}>
               Entry Date
             </label>
@@ -390,8 +475,37 @@ export function ManualJournalEntryPanel({
             />
           </div>
 
+          {/* Currency */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px", minWidth: "110px" }}>
+            <label style={{ fontSize: "12px", fontWeight: 500, color: "#667085" }}>Currency</label>
+            <select
+              value={transactionCurrency}
+              onChange={(e) => setTransactionCurrency(e.target.value as AccountingCurrency)}
+              style={{ height: "36px", border: "1px solid #E5E9F0", borderRadius: "6px", padding: "0 8px", fontSize: "13px", color: "#12332B", outline: "none", backgroundColor: "#FFFFFF" }}
+            >
+              {SUPPORTED_ACCOUNTING_CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+
+          {!isPhp && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px", minWidth: "160px" }}>
+              <label style={{ fontSize: "12px", fontWeight: 500, color: "#667085" }}>
+                {transactionCurrency} → {FUNCTIONAL_CURRENCY} Rate
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.0001"
+                value={exchangeRateInput}
+                onChange={(e) => setExchangeRateInput(e.target.value)}
+                placeholder="e.g. 58.25"
+                style={{ height: "36px", border: "1px solid #E5E9F0", borderRadius: "6px", padding: "0 10px", fontSize: "13px", color: "#12332B", outline: "none", backgroundColor: "#FFFFFF", fontFamily: "monospace" }}
+              />
+            </div>
+          )}
+
           {/* Memo */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px", flex: 1 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px", flex: 1, minWidth: "200px" }}>
             <label style={{ fontSize: "12px", fontWeight: 500, color: "#667085" }}>
               Description / Memo
             </label>
@@ -433,8 +547,8 @@ export function ManualJournalEntryPanel({
           >
             <span style={{ fontSize: "11px", fontWeight: 600, color: "#667085", textTransform: "uppercase", letterSpacing: "0.4px" }}>Account</span>
             <span style={{ fontSize: "11px", fontWeight: 600, color: "#667085", textTransform: "uppercase", letterSpacing: "0.4px" }}>Description</span>
-            <span style={{ fontSize: "11px", fontWeight: 600, color: "#667085", textTransform: "uppercase", letterSpacing: "0.4px", textAlign: "right" }}>Debit (DR)</span>
-            <span style={{ fontSize: "11px", fontWeight: 600, color: "#667085", textTransform: "uppercase", letterSpacing: "0.4px", textAlign: "right" }}>Credit (CR)</span>
+            <span style={{ fontSize: "11px", fontWeight: 600, color: "#667085", textTransform: "uppercase", letterSpacing: "0.4px", textAlign: "right" }}>Debit ({transactionCurrency})</span>
+            <span style={{ fontSize: "11px", fontWeight: 600, color: "#667085", textTransform: "uppercase", letterSpacing: "0.4px", textAlign: "right" }}>Credit ({transactionCurrency})</span>
             <span />
           </div>
 
@@ -635,16 +749,40 @@ export function ManualJournalEntryPanel({
             }}
           >
             <span style={{ fontSize: "12px", fontWeight: 600, color: "#667085", textTransform: "uppercase", letterSpacing: "0.4px" }}>
-              Totals
+              Totals ({transactionCurrency})
             </span>
             <span style={{ fontSize: "13px", fontWeight: 600, color: "#12332B", textAlign: "right" }}>
-              {PHP.format(totalDebits)}
+              {formatMoney(foreignTotalDebits, transactionCurrency)}
             </span>
             <span style={{ fontSize: "13px", fontWeight: 600, color: "#12332B", textAlign: "right" }}>
-              {PHP.format(totalCredits)}
+              {formatMoney(foreignTotalCredits, transactionCurrency)}
             </span>
             <span />
           </div>
+          {!isPhp && (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 110px 110px 40px",
+                gap: "8px",
+                padding: "8px 10px",
+                backgroundColor: "#FFFFFF",
+                borderTop: "1px solid #E5E9F0",
+                alignItems: "center",
+              }}
+            >
+              <span style={{ fontSize: "11px", color: "#667085", textTransform: "uppercase", letterSpacing: "0.4px" }}>
+                Posted in PHP @ {hasUsableRate ? lockedRate : "—"}
+              </span>
+              <span style={{ fontSize: "12px", color: "#12332B", textAlign: "right" }}>
+                {formatMoney(totalDebits, FUNCTIONAL_CURRENCY)}
+              </span>
+              <span style={{ fontSize: "12px", color: "#12332B", textAlign: "right" }}>
+                {formatMoney(totalCredits, FUNCTIONAL_CURRENCY)}
+              </span>
+              <span />
+            </div>
+          )}
 
           {/* Balance status bar */}
           <div
@@ -665,9 +803,13 @@ export function ManualJournalEntryPanel({
               <span style={{ fontSize: "12px", color: "#667085" }}>
                 Enter debit and credit amounts to validate balance.
               </span>
+            ) : !hasUsableRate && !isPhp ? (
+              <span style={{ fontSize: "12px", fontWeight: 500, color: "#B45309" }}>
+                Enter a positive {transactionCurrency}→{FUNCTIONAL_CURRENCY} rate to balance in PHP.
+              </span>
             ) : (
               <span style={{ fontSize: "12px", fontWeight: 500, color: "#B45309" }}>
-                Out of balance — difference: {PHP.format(difference)}
+                Out of balance — difference: {formatMoney(difference, FUNCTIONAL_CURRENCY)}
               </span>
             )}
           </div>

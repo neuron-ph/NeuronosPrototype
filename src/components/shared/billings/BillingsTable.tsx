@@ -57,13 +57,27 @@ interface BillingsTableProps {
   onSendServiceToBooking?: (itemIds: string[], bookingId: string) => Promise<void>;
 }
 
-const formatCurrency = (amount: number, currency: string = "PHP") => {
-  return new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: currency,
-    minimumFractionDigits: 2,
-  }).format(amount);
-};
+import { formatMoney as formatMoneyHelper, pickReportingAmount } from "../../../utils/accountingCurrency";
+
+const formatCurrency = (amount: number, currency: string = "PHP") =>
+  formatMoneyHelper(amount, currency as any);
+
+// Sum a list of mixed-currency items in PHP base. Returns the PHP total and a
+// flag indicating whether the group spans multiple currencies (so callers can
+// disclose "PHP base" instead of pretending it's a single-currency total).
+function sumInBase(items: { amount?: number; currency?: string; base_amount?: number; exchange_rate?: number }[]): { total: number; mixed: boolean; soleCurrency: string } {
+  let total = 0;
+  const currencies = new Set<string>();
+  for (const it of items) {
+    total += pickReportingAmount(it as any);
+    currencies.add(it.currency || "PHP");
+  }
+  return {
+    total: Math.round(total * 100) / 100,
+    mixed: currencies.size > 1,
+    soleCurrency: currencies.size === 1 ? Array.from(currencies)[0] : "PHP",
+  };
+}
 
 // Helper: Compute aggregate billing status from a list of items
 const getBookingBillingStatus = (items: BillingTableItem[]): "Unbilled" | "Partially Billed" | "Fully Billed" | "Voided" => {
@@ -314,7 +328,8 @@ export function BillingsTable({
             const items = bookingGroupedData[bid] || [];
             const meta = bookingMeta.get(bid);
             const serviceType = bid === "unassigned" ? "Unassigned" : inferSvcType(bid, meta);
-            const subtotal = items.reduce((sum, item) => sum + item.amount, 0);
+            const subtotalAgg = sumInBase(items);
+            const subtotal = subtotalAgg.total;
             const isExpanded = expandedBookings.has(bid);
             const itemCount = items.length;
             const isEmpty = itemCount === 0;
@@ -419,14 +434,21 @@ export function BillingsTable({
                     )}
                   </div>
                   {/* Subtotal */}
-                  <span style={{
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    color: isEmpty ? "var(--theme-text-muted)" : "var(--theme-text-primary)",
-                    fontFamily: "monospace",
-                  }}>
-                    {formatCurrency(subtotal)}
-                  </span>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+                    <span style={{
+                      fontSize: "13px",
+                      fontWeight: 600,
+                      color: isEmpty ? "var(--theme-text-muted)" : "var(--theme-text-primary)",
+                      fontFamily: "monospace",
+                    }}>
+                      {formatCurrency(subtotal, subtotalAgg.mixed ? "PHP" : subtotalAgg.soleCurrency)}
+                    </span>
+                    {subtotalAgg.mixed && (
+                      <span style={{ fontSize: "9px", color: "var(--theme-text-muted)", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                        PHP base · mixed
+                      </span>
+                    )}
+                  </div>
                 </button>
 
                 {/* Expanded Content: inline rows under this booking header */}
@@ -612,7 +634,8 @@ export function BillingsTable({
 
           {serviceKeys.map((svcKey, svcIdx) => {
             const items = serviceGroups[svcKey] || [];
-            const subtotal = items.reduce((sum, i) => sum + i.amount, 0);
+            const subtotalAgg = sumInBase(items as any);
+            const subtotal = subtotalAgg.total;
             const isExpanded = expandedCategories.has(svcKey);
             const linkedBookingId = serviceToBookingId.get(svcKey.toLowerCase());
             const linkedBookingNumber = serviceToBookingNumber.get(svcKey.toLowerCase());
@@ -870,7 +893,8 @@ export function BillingsTable({
         {displayedCategories.map(category => {
             const items = groupedData[category] || [];
             const isExpanded = expandedCategories.has(category);
-            const subtotal = items.reduce((sum, item) => sum + item.amount, 0);
+            const subtotalAgg = sumInBase(items);
+            const subtotal = subtotalAgg.total;
             const currency = items[0]?.currency || "PHP";
 
             // Adapter: Create a partial SellingPriceCategory object for the header

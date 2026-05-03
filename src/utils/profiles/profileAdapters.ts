@@ -13,7 +13,7 @@ export interface ProfileAdapter {
    * with that tag in their booking_profile_tags array.
    * If `serviceType` is provided, catalog adapters scope results to that booking type.
    */
-  search(query: string, options?: { limit?: number; providerTag?: string; serviceType?: string }): Promise<ProfileLookupRecord[]>;
+  search(query: string, options?: { limit?: number; providerTag?: string; providerScope?: 'local' | 'overseas'; serviceType?: string }): Promise<ProfileLookupRecord[]>;
   /**
    * Fetch a single record by ID (used to re-validate a previously linked profile).
    * Returns null if the record is archived or not found.

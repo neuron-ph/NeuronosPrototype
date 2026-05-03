@@ -7,6 +7,16 @@ import { toast } from "sonner@2.0.3";
 import { useUser } from "../../../hooks/useUser";
 import { canPerformEVAction } from "../../../utils/permissions";
 import type { EVoucherAPType } from "../../../types/evoucher";
+import {
+  FUNCTIONAL_CURRENCY,
+  formatMoney,
+  normalizeCurrency,
+  resolvePostingRate,
+  roundMoney,
+  toBaseAmount,
+  type AccountingCurrency,
+} from "../../../utils/accountingCurrency";
+import { resolveExchangeRate } from "../../../utils/exchangeRates";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,6 +37,12 @@ interface EVoucherSummary {
   requestor_name?: string;
   requestor_department?: string;
   purpose?: string;
+  currency?: string;
+  original_currency?: string;
+  exchange_rate?: number;
+  base_amount?: number;
+  base_currency?: string;
+  exchange_rate_date?: string;
 }
 
 const PHP = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" });
@@ -129,6 +145,8 @@ export function DisburseEVoucherPage() {
   // ── GL accounts ───────────────────────────────────────────────────────────
   const [accounts, setAccounts] = useState<GLAccount[]>([]);
   const [advancesReceivable, setAdvancesReceivable] = useState<GLAccount | null>(null);
+  const [fxGainAccount, setFxGainAccount] = useState<GLAccount | null>(null);
+  const [fxLossAccount, setFxLossAccount] = useState<GLAccount | null>(null);
   const [loadingAccounts, setLoadingAccounts] = useState(true);
 
   // ── Form state ────────────────────────────────────────────────────────────
@@ -145,6 +163,10 @@ export function DisburseEVoucherPage() {
   const [disbursementDate, setDisbursementDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [remarks, setRemarks] = useState("");
   const [posting, setPosting] = useState(false);
+  // Cash-leg FX rate at the moment of disbursement. Defaults to today's rate
+  // from the exchange_rates table, falls back to the voucher's locked rate.
+  // Difference between this and the voucher's locked rate is realized FX.
+  const [disbursementRateInput, setDisbursementRateInput] = useState<string>("");
 
   // ── Load EVoucher ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -182,6 +204,8 @@ export function DisburseEVoucherPage() {
         all.find((a) => a.name.toLowerCase().includes("advances receivable")) ??
         null;
       setAdvancesReceivable(adv);
+      setFxGainAccount(all.find((a) => a.code === "4510") ?? null);
+      setFxLossAccount(all.find((a) => a.code === "7010") ?? null);
       setLoadingAccounts(false);
     };
     load();
@@ -198,7 +222,69 @@ export function DisburseEVoucherPage() {
 
   const isReimb = evoucher ? isReimbursement(evoucher.transaction_type) : false;
   const refRequired = paymentMethod === "Check" || paymentMethod === "Bank Transfer";
+  // The voucher amount is in `evoucher.currency` (USD or PHP); the GL posts
+  // in PHP base via the locked `exchange_rate` stamped at creation time.
   const amount = evoucher?.amount ?? 0;
+  const voucherCurrency: AccountingCurrency = normalizeCurrency(
+    evoucher?.original_currency ?? evoucher?.currency ?? FUNCTIONAL_CURRENCY,
+    FUNCTIONAL_CURRENCY,
+  );
+  const lockedRate = (() => {
+    try {
+      return resolvePostingRate(voucherCurrency, evoucher?.exchange_rate);
+    } catch {
+      return NaN;
+    }
+  })();
+  const hasUsableRate = Number.isFinite(lockedRate) && lockedRate > 0;
+  // Carrying amount (AP/Advances) at the voucher's locked creation rate.
+  const apBase = hasUsableRate
+    ? toBaseAmount({ amount, currency: voucherCurrency, exchangeRate: lockedRate })
+    : 0;
+  const isForeignVoucher = voucherCurrency !== FUNCTIONAL_CURRENCY;
+
+  // Disbursement-day rate (cash leg). For PHP vouchers always 1; for foreign,
+  // user can override; defaults to today's rate from the FX table or falls
+  // back to the voucher's locked rate.
+  const parsedDisbRate = parseFloat(disbursementRateInput);
+  const disbursementRate = !isForeignVoucher
+    ? 1
+    : (Number.isFinite(parsedDisbRate) && parsedDisbRate > 0 ? parsedDisbRate : (hasUsableRate ? lockedRate : NaN));
+  const hasDisbRate = Number.isFinite(disbursementRate) && disbursementRate > 0;
+  const cashBase = hasDisbRate
+    ? toBaseAmount({ amount, currency: voucherCurrency, exchangeRate: disbursementRate })
+    : 0;
+  // For multi-step (cash advance) flows: realized FX between voucher rate and disbursement rate.
+  // Reimbursements settle in one step at the disbursement rate, so AP carrying
+  // value is by definition the cash value — no FX delta.
+  const realizesFx = isForeignVoucher && !isReimb && hasUsableRate && hasDisbRate;
+  const fxDelta = realizesFx ? roundMoney(cashBase - apBase) : 0;
+  // For E-Voucher disbursement we DR Advances (carrying) and CR Cash (paid).
+  // If cash > AP → DR FX Loss (we paid more PHP than we owed).
+  // If cash < AP → CR FX Gain (we paid less PHP than we owed).
+  const fxIsLoss = fxDelta > 0;
+  const fxIsGain = fxDelta < 0;
+  const fxAbs = Math.abs(fxDelta);
+  // baseAmount is the PHP magnitude of the document for stamping on the JE header.
+  const baseAmount = realizesFx ? cashBase : apBase;
+
+  // Auto-prefill disbursement rate from the FX table when foreign + date changes.
+  useEffect(() => {
+    if (!isForeignVoucher) return;
+    if (disbursementRateInput) return;
+    let cancelled = false;
+    resolveExchangeRate({
+      fromCurrency: voucherCurrency,
+      toCurrency: FUNCTIONAL_CURRENCY,
+      rateDate: disbursementDate || new Date(),
+    })
+      .then((row) => {
+        if (cancelled) return;
+        setDisbursementRateInput((cur) => cur || String(row.rate));
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [isForeignVoucher, voucherCurrency, disbursementDate, disbursementRateInput]);
 
   const sourceAccounts = accounts.filter(
     (a) => a.type === "asset" || a.type === "cash" || a.type === "bank"
@@ -212,7 +298,10 @@ export function DisburseEVoucherPage() {
     !!sourceAccountId &&
     !!paymentMethod &&
     (!refRequired || !!reference.trim()) &&
-    (!isReimb || !!expenseAccountId);
+    (!isReimb || !!expenseAccountId) &&
+    hasUsableRate &&
+    (!isForeignVoucher || hasDisbRate) &&
+    (!realizesFx || fxAbs < 0.005 || (fxIsGain ? !!fxGainAccount : !!fxLossAccount));
 
   // ── Submit ────────────────────────────────────────────────────────────────
   const handleConfirm = async () => {
@@ -224,48 +313,91 @@ export function DisburseEVoucherPage() {
       const disbDate = new Date(disbursementDate + "T12:00:00").toISOString();
       const evoucherNumber = evoucher.evoucher_number;
 
+      const foreignAmount = roundMoney(amount);
+      const fxLineMeta = (rate: number) => isForeignVoucher
+        ? {
+            currency: voucherCurrency,
+            exchange_rate: rate,
+            base_currency: FUNCTIONAL_CURRENCY,
+          }
+        : {};
+
       let lines;
       if (isReimb) {
+        // Reimbursements settle in one step at the disbursement rate — no FX delta.
         lines = [
           {
             account_id: expenseAccountId,
             account_code: expenseAccountCode,
             account_name: expenseAccountName,
-            debit: amount,
+            debit: cashBase,
             credit: 0,
             description: `Reimbursement — ${evoucherNumber}`,
+            ...(isForeignVoucher ? { foreign_debit: foreignAmount, foreign_credit: 0, ...fxLineMeta(disbursementRate) } : {}),
           },
           {
             account_id: sourceAccountId,
             account_code: sourceAccountCode,
             account_name: sourceAccountName,
             debit: 0,
-            credit: amount,
+            credit: cashBase,
             description: `Reimbursement — ${evoucherNumber}`,
+            ...(isForeignVoucher ? { foreign_debit: 0, foreign_credit: foreignAmount, ...fxLineMeta(disbursementRate) } : {}),
           },
         ];
       } else {
+        // Multi-step: DR Advances at carrying value (locked rate), CR Cash at disbursement rate.
+        // Difference is realized FX gain/loss.
         lines = [
           {
             account_id: advancesReceivable?.id ?? "sys-adv-recv-001",
             account_code: advancesReceivable?.code ?? "1150",
             account_name: advancesReceivable?.name ?? "Employee Cash Advances Receivable",
-            debit: amount,
+            debit: apBase,
             credit: 0,
             description: `Cash advance disbursed — ${evoucherNumber}`,
+            ...(isForeignVoucher ? { foreign_debit: foreignAmount, foreign_credit: 0, ...fxLineMeta(lockedRate) } : {}),
           },
           {
             account_id: sourceAccountId,
             account_code: sourceAccountCode,
             account_name: sourceAccountName,
             debit: 0,
-            credit: amount,
+            credit: cashBase,
             description: `Cash advance disbursed — ${evoucherNumber}`,
+            ...(isForeignVoucher ? { foreign_debit: 0, foreign_credit: foreignAmount, ...fxLineMeta(disbursementRate) } : {}),
           },
         ];
+
+        // 3rd line: realized FX gain/loss (only if non-trivial).
+        if (realizesFx && fxAbs >= 0.005) {
+          if (fxIsLoss && fxLossAccount) {
+            lines.push({
+              account_id: fxLossAccount.id,
+              account_code: fxLossAccount.code,
+              account_name: fxLossAccount.name,
+              debit: fxAbs,
+              credit: 0,
+              description: `Realized FX loss — ${evoucherNumber}`,
+            } as any);
+          } else if (fxIsGain && fxGainAccount) {
+            lines.push({
+              account_id: fxGainAccount.id,
+              account_code: fxGainAccount.code,
+              account_name: fxGainAccount.name,
+              debit: 0,
+              credit: fxAbs,
+              description: `Realized FX gain — ${evoucherNumber}`,
+            } as any);
+          }
+        }
       }
 
-      // 1. Create disbursement journal entry
+      // Compute totals from the lines so the FX adjustment balances them.
+      const totalDebit = lines.reduce((s, l) => s + (Number((l as any).debit) || 0), 0);
+      const totalCredit = lines.reduce((s, l) => s + (Number((l as any).credit) || 0), 0);
+
+      // 1. Create disbursement journal entry — PHP-balanced, FX preserved.
       const { error: jeError } = await supabase.from("journal_entries").insert({
         id: entryId,
         entry_number: entryId,
@@ -273,8 +405,14 @@ export function DisburseEVoucherPage() {
         evoucher_id: evoucher.id,
         description: `Disbursement — ${evoucherNumber} via ${paymentMethod}${reference ? ` [${reference}]` : ""}`,
         lines,
-        total_debit: amount,
-        total_credit: amount,
+        total_debit: totalDebit,
+        total_credit: totalCredit,
+        transaction_currency: voucherCurrency,
+        exchange_rate: disbursementRate,
+        base_currency: FUNCTIONAL_CURRENCY,
+        source_amount: foreignAmount,
+        base_amount: cashBase,
+        exchange_rate_date: disbursementDate,
         status: "posted",
         created_by: user.id,
         created_at: now,
@@ -456,9 +594,14 @@ export function DisburseEVoucherPage() {
             <div style={{ fontSize: "15px", fontWeight: 600, color: "var(--theme-text-muted)", letterSpacing: "0.01em", marginBottom: "4px" }}>
               {evoucher.evoucher_number}
             </div>
-            <div style={{ fontSize: "30px", fontWeight: 700, color: "var(--theme-text-primary)", letterSpacing: "-0.02em", lineHeight: 1.1, marginBottom: "14px" }}>
-              {PHP.format(amount)}
+            <div style={{ fontSize: "30px", fontWeight: 700, color: "var(--theme-text-primary)", letterSpacing: "-0.02em", lineHeight: 1.1, marginBottom: isForeignVoucher ? "6px" : "14px" }}>
+              {formatMoney(amount, voucherCurrency)}
             </div>
+            {isForeignVoucher && (
+              <div style={{ fontSize: "12px", color: "var(--theme-text-muted)", marginBottom: "14px" }}>
+                ≈ {hasUsableRate ? formatMoney(baseAmount, FUNCTIONAL_CURRENCY) : "—"} @ rate {hasUsableRate ? lockedRate : "—"}
+              </div>
+            )}
             <span style={{
               display: "inline-flex", alignItems: "center",
               padding: "3px 9px", borderRadius: "4px",
@@ -539,7 +682,7 @@ export function DisburseEVoucherPage() {
                     </div>
                   )}
                 </div>
-                <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-text-primary)", textAlign: "right", paddingTop: "18px" }}>{PHP.format(amount)}</span>
+                <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-text-primary)", textAlign: "right", paddingTop: "18px" }}>{PHP.format(isReimb ? cashBase : apBase)}</span>
                 <span style={{ fontSize: "12px", color: "var(--theme-text-muted)", textAlign: "right", paddingTop: "18px" }}>—</span>
               </div>
 
@@ -549,6 +692,7 @@ export function DisburseEVoucherPage() {
                 padding: "12px 12px 12px 24px",
                 gap: "8px",
                 alignItems: "start",
+                borderBottom: realizesFx && fxAbs >= 0.005 ? "1px solid var(--theme-border-default)" : "none",
               }}>
                 <div>
                   <div style={{ fontSize: "9px", fontWeight: 700, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "4px" }}>CR</div>
@@ -557,8 +701,30 @@ export function DisburseEVoucherPage() {
                   </div>
                 </div>
                 <span style={{ fontSize: "12px", color: "var(--theme-text-muted)", textAlign: "right", paddingTop: "18px" }}>—</span>
-                <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-text-primary)", textAlign: "right", paddingTop: "18px" }}>{PHP.format(amount)}</span>
+                <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-text-primary)", textAlign: "right", paddingTop: "18px" }}>{PHP.format(cashBase)}</span>
               </div>
+
+              {/* FX row — only when there's a realized delta */}
+              {realizesFx && fxAbs >= 0.005 && (
+                <div style={{
+                  display: "grid", gridTemplateColumns: "1fr 76px 76px",
+                  padding: "12px",
+                  gap: "8px",
+                  alignItems: "start",
+                  backgroundColor: "var(--theme-bg-surface-subtle)",
+                }}>
+                  <div>
+                    <div style={{ fontSize: "9px", fontWeight: 700, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "4px" }}>{fxIsLoss ? "DR" : "CR"} · FX</div>
+                    <div style={{ fontSize: "12px", color: "var(--theme-text-primary)" }}>
+                      {fxIsLoss
+                        ? `${fxLossAccount?.code ?? "7010"} — ${fxLossAccount?.name ?? "Realized FX Loss"}`
+                        : `${fxGainAccount?.code ?? "4510"} — ${fxGainAccount?.name ?? "Realized FX Gain"}`}
+                    </div>
+                  </div>
+                  <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-text-primary)", textAlign: "right", paddingTop: "18px" }}>{fxIsLoss ? PHP.format(fxAbs) : "—"}</span>
+                  <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-text-primary)", textAlign: "right", paddingTop: "18px" }}>{fxIsGain ? PHP.format(fxAbs) : "—"}</span>
+                </div>
+              )}
             </div>
 
             {isReimb && (
@@ -594,6 +760,55 @@ export function DisburseEVoucherPage() {
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                {isForeignVoucher && (
+                  <div style={{
+                    padding: "10px 12px",
+                    borderRadius: "8px",
+                    backgroundColor: hasUsableRate ? "var(--theme-bg-surface-subtle)" : "var(--theme-status-warning-bg)",
+                    border: `1px solid ${hasUsableRate ? "var(--theme-border-default)" : "var(--theme-status-warning-border)"}`,
+                  }}>
+                    <p style={{ margin: 0, fontSize: "12px", color: hasUsableRate ? "var(--theme-text-secondary)" : "var(--theme-status-warning-fg)", lineHeight: 1.5 }}>
+                      {hasUsableRate
+                        ? <>Voucher in <strong>{voucherCurrency}</strong>; AP carrying rate <strong>{lockedRate}</strong> ({formatMoney(apBase, FUNCTIONAL_CURRENCY)}).</>
+                        : <>Voucher is in <strong>{voucherCurrency}</strong> but has no locked exchange rate. Edit the voucher to capture a rate before disbursing.</>
+                      }
+                    </p>
+                  </div>
+                )}
+                {isForeignVoucher && !isReimb && (
+                  <div>
+                    <label htmlFor="disb-rate" style={{ display: "block", fontSize: "12px", fontWeight: 500, color: "var(--theme-text-muted)", marginBottom: "6px" }}>
+                      Disbursement Rate ({voucherCurrency} → {FUNCTIONAL_CURRENCY}) *
+                    </label>
+                    <input
+                      id="disb-rate"
+                      type="number"
+                      step="0.0001"
+                      min="0"
+                      value={disbursementRateInput}
+                      onChange={(e) => setDisbursementRateInput(e.target.value)}
+                      placeholder="e.g. 58.25"
+                      style={{
+                        width: "100%", height: "40px",
+                        border: "1px solid var(--theme-border-default)", borderRadius: "8px",
+                        padding: "0 12px", fontSize: "13px", outline: "none",
+                        boxSizing: "border-box",
+                        backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-primary)",
+                      }}
+                    />
+                    {realizesFx && fxAbs >= 0.005 && (
+                      <p style={{ margin: "8px 0 0", fontSize: "11px", color: fxIsLoss ? "var(--theme-status-danger-fg)" : "var(--theme-status-success-fg)", lineHeight: 1.5 }}>
+                        Realized FX {fxIsLoss ? "loss" : "gain"} of {formatMoney(fxAbs, FUNCTIONAL_CURRENCY)} will post to{" "}
+                        <strong>{fxIsLoss ? (fxLossAccount?.code ?? "7010") : (fxGainAccount?.code ?? "4510")}</strong>.
+                      </p>
+                    )}
+                    {realizesFx && fxAbs >= 0.005 && ((fxIsLoss && !fxLossAccount) || (fxIsGain && !fxGainAccount)) && (
+                      <p style={{ margin: "8px 0 0", fontSize: "11px", color: "var(--theme-status-warning-fg)", lineHeight: 1.5 }}>
+                        Missing FX {fxIsLoss ? "loss (7010)" : "gain (4510)"} account in COA — seed before disbursing.
+                      </p>
+                    )}
+                  </div>
+                )}
                 {isReimb && (
                   <AccountSelect
                     label="Expense Account (DR) *"

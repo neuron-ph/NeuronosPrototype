@@ -14,6 +14,17 @@ import { calculateInvoiceBalance } from "../../../utils/accounting-math";
 import { supabase } from "../../../utils/supabase/client";
 import { REVERSED_INVOICE_STATUS } from "../../../utils/invoiceReversal";
 import { NeuronModal } from "../../ui/NeuronModal";
+import {
+  FUNCTIONAL_CURRENCY,
+  SUPPORTED_ACCOUNTING_CURRENCIES,
+  formatMoney,
+  normalizeCurrency,
+  resolvePostingRate,
+  roundMoney,
+  toBaseAmount,
+  type AccountingCurrency,
+} from "../../../utils/accountingCurrency";
+import { resolveExchangeRate } from "../../../utils/exchangeRates";
 
 interface CollectionCreatorPanelProps {
   isOpen: boolean;
@@ -34,8 +45,11 @@ interface OpenInvoice {
   description: string;
   due_date: string;
   amount: number;
-  remaining_balance: number;
-  payment_amount: number; // For the form
+  remaining_balance: number;       // invoice currency (legacy display)
+  remaining_balance_base: number;  // PHP base — authoritative for cross-currency allocation
+  invoice_currency: string;
+  invoice_rate: number;            // invoice's locked FX rate (invoice currency → PHP)
+  payment_amount: number;          // invoice currency
   isSelected: boolean;
   isReversed?: boolean;
 }
@@ -62,7 +76,31 @@ export function CollectionCreatorPanel({
   const [depositTo, setDepositTo] = useState("Undeposited Funds");
   const [notes, setNotes] = useState("");
   const [amountReceived, setAmountReceived] = useState<number>(0);
-  
+
+  // Multi-currency. Defaults to PHP; user can switch to USD and lock a rate.
+  const [collectionCurrency, setCollectionCurrency] =
+    useState<AccountingCurrency>(FUNCTIONAL_CURRENCY);
+  const [exchangeRateInput, setExchangeRateInput] = useState<string>("");
+
+  useEffect(() => {
+    if (collectionCurrency === FUNCTIONAL_CURRENCY) {
+      setExchangeRateInput("");
+      return;
+    }
+    let cancelled = false;
+    resolveExchangeRate({
+      fromCurrency: collectionCurrency,
+      toCurrency: FUNCTIONAL_CURRENCY,
+      rateDate: paymentDate || new Date(),
+    })
+      .then((row) => {
+        if (cancelled) return;
+        setExchangeRateInput((cur) => cur || String(row.rate));
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [collectionCurrency, paymentDate]);
+
   // -- Data State --
   const [invoices, setInvoices] = useState<OpenInvoice[]>([]);
 
@@ -76,6 +114,13 @@ export function CollectionCreatorPanel({
         setReferenceNo(initialData.reference_number || "");
         setNotes(initialData.notes || "");
         setAmountReceived(initialData.amount);
+        const cur = normalizeCurrency(
+          (initialData as any).original_currency ?? initialData.currency ?? FUNCTIONAL_CURRENCY,
+          FUNCTIONAL_CURRENCY,
+        );
+        setCollectionCurrency(cur);
+        const rate = (initialData as any).exchange_rate;
+        if (rate && rate > 0) setExchangeRateInput(String(rate));
 
         // Filter and map invoices that are LINKED to this collection
         const linkedInvoiceIds = initialData.linked_billings?.map(lb => lb.id) || [];
@@ -85,6 +130,9 @@ export function CollectionCreatorPanel({
           .map(inv => {
             const link = initialData.linked_billings?.find(lb => lb.id === inv.id);
             const paymentAmount = link ? link.amount : 0;
+            const invCcy = ((inv as any).original_currency || (inv as any).currency || FUNCTIONAL_CURRENCY) as string;
+            const rRaw = Number((inv as any).exchange_rate);
+            const invRate = Number.isFinite(rRaw) && rRaw > 0 ? rRaw : 1;
 
             return {
               id: inv.id,
@@ -94,8 +142,11 @@ export function CollectionCreatorPanel({
               due_date: inv.due_date || inv.created_at || "",
               amount: (inv.total_amount ?? inv.amount) ?? 0,
               remaining_balance: 0, // In view mode, we don't care about balance
+              remaining_balance_base: 0,
+              invoice_currency: invCcy,
+              invoice_rate: invRate,
               payment_amount: paymentAmount,
-              isSelected: true
+              isSelected: true,
             };
           });
 
@@ -112,39 +163,58 @@ export function CollectionCreatorPanel({
 
         // Separate reversed invoices from open ones so reversed show in the list
         // but cannot be selected for payment.
+        const buildInvoiceMeta = (inv: Invoice) => {
+          const invCcy = ((inv as any).original_currency || (inv as any).currency || FUNCTIONAL_CURRENCY) as string;
+          const rRaw = Number((inv as any).exchange_rate);
+          const invRate = Number.isFinite(rRaw) && rRaw > 0 ? rRaw : 1;
+          return { invCcy, invRate };
+        };
+
         const reversedItems: OpenInvoice[] = existingInvoices
           .filter(inv => String(inv.status || "").toLowerCase() === REVERSED_INVOICE_STATUS)
-          .map(inv => ({
-            id: inv.id,
-            voucher_number: inv.invoice_number || "",
-            statement_reference: inv.invoice_number || "",
-            description: inv.description || "",
-            due_date: inv.due_date || inv.created_at || "",
-            amount: (inv.total_amount ?? inv.amount) ?? 0,
-            remaining_balance: 0,
-            payment_amount: 0,
-            isSelected: false,
-            isReversed: true,
-          }));
+          .map(inv => {
+            const { invCcy, invRate } = buildInvoiceMeta(inv);
+            return {
+              id: inv.id,
+              voucher_number: inv.invoice_number || "",
+              statement_reference: inv.invoice_number || "",
+              description: inv.description || "",
+              due_date: inv.due_date || inv.created_at || "",
+              amount: (inv.total_amount ?? inv.amount) ?? 0,
+              remaining_balance: 0,
+              remaining_balance_base: 0,
+              invoice_currency: invCcy,
+              invoice_rate: invRate,
+              payment_amount: 0,
+              isSelected: false,
+              isReversed: true,
+            };
+          });
 
         const openItems: OpenInvoice[] = existingInvoices
           .filter(inv => String(inv.status || "").toLowerCase() !== REVERSED_INVOICE_STATUS)
           .map(inv => {
-            const { balance, status } = calculateInvoiceBalance(inv, existingCollections);
-            return { invoice: inv, balance, status };
+            const fin = calculateInvoiceBalance(inv, existingCollections);
+            return { invoice: inv, fin };
           })
-          .filter(({ balance, status }) => balance > 0.01 && status !== 'paid')
-          .map(({ invoice: inv, balance }) => ({
-            id: inv.id,
-            voucher_number: inv.invoice_number || "",
-            statement_reference: inv.invoice_number || "",
-            description: inv.description || "",
-            due_date: inv.due_date || inv.created_at || "",
-            amount: (inv.total_amount ?? inv.amount) ?? 0,
-            remaining_balance: balance,
-            payment_amount: 0,
-            isSelected: false,
-          }))
+          .filter(({ fin }) => fin.balanceBase > 0.01 && fin.status !== 'paid')
+          .map(({ invoice: inv, fin }) => {
+            const { invCcy, invRate } = buildInvoiceMeta(inv);
+            return {
+              id: inv.id,
+              voucher_number: inv.invoice_number || "",
+              statement_reference: inv.invoice_number || "",
+              description: inv.description || "",
+              due_date: inv.due_date || inv.created_at || "",
+              amount: (inv.total_amount ?? inv.amount) ?? 0,
+              remaining_balance: fin.balance,
+              remaining_balance_base: fin.balanceBase,
+              invoice_currency: invCcy,
+              invoice_rate: invRate,
+              payment_amount: 0,
+              isSelected: false,
+            };
+          })
           .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
 
         setInvoices([...openItems, ...reversedItems]);
@@ -154,28 +224,58 @@ export function CollectionCreatorPanel({
 
 
   // -- Bidirectional Logic --
+  //
+  // Multi-currency convention:
+  //   - amountReceived is in collectionCurrency.
+  //   - inv.payment_amount is in invoice currency.
+  //   - inv.remaining_balance_base is the authoritative remaining balance in PHP.
+  //   - All cross-row comparisons happen in PHP base.
 
-  // 1. Handle "Amount Received" Change (Auto-Allocate)
+  const collectionRate = (() => {
+    if (collectionCurrency === FUNCTIONAL_CURRENCY) return 1;
+    const r = parseFloat(exchangeRateInput);
+    return Number.isFinite(r) && r > 0 ? r : 0; // 0 means "not yet known"
+  })();
+
+  // collection currency → PHP base
+  const collToBase = (amt: number) => collectionRate > 0 ? roundMoney(amt * collectionRate) : 0;
+  // PHP base → collection currency
+  const baseToColl = (base: number) => collectionRate > 0 ? roundMoney(base / collectionRate) : 0;
+  // invoice currency → PHP base
+  const invToBase = (amt: number, rate: number) => roundMoney(amt * (rate > 0 ? rate : 1));
+  // PHP base → invoice currency
+  const baseToInv = (base: number, rate: number) => roundMoney(base / (rate > 0 ? rate : 1));
+
+  // 1. Handle "Amount Received" Change (Auto-Allocate, in PHP base)
   const handleAmountReceivedChange = (val: string) => {
     if (isReadOnly) return;
     const newAmount = parseFloat(val) || 0;
     setAmountReceived(newAmount);
 
-    // Auto-allocate logic
-    let remainingToAllocate = newAmount;
-    
+    // If we don't yet have a collection rate (USD without rate entered), fall back to
+    // raw allocation in collection currency to keep the UI usable. The submit guard
+    // will refuse if reconciliation fails.
+    const haveBase = collectionRate > 0;
+    let remainingBase = haveBase ? collToBase(newAmount) : newAmount;
+
     const newInvoices = invoices.map(inv => {
-      if (remainingToAllocate <= 0) {
+      if (inv.isReversed || remainingBase <= 0) {
         return { ...inv, isSelected: false, payment_amount: 0 };
       }
+      const invRemainingBase = haveBase
+        ? inv.remaining_balance_base
+        : inv.remaining_balance; // fall-back when no rate
+      const sliceBase = Math.min(remainingBase, invRemainingBase);
+      remainingBase -= sliceBase;
 
-      const amountToPay = Math.min(remainingToAllocate, inv.remaining_balance);
-      remainingToAllocate -= amountToPay;
+      const paymentInInvoiceCcy = haveBase
+        ? baseToInv(sliceBase, inv.invoice_rate)
+        : roundMoney(sliceBase);
 
       return {
         ...inv,
-        isSelected: true,
-        payment_amount: parseFloat(amountToPay.toFixed(2))
+        isSelected: paymentInInvoiceCcy > 0,
+        payment_amount: paymentInInvoiceCcy,
       };
     });
 
@@ -185,55 +285,56 @@ export function CollectionCreatorPanel({
   // 2. Handle Invoice Selection (Manual Toggle)
   const toggleInvoice = (id: string) => {
     if (isReadOnly) return;
-    // Reversed invoices cannot be selected for payment
     const target = invoices.find(inv => inv.id === id);
     if (target?.isReversed) return;
-    let amountDelta = 0;
+    let collectionDelta = 0;
 
     const newInvoices = invoices.map(inv => {
       if (inv.id === id) {
         const newSelected = !inv.isSelected;
-        // If selecting, default to full balance. If deselecting, 0.
         const newPaymentAmount = newSelected ? inv.remaining_balance : 0;
-        
-        // Calculate delta to update total Amount Received
-        amountDelta = newSelected ? inv.remaining_balance : -inv.payment_amount;
+
+        // Translate the invoice-currency change into collection-currency delta via PHP base.
+        const baseDelta = newSelected
+          ? inv.remaining_balance_base
+          : -invToBase(inv.payment_amount, inv.invoice_rate);
+        collectionDelta = collectionRate > 0 ? baseToColl(baseDelta) : baseDelta;
 
         return {
           ...inv,
           isSelected: newSelected,
-          payment_amount: newPaymentAmount
+          payment_amount: newPaymentAmount,
         };
       }
       return inv;
     });
 
     setInvoices(newInvoices);
-    setAmountReceived(prev => Math.max(0, parseFloat((prev + amountDelta).toFixed(2))));
+    setAmountReceived(prev => Math.max(0, roundMoney(prev + collectionDelta)));
   };
 
-  // 3. Handle specific Payment Amount change on a row
+  // 3. Handle specific Payment Amount change on a row (input is in invoice currency)
   const handleInvoicePaymentChange = (id: string, amount: number) => {
     if (isReadOnly) return;
-    let amountDelta = 0;
+    let collectionDelta = 0;
 
     const newInvoices = invoices.map(inv => {
       if (inv.id === id) {
-        // Limit to remaining balance
         const validAmount = Math.min(amount, inv.remaining_balance);
-        amountDelta = validAmount - inv.payment_amount;
+        const baseDelta = invToBase(validAmount - inv.payment_amount, inv.invoice_rate);
+        collectionDelta = collectionRate > 0 ? baseToColl(baseDelta) : baseDelta;
 
         return {
           ...inv,
           payment_amount: validAmount,
-          isSelected: validAmount > 0
+          isSelected: validAmount > 0,
         };
       }
       return inv;
     });
 
     setInvoices(newInvoices);
-    setAmountReceived(prev => Math.max(0, parseFloat((prev + amountDelta).toFixed(2))));
+    setAmountReceived(prev => Math.max(0, roundMoney(prev + collectionDelta)));
   };
 
   // Delete a reversed invoice — only allowed when status='reversed'
@@ -280,6 +381,34 @@ export function CollectionCreatorPanel({
       ? [notes, `Customer credit pending: ${formatCurrency(amountToCredit)} remains unapplied.`].filter(Boolean).join("\n\n")
       : notes;
 
+    // FX guard: USD postings must carry a positive rate.
+    let lockedRate: number;
+    try {
+      lockedRate = resolvePostingRate(collectionCurrency, parseFloat(exchangeRateInput));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Invalid exchange rate");
+      return;
+    }
+    const baseAmount = toBaseAmount({
+      amount: amountReceived,
+      currency: collectionCurrency,
+      exchangeRate: lockedRate,
+    });
+    const rateDate = (paymentDate || new Date().toISOString()).slice(0, 10);
+
+    // Reconciliation guard: Σ(payment_amount × invoice.exchange_rate) plus any
+    // unapplied credit must equal baseAmount within ±₱0.05. Prevents silent
+    // cross-currency allocation drift.
+    const allocatedBase = selectedInvoices.reduce(
+      (sum, inv) => sum + roundMoney(inv.payment_amount * (inv.invoice_rate > 0 ? inv.invoice_rate : 1)),
+      0,
+    );
+    const creditBase = amountToCredit > 0 ? roundMoney(amountToCredit * lockedRate) : 0;
+    if (Math.abs((allocatedBase + creditBase) - baseAmount) > 0.05) {
+      toast.error("Allocations don't reconcile in PHP — re-allocate before saving.");
+      return;
+    }
+
     try {
       setIsSaving(true);
 
@@ -298,8 +427,13 @@ export function CollectionCreatorPanel({
           customer_id: project.customer_id || null,
           customer_name: project.customer_name,
           invoice_id: primaryInvoiceId || null,
-          amount: amountReceived,
-          currency: 'PHP',
+          amount: roundMoney(amountReceived),
+          currency: collectionCurrency,
+          original_currency: collectionCurrency,
+          exchange_rate: lockedRate,
+          base_currency: FUNCTIONAL_CURRENCY,
+          base_amount: baseAmount,
+          exchange_rate_date: rateDate,
           payment_method: paymentMethod,
           reference_number: referenceNo || null,
           collection_date: new Date(paymentDate).toISOString(),
@@ -315,7 +449,9 @@ export function CollectionCreatorPanel({
 
       if (insertErr) throw new Error(insertErr.message);
 
-      // Create draft journal entry for Accounting to review and post
+      // Create draft journal entry for Accounting to review and post.
+      // Total debit/credit are PHP base; the closing posting sheet writes the
+      // full FX-balanced lines and any realized FX gain/loss.
       const jeId = `JE-COL-${Date.now()}`;
       await supabase.from("journal_entries").insert({
         id: jeId,
@@ -326,8 +462,14 @@ export function CollectionCreatorPanel({
         reference: referenceNo || collectionNumber,
         customer_name: project.customer_name || null,
         lines: [],
-        total_debit: amountReceived,
-        total_credit: amountReceived,
+        total_debit: baseAmount,
+        total_credit: baseAmount,
+        transaction_currency: collectionCurrency,
+        exchange_rate: lockedRate,
+        base_currency: FUNCTIONAL_CURRENCY,
+        source_amount: roundMoney(amountReceived),
+        base_amount: baseAmount,
+        exchange_rate_date: rateDate,
         status: "draft",
         created_by: user?.id ?? null,
         created_at: new Date().toISOString(),
@@ -449,14 +591,45 @@ export function CollectionCreatorPanel({
                         fullWidth
                       />
                    </div>
+
+                   {/* Currency + FX rate */}
+                   <div>
+                      <label className="block text-sm font-medium text-[var(--theme-text-primary)] mb-1.5">Currency</label>
+                      <CustomDropdown
+                        value={collectionCurrency}
+                        onChange={(v) => setCollectionCurrency(v as AccountingCurrency)}
+                        options={SUPPORTED_ACCOUNTING_CURRENCIES.map((c) => ({ value: c, label: c }))}
+                        fullWidth
+                      />
+                   </div>
+
+                   {collectionCurrency !== FUNCTIONAL_CURRENCY && (
+                     <div>
+                        <label className="block text-sm font-medium text-[var(--theme-text-primary)] mb-1.5">
+                          {collectionCurrency} → {FUNCTIONAL_CURRENCY} Rate
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.0001"
+                          readOnly={isReadOnly}
+                          value={exchangeRateInput}
+                          onChange={(e) => setExchangeRateInput(e.target.value)}
+                          placeholder="e.g. 58.25"
+                          className="w-full px-3.5 py-2.5 bg-[var(--theme-bg-surface)] border border-[var(--theme-border-default)] rounded-lg text-[var(--theme-text-primary)] text-sm font-mono focus:outline-none focus:ring-1 focus:ring-[var(--theme-action-primary-bg)] focus:border-[var(--theme-action-primary-bg)]"
+                        />
+                     </div>
+                   )}
                 </div>
 
                 {/* Right Column: Amount Received */}
                 <div className="w-[300px] flex flex-col justify-start pt-1">
-                   <label className="block text-sm font-medium text-[var(--theme-text-primary)] mb-1.5">Amount Received</label>
+                   <label className="block text-sm font-medium text-[var(--theme-text-primary)] mb-1.5">
+                     Amount Received ({collectionCurrency})
+                   </label>
                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--theme-text-muted)] font-medium text-lg">₱</span>
-                      <input 
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--theme-text-muted)] font-medium text-lg">{collectionCurrency === "USD" ? "$" : "₱"}</span>
+                      <input
                         type="number"
                         value={amountReceived || ""}
                         onChange={(e) => handleAmountReceivedChange(e.target.value)}
@@ -464,6 +637,15 @@ export function CollectionCreatorPanel({
                         placeholder="0.00"
                       />
                    </div>
+                   {collectionCurrency !== FUNCTIONAL_CURRENCY && (() => {
+                     const r = parseFloat(exchangeRateInput);
+                     if (!Number.isFinite(r) || r <= 0 || amountReceived <= 0) return null;
+                     return (
+                       <p className="text-xs text-[var(--theme-text-muted)] mt-2">
+                         ≈ {formatMoney(amountReceived * r, FUNCTIONAL_CURRENCY)} @ rate {r}
+                       </p>
+                     );
+                   })()}
                    <p className="text-xs text-[var(--theme-text-muted)] mt-2">
                       {isReadOnly 
                         ? "Total amount for this collection record." 

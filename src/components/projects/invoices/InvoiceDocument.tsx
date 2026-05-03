@@ -3,6 +3,7 @@ import type { Project } from "../../../types/pricing";
 import type { Invoice } from "../../../types/accounting";
 import type { BillingLineItem } from "../../../types/operations";
 import logoImage from "figma:asset/28c84ed117b026fbf800de0882eb478561f37f4f.png";
+import { formatMoney, formatDualCurrency } from "../../../utils/accountingCurrency";
 
 export interface InvoicePrintOptions {
   signatories: {
@@ -47,16 +48,16 @@ export const InvoiceDocument = React.forwardRef<HTMLDivElement, InvoiceDocumentP
       return val || fallback;
     };
 
-    // Helper to format money
+    // Helper to format money via the canonical formatter (locale-aware per currency).
     const fmtMoney = (val?: number, currency = "PHP") => {
-        if (val === undefined || val === null) return "0.00";
-        // Use Intl.NumberFormat to handle currency symbols (PHP, USD, etc.)
-        return new Intl.NumberFormat('en-PH', { 
-            style: 'currency', 
-            currency: currency,
-            minimumFractionDigits: 2 
-        }).format(val);
+        if (val === undefined || val === null) return formatMoney(0, "PHP" as any);
+        return formatMoney(val, (currency || "PHP") as any);
     };
+
+    // For foreign-currency invoices, render the PHP-base equivalent under the total.
+    const isForeign = (invoice.currency && invoice.currency !== "PHP");
+    const invRate = Number((invoice as any).exchange_rate);
+    const hasUsableRate = isForeign && Number.isFinite(invRate) && invRate > 0;
 
     // Helper to render description with conversion info
     const renderDescription = (item: BillingLineItem) => {
@@ -608,6 +609,17 @@ export const InvoiceDocument = React.forwardRef<HTMLDivElement, InvoiceDocumentP
                     <span className="p-gt-label">BALANCE DUE</span>
                     <span className="p-gt-val">{fmtMoney(invoice.total_amount as number | undefined, invoice.currency as string | undefined)}</span>
                 </div>
+                {hasUsableRate && (
+                    <div className="p-total-row" style={{ marginTop: "6px", fontSize: "10px", color: "#666", justifyContent: "flex-end" }}>
+                        <span style={{ fontStyle: "italic" }}>
+                            {formatDualCurrency({
+                                amount: Number(invoice.total_amount) || 0,
+                                currency: invoice.currency as any,
+                                exchangeRate: invRate,
+                            })}
+                        </span>
+                    </div>
+                )}
             </div>
         </div>
 

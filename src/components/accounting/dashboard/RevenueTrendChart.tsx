@@ -9,6 +9,7 @@
 
 import { useMemo, useState } from "react";
 import { formatCurrencyCompact } from "../aggregate/types";
+import { formatMoney } from "../../../utils/accountingCurrency";
 
 interface RevenueTrendChartProps {
   invoices: any[];
@@ -73,8 +74,7 @@ function getMonthsForPeriod(period: Period): { key: string; label: string }[] {
   return months;
 }
 
-const fmt = (amount: number) =>
-  new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", maximumFractionDigits: 0 }).format(amount);
+const fmt = (amount: number) => formatMoney(amount, "PHP");
 
 export function RevenueTrendChart({ invoices, expenses, onNavigate }: RevenueTrendChartProps) {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);

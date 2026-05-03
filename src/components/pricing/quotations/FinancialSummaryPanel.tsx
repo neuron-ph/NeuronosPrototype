@@ -1,6 +1,8 @@
 import { Calculator } from "lucide-react";
 import type { FinancialSummary } from "../../../types/pricing";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { formatMoney } from "../../../utils/accountingCurrency";
+import { resolveExchangeRate } from "../../../utils/exchangeRates";
 
 interface FinancialSummaryPanelProps {
   financialSummary: FinancialSummary;
@@ -13,24 +15,33 @@ interface FinancialSummaryPanelProps {
 
 export function FinancialSummaryPanel({
   financialSummary,
-  currency, // Note: This should ideally be PHP now, but we'll override display
+  currency,
   taxRate,
   setTaxRate,
   otherCharges,
   setOtherCharges
 }: FinancialSummaryPanelProps) {
-  
-  // Local state for USD reference rate (default 58 PHP/USD)
-  const [usdRefRate, setUsdRefRate] = useState(58.00);
-  
-  const formatAmount = (amount: number) => {
-    return amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  };
+
+  // Local state for USD reference rate. Auto-fetches today's USD→PHP rate
+  // from the FX table so the user isn't typing 58 by hand.
+  const [usdRefRate, setUsdRefRate] = useState<number>(58.00);
+  useEffect(() => {
+    let cancelled = false;
+    resolveExchangeRate({ fromCurrency: "USD", toCurrency: "PHP", rateDate: new Date() })
+      .then((row) => { if (!cancelled && row?.rate > 0) setUsdRefRate(row.rate); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
+
+  const formatAmount = (amount: number) => formatMoney(amount, "PHP");
+  const formatUSD = (amount: number) => formatMoney(amount, "USD");
 
   const calculateApproxUSD = () => {
     if (usdRefRate <= 0) return 0;
     return financialSummary.grand_total / usdRefRate;
   };
+
+  const isForeignSource = currency && currency !== "PHP";
 
   return (
     <div style={{
@@ -46,16 +57,33 @@ export function FinancialSummaryPanel({
         borderBottom: "1px solid var(--neuron-ui-border)",
         backgroundColor: "var(--theme-bg-surface-subtle)"
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <Calculator size={16} style={{ color: "var(--neuron-brand-green)" }} />
-          <h3 style={{
-            fontSize: "14px",
-            fontWeight: 600,
-            color: "var(--neuron-ink-primary)",
-            margin: 0
-          }}>
-            FINANCIAL SUMMARY (PHP)
-          </h3>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <Calculator size={16} style={{ color: "var(--neuron-brand-green)" }} />
+            <h3 style={{
+              fontSize: "14px",
+              fontWeight: 600,
+              color: "var(--neuron-ink-primary)",
+              margin: 0
+            }}>
+              FINANCIAL SUMMARY (PHP)
+            </h3>
+          </div>
+          {isForeignSource && (
+            <span title={`Source lines may be in ${currency}; aggregated to PHP base`} style={{
+              fontSize: "9px",
+              fontWeight: 700,
+              padding: "2px 6px",
+              borderRadius: "3px",
+              backgroundColor: "var(--theme-bg-surface)",
+              border: "1px solid var(--theme-border-default)",
+              color: "var(--theme-text-muted)",
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+            }}>
+              ↻ {currency} → PHP
+            </span>
+          )}
         </div>
       </div>
 
@@ -84,7 +112,7 @@ export function FinancialSummaryPanel({
               fontWeight: 600,
               color: "var(--neuron-ink-primary)"
             }}>
-              ₱ {formatAmount(financialSummary.subtotal_non_taxed)}
+              {formatAmount(financialSummary.subtotal_non_taxed)}
             </span>
           </div>
 
@@ -109,7 +137,7 @@ export function FinancialSummaryPanel({
               fontWeight: 600,
               color: "var(--neuron-ink-primary)"
             }}>
-              ₱ {formatAmount(financialSummary.subtotal_taxed)}
+              {formatAmount(financialSummary.subtotal_taxed)}
             </span>
           </div>
 
@@ -162,7 +190,7 @@ export function FinancialSummaryPanel({
               fontSize: "11px",
               color: "var(--theme-status-warning-fg)"
             }}>
-              Tax Amount: ₱ {formatAmount(financialSummary.tax_amount)}
+              Tax Amount: {formatAmount(financialSummary.tax_amount)}
             </div>
           </div>
 
@@ -231,7 +259,7 @@ export function FinancialSummaryPanel({
               color: "var(--neuron-brand-green)",
               lineHeight: 1
             }}>
-              ₱ {formatAmount(financialSummary.grand_total)}
+              {formatAmount(financialSummary.grand_total)}
             </div>
           </div>
 
@@ -277,7 +305,7 @@ export function FinancialSummaryPanel({
               color: "var(--neuron-semantic-info)",
               lineHeight: 1
             }}>
-              $ {formatAmount(calculateApproxUSD())}
+              {formatUSD(calculateApproxUSD())}
             </div>
             <div style={{ marginTop: "6px", fontSize: "10px", color: "var(--theme-text-muted)" }}>
               * Reference only based on manual rate

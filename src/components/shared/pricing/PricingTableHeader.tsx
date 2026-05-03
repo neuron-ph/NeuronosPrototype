@@ -85,7 +85,7 @@ export function PricingTableHeader({
       
       <div style={{ textAlign: "center" }}>Curr</div>
       
-      {showForex && <div style={{ textAlign: "right" }}>Forex</div>}
+      {showForex && <div style={{ textAlign: "right" }} title="Foreign currency rate to PHP (e.g. 58 means 1 USD = ₱58)">Rate →PHP</div>}
       
       {showTax && <div style={{ textAlign: "center" }}>Tax</div>}
       

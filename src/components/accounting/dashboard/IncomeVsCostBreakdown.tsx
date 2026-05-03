@@ -7,6 +7,7 @@
  */
 
 import { useMemo } from "react";
+import { formatMoney } from "../../../utils/accountingCurrency";
 
 interface IncomeVsCostBreakdownProps {
   invoices: any[];
@@ -20,12 +21,7 @@ interface CategoryRow {
   pct: number;
 }
 
-const fmt = (amount: number) =>
-  new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    maximumFractionDigits: 0,
-  }).format(amount);
+const fmt = (amount: number) => formatMoney(amount, "PHP");
 
 export function IncomeVsCostBreakdown({
   invoices,

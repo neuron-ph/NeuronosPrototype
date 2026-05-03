@@ -270,8 +270,16 @@ export function ContractRateCardV2({
 
   // ---- Format helpers ----
   const getUnitLabel = (unitValue: string) => UNIT_OPTIONS.find((u) => u.value === unitValue)?.label || unitValue;
+  const matrixCurrency = (matrix.currency || "PHP") as "PHP" | "USD";
   const formatCurrency = (val: number) =>
-    new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(val);
+    new Intl.NumberFormat("en-PH", { style: "currency", currency: matrixCurrency, minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(val);
+
+  const setMatrixCurrency = (next: "PHP" | "USD") => {
+    onChange({ ...matrix, currency: next, exchange_rate: next === "PHP" ? 1 : (matrix.exchange_rate || undefined) });
+  };
+  const setMatrixRate = (rate: number) => {
+    onChange({ ...matrix, exchange_rate: Number.isFinite(rate) && rate > 0 ? rate : undefined });
+  };
 
   // ============================================
   // RENDER
@@ -299,6 +307,33 @@ export function ContractRateCardV2({
           <span style={{ fontSize: "11px", fontWeight: 500, color: "var(--theme-text-muted)", backgroundColor: "var(--theme-bg-surface-subtle)", padding: "2px 8px", borderRadius: "4px" }}>
             {totalItems} {totalItems === 1 ? "item" : "items"}
           </span>
+          {/* Matrix-level currency — every rate in this matrix is denominated in this currency. */}
+          {!viewMode ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginLeft: "8px" }}>
+              <CustomDropdown
+                value={matrixCurrency}
+                onChange={(v) => setMatrixCurrency(v as "PHP" | "USD")}
+                options={[{ value: "PHP", label: "PHP" }, { value: "USD", label: "USD" }]}
+                size="sm"
+              />
+              {matrixCurrency === "USD" && (
+                <input
+                  type="number"
+                  step="0.0001"
+                  min="0"
+                  placeholder="USD→PHP rate"
+                  value={matrix.exchange_rate ?? ""}
+                  onChange={(e) => setMatrixRate(parseFloat(e.target.value))}
+                  title="Exchange rate locked at contract signing (USD → PHP)"
+                  style={{ width: "100px", height: "26px", padding: "0 8px", fontSize: "11px", border: "1px solid var(--theme-border-default)", borderRadius: "4px", fontFamily: "monospace" }}
+                />
+              )}
+            </div>
+          ) : matrixCurrency !== "PHP" && (
+            <span style={{ fontSize: "10px", fontWeight: 700, padding: "2px 6px", borderRadius: "3px", backgroundColor: "var(--theme-bg-surface-subtle)", color: "var(--theme-text-muted)", letterSpacing: "0.05em", marginLeft: "4px" }}>
+              {matrixCurrency} @ {matrix.exchange_rate ?? "—"}
+            </span>
+          )}
         </div>
 
         {!viewMode && (

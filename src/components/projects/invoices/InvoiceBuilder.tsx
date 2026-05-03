@@ -21,6 +21,15 @@ import { useBookingGrouping } from "../../../hooks/useBookingGrouping";
 import { getServiceIcon } from "../../../utils/quotation-helpers";
 import { useConsignees } from "../../../hooks/useConsignees";
 import type { Consignee } from "../../../types/bd";
+import {
+  FUNCTIONAL_CURRENCY,
+  formatMoney,
+  normalizeCurrency,
+  resolvePostingRate,
+  roundMoney,
+  toBaseAmount,
+  type AccountingCurrency,
+} from "../../../utils/accountingCurrency";
 
 
 // A4 Dimensions in pixels at 96 DPI
@@ -352,14 +361,30 @@ export function InvoiceBuilder({
         const override = itemOverrides[item.id] || { remarks: "", tax_type: "NON-VAT" };
         
         // Multi-Currency Calculation
+        // Convention: `exchangeRate` is the non-PHP↔PHP rate (e.g. USD→PHP = 58).
+        //   - target=PHP, source=USD → finalAmount = source × rate
+        //   - target=USD, source=PHP → finalAmount = source / rate
+        //   - same currency → unchanged
         const originalAmount = Number(item.amount) || 0;
+        const sourceCurrency = item.currency || targetCurrency;
         let finalAmount = originalAmount;
         let itemRateUsed = 1;
-        
-        // If item currency differs from target currency, apply rate
-        if (item.currency && item.currency !== targetCurrency) {
-            finalAmount = originalAmount * exchangeRate;
-            itemRateUsed = exchangeRate;
+
+        if (sourceCurrency !== targetCurrency) {
+            const rate = Number(exchangeRate);
+            if (!Number.isFinite(rate) || rate <= 0) {
+                finalAmount = originalAmount;
+            } else if (targetCurrency === "PHP" && sourceCurrency !== "PHP") {
+                finalAmount = roundMoney(originalAmount * rate);
+                itemRateUsed = rate;
+            } else if (targetCurrency !== "PHP" && sourceCurrency === "PHP") {
+                finalAmount = roundMoney(originalAmount / rate);
+                itemRateUsed = rate;
+            } else {
+                // Cross non-PHP (e.g. USD→EUR) — unsupported single-rate path; pass through.
+                finalAmount = originalAmount;
+                itemRateUsed = rate;
+            }
         }
         
         const isVat = override.tax_type === "VAT";
@@ -572,6 +597,24 @@ export function InvoiceBuilder({
           effectiveDueDate = d.toISOString().split('T')[0];
       }
 
+      // FX: invoice posts in `targetCurrency`, but the GL functional currency
+      // is PHP. Lock a rate at create time so downstream reports and the GL
+      // posting sheet have the same numbers we showed the user.
+      const invoiceCurrency = normalizeCurrency(targetCurrency, FUNCTIONAL_CURRENCY);
+      let lockedRate: number;
+      try {
+        lockedRate = resolvePostingRate(invoiceCurrency, exchangeRate);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Invalid exchange rate");
+        return;
+      }
+      const baseAmount = toBaseAmount({
+        amount: draftInvoice.total_amount,
+        currency: invoiceCurrency,
+        exchangeRate: lockedRate,
+      });
+      const rateDate = (invoiceDate || new Date().toISOString()).slice(0, 10);
+
       const invoiceRow = {
         id: crypto.randomUUID(),
         invoice_number: invoiceNumber,
@@ -587,9 +630,14 @@ export function InvoiceBuilder({
         due_date: effectiveDueDate,
         payment_terms: creditTerms || 'NET 15',
         notes: notes,
-        currency: targetCurrency,
+        currency: invoiceCurrency,
+        original_currency: invoiceCurrency,
+        exchange_rate: lockedRate,
+        base_currency: FUNCTIONAL_CURRENCY,
+        base_amount: baseAmount,
+        exchange_rate_date: rateDate,
         subtotal: draftInvoice.subtotal,
-        total_amount: draftInvoice.total_amount,
+        total_amount: roundMoney(draftInvoice.total_amount),
         tax_amount: draftInvoice.tax_amount,
         status: 'posted',
         metadata: {
@@ -598,8 +646,10 @@ export function InvoiceBuilder({
             billed_to_type: billedToType,
             billed_to_consignee_id: billedToConsigneeId || null,
             customer_address: customerAddress,
-            exchange_rate: exchangeRate,
-            original_currency: project.currency,
+            // exchange_rate / original_currency duplicated in metadata for back-compat
+            // with older read paths; the columns above are authoritative.
+            exchange_rate: lockedRate,
+            original_currency: invoiceCurrency,
             revenue_account_id: revenueAccountId || null,
             line_items: draftInvoice.line_items,
             zone_a: {
@@ -622,7 +672,9 @@ export function InvoiceBuilder({
 
       if (invoiceError) throw new Error(invoiceError.message);
 
-      // Create draft journal entry for Accounting to review and post
+      // Create draft journal entry for Accounting to review and post.
+      // Total debit/credit are PHP base; the GL posting sheet finalises lines
+      // and locks the rate that's already stamped onto the invoice row.
       const jeId = `JE-INV-${Date.now()}`;
       await supabase.from("journal_entries").insert({
         id: jeId,
@@ -634,8 +686,14 @@ export function InvoiceBuilder({
         project_number: invoiceRow.project_number || null,
         customer_name: invoiceRow.customer_name || null,
         lines: [],
-        total_debit: invoiceRow.total_amount,
-        total_credit: invoiceRow.total_amount,
+        total_debit: baseAmount,
+        total_credit: baseAmount,
+        transaction_currency: invoiceCurrency,
+        exchange_rate: lockedRate,
+        base_currency: FUNCTIONAL_CURRENCY,
+        source_amount: roundMoney(invoiceRow.total_amount),
+        base_amount: baseAmount,
+        exchange_rate_date: rateDate,
         status: "draft",
         created_by: user?.id ?? null,
         created_at: new Date().toISOString(),
@@ -679,10 +737,8 @@ export function InvoiceBuilder({
       setDisplayOptions(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  // Helper
-  const formatCurrency = (amount: number, curr: string = "PHP") => {
-    return new Intl.NumberFormat("en-PH", { style: "currency", currency: curr }).format(amount);
-  };
+  // Helper — delegates to the canonical formatter.
+  const formatCurrency = (amount: number, curr: string = "PHP") => formatMoney(amount, curr as any);
   
   const formatDate = (dateString: string) => {
     if (!dateString) return "-";

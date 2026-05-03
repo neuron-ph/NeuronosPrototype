@@ -14,6 +14,13 @@ import { getAccounts } from "../../utils/accounting-api";
 import type { Account } from "../../types/accounting-core";
 import { canDeleteEVoucher } from "../../utils/permissions";
 import { toast } from "sonner@2.0.3";
+import {
+  FUNCTIONAL_CURRENCY,
+  SUPPORTED_ACCOUNTING_CURRENCIES,
+  formatMoney,
+  type AccountingCurrency,
+} from "../../utils/accountingCurrency";
+import { resolveExchangeRate } from "../../utils/exchangeRates";
 
 interface LineItem {
   id: string;
@@ -132,7 +139,31 @@ export function AddRequestForPaymentPanel({
   const [creditTerms, setCreditTerms] = useState<CreditTerm>("None");
   const [paymentSchedule, setPaymentSchedule] = useState("");
   const [notes, setNotes] = useState("");
-  
+
+  // Multi-currency. Defaults to PHP; user picks USD when needed and either
+  // accepts a rate looked up from `exchange_rates` or enters a custom one.
+  const [currency, setCurrency] = useState<AccountingCurrency>(FUNCTIONAL_CURRENCY);
+  const [exchangeRateInput, setExchangeRateInput] = useState<string>("");
+
+  useEffect(() => {
+    if (currency === FUNCTIONAL_CURRENCY) {
+      setExchangeRateInput("");
+      return;
+    }
+    let cancelled = false;
+    resolveExchangeRate({
+      fromCurrency: currency,
+      toCurrency: FUNCTIONAL_CURRENCY,
+      rateDate: new Date(),
+    })
+      .then((row) => {
+        if (cancelled) return;
+        setExchangeRateInput((cur) => cur || String(row.rate));
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [currency]);
+
   // New State for Collections
   const [linkedBillings, setLinkedBillings] = useState<LinkedBilling[]>([]);
   const [availableStatements, setAvailableStatements] = useState<any[]>([]);
@@ -396,13 +427,26 @@ export function AddRequestForPaymentPanel({
     ));
   };
 
+  // FX guard: USD postings must carry a positive rate before any save path.
+  const ensureFxRateValid = (): boolean => {
+    if (currency === FUNCTIONAL_CURRENCY) return true;
+    const rate = parseFloat(exchangeRateInput);
+    if (!Number.isFinite(rate) || rate <= 0) {
+      toast.error(`Enter a positive ${currency}→${FUNCTIONAL_CURRENCY} exchange rate before saving.`);
+      return false;
+    }
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Don't submit if in view mode
     if (isViewMode) {
       return;
     }
+
+    if (!ensureFxRateValid()) return;
     
     try {
       // Prepare form data
@@ -424,7 +468,9 @@ export function AddRequestForPaymentPanel({
         bookingId,
         isBillable: transactionSubtype === "billable_expense",
         linkedBillings: isCollectionMode ? linkedBillings : undefined,
-        sourceAccountId: sourceAccountId || undefined
+        sourceAccountId: sourceAccountId || undefined,
+        currency,
+        exchangeRate: currency === FUNCTIONAL_CURRENCY ? 1 : parseFloat(exchangeRateInput),
       };
 
       // Use the hook's submitForApproval function (creates + submits in one go)
@@ -448,7 +494,9 @@ export function AddRequestForPaymentPanel({
     if (isViewMode) {
       return;
     }
-    
+
+    if (!ensureFxRateValid()) return;
+
     try {
       // Prepare form data
       const formData = {
@@ -469,7 +517,9 @@ export function AddRequestForPaymentPanel({
         bookingId,
         isBillable: transactionSubtype === "billable_expense",
         linkedBillings: isCollectionMode ? linkedBillings : undefined,
-        sourceAccountId: sourceAccountId || undefined
+        sourceAccountId: sourceAccountId || undefined,
+        currency,
+        exchangeRate: currency === FUNCTIONAL_CURRENCY ? 1 : parseFloat(exchangeRateInput),
       };
 
       // Use the hook's createDraft function
@@ -489,6 +539,8 @@ export function AddRequestForPaymentPanel({
   const handleAutoApprove = async () => {
     if (isViewMode) return;
 
+    if (!ensureFxRateValid()) return;
+
     try {
       // Prepare form data
       const formData = {
@@ -509,7 +561,9 @@ export function AddRequestForPaymentPanel({
         bookingId,
         isBillable: transactionSubtype === "billable_expense",
         linkedBillings: isCollectionMode ? linkedBillings : undefined,
-        sourceAccountId: sourceAccountId || undefined
+        sourceAccountId: sourceAccountId || undefined,
+        currency,
+        exchangeRate: currency === FUNCTIONAL_CURRENCY ? 1 : parseFloat(exchangeRateInput),
       };
 
       // Use the hook's autoApprove function
@@ -1072,6 +1126,41 @@ export function AddRequestForPaymentPanel({
                     />
                   </div>
                 </div>
+
+                {/* Currency + FX rate. Only shows when this voucher should
+                    post in something other than PHP. */}
+                <div style={{ display: "grid", gridTemplateColumns: currency === FUNCTIONAL_CURRENCY ? "1fr" : "1fr 1fr", gap: "16px", marginTop: "16px" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 500, color: "var(--theme-text-secondary)", marginBottom: "8px" }}>
+                      Currency
+                    </label>
+                    <select
+                      disabled={isViewMode}
+                      value={currency}
+                      onChange={(e) => setCurrency(e.target.value as AccountingCurrency)}
+                      style={{ width: "100%", padding: "10px 14px", fontSize: "14px", border: "1px solid var(--theme-border-default)", borderRadius: "6px", outline: "none", backgroundColor: isViewMode ? "var(--neuron-pill-inactive-bg)" : "var(--theme-bg-surface)" }}
+                    >
+                      {SUPPORTED_ACCOUNTING_CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  {currency !== FUNCTIONAL_CURRENCY && (
+                    <div>
+                      <label style={{ display: "block", fontSize: "12px", fontWeight: 500, color: "var(--theme-text-secondary)", marginBottom: "8px" }}>
+                        {currency} → {FUNCTIONAL_CURRENCY} Rate <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.0001"
+                        readOnly={isViewMode}
+                        value={exchangeRateInput}
+                        onChange={(e) => setExchangeRateInput(e.target.value)}
+                        placeholder="e.g. 58.25"
+                        style={{ width: "100%", padding: "10px 14px", fontSize: "14px", border: "1px solid var(--theme-border-default)", borderRadius: "6px", outline: "none", backgroundColor: isViewMode ? "var(--neuron-pill-inactive-bg)" : "var(--theme-bg-surface)", fontFamily: "monospace" }}
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1194,7 +1283,7 @@ export function AddRequestForPaymentPanel({
                               </td>
                               <td style={{ padding: "10px 16px" }}>
                                 <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "4px" }}>
-                                  <span style={{ color: "var(--theme-text-muted)", fontSize: "14px" }}>₱</span>
+                                  <span style={{ color: "var(--theme-text-muted)", fontSize: "14px" }}>{currency === "USD" ? "$" : "₱"}</span>
                                   <input
                                     type="number"
                                     readOnly={isViewMode}
@@ -1226,7 +1315,7 @@ export function AddRequestForPaymentPanel({
                               Subtotal ({section.category_name})
                             </td>
                             <td style={{ padding: "8px 16px", textAlign: "right", fontWeight: 600, fontSize: "13px", color: "var(--theme-text-secondary)" }}>
-                              ₱ {sectionSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              {formatMoney(sectionSubtotal, currency)}
                             </td>
                             {!isViewMode && !isCollectionMode && <td />}
                           </tr>
@@ -1239,11 +1328,20 @@ export function AddRequestForPaymentPanel({
 
               {/* Grand total */}
               {(categorySections.length > 0 || isCollectionMode) && (
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: "24px", padding: "12px 16px", backgroundColor: "var(--theme-bg-page)", borderRadius: "8px", border: "1px solid var(--theme-border-default)", marginTop: "4px" }}>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "24px", padding: "12px 16px", backgroundColor: "var(--theme-bg-page)", borderRadius: "8px", border: "1px solid var(--theme-border-default)", marginTop: "4px", flexWrap: "wrap" }}>
                   <span style={{ fontWeight: 600, fontSize: "13px", color: "var(--theme-text-secondary)" }}>Total Amount</span>
                   <span style={{ fontWeight: 700, fontSize: "14px", color: "var(--theme-text-primary)" }}>
-                    ₱ {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {formatMoney(totalAmount, currency)}
                   </span>
+                  {currency !== FUNCTIONAL_CURRENCY && (() => {
+                    const r = parseFloat(exchangeRateInput);
+                    if (!Number.isFinite(r) || r <= 0) return null;
+                    return (
+                      <span style={{ fontSize: "12px", color: "var(--theme-text-muted)" }}>
+                        ≈ {formatMoney(totalAmount * r, FUNCTIONAL_CURRENCY)} @ {r}
+                      </span>
+                    );
+                  })()}
                 </div>
               )}
             </div>

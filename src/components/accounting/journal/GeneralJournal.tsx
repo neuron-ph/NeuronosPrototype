@@ -46,10 +46,19 @@ export interface JournalEntry {
   created_by: string | null;
   created_by_name: string | null;
   created_at: string;
+  // FX header (PHP-only entries report PHP/1).
+  transaction_currency?: "PHP" | "USD";
+  exchange_rate?: number;
+  base_currency?: "PHP" | "USD";
+  source_amount?: number;
+  base_amount?: number;
+  exchange_rate_date?: string | null;
 }
 
 type SourceType = "all" | "evoucher" | "invoice" | "collection" | "manual";
 type StatusFilter = "all" | "draft" | "posted" | "void";
+
+type CurrencyFilter = "all" | "PHP" | "USD";
 
 interface Filters {
   dateFrom: string;
@@ -58,6 +67,7 @@ interface Filters {
   statusFilter: StatusFilter;
   accountId: string;
   search: string;
+  currency: CurrencyFilter;
 }
 
 interface COAAccount {
@@ -241,6 +251,7 @@ export function GeneralJournal() {
     statusFilter: "all",
     accountId: "",
     search: "",
+    currency: "all",
   });
   const [searchInput, setSearchInput] = useState("");
   const [page, setPage] = useState(0);
@@ -507,6 +518,16 @@ export function GeneralJournal() {
               <option key={a.id} value={a.id}>{a.code} — {a.name}</option>
             ))}
           </select>
+          {/* Currency filter */}
+          <select
+            value={filters.currency}
+            onChange={(e) => setFilter("currency", e.target.value as CurrencyFilter)}
+            className="h-9 px-3 border border-[var(--theme-border-default)] rounded-lg text-[13px] text-[var(--theme-text-primary)] bg-[var(--theme-bg-page)] outline-none focus:ring-2 focus:ring-[var(--theme-state-focus-ring)] cursor-pointer"
+          >
+            <option value="all">All Currencies</option>
+            <option value="PHP">PHP only</option>
+            <option value="USD">USD only</option>
+          </select>
         </div>
 
         {/* Source tabs */}
@@ -597,7 +618,7 @@ export function GeneralJournal() {
                       <p style={{ fontSize: "13px", color: "var(--theme-text-muted)", margin: "0 0 4px" }}>No journal entries found for this period.</p>
                       <button
                         onClick={() => {
-                          setFilters({ dateFrom: startOfMonthISO(), dateTo: endOfMonthISO(), sourceType: "all", statusFilter: "all", accountId: "", search: "" });
+                          setFilters({ dateFrom: startOfMonthISO(), dateTo: endOfMonthISO(), sourceType: "all", statusFilter: "all", accountId: "", search: "", currency: "all" });
                           setSearchInput("");
                           setPage(0);
                         }}
@@ -663,6 +684,11 @@ export function GeneralJournal() {
                               }}>
                                 {entry.description || "—"}
                               </span>
+                              {entry.transaction_currency && entry.transaction_currency !== "PHP" && (
+                                <span style={{ fontSize: "10px", color: "var(--theme-text-muted)", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                                  {entry.transaction_currency} @ {entry.exchange_rate ?? "—"}
+                                </span>
+                              )}
                             </td>
                             <td style={{ padding: "10px 12px", fontSize: "12px", color: "var(--theme-text-muted)" }}>
                               {entry.lines?.length ?? 0}
@@ -836,6 +862,12 @@ function applyFiltersToQuery(query: any, f: Filters) {
     query = query.is("evoucher_id", null).is("invoice_id", null).is("collection_id", null).is("booking_id", null);
   }
   if (f.statusFilter !== "all") query = query.eq("status", f.statusFilter);
+  if (f.currency === "PHP") {
+    // PHP-only: include legacy rows where transaction_currency is null.
+    query = query.or("transaction_currency.eq.PHP,transaction_currency.is.null");
+  } else if (f.currency === "USD") {
+    query = query.eq("transaction_currency", "USD");
+  }
   if (f.accountId) query = query.contains("lines", [{ account_id: f.accountId }]);
   if (f.search.trim()) {
     const s = f.search.trim();

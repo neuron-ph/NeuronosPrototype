@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { toast } from "sonner@2.0.3";
-import { ArrowLeft, ArrowUpRight, ArrowDownLeft, FileText, Search, Download, Filter } from 'lucide-react';
+import { ArrowLeft, Search, Download, Filter } from 'lucide-react';
 import { format } from 'date-fns';
 import { Account } from '../../../types/accounting-core';
-import { Transaction } from '../../../types/accounting';
-import { getTransactions } from '../../../utils/accounting-api';
+import { supabase } from '../../../utils/supabase/client';
 import { DataTable, ColumnDef } from '../../common/DataTable';
 
 interface AccountLedgerProps {
@@ -12,11 +11,50 @@ interface AccountLedgerProps {
   onBack: () => void;
 }
 
-type LedgerRow = Transaction & {
+interface JournalLineRaw {
+  account_id: string;
+  debit?: number;
+  credit?: number;
+  description?: string;
+  foreign_debit?: number;
+  foreign_credit?: number;
+  currency?: string;
+}
+
+interface JournalEntryRaw {
+  id: string;
+  entry_number: string;
+  entry_date: string;
+  description: string | null;
+  reference: string | null;
+  status: string;
+  evoucher_id: string | null;
+  invoice_id: string | null;
+  collection_id: string | null;
+  booking_id: string | null;
+  lines: JournalLineRaw[] | null;
+}
+
+type LedgerRow = {
+  id: string;
+  date: string;
+  entry_number: string;
+  source_type: string;
+  description: string;
+  reference: string | null;
   debit: number | null;
   credit: number | null;
   running_balance: number;
+  // For USD accounts only: parallel PHP-base running balance for cross-currency context.
+  running_balance_base?: number;
 };
+
+function sourceTypeOf(e: JournalEntryRaw): string {
+  if (e.evoucher_id) return "E-Voucher";
+  if (e.invoice_id) return "Invoice";
+  if (e.collection_id) return "Collection";
+  return "Journal";
+}
 
 export function AccountLedger({ account, onBack }: AccountLedgerProps) {
   const [transactions, setTransactions] = useState<LedgerRow[]>([]);
@@ -29,40 +67,63 @@ export function AccountLedger({ account, onBack }: AccountLedgerProps) {
     const loadData = async () => {
       setLoading(true);
       try {
-        const allTxns = await getTransactions();
+        // Fetch posted journal entries that touch this account.
+        // jsonb `cs` (contains) lets Postgres filter at the DB.
+        const { data, error } = await supabase
+          .from('journal_entries')
+          .select('id, entry_number, entry_date, description, reference, status, evoucher_id, invoice_id, collection_id, booking_id, lines')
+          .eq('status', 'posted')
+          .filter('lines', 'cs', JSON.stringify([{ account_id: account.id }]))
+          .order('entry_date', { ascending: true });
+
+        if (error) throw error;
         if (cancelled) return;
 
-        const accountTxns = allTxns.filter(t =>
-          t.bank_account_id === account.id || t.category_account_id === account.id
-        );
+        const useForeign = account.currency === "USD";
+        const isDebitNormal = ['Asset', 'Expense'].includes(account.type);
 
-        const sorted = accountTxns.sort((a, b) =>
-          new Date(a.date).getTime() - new Date(b.date).getTime()
-        );
+        let balance = account.starting_amount ?? 0;
+        let baseBalance = 0; // PHP-base parallel ledger for USD accounts
+        const rows: LedgerRow[] = [];
 
-        let balance = 0;
-        const rows: LedgerRow[] = sorted.map(txn => {
-          const isDebit = txn.category_account_id === account.id;
-          const isCredit = txn.bank_account_id === account.id;
+        for (const entry of (data ?? []) as JournalEntryRaw[]) {
+          const lines = (entry.lines ?? []).filter(l => l.account_id === account.id);
+          for (const line of lines) {
+            const debit = useForeign
+              ? (line.foreign_debit ?? line.debit ?? 0)
+              : (line.debit ?? 0);
+            const credit = useForeign
+              ? (line.foreign_credit ?? line.credit ?? 0)
+              : (line.credit ?? 0);
 
-          let impact = 0;
-          if (['Asset', 'Expense'].includes(account.type)) {
-            if (isDebit) impact = txn.amount;
-            if (isCredit) impact = -txn.amount;
-          } else {
-            if (isDebit) impact = -txn.amount;
-            if (isCredit) impact = txn.amount;
+            const impact = isDebitNormal ? (debit - credit) : (credit - debit);
+            balance += impact;
+
+            // For USD accounts also track PHP-base running balance using the
+            // line's locked posting amount.
+            let baseRow: number | undefined;
+            if (useForeign) {
+              const baseDebit = Number(line.debit ?? 0);
+              const baseCredit = Number(line.credit ?? 0);
+              const baseImpact = isDebitNormal ? (baseDebit - baseCredit) : (baseCredit - baseDebit);
+              baseBalance += baseImpact;
+              baseRow = baseBalance;
+            }
+
+            rows.push({
+              id: `${entry.id}:${rows.length}`,
+              date: entry.entry_date,
+              entry_number: entry.entry_number,
+              source_type: sourceTypeOf(entry),
+              description: line.description || entry.description || entry.entry_number,
+              reference: entry.reference,
+              debit: debit > 0 ? debit : null,
+              credit: credit > 0 ? credit : null,
+              running_balance: balance,
+              running_balance_base: baseRow,
+            });
           }
-
-          balance += impact;
-
-          return {
-            ...txn,
-            debit: isDebit ? txn.amount : null,
-            credit: isCredit ? txn.amount : null,
-            running_balance: balance,
-          };
-        });
+        }
 
         setTransactions(rows.reverse());
       } catch (error) {
@@ -78,9 +139,12 @@ export function AccountLedger({ account, onBack }: AccountLedgerProps) {
   }, [account]);
 
   const filteredData = useMemo(() => {
-    return transactions.filter(t => 
-      t.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (t.reference && t.reference.toLowerCase().includes(searchQuery.toLowerCase()))
+    const q = searchQuery.toLowerCase();
+    if (!q) return transactions;
+    return transactions.filter(t =>
+      t.description.toLowerCase().includes(q) ||
+      t.entry_number.toLowerCase().includes(q) ||
+      (t.reference && t.reference.toLowerCase().includes(q))
     );
   }, [transactions, searchQuery]);
 
@@ -101,10 +165,10 @@ export function AccountLedger({ account, onBack }: AccountLedgerProps) {
     },
     {
       header: "Type",
-      accessorKey: "status", // Using status as proxy for type, or maybe we need a type field
+      accessorKey: "source_type",
       cell: (item) => (
         <span className="capitalize px-2 py-1 bg-[var(--theme-bg-surface-subtle)] rounded text-xs text-[var(--theme-text-secondary)] font-medium">
-          Transaction
+          {item.source_type}
         </span>
       )
     },
@@ -114,7 +178,9 @@ export function AccountLedger({ account, onBack }: AccountLedgerProps) {
       cell: (item) => (
          <div className="flex flex-col">
             <span className="font-medium text-[var(--theme-text-primary)]">{item.description}</span>
-            {item.reference && <span className="text-xs text-[var(--theme-text-muted)]">Ref: {item.reference}</span>}
+            <span className="text-xs text-[var(--theme-text-muted)]">
+              {item.entry_number}{item.reference ? ` • Ref: ${item.reference}` : ''}
+            </span>
          </div>
       )
     },
@@ -175,6 +241,11 @@ export function AccountLedger({ account, onBack }: AccountLedgerProps) {
              <span className="text-3xl font-bold text-[var(--theme-text-primary)] tracking-tight font-mono">
                 {formatCurrency(account.balance)}
              </span>
+             {account.currency === "USD" && transactions.length > 0 && transactions[0].running_balance_base != null && (
+               <span className="text-xs text-[var(--theme-text-muted)] font-mono mt-1">
+                 ≈ {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(transactions[0].running_balance_base ?? 0)}
+               </span>
+             )}
           </div>
         </div>
 

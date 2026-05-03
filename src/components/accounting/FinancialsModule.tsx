@@ -41,6 +41,7 @@ import { useDataScope } from "../../hooks/useDataScope";
 import type { DataScope } from "../../hooks/useDataScope";
 import { calculateFinancialTotals } from "../../utils/financialCalculations";
 import { calculateInvoiceBalance } from "../../utils/accounting-math";
+import { pickReportingAmount } from "../../utils/accountingCurrency";
 import type { FinancialData } from "../../hooks/useProjectFinancials";
 import type { BillingItem } from "../shared/billings/UnifiedBillingsTab";
 import type { Expense as OperationsExpense } from "../../types/operations";
@@ -438,9 +439,9 @@ export function FinancialsModule() {
   // Billings KPI cards
   const billingsKPIs: KPICard[] = useMemo(() => {
     const items = activeScopedBillingItems;
-    const total = items.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
+    const total = items.reduce((sum, i) => sum + pickReportingAmount(i as any), 0);
     const unbilledItems = items.filter((i) => (i.status || "").toLowerCase() === "unbilled");
-    const unbilledTotal = unbilledItems.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
+    const unbilledTotal = unbilledItems.reduce((sum, i) => sum + pickReportingAmount(i as any), 0);
     const uniqueBookings = new Set(items.map((i) => i.booking_id).filter(Boolean));
     const avgPerBooking = uniqueBookings.size > 0 ? total / uniqueBookings.size : 0;
     const unbilledPct = total > 0 ? (unbilledTotal / total) * 100 : 0;
@@ -645,7 +646,7 @@ export function FinancialsModule() {
         key,
         label: key,
         items,
-        subtotal: items.reduce((sum, i) => sum + (Number(i.amount) || 0), 0),
+        subtotal: items.reduce((sum, i) => sum + pickReportingAmount(i as any), 0),
         count: items.length,
       }))
       .sort((a, b) => b.subtotal - a.subtotal);
@@ -702,7 +703,16 @@ export function FinancialsModule() {
     unpaid.forEach((inv: any) => {
       const days = getAgingDays(inv);
       const label = getAgingBucketLabel(days);
-      const balance = Number(inv.remaining_balance ?? inv.total_amount ?? inv.amount ?? 0);
+      // PHP-base balance: remaining_balance is in original currency; translate
+      // by exchange_rate so USD invoices aggregate correctly with PHP ones.
+      const rate = Number(inv.exchange_rate);
+      const remainingOriginal = Number(
+        inv.remaining_balance ?? inv.total_amount ?? inv.amount ?? 0,
+      );
+      const balance =
+        Number.isFinite(rate) && rate > 0 && rate !== 1
+          ? remainingOriginal * rate
+          : Number(inv.base_amount ?? remainingOriginal);
       bucketMap[label].amount += balance;
       bucketMap[label].count += 1;
     });
@@ -726,22 +736,41 @@ export function FinancialsModule() {
   // Invoice KPIs
   const invoicesKPIs: KPICard[] = useMemo(() => {
     const items = scopedInvoices;
-    const totalInvoiced = items.reduce((sum, inv: any) => sum + (Number(inv.total_amount) || Number(inv.amount) || 0), 0);
+    // Aggregations are in PHP base. Prefer the persisted base_amount column
+    // and translate `remaining_balance` (original currency) via exchange_rate
+    // so USD invoices roll up correctly alongside PHP ones.
+    const baseTotal = (inv: any) =>
+      Number(inv.base_amount ?? inv.total_amount ?? inv.amount ?? 0);
+    const baseRemaining = (inv: any) => {
+      const remainingOriginal = Number(
+        inv.remaining_balance ?? inv.total_amount ?? inv.amount ?? 0,
+      );
+      const rate = Number(inv.exchange_rate);
+      if (Number.isFinite(rate) && rate > 0 && rate !== 1) {
+        return remainingOriginal * rate;
+      }
+      // Fall back to base_amount when remaining_balance is missing.
+      return inv.remaining_balance == null
+        ? Number(inv.base_amount ?? remainingOriginal)
+        : remainingOriginal;
+    };
+
+    const totalInvoiced = items.reduce((sum, inv: any) => sum + baseTotal(inv), 0);
 
     const unpaid = items.filter((inv: any) => (inv.status || "").toLowerCase() !== "paid");
-    const outstanding = unpaid.reduce((sum, inv: any) => sum + (Number(inv.remaining_balance ?? inv.total_amount ?? inv.amount ?? 0)), 0);
+    const outstanding = unpaid.reduce((sum, inv: any) => sum + baseRemaining(inv), 0);
 
     const overdue = items.filter((inv: any) => {
       const s = (inv.status || "").toLowerCase();
       if (s === "paid") return false;
       return getAgingDays(inv) > 0;
     });
-    const overdueAmount = overdue.reduce((sum, inv: any) => sum + (Number(inv.remaining_balance ?? inv.total_amount ?? inv.amount ?? 0)), 0);
+    const overdueAmount = overdue.reduce((sum, inv: any) => sum + baseRemaining(inv), 0);
 
     // Collection rate: use scoped collections that match scoped invoices
     const scopedCollectionTotal = collections
       .filter((c: any) => isInScope(c.collection_date || c.created_at, scope))
-      .reduce((sum, c: any) => sum + (Number(c.amount) || 0), 0);
+      .reduce((sum, c: any) => sum + pickReportingAmount(c), 0);
     const collectionRate = totalInvoiced > 0 ? (scopedCollectionTotal / totalInvoiced) * 100 : 0;
 
     const outstandingPct = totalInvoiced > 0 ? (outstanding / totalInvoiced) * 100 : 0;
@@ -954,7 +983,7 @@ export function FinancialsModule() {
         key,
         label: key,
         items,
-        subtotal: items.reduce((sum, inv) => sum + (Number(inv.total_amount) || Number(inv.amount) || 0), 0),
+        subtotal: items.reduce((sum, inv) => sum + pickReportingAmount(inv as any), 0),
         count: items.length,
       }))
       .sort((a, b) => b.subtotal - a.subtotal);
@@ -978,7 +1007,7 @@ export function FinancialsModule() {
   // Collections KPIs
   const collectionsKPIs: KPICard[] = useMemo(() => {
     const items = scopedCollections;
-    const totalCollected = items.reduce((sum, c: any) => sum + (Number(c.amount) || 0), 0);
+    const totalCollected = items.reduce((sum, c: any) => sum + pickReportingAmount(c), 0);
 
     // "This Month" — collections in the current calendar month
     const now = new Date();
@@ -986,7 +1015,7 @@ export function FinancialsModule() {
       const d = c.collection_date ? new Date(c.collection_date) : null;
       return d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     });
-    const thisMonthTotal = thisMonthItems.reduce((sum, c: any) => sum + (Number(c.amount) || 0), 0);
+    const thisMonthTotal = thisMonthItems.reduce((sum, c: any) => sum + pickReportingAmount(c), 0);
 
     // Avg days to collect
     let totalDays = 0;
@@ -1003,7 +1032,7 @@ export function FinancialsModule() {
 
     // Collection rate (collected vs. total outstanding invoices in scope)
     const totalInvoiced = scopedInvoices.reduce((sum, inv: any) =>
-      sum + (Number(inv.total_amount) || Number(inv.amount) || 0), 0);
+      sum + pickReportingAmount(inv), 0);
     const collRate = totalInvoiced > 0 ? (totalCollected / totalInvoiced) * 100 : 0;
 
     return [
@@ -1183,7 +1212,7 @@ export function FinancialsModule() {
         key,
         label: key,
         items,
-        subtotal: items.reduce((sum, c) => sum + (Number(c.amount) || 0), 0),
+        subtotal: items.reduce((sum, c) => sum + pickReportingAmount(c as any), 0),
         count: items.length,
       }))
       .sort((a, b) => b.subtotal - a.subtotal);
@@ -1206,7 +1235,7 @@ export function FinancialsModule() {
   // Expenses KPIs
   const expensesKPIs: KPICard[] = useMemo(() => {
     const items = scopedExpenses;
-    const totalExpenses = items.reduce((sum, e: any) => sum + (Number(e.amount) || 0), 0);
+    const totalExpenses = items.reduce((sum, e: any) => sum + pickReportingAmount(e), 0);
 
     const pending = items.filter((e: any) => (e.status || "").toLowerCase() === "pending");
     const pendingCount = pending.length;
@@ -1215,7 +1244,7 @@ export function FinancialsModule() {
     const catMap = new Map<string, number>();
     items.forEach((e: any) => {
       const cat = e.expenseCategory || e.category || "General";
-      catMap.set(cat, (catMap.get(cat) || 0) + (Number(e.amount) || 0));
+      catMap.set(cat, (catMap.get(cat) || 0) + pickReportingAmount(e));
     });
     let topCategory = "N/A";
     let topCatAmount = 0;
@@ -1225,7 +1254,7 @@ export function FinancialsModule() {
 
     // Billable ratio
     const billable = items.filter((e: any) => e.isBillable);
-    const billableTotal = billable.reduce((sum, e: any) => sum + (Number(e.amount) || 0), 0);
+    const billableTotal = billable.reduce((sum, e: any) => sum + pickReportingAmount(e), 0);
     const billableRatio = totalExpenses > 0 ? (billableTotal / totalExpenses) * 100 : 0;
 
     return [
@@ -1239,7 +1268,7 @@ export function FinancialsModule() {
       {
         label: "Pending Approval",
         value: pendingCount.toString(),
-        subtext: pendingCount > 0 ? formatCurrencyCompact(pending.reduce((s, e: any) => s + (Number(e.amount) || 0), 0)) : "all clear",
+        subtext: pendingCount > 0 ? formatCurrencyCompact(pending.reduce((s, e: any) => s + pickReportingAmount(e), 0)) : "all clear",
         icon: Clock,
         severity: pendingCount > 10 ? "warning" as const : "normal" as const,
       },
@@ -1395,7 +1424,7 @@ export function FinancialsModule() {
         key,
         label: key,
         items,
-        subtotal: items.reduce((sum, e) => sum + (Number(e.amount) || 0), 0),
+        subtotal: items.reduce((sum, e) => sum + pickReportingAmount(e as any), 0),
         count: items.length,
       }))
       .sort((a, b) => b.subtotal - a.subtotal);

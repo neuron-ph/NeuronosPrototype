@@ -8,6 +8,7 @@ import { CustomDropdown } from "../../bd/CustomDropdown";
 import { CustomDatePicker } from "../../common/CustomDatePicker";
 import { DataTable, ColumnDef } from "../../common/DataTable";
 import { getCollectionResolutionLabel } from "../../../utils/collectionResolution";
+import { formatMoney as formatMoneyHelper, pickReportingAmount } from "../../../utils/accountingCurrency";
 
 interface UnifiedCollectionsTabProps {
   financials: FinancialData;
@@ -76,12 +77,8 @@ export function UnifiedCollectionsTab({
     }
   }
 
-  const formatCurrency = (amount: number, currency: string = "PHP") => {
-    return new Intl.NumberFormat("en-PH", {
-      style: "currency",
-      currency,
-    }).format(amount);
-  };
+  const formatCurrency = (amount: number, currency: string = "PHP") =>
+    formatMoneyHelper(amount, currency as any);
 
   const formatDate = (dateString: string) => {
     if (!dateString) return "-";
@@ -163,8 +160,14 @@ export function UnifiedCollectionsTab({
     });
   }, [collections, searchQuery, filterStatus, dateFrom, dateTo]);
 
+  // Aggregate in PHP base — collections may span USD and PHP.
   const totalCollections = useMemo(() => {
-    return filteredCollections.reduce((sum, item) => sum + (item.amount || 0), 0);
+    return filteredCollections.reduce((sum, item) => sum + pickReportingAmount(item as any), 0);
+  }, [filteredCollections]);
+
+  const collectionsHaveMixedCurrency = useMemo(() => {
+    const ccys = new Set(filteredCollections.map((c: any) => c.original_currency || c.currency || "PHP"));
+    return ccys.size > 1;
   }, [filteredCollections]);
 
   const columns: ColumnDef<any>[] = [
@@ -218,7 +221,7 @@ export function UnifiedCollectionsTab({
       align: "right",
       cell: (item) => (
         <span className="text-[12px] font-bold text-[var(--theme-status-success-fg)]">
-          {formatCurrency(item.amount)}
+          {formatCurrency(item.amount, (item as any).original_currency || (item as any).currency || "PHP")}
         </span>
       ),
     },
@@ -347,7 +350,7 @@ export function UnifiedCollectionsTab({
         icon={Receipt}
         footerSummary={[
           {
-            label: "Total Collections",
+            label: collectionsHaveMixedCurrency ? "Total Collections (PHP base)" : "Total Collections",
             value: <span className="text-[var(--theme-text-secondary)]">{formatCurrency(totalCollections)}</span>,
           },
         ]}

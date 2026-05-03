@@ -23,6 +23,7 @@ import { isInScope } from "../aggregate/types";
 import type { DateScope } from "../aggregate/types";
 import { isInvoiceFinanciallyActive } from "../../../utils/invoiceReversal";
 import { isCollectionAppliedToInvoice } from "../../../utils/collectionResolution";
+import { pickReportingAmount } from "../../../utils/accountingCurrency";
 import {
   filterBillingItemsForScope,
   filterInvoicesForScope,
@@ -182,17 +183,17 @@ export function SalesReport({ data, scope }: SalesReportProps) {
           .filter(isCollectionAppliedToInvoice);
         const scopedExpenses = mapEvoucherExpensesForScope(expenses, [bookingId], bookingId);
 
-        // BILLED AMOUNT — sum of active invoices linked to this booking
+        // BILLED AMOUNT — sum of active invoices linked to this booking (PHP base)
         const billedAmount = scopedInvoices.reduce(
-          (s: number, inv: any) => s + (Number(inv.total_amount) || Number(inv.subtotal) || 0), 0
+          (s: number, inv: any) => s + (pickReportingAmount(inv) || Number(inv.subtotal) || 0), 0
         );
 
-        // COST OF SALES — evoucher expenses scoped to this booking
-        const costOfSales = scopedExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+        // COST OF SALES — evoucher expenses scoped to this booking (PHP base)
+        const costOfSales = scopedExpenses.reduce((s, e) => s + pickReportingAmount(e as any), 0);
 
-        // COLLECTED — applied collections via this booking's invoices
+        // COLLECTED — applied collections via this booking's invoices (PHP base)
         const collectedAmount = scopedCollections.reduce(
-          (s: number, c: any) => s + (Number(c.amount) || 0), 0
+          (s: number, c: any) => s + pickReportingAmount(c), 0
         );
 
         // INVOICE NOS — derived from scoped invoices

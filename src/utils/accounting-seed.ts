@@ -15,6 +15,7 @@ export interface SeedAccountRow {
   balance: number;
   starting_amount: number;
   parent_id: string | null;
+  currency: string;
 }
 
 function parseColumns(sql: string): string[] {
@@ -103,6 +104,7 @@ function parseAccountsFromSql(sql: string): SeedAccountRow[] {
       balance: Number(entry.balance ?? 0),
       starting_amount: Number(entry.starting_amount ?? 0),
       parent_id: entry.parent_id == null ? null : String(entry.parent_id),
+      currency: entry.currency == null ? "PHP" : String(entry.currency),
     };
   });
 }

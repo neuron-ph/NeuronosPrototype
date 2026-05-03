@@ -7,6 +7,7 @@ import {
 } from '../../../utils/bookings/bookingDetailsCompat';
 import { getServiceSchema } from '../../../config/booking/bookingScreenSchema';
 import { hydrateProfileValue, hydrateProfileValueArray } from '../../../utils/bookings/profileSerialize';
+import { getSelectedCustomer } from '../../../utils/bookings/selectedCustomer';
 
 export type FormState = Record<string, unknown>;
 
@@ -67,12 +68,21 @@ export function useBookingFormState(serviceType: string, seed?: FormState) {
     setFormState(prev => ({ ...prev, ...normalized }));
   }, [serviceType]);
 
+  // The customer field on bookings is a profile-lookup, so its value is a
+  // ProfileSelectionValue (object), not a plain string. Resolve both id and
+  // display name once, then expose them on the context so per-customer
+  // lookups (like the consignee picker) can scope correctly.
+  const selectedCustomer = getSelectedCustomer(formState);
+
   const context: BookingFormContext = {
     service_type: String(formState.service_type ?? serviceType),
     movement_type: String(formState.movement_type ?? ''),
     mode: String(formState.mode ?? ''),
     incoterms: String(formState.incoterms ?? ''),
     status: String(formState.status ?? ''),
+    type_of_package: String(formState.type_of_package ?? ''),
+    customer_id: selectedCustomer.customerId,
+    customer_name: selectedCustomer.customerName || null,
   };
 
   return { formState, setField, setFields, initFromRecord, initFromPrefill, context };

@@ -54,6 +54,12 @@ function getFieldValue(
 function isEmpty(value: unknown): boolean {
   if (value === undefined || value === null || value === '') return true;
   if (Array.isArray(value)) return value.length === 0;
+  // ProfileSelectionValue: validation passes when the resolved label is non-empty.
+  // Combo/manual fallback remains valid for onboarding-heavy types.
+  if (typeof value === 'object' && value !== null && 'label' in value) {
+    const label = (value as { label?: unknown }).label;
+    return typeof label !== 'string' || label.trim().length === 0;
+  }
   return false;
 }
 

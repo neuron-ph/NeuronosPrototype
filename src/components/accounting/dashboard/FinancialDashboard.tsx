@@ -30,6 +30,7 @@ import { PLTrendCard } from "./PLTrendCard";
 import { toast } from "sonner@2.0.3";
 import { calculateInvoiceBalance } from "../../../utils/accounting-math";
 import { isCollectionAppliedToInvoice } from "../../../utils/collectionResolution";
+import { pickReportingAmount, formatMoney } from "../../../utils/accountingCurrency";
 
 interface FinancialDashboardProps {
   billingItems: any[];
@@ -60,8 +61,7 @@ function getAgingDays(inv: any): number {
   return Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-const fmt = (amount: number) =>
-  new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", maximumFractionDigits: 0 }).format(amount);
+const fmt = (amount: number) => formatMoney(amount, "PHP");
 
 function normalizeRef(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -147,38 +147,38 @@ export function FinancialDashboard({
 
   // Revenue = invoiced + unbilled
   const invoicedRevenue = useMemo(
-    () => scopedInvoices.reduce((s, inv: any) => s + (Number(inv.total_amount) || Number(inv.amount) || 0), 0),
+    () => scopedInvoices.reduce((s, inv: any) => s + pickReportingAmount(inv), 0),
     [scopedInvoices]
   );
   const unbilledRevenue = useMemo(
     () =>
       scopedBillings
         .filter((b: any) => (b.status || "").toLowerCase() === "unbilled")
-        .reduce((s, b: any) => s + (Number(b.amount) || 0), 0),
+        .reduce((s, b: any) => s + pickReportingAmount(b), 0),
     [scopedBillings]
   );
   const netRevenue = invoicedRevenue + unbilledRevenue;
 
   const prevInvoicedRevenue = useMemo(
-    () => prevInvoices.reduce((s, inv: any) => s + (Number(inv.total_amount) || Number(inv.amount) || 0), 0),
+    () => prevInvoices.reduce((s, inv: any) => s + pickReportingAmount(inv), 0),
     [prevInvoices]
   );
   const prevUnbilledRevenue = useMemo(
     () =>
       prevBillings
         .filter((b: any) => (b.status || "").toLowerCase() === "unbilled")
-        .reduce((s, b: any) => s + (Number(b.amount) || 0), 0),
+        .reduce((s, b: any) => s + pickReportingAmount(b), 0),
     [prevBillings]
   );
   const prevNetRevenue = prevInvoicedRevenue + prevUnbilledRevenue;
 
   // Expenses
   const totalExpenses = useMemo(
-    () => scopedExpenses.reduce((s, e: any) => s + (Number(e.amount) || 0), 0),
+    () => scopedExpenses.reduce((s, e: any) => s + pickReportingAmount(e), 0),
     [scopedExpenses]
   );
   const prevTotalExpenses = useMemo(
-    () => prevExpenses.reduce((s, e: any) => s + (Number(e.amount) || 0), 0),
+    () => prevExpenses.reduce((s, e: any) => s + pickReportingAmount(e), 0),
     [prevExpenses]
   );
 
@@ -189,11 +189,11 @@ export function FinancialDashboard({
 
   // Cash Collected
   const totalCollected = useMemo(
-    () => scopedCollections.filter((c: any) => isCollectionAppliedToInvoice(c)).reduce((s, c: any) => s + (Number(c.amount) || 0), 0),
+    () => scopedCollections.filter((c: any) => isCollectionAppliedToInvoice(c)).reduce((s, c: any) => s + pickReportingAmount(c), 0),
     [scopedCollections]
   );
   const prevTotalCollected = useMemo(
-    () => prevCollections.filter((c: any) => isCollectionAppliedToInvoice(c)).reduce((s, c: any) => s + (Number(c.amount) || 0), 0),
+    () => prevCollections.filter((c: any) => isCollectionAppliedToInvoice(c)).reduce((s, c: any) => s + pickReportingAmount(c), 0),
     [prevCollections]
   );
   const collectionRate = invoicedRevenue > 0 ? (totalCollected / invoicedRevenue) * 100 : 0;
@@ -201,7 +201,7 @@ export function FinancialDashboard({
   // Outstanding AR (across ALL invoices, not scope-filtered — it's a balance sheet metric)
   const outstandingAR = useMemo(() => {
     return invoices
-      .map((inv: any) => calculateInvoiceBalance(inv, collections).balance)
+      .map((inv: any) => calculateInvoiceBalance(inv, collections).balanceBase)
       .filter((balance: number) => balance > 0.01)
       .reduce(
         (s, balance: number) => s + balance,

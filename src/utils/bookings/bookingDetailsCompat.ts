@@ -143,10 +143,13 @@ const SERVICE_LEGACY_MAP: Record<string, Record<string, string>> = {
   Forwarding: {
     forwarder: 'agent',
   },
-  // Trucking: old "emptyReturn" stored the FCL empty-return date/text → maps to the FCL field.
-  // "date_empty_return" is a separate field driven by status = Empty Return.
+  // Trucking: old "emptyReturn" stored the FCL empty-return date/text. The schema now
+  // splits that field into empty_return_location (warehouse profile) + empty_return_date.
+  // Legacy values map to the date side. Plain `empty_return` (string/date) is aliased the same way.
+  // "date_empty_return" remains a separate field driven by status = Empty Return.
   Trucking: {
-    emptyReturn: 'empty_return',
+    emptyReturn:    'empty_return_date',
+    empty_return:   'empty_return_date',
   },
   // Brokerage: "pod" shorthand → canonical "pod_aod"
   Brokerage: {
