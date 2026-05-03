@@ -308,7 +308,7 @@ export function FinancialDashboard({
         return days > bestDays ? inv : best;
       }, null);
       const oldestDays = oldest ? getAgingDays(oldest) : 0;
-      const oldestNumber = oldest?.invoice_number || oldest?.id || "Unknown";
+      const oldestNumber = oldest?.invoice_number || "Unknown";
       const oldestCustomer = (oldest?.customer_name || oldest?.customerName || "").trim() || "Unknown";
 
       items.push({
@@ -333,16 +333,17 @@ export function FinancialDashboard({
     );
     if (unbilledItems.length > 0) {
       // Find largest unbilled booking for detail line
-      const bookingMap = new Map<string, { id: string; customer: string; amount: number }>();
+      const bookingMap = new Map<string, { label: string; customer: string; amount: number }>();
       for (const b of unbilledItems) {
         const bid = b.booking_id || b.bookingId || "unknown";
+        const label = b.booking_number || b.bookingNumber || "—";
         const existing = bookingMap.get(bid);
         const amt = Number(b.amount) || 0;
         const customer = (b.customer_name || b.customerName || "").trim() || "Unknown";
         if (existing) {
           existing.amount += amt;
         } else {
-          bookingMap.set(bid, { id: bid, customer, amount: amt });
+          bookingMap.set(bid, { label, customer, amount: amt });
         }
       }
       const largest = Array.from(bookingMap.values()).sort((a, b) => b.amount - a.amount)[0];
@@ -352,7 +353,7 @@ export function FinancialDashboard({
         icon: FileWarning,
         label: `${unbilledItems.length} unbilled charge${unbilledItems.length > 1 ? "s" : ""} — potential revenue leakage`,
         detail: fmt(unbilledTotal),
-        detailLine: largest ? `Largest: ${largest.id} — ${fmt(largest.amount)} — ${largest.customer}` : undefined,
+        detailLine: largest ? `Largest: ${largest.label} — ${fmt(largest.amount)} — ${largest.customer}` : undefined,
         actionLabel: "Create Invoice",
         onAction: () => onNavigateTab("billings"),
         dismissKey: "unbilled-charges",
@@ -462,7 +463,7 @@ export function FinancialDashboard({
         onUnbilledClick={() => onNavigateTab("billings")}
         onRecordPayment={() => onNavigateTab("collections")}
         onSendReminder={(inv: any) => {
-          const invNumber = inv.invoice_number || inv.id || "Invoice";
+          const invNumber = inv.invoice_number || "Invoice";
           const customer = (inv.customer_name || inv.customerName || "").trim() || "Customer";
           const balance = calculateInvoiceBalance(inv, collections).balance;
           const dueDate = inv.due_date ? new Date(inv.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "N/A";

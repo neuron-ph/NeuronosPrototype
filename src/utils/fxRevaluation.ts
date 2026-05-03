@@ -170,7 +170,6 @@ export function buildRevaluationJournalEntry(params: BuildRevaluationJEParams) {
 
   const main = {
     id: entryId,
-    entry_number: entryId,
     entry_date: `${summary.asOfDate}T23:59:00Z`,
     description: `Period-end FX revaluation @ ${summary.asOfDate}`,
     reference: summary.idempotencyKey,
@@ -192,7 +191,6 @@ export function buildRevaluationJournalEntry(params: BuildRevaluationJEParams) {
 
   const reverse = {
     id: reversalEntryId,
-    entry_number: reversalEntryId,
     entry_date: `${summary.reversalDate}T00:00:01Z`,
     description: `Reversal of FX revaluation ${summary.asOfDate}`,
     reference: `${summary.idempotencyKey}_reversal`,

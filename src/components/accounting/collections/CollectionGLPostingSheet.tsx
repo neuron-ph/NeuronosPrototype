@@ -498,7 +498,6 @@ export function CollectionGLPostingSheet({
       // 1. Create PHP-balanced journal entry with FX metadata.
       const { error: jeError } = await supabase.from("journal_entries").insert({
         id: entryId,
-        entry_number: entryId,
         entry_date: now,
         collection_id: collectionId,
         description,

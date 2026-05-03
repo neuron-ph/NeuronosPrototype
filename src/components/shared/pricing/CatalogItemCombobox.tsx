@@ -13,8 +13,18 @@ export interface CatalogItem {
   id: string;
   name: string;
   category_id: string | null;
+  /** Master currency for this item (e.g. "USD" for ocean freight billed by carrier in USD). */
+  currency?: string | null;
+  /** Master default unit price in `currency`. */
+  default_price?: number | null;
   created_at?: string;
   updated_at?: string;
+}
+
+/** Metadata emitted alongside the description when a catalog item is selected. */
+export interface CatalogSelectionMeta {
+  currency?: string | null;
+  default_price?: number | null;
 }
 
 export interface CatalogCategory {
@@ -32,7 +42,7 @@ interface CatalogItemComboboxProps {
   serviceType?: string;                 // kept for future smart-sort when we link catalog → service
   side?: "revenue" | "expense" | "both"; // filter items by category side
   categoryId?: string;                  // when set, shows only items in this catalog category + assigns on quick-create
-  onChange: (description: string, catalogItemId?: string) => void;
+  onChange: (description: string, catalogItemId?: string, meta?: CatalogSelectionMeta) => void;
   disabled?: boolean;
   placeholder?: string;
 }
@@ -114,7 +124,7 @@ async function fetchCatalogItems(forceRefresh = false): Promise<CatalogItem[]> {
 async function doFetchCatalogItems(): Promise<CatalogItem[]> {
   try {
     const [itemsRes, catsRes] = await Promise.all([
-      supabase.from('catalog_items').select('id, name, category_id, created_at, updated_at').order('name'),
+      supabase.from('catalog_items').select('id, name, category_id, currency, default_price, created_at, updated_at').order('name'),
       supabase.from('catalog_categories').select('id, side'),
     ]);
 
@@ -273,7 +283,10 @@ export function CatalogItemCombobox({
   // Handle selecting an existing item
   const handleSelect = (item: CatalogItem) => {
     setSearchText(item.name);
-    onChange(item.name, item.id);
+    onChange(item.name, item.id, {
+      currency: item.currency ?? null,
+      default_price: item.default_price ?? null,
+    });
     setIsOpen(false);
   };
 
@@ -305,7 +318,7 @@ export function CatalogItemCombobox({
         supabase
           .from('catalog_items')
           .insert({ id: `ci-${Date.now()}`, name, ...(categoryId ? { category_id: categoryId } : {}) })
-          .select('id, name, category_id, created_at, updated_at')
+          .select('id, name, category_id, currency, default_price, created_at, updated_at')
           .single(),
         new Promise<{ data: null; error: { message: string } }>((resolve) =>
           setTimeout(() => resolve({ data: null, error: { message: 'Request timed out' } }), 10_000)
@@ -346,7 +359,7 @@ export function CatalogItemCombobox({
   const handleInputChange = (text: string) => {
     setSearchText(text);
     if (!isOpen) setIsOpen(true);
-    onChange(text, undefined);
+    onChange(text, undefined, undefined);
   };
 
   const filteredItems = getFilteredItems();

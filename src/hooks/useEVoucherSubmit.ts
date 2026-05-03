@@ -170,7 +170,7 @@ export function useEVoucherSubmit(
 
     return {
       id: createId("evoucher"),
-      evoucher_number: `EV-${Date.now()}`,
+      // evoucher_number filled by DB trigger (set_evoucher_number)
       transaction_type: getTransactionType(data),
       source_module: getSourceModule(),
       booking_id: data.bookingId || null,

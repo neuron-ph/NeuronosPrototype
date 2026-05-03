@@ -6,6 +6,7 @@ import { CategoryPresetDropdown } from "./CategoryPresetDropdown";
 import { PhilippinePeso } from "../../icons/PhilippinePeso";
 import { PricingTableHeader } from "../../shared/pricing/PricingTableHeader";
 import { UniversalPricingRow, PricingItemData } from "../../shared/pricing/UniversalPricingRow";
+import { MixedCurrencySubtotal } from "../../shared/pricing/MixedCurrencySubtotal";
 import { NeuronModal } from "../../ui/NeuronModal";
 import {
   calculateSellingItemFromAmountAdded,
@@ -366,10 +367,13 @@ export function SellingPriceSection({
                           alignItems: "center"
                         }}>
                           <div style={{ gridColumn: "1 / -2", textAlign: "right", paddingRight: "16px" }}>
-                            Subtotal (Selling Price - PHP)
+                            Subtotal (Selling Price)
                           </div>
                           <div style={{ textAlign: "right" }}>
-                            ₱ {category.subtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            <MixedCurrencySubtotal
+                              items={category.line_items as any}
+                              phpTotal={category.subtotal}
+                            />
                           </div>
                         </div>
                       </div>

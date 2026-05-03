@@ -141,7 +141,7 @@ function ItemsTab() {
   const [renamingCatId, setRenamingCatId] = useState<string | null>(null);
   const [renamingValue, setRenamingValue] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
-  const [addForm, setAddForm] = useState<{ name: string; category_id: string | null }>({ name: "", category_id: null });
+  const [addForm, setAddForm] = useState<{ name: string; category_id: string | null; currency: string; default_price: number }>({ name: "", category_id: null, currency: "PHP", default_price: 0 });
   const [showAddCategoryForm, setShowAddCategoryForm] = useState(false);
   const [addCategoryName, setAddCategoryName] = useState("");
 
@@ -176,13 +176,15 @@ function ItemsTab() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("catalog_items")
-        .select("id, name, category_id, created_at, updated_at, catalog_categories(name)")
+        .select("id, name, category_id, currency, default_price, created_at, updated_at, catalog_categories(name)")
         .order("name");
       if (error) throw error;
       return (data ?? []).map((i: any) => ({
         id: i.id,
         name: i.name,
         category_id: i.category_id,
+        currency: i.currency ?? "PHP",
+        default_price: i.default_price ?? 0,
         category_name: i.catalog_categories?.name ?? null,
         created_at: i.created_at,
         updated_at: i.updated_at,
@@ -303,6 +305,8 @@ function ItemsTab() {
     const { error } = await supabase.from("catalog_items").update({
       name: updates.name,
       category_id: updates.category_id ?? null,
+      currency: updates.currency ?? "PHP",
+      default_price: Number(updates.default_price) || 0,
     }).eq("id", id);
     if (!error) {
       toast.success("Item updated");
@@ -336,11 +340,13 @@ function ItemsTab() {
       id: `ci-${Date.now()}`,
       name: addForm.name.trim(),
       category_id: addForm.category_id || null,
+      currency: addForm.currency || "PHP",
+      default_price: Number(addForm.default_price) || 0,
     });
     if (!error) {
       toast.success(`Created "${addForm.name}"`);
       setShowAddForm(false);
-      setAddForm({ name: "", category_id: null });
+      setAddForm({ name: "", category_id: null, currency: "PHP", default_price: 0 });
       invalidateCatalog();
     } else {
       toast.error(error.message || "Error creating item");
@@ -556,6 +562,29 @@ function ItemsTab() {
                 onChange={val => setAddForm({ ...addForm, category_id: val || null })}
                 placeholder="— None —"
                 size="sm"
+              />
+            </div>
+            <div style={{ flex: "0 0 90px" }}>
+              <label style={labelStyle}>Currency</label>
+              <CustomDropdown
+                value={addForm.currency}
+                options={[
+                  { value: "PHP", label: "PHP" },
+                  { value: "USD", label: "USD" },
+                ]}
+                onChange={val => setAddForm({ ...addForm, currency: val || "PHP" })}
+                size="sm"
+              />
+            </div>
+            <div style={{ flex: "0 0 120px" }}>
+              <label style={labelStyle}>Default Price</label>
+              <input
+                type="number"
+                step="0.01"
+                value={addForm.default_price || ""}
+                onChange={e => setAddForm({ ...addForm, default_price: Number(e.target.value) || 0 })}
+                placeholder="0.00"
+                style={{ ...inputStyle, textAlign: "right" }}
               />
             </div>
             <div style={{ display: "flex", gap: "6px" }}>
@@ -860,6 +889,30 @@ function ItemViewRow({
         {item.name}
       </span>
 
+      {/* Currency badge — only when non-PHP, signals USD-native items at a glance */}
+      {item.currency && item.currency !== "PHP" && (
+        <span style={{
+          fontSize: "10px", fontWeight: 600, letterSpacing: "0.04em",
+          padding: "2px 6px", borderRadius: "4px",
+          color: "var(--neuron-semantic-info)",
+          backgroundColor: "var(--theme-bg-surface-tint)",
+          marginRight: "8px",
+        }}>
+          {item.currency}
+        </span>
+      )}
+
+      {/* Default price (when set) */}
+      {item.default_price ? (
+        <span style={{
+          fontSize: "12px", color: "var(--theme-text-muted)",
+          width: "90px", textAlign: "right", flexShrink: 0,
+          fontVariantNumeric: "tabular-nums", marginRight: "8px",
+        }}>
+          {(item.currency || "PHP")} {Number(item.default_price).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </span>
+      ) : null}
+
       {/* Usage count */}
       <span style={{
         fontSize: "12px", fontWeight: usage > 0 ? 600 : 400,
@@ -922,6 +975,27 @@ function ItemEditRow({
           onChange={val => setEditForm({ ...editForm, category_id: val || null } as any)}
           placeholder="— No category —"
           size="sm"
+        />
+      </div>
+      <div style={{ flex: "0 0 80px" }}>
+        <CustomDropdown
+          value={editForm.currency || "PHP"}
+          options={[
+            { value: "PHP", label: "PHP" },
+            { value: "USD", label: "USD" },
+          ]}
+          onChange={val => setEditForm({ ...editForm, currency: val || "PHP" })}
+          size="sm"
+        />
+      </div>
+      <div style={{ flex: "0 0 100px" }}>
+        <input
+          type="number"
+          step="0.01"
+          value={editForm.default_price ?? ""}
+          onChange={e => setEditForm({ ...editForm, default_price: Number(e.target.value) || 0 })}
+          placeholder="0.00"
+          style={{ ...inputStyle, textAlign: "right" }}
         />
       </div>
       <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>

@@ -139,7 +139,7 @@ export async function createInvoiceReversalDraft(originalInvoice: any, actor?: A
     invoice_date: now.split("T")[0],
     due_date: now.split("T")[0],
     notes: [
-      `Reversal draft for ${originalInvoice.invoice_number || originalInvoice.id}`,
+      `Reversal draft for ${originalInvoice.invoice_number || "(unnumbered)"}`,
       originalInvoice.notes || "",
     ].filter(Boolean).join("\n\n"),
     user_id: originalInvoice.user_id || null,

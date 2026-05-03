@@ -205,7 +205,7 @@ export function ProjectFinancialsTab({ project, currentUser }: ProjectFinancials
                             {item.purpose || item.description || item.invoice_number || "Financial Entry"}
                           </div>
                           <div style={{ fontSize: "12px", color: "var(--theme-text-muted)" }}>
-                            {item.voucher_number || item.invoice_number || item.id} •{" "}
+                            {item.voucher_number || item.invoice_number || "—"} •{" "}
                             {new Date(item.request_date || item.invoice_date || item.created_at).toLocaleDateString()}
                           </div>
                         </td>

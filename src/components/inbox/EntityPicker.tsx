@@ -99,7 +99,7 @@ export function EntityPicker({ onSelect, onClose }: EntityPickerProps) {
     queryKey: ["entity_picker", "booking", q],
     queryFn: async () => {
       const { data } = await supabase.from("bookings").select("id, tracking_number, customer_name").ilike("tracking_number", `%${q}%`).limit(20);
-      return (data || []).map((r) => ({ id: r.id, label: r.tracking_number || r.id, sub: r.customer_name }));
+      return (data || []).map((r) => ({ id: r.id, label: r.tracking_number || "—", sub: r.customer_name }));
     },
     enabled: activeType === "booking",
     staleTime: 30_000,
@@ -109,7 +109,7 @@ export function EntityPicker({ onSelect, onClose }: EntityPickerProps) {
     queryKey: ["entity_picker", "project", q],
     queryFn: async () => {
       const { data } = await supabase.from("projects").select("id, project_number, customer_name").ilike("project_number", `%${q}%`).limit(20);
-      return (data || []).map((r) => ({ id: r.id, label: r.project_number || r.id, sub: r.customer_name }));
+      return (data || []).map((r) => ({ id: r.id, label: r.project_number || "—", sub: r.customer_name }));
     },
     enabled: activeType === "project",
     staleTime: 30_000,
@@ -119,7 +119,7 @@ export function EntityPicker({ onSelect, onClose }: EntityPickerProps) {
     queryKey: ["entity_picker", "invoice", q],
     queryFn: async () => {
       const { data } = await supabase.from("billings").select("id, invoice_number, customer_name").not("invoice_number", "is", null).ilike("invoice_number", `%${q}%`).limit(20);
-      return (data || []).map((r) => ({ id: r.id, label: r.invoice_number || r.id, sub: r.customer_name }));
+      return (data || []).map((r) => ({ id: r.id, label: r.invoice_number || "—", sub: r.customer_name }));
     },
     enabled: activeType === "invoice",
     staleTime: 30_000,
@@ -129,7 +129,7 @@ export function EntityPicker({ onSelect, onClose }: EntityPickerProps) {
     queryKey: ["entity_picker", "collection", q],
     queryFn: async () => {
       const { data } = await supabase.from("collections").select("id, reference_number, customer_name").ilike("reference_number", `%${q}%`).limit(20);
-      return (data || []).map((r) => ({ id: r.id, label: r.reference_number || r.id, sub: r.customer_name }));
+      return (data || []).map((r) => ({ id: r.id, label: r.reference_number || "—", sub: r.customer_name }));
     },
     enabled: activeType === "collection",
     staleTime: 30_000,
@@ -139,7 +139,7 @@ export function EntityPicker({ onSelect, onClose }: EntityPickerProps) {
     queryKey: ["entity_picker", "expense", q],
     queryFn: async () => {
       const { data } = await supabase.from("expenses").select("id, description, amount").ilike("description", `%${q}%`).limit(20);
-      return (data || []).map((r) => ({ id: r.id, label: r.description || r.id, sub: r.amount ? `PHP ${r.amount}` : undefined }));
+      return (data || []).map((r) => ({ id: r.id, label: r.description || "—", sub: r.amount ? `PHP ${r.amount}` : undefined }));
     },
     enabled: activeType === "expense",
     staleTime: 30_000,

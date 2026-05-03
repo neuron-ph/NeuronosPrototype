@@ -6,6 +6,8 @@ import { CategoryHeader } from "./CategoryHeader";
 import { CategoryPresetDropdown } from "./CategoryPresetDropdown";
 import { CustomCheckbox } from "../../bd/CustomCheckbox";
 import { NaturalNumberInput } from "../../shared/pricing/NaturalNumberInput";
+import { DualCurrencyAmount } from "../../shared/pricing/DualCurrencyAmount";
+import { MixedCurrencySubtotal } from "../../shared/pricing/MixedCurrencySubtotal";
 
 interface BuyingPriceSectionProps {
   categories: BuyingPriceCategory[];
@@ -475,7 +477,10 @@ export function BuyingPriceSectionV2({
                     fontWeight: 600,
                     color: "var(--neuron-brand-green)"
                   }}>
-                    ₱ {vendorGroup.subtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    <MixedCurrencySubtotal
+                      items={vendorGroup.categories.flatMap((c) => c.line_items) as any}
+                      phpTotal={vendorGroup.subtotal}
+                    />
                   </div>
                 </button>
 
@@ -555,7 +560,10 @@ export function BuyingPriceSectionV2({
                               fontWeight: 600,
                               color: "var(--neuron-brand-green)"
                             }}>
-                              ₱ {categoryGroup.subtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              <MixedCurrencySubtotal
+                                items={categoryGroup.line_items as any}
+                                phpTotal={categoryGroup.subtotal}
+                              />
                             </div>
                           </button>
 
@@ -764,10 +772,10 @@ export function BuyingPriceSectionV2({
                                           />
                                         </div>
                                         
-                                        {/* Calculated Amount */}
-                                        <div style={{ 
-                                          textAlign: "right", 
-                                          fontWeight: 700, 
+                                        {/* Calculated Amount — Pattern A: original primary, PHP equivalent secondary */}
+                                        <div style={{
+                                          textAlign: "right",
+                                          fontWeight: 700,
                                           color: "var(--neuron-brand-green)",
                                           fontSize: "13px",
                                           display: "flex",
@@ -775,22 +783,13 @@ export function BuyingPriceSectionV2({
                                           alignItems: "flex-end",
                                           justifyContent: "center"
                                         }}>
-                                          {/* Primary: PHP Total */}
-                                          <span>
-                                            ₱ {item.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                          </span>
-                                          
-                                          {/* Secondary: Original Currency (if not PHP/Forex 1) */}
-                                          {(item.currency !== 'PHP' && item.forex_rate !== 1) && (
-                                            <span style={{ 
-                                              fontSize: "11px", 
-                                              color: "var(--theme-text-muted)", 
-                                              fontWeight: 500,
-                                              marginTop: "2px"
-                                            }}>
-                                              ({item.currency} {(item.price * item.quantity).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
-                                            </span>
-                                          )}
+                                          <DualCurrencyAmount
+                                            originalAmount={(item.price || 0) * (item.quantity || 1)}
+                                            currency={item.currency}
+                                            forexRate={item.forex_rate || 1}
+                                            baseAmount={item.amount}
+                                            rateDate={(item as any).forex_rate_date ?? null}
+                                          />
                                         </div>
                                       </div>
 

@@ -59,7 +59,7 @@ export function ProjectExpensesTab({ project, currentUser, title, subtitle }: Pr
           bookingId: targetBookingId,
           projectNumber: ev.project_number || project.project_number,
           bookingType: bookingType,
-          expenseName: ev.voucher_number || ev.id,
+          expenseName: ev.voucher_number || "—",
           expenseCategory: ev.expense_category || ev.gl_category || "Uncategorized",
           amount: ev.total_amount || ev.amount || 0,
           currency: ev.currency || "PHP",

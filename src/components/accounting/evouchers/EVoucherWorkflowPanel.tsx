@@ -298,7 +298,6 @@ export function EVoucherWorkflowPanel({
           const reversalId = `JE-REV-${Date.now()}`;
           await supabase.from("journal_entries").insert({
             id: reversalId,
-            entry_number: reversalId,
             entry_date: new Date().toISOString(),
             evoucher_id: evoucherId,
             description: `REVERSAL of ${ev.closing_journal_entry_id} — Correction Unlock by ${currentUser?.name}`,

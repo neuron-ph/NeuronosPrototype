@@ -942,11 +942,11 @@ function DeptQueuePanel({
                   <ItemRow
                     key={q.id}
                     dotColor="green"
-                    label={q.quotation_number ?? q.id.slice(0, 8)}
+                    label={q.quotation_number ?? "—"}
                     sub={`${q.customer_name} · ${q.status}`}
                     meta={timeAgo(q.created_at)}
                     onClick={() => {
-                      if (user?.id) trackRecent({ label: q.quotation_number ?? q.id.slice(0, 8), sub: q.customer_name, path: "/bd/inquiries", type: "quotation", time: new Date().toISOString() }, user.id);
+                      if (user?.id) trackRecent({ label: q.quotation_number ?? "—", sub: q.customer_name, path: "/bd/inquiries", type: "quotation", time: new Date().toISOString() }, user.id);
                       onNavigate("/bd/inquiries");
                     }}
                   />
@@ -959,11 +959,11 @@ function DeptQueuePanel({
                   <ItemRow
                     key={q.id}
                     dotColor="amber"
-                    label={q.quotation_number ?? q.id.slice(0, 8)}
+                    label={q.quotation_number ?? "—"}
                     sub={q.customer_name}
                     meta={timeAgo(q.updated_at ?? q.created_at)}
                     onClick={() => {
-                      if (user?.id) trackRecent({ label: q.quotation_number ?? q.id.slice(0, 8), sub: q.customer_name, path: "/bd/inquiries", type: "quotation", time: new Date().toISOString() }, user.id);
+                      if (user?.id) trackRecent({ label: q.quotation_number ?? "—", sub: q.customer_name, path: "/bd/inquiries", type: "quotation", time: new Date().toISOString() }, user.id);
                       onNavigate("/bd/inquiries");
                     }}
                   />
@@ -978,11 +978,11 @@ function DeptQueuePanel({
                   <ItemRow
                     key={q.id}
                     dotColor="green"
-                    label={q.quotation_number ?? q.id.slice(0, 8)}
+                    label={q.quotation_number ?? "—"}
                     sub={`${q.customer_name} · ${q.status}`}
                     meta={timeAgo(q.created_at)}
                     onClick={() => {
-                      if (user?.id) trackRecent({ label: q.quotation_number ?? q.id.slice(0, 8), sub: q.customer_name, path: "/pricing/quotations", type: "quotation", time: new Date().toISOString() }, user.id);
+                      if (user?.id) trackRecent({ label: q.quotation_number ?? "—", sub: q.customer_name, path: "/pricing/quotations", type: "quotation", time: new Date().toISOString() }, user.id);
                       onNavigate("/pricing/quotations");
                     }}
                   />
@@ -995,11 +995,11 @@ function DeptQueuePanel({
                   <ItemRow
                     key={q.id}
                     dotColor="blue"
-                    label={q.quotation_number ?? q.id.slice(0, 8)}
+                    label={q.quotation_number ?? "—"}
                     sub={`${q.customer_name} · ${q.status}`}
                     meta={timeAgo(q.updated_at ?? q.created_at)}
                     onClick={() => {
-                      if (user?.id) trackRecent({ label: q.quotation_number ?? q.id.slice(0, 8), sub: q.customer_name, path: "/pricing/quotations", type: "quotation", time: new Date().toISOString() }, user.id);
+                      if (user?.id) trackRecent({ label: q.quotation_number ?? "—", sub: q.customer_name, path: "/pricing/quotations", type: "quotation", time: new Date().toISOString() }, user.id);
                       onNavigate("/pricing/quotations");
                     }}
                   />

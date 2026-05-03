@@ -89,6 +89,32 @@ export function JournalEntryDetailPanel({
   const navigate = useNavigate();
   const { user } = useUser();
   const src = getSource(entry);
+  const [sourceRefLabel, setSourceRefLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSourceRefLabel(null);
+    if (!src.id || src.type === "manual") return;
+    const lookups: Record<string, { table: string; column: string }> = {
+      evoucher: { table: "evouchers", column: "evoucher_number" },
+      invoice: { table: "invoices", column: "invoice_number" },
+      collection: { table: "collections", column: "collection_number" },
+      booking: { table: "bookings", column: "booking_number" },
+    };
+    const cfg = lookups[src.type];
+    if (!cfg) return;
+    supabase
+      .from(cfg.table)
+      .select(cfg.column)
+      .eq("id", src.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return;
+        const val = (data as any)?.[cfg.column];
+        if (val) setSourceRefLabel(val);
+      });
+    return () => { cancelled = true; };
+  }, [src.id, src.type]);
   const isBalanced = Math.abs(entry.total_debit - entry.total_credit) < 0.01;
   const lines = entry.lines ?? [];
   const hasLines = lines.length > 0;
@@ -260,7 +286,7 @@ export function JournalEntryDetailPanel({
                 cursor: "pointer",
               }}
             >
-              {src.label} · {src.ref}
+              {src.label} · {sourceRefLabel || (src.ref && !/^(evoucher|invoice|collection|booking)-\d{10,}/i.test(String(src.ref)) ? src.ref : "—")}
               <ExternalLink size={12} />
             </button>
           ) : (

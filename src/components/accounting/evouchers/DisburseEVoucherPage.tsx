@@ -400,7 +400,6 @@ export function DisburseEVoucherPage() {
       // 1. Create disbursement journal entry — PHP-balanced, FX preserved.
       const { error: jeError } = await supabase.from("journal_entries").insert({
         id: entryId,
-        entry_number: entryId,
         entry_date: disbDate,
         evoucher_id: evoucher.id,
         description: `Disbursement — ${evoucherNumber} via ${paymentMethod}${reference ? ` [${reference}]` : ""}`,

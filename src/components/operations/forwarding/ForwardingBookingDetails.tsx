@@ -251,7 +251,7 @@ export function ForwardingBookingDetails({
             </p>
           )}
           <p style={{ fontSize: "13px", color: "var(--neuron-ink-muted)", margin: 0 }}>
-            {(booking as any).booking_number || booking.bookingId}
+            {(booking as any).booking_number || "—"}
           </p>
         </div>
 

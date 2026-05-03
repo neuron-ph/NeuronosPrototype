@@ -697,7 +697,7 @@ export async function downloadQuotationPDF(
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `Quotation-${quotation.quote_number || quotation.id}.pdf`;
+  a.download = `Quotation-${quotation.quote_number || quotation.quotation_number || "untitled"}.pdf`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

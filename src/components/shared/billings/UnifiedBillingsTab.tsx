@@ -724,6 +724,10 @@ export function UnifiedBillingsTab({
       quantity: item.quantity || 1,
       currency: lineCurrency,
       exchange_rate: lineCurrency === "PHP" ? 1 : lineRate,
+      exchange_rate_date:
+        (item as any).exchange_rate_date ||
+        (item as any).forex_rate_date ||
+        new Date().toISOString().slice(0, 10),
       status: item.status || "unbilled",
       is_taxed: Boolean(item.is_taxed),
       source_quotation_item_id: item.source_quotation_item_id || null,

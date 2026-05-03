@@ -317,7 +317,7 @@ export function ManualJournalEntryPanel({
     try {
       const entryId = `JE-MAN-${Date.now()}`;
       const { error } = await supabase.from("journal_entries").insert({
-        id: entryId, entry_number: entryId, entry_date: entryDate,
+        id: entryId, entry_date: entryDate,
         description: memo.trim() || null, lines: buildJsonbLines(),
         total_debit: totalDebits, total_credit: totalCredits,
         ...fxHeader(),
@@ -343,7 +343,7 @@ export function ManualJournalEntryPanel({
     try {
       const entryId = `JE-MAN-${Date.now()}`;
       const { error: jeError } = await supabase.from("journal_entries").insert({
-        id: entryId, entry_number: entryId, entry_date: entryDate,
+        id: entryId, entry_date: entryDate,
         description: memo.trim() || null, lines: buildJsonbLines(),
         total_debit: totalDebits, total_credit: totalCredits,
         ...fxHeader(),

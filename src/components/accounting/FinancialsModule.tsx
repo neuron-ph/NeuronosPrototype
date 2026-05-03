@@ -266,13 +266,18 @@ export function FinancialsModule() {
         { data: collectionRows, error: e3 },
         { data: expenseRows, error: e4 },
       ] = await Promise.all([
-        applyScope(supabase.from('billing_line_items').select('*'), dataScope),
+        applyScope(supabase.from('billing_line_items').select('*, bookings:booking_id(booking_number)'), dataScope),
         applyScope(supabase.from('invoices').select('*'), dataScope),
         applyScope(supabase.from('collections').select('*'), dataScope),
         applyScope(supabase.from('evouchers').select('*'), dataScope),
       ]);
 
-      const billingItems = (!e1 && billingRows) ? billingRows : [];
+      const billingItems = (!e1 && billingRows)
+        ? billingRows.map((b: any) => ({
+            ...b,
+            booking_number: b.bookings?.booking_number ?? b.booking_number ?? null,
+          }))
+        : [];
 
       const invoices = (!e2 && invoiceRows)
         ? invoiceRows.filter((b: any) => {
@@ -828,7 +833,7 @@ export function FinancialsModule() {
       width: "110px",
       cell: (inv: any) => (
         <span className="font-medium" style={{ color: "var(--neuron-brand-green)" }}>
-          {inv.invoice_number || inv.id?.slice(0, 8) || "—"}
+          {inv.invoice_number || "—"}
         </span>
       ),
     },

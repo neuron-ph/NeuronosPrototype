@@ -749,7 +749,7 @@ export function CustomerLedgerDetail({ customer, onClose, contactCount }: Custom
               expenses={expenses.map(exp => ({
                 expenseId: exp.id,
                 id: exp.id,
-                expenseName: exp.evoucher_number || exp.id,
+                expenseName: exp.evoucher_number || "—",
                 expenseCategory: exp.category || "General",
                 amount: Number(exp.amount || 0),
                 currency: exp.currency || "PHP",

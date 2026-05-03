@@ -137,7 +137,7 @@ export function LiquidationForm({
             .from("evouchers")
             .insert({
               id: reimbursementId,
-              evoucher_number: reimbursementId,
+              // evoucher_number filled by DB trigger
               transaction_type: "reimbursement",
               source_module: "operations",
               status: "draft",
