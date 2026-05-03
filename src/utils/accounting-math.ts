@@ -1,68 +1,100 @@
 import { Invoice, Collection } from "../types/accounting";
 import { isCollectionAppliedToInvoice } from "./collectionResolution";
+import { pickReportingAmount, roundMoney } from "./accountingCurrency";
 
 export interface InvoiceFinancialState {
+  // Legacy fields — denominated in the invoice's own currency
   totalAmount: number;
   paidAmount: number;
   balance: number;
   status: 'paid' | 'partial' | 'open' | 'overdue';
+  // Multi-currency fields — denominated in PHP base
+  totalAmountBase: number;
+  paidAmountBase: number;
+  balanceBase: number;
+  invoiceCurrency: string;
+}
+
+function invoiceRate(invoice: Invoice): number {
+  const r = Number((invoice as any).exchange_rate);
+  return Number.isFinite(r) && r > 0 ? r : 1;
+}
+
+function collectionRate(collection: Collection): number {
+  const r = Number((collection as any).exchange_rate);
+  return Number.isFinite(r) && r > 0 ? r : 1;
 }
 
 /**
  * Calculates the real-time financial state of an invoice based on its linked collections.
- * This ensures the UI reflects payment status immediately without waiting for DB updates.
+ *
+ * Returns both invoice-currency totals (legacy `balance`/`paidAmount`) and PHP-base
+ * totals (`*Base`). Status is driven by `balanceBase` so cross-currency settlements
+ * close the invoice correctly even when payment currency differs from invoice currency.
  */
 export function calculateInvoiceBalance(
-  invoice: Invoice, 
+  invoice: Invoice,
   allCollections: Collection[]
 ): InvoiceFinancialState {
+  const invoiceCurrency = ((invoice as any).original_currency || (invoice as any).currency || "PHP") as string;
+  const invRate = invoiceRate(invoice);
   const totalAmount = invoice.total_amount || invoice.amount || 0;
+  const totalAmountBase = pickReportingAmount(invoice as any) || roundMoney(totalAmount * invRate);
 
-  // 1. Calculate total paid from linked collections
-  const paidAmount = allCollections.reduce((sum, collection) => {
-    if (!isCollectionAppliedToInvoice(collection)) return sum;
+  // Walk collections once, accumulating in BOTH invoice currency (legacy) and PHP base.
+  let paidAmount = 0;
+  let paidAmountBase = 0;
 
-    // Find if this collection pays off this specific invoice
-    const link = collection.linked_billings?.find(
-      (billing) => billing.id === invoice.id
-    );
-
-    if (link) {
-      return sum + (link.amount || 0);
-    }
+  allCollections.forEach((collection) => {
+    if (!isCollectionAppliedToInvoice(collection)) return;
 
     const directInvoiceId =
       (collection as any).invoice_id ||
       (collection as any).invoiceId ||
       null;
+    const link = collection.linked_billings?.find((billing) => billing.id === invoice.id);
 
-    if (directInvoiceId === invoice.id) {
-      return sum + (collection.amount || 0);
+    if (link) {
+      // linked_billings.amount is denominated in invoice currency (per DB convention).
+      const amtInvoiceCcy = Number(link.amount) || 0;
+      paidAmount += amtInvoiceCcy;
+      paidAmountBase += roundMoney(amtInvoiceCcy * invRate);
+      return;
     }
 
-    return sum;
-  }, 0);
+    if (directInvoiceId === invoice.id) {
+      // Direct collection: collection.amount is in collection's own currency.
+      // Translate to invoice currency for the legacy field; use base_amount for PHP.
+      const collCcy = ((collection as any).original_currency || (collection as any).currency || "PHP") as string;
+      const collAmt = Number(collection.amount) || 0;
+      const collBase = pickReportingAmount(collection as any) || roundMoney(collAmt * collectionRate(collection));
 
-  // 2. Calculate Balance
-  // Round to 2 decimals to avoid floating point errors
-  const balance = Math.max(0, Math.round((totalAmount - paidAmount) * 100) / 100);
+      if (collCcy === invoiceCurrency) {
+        paidAmount += collAmt;
+      } else {
+        // Convert PHP base back to invoice currency for the legacy field.
+        paidAmount += invRate > 0 ? roundMoney(collBase / invRate) : 0;
+      }
+      paidAmountBase += collBase;
+    }
+  });
 
-  // 3. Determine Status
+  const balance = Math.max(0, roundMoney(totalAmount - paidAmount));
+  const balanceBase = Math.max(0, roundMoney(totalAmountBase - paidAmountBase));
+
+  // Status is driven by PHP base so cross-currency settlements close cleanly.
   let status: 'paid' | 'partial' | 'open' | 'overdue' = 'open';
-  
-  // Logic for Overdue
   const isOverdue = (() => {
-    if (balance <= 0) return false;
+    if (balanceBase <= 0) return false;
     const dueDate = new Date((invoice.due_date || invoice.created_at) as string);
     if (!invoice.due_date) dueDate.setDate(dueDate.getDate() + 30);
-    // Set to end of day for fair comparison
     dueDate.setHours(23, 59, 59, 999);
     return new Date() > dueDate;
   })();
 
-  if (balance <= 0.01) { // Tolerance for tiny rounding errors
+  if (balanceBase <= 0.01) {
     status = 'paid';
-  } else if (paidAmount > 0) {
+  } else if (paidAmountBase > 0) {
     status = 'partial';
   } else if (isOverdue) {
     status = 'overdue';
@@ -74,7 +106,11 @@ export function calculateInvoiceBalance(
     totalAmount,
     paidAmount,
     balance,
-    status
+    status,
+    totalAmountBase,
+    paidAmountBase,
+    balanceBase,
+    invoiceCurrency,
   };
 }
 

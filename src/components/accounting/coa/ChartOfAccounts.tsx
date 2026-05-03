@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { usePermission } from "../../../context/PermissionProvider";
-import { Plus, Search, Filter, Download, ChevronDown, ChevronRight, Folder, FileText, MoreHorizontal, RefreshCw, BookOpen } from "lucide-react";
+import { Plus, Search, Filter, Download, ChevronDown, ChevronRight, Folder, FileText, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner@2.0.3";
-import { getAccounts, seedInitialAccounts, resetChartOfAccounts } from "../../../utils/accounting-api";
+import { getAccounts, seedInitialAccounts } from "../../../utils/accounting-api";
 import { Account } from "../../../types/accounting-core";
 import { AccountSidePanel } from "./AccountSidePanel";
 import { DataTable, ColumnDef } from "../../common/DataTable";
 
 import { AccountLedger } from "./AccountLedger";
-import { ManualJournalEntryPanel } from "./ManualJournalEntryPanel";
 
 // Extended type for flattened tree
 type FlatAccount = Account & { level: number };
@@ -49,7 +48,6 @@ export function ChartOfAccounts() {
   // Side Panel State
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
-  const [showManualJE, setShowManualJE] = useState(false);
 
   // Expanded folders state (for hierarchy)
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
@@ -171,22 +169,6 @@ export function ChartOfAccounts() {
     setIsPanelOpen(true);
   };
 
-  const handleResetCOA = async () => {
-    if (confirm("WARNING: This will delete ALL existing accounts and reset them to the standard Neuron Chart of Accounts. Are you sure?")) {
-      try {
-        setLoading(true);
-        await resetChartOfAccounts();
-        await loadAccounts();
-        toast.success("Chart of Accounts reset successfully");
-      } catch (error) {
-        console.error("Reset failed:", error);
-        toast.error("Failed to reset Chart of Accounts");
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
   const handleEditAccount = (account: Account) => {
     setSelectedAccount(account);
     setIsPanelOpen(true);
@@ -297,9 +279,16 @@ export function ChartOfAccounts() {
       cell: (item) => {
         const currency = item.currency || "PHP";
         return (
-          <span className="font-mono font-medium text-[var(--theme-text-primary)] text-[12px]">
-            {formatCurrency(item.balance || 0, currency)}
-          </span>
+          <div className="flex items-center justify-end gap-2">
+            {currency === "USD" && (
+              <span className="text-[9px] font-bold text-[var(--theme-text-muted)] bg-[var(--theme-bg-surface-subtle)] px-1.5 py-0.5 rounded uppercase tracking-wider">
+                USD
+              </span>
+            )}
+            <span className="font-mono font-medium text-[var(--theme-text-primary)] text-[12px]">
+              {formatCurrency(item.balance || 0, currency)}
+            </span>
+          </div>
         );
       }
     },
@@ -371,25 +360,9 @@ export function ChartOfAccounts() {
           </div>
           
           <div className="flex gap-3">
-             <button 
-                onClick={handleResetCOA}
-                className="h-10 px-4 bg-[var(--theme-bg-surface)] border border-[var(--theme-status-danger-border)] text-[var(--theme-status-danger-fg)] rounded-lg font-medium text-sm hover:bg-[var(--theme-status-danger-bg)] transition-colors flex items-center gap-2"
-                title="Reset to Standard COA"
-             >
-                <RefreshCw size={16} />
-                <span className="hidden sm:inline">Reset</span>
-             </button>
              <button className="h-10 px-4 bg-[var(--theme-bg-surface)] border border-[var(--theme-border-default)] text-[var(--theme-text-secondary)] rounded-lg font-medium text-sm hover:bg-[var(--theme-bg-surface-subtle)] transition-colors flex items-center gap-2">
                 <Download size={16} />
                 Export
-             </button>
-             <button
-               onClick={() => setShowManualJE(true)}
-               className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[13px] font-medium text-white"
-               style={{ backgroundColor: "var(--neuron-brand-green, #0F766E)" }}
-             >
-               <BookOpen size={16} />
-               Create Journal Entry
              </button>
              <button
                onClick={handleAddAccount}
@@ -542,16 +515,6 @@ export function ChartOfAccounts() {
         onClose={() => setIsPanelOpen(false)}
         onSave={loadAccounts}
         account={selectedAccount}
-      />
-
-      <ManualJournalEntryPanel
-        isOpen={showManualJE}
-        onClose={() => setShowManualJE(false)}
-        onCreated={() => {
-          setShowManualJE(false);
-          // refetch balances if the panel updated the ledger
-          loadAccounts();
-        }}
       />
     </div>
   );

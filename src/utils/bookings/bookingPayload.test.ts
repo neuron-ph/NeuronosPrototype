@@ -81,9 +81,9 @@ describe('normalizeDetails — service-specific mappings', () => {
     expect(result.forwarder).toBe('ABC Forwarders');
   });
 
-  it('maps Trucking emptyReturn → empty_return (FCL field, not status date)', () => {
+  it('maps Trucking emptyReturn → empty_return_date (FCL field, not status date)', () => {
     const result = normalizeDetails({ emptyReturn: '2026-06-01' }, 'Trucking');
-    expect(result.empty_return).toBe('2026-06-01');
+    expect(result.empty_return_date).toBe('2026-06-01');
     expect(result.date_empty_return).toBeUndefined();
   });
 
@@ -133,7 +133,7 @@ describe('mergeBookingRecord', () => {
       details: { emptyReturn: '2026-07-01' },
     };
     const merged = mergeBookingRecord(raw);
-    expect(merged.empty_return).toBe('2026-07-01');
+    expect(merged.empty_return_date).toBe('2026-07-01');
   });
 });
 

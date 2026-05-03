@@ -76,6 +76,7 @@ export interface QuotationLineItemNew {
   unit_type?: string;        // ✨ NEW: Phase 2 (Per BL, Per Set) - Explicit field
   rating_basis?: string;     // ✨ NEW: Phase 2 (W/M, CBM, KG)
   forex_rate: number;        // 1.0 (or actual conversion rate)
+  forex_rate_date?: string;  // ISO YYYY-MM-DD — date the forex_rate was locked (audit trail)
   is_taxed: boolean;         // true if VAT applies to this item
   taxed?: boolean;           // alias for is_taxed (used by some components)
   charge_currency?: string;  // display currency for this line item
@@ -326,6 +327,10 @@ export interface QuotationNew {
   created_at: string;            // Server-stamped ISO timestamp (set on creation)
   updated_at: string;
   notes?: string;
+
+  // JSONB overflow column on quotations. Stores profile_refs (linked profile metadata
+  // for service-specific lookups) and other overflow used by Pricing/BD save paths.
+  details?: Record<string, unknown>;
 }
 
 // Backward compatibility alias - Inquiry is now just a QuotationNew with status "Inquiry"
@@ -538,6 +543,8 @@ export interface ContractRateMatrix {
   columns: string[];                   // ["FCL", "LCL / AIR"] — configurable per service
   rows: ContractRateRow[];             // Flat array for engine compatibility
   categories?: ContractRateCategory[]; // UI grouping (optional — auto-migrated from rows if missing)
+  currency?: string;                   // "PHP" | "USD" — denomination of every rate in this matrix. Defaults to PHP for legacy rows.
+  exchange_rate?: number;              // Locked rate to PHP at matrix creation. 1 for PHP matrices; required positive for non-PHP.
 }
 
 /**

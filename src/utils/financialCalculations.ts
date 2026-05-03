@@ -12,6 +12,37 @@ const num = (value: unknown): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+/**
+ * Pull the PHP-base reporting amount off a row. Prefers `base_amount` (set by
+ * the multi-currency migration), falls back to raw `amount` / `total_amount`
+ * for legacy rows that predate it.
+ */
+const baseAmt = (row: RawRow): number => {
+  if (row.base_amount != null) {
+    const parsed = Number(row.base_amount);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return num(row.amount) || num(row.total_amount);
+};
+
+/**
+ * PHP-base remaining balance for an invoice row. `remaining_balance` is
+ * stored in the document's original currency, so for USD invoices we must
+ * translate via `exchange_rate` before aggregating with PHP balances.
+ *
+ * Falls back to `base_amount` when no remaining_balance is set, and to the
+ * raw amount for legacy rows with no FX metadata.
+ */
+const baseRemainingBalance = (row: RawRow): number => {
+  if (row.remaining_balance == null) return baseAmt(row);
+  const remainingOriginal = num(row.remaining_balance);
+  const rate = Number(row.exchange_rate);
+  if (Number.isFinite(rate) && rate > 0 && rate !== 1) {
+    return remainingOriginal * rate;
+  }
+  return remainingOriginal;
+};
+
 const str = (value: unknown): string => {
   return typeof value === "string" ? value.toLowerCase() : "";
 };
@@ -25,12 +56,12 @@ export const calculateFinancialTotals = (
   const activeInvoices = invoices.filter((invoice) => isInvoiceFinanciallyActive(invoice));
 
   const invoicedAmount = activeInvoices.reduce(
-    (sum, item) => sum + (num(item.amount) || num(item.total_amount)), 0
+    (sum, item) => sum + baseAmt(item), 0
   );
 
   const unbilledCharges = billingItems
     .filter(item => str(item.status) === "unbilled")
-    .reduce((sum, item) => sum + num(item.amount), 0);
+    .reduce((sum, item) => sum + baseAmt(item), 0);
 
   const bookedCharges = invoicedAmount + unbilledCharges;
 
@@ -41,11 +72,11 @@ export const calculateFinancialTotals = (
     APPROVED_EXPENSE_STATUSES.includes(str(item.status))
   );
 
-  const directCost = approvedExpenses.reduce((sum, item) => sum + num(item.amount), 0);
+  const directCost = approvedExpenses.reduce((sum, item) => sum + baseAmt(item), 0);
 
   const collectedAmount = collections
     .filter((item) => isCollectionAppliedToInvoice(item))
-    .reduce((sum, item) => sum + num(item.amount), 0);
+    .reduce((sum, item) => sum + baseAmt(item), 0);
 
   // paidDirectCost = only expenses where cash has actually gone out
   const paidDirectCost = approvedExpenses
@@ -53,18 +84,19 @@ export const calculateFinancialTotals = (
       ["paid", "partial"].includes(str(item.status)) ||
       ["paid", "cleared"].includes(str(item.payment_status))
     )
-    .reduce((sum, item) => sum + num(item.amount), 0);
+    .reduce((sum, item) => sum + baseAmt(item), 0);
 
   const netCashFlow = collectedAmount - paidDirectCost;
 
   const grossProfit = bookedCharges - directCost;
   const grossMargin = bookedCharges > 0 ? (grossProfit / bookedCharges) * 100 : 0;
 
-  // Helper to check overdue
+  // Helper to check overdue. Compare against the PHP-base balance so a near-
+  // zero USD residual (e.g. 0.005 USD) does not trip on the 0.01 threshold.
   const checkOverdue = (item: RawRow): boolean => {
     if (["paid", "cleared"].includes(str(item.payment_status))) return false;
 
-    const balance = num(item.remaining_balance ?? item.amount ?? item.total_amount);
+    const balance = baseRemainingBalance(item);
     if (balance <= 0.01) return false;
 
     const dueDateStr = (item.due_date || item.created_at) as string | undefined;
@@ -76,24 +108,14 @@ export const calculateFinancialTotals = (
     return new Date() > dueDate;
   };
 
-  const outstandingAmount = activeInvoices
-    .reduce((sum, item) => {
-      if (["paid", "cleared"].includes(str(item.payment_status))) return sum;
-
-      const balance = item.remaining_balance !== undefined
-        ? num(item.remaining_balance)
-        : (num(item.amount) || num(item.total_amount));
-      return sum + balance;
-    }, 0);
+  const outstandingAmount = activeInvoices.reduce((sum, item) => {
+    if (["paid", "cleared"].includes(str(item.payment_status))) return sum;
+    return sum + baseRemainingBalance(item);
+  }, 0);
 
   const overdueAmount = activeInvoices
-    .filter(b => checkOverdue(b))
-    .reduce((sum, item) => {
-      const balance = item.remaining_balance !== undefined
-        ? num(item.remaining_balance)
-        : (num(item.amount) || num(item.total_amount));
-      return sum + balance;
-    }, 0);
+    .filter((b) => checkOverdue(b))
+    .reduce((sum, item) => sum + baseRemainingBalance(item), 0);
 
   return {
     bookedCharges,

@@ -13,6 +13,7 @@ CREATE TABLE evoucher_line_items (
   description     TEXT,
   amount          NUMERIC(15,2) DEFAULT 0,
   catalog_item_id TEXT REFERENCES catalog_items(id) ON DELETE SET NULL,
+  catalog_snapshot JSONB DEFAULT NULL,
   sort_order      INTEGER DEFAULT 0,
   created_at      TIMESTAMPTZ DEFAULT now(),
   updated_at      TIMESTAMPTZ DEFAULT now()

@@ -2,6 +2,37 @@ import { supabase } from './supabase/client';
 import { Account, AccountType } from '../types/accounting-core';
 import { Transaction } from '../types/accounting';
 import { freightForwardingCoASeed, SeedAccountRow } from './accounting-seed';
+import {
+  FUNCTIONAL_CURRENCY,
+  normalizeCurrency,
+  type AccountingCurrency,
+} from './accountingCurrency';
+
+/**
+ * Account types that may legitimately hold a non-PHP balance.
+ *
+ * Currency-specific behaviour is restricted to monetary leaf accounts (cash,
+ * bank, AR, AP). Revenue/Expense/Equity accounts stay in the PHP functional
+ * currency since the GL itself balances in PHP.
+ *
+ * The seeded chart of accounts stores types as lowercase strings ("asset",
+ * "liability", ...), while UI code uses the capitalized forms. Compare
+ * case-insensitively so we never silently coerce a USD bank account back to
+ * PHP when reading a seeded row.
+ */
+const MONETARY_ACCOUNT_TYPES = new Set(["asset", "liability"]);
+
+export function isMonetaryAccountType(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  return MONETARY_ACCOUNT_TYPES.has(value.trim().toLowerCase());
+}
+
+function resolveAccountCurrency(account: Partial<Account>): AccountingCurrency {
+  const requested = normalizeCurrency(account.currency, FUNCTIONAL_CURRENCY);
+  if (requested === FUNCTIONAL_CURRENCY) return FUNCTIONAL_CURRENCY;
+  if (!isMonetaryAccountType(account.type ?? "Expense")) return FUNCTIONAL_CURRENCY;
+  return requested;
+}
 
 console.log("Loading accounting-api.ts (Client Side - Direct Supabase)");
 
@@ -42,6 +73,7 @@ function mapUiAccountToDb(account: Partial<Account>): Record<string, any> {
     is_active: account.is_active ?? true,
     is_system: account.is_system ?? false,
     sort_order: account.sort_order ?? 0,
+    currency: resolveAccountCurrency(account),
     updated_at: account.updated_at ?? new Date().toISOString(),
     created_at: account.created_at,
   };

@@ -10,6 +10,14 @@ import {
   type ActivityActor,
 } from "../utils/activityLog";
 import { determineSubmittedEVoucherStatus } from "../utils/evoucherApproval";
+import {
+  FUNCTIONAL_CURRENCY,
+  normalizeCurrency,
+  resolvePostingRate,
+  roundMoney,
+  toBaseAmount,
+  type AccountingCurrency,
+} from "../utils/accountingCurrency";
 
 type EVoucherContext =
   | "bd"
@@ -50,6 +58,12 @@ interface EVoucherData {
   linkedBillings?: { id: string; amount: number }[];
   parentVoucherId?: string;
   parent_voucher_id?: string;
+  /** Original transaction currency. Defaults to PHP. */
+  currency?: AccountingCurrency | string;
+  /** Locked rate to PHP. Required for non-PHP currencies. */
+  exchangeRate?: number;
+  /** Date the rate was locked (ISO yyyy-mm-dd). Defaults to today. */
+  exchangeRateDate?: string;
 }
 
 type CreatedVoucher = {
@@ -143,6 +157,17 @@ export function useEVoucherSubmit(
     const now = new Date().toISOString();
     const descriptionPrefix = data.isBillable ? "[BILLABLE] " : "";
 
+    // FX: amount is in `currency`; we lock a rate and persist the PHP base
+    // alongside so downstream GL posting and reports can rely on it.
+    const currency = normalizeCurrency(data.currency, FUNCTIONAL_CURRENCY);
+    const lockedRate = resolvePostingRate(currency, data.exchangeRate);
+    const baseAmount = toBaseAmount({
+      amount: data.totalAmount,
+      currency,
+      exchangeRate: lockedRate,
+    });
+    const rateDate = data.exchangeRateDate ?? now.slice(0, 10);
+
     return {
       id: createId("evoucher"),
       evoucher_number: `EV-${Date.now()}`,
@@ -151,8 +176,13 @@ export function useEVoucherSubmit(
       booking_id: data.bookingId || null,
       project_number: data.projectNumber || null,
       vendor_name: data.vendor || null,
-      amount: data.totalAmount,
-      currency: "PHP",
+      amount: roundMoney(data.totalAmount),
+      currency,
+      original_currency: currency,
+      exchange_rate: lockedRate,
+      base_currency: FUNCTIONAL_CURRENCY,
+      base_amount: baseAmount,
+      exchange_rate_date: rateDate,
       payment_method: data.preferredPayment || null,
       credit_terms: data.creditTerms || null,
       description: descriptionPrefix + data.requestName,

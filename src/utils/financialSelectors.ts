@@ -172,8 +172,14 @@ export const mapExpenseRowsForScope = (
       expenseDate: row.expense_date || row.created_at,
       createdAt: row.created_at,
       status: row.status || "draft",
-      amount: row.amount || row.total_amount || 0,
+      // `amount` keeps the original-currency value so the existing tables and
+      // edit forms render and round-trip correctly. Aggregations should read
+      // `base_amount` (PHP) instead — see baseAmt() in financialCalculations.
+      amount: row.amount ?? row.total_amount ?? 0,
       currency: row.currency || "PHP",
+      base_amount: row.base_amount ?? row.amount ?? row.total_amount ?? 0,
+      base_currency: row.base_currency ?? "PHP",
+      exchange_rate: row.exchange_rate ?? 1,
       isBillable: row.is_billable || (row.details as any)?.is_billable || false,
       serviceType: row.service_type,
       projectNumber: row.project_number,
@@ -204,9 +210,14 @@ export const mapEvoucherExpensesForScope = (
       evoucher_id: row.id,
       created_at: row.created_at || row.request_date,
       description: row.purpose || row.description,
-      amount: row.total_amount || row.amount || 0,
-      total_amount: row.total_amount || row.amount || 0,
+      // amount/currency stay in original units so display and edit flows are
+      // consistent. base_amount (PHP) is what reports should aggregate on.
+      amount: row.total_amount ?? row.amount ?? 0,
+      total_amount: row.total_amount ?? row.amount ?? 0,
       currency: row.currency || "PHP",
+      base_amount: row.base_amount ?? row.total_amount ?? row.amount ?? 0,
+      base_currency: row.base_currency ?? "PHP",
+      exchange_rate: row.exchange_rate ?? 1,
       status: row.status,
       expense_category: row.expense_category,
       is_billable: row.is_billable,

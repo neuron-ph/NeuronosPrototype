@@ -7,6 +7,19 @@
  */
 export type Currency = 'USD' | 'PHP';
 
+/**
+ * FX metadata persisted alongside any posted document or journal entry.
+ * Original-currency fields preserve the source intent; base fields are
+ * the locked PHP equivalents used for GL balancing and reporting.
+ */
+export interface FxFields {
+  original_currency?: Currency | string;
+  exchange_rate?: number;
+  base_currency?: Currency;
+  base_amount?: number;
+  exchange_rate_date?: string | null;
+}
+
 export type AccountType =
   | 'asset'
   | 'liability'
@@ -56,7 +69,7 @@ export interface AccountNode extends Account {
 }
 
 // Billing record as stored in the invoices/evouchers tables
-export interface Billing {
+export interface Billing extends FxFields {
   id: string;
   invoice_number?: string;
   invoice_date?: string;
@@ -82,7 +95,7 @@ export interface Billing {
 }
 
 // Collection record as stored in the collections/evouchers tables
-export interface Collection {
+export interface Collection extends FxFields {
   id: string;
   evoucher_number?: string;
   reference_number?: string;
@@ -104,7 +117,7 @@ export interface Collection {
 }
 
 // Expense record as stored in the evouchers table
-export interface Expense {
+export interface Expense extends FxFields {
   id: string;
   evoucher_number?: string;
   date?: string;
@@ -124,7 +137,7 @@ export interface Expense {
   [key: string]: any;
 }
 
-export interface Invoice {
+export interface Invoice extends FxFields {
   id: string;
   invoice_number?: string;
   invoice_date?: string;

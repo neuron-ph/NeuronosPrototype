@@ -25,7 +25,12 @@ export function useConsignees(customerId?: string) {
 
   const createMutation = useMutation({
     mutationFn: async (data: Partial<Consignee>) => {
-      const payload = { ...data, customer_id: customerId };
+      // consignees.id is text NOT NULL with no DB default — generate client-side.
+      const payload = {
+        id: data.id ?? crypto.randomUUID(),
+        ...data,
+        customer_id: customerId,
+      };
       const { data: created, error } = await supabase
         .from("consignees")
         .insert(payload)

@@ -34,10 +34,22 @@ export type JournalEntryType = "Invoice" | "Payment" | "Bill" | "Expense" | "Jou
 export interface JournalLine {
   id: string;
   account_id: string;
+  account_code?: string; // Snapshot for display/audit
   account_name: string; // Snapshot for display
   description?: string;
+  /** PHP base amount used for GL balancing. */
   debit: number;
+  /** PHP base amount used for GL balancing. */
   credit: number;
+  /** Line-level currency. Equals base_currency for PHP-only lines. */
+  currency?: "PHP" | "USD";
+  /** Original-currency debit for USD-origin lines (informational). */
+  foreign_debit?: number;
+  /** Original-currency credit for USD-origin lines (informational). */
+  foreign_credit?: number;
+  /** Locked rate used to compute base debit/credit. 1 for PHP-only lines. */
+  exchange_rate?: number;
+  base_currency?: "PHP" | "USD";
 }
 
 export interface JournalEntry {
@@ -58,9 +70,17 @@ export interface JournalEntry {
   lines: JournalLine[];
   
   // Metadata
-  total_amount: number; // Sum of debits (should equal sum of credits)
+  total_amount: number; // Sum of PHP-base debits (must equal PHP-base credits)
   status: "Posted" | "Void" | "Draft";
   created_by: string;
   created_at: string;
   updated_at: string;
+
+  // FX header. PHP-only entries lock rate=1 and source=base.
+  transaction_currency?: "PHP" | "USD";
+  exchange_rate?: number;
+  base_currency?: "PHP" | "USD";
+  source_amount?: number;
+  base_amount?: number;
+  exchange_rate_date?: string | null;
 }

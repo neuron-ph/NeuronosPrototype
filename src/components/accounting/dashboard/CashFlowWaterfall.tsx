@@ -8,6 +8,7 @@
 
 import { useMemo } from "react";
 import { formatCurrencyCompact } from "../aggregate/types";
+import { formatMoney } from "../../../utils/accountingCurrency";
 import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 
 interface CashFlowWaterfallProps {
@@ -19,12 +20,7 @@ interface CashFlowWaterfallProps {
   onNavigate?: () => void;
 }
 
-const fmt = (amount: number) =>
-  new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    maximumFractionDigits: 0,
-  }).format(amount);
+const fmt = (amount: number) => formatMoney(amount, "PHP");
 
 interface FlowRow {
   label: string;

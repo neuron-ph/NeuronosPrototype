@@ -5515,3 +5515,208 @@ DROP TABLE IF EXISTS customer_team_profiles CASCADE;
 DROP TABLE IF EXISTS client_handler_preferences CASCADE;
 DROP TABLE IF EXISTS assignment_default_items CASCADE;
 DROP TABLE IF EXISTS assignment_default_profiles CASCADE;
+
+-- 078: evoucher_line_items.catalog_snapshot
+-- Keeps dev_setup aligned with the live migration chain for expense catalog snapshots.
+ALTER TABLE evoucher_line_items
+  ADD COLUMN IF NOT EXISTS catalog_snapshot JSONB DEFAULT NULL;
+
+UPDATE evoucher_line_items eli
+SET catalog_snapshot = jsonb_build_object(
+  'name', COALESCE(NULLIF(ci.name, ''), NULLIF(eli.particular, ''), ''),
+  'unit_type', ci.unit_type,
+  'tax_code', ci.tax_code,
+  'category_name', cc.name,
+  'default_price', COALESCE(ci.default_price, eli.amount, 0),
+  'currency', COALESCE(ci.currency, 'PHP')
+)
+FROM catalog_items ci
+LEFT JOIN catalog_categories cc ON cc.id = ci.category_id
+WHERE eli.catalog_item_id = ci.id
+  AND eli.catalog_item_id IS NOT NULL
+  AND eli.catalog_snapshot IS NULL;
+
+-- ===========================================================================
+-- USD multi-currency accounting (migrations 079–084)
+-- ===========================================================================
+-- These were authored as separate migration files so prod can apply them
+-- incrementally; the same SQL is replayed here so a fresh dev bootstrap ends
+-- up with the same schema as the code expects (FX columns are read/written
+-- by the new posting flows in InvoiceGLPostingSheet / CollectionGLPostingSheet
+-- / GLConfirmationSheet / accounting-api).
+
+-- 079: accounts.currency
+ALTER TABLE accounts
+  ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'PHP';
+UPDATE accounts SET currency = 'PHP' WHERE currency IS NULL;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'accounts_currency_check') THEN
+    ALTER TABLE accounts ADD CONSTRAINT accounts_currency_check
+      CHECK (currency IN ('PHP', 'USD'));
+  END IF;
+END$$;
+CREATE INDEX IF NOT EXISTS idx_accounts_currency ON accounts(currency);
+
+-- 080: exchange_rates master table + dev seed row
+CREATE TABLE IF NOT EXISTS exchange_rates (
+  id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  rate_date       DATE NOT NULL,
+  from_currency   TEXT NOT NULL,
+  to_currency     TEXT NOT NULL,
+  rate            NUMERIC(18, 8) NOT NULL CHECK (rate > 0),
+  source          TEXT,
+  notes           TEXT,
+  created_by      TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT exchange_rates_currency_pair_check
+    CHECK (from_currency IN ('PHP', 'USD') AND to_currency IN ('PHP', 'USD')),
+  CONSTRAINT exchange_rates_distinct_currencies_check
+    CHECK (from_currency <> to_currency),
+  CONSTRAINT exchange_rates_unique_per_day
+    UNIQUE (rate_date, from_currency, to_currency)
+);
+SELECT add_updated_at_trigger('exchange_rates');
+CREATE INDEX IF NOT EXISTS idx_exchange_rates_date
+  ON exchange_rates(rate_date DESC);
+CREATE INDEX IF NOT EXISTS idx_exchange_rates_pair_date
+  ON exchange_rates(from_currency, to_currency, rate_date DESC);
+INSERT INTO exchange_rates (rate_date, from_currency, to_currency, rate, source, notes)
+VALUES (CURRENT_DATE, 'USD', 'PHP', 58.00, 'manual', 'Seed rate for dev/staging')
+ON CONFLICT (rate_date, from_currency, to_currency) DO NOTHING;
+
+-- 081: source-document FX columns
+ALTER TABLE invoices
+  ADD COLUMN IF NOT EXISTS original_currency   TEXT,
+  ADD COLUMN IF NOT EXISTS exchange_rate       NUMERIC(18, 8),
+  ADD COLUMN IF NOT EXISTS base_currency       TEXT NOT NULL DEFAULT 'PHP',
+  ADD COLUMN IF NOT EXISTS base_amount         NUMERIC(15, 2),
+  ADD COLUMN IF NOT EXISTS exchange_rate_date  DATE;
+ALTER TABLE collections
+  ADD COLUMN IF NOT EXISTS original_currency   TEXT,
+  ADD COLUMN IF NOT EXISTS exchange_rate       NUMERIC(18, 8),
+  ADD COLUMN IF NOT EXISTS base_currency       TEXT NOT NULL DEFAULT 'PHP',
+  ADD COLUMN IF NOT EXISTS base_amount         NUMERIC(15, 2),
+  ADD COLUMN IF NOT EXISTS exchange_rate_date  DATE;
+ALTER TABLE evouchers
+  ADD COLUMN IF NOT EXISTS original_currency   TEXT,
+  ADD COLUMN IF NOT EXISTS exchange_rate       NUMERIC(18, 8),
+  ADD COLUMN IF NOT EXISTS base_currency       TEXT NOT NULL DEFAULT 'PHP',
+  ADD COLUMN IF NOT EXISTS base_amount         NUMERIC(15, 2),
+  ADD COLUMN IF NOT EXISTS exchange_rate_date  DATE;
+ALTER TABLE expenses
+  ADD COLUMN IF NOT EXISTS original_currency   TEXT,
+  ADD COLUMN IF NOT EXISTS exchange_rate       NUMERIC(18, 8),
+  ADD COLUMN IF NOT EXISTS base_currency       TEXT NOT NULL DEFAULT 'PHP',
+  ADD COLUMN IF NOT EXISTS base_amount         NUMERIC(15, 2),
+  ADD COLUMN IF NOT EXISTS exchange_rate_date  DATE;
+ALTER TABLE billing_line_items
+  ADD COLUMN IF NOT EXISTS exchange_rate   NUMERIC(18, 8),
+  ADD COLUMN IF NOT EXISTS base_currency   TEXT NOT NULL DEFAULT 'PHP',
+  ADD COLUMN IF NOT EXISTS base_amount     NUMERIC(15, 2);
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'invoices_base_currency_check') THEN
+    ALTER TABLE invoices ADD CONSTRAINT invoices_base_currency_check
+      CHECK (base_currency IN ('PHP', 'USD'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'collections_base_currency_check') THEN
+    ALTER TABLE collections ADD CONSTRAINT collections_base_currency_check
+      CHECK (base_currency IN ('PHP', 'USD'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'evouchers_base_currency_check') THEN
+    ALTER TABLE evouchers ADD CONSTRAINT evouchers_base_currency_check
+      CHECK (base_currency IN ('PHP', 'USD'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'expenses_base_currency_check') THEN
+    ALTER TABLE expenses ADD CONSTRAINT expenses_base_currency_check
+      CHECK (base_currency IN ('PHP', 'USD'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'billing_line_items_base_currency_check') THEN
+    ALTER TABLE billing_line_items ADD CONSTRAINT billing_line_items_base_currency_check
+      CHECK (base_currency IN ('PHP', 'USD'));
+  END IF;
+END$$;
+CREATE INDEX IF NOT EXISTS idx_invoices_original_currency ON invoices(original_currency);
+CREATE INDEX IF NOT EXISTS idx_collections_original_currency ON collections(original_currency);
+CREATE INDEX IF NOT EXISTS idx_evouchers_original_currency ON evouchers(original_currency);
+CREATE INDEX IF NOT EXISTS idx_expenses_original_currency ON expenses(original_currency);
+
+-- 082: journal_entries FX header
+ALTER TABLE journal_entries
+  ADD COLUMN IF NOT EXISTS transaction_currency  TEXT,
+  ADD COLUMN IF NOT EXISTS exchange_rate         NUMERIC(18, 8),
+  ADD COLUMN IF NOT EXISTS base_currency         TEXT NOT NULL DEFAULT 'PHP',
+  ADD COLUMN IF NOT EXISTS source_amount         NUMERIC(15, 2),
+  ADD COLUMN IF NOT EXISTS base_amount           NUMERIC(15, 2),
+  ADD COLUMN IF NOT EXISTS exchange_rate_date    DATE;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'journal_entries_base_currency_check') THEN
+    ALTER TABLE journal_entries ADD CONSTRAINT journal_entries_base_currency_check
+      CHECK (base_currency IN ('PHP', 'USD'));
+  END IF;
+END$$;
+CREATE INDEX IF NOT EXISTS idx_journal_entries_transaction_currency
+  ON journal_entries(transaction_currency);
+
+-- 083: backfill PHP/1 defaults so legacy rows satisfy the new read paths
+UPDATE invoices SET
+  original_currency  = COALESCE(original_currency, NULLIF(currency, ''), 'PHP'),
+  exchange_rate      = COALESCE(exchange_rate, 1),
+  base_currency      = COALESCE(base_currency, 'PHP'),
+  base_amount        = COALESCE(base_amount, total_amount, 0),
+  exchange_rate_date = COALESCE(exchange_rate_date, invoice_date::DATE, created_at::DATE)
+WHERE original_currency IS NULL OR exchange_rate IS NULL OR base_amount IS NULL OR exchange_rate_date IS NULL;
+UPDATE collections SET
+  original_currency  = COALESCE(original_currency, NULLIF(currency, ''), 'PHP'),
+  exchange_rate      = COALESCE(exchange_rate, 1),
+  base_currency      = COALESCE(base_currency, 'PHP'),
+  base_amount        = COALESCE(base_amount, amount, 0),
+  exchange_rate_date = COALESCE(exchange_rate_date, collection_date::DATE, created_at::DATE)
+WHERE original_currency IS NULL OR exchange_rate IS NULL OR base_amount IS NULL OR exchange_rate_date IS NULL;
+UPDATE evouchers SET
+  original_currency  = COALESCE(original_currency, NULLIF(currency, ''), 'PHP'),
+  exchange_rate      = COALESCE(exchange_rate, 1),
+  base_currency      = COALESCE(base_currency, 'PHP'),
+  base_amount        = COALESCE(base_amount, amount, 0),
+  exchange_rate_date = COALESCE(exchange_rate_date, created_at::DATE)
+WHERE original_currency IS NULL OR exchange_rate IS NULL OR base_amount IS NULL OR exchange_rate_date IS NULL;
+UPDATE expenses SET
+  original_currency  = COALESCE(original_currency, NULLIF(currency, ''), 'PHP'),
+  exchange_rate      = COALESCE(exchange_rate, 1),
+  base_currency      = COALESCE(base_currency, 'PHP'),
+  base_amount        = COALESCE(base_amount, amount, 0),
+  exchange_rate_date = COALESCE(exchange_rate_date, created_at::DATE)
+WHERE original_currency IS NULL OR exchange_rate IS NULL OR base_amount IS NULL OR exchange_rate_date IS NULL;
+UPDATE billing_line_items SET
+  exchange_rate = COALESCE(exchange_rate, 1),
+  base_currency = COALESCE(base_currency, 'PHP'),
+  base_amount   = COALESCE(base_amount, amount, 0)
+WHERE exchange_rate IS NULL OR base_amount IS NULL;
+UPDATE journal_entries SET
+  transaction_currency = COALESCE(transaction_currency, 'PHP'),
+  exchange_rate        = COALESCE(exchange_rate, 1),
+  base_currency        = COALESCE(base_currency, 'PHP'),
+  source_amount        = COALESCE(source_amount, total_debit, 0),
+  base_amount          = COALESCE(base_amount, total_debit, 0),
+  exchange_rate_date   = COALESCE(exchange_rate_date, entry_date::DATE, created_at::DATE)
+WHERE transaction_currency IS NULL OR exchange_rate IS NULL OR base_amount IS NULL OR exchange_rate_date IS NULL;
+
+-- 084: dev USD bank account
+INSERT INTO accounts (
+  id, code, name, type, sub_type, category, normal_balance,
+  is_active, is_system, sort_order, balance, starting_amount, currency
+)
+VALUES (
+  'coa-1090', '1090', 'Cash in Bank - USD',
+  'asset', 'Current Assets', 'Assets', 'debit',
+  true, false, 190, 0, 0, 'USD'
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- 085: send_billing_items_to_booking() FX-aware (see migration 085 for full
+-- inline body — it adds exchange_rate / base_amount / base_currency to the
+-- INSERT path so USD line items aggregate correctly in PHP-base reports).
+-- Apply migration 085 separately if recreating an environment from this file.

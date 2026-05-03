@@ -127,3 +127,28 @@ describe('normalizeServicesMetadata', () => {
     expect(result[0].service_details.unknown_field).toBe('keep me');
   });
 });
+
+// ---------------------------------------------------------------------------
+// profile_refs preservation
+// ---------------------------------------------------------------------------
+
+describe('normalizeQuotationDetails — profile_refs and unknown keys', () => {
+  it('preserves profile_refs untouched', () => {
+    const refs = {
+      pod_aod: { profile_id: 'p-1', profile_type: 'port', label_snapshot: 'MICP', source: 'linked' as const },
+    };
+    const out = normalizeQuotationDetails('Brokerage', { profile_refs: refs, pod_aod: 'MICP' });
+    expect(out.profile_refs).toEqual(refs);
+  });
+
+  it('does not drop unrelated details keys', () => {
+    const out = normalizeQuotationDetails('Forwarding', {
+      arbitrary_key: 'ok',
+      nested: { a: 1 },
+      profile_refs: { pol_aol: { profile_id: 'x', profile_type: 'port', label_snapshot: 'MNL', source: 'linked' as const } },
+    });
+    expect(out.arbitrary_key).toBe('ok');
+    expect(out.nested).toEqual({ a: 1 });
+    expect(out.profile_refs).toBeDefined();
+  });
+});

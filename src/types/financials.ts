@@ -31,6 +31,10 @@ export interface BookingChargeLine extends BookingFinancialContext {
   description: string;
   amount: number;
   currency: string;
+  /** PHP-base equivalent of `amount` for reporting; falls back to `amount` for legacy rows. */
+  baseAmount?: number;
+  baseCurrency?: "PHP" | "USD";
+  exchangeRate?: number;
   status: string;
   createdAt: string | null;
   invoiceId?: string | null;
@@ -52,6 +56,9 @@ export interface BookingExpense extends BookingFinancialContext {
   id: string;
   amount: number;
   currency: string;
+  baseAmount?: number;
+  baseCurrency?: "PHP" | "USD";
+  exchangeRate?: number;
   status: string;
   createdAt: string | null;
   expenseDate: string | null;
@@ -71,6 +78,11 @@ export interface InvoiceFinancialDocument {
   invoiceDate: string | null;
   dueDate: string | null;
   totalAmount: number;
+  /** PHP-base equivalent of totalAmount used for reporting. */
+  baseAmount?: number;
+  baseCurrency?: "PHP" | "USD";
+  originalCurrency?: "PHP" | "USD" | string;
+  exchangeRate?: number;
   remainingBalance: number;
   projectNumbers: string[];
   contractIds: string[];
@@ -93,6 +105,10 @@ export interface CollectionFinancialRecord {
   customerId: string | null;
   customerName: string | null;
   amount: number;
+  baseAmount?: number;
+  baseCurrency?: "PHP" | "USD";
+  originalCurrency?: "PHP" | "USD" | string;
+  exchangeRate?: number;
   status: string;
   collectionDate: string | null;
   projectNumbers: string[];

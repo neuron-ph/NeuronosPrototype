@@ -96,13 +96,21 @@ export const normalizeBookingContext = (row: Record<string, unknown>): BookingFi
 
 export const normalizeBookingChargeLine = (row: Record<string, unknown>): BookingChargeLine => {
   const context = normalizeBookingContext(row);
+  const amount = asNumber(row.amount);
+  // Prefer the persisted PHP-base amount, fall back to raw amount for legacy
+  // rows that predate the multi-currency migration.
+  const baseAmount =
+    row.base_amount != null ? asNumber(row.base_amount) : amount;
 
   return {
     ...context,
     id: asString(row.id) ?? "",
     description: asString(row.description) ?? "",
-    amount: asNumber(row.amount),
+    amount,
     currency: asString(row.currency) ?? "PHP",
+    baseAmount,
+    baseCurrency: ((asString(row.base_currency) ?? "PHP") as "PHP" | "USD"),
+    exchangeRate: row.exchange_rate == null ? undefined : asNumber(row.exchange_rate),
     status: asString(row.status) ?? "unbilled",
     createdAt: asString(row.created_at) ?? asString(row.createdAt),
     invoiceId: asString(row.invoice_id) ?? asString(row.invoiceId),
@@ -125,12 +133,17 @@ export const normalizeBookingChargeLine = (row: Record<string, unknown>): Bookin
 export const normalizeBookingExpense = (row: Record<string, unknown>): BookingExpense => {
   const context = normalizeBookingContext(row);
   const amount = asNumber(row.amount ?? row.total_amount);
+  const baseAmount =
+    row.base_amount != null ? asNumber(row.base_amount) : amount;
 
   return {
     ...context,
     id: asString(row.id) ?? "",
     amount,
     currency: asString(row.currency) ?? "PHP",
+    baseAmount,
+    baseCurrency: ((asString(row.base_currency) ?? "PHP") as "PHP" | "USD"),
+    exchangeRate: row.exchange_rate == null ? undefined : asNumber(row.exchange_rate),
     status: asString(row.status) ?? "draft",
     createdAt: asString(row.created_at) ?? asString(row.createdAt),
     expenseDate:
@@ -156,6 +169,10 @@ export const normalizeInvoiceFinancialDocument = (
   const totalAmount = asNumber(row.total_amount ?? row.amount ?? row.subtotal);
   const remainingBalance =
     row.remaining_balance == null ? totalAmount : asNumber(row.remaining_balance);
+  // Reports aggregate base amounts; legacy rows without a base column fall
+  // back to their raw total to keep historical totals unchanged.
+  const baseAmount =
+    row.base_amount != null ? asNumber(row.base_amount) : totalAmount;
 
   return {
     id: asString(row.id) ?? "",
@@ -166,6 +183,10 @@ export const normalizeInvoiceFinancialDocument = (
     invoiceDate: asString(row.invoice_date) ?? asString(row.created_at),
     dueDate: asString(row.due_date),
     totalAmount,
+    baseAmount,
+    baseCurrency: ((asString(row.base_currency) ?? "PHP") as "PHP" | "USD"),
+    originalCurrency: asString(row.original_currency) ?? asString(row.currency) ?? "PHP",
+    exchangeRate: row.exchange_rate == null ? undefined : asNumber(row.exchange_rate),
     remainingBalance,
     projectNumbers: [
       ...new Set(
@@ -214,6 +235,10 @@ export const normalizeCollectionFinancialRecord = (
   customerId: asString(row.customer_id) ?? asString(row.customerId),
   customerName: asString(row.customer_name) ?? asString(row.customerName),
   amount: asNumber(row.amount),
+  baseAmount: row.base_amount != null ? asNumber(row.base_amount) : asNumber(row.amount),
+  baseCurrency: ((asString(row.base_currency) ?? "PHP") as "PHP" | "USD"),
+  originalCurrency: asString(row.original_currency) ?? asString(row.currency) ?? "PHP",
+  exchangeRate: row.exchange_rate == null ? undefined : asNumber(row.exchange_rate),
   status: asString(row.status) ?? "posted",
   collectionDate:
     asString(row.collection_date) ?? asString(row.collectionDate) ?? asString(row.created_at),

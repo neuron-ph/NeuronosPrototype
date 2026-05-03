@@ -4,6 +4,7 @@ import { toast } from "sonner@2.0.3";
 import { motion, AnimatePresence } from "motion/react";
 import { saveAccount, deleteAccount, getAccounts } from "../../../utils/accounting-api";
 import type { Account, AccountType } from "../../../types/accounting-core";
+import { formatMoney } from "../../../utils/accountingCurrency";
 
 interface AccountSidePanelProps {
   isOpen: boolean;
@@ -13,14 +14,24 @@ interface AccountSidePanelProps {
 }
 
 const ACCOUNT_TYPES: AccountType[] = ["Asset", "Liability", "Equity", "Income", "Expense"];
-const CURRENCIES = ["USD", "PHP"] as const;
+const CURRENCIES = ["PHP", "USD"] as const;
+// Only monetary leaf accounts (cash, bank, AR, AP) may hold a non-PHP balance.
+// P&L and equity accounts stay in the GL functional currency (PHP).
+//
+// Seeded rows use lowercase ("asset","liability"); newer UI uses the
+// capitalised forms. Normalise before comparing to avoid silently snapping a
+// seeded USD bank account back to PHP whenever the panel reopens.
+const FOREIGN_CURRENCY_ALLOWED_TYPES = new Set(["asset", "liability"]);
+function allowsForeignCurrency(type: unknown): boolean {
+  return typeof type === "string" && FOREIGN_CURRENCY_ALLOWED_TYPES.has(type.trim().toLowerCase());
+}
 
 export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSidePanelProps) {
   const [formData, setFormData] = useState<Partial<Account>>({
     name: "",
     code: "",
     type: "Asset",
-    currency: "USD",
+    currency: "PHP",
     is_folder: false,
     parent_id: undefined,
     balance: 0,
@@ -47,6 +58,14 @@ export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSi
     }
   }, [isOpen, account]);
 
+  // Lock currency to PHP for any non-monetary account type. Revenue/expense/equity
+  // accounts always denominate in the GL functional currency.
+  useEffect(() => {
+    if (!allowsForeignCurrency(formData.type) && formData.currency !== "PHP") {
+      setFormData(prev => ({ ...prev, currency: "PHP" }));
+    }
+  }, [formData.type, formData.currency]);
+
   useEffect(() => {
     if (account) {
       setFormData(account);
@@ -55,7 +74,7 @@ export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSi
         name: "",
         code: "",
         type: "Asset",
-        currency: "USD",
+        currency: "PHP",
         is_folder: false,
         parent_id: undefined,
         balance: 0,
@@ -255,7 +274,7 @@ export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSi
                     <p className="text-xs text-[var(--theme-text-muted)]">
                       Editing the starting amount updates the opening balance. Current balance is{" "}
                       <span className="font-mono font-medium text-[var(--theme-text-secondary)]">
-                        {new Intl.NumberFormat("en-PH", { style: "currency", currency: formData.currency === "USD" ? "USD" : "PHP" }).format(formData.balance ?? 0)}
+                        {formatMoney(formData.balance ?? 0, (formData.currency === "USD" ? "USD" : "PHP") as any)}
                       </span>
                       .
                     </p>
@@ -267,20 +286,33 @@ export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSi
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-[var(--theme-text-primary)]">Currency</label>
                 <div className="flex gap-4">
-                  {CURRENCIES.map(curr => (
-                    <label key={curr} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="currency"
-                        value={curr}
-                        checked={formData.currency === curr}
-                        onChange={() => setFormData(prev => ({ ...prev, currency: curr }))}
-                        className="text-[var(--theme-action-primary-bg)] focus:ring-[var(--theme-action-primary-bg)]"
-                      />
-                      <span className="text-sm text-[var(--theme-text-secondary)] font-medium">{curr}</span>
-                    </label>
-                  ))}
+                  {CURRENCIES.map(curr => {
+                    const allowsForeign = allowsForeignCurrency(formData.type);
+                    const disabled = curr !== "PHP" && !allowsForeign;
+                    return (
+                      <label
+                        key={curr}
+                        className={`flex items-center gap-2 ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                      >
+                        <input
+                          type="radio"
+                          name="currency"
+                          value={curr}
+                          checked={formData.currency === curr}
+                          disabled={disabled}
+                          onChange={() => setFormData(prev => ({ ...prev, currency: curr }))}
+                          className="text-[var(--theme-action-primary-bg)] focus:ring-[var(--theme-action-primary-bg)]"
+                        />
+                        <span className="text-sm text-[var(--theme-text-secondary)] font-medium">{curr}</span>
+                      </label>
+                    );
+                  })}
                 </div>
+                {!allowsForeignCurrency(formData.type) && (
+                  <p className="text-xs text-[var(--theme-text-muted)]">
+                    Only Asset and Liability accounts (cash, bank, AR, AP) may hold a non-PHP balance. The GL is PHP-functional.
+                  </p>
+                )}
               </div>
 
               {/* Is Folder */}

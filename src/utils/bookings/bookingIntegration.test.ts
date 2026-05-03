@@ -456,10 +456,10 @@ describe('compat fix — cyFee mapping', () => {
   });
 });
 
-describe('compat fix — Trucking emptyReturn maps to empty_return (FCL field)', () => {
-  it('old Trucking emptyReturn maps to empty_return, not date_empty_return', () => {
+describe('compat fix — Trucking emptyReturn maps to empty_return_date (FCL field)', () => {
+  it('old Trucking emptyReturn maps to empty_return_date, not date_empty_return', () => {
     const result = normalizeDetails({ emptyReturn: '2026-06-15' }, 'Trucking');
-    expect(result.empty_return).toBe('2026-06-15');
+    expect(result.empty_return_date).toBe('2026-06-15');
     expect(result.date_empty_return).toBeUndefined();
   });
 });

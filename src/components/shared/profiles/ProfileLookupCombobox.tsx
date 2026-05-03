@@ -119,7 +119,11 @@ export function ProfileLookupCombobox({
     const requestId = ++searchRequestIdRef.current;
     setLoading(true);
     try {
-      const res = await adapterInfo.adapter.search(q, { providerTag: adapterInfo.providerTag, limit: 20 });
+      const res = await adapterInfo.adapter.search(q, {
+        providerTag: adapterInfo.providerTag,
+        providerScope: adapterInfo.providerScope,
+        limit: 20,
+      });
       if (requestId === searchRequestIdRef.current) {
         setResults(res);
       }

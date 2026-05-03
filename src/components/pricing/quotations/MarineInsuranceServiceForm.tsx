@@ -1,10 +1,13 @@
 import type { ReactNode } from "react";
+import { ProfileLookupCombobox } from "../../shared/profiles/ProfileLookupCombobox";
+import type { ProfileSelectionValue } from "../../../types/profiles";
 
 interface MarineInsuranceFormData {
   commodityDescription?: string;
   hsCode?: string;
-  aolPol?: string;
-  aodPod?: string;
+  // Profile-backed (port). May hold ProfileSelectionValue or string snapshot.
+  aolPol?: string | ProfileSelectionValue;
+  aodPod?: string | ProfileSelectionValue;
   invoiceValue?: number;
 }
 
@@ -127,7 +130,7 @@ export function MarineInsuranceServiceForm({ data, onChange, viewMode = false, c
           </div>
         )}
 
-        {/* AOL/POL & AOD/POD */}
+        {/* AOL/POL & AOD/POD — port profile lookups */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
           <div>
             <label style={{
@@ -139,30 +142,12 @@ export function MarineInsuranceServiceForm({ data, onChange, viewMode = false, c
             }}>
               AOL/POL *
             </label>
-            <input
-              type="text"
-              value={data.aolPol || ""}
-              onChange={(e) => updateField("aolPol", e.target.value)}
-              placeholder="Airport/Port of Loading"
+            <ProfileLookupCombobox
+              profileType="port"
+              value={data.aolPol ?? null}
+              onChange={(v) => updateField("aolPol", v)}
               disabled={viewMode}
-              style={{
-                width: "100%",
-                padding: "10px 12px",
-                fontSize: "13px",
-                color: "var(--neuron-ink-base)",
-                backgroundColor: viewMode ? "var(--neuron-pill-inactive-bg)" : "var(--theme-bg-surface)",
-                border: "1px solid var(--neuron-ui-border)",
-                borderRadius: "6px",
-                outline: "none",
-                transition: "border-color 0.15s ease",
-                cursor: viewMode ? "default" : "text"
-              }}
-              onFocus={(e) => {
-                if (!viewMode) e.currentTarget.style.borderColor = "var(--neuron-brand-teal)";
-              }}
-              onBlur={(e) => {
-                if (!viewMode) e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
-              }}
+              placeholder="Search Airport/Port of Loading…"
             />
           </div>
           <div>
@@ -175,30 +160,12 @@ export function MarineInsuranceServiceForm({ data, onChange, viewMode = false, c
             }}>
               AOD/POD *
             </label>
-            <input
-              type="text"
-              value={data.aodPod || ""}
-              onChange={(e) => updateField("aodPod", e.target.value)}
-              placeholder="Airport/Port of Discharge"
+            <ProfileLookupCombobox
+              profileType="port"
+              value={data.aodPod ?? null}
+              onChange={(v) => updateField("aodPod", v)}
               disabled={viewMode}
-              style={{
-                width: "100%",
-                padding: "10px 12px",
-                fontSize: "13px",
-                color: "var(--neuron-ink-base)",
-                backgroundColor: viewMode ? "var(--neuron-pill-inactive-bg)" : "var(--theme-bg-surface)",
-                border: "1px solid var(--neuron-ui-border)",
-                borderRadius: "6px",
-                outline: "none",
-                transition: "border-color 0.15s ease",
-                cursor: viewMode ? "default" : "text"
-              }}
-              onFocus={(e) => {
-                if (!viewMode) e.currentTarget.style.borderColor = "var(--neuron-brand-teal)";
-              }}
-              onBlur={(e) => {
-                if (!viewMode) e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
-              }}
+              placeholder="Search Airport/Port of Discharge…"
             />
           </div>
         </div>

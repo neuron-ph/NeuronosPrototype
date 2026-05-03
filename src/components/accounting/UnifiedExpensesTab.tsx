@@ -8,6 +8,7 @@ import { AddRequestForPaymentPanel } from "./AddRequestForPaymentPanel";
 import { SidePanel } from "../common/SidePanel";
 import { CatalogItemCombobox } from "../shared/pricing/CatalogItemCombobox";
 import { buildCatalogSnapshot } from "../../utils/catalogSnapshot";
+import { formatMoney } from "../../utils/accountingCurrency";
 import { toast } from "../ui/toast-utils";
 import { supabase } from "../../utils/supabase/client";
 // Expenses received here are raw Supabase evoucher rows, not the OperationsExpense type
@@ -507,7 +508,7 @@ export function UnifiedExpensesTab({
               {str(pendingConversion?.description || pendingConversion?.expenseName) || "Billable Expense"}
             </p>
             <p className="text-[13px] text-[var(--theme-text-muted)] mt-0.5">
-              {new Intl.NumberFormat("en-PH", { style: "currency", currency: str(pendingConversion?.currency) || "PHP" }).format(num(pendingConversion?.amount))}
+              {formatMoney(num(pendingConversion?.amount), (str(pendingConversion?.currency) || "PHP") as any)}
               {" · "}{str(pendingConversion?.expenseCategory) || "Billable Expenses"}
             </p>
           </div>

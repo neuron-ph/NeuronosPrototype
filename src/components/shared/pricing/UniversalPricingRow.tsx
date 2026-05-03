@@ -126,6 +126,14 @@ export function UniversalPricingRow({
   const handleFieldChange = (field: string, value: any) => {
     if (handlers?.onFieldChange) {
       handlers.onFieldChange(field, value);
+      // Stamp the FX lock date whenever a non-PHP rate is captured. Gives the
+      // audit trail a "rate as of" timestamp without requiring a separate UI.
+      if (field === "forex_rate" && Number.isFinite(value) && value > 0 && value !== 1) {
+        handlers.onFieldChange("forex_rate_date", new Date().toISOString().slice(0, 10));
+      }
+      if (field === "currency" && value !== "PHP" && (data.forex_rate ?? 1) !== 1 && !data.forex_rate_date) {
+        handlers.onFieldChange("forex_rate_date", new Date().toISOString().slice(0, 10));
+      }
     }
   };
 
@@ -374,10 +382,8 @@ export function UniversalPricingRow({
               value={data.currency || "USD"}
               onChange={(value) => handleFieldChange('currency', value)}
               options={[
-                { value: "USD", label: "USD" },
                 { value: "PHP", label: "PHP" },
-                { value: "EUR", label: "EUR" },
-                { value: "CNY", label: "CNY" }
+                { value: "USD", label: "USD" },
               ]}
               placeholder="USD"
               size="sm"

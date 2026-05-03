@@ -6,6 +6,16 @@ import { toast } from "../../ui/toast-utils";
 import { SidePanel } from "../../common/SidePanel";
 import { useUser } from "../../../hooks/useUser";
 import { fireInvoiceARTicket } from "../../../utils/workflowTickets";
+import {
+  FUNCTIONAL_CURRENCY,
+  formatMoney,
+  normalizeCurrency,
+  resolvePostingRate,
+  roundMoney,
+  toBaseAmount,
+  type AccountingCurrency,
+} from "../../../utils/accountingCurrency";
+import { resolveExchangeRate } from "../../../utils/exchangeRates";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -27,6 +37,12 @@ interface InvoiceRecord {
   status: string;
   journal_entry_id?: string | null;
   description?: string;
+  currency?: string | null;
+  original_currency?: string | null;
+  exchange_rate?: number | null;
+  base_amount?: number | null;
+  base_currency?: string | null;
+  exchange_rate_date?: string | null;
 }
 
 interface JournalLine {
@@ -158,8 +174,13 @@ export function InvoiceGLPostingSheet({
   const [creditAccountName, setCreditAccountName] = useState("");
   const [creditAccountCode, setCreditAccountCode] = useState("");
 
-  // Amount — editable, seeded from invoice total
+  // Amount — editable, seeded from invoice total. This is in `invoiceCurrency`.
   const [amount, setAmount] = useState<string>("");
+
+  // Multi-currency. Defaults to PHP if invoice has no currency set.
+  const [invoiceCurrency, setInvoiceCurrency] =
+    useState<AccountingCurrency>(FUNCTIONAL_CURRENCY);
+  const [exchangeRateInput, setExchangeRateInput] = useState<string>("");
 
   // Memo / description
   const [description, setDescription] = useState("");
@@ -181,7 +202,7 @@ export function InvoiceGLPostingSheet({
     setLoadingInvoice(true);
     const { data, error } = await supabase
       .from("invoices")
-      .select("id, invoice_number, customer_name, invoice_date, total_amount, status, journal_entry_id, notes")
+      .select("id, invoice_number, customer_name, invoice_date, total_amount, status, journal_entry_id, notes, currency, original_currency, exchange_rate, base_amount, base_currency, exchange_rate_date")
       .eq("id", invoiceId)
       .maybeSingle();
 
@@ -192,6 +213,25 @@ export function InvoiceGLPostingSheet({
       setInvoice(inv);
       setAmount(String(inv.total_amount ?? ""));
       setDescription(`Invoice ${inv.invoice_number} — ${inv.customer_name}`);
+      const currency = normalizeCurrency(
+        inv.original_currency ?? inv.currency ?? FUNCTIONAL_CURRENCY,
+        FUNCTIONAL_CURRENCY,
+      );
+      setInvoiceCurrency(currency);
+      if (currency !== FUNCTIONAL_CURRENCY) {
+        if (inv.exchange_rate && inv.exchange_rate > 0) {
+          setExchangeRateInput(String(inv.exchange_rate));
+        } else {
+          // Pull a default rate from the master table for the invoice date.
+          resolveExchangeRate({
+            fromCurrency: currency,
+            toCurrency: FUNCTIONAL_CURRENCY,
+            rateDate: inv.invoice_date ?? new Date().toISOString(),
+          })
+            .then((row) => setExchangeRateInput((cur) => cur || String(row.rate)))
+            .catch(() => undefined);
+        }
+      }
     }
     setLoadingInvoice(false);
   }
@@ -252,6 +292,8 @@ export function InvoiceGLPostingSheet({
     setCreditAccountCode("");
     setAmount("");
     setDescription("");
+    setInvoiceCurrency(FUNCTIONAL_CURRENCY);
+    setExchangeRateInput("");
     onClose();
   }
 
@@ -269,11 +311,26 @@ export function InvoiceGLPostingSheet({
       return;
     }
 
-    const postingAmount = parseFloat(amount);
-    if (!postingAmount || isNaN(postingAmount) || postingAmount <= 0) {
+    const originalAmount = parseFloat(amount);
+    if (!originalAmount || isNaN(originalAmount) || originalAmount <= 0) {
       toast.error("Enter a valid amount greater than zero");
       return;
     }
+
+    let lockedRate: number;
+    try {
+      lockedRate = resolvePostingRate(invoiceCurrency, parseFloat(exchangeRateInput));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Invalid exchange rate");
+      return;
+    }
+
+    const baseAmount = toBaseAmount({
+      amount: originalAmount,
+      currency: invoiceCurrency,
+      exchangeRate: lockedRate,
+    });
+    const rateDate = (invoice?.invoice_date ?? new Date().toISOString()).slice(0, 10);
 
     setPosting(true);
     try {
@@ -284,21 +341,40 @@ export function InvoiceGLPostingSheet({
           account_id: debitAccountId,
           account_code: debitAccountCode,
           account_name: debitAccountName,
-          debit: postingAmount,
+          debit: baseAmount,
           credit: 0,
           description,
-        },
+          // Per-line FX metadata for drill-down/audit.
+          ...(invoiceCurrency !== FUNCTIONAL_CURRENCY
+            ? {
+                foreign_debit: roundMoney(originalAmount),
+                foreign_credit: 0,
+                currency: invoiceCurrency,
+                exchange_rate: lockedRate,
+                base_currency: FUNCTIONAL_CURRENCY,
+              }
+            : {}),
+        } as JournalLine,
         {
           account_id: creditAccountId,
           account_code: creditAccountCode,
           account_name: creditAccountName,
           debit: 0,
-          credit: postingAmount,
+          credit: baseAmount,
           description,
-        },
+          ...(invoiceCurrency !== FUNCTIONAL_CURRENCY
+            ? {
+                foreign_debit: 0,
+                foreign_credit: roundMoney(originalAmount),
+                currency: invoiceCurrency,
+                exchange_rate: lockedRate,
+                base_currency: FUNCTIONAL_CURRENCY,
+              }
+            : {}),
+        } as JournalLine,
       ];
 
-      // 1. Create journal entry
+      // 1. Create journal entry — PHP-balanced, with FX metadata.
       const { error: jeError } = await supabase.from("journal_entries").insert({
         id: entryId,
         entry_number: entryId,
@@ -306,8 +382,14 @@ export function InvoiceGLPostingSheet({
         invoice_id: invoiceId,
         description,
         lines,
-        total_debit: postingAmount,
-        total_credit: postingAmount,
+        total_debit: baseAmount,
+        total_credit: baseAmount,
+        transaction_currency: invoiceCurrency,
+        exchange_rate: lockedRate,
+        base_currency: FUNCTIONAL_CURRENCY,
+        source_amount: roundMoney(originalAmount),
+        base_amount: baseAmount,
+        exchange_rate_date: rateDate,
         status: "posted",
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -320,12 +402,18 @@ export function InvoiceGLPostingSheet({
         logActivity("invoice", invoice.id, invoice.invoice_number ?? invoice.id, "posted", actor);
       }
 
-      // 2. Update invoice — link journal entry and set status to posted
+      // 2. Update invoice — link JE, persist FX metadata, set status to posted.
       const { error: invError } = await supabase
         .from("invoices")
         .update({
           journal_entry_id: entryId,
           status: "posted",
+          currency: invoiceCurrency,
+          original_currency: invoiceCurrency,
+          exchange_rate: lockedRate,
+          base_currency: FUNCTIONAL_CURRENCY,
+          base_amount: baseAmount,
+          exchange_rate_date: rateDate,
           updated_at: new Date().toISOString(),
         })
         .eq("id", invoiceId);
@@ -362,17 +450,30 @@ export function InvoiceGLPostingSheet({
   // ---------------------------------------------------------------------------
 
   const isAlreadyPosted = !!invoice?.journal_entry_id;
-  const postingAmount = parseFloat(amount) || 0;
+  const originalAmountValue = parseFloat(amount) || 0;
+  const parsedRate = parseFloat(exchangeRateInput);
+  const isPhpInvoice = invoiceCurrency === FUNCTIONAL_CURRENCY;
+  const lockedPreviewRate = isPhpInvoice
+    ? 1
+    : Number.isFinite(parsedRate) && parsedRate > 0
+      ? parsedRate
+      : NaN;
+  const hasUsableRate = Number.isFinite(lockedPreviewRate) && lockedPreviewRate > 0;
+  const previewBaseAmount = hasUsableRate
+    ? roundMoney(originalAmountValue * lockedPreviewRate)
+    : 0;
+
   const canPost =
     !posting &&
     !isAlreadyPosted &&
     !!debitAccountId &&
     !!creditAccountId &&
     debitAccountId !== creditAccountId &&
-    postingAmount > 0;
+    originalAmountValue > 0 &&
+    hasUsableRate;
 
-  const formatCurrency = (n: number) =>
-    new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(n);
+  const formatCurrency = (n: number, c: AccountingCurrency = FUNCTIONAL_CURRENCY) =>
+    formatMoney(n, c);
 
   const formatDate = (d?: string) =>
     d
@@ -530,7 +631,7 @@ export function InvoiceGLPostingSheet({
                 },
                 {
                   label: "Amount",
-                  value: formatCurrency(invoice.total_amount),
+                  value: formatCurrency(invoice.total_amount, invoiceCurrency),
                   bold: true,
                 },
               ].map(({ label, value, bold }) => (
@@ -647,7 +748,7 @@ export function InvoiceGLPostingSheet({
                       color: "var(--theme-text-primary)",
                     }}
                   >
-                    {postingAmount > 0 ? formatCurrency(postingAmount) : "—"}
+                    {previewBaseAmount > 0 ? formatCurrency(previewBaseAmount, FUNCTIONAL_CURRENCY) : "—"}
                   </span>
                 </div>
                 <AccountSelect
@@ -698,7 +799,7 @@ export function InvoiceGLPostingSheet({
                       color: "var(--theme-text-primary)",
                     }}
                   >
-                    {postingAmount > 0 ? formatCurrency(postingAmount) : "—"}
+                    {previewBaseAmount > 0 ? formatCurrency(previewBaseAmount, FUNCTIONAL_CURRENCY) : "—"}
                   </span>
                 </div>
                 <AccountSelect
@@ -714,7 +815,42 @@ export function InvoiceGLPostingSheet({
                 />
               </div>
 
-              {/* Amount field */}
+              {/* Currency + rate */}
+              <div style={{ display: "flex", gap: "12px" }}>
+                <div style={{ minWidth: "120px" }}>
+                  <p style={{ fontSize: "12px", fontWeight: 500, color: "var(--theme-text-muted)", marginBottom: "6px" }}>
+                    Currency
+                  </p>
+                  <select
+                    value={invoiceCurrency}
+                    disabled={isAlreadyPosted}
+                    onChange={(e) => setInvoiceCurrency(e.target.value as AccountingCurrency)}
+                    style={{ width: "100%", height: "36px", border: "1px solid var(--neuron-ui-border)", borderRadius: "6px", padding: "0 10px", fontSize: "13px", backgroundColor: isAlreadyPosted ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface)", color: "var(--theme-text-primary)" }}
+                  >
+                    <option value="PHP">PHP</option>
+                    <option value="USD">USD</option>
+                  </select>
+                </div>
+                {!isPhpInvoice && (
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: "12px", fontWeight: 500, color: "var(--theme-text-muted)", marginBottom: "6px" }}>
+                      {invoiceCurrency} → {FUNCTIONAL_CURRENCY} Rate
+                    </p>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.0001"
+                      value={exchangeRateInput}
+                      disabled={isAlreadyPosted}
+                      onChange={(e) => setExchangeRateInput(e.target.value)}
+                      placeholder="e.g. 58.25"
+                      style={{ width: "100%", height: "36px", border: "1px solid var(--neuron-ui-border)", borderRadius: "6px", padding: "0 10px", fontSize: "13px", outline: "none", boxSizing: "border-box", backgroundColor: isAlreadyPosted ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface)", color: "var(--theme-text-primary)", fontFamily: "monospace" }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Amount field — entered in invoice currency */}
               <div>
                 <p
                   style={{
@@ -724,7 +860,7 @@ export function InvoiceGLPostingSheet({
                     marginBottom: "6px",
                   }}
                 >
-                  Posting Amount (PHP)
+                  Invoice Amount ({invoiceCurrency})
                 </p>
                 <input
                   type="number"
@@ -748,6 +884,11 @@ export function InvoiceGLPostingSheet({
                     color: "var(--theme-text-primary)",
                   }}
                 />
+                {!isPhpInvoice && hasUsableRate && originalAmountValue > 0 && (
+                  <p style={{ fontSize: "11px", color: "var(--theme-text-muted)", marginTop: "6px" }}>
+                    Posts as {formatCurrency(previewBaseAmount, FUNCTIONAL_CURRENCY)} @ rate {lockedPreviewRate}
+                  </p>
+                )}
               </div>
 
               {/* Memo / description */}
@@ -785,7 +926,7 @@ export function InvoiceGLPostingSheet({
               </div>
 
               {/* Balance confirmation pill */}
-              {!isAlreadyPosted && postingAmount > 0 && debitAccountId && creditAccountId && (
+              {!isAlreadyPosted && previewBaseAmount > 0 && debitAccountId && creditAccountId && (
                 <div
                   style={{
                     padding: "10px 14px",
@@ -801,8 +942,10 @@ export function InvoiceGLPostingSheet({
                       fontWeight: 500,
                     }}
                   >
-                    Balanced — DR {formatCurrency(postingAmount)} = CR{" "}
-                    {formatCurrency(postingAmount)}
+                    Balanced (PHP) — DR {formatCurrency(previewBaseAmount, FUNCTIONAL_CURRENCY)} = CR {formatCurrency(previewBaseAmount, FUNCTIONAL_CURRENCY)}
+                    {!isPhpInvoice && originalAmountValue > 0 && (
+                      <> · from {formatCurrency(originalAmountValue, invoiceCurrency)} @ {lockedPreviewRate}</>
+                    )}
                   </p>
                 </div>
               )}

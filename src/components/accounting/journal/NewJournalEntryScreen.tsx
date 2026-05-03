@@ -7,6 +7,16 @@ import { supabase } from "../../../utils/supabase/client";
 import { useUser } from "../../../hooks/useUser";
 import { logCreation } from "../../../utils/activityLog";
 import { toast } from "sonner@2.0.3";
+import {
+  FUNCTIONAL_CURRENCY,
+  SUPPORTED_ACCOUNTING_CURRENCIES,
+  formatMoney,
+  resolvePostingRate,
+  roundMoney,
+  toBaseAmount,
+  type AccountingCurrency,
+} from "../../../utils/accountingCurrency";
+import { resolveExchangeRate } from "../../../utils/exchangeRates";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -105,10 +115,50 @@ export function NewJournalEntryScreen({ onBack, onCreated }: NewJournalEntryScre
   const [memo, setMemo] = useState<string>("");
   const [lines, setLines] = useState<LineItem[]>([makeLine(), makeLine()]);
 
+  // Multi-currency state. PHP keeps the legacy behavior (rate locked to 1).
+  // USD requires a positive rate; debit/credit columns are then in USD and the
+  // app computes the PHP base totals used for GL balancing.
+  const [transactionCurrency, setTransactionCurrency] =
+    useState<AccountingCurrency>(FUNCTIONAL_CURRENCY);
+  const [exchangeRateInput, setExchangeRateInput] = useState<string>("");
+  const [rateLookupPending, setRateLookupPending] = useState(false);
+
   const [accounts, setAccounts] = useState<COAAccount[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [confirmPost, setConfirmPost] = useState(false);
+
+  // When the user picks USD, look up a sensible default rate from the
+  // exchange_rates table for the entry date. Never silently default to 1.
+  useEffect(() => {
+    if (transactionCurrency === FUNCTIONAL_CURRENCY) {
+      setExchangeRateInput("");
+      return;
+    }
+    let cancelled = false;
+    setRateLookupPending(true);
+    resolveExchangeRate({
+      fromCurrency: transactionCurrency,
+      toCurrency: FUNCTIONAL_CURRENCY,
+      rateDate: entryDate,
+    })
+      .then((row) => {
+        if (cancelled) return;
+        setExchangeRateInput((current) =>
+          current ? current : String(row.rate),
+        );
+      })
+      .catch(() => {
+        // Leave the field empty so the user is forced to enter a rate.
+        if (!cancelled) setExchangeRateInput("");
+      })
+      .finally(() => {
+        if (!cancelled) setRateLookupPending(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [transactionCurrency, entryDate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -128,12 +178,32 @@ export function NewJournalEntryScreen({ onBack, onCreated }: NewJournalEntryScre
   }, []);
 
   // ─── Totals ──────────────────────────────────────────────────────────────
+  //
+  // Inputs are interpreted in `transactionCurrency`. We compute foreign totals
+  // (what the user typed) and PHP-base totals (what gets posted). Validation
+  // is always against the PHP-base totals because the GL balances in PHP.
 
-  const totalDebits  = lines.reduce((s, l) => s + parseAmount(l.debit),  0);
-  const totalCredits = lines.reduce((s, l) => s + parseAmount(l.credit), 0);
+  const parsedRate = parseFloat(exchangeRateInput);
+  const isPhp = transactionCurrency === FUNCTIONAL_CURRENCY;
+  const lockedRate = isPhp
+    ? 1
+    : Number.isFinite(parsedRate) && parsedRate > 0
+      ? parsedRate
+      : NaN;
+  const hasUsableRate = Number.isFinite(lockedRate) && lockedRate > 0;
+
+  const foreignTotalDebits = lines.reduce((s, l) => s + parseAmount(l.debit), 0);
+  const foreignTotalCredits = lines.reduce((s, l) => s + parseAmount(l.credit), 0);
+
+  const totalDebits = hasUsableRate ? roundMoney(foreignTotalDebits * lockedRate) : 0;
+  const totalCredits = hasUsableRate ? roundMoney(foreignTotalCredits * lockedRate) : 0;
   const runningBalance = totalDebits - totalCredits; // positive = debits ahead
   const difference = Math.abs(runningBalance);
-  const isBalanced = totalDebits > 0 && totalCredits > 0 && difference < 0.005;
+  const isBalanced =
+    hasUsableRate &&
+    totalDebits > 0 &&
+    totalCredits > 0 &&
+    difference < 0.005;
 
   // ─── Enforcement logic ────────────────────────────────────────────────────
   //
@@ -179,18 +249,34 @@ export function NewJournalEntryScreen({ onBack, onCreated }: NewJournalEntryScre
       .filter((l) => parseAmount(l.debit) > 0 || parseAmount(l.credit) > 0)
       .map((l) => {
         const acct = accounts.find((a) => a.id === l.account_id);
+        const foreignDebit = parseAmount(l.debit);
+        const foreignCredit = parseAmount(l.credit);
+        const baseDebit = roundMoney(foreignDebit * lockedRate);
+        const baseCredit = roundMoney(foreignCredit * lockedRate);
         return {
-          account_id:   l.account_id,
-          account_code: acct?.code ?? "",
-          account_name: acct?.name ?? "",
-          debit:        parseAmount(l.debit),
-          credit:       parseAmount(l.credit),
-          description:  l.description.trim() || memo.trim() || "",
+          account_id:    l.account_id,
+          account_code:  acct?.code ?? "",
+          account_name:  acct?.name ?? "",
+          // PHP base values are what GL balancing and reporting use.
+          debit:         baseDebit,
+          credit:        baseCredit,
+          // Original-currency values for drill-down / audit. For PHP-only
+          // entries these mirror base; for USD entries they are the typed amounts.
+          foreign_debit:  foreignDebit,
+          foreign_credit: foreignCredit,
+          currency:       transactionCurrency,
+          exchange_rate:  lockedRate,
+          base_currency:  FUNCTIONAL_CURRENCY,
+          description:    l.description.trim() || memo.trim() || "",
         };
       });
 
   const validate = () => {
     if (!user?.id)    { toast.error("Cannot determine current user"); return false; }
+    if (!isPhp && !hasUsableRate) {
+      toast.error(`Enter a positive ${transactionCurrency}→${FUNCTIONAL_CURRENCY} rate`);
+      return false;
+    }
     if (!isBalanced)  { toast.error("Entry is out of balance"); return false; }
     const active = lines.filter((l) => parseAmount(l.debit) > 0 || parseAmount(l.credit) > 0);
     if (active.some((l) => !l.account_id)) {
@@ -205,11 +291,25 @@ export function NewJournalEntryScreen({ onBack, onCreated }: NewJournalEntryScre
     setSubmitting(true);
     try {
       const id = `JE-MAN-${Date.now()}`;
+      const postingRate = resolvePostingRate(transactionCurrency, lockedRate);
+      const sourceAmount = roundMoney(foreignTotalDebits);
+      const baseAmount = toBaseAmount({
+        amount: sourceAmount,
+        currency: transactionCurrency,
+        exchangeRate: postingRate,
+      });
       const { error } = await supabase.from("journal_entries").insert({
         id, entry_number: id, entry_date: entryDate,
         description: memo.trim() || null,
         lines: buildLines(),
         total_debit: totalDebits, total_credit: totalCredits,
+        // FX header
+        transaction_currency: transactionCurrency,
+        exchange_rate:        postingRate,
+        base_currency:        FUNCTIONAL_CURRENCY,
+        source_amount:        sourceAmount,
+        base_amount:          baseAmount,
+        exchange_rate_date:   entryDate,
         status, created_by: user!.id,
         created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       });
@@ -265,16 +365,16 @@ export function NewJournalEntryScreen({ onBack, onCreated }: NewJournalEntryScre
                 : "bg-[var(--theme-status-warning-bg)] border-[var(--theme-status-warning-border)] text-[var(--theme-status-warning-fg)]"
             }`}>
               {isBalanced
-                ? <><CheckCircle size={14} /> Balanced</>
-                : <><AlertTriangle size={14} /> {PHP.format(difference)} out of balance</>
+                ? <><CheckCircle size={14} /> Balanced (PHP)</>
+                : <><AlertTriangle size={14} /> {formatMoney(difference, FUNCTIONAL_CURRENCY)} out of balance (PHP)</>
               }
             </div>
           )}
         </div>
 
-        {/* Date + Memo */}
-        <div className="flex gap-6 mt-6 ml-12">
-          <div className="flex flex-col gap-1.5" style={{ minWidth: "180px" }}>
+        {/* Date + Currency + Rate + Memo */}
+        <div className="flex gap-6 mt-6 ml-12 flex-wrap">
+          <div className="flex flex-col gap-1.5" style={{ minWidth: "160px" }}>
             <label className="text-[11px] font-semibold text-[var(--theme-text-muted)] uppercase tracking-wider">
               Entry Date
             </label>
@@ -285,7 +385,46 @@ export function NewJournalEntryScreen({ onBack, onCreated }: NewJournalEntryScre
               className="h-10 px-3 border border-[var(--theme-border-default)] rounded-lg text-[13px] text-[var(--theme-text-primary)] bg-[var(--theme-bg-surface)] outline-none focus:ring-2 focus:ring-[var(--theme-state-focus-ring)]"
             />
           </div>
-          <div className="flex flex-col gap-1.5 flex-1">
+          <div className="flex flex-col gap-1.5" style={{ minWidth: "120px" }}>
+            <label className="text-[11px] font-semibold text-[var(--theme-text-muted)] uppercase tracking-wider">
+              Currency
+            </label>
+            <select
+              value={transactionCurrency}
+              onChange={(e) => {
+                // Lock currency once any line carries data; flipping mid-entry
+                // would silently rebase amounts.
+                const hasEntries = lines.some((l) => l.account_id || Number(l.debit) !== 0 || Number(l.credit) !== 0);
+                if (hasEntries) {
+                  toast.error("Clear all line entries before changing currency");
+                  return;
+                }
+                setTransactionCurrency(e.target.value as AccountingCurrency);
+              }}
+              className="h-10 px-3 border border-[var(--theme-border-default)] rounded-lg text-[13px] text-[var(--theme-text-primary)] bg-[var(--theme-bg-surface)] outline-none focus:ring-2 focus:ring-[var(--theme-state-focus-ring)]"
+            >
+              {SUPPORTED_ACCOUNTING_CURRENCIES.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+          {!isPhp && (
+            <div className="flex flex-col gap-1.5" style={{ minWidth: "180px" }}>
+              <label className="text-[11px] font-semibold text-[var(--theme-text-muted)] uppercase tracking-wider">
+                {transactionCurrency} → {FUNCTIONAL_CURRENCY} Rate
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.0001"
+                value={exchangeRateInput}
+                onChange={(e) => setExchangeRateInput(e.target.value)}
+                placeholder={rateLookupPending ? "Loading…" : "e.g. 58.25"}
+                className="h-10 px-3 border border-[var(--theme-border-default)] rounded-lg text-[13px] text-[var(--theme-text-primary)] bg-[var(--theme-bg-surface)] outline-none focus:ring-2 focus:ring-[var(--theme-state-focus-ring)] font-mono"
+              />
+            </div>
+          )}
+          <div className="flex flex-col gap-1.5 flex-1" style={{ minWidth: "240px" }}>
             <label className="text-[11px] font-semibold text-[var(--theme-text-muted)] uppercase tracking-wider">
               Description / Memo
             </label>
@@ -316,7 +455,13 @@ export function NewJournalEntryScreen({ onBack, onCreated }: NewJournalEntryScre
               backgroundColor: "var(--theme-bg-surface)",
               borderBottom: "1px solid var(--theme-border-default)",
             }}>
-              {["Account", "Description", "Debit (DR)", "Credit (CR)", ""].map((h, i) => (
+              {[
+                "Account",
+                "Description",
+                `Debit (DR) ${transactionCurrency}`,
+                `Credit (CR) ${transactionCurrency}`,
+                "",
+              ].map((h, i) => (
                 <span key={i} style={{
                   fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)",
                   textTransform: "uppercase", letterSpacing: "0.04em",
@@ -502,17 +647,39 @@ export function NewJournalEntryScreen({ onBack, onCreated }: NewJournalEntryScre
               borderBottom: "1px solid var(--theme-border-default)",
             }}>
               <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                Totals
+                Totals ({transactionCurrency})
               </span>
               <span />
               <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--theme-text-primary)", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                {PHP.format(totalDebits)}
+                {formatMoney(foreignTotalDebits, transactionCurrency)}
               </span>
               <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--theme-text-primary)", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                {PHP.format(totalCredits)}
+                {formatMoney(foreignTotalCredits, transactionCurrency)}
               </span>
               <span />
             </div>
+            {!isPhp && (
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "2fr 3fr 124px 124px 36px",
+                gap: "8px",
+                padding: "8px 12px",
+                backgroundColor: "var(--theme-bg-page)",
+                borderBottom: "1px solid var(--theme-border-default)",
+              }}>
+                <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  Posted in PHP @ {hasUsableRate ? lockedRate : "—"}
+                </span>
+                <span />
+                <span style={{ fontSize: "12px", color: "var(--theme-text-secondary)", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                  {formatMoney(totalDebits, FUNCTIONAL_CURRENCY)}
+                </span>
+                <span style={{ fontSize: "12px", color: "var(--theme-text-secondary)", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                  {formatMoney(totalCredits, FUNCTIONAL_CURRENCY)}
+                </span>
+                <span />
+              </div>
+            )}
 
             <div style={{
               padding: "10px 14px",
@@ -527,18 +694,25 @@ export function NewJournalEntryScreen({ onBack, onCreated }: NewJournalEntryScre
                 <>
                   <CheckCircle size={14} style={{ color: "var(--theme-status-success-fg)", flexShrink: 0 }} />
                   <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--theme-status-success-fg)" }}>
-                    Entry is balanced — debits equal credits ({PHP.format(totalDebits)})
+                    Entry is balanced — debits equal credits ({formatMoney(totalDebits, FUNCTIONAL_CURRENCY)})
                   </span>
                 </>
               ) : totalDebits === 0 && totalCredits === 0 ? (
                 <span style={{ fontSize: "12px", color: "var(--theme-text-muted)" }}>
                   Enter debit and credit amounts to validate balance.
                 </span>
+              ) : !hasUsableRate ? (
+                <>
+                  <AlertTriangle size={14} style={{ color: "var(--theme-status-warning-fg)", flexShrink: 0 }} />
+                  <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--theme-status-warning-fg)" }}>
+                    Enter a positive {transactionCurrency}→{FUNCTIONAL_CURRENCY} rate to balance in PHP.
+                  </span>
+                </>
               ) : (
                 <>
                   <AlertTriangle size={14} style={{ color: "var(--theme-status-warning-fg)", flexShrink: 0 }} />
                   <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--theme-status-warning-fg)" }}>
-                    Out of balance — difference: {PHP.format(difference)}
+                    Out of balance — difference: {formatMoney(difference, FUNCTIONAL_CURRENCY)}
                   </span>
                 </>
               )}
@@ -562,7 +736,7 @@ export function NewJournalEntryScreen({ onBack, onCreated }: NewJournalEntryScre
             borderBottom: "1px solid var(--theme-status-success-border)",
           }}>
             <p style={{ margin: "0 0 10px", fontSize: "13px", fontWeight: 500, color: "var(--theme-status-success-fg)", lineHeight: 1.5 }}>
-              Post to General Ledger? This entry is balanced ({PHP.format(totalDebits)}).{" "}
+              Post to General Ledger? This entry is balanced ({formatMoney(totalDebits, FUNCTIONAL_CURRENCY)}).{" "}
               Once posted, it is <strong>permanent and cannot be edited or deleted</strong>.
             </p>
             <div className="flex gap-3">

@@ -13,6 +13,7 @@ import { buildServiceToBookingMap, resolveBookingIdForService } from "../../../u
 import { getBillingDisplayCategory } from "../../../utils/billingCategory";
 import { findNegativeBillingAmountItems } from "../../../utils/pricing/quotationSignedPricing";
 import { buildCatalogSnapshot } from "../../../utils/catalogSnapshot";
+import { formatMoney as formatMoneyHelper } from "../../../utils/accountingCurrency";
 
 // Interface matching the backend response for billing items
 export interface BillingItem {
@@ -58,13 +59,8 @@ interface UnifiedBillingsTabProps {
   pendingBillableCount?: number;
 }
 
-const formatCurrency = (amount: number, currency: string = "PHP") => {
-  return new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: currency,
-    minimumFractionDigits: 2,
-  }).format(amount);
-};
+const formatCurrency = (amount: number, currency: string = "PHP") =>
+  formatMoneyHelper(amount, currency as any);
 
 const EMPTY_LINKED_BOOKINGS: any[] = [];
 // Canonical billing item statuses: unbilled → invoiced → paid → voided
@@ -507,6 +503,20 @@ export function UnifiedBillingsTab({
             return;
           }
 
+          // FX guard: refuse to save non-PHP lines without a positive exchange
+          // rate. Without this, base_amount silently falls back to the raw
+          // foreign amount and corrupts every PHP-base aggregation downstream.
+          const missingFxLines = itemsToSave.filter((item: any) => {
+            const c = item.currency || "PHP";
+            if (c === "PHP") return false;
+            const r = Number(item.exchange_rate ?? item.forex_rate);
+            return !(Number.isFinite(r) && r > 0);
+          });
+          if (missingFxLines.length > 0) {
+            toast.error(`Non-PHP billing rows need an exchange rate: ${missingFxLines.map((item: any) => item.description || item.id).join(", ")}`);
+            return;
+          }
+
           toast.info("Saving changes...");
 
           const isNew = (item: any) =>
@@ -517,6 +527,22 @@ export function UnifiedBillingsTab({
             const displayCategory = getBillingDisplayCategory(item);
             const persistedCategory = displayCategory === "General" ? "Uncategorized" : displayCategory;
 
+            // FX: stamp a base_amount alongside the line currency so reports
+            // can aggregate in PHP without joining the parent invoice. The
+            // pre-save guard above refuses non-PHP lines without a positive
+            // rate, so by here either the line is PHP (rate=1) or the rate is
+            // a positive number. We do NOT fall back to the raw foreign amount
+            // for missing rates — that would silently poison PHP aggregates.
+            const lineCurrency = item.currency || "PHP";
+            const rawRate = Number(item.exchange_rate ?? item.forex_rate);
+            const lineRate = lineCurrency === "PHP"
+              ? 1
+              : (Number.isFinite(rawRate) && rawRate > 0 ? rawRate : null);
+            const lineAmount = Number(item.amount || 0);
+            const lineBaseAmount = lineRate === null
+              ? null
+              : Math.round(lineAmount * lineRate * 100) / 100;
+
             return ({
             booking_id: item.booking_id || null,
             project_number: projectId,
@@ -526,7 +552,10 @@ export function UnifiedBillingsTab({
             quotation_category: persistedCategory,
             amount: item.amount || 0,
             quantity: item.quantity || 1,
-            currency: item.currency || "PHP",
+            currency: lineCurrency,
+            exchange_rate: lineRate,
+            base_currency: "PHP",
+            base_amount: lineBaseAmount,
             status: item.status || "unbilled",
             is_taxed: item.is_taxed || false,
             source_quotation_item_id: item.source_quotation_item_id || null,
@@ -672,9 +701,17 @@ export function UnifiedBillingsTab({
       return;
     }
 
+    const missingFxItems: string[] = [];
     const payload = selectedItems.map(item => {
       const displayCategory = getBillingDisplayCategory(item);
       const persistedCategory = displayCategory === "General" ? null : displayCategory;
+
+      const lineCurrency = item.currency || "PHP";
+      const rawRate = Number(item.exchange_rate ?? item.forex_rate ?? (lineCurrency === "PHP" ? 1 : NaN));
+      const lineRate = Number.isFinite(rawRate) && rawRate > 0 ? rawRate : null;
+      if (lineCurrency !== "PHP" && lineRate === null) {
+        missingFxItems.push(item.description || item.id);
+      }
 
       return ({
       id: item.id,
@@ -685,7 +722,8 @@ export function UnifiedBillingsTab({
       category: persistedCategory,
       amount: item.amount || 0,
       quantity: item.quantity || 1,
-      currency: item.currency || "PHP",
+      currency: lineCurrency,
+      exchange_rate: lineCurrency === "PHP" ? 1 : lineRate,
       status: item.status || "unbilled",
       is_taxed: Boolean(item.is_taxed),
       source_quotation_item_id: item.source_quotation_item_id || null,
@@ -700,6 +738,11 @@ export function UnifiedBillingsTab({
       created_at: item.created_at || new Date().toISOString(),
       });
     });
+
+    if (missingFxItems.length > 0) {
+      toast.error(`Cannot send non-PHP billing rows without an exchange rate: ${missingFxItems.join(", ")}`);
+      return;
+    }
 
     const { error } = await supabase.rpc("send_billing_items_to_booking", {
       p_booking_id: bookingId,

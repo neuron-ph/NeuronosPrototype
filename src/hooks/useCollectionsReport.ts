@@ -8,6 +8,7 @@ import { supabase } from "../utils/supabase/client";
 import { isInScope } from "../components/accounting/aggregate/types";
 import type { DateScope } from "../components/accounting/aggregate/types";
 import { isCollectionAppliedToInvoice } from "../utils/collectionResolution";
+import { pickReportingAmount } from "../utils/accountingCurrency";
 import { queryKeys } from "../lib/queryKeys";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -118,7 +119,7 @@ export function useCollectionsReport(scope: DateScope) {
           invoiceRef,
           paymentMethod: (c.payment_method as string) || "—",
           referenceNumber: (c.reference_number as string) || (c.check_number as string) || "—",
-          amount: Number(c.amount) || 0,
+          amount: pickReportingAmount(c),
         };
       })
       .sort((a, b) => {

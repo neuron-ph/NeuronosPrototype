@@ -5,6 +5,16 @@ import { logActivity } from "../../../utils/activityLog";
 import { toast } from "sonner@2.0.3";
 import { SidePanel } from "../../common/SidePanel";
 import type { EVoucherAPType } from "../../../types/evoucher";
+import {
+  FUNCTIONAL_CURRENCY,
+  formatMoney,
+  normalizeCurrency,
+  resolvePostingRate,
+  roundMoney,
+  toBaseAmount,
+  type AccountingCurrency,
+} from "../../../utils/accountingCurrency";
+import { resolveExchangeRate } from "../../../utils/exchangeRates";
 
 interface GLAccount {
   id: string;
@@ -139,7 +149,59 @@ export function GLConfirmationSheet({
   );
   const [posting, setPosting] = useState(false);
 
+  // Multi-currency. Defaults to PHP unless the evoucher row carries USD.
+  const [voucherCurrency, setVoucherCurrency] =
+    useState<AccountingCurrency>(FUNCTIONAL_CURRENCY);
+  const [exchangeRateInput, setExchangeRateInput] = useState<string>("");
+
   const hints = getSuggestedAccounts(transactionType);
+
+  const parsedRate = parseFloat(exchangeRateInput);
+  const isPhpVoucher = voucherCurrency === FUNCTIONAL_CURRENCY;
+  const previewRate = isPhpVoucher
+    ? 1
+    : Number.isFinite(parsedRate) && parsedRate > 0
+      ? parsedRate
+      : NaN;
+  const hasUsableRate = Number.isFinite(previewRate) && previewRate > 0;
+  const previewBase = hasUsableRate ? roundMoney(amount * previewRate) : 0;
+
+  // Load evoucher FX metadata when the sheet opens.
+  useEffect(() => {
+    if (!isOpen || !evoucherId) return;
+    let cancelled = false;
+    supabase
+      .from("evouchers")
+      .select("currency, original_currency, exchange_rate, exchange_rate_date")
+      .eq("id", evoucherId)
+      .maybeSingle()
+      .then(async ({ data }) => {
+        if (cancelled) return;
+        const currency = normalizeCurrency(
+          (data as any)?.original_currency ?? (data as any)?.currency ?? FUNCTIONAL_CURRENCY,
+          FUNCTIONAL_CURRENCY,
+        );
+        setVoucherCurrency(currency);
+        if (currency !== FUNCTIONAL_CURRENCY) {
+          const existing = (data as any)?.exchange_rate;
+          if (existing && existing > 0) {
+            setExchangeRateInput(String(existing));
+          } else {
+            try {
+              const row = await resolveExchangeRate({
+                fromCurrency: currency,
+                toCurrency: FUNCTIONAL_CURRENCY,
+                rateDate: (data as any)?.exchange_rate_date ?? new Date().toISOString(),
+              });
+              if (!cancelled) setExchangeRateInput((cur) => cur || String(row.rate));
+            } catch {
+              // user must enter manually
+            }
+          }
+        }
+      });
+    return () => { cancelled = true; };
+  }, [isOpen, evoucherId]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -191,30 +253,63 @@ export function GLConfirmationSheet({
       return;
     }
 
+    // Closing entry runs at the voucher's locked carrying rate (auto-loaded
+    // from `evoucher.exchange_rate` in the open effect). This clears Advances
+    // Receivable at its exact carrying value — no FX delta here. Any realized
+    // FX between AP carrying rate and cash settlement rate is booked by
+    // DisburseEVoucherPage at disbursement time.
+    let lockedRate: number;
+    try {
+      lockedRate = resolvePostingRate(voucherCurrency, parseFloat(exchangeRateInput));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Invalid exchange rate");
+      return;
+    }
+    const baseAmount = toBaseAmount({
+      amount,
+      currency: voucherCurrency,
+      exchangeRate: lockedRate,
+    });
+    const rateDate = new Date().toISOString().slice(0, 10);
+
     setPosting(true);
     try {
+      const isForeign = voucherCurrency !== FUNCTIONAL_CURRENCY;
+      const fxLineFields = isForeign
+        ? {
+            currency: voucherCurrency,
+            exchange_rate: lockedRate,
+            base_currency: FUNCTIONAL_CURRENCY,
+          }
+        : {};
       const lines: JournalLine[] = [
         {
           account_id: debitAccountId,
           account_code: debitAccountCode,
           account_name: debitAccountName,
-          debit: amount,
+          debit: baseAmount,
           credit: 0,
           description,
-        },
+          ...(isForeign
+            ? { foreign_debit: roundMoney(amount), foreign_credit: 0, ...fxLineFields }
+            : {}),
+        } as JournalLine,
         {
           account_id: creditAccountId,
           account_code: creditAccountCode,
           account_name: creditAccountName,
           debit: 0,
-          credit: amount,
+          credit: baseAmount,
           description,
-        },
+          ...(isForeign
+            ? { foreign_debit: 0, foreign_credit: roundMoney(amount), ...fxLineFields }
+            : {}),
+        } as JournalLine,
       ];
 
       const entryId = `JE-${Date.now()}`;
 
-      // Create journal entry
+      // Create PHP-balanced journal entry with FX metadata.
       const { error: jeError } = await supabase.from("journal_entries").insert({
         id: entryId,
         entry_number: entryId,
@@ -222,8 +317,14 @@ export function GLConfirmationSheet({
         evoucher_id: evoucherId,
         description,
         lines,
-        total_debit: amount,
-        total_credit: amount,
+        total_debit: baseAmount,
+        total_credit: baseAmount,
+        transaction_currency: voucherCurrency,
+        exchange_rate: lockedRate,
+        base_currency: FUNCTIONAL_CURRENCY,
+        source_amount: roundMoney(amount),
+        base_amount: baseAmount,
+        exchange_rate_date: rateDate,
         status: "draft",
         created_by: currentUser.id,
         created_at: new Date().toISOString(),
@@ -232,12 +333,18 @@ export function GLConfirmationSheet({
 
       if (jeError) throw jeError;
 
-      // Transition EV to posted + link closing journal entry
+      // Transition EV to posted + link closing JE + persist FX metadata.
       const { error: evError } = await supabase
         .from("evouchers")
         .update({
           status: "posted",
           closing_journal_entry_id: entryId,
+          currency: voucherCurrency,
+          original_currency: voucherCurrency,
+          exchange_rate: lockedRate,
+          base_currency: FUNCTIONAL_CURRENCY,
+          base_amount: baseAmount,
+          exchange_rate_date: rateDate,
           updated_at: new Date().toISOString(),
         })
         .eq("id", evoucherId);
@@ -289,8 +396,8 @@ export function GLConfirmationSheet({
       ) : (
         <button
           onClick={handlePost}
-          disabled={posting || !debitAccountId || !creditAccountId}
-          style={{ height: "40px", padding: "0 24px", borderRadius: "8px", backgroundColor: "var(--theme-action-primary-bg)", border: "none", color: "var(--theme-action-primary-text)", fontSize: "13px", fontWeight: 600, cursor: posting || !debitAccountId || !creditAccountId ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "8px", opacity: posting || !debitAccountId || !creditAccountId ? 0.6 : 1 }}
+          disabled={posting || !debitAccountId || !creditAccountId || !hasUsableRate}
+          style={{ height: "40px", padding: "0 24px", borderRadius: "8px", backgroundColor: "var(--theme-action-primary-bg)", border: "none", color: "var(--theme-action-primary-text)", fontSize: "13px", fontWeight: 600, cursor: posting || !debitAccountId || !creditAccountId || !hasUsableRate ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "8px", opacity: posting || !debitAccountId || !creditAccountId || !hasUsableRate ? 0.6 : 1 }}
         >
           {posting && <Loader2 size={16} className="animate-spin" />}
           {posting ? "Posting…" : "Confirm & Post to Ledger"}
@@ -316,7 +423,7 @@ export function GLConfirmationSheet({
           <div style={{ display: "flex", justifyContent: "space-between" }}>
             <span style={{ fontSize: "13px", color: "var(--theme-text-muted)" }}>Amount</span>
             <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--theme-text-primary)" }}>
-              {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(amount)}
+              {formatMoney(amount, voucherCurrency)}
             </span>
           </div>
         </div>
@@ -350,7 +457,7 @@ export function GLConfirmationSheet({
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
                 <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Debit (DR)</span>
                 <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--theme-text-primary)" }}>
-                  {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(amount)}
+                  {formatMoney(previewBase, FUNCTIONAL_CURRENCY)}
                 </span>
               </div>
               <AccountSelect
@@ -371,7 +478,7 @@ export function GLConfirmationSheet({
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
                 <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Credit (CR)</span>
                 <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--theme-text-primary)" }}>
-                  {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(amount)}
+                  {formatMoney(previewBase, FUNCTIONAL_CURRENCY)}
                 </span>
               </div>
               <AccountSelect
@@ -386,6 +493,35 @@ export function GLConfirmationSheet({
                 }}
               />
             </div>
+
+            {/* Currency + rate (visible only when USD) */}
+            {!isPhpVoucher && (
+              <div style={{ display: "flex", gap: "12px" }}>
+                <div style={{ minWidth: "120px" }}>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: 500, color: "var(--theme-text-muted)", marginBottom: "6px" }}>Currency</label>
+                  <input
+                    type="text"
+                    value={voucherCurrency}
+                    readOnly
+                    style={{ width: "100%", height: "36px", border: "1px solid var(--theme-border-default)", borderRadius: "6px", padding: "0 10px", fontSize: "13px", backgroundColor: "var(--theme-bg-surface-subtle)", color: "var(--theme-text-secondary)" }}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: 500, color: "var(--theme-text-muted)", marginBottom: "6px" }}>
+                    {voucherCurrency} → {FUNCTIONAL_CURRENCY} Rate
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.0001"
+                    value={exchangeRateInput}
+                    onChange={(e) => setExchangeRateInput(e.target.value)}
+                    placeholder="e.g. 58.25"
+                    style={{ width: "100%", height: "36px", border: "1px solid var(--theme-border-default)", borderRadius: "6px", padding: "0 10px", fontSize: "13px", outline: "none", boxSizing: "border-box", backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-primary)", fontFamily: "monospace" }}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Description */}
             <div>
@@ -403,7 +539,10 @@ export function GLConfirmationSheet({
             <div style={{ padding: "10px 14px", borderRadius: "6px", backgroundColor: "var(--theme-status-success-bg)", border: "1px solid var(--theme-status-success-border)", display: "flex", alignItems: "center", gap: "8px" }}>
               <CheckCircle size={13} style={{ color: "var(--theme-status-success-fg)", flexShrink: 0 }} />
               <p style={{ fontSize: "12px", color: "var(--theme-status-success-fg)", fontWeight: 500, margin: 0 }}>
-                Balanced — DR {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(amount)} = CR {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(amount)}
+                Balanced (PHP) — DR {formatMoney(previewBase, FUNCTIONAL_CURRENCY)} = CR {formatMoney(previewBase, FUNCTIONAL_CURRENCY)}
+                {!isPhpVoucher && hasUsableRate && (
+                  <> · from {formatMoney(amount, voucherCurrency)} @ {previewRate}</>
+                )}
               </p>
             </div>
           </div>

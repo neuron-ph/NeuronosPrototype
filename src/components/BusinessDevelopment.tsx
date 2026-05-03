@@ -425,12 +425,17 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
           validity_period: data.validity_period,
           source_contract_id: data.source_contract_id || null,
           source_contract_number: data.source_contract_number || null,
-          // Contract rate tables
-          rate_matrices: data.rate_matrices || [],
-          scope_of_services: data.scope_of_services || [],
-          terms_and_conditions: data.terms_and_conditions || [],
-          contract_general_details: data.contract_general_details || null,
         },
+        // Contract overflow + linked profile metadata live in details (matches Pricing.tsx).
+        // Preserves builder-provided keys like profile_refs and any prior overflow.
+        details: (() => {
+          const overflow: Record<string, unknown> = { ...((data as any).details ?? {}) };
+          if (data.rate_matrices !== undefined) overflow.rate_matrices = data.rate_matrices;
+          if (data.scope_of_services !== undefined) overflow.scope_of_services = data.scope_of_services;
+          if (data.terms_and_conditions !== undefined) overflow.terms_and_conditions = data.terms_and_conditions;
+          if (data.contract_general_details !== undefined) overflow.contract_general_details = data.contract_general_details;
+          return Object.keys(overflow).length > 0 ? overflow : undefined;
+        })(),
         status: data.status || 'Draft',
         validity_date: toValidityDate(data.valid_until, data.created_date),
         created_by: user?.id || null,
@@ -535,11 +540,16 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
           validity_period: updatedQuotation.validity_period,
           source_contract_id: updatedQuotation.source_contract_id || null,
           source_contract_number: updatedQuotation.source_contract_number || null,
-          rate_matrices: updatedQuotation.rate_matrices || [],
-          scope_of_services: updatedQuotation.scope_of_services || [],
-          terms_and_conditions: updatedQuotation.terms_and_conditions || [],
-          contract_general_details: updatedQuotation.contract_general_details || null,
         },
+        // Contract overflow + linked profile metadata live in details (matches Pricing.tsx).
+        details: (() => {
+          const overflow: Record<string, unknown> = { ...((updatedQuotation as any).details ?? {}) };
+          if (updatedQuotation.rate_matrices !== undefined) overflow.rate_matrices = updatedQuotation.rate_matrices;
+          if (updatedQuotation.scope_of_services !== undefined) overflow.scope_of_services = updatedQuotation.scope_of_services;
+          if (updatedQuotation.terms_and_conditions !== undefined) overflow.terms_and_conditions = updatedQuotation.terms_and_conditions;
+          if (updatedQuotation.contract_general_details !== undefined) overflow.contract_general_details = updatedQuotation.contract_general_details;
+          return Object.keys(overflow).length > 0 ? overflow : undefined;
+        })(),
         status: updatedQuotation.status || 'Draft',
         validity_date: toValidityDate(updatedQuotation.valid_until, updatedQuotation.created_date),
         currency: updatedQuotation.currency || 'PHP',
