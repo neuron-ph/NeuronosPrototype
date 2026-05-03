@@ -1,5 +1,5 @@
 import { ArrowLeft, Mail, Phone, Building2, User, Edit, Trash2, Paperclip, Download, FileText, Image as ImageIcon, File, Upload, CheckCircle2, AlertCircle, MessageSquare, Send, Plus, Users, MessageCircle, Linkedin, StickyNote, Flag, CheckSquare, UserCheck } from "lucide-react";
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { usePermission } from "../../context/PermissionProvider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../../lib/queryKeys";
@@ -13,15 +13,10 @@ import { logActivity, logCreation } from "../../utils/activityLog";
 import { toast } from "sonner@2.0.3";
 import { CreateQuotationMenu } from "../pricing/CreateQuotationMenu";
 import { ContactTeamsTab } from "./ContactTeamsTab";
+import { CommentsTab } from "../shared/CommentsTab";
+import { EntityAttachmentsTab } from "../shared/EntityAttachmentsTab";
 
-interface ContactDetailProps {
-  contact: Contact;
-  onBack: () => void;
-  onCreateInquiry?: (customer: Customer, contact?: Contact, quotationType?: QuotationType) => void;
-  variant?: "bd" | "pricing";
-}
-
-// Mock attachment data
+// Local attachment shape for in-memory task/activity proof uploads (not persisted)
 interface Attachment {
   id: string;
   name: string;
@@ -33,91 +28,12 @@ interface Attachment {
   sourceName: string;
 }
 
-const mockAttachments: Attachment[] = [
-  {
-    id: "att-1",
-    name: "Q1_2025_Forecast.pdf",
-    type: "pdf",
-    size: "2.3 MB",
-    uploadedAt: "2024-12-05T10:30:00Z",
-    source: "Task",
-    sourceId: "task-1",
-    sourceName: "Follow up on Q1 2025 forecast"
-  },
-  {
-    id: "att-2",
-    name: "Meeting_Notes_Nov_2024.pdf",
-    type: "pdf",
-    size: "1.8 MB",
-    uploadedAt: "2024-11-28T14:20:00Z",
-    source: "Activity",
-    sourceId: "act-1",
-    sourceName: "Meeting Logged"
-  },
-  {
-    id: "att-3",
-    name: "Shipment_Schedule.xlsx",
-    type: "spreadsheet",
-    size: "456 KB",
-    uploadedAt: "2024-11-25T09:15:00Z",
-    source: "Task",
-    sourceId: "task-2",
-    sourceName: "Review shipment schedule"
-  },
-  {
-    id: "att-4",
-    name: "Product_Catalog_2024.pdf",
-    type: "pdf",
-    size: "5.2 MB",
-    uploadedAt: "2024-11-20T11:00:00Z",
-    source: "Inquiry",
-    sourceId: "inq-1",
-    sourceName: "General Merchandise Inquiry"
-  },
-  {
-    id: "att-5",
-    name: "Warehouse_Photo.jpg",
-    type: "image",
-    size: "3.1 MB",
-    uploadedAt: "2024-11-15T16:45:00Z",
-    source: "Activity",
-    sourceId: "act-2",
-    sourceName: "Site Visit Logged"
-  }
-];
-
-interface Comment {
-  id: string;
-  user_name: string;
-  user_department: "BD" | "Pricing";
-  message: string;
-  created_at: string;
+interface ContactDetailProps {
+  contact: Contact;
+  onBack: () => void;
+  onCreateInquiry?: (customer: Customer, contact?: Contact, quotationType?: QuotationType) => void;
+  variant?: "bd" | "pricing";
 }
-
-// Mock comments for demo
-const mockComments: Comment[] = [
-  {
-    id: "cm1",
-    user_name: "Ana Reyes",
-    user_department: "BD",
-    message: "Hi Pricing team, this client needs urgent quotation for the Shanghai shipment. They're requesting cold storage throughout.",
-    created_at: "2025-12-10T10:15:00"
-  },
-  {
-    id: "cm2",
-    user_name: "Juan Dela Cruz",
-    user_department: "Pricing",
-    message: "Got it! I'll prioritize this. Do we have their preferred vendor for cold chain?",
-    created_at: "2025-12-10T10:45:00"
-  },
-  {
-    id: "cm3",
-    user_name: "Ana Reyes",
-    user_department: "BD",
-    message: "They usually work with Manila Cold Chain Solutions. Also mentioned they need delivery by Dec 15.",
-    created_at: "2025-12-10T11:20:00"
-  }
-];
 
 export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd" }: ContactDetailProps) {
   const { can } = usePermission();
@@ -143,7 +59,6 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
     if (canViewAttachmentsTab) return "attachments";
     return "comments";
   });
-  const [newComment, setNewComment] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [editedContact, setEditedContact] = useState(contact);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -164,28 +79,9 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
     contact_id: contact.id
   });
   const [activityAttachments, setActivityAttachments] = useState<Attachment[]>([]);
-  const [attachments, setAttachments] = useState<Attachment[]>(mockAttachments);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isConverting, setIsConverting] = useState(false);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
 
-    const newAttachment: Attachment = {
-      id: `att-${Date.now()}`,
-      name: file.name,
-      type: file.name.endsWith('.pdf') ? 'pdf' : file.name.match(/\.(jpg|jpeg|png|gif)$/i) ? 'image' : file.name.endsWith('.xlsx') ? 'spreadsheet' : 'document',
-      size: `${(file.size / 1024 / 1024).toFixed(1)} MB`,
-      uploadedAt: new Date().toISOString(),
-      source: "Activity", // Defaulting to Activity for manual uploads
-      sourceId: "manual-upload",
-      sourceName: "Manual Upload"
-    };
-
-    setAttachments([newAttachment, ...attachments]);
-  };
-  
   const { user, effectiveRole, effectiveDepartment } = useUser();
   const canAssignOwner = effectiveDepartment === "Executive" || effectiveRole === "manager" || effectiveRole === "executive";
 
@@ -304,23 +200,6 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
     });
   };
 
-  const formatCommentDateTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', { 
-      day: 'numeric',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const handleSendComment = () => {
-    if (newComment.trim()) {
-      // TODO: Add comment to database
-      console.log("New comment:", newComment);
-      setNewComment("");
-    }
-  };
 
   const getLifecycleStageColor = (stage: LifecycleStage) => {
     switch (stage) {
@@ -2612,203 +2491,22 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
               )}
 
               {activeTab === "attachments" && canViewAttachmentsTab && (
-                <div>
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
-                      Attachments
-                    </h3>
-                    <div>
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        className="hidden"
-                        onChange={handleFileUpload}
-                      />
-                      <button
-                        onClick={() => fileInputRef.current?.click()}
-                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors"
-                        style={{
-                          backgroundColor: "var(--theme-action-primary-bg)",
-                          color: "#FFFFFF"
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = "var(--theme-action-primary-border)";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
-                        }}
-                      >
-                        <Upload size={14} />
-                        Upload File
-                      </button>
-                    </div>
-                  </div>
-
-                  {attachments.length === 0 ? (
-                    <div className="text-center py-12">
-                      <p className="text-[14px]" style={{ color: "var(--theme-text-muted)" }}>No attachments yet</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {attachments.map((attachment) => (
-                        <div 
-                          key={attachment.id}
-                          className="p-4 rounded-lg"
-                          style={{
-                            border: "1px solid var(--neuron-ui-border)",
-                            backgroundColor: "var(--theme-bg-surface)"
-                          }}
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-start gap-4 flex-1">
-                              <div className="flex-shrink-0 mt-1">
-                                {attachment.type === "pdf" && <FileText size={20} style={{ color: "var(--theme-action-primary-bg)" }} />}
-                                {attachment.type === "image" && <ImageIcon size={20} style={{ color: "var(--theme-action-primary-bg)" }} />}
-                                {attachment.type === "document" && <File size={20} style={{ color: "var(--theme-action-primary-bg)" }} />}
-                                {attachment.type === "spreadsheet" && <File size={20} style={{ color: "var(--theme-action-primary-bg)" }} />}
-                              </div>
-                              <div className="flex-1">
-                                <div className="text-[14px] font-medium mb-1" style={{ color: "var(--theme-text-primary)" }}>
-                                  {attachment.name}
-                                </div>
-                                <div className="flex items-center gap-3 mb-2">
-                                  <span className="text-[12px]" style={{ color: "var(--theme-text-muted)" }}>
-                                    {attachment.size}
-                                  </span>
-                                  <span className="text-[12px]" style={{ color: "var(--theme-text-muted)" }}>
-                                    • Uploaded: {formatDate(attachment.uploadedAt)}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span 
-                                    className="text-[11px] px-2 py-0.5 rounded font-medium uppercase tracking-wide"
-                                    style={{
-                                      backgroundColor: attachment.source === "Task" ? "var(--theme-status-warning-bg)" : attachment.source === "Activity" ? "var(--theme-bg-surface-tint)" : "var(--neuron-pill-inactive-bg)",
-                                      color: attachment.source === "Task" ? "#C88A2B" : attachment.source === "Activity" ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)"
-                                    }}
-                                  >
-                                    {attachment.source}
-                                  </span>
-                                  <span className="text-[12px]" style={{ color: "var(--theme-text-muted)" }}>
-                                    {attachment.sourceName}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                            <button
-                              className="flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ml-4"
-                              style={{
-                                backgroundColor: "var(--theme-action-primary-bg)",
-                                color: "#FFFFFF"
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.backgroundColor = "var(--theme-action-primary-border)";
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
-                              }}
-                            >
-                              <Download size={14} />
-                              Download
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <EntityAttachmentsTab
+                  entityId={contact.id}
+                  entityType="contacts"
+                  currentUser={user ? { id: user.id, name: user.name || "", email: user.email || "", department: user.department || "" } : null}
+                />
               )}
 
               {activeTab === "comments" && canViewCommentsTab && (
-                <div>
-                  {/* Comments List */}
-                  <div className="space-y-4 mb-6">
-                    {mockComments.map((comment) => (
-                      <div
-                        key={comment.id}
-                        className="p-4 rounded-lg"
-                        style={{
-                          background: comment.user_department === "BD" 
-                            ? "var(--theme-bg-surface-tint)" 
-                            : "var(--neuron-bg-card)",
-                          border: comment.user_department === "BD"
-                            ? "1.5px solid var(--theme-action-primary-bg)"
-                            : "1.5px solid var(--neuron-ui-border)",
-                          marginLeft: comment.user_department === "BD" ? "40px" : "0",
-                          marginRight: comment.user_department === "Pricing" ? "40px" : "0"
-                        }}
-                      >
-                        <div className="flex items-center gap-2 mb-2">
-                          <span style={{ 
-                            fontSize: "13px", 
-                            fontWeight: 600, 
-                            color: comment.user_department === "BD" 
-                              ? "var(--neuron-brand-green)" 
-                              : "var(--neuron-ink-primary)" 
-                          }}>
-                            {comment.user_name}
-                          </span>
-                          <span 
-                            className="px-2 py-0.5 rounded text-[11px]"
-                            style={{ 
-                              background: comment.user_department === "BD" ? "var(--theme-action-primary-bg)" : "#6B7A76",
-                              color: "#FFFFFF",
-                              fontWeight: 500
-                            }}
-                          >
-                            {comment.user_department}
-                          </span>
-                          <span style={{ fontSize: "12px", color: "var(--neuron-ink-muted)" }}>
-                            {formatCommentDateTime(comment.created_at)}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: "14px", color: "var(--neuron-ink-secondary)" }}>
-                          {comment.message}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Comment Input */}
-                  <div 
-                    className="sticky bottom-0 p-4 rounded-lg"
-                    style={{
-                      background: "var(--neuron-bg-card)",
-                      border: "1.5px solid var(--neuron-ui-border)"
-                    }}
-                  >
-                    <div className="flex gap-3">
-                      <textarea
-                        value={newComment}
-                        onChange={(e) => setNewComment(e.target.value)}
-                        placeholder="Add a comment for Pricing team..."
-                        rows={3}
-                        className="flex-1 px-3 py-2 rounded-lg resize-none"
-                        style={{
-                          border: "1.5px solid var(--neuron-ui-border)",
-                          background: "var(--neuron-bg-input)",
-                          color: "var(--neuron-ink-primary)",
-                          fontSize: "14px",
-                          outline: "none"
-                        }}
-                      />
-                      <button
-                        onClick={handleSendComment}
-                        disabled={!newComment.trim()}
-                        className="px-4 py-2 rounded-lg transition-all flex items-center gap-2"
-                        style={{
-                          background: newComment.trim() ? "var(--theme-action-primary-bg)" : "var(--theme-border-default)",
-                          color: newComment.trim() ? "#FFFFFF" : "var(--theme-text-muted)",
-                          border: "none",
-                          cursor: newComment.trim() ? "pointer" : "not-allowed",
-                          height: "fit-content"
-                        }}
-                      >
-                        <Send size={16} />
-                        Send
-                      </button>
-                    </div>
-                  </div>
+                <div className="h-[600px]">
+                  <CommentsTab
+                    entityId={contact.id}
+                    entityType="contact"
+                    currentUserId={user?.id || ""}
+                    currentUserName={user?.name || "Unknown"}
+                    currentUserDepartment={user?.department || effectiveDepartment || "BD"}
+                  />
                 </div>
               )}
             </div>

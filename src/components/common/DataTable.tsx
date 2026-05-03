@@ -36,6 +36,12 @@ interface DataTableProps<T> {
 
   // Render Options
   renderTableOnEmpty?: boolean;
+
+  /**
+   * Set of row ids with unread notifications. Renders a small leading red dot
+   * in the first cell of each unread row. Compare with item.id strings.
+   */
+  unreadIds?: Set<string | number>;
 }
 
 export function DataTable<T extends { id?: string | number }>({
@@ -52,6 +58,7 @@ export function DataTable<T extends { id?: string | number }>({
   onSelectRow,
   onSelectAll,
   renderTableOnEmpty = false,
+  unreadIds,
 }: DataTableProps<T>) {
   const allSelected =
     data.length > 0 && data.every((item) => item.id && selectedIds.includes(item.id));
@@ -286,22 +293,50 @@ export function DataTable<T extends { id?: string | number }>({
                     </div>
                   </td>
                 )}
-                {columns.map((col, colIdx) => (
-                  <td
-                    key={colIdx}
-                    className="px-4 py-3"
-                    style={{ textAlign: col.align || "left" }}
-                  >
-                    {col.cell ? (
-                      col.cell(item)
-                    ) : (
-                      <span className="text-[12px] text-[var(--theme-text-primary)] font-medium">
-                        {/* @ts-ignore - Generic accessor handling */}
-                        {item[col.accessorKey]}
-                      </span>
-                    )}
-                  </td>
-                ))}
+                {columns.map((col, colIdx) => {
+                  const showUnreadDot =
+                    colIdx === 0 && !!unreadIds && !!item.id && unreadIds.has(item.id);
+                  return (
+                    <td
+                      key={colIdx}
+                      className="px-4 py-3"
+                      style={{ textAlign: col.align || "left" }}
+                    >
+                      {showUnreadDot ? (
+                        <div className="flex items-center gap-2">
+                          <span
+                            aria-label="Unread"
+                            style={{
+                              width: 8,
+                              height: 8,
+                              minWidth: 8,
+                              borderRadius: 4,
+                              backgroundColor: "var(--theme-status-danger-fg)",
+                              flexShrink: 0,
+                            }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            {col.cell ? (
+                              col.cell(item)
+                            ) : (
+                              <span className="text-[12px] text-[var(--theme-text-primary)] font-semibold">
+                                {/* @ts-ignore - Generic accessor handling */}
+                                {item[col.accessorKey]}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ) : col.cell ? (
+                        col.cell(item)
+                      ) : (
+                        <span className="text-[12px] text-[var(--theme-text-primary)] font-medium">
+                          {/* @ts-ignore - Generic accessor handling */}
+                          {item[col.accessorKey]}
+                        </span>
+                      )}
+                    </td>
+                  );
+                })}
               </tr>
             ))
           )}

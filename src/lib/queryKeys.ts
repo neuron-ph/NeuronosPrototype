@@ -80,6 +80,14 @@ export const queryKeys = {
     list: () => ["inbox", "list"] as const,
     thread: (id: string) => ["inbox", "thread", id] as const,
   },
+  notifications: {
+    all: () => ["notifications"] as const,
+    counters: (userId: string) => ["notifications", "counters", userId] as const,
+    feed: (userId: string, unreadOnly: boolean) =>
+      ["notifications", "feed", userId, unreadOnly] as const,
+    unreadEntities: (userId: string, entityType: string) =>
+      ["notifications", "unreadEntities", userId, entityType] as const,
+  },
   transactions: {
     all: () => ["transactions"] as const,
     accounts: () => ["transactions", "accounts"] as const,

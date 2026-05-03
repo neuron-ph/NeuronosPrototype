@@ -12,6 +12,7 @@ import { LiquidationForm } from "./LiquidationForm";
 import { GLConfirmationSheet } from "./GLConfirmationSheet";
 import type { EVoucherAPType } from "../../../types/evoucher";
 import { ensureBillableExpenseBillingItem } from "../../../utils/evoucherApproval";
+import { recordNotificationEvent } from "../../../utils/notifications";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -355,6 +356,20 @@ export function EVoucherWorkflowPanel({
           autoCreated: true,
         });
       }
+      void recordNotificationEvent({
+        actorUserId: currentUser?.id ?? null,
+        module: "accounting",
+        subSection: "evouchers",
+        entityType: "evoucher",
+        entityId: evoucherId,
+        kind: "rejected",
+        summary: {
+          label: `E-Voucher ${evoucherNumber} rejected`,
+          reference: evoucherNumber,
+          to_status: targetStatus,
+        },
+        recipientIds: [requestorId ?? null],
+      });
       toast.success("E-Voucher rejected");
       setShowReject(false);
       setRejectionReason("");
@@ -398,6 +413,19 @@ export function EVoucherWorkflowPanel({
           autoCreated: true,
         });
       }
+      void recordNotificationEvent({
+        actorUserId: currentUser?.id ?? null,
+        module: "accounting",
+        subSection: "evouchers",
+        entityType: "evoucher",
+        entityId: evoucherId,
+        kind: "posted",
+        summary: {
+          label: `E-Voucher ${evoucherNumber} verified and posted`,
+          reference: evoucherNumber,
+        },
+        recipientIds: [requestorId ?? null],
+      });
       toast.success("E-Voucher verified and posted to ledger");
       onStatusChange?.();
     } catch {

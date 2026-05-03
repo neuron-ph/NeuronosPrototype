@@ -1,11 +1,12 @@
-import { X, Plus, Printer, Download, Calendar as CalendarIcon, CreditCard, Clock, Tag, ChevronDown, ChevronRight, RefreshCw, FileText, Banknote, Receipt, ArrowRight, CheckSquare, Square, Loader2, Save, Zap, Trash2 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { X, Plus, Printer, Download, Calendar as CalendarIcon, CreditCard, Clock, Tag, ChevronDown, ChevronRight, RefreshCw, FileText, Banknote, Receipt, ArrowRight, CheckSquare, Square, Loader2, Save, Zap, Trash2, Check } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { NeuronLogo } from "../NeuronLogo";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { CatalogItemCombobox } from "../shared/pricing/CatalogItemCombobox";
 import { CategoryDropdown } from "../pricing/quotations/CategoryDropdown";
+import { CustomDatePicker } from "../common/CustomDatePicker";
 import type { EVoucher, EVoucherTransactionType, LinkedBilling } from "../../types/evoucher";
 import { useEVoucherSubmit } from "../../hooks/useEVoucherSubmit";
 import { useUser } from "../../hooks/useUser";
@@ -144,10 +145,14 @@ export function AddRequestForPaymentPanel({
   // accepts a rate looked up from `exchange_rates` or enters a custom one.
   const [currency, setCurrency] = useState<AccountingCurrency>(FUNCTIONAL_CURRENCY);
   const [exchangeRateInput, setExchangeRateInput] = useState<string>("");
+  const [rateDate, setRateDate] = useState<string | null>(null);
+  const [rateAuto, setRateAuto] = useState<boolean>(true);
 
   useEffect(() => {
     if (currency === FUNCTIONAL_CURRENCY) {
       setExchangeRateInput("");
+      setRateDate(null);
+      setRateAuto(true);
       return;
     }
     let cancelled = false;
@@ -159,6 +164,7 @@ export function AddRequestForPaymentPanel({
       .then((row) => {
         if (cancelled) return;
         setExchangeRateInput((cur) => cur || String(row.rate));
+        setRateDate((cur) => cur || row.rate_date);
       })
       .catch(() => undefined);
     return () => { cancelled = true; };
@@ -879,9 +885,9 @@ export function AddRequestForPaymentPanel({
                     </span>
                   </div>
                   <div>
-                    <span style={{ 
-                      fontSize: "11px", 
-                      fontWeight: 500, 
+                    <span style={{
+                      fontSize: "11px",
+                      fontWeight: 500,
                       color: "var(--theme-text-muted)",
                       textTransform: "uppercase",
                       letterSpacing: "0.5px",
@@ -952,10 +958,12 @@ export function AddRequestForPaymentPanel({
                    </div>
                 )}
 
-                {/* Description / Purpose + Transaction Type on one row */}
+                {/* Description / Purpose + Transaction Type + Currency on one row */}
                 <div style={{
                   display: "grid",
-                  gridTemplateColumns: (context === "operations" || context === "accounting" || context === "personal") ? "2fr 1fr" : "1fr",
+                  gridTemplateColumns: (context === "operations" || context === "accounting" || context === "personal")
+                    ? (!isCollectionMode && !isBillingMode ? "2fr 1fr 1fr" : "2fr 1fr")
+                    : (!isCollectionMode && !isBillingMode ? "2fr 1fr" : "1fr"),
                   gap: "16px"
                 }}>
                   {/* Request Name */}
@@ -1061,6 +1069,41 @@ export function AddRequestForPaymentPanel({
                       />
                     </div>
                   )}
+
+                  {/* Currency — document-level attribute. */}
+                  {!isCollectionMode && !isBillingMode && (
+                    <div>
+                      <label style={{
+                        display: "block",
+                        fontSize: "12px",
+                        fontWeight: 500,
+                        color: "var(--theme-text-secondary)",
+                        marginBottom: "8px"
+                      }}>
+                        Currency
+                      </label>
+                      <CurrencyPill
+                        currency={currency}
+                        rate={exchangeRateInput}
+                        rateDate={rateDate}
+                        rateAuto={rateAuto}
+                        disabled={isViewMode}
+                        onCurrencyChange={(c) => {
+                          setCurrency(c);
+                          if (c === FUNCTIONAL_CURRENCY) {
+                            setExchangeRateInput("");
+                            setRateDate(null);
+                          }
+                          setRateAuto(true);
+                        }}
+                        onRateChange={(value, opts) => {
+                          setExchangeRateInput(value);
+                          if (opts?.auto !== undefined) setRateAuto(opts.auto);
+                          if (opts?.date !== undefined) setRateDate(opts.date);
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Project / Booking Number */}
@@ -1127,40 +1170,6 @@ export function AddRequestForPaymentPanel({
                   </div>
                 </div>
 
-                {/* Currency + FX rate. Only shows when this voucher should
-                    post in something other than PHP. */}
-                <div style={{ display: "grid", gridTemplateColumns: currency === FUNCTIONAL_CURRENCY ? "1fr" : "1fr 1fr", gap: "16px", marginTop: "16px" }}>
-                  <div>
-                    <label style={{ display: "block", fontSize: "12px", fontWeight: 500, color: "var(--theme-text-secondary)", marginBottom: "8px" }}>
-                      Currency
-                    </label>
-                    <select
-                      disabled={isViewMode}
-                      value={currency}
-                      onChange={(e) => setCurrency(e.target.value as AccountingCurrency)}
-                      style={{ width: "100%", padding: "10px 14px", fontSize: "14px", border: "1px solid var(--theme-border-default)", borderRadius: "6px", outline: "none", backgroundColor: isViewMode ? "var(--neuron-pill-inactive-bg)" : "var(--theme-bg-surface)" }}
-                    >
-                      {SUPPORTED_ACCOUNTING_CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  {currency !== FUNCTIONAL_CURRENCY && (
-                    <div>
-                      <label style={{ display: "block", fontSize: "12px", fontWeight: 500, color: "var(--theme-text-secondary)", marginBottom: "8px" }}>
-                        {currency} → {FUNCTIONAL_CURRENCY} Rate <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.0001"
-                        readOnly={isViewMode}
-                        value={exchangeRateInput}
-                        onChange={(e) => setExchangeRateInput(e.target.value)}
-                        placeholder="e.g. 58.25"
-                        style={{ width: "100%", padding: "10px 14px", fontSize: "14px", border: "1px solid var(--theme-border-default)", borderRadius: "6px", outline: "none", backgroundColor: isViewMode ? "var(--neuron-pill-inactive-bg)" : "var(--theme-bg-surface)", fontFamily: "monospace" }}
-                      />
-                    </div>
-                  )}
-                </div>
               </div>
             </div>
 
@@ -1282,16 +1291,27 @@ export function AddRequestForPaymentPanel({
                                 />
                               </td>
                               <td style={{ padding: "10px 16px" }}>
-                                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "4px" }}>
-                                  <span style={{ color: "var(--theme-text-muted)", fontSize: "14px" }}>{currency === "USD" ? "$" : "₱"}</span>
-                                  <input
-                                    type="number"
-                                    readOnly={isViewMode}
-                                    value={item.amount || ""}
-                                    onChange={e => handleItemChange(section.id, item.id, "amount", parseFloat(e.target.value) || 0)}
-                                    placeholder="0.00"
-                                    style={{ width: "100px", textAlign: "right", border: "none", outline: "none", fontSize: "14px", backgroundColor: "transparent" }}
-                                  />
+                                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "2px" }}>
+                                  <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "4px" }}>
+                                    <span style={{ color: "var(--theme-text-muted)", fontSize: "14px" }}>{currency === "USD" ? "$" : "₱"}</span>
+                                    <input
+                                      type="number"
+                                      readOnly={isViewMode}
+                                      value={item.amount || ""}
+                                      onChange={e => handleItemChange(section.id, item.id, "amount", parseFloat(e.target.value) || 0)}
+                                      placeholder="0.00"
+                                      style={{ width: "100px", textAlign: "right", border: "none", outline: "none", fontSize: "14px", backgroundColor: "transparent" }}
+                                    />
+                                  </div>
+                                  {currency !== FUNCTIONAL_CURRENCY && (() => {
+                                    const r = parseFloat(exchangeRateInput);
+                                    if (!Number.isFinite(r) || r <= 0 || !item.amount) return null;
+                                    return (
+                                      <span style={{ fontSize: "11px", color: "var(--theme-text-muted)", fontFamily: "monospace" }}>
+                                        ≈ {formatMoney(item.amount * r, FUNCTIONAL_CURRENCY)}
+                                      </span>
+                                    );
+                                  })()}
                                 </div>
                               </td>
                               {!isViewMode && !isCollectionMode && (
@@ -1315,7 +1335,16 @@ export function AddRequestForPaymentPanel({
                               Subtotal ({section.category_name})
                             </td>
                             <td style={{ padding: "8px 16px", textAlign: "right", fontWeight: 600, fontSize: "13px", color: "var(--theme-text-secondary)" }}>
-                              {formatMoney(sectionSubtotal, currency)}
+                              <div>{formatMoney(sectionSubtotal, currency)}</div>
+                              {currency !== FUNCTIONAL_CURRENCY && (() => {
+                                const r = parseFloat(exchangeRateInput);
+                                if (!Number.isFinite(r) || r <= 0) return null;
+                                return (
+                                  <div style={{ fontSize: "11px", color: "var(--theme-text-muted)", fontWeight: 500, fontFamily: "monospace" }}>
+                                    ≈ {formatMoney(sectionSubtotal * r, FUNCTIONAL_CURRENCY)}
+                                  </div>
+                                );
+                              })()}
                             </td>
                             {!isViewMode && !isCollectionMode && <td />}
                           </tr>
@@ -1328,20 +1357,22 @@ export function AddRequestForPaymentPanel({
 
               {/* Grand total */}
               {(categorySections.length > 0 || isCollectionMode) && (
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: "24px", padding: "12px 16px", backgroundColor: "var(--theme-bg-page)", borderRadius: "8px", border: "1px solid var(--theme-border-default)", marginTop: "4px", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "16px", padding: "14px 16px", backgroundColor: "var(--theme-bg-page)", borderRadius: "8px", border: "1px solid var(--theme-border-default)", marginTop: "4px" }}>
                   <span style={{ fontWeight: 600, fontSize: "13px", color: "var(--theme-text-secondary)" }}>Total Amount</span>
-                  <span style={{ fontWeight: 700, fontSize: "14px", color: "var(--theme-text-primary)" }}>
-                    {formatMoney(totalAmount, currency)}
-                  </span>
-                  {currency !== FUNCTIONAL_CURRENCY && (() => {
-                    const r = parseFloat(exchangeRateInput);
-                    if (!Number.isFinite(r) || r <= 0) return null;
-                    return (
-                      <span style={{ fontSize: "12px", color: "var(--theme-text-muted)" }}>
-                        ≈ {formatMoney(totalAmount * r, FUNCTIONAL_CURRENCY)} @ {r}
-                      </span>
-                    );
-                  })()}
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontWeight: 700, fontSize: "16px", color: "var(--theme-text-primary)" }}>
+                      {formatMoney(totalAmount, currency)}
+                    </div>
+                    {currency !== FUNCTIONAL_CURRENCY && (() => {
+                      const r = parseFloat(exchangeRateInput);
+                      if (!Number.isFinite(r) || r <= 0) return null;
+                      return (
+                        <div style={{ fontSize: "11px", color: "var(--theme-text-muted)", marginTop: "2px", fontFamily: "monospace" }}>
+                          ≈ {formatMoney(totalAmount * r, FUNCTIONAL_CURRENCY)} <span style={{ opacity: 0.7 }}>· @ ₱{r.toFixed(4)}</span>
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </div>
               )}
             </div>
@@ -1380,80 +1411,22 @@ export function AddRequestForPaymentPanel({
                   />
                 </div>
 
-                {/* Source Account (Bank/Fund) - Only show if Accounts loaded */}
-                <div>
-                  <label style={{ 
-                    display: "block", 
-                    fontSize: "12px", 
-                    fontWeight: 500, 
-                    color: "var(--theme-text-secondary)", 
-                    marginBottom: "8px" 
-                  }}>
-                    Source Account / Fund
-                  </label>
-                  <CustomDropdown
-                    options={accounts.map(acc => ({ 
-                      value: acc.id, 
-                      label: `${acc.name} (${acc.currency})`, 
-                      icon: <Banknote size={16} /> 
-                    }))}
-                    value={sourceAccountId}
-                    onChange={(value) => setSourceAccountId(value)}
-                    placeholder="Select account (Optional)"
-                    disabled={isViewMode || accounts.length === 0}
-                  />
-                </div>
-
-                {/* Credit Terms */}
-                <div>
-                  <label style={{ 
-                    display: "block", 
-                    fontSize: "12px", 
-                    fontWeight: 500, 
-                    color: "var(--theme-text-secondary)", 
-                    marginBottom: "8px" 
-                  }}>
-                    Credit Terms
-                  </label>
-                  <CustomDropdown
-                    options={CREDIT_TERMS.map(t => ({ value: t, label: t, icon: <Clock size={16} /> }))}
-                    value={creditTerms}
-                    onChange={(value) => setCreditTerms(value as CreditTerm)}
-                    placeholder="Select terms"
-                    disabled={isViewMode}
-                  />
-                </div>
-
                 {/* Due Date */}
                 <div>
-                  <label style={{ 
-                    display: "block", 
-                    fontSize: "12px", 
-                    fontWeight: 500, 
-                    color: "var(--theme-text-secondary)", 
-                    marginBottom: "8px" 
+                  <label style={{
+                    display: "block",
+                    fontSize: "12px",
+                    fontWeight: 500,
+                    color: "var(--theme-text-secondary)",
+                    marginBottom: "8px"
                   }}>
                     Payment Due Date
                   </label>
-                  <div style={{ position: "relative" }}>
-                    <CalendarIcon size={16} style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "var(--theme-text-muted)" }} />
-                    <input
-                      type="date"
-                      readOnly={isViewMode}
-                      value={paymentSchedule}
-                      onChange={(e) => setPaymentSchedule(e.target.value)}
-                      style={{
-                        width: "100%",
-                        padding: "10px 10px 10px 36px",
-                        fontSize: "14px",
-                        border: "1px solid var(--theme-border-default)",
-                        borderRadius: "6px",
-                        outline: "none",
-                        transition: "all 0.2s",
-                        backgroundColor: isViewMode ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface)"
-                      }}
-                    />
-                  </div>
+                  <CustomDatePicker
+                    value={paymentSchedule}
+                    onChange={(v) => setPaymentSchedule(v)}
+                    disabled={isViewMode}
+                  />
                 </div>
               </div>
             </div>
@@ -1686,5 +1659,228 @@ export function AddRequestForPaymentPanel({
       </motion.div>
     </>,
     document.body,
+  );
+}
+
+interface CurrencyPillProps {
+  currency: AccountingCurrency;
+  rate: string;
+  rateDate: string | null;
+  rateAuto: boolean;
+  disabled?: boolean;
+  onCurrencyChange: (c: AccountingCurrency) => void;
+  onRateChange: (rate: string, opts?: { auto?: boolean; date?: string | null }) => void;
+}
+
+function CurrencyPill({ currency, rate, rateDate, rateAuto, disabled, onCurrencyChange, onRateChange }: CurrencyPillProps) {
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(null);
+  const isFunctional = currency === FUNCTIONAL_CURRENCY;
+  const numericRate = parseFloat(rate);
+  const hasRate = Number.isFinite(numericRate) && numericRate > 0;
+
+  useEffect(() => {
+    if (!open || !buttonRef.current) return;
+    const update = () => {
+      if (!buttonRef.current) return;
+      const r = buttonRef.current.getBoundingClientRect();
+      setAnchor({ top: r.bottom + 6, right: window.innerWidth - r.right });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (buttonRef.current?.contains(target)) return;
+      const popover = document.getElementById("currency-pill-popover");
+      if (popover?.contains(target)) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [open]);
+
+  const formattedRateDate = rateDate
+    ? new Date(rateDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : null;
+
+  const handleUseToday = async () => {
+    try {
+      const row = await resolveExchangeRate({
+        fromCurrency: currency,
+        toCurrency: FUNCTIONAL_CURRENCY,
+        rateDate: new Date(),
+      });
+      onRateChange(String(row.rate), { auto: true, date: row.rate_date });
+    } catch {
+      /* ignore */
+    }
+  };
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "8px",
+          padding: "10px 14px",
+          fontSize: "14px",
+          fontWeight: 500,
+          color: "var(--theme-text-primary)",
+          backgroundColor: disabled ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface)",
+          border: "1px solid var(--theme-border-default)",
+          borderRadius: "8px",
+          cursor: disabled ? "not-allowed" : "pointer",
+          opacity: disabled ? 0.6 : 1,
+          transition: "border-color 0.15s",
+          fontFamily: "inherit",
+        }}
+        onMouseEnter={(e) => {
+          if (!disabled) e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
+        }}
+        onMouseLeave={(e) => {
+          if (!disabled) e.currentTarget.style.borderColor = "var(--theme-border-default)";
+        }}
+        title={isFunctional ? "Document currency: PHP" : `Document currency: USD${hasRate ? ` · ₱${numericRate.toFixed(4)} per $1` : ""}`}
+      >
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ color: "var(--theme-text-muted)" }}>{isFunctional ? "₱" : "$"}</span>
+          <span>{currency}</span>
+          {!isFunctional && hasRate && (
+            <span style={{ color: "var(--theme-text-muted)", fontSize: "13px", fontWeight: 400 }}>
+              · ₱{numericRate.toFixed(2)}
+            </span>
+          )}
+        </span>
+        <ChevronDown size={16} style={{ color: "var(--theme-text-muted)", transition: "transform 0.2s", transform: open ? "rotate(180deg)" : "rotate(0deg)" }} />
+      </button>
+
+      {open && anchor && createPortal(
+        <div
+          id="currency-pill-popover"
+          style={{
+            position: "fixed",
+            top: anchor.top,
+            right: anchor.right,
+            width: "320px",
+            backgroundColor: "var(--theme-bg-surface)",
+            border: "1px solid var(--theme-border-default)",
+            borderRadius: "10px",
+            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.12)",
+            zIndex: 10000,
+            padding: "16px",
+          }}
+        >
+          <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "10px" }}>
+            Document currency
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: hasRate || !isFunctional ? "16px" : "4px" }}>
+            {SUPPORTED_ACCOUNTING_CURRENCIES.map((c) => {
+              const selected = c === currency;
+              const symbol = c === "PHP" ? "₱" : "$";
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => onCurrencyChange(c)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "10px 12px",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    color: selected ? "var(--theme-action-primary-bg)" : "var(--theme-text-primary)",
+                    backgroundColor: selected ? "var(--theme-bg-surface-tint)" : "var(--theme-bg-surface)",
+                    border: `1px solid ${selected ? "var(--theme-action-primary-bg)" : "var(--theme-border-default)"}`,
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  <span><span style={{ marginRight: "8px", opacity: 0.7 }}>{symbol}</span>{c}</span>
+                  {selected && <Check size={14} />}
+                </button>
+              );
+            })}
+          </div>
+
+          {!isFunctional && (
+            <>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+                <label style={{ fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  Exchange rate
+                </label>
+                <button
+                  type="button"
+                  onClick={handleUseToday}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    padding: "2px 8px",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    color: "var(--theme-action-primary-bg)",
+                    background: "transparent",
+                    border: "none",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  <RefreshCw size={11} /> Use today's rate
+                </button>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", border: "1px solid var(--theme-border-default)", borderRadius: "8px", backgroundColor: "var(--theme-bg-surface)" }}>
+                <span style={{ fontSize: "13px", color: "var(--theme-text-muted)", fontFamily: "monospace" }}>$1 =</span>
+                <span style={{ fontSize: "13px", color: "var(--theme-text-muted)" }}>₱</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.0001"
+                  value={rate}
+                  onChange={(e) => onRateChange(e.target.value, { auto: false })}
+                  placeholder="58.0000"
+                  style={{ flex: 1, border: "none", outline: "none", fontSize: "13px", backgroundColor: "transparent", fontFamily: "monospace", color: "var(--theme-text-primary)" }}
+                />
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "8px", fontSize: "11px", color: "var(--theme-text-muted)" }}>
+                {rateAuto && formattedRateDate ? (
+                  <>
+                    <span style={{ display: "inline-block", padding: "1px 6px", fontSize: "10px", fontWeight: 600, backgroundColor: "var(--theme-bg-surface-tint)", color: "var(--theme-action-primary-bg)", borderRadius: "3px", textTransform: "uppercase", letterSpacing: "0.4px" }}>Auto</span>
+                    <span>Rate as of {formattedRateDate}</span>
+                  </>
+                ) : (
+                  <span>Manual rate · locks at submission</span>
+                )}
+              </div>
+            </>
+          )}
+
+          <div style={{ marginTop: "16px", paddingTop: "12px", borderTop: "1px solid var(--theme-border-subtle)", fontSize: "11px", color: "var(--theme-text-muted)", lineHeight: 1.5 }}>
+            All amounts in this voucher will be entered in <strong style={{ color: "var(--theme-text-secondary)" }}>{currency}</strong>. The PHP equivalent is computed from this rate and locked when you submit.
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }

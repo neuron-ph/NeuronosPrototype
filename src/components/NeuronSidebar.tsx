@@ -11,6 +11,7 @@ import {
   Calendar,
   Activity,
   Inbox,
+  Bell,
   ChevronDown,
   ChevronRight,
   ChevronLeft,
@@ -36,8 +37,98 @@ import {
 import { NeuronLogo } from "./NeuronLogo";
 import { usePermission } from "../context/PermissionProvider";
 import { useUser } from "../hooks/useUser";
+import { useNotifications } from "../hooks/useNotifications";
+import { NotificationsPanel } from "./notifications/NotificationsPanel";
 import { supabase } from "../utils/supabase/client";
 import type { ModuleId } from "./admin/permissionsConfig";
+import type { NotifModule, NotifSubSection } from "../utils/notifications";
+
+// Map sidebar Page id → notification (module, sub_section) for badge counts
+const PAGE_TO_NOTIF: Record<string, { module: NotifModule; sub: NotifSubSection }> = {
+  "bd-contacts":         { module: "bd", sub: "contacts" },
+  "bd-customers":        { module: "bd", sub: "customers" },
+  "bd-inquiries":        { module: "bd", sub: "inquiries" },
+  "bd-projects":         { module: "bd", sub: "projects" },
+  "bd-contracts":        { module: "bd", sub: "contracts" },
+  "bd-tasks":            { module: "bd", sub: "tasks" },
+  "bd-activities":       { module: "bd", sub: "activities" },
+  "bd-budget-requests":  { module: "bd", sub: "budget-requests" },
+  "pricing-contacts":    { module: "pricing", sub: "contacts" },
+  "pricing-customers":   { module: "pricing", sub: "customers" },
+  "pricing-quotations":  { module: "pricing", sub: "quotations" },
+  "pricing-projects":    { module: "pricing", sub: "projects" },
+  "pricing-contracts":   { module: "pricing", sub: "contracts" },
+  "ops-forwarding":         { module: "operations", sub: "forwarding" },
+  "ops-brokerage":          { module: "operations", sub: "brokerage" },
+  "ops-trucking":           { module: "operations", sub: "trucking" },
+  "ops-marine-insurance":   { module: "operations", sub: "marine-insurance" },
+  "ops-others":             { module: "operations", sub: "others" },
+  "acct-evouchers":      { module: "accounting", sub: "evouchers" },
+  "acct-billings":       { module: "accounting", sub: "billings" },
+  "acct-invoices":       { module: "accounting", sub: "invoices" },
+  "acct-collections":    { module: "accounting", sub: "collections" },
+  "acct-expenses":       { module: "accounting", sub: "expenses" },
+  "acct-projects":       { module: "accounting", sub: "projects" },
+  "acct-contracts":      { module: "accounting", sub: "contracts" },
+  "acct-bookings":       { module: "accounting", sub: "bookings" },
+  "acct-customers":      { module: "accounting", sub: "customers" },
+  "hr":                  { module: "hr", sub: "" },
+};
+
+interface SidebarBadgeProps {
+  count: number;
+  variant: "trailing" | "icon-overlay";
+}
+function SidebarBadge({ count, variant }: SidebarBadgeProps) {
+  if (!count || count <= 0) return null;
+  const display = count > 99 ? "99+" : String(count);
+  if (variant === "icon-overlay") {
+    return (
+      <span
+        style={{
+          position: "absolute",
+          top: -4,
+          right: -5,
+          minWidth: 14,
+          height: 14,
+          borderRadius: 7,
+          backgroundColor: "var(--theme-status-danger-fg)",
+          color: "#FFFFFF",
+          fontSize: 9,
+          fontWeight: 700,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "0 3px",
+          lineHeight: 1,
+        }}
+      >
+        {display}
+      </span>
+    );
+  }
+  return (
+    <motion.span
+      key="sidebar-trailing-badge"
+      initial={{ opacity: 0, scale: 0.8 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.8 }}
+      transition={{ duration: 0.15 }}
+      style={{
+        fontSize: 10,
+        fontWeight: 700,
+        padding: "1px 6px",
+        borderRadius: 10,
+        backgroundColor: "var(--theme-status-danger-bg)",
+        color: "var(--theme-status-danger-fg)",
+        marginLeft: "auto",
+        flexShrink: 0,
+      }}
+    >
+      {display}
+    </motion.span>
+  );
+}
 
 // Prefetch lazy module bundles on sidebar hover — React caches the promise so the
 // bundle downloads at most once regardless of how many times the user hovers.
@@ -254,6 +345,8 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
 
   // Use effectiveDepartment from context for dev role override support
   const { user, effectiveDepartment, effectiveRole } = useUser();
+  const { moduleCount, subSectionCount, total: notifTotal } = useNotifications();
+  const [notifPanelOpen, setNotifPanelOpen] = useState(false);
   const { can, isLoaded: permissionsLoaded } = usePermission();
 
   // Fetch inbox unread count — with hard timeout so a hung Supabase client
@@ -397,6 +490,12 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
   const renderNavButton = (item: { id: Page; label: string; icon: any }, isSubItem = false) => {
     const Icon = item.icon;
     const isActive = currentPage === item.id;
+    const notifTarget = PAGE_TO_NOTIF[item.id];
+    const badgeCount = notifTarget
+      ? notifTarget.sub
+        ? subSectionCount(notifTarget.module, notifTarget.sub)
+        : moduleCount(notifTarget.module)
+      : 0;
 
     return (
       <button
@@ -425,13 +524,15 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
         }}
         title={isCollapsed ? item.label : undefined}
       >
-        <Icon
-          size={isSubItem ? 18 : 20}
-          style={{
-            color: isActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)",
-            flexShrink: 0
-          }}
-        />
+        <div style={{ position: "relative", flexShrink: 0 }}>
+          <Icon
+            size={isSubItem ? 18 : 20}
+            style={{
+              color: isActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)",
+            }}
+          />
+          {isCollapsed && <SidebarBadge count={badgeCount} variant="icon-overlay" />}
+        </div>
         <AnimatePresence initial={false}>
           {!isCollapsed && (
             <motion.span
@@ -440,10 +541,15 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -6 }}
               transition={{ duration: 0.18, ease: [0.25, 1, 0.5, 1] }}
-              style={{ fontSize: "14px", lineHeight: "20px" }}
+              style={{ fontSize: "14px", lineHeight: "20px", flex: 1, textAlign: "left" }}
             >
               {item.label}
             </motion.span>
+          )}
+        </AnimatePresence>
+        <AnimatePresence initial={false}>
+          {!isCollapsed && badgeCount > 0 && (
+            <SidebarBadge count={badgeCount} variant="trailing" />
           )}
         </AnimatePresence>
       </button>
@@ -645,13 +751,15 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
               title={isCollapsed ? "Business Development" : undefined}
             >
               <div className="flex items-center gap-3 flex-1 min-w-0" style={{ justifyContent: isCollapsed ? "center" : "flex-start" }}>
-                <Briefcase
-                  size={20}
-                  style={{
-                    color: isBDActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)",
-                    flexShrink: 0
-                  }}
-                />
+                <div style={{ position: "relative", flexShrink: 0 }}>
+                  <Briefcase
+                    size={20}
+                    style={{
+                      color: isBDActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)",
+                    }}
+                  />
+                  {isCollapsed && <SidebarBadge count={moduleCount("bd")} variant="icon-overlay" />}
+                </div>
                 <AnimatePresence initial={false}>
                   {!isCollapsed && (
                     <motion.span
@@ -667,6 +775,9 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
                   )}
                 </AnimatePresence>
               </div>
+              {!isCollapsed && !isBDExpanded && moduleCount("bd") > 0 && (
+                <SidebarBadge count={moduleCount("bd")} variant="trailing" />
+              )}
               <AnimatePresence initial={false}>
                 {!isCollapsed && (
                   <motion.span
@@ -743,13 +854,15 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
               title={isCollapsed ? "Pricing" : undefined}
             >
               <div className="flex items-center gap-3 flex-1 min-w-0" style={{ justifyContent: isCollapsed ? "center" : "flex-start" }}>
-                <Banknote
-                  size={20}
-                  style={{
-                    color: isPricingActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)",
-                    flexShrink: 0
-                  }}
-                />
+                <div style={{ position: "relative", flexShrink: 0 }}>
+                  <Banknote
+                    size={20}
+                    style={{
+                      color: isPricingActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)",
+                    }}
+                  />
+                  {isCollapsed && <SidebarBadge count={moduleCount("pricing")} variant="icon-overlay" />}
+                </div>
                 <AnimatePresence initial={false}>
                   {!isCollapsed && (
                     <motion.span
@@ -765,6 +878,9 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
                   )}
                 </AnimatePresence>
               </div>
+              {!isCollapsed && !isPricingExpanded && moduleCount("pricing") > 0 && (
+                <SidebarBadge count={moduleCount("pricing")} variant="trailing" />
+              )}
               <AnimatePresence initial={false}>
                 {!isCollapsed && (
                   <motion.span
@@ -841,13 +957,15 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
               title={isCollapsed ? "Operations" : undefined}
             >
               <div className="flex items-center gap-3 flex-1 min-w-0" style={{ justifyContent: isCollapsed ? "center" : "flex-start" }}>
-                <Package
-                  size={20}
-                  style={{
-                    color: isOperationsActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)",
-                    flexShrink: 0
-                  }}
-                />
+                <div style={{ position: "relative", flexShrink: 0 }}>
+                  <Package
+                    size={20}
+                    style={{
+                      color: isOperationsActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)",
+                    }}
+                  />
+                  {isCollapsed && <SidebarBadge count={moduleCount("operations")} variant="icon-overlay" />}
+                </div>
                 <AnimatePresence initial={false}>
                   {!isCollapsed && (
                     <motion.span
@@ -863,6 +981,9 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
                   )}
                 </AnimatePresence>
               </div>
+              {!isCollapsed && !isOperationsExpanded && moduleCount("operations") > 0 && (
+                <SidebarBadge count={moduleCount("operations")} variant="trailing" />
+              )}
               <AnimatePresence initial={false}>
                 {!isCollapsed && (
                   <motion.span
@@ -944,13 +1065,15 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
               title={isCollapsed ? "Accounting" : undefined}
             >
               <div className="flex items-center gap-3 flex-1 min-w-0" style={{ justifyContent: isCollapsed ? "center" : "flex-start" }}>
-                <PesoIcon
-                  size={20}
-                  style={{
-                    color: isAcctActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)",
-                    flexShrink: 0
-                  }}
-                />
+                <div style={{ position: "relative", flexShrink: 0 }}>
+                  <PesoIcon
+                    size={20}
+                    style={{
+                      color: isAcctActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)",
+                    }}
+                  />
+                  {isCollapsed && <SidebarBadge count={moduleCount("accounting")} variant="icon-overlay" />}
+                </div>
                 <AnimatePresence initial={false}>
                   {!isCollapsed && (
                     <motion.span
@@ -966,6 +1089,9 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
                   )}
                 </AnimatePresence>
               </div>
+              {!isCollapsed && !isAcctExpanded && moduleCount("accounting") > 0 && (
+                <SidebarBadge count={moduleCount("accounting")} variant="trailing" />
+              )}
               <AnimatePresence initial={false}>
                 {!isCollapsed && (
                   <motion.span
@@ -1007,6 +1133,51 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
         
         {/* Personal Section */}
         {renderSectionHeader("PERSONAL")}
+
+        {/* Notifications — opens side panel rather than navigating */}
+        <button
+          onClick={() => setNotifPanelOpen(true)}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuron-ui-active-border)]"
+          style={{
+            height: "40px",
+            backgroundColor: "transparent",
+            border: "1.5px solid transparent",
+            color: "var(--neuron-ink-secondary)",
+            justifyContent: isCollapsed ? "center" : "flex-start",
+            paddingLeft: isCollapsed ? "0" : "12px",
+            paddingRight: isCollapsed ? "0" : "12px",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = "transparent";
+          }}
+          title={isCollapsed ? "Notifications" : undefined}
+        >
+          <div style={{ position: "relative", flexShrink: 0 }}>
+            <Bell size={20} style={{ color: "var(--neuron-ink-muted)" }} />
+            {isCollapsed && <SidebarBadge count={notifTotal} variant="icon-overlay" />}
+          </div>
+          <AnimatePresence initial={false}>
+            {!isCollapsed && (
+              <motion.span
+                key="notif-label"
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -6 }}
+                transition={{ duration: 0.18, ease: [0.25, 1, 0.5, 1] }}
+                style={{ fontSize: "14px", lineHeight: "20px", flex: 1, textAlign: "left" }}
+              >
+                Notifications
+              </motion.span>
+            )}
+          </AnimatePresence>
+          {!isCollapsed && notifTotal > 0 && (
+            <SidebarBadge count={notifTotal} variant="trailing" />
+          )}
+        </button>
+
         {personalItems.map(item => {
           if (item.id === "inbox") {
             const isActive = currentPage === "inbox";
@@ -1324,6 +1495,8 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
           </button>
         )}
       </div>
+
+      <NotificationsPanel isOpen={notifPanelOpen} onClose={() => setNotifPanelOpen(false)} />
     </div>
   );
 }

@@ -21,6 +21,7 @@ import { ServiceRoleAssignmentForm, type ServiceRoleAssignmentPayload } from './
 import { toast } from '../../ui/toast-utils';
 import { appendBookingActivity } from '../../../utils/bookingActivityLog';
 import { fireBookingAssignmentTickets } from '../../../utils/workflowTickets';
+import { recordNotificationEvent, operationsSubSectionFor } from '../../../utils/notifications';
 import { useUser } from '../../../hooks/useUser';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../../../lib/queryKeys';
@@ -212,6 +213,28 @@ export function BookingAssignmentSection({
         },
         { name: actorName, department: actorDept },
       );
+
+      // Notify newly-assigned users (anyone not in the previous assignment set).
+      const previousIds = new Set(initialAssignments.map((a) => a.user_id));
+      const newlyAssigned = pendingPayload.assignments
+        .map((a) => a.user_id)
+        .filter((uid) => uid && !previousIds.has(uid));
+      if (newlyAssigned.length > 0) {
+        void recordNotificationEvent({
+          actorUserId: user?.id ?? null,
+          module: 'operations',
+          subSection: operationsSubSectionFor(pendingPayload.serviceType),
+          entityType: 'booking',
+          entityId: bookingId,
+          kind: 'assigned',
+          summary: {
+            label: `Assigned to ${pendingPayload.serviceType} booking${bookingNumber ? ` ${bookingNumber}` : ''}`,
+            reference: bookingNumber ?? undefined,
+            customer_name: customerName ?? undefined,
+          },
+          recipientIds: newlyAssigned,
+        });
+      }
 
       const newHandler = pendingPayload.assignments.find(
         (a) => a.role_key === 'handler' || a.role_key === 'customs_declarant',
