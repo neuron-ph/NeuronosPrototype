@@ -105,7 +105,7 @@ export function FinancialSummaryPanel({
               fontWeight: 500,
               color: "var(--neuron-ink-secondary)"
             }}>
-              Subtotal (PHP Non-Taxed)
+              Subtotal · Non-Taxed
             </span>
             <span style={{
               fontSize: "14px",
@@ -130,7 +130,7 @@ export function FinancialSummaryPanel({
               fontWeight: 500,
               color: "var(--neuron-ink-secondary)"
             }}>
-              Subtotal (PHP Taxable)
+              Subtotal · Taxable
             </span>
             <span style={{
               fontSize: "14px",

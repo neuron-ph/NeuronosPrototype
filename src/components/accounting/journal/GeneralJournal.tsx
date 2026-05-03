@@ -356,7 +356,6 @@ export function GeneralJournal() {
       }));
       const { error: revErr } = await supabase.from("journal_entries").insert({
         id: reversalId,
-        entry_number: reversalId,
         entry_date: new Date().toISOString(),
         evoucher_id: voidTarget.evoucher_id,
         invoice_id: voidTarget.invoice_id,

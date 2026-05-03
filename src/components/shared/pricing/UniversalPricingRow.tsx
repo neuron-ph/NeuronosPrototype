@@ -4,6 +4,7 @@ import { CustomCheckbox } from "../../bd/CustomCheckbox";
 import { CustomDropdown } from "../../bd/CustomDropdown";
 import { FormattedNumberInput } from "./FormattedNumberInput";
 import { CatalogItemCombobox } from "./CatalogItemCombobox";
+import { DualCurrencyAmount } from "./DualCurrencyAmount";
 
 export interface PricingItemData {
   id: string;
@@ -14,6 +15,7 @@ export interface PricingItemData {
   percentage_added: number;
   currency: string;
   forex_rate: number;
+  forex_rate_date?: string | null;
   is_taxed: boolean;
   final_price: number;
   amount?: number; // Calculated PHP Total
@@ -181,9 +183,18 @@ export function UniversalPricingRow({
               serviceType={serviceType}
               side="revenue"
               categoryId={categoryId}
-              onChange={(description, catalogItemId) => {
+              onChange={(description, catalogItemId, meta) => {
                 handleFieldChange('description', description);
                 handleFieldChange('catalog_item_id', catalogItemId ?? null);
+                // Apply catalog defaults on selection. Only stamp when the row
+                // has not been customized yet (avoid clobbering user edits).
+                if (meta?.currency && meta.currency !== data.currency) {
+                  handleFieldChange('currency', meta.currency);
+                }
+                if (meta?.default_price && !data.base_cost && !data.final_price) {
+                  handleFieldChange('base_cost', meta.default_price);
+                  handleFieldChange('final_price', meta.default_price);
+                }
               }}
               placeholder="Item description"
             />
@@ -436,47 +447,82 @@ export function UniversalPricingRow({
           justifyContent: "center"
         }}>
           {priceEditable && !isViewMode ? (
-             <input
-             type="number"
-             value={data.final_price}
-             onChange={(e) => handlers?.onPriceChange && handlers.onPriceChange(parseFloat(e.target.value) || 0)}
-             step="0.01"
-             placeholder="Price"
-             style={{
-               width: "100%",
-               padding: "6px 8px",
-               fontSize: "14px",
-               textAlign: "right",
-               border: "1px solid var(--theme-border-default)",
-               borderRadius: "6px",
-               color: "var(--neuron-brand-green)",
-               fontWeight: 700,
-               outline: "none"
-             }}
-           />
+            (() => {
+              const isForeign = data.currency && data.currency !== "PHP";
+              const rate = Number(data.forex_rate) || 1;
+              const phpEquivalent = (Number(data.final_price) || 0) * (Number(data.quantity) || 1) * rate;
+              return (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", width: "100%" }}>
+                  <div style={{ position: "relative", width: "100%" }}>
+                    {isForeign && (
+                      <span style={{
+                        position: "absolute",
+                        left: "8px",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        fontSize: "10px",
+                        fontWeight: 600,
+                        letterSpacing: "0.04em",
+                        color: "var(--neuron-semantic-info)",
+                        pointerEvents: "none",
+                      }}>
+                        {data.currency}
+                      </span>
+                    )}
+                    <input
+                      type="number"
+                      value={data.final_price}
+                      onChange={(e) => handlers?.onPriceChange && handlers.onPriceChange(parseFloat(e.target.value) || 0)}
+                      step="0.01"
+                      placeholder="Price"
+                      style={{
+                        width: "100%",
+                        padding: isForeign ? "6px 8px 6px 38px" : "6px 8px",
+                        fontSize: "14px",
+                        textAlign: "right",
+                        border: "1px solid var(--theme-border-default)",
+                        borderRadius: "6px",
+                        color: "var(--neuron-brand-green)",
+                        fontWeight: 700,
+                        outline: "none",
+                      }}
+                    />
+                  </div>
+                  {isForeign && rate !== 1 && (
+                    <span
+                      style={{
+                        marginTop: "2px",
+                        fontSize: "11px",
+                        fontWeight: 500,
+                        color: "var(--theme-text-muted)",
+                        whiteSpace: "nowrap",
+                      }}
+                      title={`Locked at ${rate} ${data.currency}/PHP${data.forex_rate_date ? ` on ${data.forex_rate_date}` : ""}`}
+                    >
+                      ≈ ₱{phpEquivalent.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  )}
+                </div>
+              );
+            })()
           ) : simpleMode && isViewMode ? (
-            // Just the amount for billing view
-            <span>{new Intl.NumberFormat('en-PH', { style: 'currency', currency: data.currency }).format(data.amount_added > 0 ? data.final_price : (data.final_price || 0))}</span>
+            // Billing view — single amount, dual-currency aware
+            <DualCurrencyAmount
+              originalAmount={(data.final_price || 0) * (data.quantity || 1)}
+              currency={data.currency}
+              forexRate={data.forex_rate || 1}
+              baseAmount={data.amount}
+              rateDate={data.forex_rate_date ?? null}
+            />
           ) : showPHPConversion ? (
-            // ✨ PHP-First Mode (Selling Price): Show PHP Total primarily, Original Currency secondary
-            <>
-              {/* Primary: PHP Total */}
-              <span>
-                ₱ {((data.amount !== undefined ? data.amount : (data.final_price * data.quantity * data.forex_rate)) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </span>
-              
-              {/* Secondary: Original Currency (if not PHP/Forex 1) */}
-              {(data.currency !== 'PHP' && data.forex_rate !== 1) && (
-                <span style={{ 
-                  fontSize: "11px", 
-                  color: "var(--theme-text-muted)", 
-                  fontWeight: 500,
-                  marginTop: "2px"
-                }}>
-                  ({data.currency} {(data.final_price * data.quantity).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
-                </span>
-              )}
-            </>
+            // Selling Price total — Pattern A: USD primary, PHP equivalent secondary (USD-origin only)
+            <DualCurrencyAmount
+              originalAmount={(data.final_price || 0) * (data.quantity || 1)}
+              currency={data.currency}
+              forexRate={data.forex_rate || 1}
+              baseAmount={data.amount}
+              rateDate={data.forex_rate_date ?? null}
+            />
           ) : (
             // Standard Mode (Buying Price): Show Unit Price in Original Currency
             <span>{data.currency} {data.final_price.toFixed(2)}</span>

@@ -80,12 +80,12 @@ export function RateCardGeneratorPopover({
   // Build booking rows with derived quantities and billing status
   const bookingRows = linkedBookings.map((booking) => {
     const bookingId = booking.bookingId || booking.id;
+    const bookingNumber = (booking as any).booking_number || (booking as any).bookingNumber || "—";
     const serviceType = booking.serviceType || booking.bookingType || "Brokerage";
     const mode = booking.mode || "FCL";
     const quantities = deriveQuantitiesFromBooking(booking, serviceType);
     const alreadyBilled = hasExistingRateCardBilling(existingBillingItems, bookingId);
 
-    // Check if there's a rate matrix for this service type
     const hasMatrix = rateMatrices.some(
       (m) => m.service_type.toLowerCase() === serviceType.toLowerCase()
     );
@@ -93,6 +93,7 @@ export function RateCardGeneratorPopover({
     return {
       booking,
       bookingId,
+      bookingNumber,
       serviceType,
       mode,
       quantities,
@@ -299,7 +300,7 @@ export function RateCardGeneratorPopover({
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "3px" }}>
                       <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
-                        {row.bookingId}
+                        {row.bookingNumber}
                       </span>
                       <span
                         style={{

@@ -678,7 +678,7 @@ export function InvoiceBuilder({
       const jeId = `JE-INV-${Date.now()}`;
       await supabase.from("journal_entries").insert({
         id: jeId,
-        entry_number: jeId,
+        // entry_number filled by DB trigger (set_journal_entry_number)
         entry_date: new Date().toISOString(),
         invoice_id: invoiceData.id,
         description: `Invoice ${invoiceData.invoice_number} — ${invoiceRow.customer_name}`,

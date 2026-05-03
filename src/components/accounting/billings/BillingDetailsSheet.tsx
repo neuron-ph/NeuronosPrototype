@@ -167,7 +167,7 @@ export function BillingDetailsSheet({ isOpen, onClose, billingId }: BillingDetai
       }
 
       setReversalDocument(reversalInvoice);
-      toast.success(`Reversal ${reversalInvoice.invoice_number || reversalInvoice.id} completed`);
+      toast.success(`Reversal ${reversalInvoice.invoice_number || ""} completed`.replace(/Reversal +completed/, "Reversal completed"));
     } catch (err) {
       console.error("Error completing reversal:", err);
       toast.error(err instanceof Error ? err.message : "Failed to complete reversal");
@@ -470,8 +470,8 @@ export function BillingDetailsSheet({ isOpen, onClose, billingId }: BillingDetai
                       ) : reversalDocument ? (
                         <div style={{ fontSize: "13px", color: "var(--theme-status-success-fg)", lineHeight: 1.5 }}>
                           {isInvoiceReversalDraft(reversalDocument)
-                            ? <>Reversal draft created: <strong>{reversalDocument.invoice_number || reversalDocument.id}</strong>. Keep the original invoice intact and complete the cancellation from this reversal workflow.</>
-                            : <>Reversal posted: <strong>{reversalDocument.invoice_number || reversalDocument.id}</strong>. The original invoice is preserved for audit history and excluded from active AR.</>}
+                            ? <>Reversal draft created: <strong>{reversalDocument.invoice_number || "—"}</strong>. Keep the original invoice intact and complete the cancellation from this reversal workflow.</>
+                            : <>Reversal posted: <strong>{reversalDocument.invoice_number || "—"}</strong>. The original invoice is preserved for audit history and excluded from active AR.</>}
                         </div>
                       ) : (
                         <div style={{ fontSize: "13px", color: "var(--theme-text-secondary)", lineHeight: 1.5 }}>

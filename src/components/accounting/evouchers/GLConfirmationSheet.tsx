@@ -312,7 +312,6 @@ export function GLConfirmationSheet({
       // Create PHP-balanced journal entry with FX metadata.
       const { error: jeError } = await supabase.from("journal_entries").insert({
         id: entryId,
-        entry_number: entryId,
         entry_date: new Date().toISOString(),
         evoucher_id: evoucherId,
         description,

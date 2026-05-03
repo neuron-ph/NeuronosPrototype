@@ -455,7 +455,7 @@ export function CollectionCreatorPanel({
       const jeId = `JE-COL-${Date.now()}`;
       await supabase.from("journal_entries").insert({
         id: jeId,
-        entry_number: jeId,
+        // entry_number filled by DB trigger (set_journal_entry_number)
         entry_date: new Date().toISOString(),
         collection_id: created.id,
         description: `Collection ${collectionNumber} — ${project.customer_name}`,

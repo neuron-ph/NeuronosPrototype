@@ -209,7 +209,7 @@ export function DisbursementSheet({
       // 1. Create disbursement journal entry
       const { error: jeError } = await supabase.from("journal_entries").insert({
         id: entryId,
-        entry_number: entryId,
+        // entry_number filled by DB trigger (set_journal_entry_number)
         entry_date: disbDate,
         evoucher_id: evoucherId,
         description: `Disbursement — ${evoucherNumber} via ${paymentMethod}${reference ? ` [${reference}]` : ""}`,

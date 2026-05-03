@@ -299,7 +299,7 @@ export function NewJournalEntryScreen({ onBack, onCreated }: NewJournalEntryScre
         exchangeRate: postingRate,
       });
       const { error } = await supabase.from("journal_entries").insert({
-        id, entry_number: id, entry_date: entryDate,
+        id, entry_date: entryDate,
         description: memo.trim() || null,
         lines: buildLines(),
         total_debit: totalDebits, total_credit: totalCredits,

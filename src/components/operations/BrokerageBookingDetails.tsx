@@ -217,7 +217,7 @@ export function BrokerageBookingDetails({ booking, onBack, onUpdate, currentUser
               {booking.customerName}
             </p>
           )}
-          <p style={{ fontSize: "13px", color: "var(--neuron-ink-muted)", margin: 0 }}>{(booking as any).booking_number || booking.bookingId}</p>
+          <p style={{ fontSize: "13px", color: "var(--neuron-ink-muted)", margin: 0 }}>{(booking as any).booking_number || "—"}</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           {(editedBooking.status === "Completed" || (editedBooking.status === "Cancelled" && bookingBillingItems.some(item => item.status === "unbilled"))) && (

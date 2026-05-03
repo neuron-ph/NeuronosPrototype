@@ -1,6 +1,8 @@
 import React from "react";
 import type { Project, QuotationNew, AddressStruct, QuotationChargeCategory } from "../../../types/pricing";
 import { QuotationPrintOptions } from "./screen/useQuotationDocumentState";
+import { DualCurrencyAmount } from "../../shared/pricing/DualCurrencyAmount";
+import { normalizeCurrency, FUNCTIONAL_CURRENCY } from "../../../utils/accountingCurrency";
 import logoImage from "figma:asset/28c84ed117b026fbf800de0882eb478561f37f4f.png";
 
 interface QuotationDocumentProps {
@@ -648,16 +650,27 @@ export const QuotationDocument = React.forwardRef<HTMLDivElement, QuotationDocum
                             cat.line_items.forEach((item: any, itemIdx: number) => {
                                 // SellingPriceLineItem has final_price (base_cost + markup).
                                 const displayPrice = item.final_price ?? item.price;
+                                const itemCurrency = normalizeCurrency(item.currency, FUNCTIONAL_CURRENCY);
+                                const itemRate = Number(item.forex_rate) || 1;
+                                const originalAmt = Number(displayPrice || 0) * Number(item.quantity || 1);
                                 rows.push(
                                     <tr key={`cat-${categoryKey}-item-${item.id || itemIdx}`} className="p-rate-row">
                                         <td>{item.description}</td>
                                         <td className="p-rate-price">{fmtMoney(displayPrice)}</td>
-                                        <td className="p-rate-cur">{item.currency}</td>
+                                        <td className="p-rate-cur">{itemCurrency}</td>
                                         <td className="p-rate-qty">{item.quantity}</td>
-                                        <td className="p-rate-forex">{item.forex_rate}</td>
+                                        <td className="p-rate-forex">{itemRate}</td>
                                         <td className="p-rate-tax">{item.is_taxed ? "x" : ""}</td>
                                         <td>{item.remarks || item.unit}</td>
-                                        <td className="p-rate-amount">{fmtMoney(effectiveAmt(item))}</td>
+                                        <td className="p-rate-amount">
+                                            <DualCurrencyAmount
+                                                originalAmount={originalAmt}
+                                                currency={itemCurrency}
+                                                forexRate={itemRate}
+                                                baseAmount={effectiveAmt(item)}
+                                                rateDate={item.forex_rate_date ?? null}
+                                            />
+                                        </td>
                                     </tr>
                                 );
                             });

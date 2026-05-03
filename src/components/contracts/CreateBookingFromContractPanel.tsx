@@ -137,7 +137,7 @@ export function CreateBookingFromContractPanel({
         console.log(`Successfully linked booking to contract`);
         toast.success(
           `${serviceType} booking created!`,
-          `Booking ${bookingData.bookingId} linked to contract ${contract.quote_number}`
+          `Booking ${bookingData.booking_number || bookingData.bookingNumber || ""} linked to contract ${contract.quote_number}`.replace(/Booking +linked/, "Booking linked")
         );
       }
 

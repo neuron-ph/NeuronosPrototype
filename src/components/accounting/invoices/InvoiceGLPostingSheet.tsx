@@ -377,7 +377,6 @@ export function InvoiceGLPostingSheet({
       // 1. Create journal entry — PHP-balanced, with FX metadata.
       const { error: jeError } = await supabase.from("journal_entries").insert({
         id: entryId,
-        entry_number: entryId,
         entry_date: new Date().toISOString(),
         invoice_id: invoiceId,
         description,

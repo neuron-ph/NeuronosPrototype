@@ -115,7 +115,7 @@ function InvoiceDrillDown({
         {displayed.map((inv, idx) => {
           const balance = getBalance(inv);
           const agingDays = getAgingDaysForInvoice(inv);
-          const invNumber = inv.invoice_number || inv.id || `INV-${idx + 1}`;
+          const invNumber = inv.invoice_number || `INV-${idx + 1}`;
           const customer = (inv.customer_name || inv.customerName || "").trim() || "Unknown Customer";
           const dueDate = inv.due_date ? new Date(inv.due_date) : null;
 
@@ -218,6 +218,7 @@ function InvoiceDrillDown({
 
 interface UnbilledBooking {
   bookingId: string;
+  bookingNumber: string;
   customerName: string;
   unbilledAmount: number;
   itemCount: number;
@@ -251,16 +252,20 @@ function groupByBooking(items: any[]): UnbilledBooking[] {
     const existing = map.get(bid);
     const amount = Number(item.amount) || 0;
     const customer = (item.customer_name || item.customerName || "").trim() || "Unknown Customer";
+    const bookingNumber = item.booking_number || item.bookingNumber || "—";
     if (existing) {
       existing.unbilledAmount += amount;
       existing.itemCount += 1;
-      // Keep the first non-unknown customer name
+      if (existing.bookingNumber === "—" && bookingNumber !== "—") {
+        existing.bookingNumber = bookingNumber;
+      }
       if (existing.customerName === "Unknown Customer" && customer !== "Unknown Customer") {
         existing.customerName = customer;
       }
     } else {
       map.set(bid, {
         bookingId: bid,
+        bookingNumber,
         customerName: customer,
         unbilledAmount: amount,
         itemCount: 1,
@@ -308,7 +313,7 @@ function UnbilledDrillDown({
                 className="text-[11px] font-semibold tabular-nums flex-shrink-0"
                 style={{ color: "var(--theme-text-primary)", minWidth: "90px" }}
               >
-                {booking.bookingId}
+                {booking.bookingNumber}
               </span>
               <span
                 className="text-[11px] font-medium truncate"

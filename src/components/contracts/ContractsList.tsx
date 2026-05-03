@@ -501,7 +501,7 @@ export function ContractsList({
                         overflow: "hidden",
                         textOverflow: "ellipsis"
                       }}>
-                        {contract.quote_number || contract.id?.slice(0, 12)}
+                        {contract.quote_number || "—"}
                       </div>
                     </div>
                   </div>

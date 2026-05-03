@@ -457,7 +457,8 @@ export function BillingsTable({
                     {catNames.length > 0 ? (
                       catNames.map((catName, catIdx) => {
                         const catItems = catGroups[catName];
-                        const catSubtotal = catItems.reduce((sum, i) => sum + i.amount, 0);
+                        const catAgg = sumInBase(catItems as any);
+                        const catSubtotal = catAgg.total;
 
                         return (
                           <div key={catName}>
@@ -484,8 +485,16 @@ export function BillingsTable({
                                   <span style={{ fontSize: "10px", color: "var(--theme-text-muted)" }}>
                                     {catItems.length} item{catItems.length !== 1 ? "s" : ""}
                                   </span>
-                                  <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", fontFamily: "monospace" }}>
-                                    {formatCurrency(catSubtotal)}
+                                  <span
+                                    style={{ fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", fontFamily: "monospace" }}
+                                    title={catAgg.mixed ? "PHP base — group spans multiple currencies" : undefined}
+                                  >
+                                    {formatCurrency(catSubtotal, catAgg.mixed ? "PHP" : catAgg.soleCurrency)}
+                                    {catAgg.mixed && (
+                                      <span style={{ marginLeft: "6px", fontSize: "9px", letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--theme-text-muted)" }}>
+                                        mixed
+                                      </span>
+                                    )}
                                   </span>
                                 </div>
                               </div>
@@ -786,7 +795,8 @@ export function BillingsTable({
                   <>
                     {catNames.map((catName, catIdx) => {
                       const catItems = catGroups[catName];
-                      const catSubtotal = catItems.reduce((sum, i) => sum + i.amount, 0);
+                      const catAgg = sumInBase(catItems as any);
+                      const catSubtotal = catAgg.total;
                       return (
                         <div key={catName}>
                           {catNames.length > 1 && (
@@ -809,8 +819,16 @@ export function BillingsTable({
                                 <span style={{ fontSize: "10px", color: "var(--theme-text-muted)" }}>
                                   {catItems.length} item{catItems.length !== 1 ? "s" : ""}
                                 </span>
-                                <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", fontFamily: "monospace" }}>
-                                  {formatCurrency(catSubtotal)}
+                                <span
+                                  style={{ fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", fontFamily: "monospace" }}
+                                  title={catAgg.mixed ? "PHP base — group spans multiple currencies" : undefined}
+                                >
+                                  {formatCurrency(catSubtotal, catAgg.mixed ? "PHP" : catAgg.soleCurrency)}
+                                  {catAgg.mixed && (
+                                    <span style={{ marginLeft: "6px", fontSize: "9px", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                                      mixed
+                                    </span>
+                                  )}
                                 </span>
                               </div>
                             </div>
