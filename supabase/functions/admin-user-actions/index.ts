@@ -21,62 +21,32 @@ Deno.serve(async (req: Request) => {
     const body = await req.json();
     const { action, ...params } = body;
 
-    if (action === "createUser") {
-      const { email, password, name, department, role, position, service_type } = params as {
-        email: string;
-        password: string;
-        name: string;
-        department: string;
-        role: string;
-        position?: string;
-        service_type?: string;
-      };
-
-      const { data, error } = await adminClient.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-        user_metadata: { name },
-      });
-
-      if (error) throw error;
-      if (!data.user) throw new Error("User creation returned no user");
-
-      // Wait briefly for the trigger to create the profile row
-      await new Promise((r) => setTimeout(r, 500));
-
-      const { error: profileError } = await adminClient
+    // Helper: resolve auth_id from public users.id
+    const getAuthId = async (userId: string): Promise<string> => {
+      const { data, error } = await adminClient
         .from("users")
-        .update({ name, department, role, position: position || null, service_type: service_type || null, is_active: true, status: "active" })
-        .eq("auth_id", data.user.id);
-
-      if (profileError) throw profileError;
-
-      return respond({ success: true, userId: data.user.id });
-    }
+        .select("auth_id")
+        .eq("id", userId)
+        .single();
+      if (error || !data?.auth_id) throw new Error("Could not resolve auth account for user");
+      return data.auth_id;
+    };
 
     if (action === "resetPassword") {
       const { userId, newPassword } = params as { userId: string; newPassword: string };
-      const { data: profile, error: lookupError } = await adminClient
-        .from("users").select("auth_id").eq("id", userId).maybeSingle();
-      if (lookupError) throw lookupError;
-      if (!profile?.auth_id) throw new Error("User auth account not found");
-      const { error } = await adminClient.auth.admin.updateUserById(profile.auth_id, { password: newPassword });
+      const authId = await getAuthId(userId);
+      const { error } = await adminClient.auth.admin.updateUserById(authId, { password: newPassword });
       if (error) throw error;
       return respond({ success: true });
     }
 
     if (action === "deleteUser") {
       const { userId } = params as { userId: string };
-      // Look up auth_id — auth.admin.deleteUser needs the auth UUID, not the public users.id
-      const { data: profile, error: lookupError } = await adminClient
-        .from("users").select("auth_id").eq("id", userId).maybeSingle();
-      if (lookupError) throw lookupError;
-      if (!profile?.auth_id) throw new Error("User auth account not found");
-      const { error: authError } = await adminClient.auth.admin.deleteUser(profile.auth_id);
-      if (authError) throw authError;
-      // Delete the users row (may already be gone via trigger, ignore error)
+      const authId = await getAuthId(userId);
+      // Delete public row first, then auth account
       await adminClient.from("users").delete().eq("id", userId);
+      const { error: authError } = await adminClient.auth.admin.deleteUser(authId);
+      if (authError) throw authError;
       return respond({ success: true });
     }
 
