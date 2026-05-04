@@ -2,6 +2,7 @@ import { supabase } from '../supabase/client';
 import { projectAssignmentsToBooking } from './projectAssignmentsToBooking';
 import { replaceBookingAssignments, saveAssignmentsAsDefault } from './persistBookingAssignments';
 import type { ServiceRoleAssignmentPayload } from '../../components/operations/assignments/ServiceRoleAssignmentForm';
+import { recordNotificationEvent, operationsSubSectionFor } from '../notifications';
 
 /**
  * Returns the legacy {team,manager,supervisor,handler}_{id,name} fields to
@@ -34,12 +35,14 @@ export function legacyProjectionFromAssignment(payload: ServiceRoleAssignmentPay
  */
 export async function persistAssignmentsForNewBooking(params: {
   bookingId: string;
+  bookingNumber?: string | null;
+  customerName?: string | null;
   payload: ServiceRoleAssignmentPayload | null;
   customerId: string | null | undefined;
   tradePartyProfileId?: string | null;
   assignedBy: string | null;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { bookingId, payload, customerId, tradePartyProfileId, assignedBy } = params;
+  const { bookingId, bookingNumber, customerName, payload, customerId, tradePartyProfileId, assignedBy } = params;
   if (!payload || payload.assignments.length === 0) return { ok: true };
 
   const projection = legacyProjectionFromAssignment(payload);
@@ -52,6 +55,22 @@ export async function persistAssignmentsForNewBooking(params: {
     projection,
   });
   if (!replaceRes.ok) return replaceRes;
+
+  // Notify everyone newly assigned to this booking. Actor (assignedBy) is auto-skipped.
+  void recordNotificationEvent({
+    actorUserId: assignedBy,
+    module: 'operations',
+    subSection: operationsSubSectionFor(payload.serviceType),
+    entityType: 'booking',
+    entityId: bookingId,
+    kind: 'assigned',
+    summary: {
+      label: `Assigned to ${payload.serviceType} booking${bookingNumber ? ` ${bookingNumber}` : ''}`,
+      reference: bookingNumber ?? undefined,
+      customer_name: customerName ?? undefined,
+    },
+    recipientIds: payload.assignments.map((a) => a.user_id),
+  });
 
   if (payload.saveAsDefault === 'customer' && customerId) {
     try {

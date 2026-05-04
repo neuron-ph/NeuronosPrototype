@@ -1,5 +1,6 @@
 import type { EVoucher } from "../types/evoucher";
 import { supabase } from "./supabase/client";
+import { recordNotificationEvent } from "./notifications";
 
 type InlineApprovalResult = {
   billingError?: string;
@@ -88,6 +89,48 @@ export async function approveEVInline(
     metadata: { previous_status: ev.status, new_status: nextStatus },
     created_at: new Date().toISOString(),
   });
+
+  // Notify the EV creator that their voucher has advanced. If the EV moved to
+  // pending_accounting, also notify accounting users so they can review.
+  const summaryBase = {
+    label: `E-Voucher ${ev.evoucher_number ?? ev.id} ${nextStatus === 'pending_accounting' ? 'pending accounting review' : 'advanced'}`,
+    reference: ev.evoucher_number ?? undefined,
+    from_status: ev.status,
+    to_status: nextStatus,
+    amount: ev.amount,
+    currency: ev.currency,
+  };
+
+  void recordNotificationEvent({
+    actorUserId: userId ?? null,
+    module: 'accounting',
+    subSection: 'evouchers',
+    entityType: 'evoucher',
+    entityId: ev.id,
+    kind: 'status_changed',
+    summary: summaryBase,
+    recipientIds: [ev.created_by ?? null],
+  });
+
+  if (nextStatus === 'pending_accounting') {
+    const { data: accountants } = await supabase
+      .from('users')
+      .select('id')
+      .eq('department', 'Accounting')
+      .eq('is_active', true);
+    if (accountants && accountants.length > 0) {
+      void recordNotificationEvent({
+        actorUserId: userId ?? null,
+        module: 'accounting',
+        subSection: 'evouchers',
+        entityType: 'evoucher',
+        entityId: ev.id,
+        kind: 'submitted',
+        summary: { ...summaryBase, label: `E-Voucher ${ev.evoucher_number ?? ev.id} pending accounting review` },
+        recipientIds: accountants.map((a) => a.id),
+      });
+    }
+  }
 
   if (!isExecutive) return {};
 

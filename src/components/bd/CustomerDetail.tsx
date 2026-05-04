@@ -1,5 +1,5 @@
 import { ArrowLeft, Building2, MapPin, Briefcase, Edit, Users, Plus, Mail, Phone, User, CheckCircle, Clock, AlertCircle, Calendar, Paperclip, Upload, MessageSquare, Send, FileText, MessageCircle, Linkedin, StickyNote, Image as ImageIcon, File, Download } from "lucide-react";
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../../lib/queryKeys";
@@ -14,6 +14,8 @@ import { CustomerProjectsTab } from "./CustomerProjectsTab";
 import { CustomerInquiriesTab } from "./CustomerInquiriesTab";
 import { CustomerAssignmentProfilesSection } from "./CustomerAssignmentProfilesSection";
 import { ConsigneeInlineSection } from "./ConsigneeInlineSection";
+import { CommentsTab } from "../shared/CommentsTab";
+import { EntityAttachmentsTab } from "../shared/EntityAttachmentsTab";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
 import { useUser } from "../../hooks/useUser";
@@ -28,84 +30,6 @@ interface CustomerDetailProps {
   onViewProject?: (project: Project) => void;
   variant?: "bd" | "pricing";
 }
-
-// Mock attachment data
-interface Attachment {
-  id: string;
-  name: string;
-  type: "pdf" | "image" | "document" | "spreadsheet";
-  size: string;
-  uploadedAt: string;
-  source: "Task" | "Activity" | "Inquiry" | "Customer";
-  sourceId: string;
-  sourceName: string;
-}
-
-const mockAttachments: Attachment[] = [
-  {
-    id: "att-c1",
-    name: "Business_Registration.pdf",
-    type: "pdf",
-    size: "4.5 MB",
-    uploadedAt: "2024-10-15T09:30:00Z",
-    source: "Customer",
-    sourceId: "cust-1",
-    sourceName: "Onboarding Documents"
-  },
-  {
-    id: "att-c2",
-    name: "Service_Agreement_2025.pdf",
-    type: "pdf",
-    size: "2.8 MB",
-    uploadedAt: "2024-11-20T14:15:00Z",
-    source: "Customer",
-    sourceId: "cust-1",
-    sourceName: "Contract Renewal"
-  },
-  {
-    id: "att-c3",
-    name: "Volume_Forecast_Q1.xlsx",
-    type: "spreadsheet",
-    size: "1.2 MB",
-    uploadedAt: "2024-12-01T11:00:00Z",
-    source: "Activity",
-    sourceId: "act-10",
-    sourceName: "Quarterly Review Meeting"
-  }
-];
-
-interface Comment {
-  id: string;
-  user_name: string;
-  user_department: "BD" | "Pricing";
-  message: string;
-  created_at: string;
-}
-
-// Mock comments for demo
-const mockComments: Comment[] = [
-  {
-    id: "cm1",
-    user_name: "Maria Santos",
-    user_department: "BD",
-    message: "This customer is requesting volume pricing for Q1 2025. Can we prepare a special rate card?",
-    created_at: "2025-12-09T14:30:00"
-  },
-  {
-    id: "cm2",
-    user_name: "Juan Dela Cruz",
-    user_department: "Pricing",
-    message: "Sure! I'll prepare tiered pricing based on monthly volume. What's their expected monthly CBM?",
-    created_at: "2025-12-09T15:15:00"
-  },
-  {
-    id: "cm3",
-    user_name: "Maria Santos",
-    user_department: "BD",
-    message: "They mentioned around 200-250 CBM per month. Mostly retail goods from China.",
-    created_at: "2025-12-09T16:00:00"
-  }
-];
 
 export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquiry, onViewProject, variant = "bd" }: CustomerDetailProps) {
   const navigate = useNavigate();
@@ -140,7 +64,6 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
     return "attachments";
   });
   
-  const [newComment, setNewComment] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [localCustomer, setLocalCustomer] = useState(customer);
   const [editedCustomer, setEditedCustomer] = useState(customer);
@@ -151,26 +74,6 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
     customer_id: customer.id
   });
   const [activityAttachments, setActivityAttachments] = useState<File[]>([]);
-  const [attachments, setAttachments] = useState<Attachment[]>(mockAttachments);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const newAttachment: Attachment = {
-      id: `att-${Date.now()}`,
-      name: file.name,
-      type: file.name.endsWith('.pdf') ? 'pdf' : file.name.match(/\.(jpg|jpeg|png|gif)$/i) ? 'image' : file.name.endsWith('.xlsx') ? 'spreadsheet' : 'document',
-      size: `${(file.size / 1024 / 1024).toFixed(1)} MB`,
-      uploadedAt: new Date().toISOString(),
-      source: "Customer", 
-      sourceId: "manual-upload",
-      sourceName: "Manual Upload"
-    };
-
-    setAttachments([newAttachment, ...attachments]);
-  };
 
   const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [newTask, setNewTask] = useState<Partial<Task>>({
@@ -352,24 +255,6 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
       hour: '2-digit',
       minute: '2-digit'
     });
-  };
-
-  const formatCommentDateTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', { 
-      day: 'numeric',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const handleSendComment = () => {
-    if (newComment.trim()) {
-      // TODO: Add comment to database
-      console.log("New comment:", newComment);
-      setNewComment("");
-    }
   };
 
   const getStatusColor = (status: CustomerStatus) => {
@@ -1943,204 +1828,22 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
 
             {/* Comments Tab */}
             {activeTab === "comments" && canViewCommentsTab && (
-              <div>
-                {/* Comments List */}
-                <div className="space-y-4 mb-6">
-                  {mockComments.map((comment) => (
-                    <div
-                      key={comment.id}
-                      className="p-4 rounded-lg"
-                      style={{
-                        background: comment.user_department === "BD" 
-                          ? "var(--theme-bg-surface-tint)" 
-                          : "var(--neuron-bg-card)",
-                        border: comment.user_department === "BD"
-                          ? "1.5px solid var(--theme-action-primary-bg)"
-                          : "1.5px solid var(--neuron-ui-border)",
-                        marginLeft: comment.user_department === "BD" ? "40px" : "0",
-                        marginRight: comment.user_department === "Pricing" ? "40px" : "0"
-                      }}
-                    >
-                      <div className="flex items-center gap-2 mb-2">
-                        <span style={{ 
-                          fontSize: "13px", 
-                          fontWeight: 600, 
-                          color: comment.user_department === "BD" 
-                            ? "var(--neuron-brand-green)" 
-                            : "var(--neuron-ink-primary)" 
-                        }}>
-                          {comment.user_name}
-                        </span>
-                        <span 
-                          className="px-2 py-0.5 rounded text-[11px]"
-                          style={{ 
-                            background: comment.user_department === "BD" ? "var(--theme-action-primary-bg)" : "#6B7A76",
-                            color: "#FFFFFF",
-                            fontWeight: 500
-                          }}
-                        >
-                          {comment.user_department}
-                        </span>
-                        <span style={{ fontSize: "12px", color: "var(--neuron-ink-muted)" }}>
-                          {formatCommentDateTime(comment.created_at)}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: "14px", color: "var(--neuron-ink-secondary)" }}>
-                        {comment.message}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Comment Input */}
-                <div 
-                  className="sticky bottom-0 p-4 rounded-lg"
-                  style={{
-                    background: "var(--neuron-bg-card)",
-                    border: "1.5px solid var(--neuron-ui-border)"
-                  }}
-                >
-                  <div className="flex gap-3">
-                    <textarea
-                      value={newComment}
-                      onChange={(e) => setNewComment(e.target.value)}
-                      placeholder="Add a comment for Pricing team..."
-                      rows={3}
-                      className="flex-1 px-3 py-2 rounded-lg resize-none"
-                      style={{
-                        border: "1.5px solid var(--neuron-ui-border)",
-                        background: "var(--neuron-bg-input)",
-                        color: "var(--neuron-ink-primary)",
-                        fontSize: "14px",
-                        outline: "none"
-                      }}
-                    />
-                    <button
-                      onClick={handleSendComment}
-                      disabled={!newComment.trim()}
-                      className="px-4 py-2 rounded-lg transition-all flex items-center gap-2"
-                      style={{
-                        background: newComment.trim() ? "var(--theme-action-primary-bg)" : "var(--theme-border-default)",
-                        color: newComment.trim() ? "#FFFFFF" : "var(--theme-text-muted)",
-                        border: "none",
-                        cursor: newComment.trim() ? "pointer" : "not-allowed",
-                        height: "fit-content"
-                      }}
-                    >
-                      <Send size={16} />
-                      Send
-                    </button>
-                  </div>
-                </div>
+              <div className="h-[600px]">
+                <CommentsTab
+                  entityId={customer.id}
+                  entityType="customer"
+                  currentUserId={user?.id || ""}
+                  currentUserName={user?.name || "Unknown"}
+                  currentUserDepartment={user?.department || effectiveDepartment || "BD"}
+                />
               </div>
             )}
-
             {activeTab === "attachments" && canViewAttachmentsTab && (
-              <div>
-                <div className="flex items-center justify-between mb-6">
-                  <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
-                    Attachments
-                  </h3>
-                  <div>
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      className="hidden"
-                      onChange={handleFileUpload}
-                    />
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors"
-                      style={{
-                        backgroundColor: "var(--theme-action-primary-bg)",
-                        color: "#FFFFFF"
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = "var(--theme-action-primary-border)";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
-                      }}
-                    >
-                      <Upload size={14} />
-                      Upload File
-                    </button>
-                  </div>
-                </div>
-
-                {attachments.length === 0 ? (
-                  <div className="text-center py-12">
-                    <p className="text-[14px]" style={{ color: "var(--theme-text-muted)" }}>No attachments yet</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {attachments.map((attachment) => (
-                      <div 
-                        key={attachment.id}
-                        className="p-4 rounded-lg"
-                        style={{
-                          border: "1px solid var(--neuron-ui-border)",
-                          backgroundColor: "var(--theme-bg-surface)"
-                        }}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-start gap-4 flex-1">
-                            <div className="flex-shrink-0 mt-1">
-                              {attachment.type === "pdf" && <FileText size={20} style={{ color: "var(--theme-action-primary-bg)" }} />}
-                              {attachment.type === "image" && <ImageIcon size={20} style={{ color: "var(--theme-action-primary-bg)" }} />}
-                              {attachment.type === "document" && <File size={20} style={{ color: "var(--theme-action-primary-bg)" }} />}
-                              {attachment.type === "spreadsheet" && <File size={20} style={{ color: "var(--theme-action-primary-bg)" }} />}
-                            </div>
-                            <div className="flex-1">
-                              <div className="text-[14px] font-medium mb-1" style={{ color: "var(--theme-text-primary)" }}>
-                                {attachment.name}
-                              </div>
-                              <div className="flex items-center gap-3 mb-2">
-                                <span className="text-[12px]" style={{ color: "var(--theme-text-muted)" }}>
-                                  {attachment.size}
-                                </span>
-                                <span className="text-[12px]" style={{ color: "var(--theme-text-muted)" }}>
-                                  • Uploaded: {formatDate(attachment.uploadedAt)}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span 
-                                  className="text-[11px] px-2 py-0.5 rounded font-medium uppercase tracking-wide"
-                                  style={{
-                                    backgroundColor: attachment.source === "Customer" ? "var(--theme-bg-surface-tint)" : attachment.source === "Activity" ? "var(--theme-status-warning-bg)" : "var(--neuron-pill-inactive-bg)",
-                                    color: attachment.source === "Customer" ? "var(--theme-action-primary-bg)" : attachment.source === "Activity" ? "var(--theme-status-warning-fg)" : "var(--theme-text-muted)"
-                                  }}
-                                >
-                                  {attachment.source}
-                                </span>
-                                <span className="text-[12px]" style={{ color: "var(--theme-text-muted)" }}>
-                                  {attachment.sourceName}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                          <button
-                            className="flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ml-4"
-                            style={{
-                              backgroundColor: "var(--theme-action-primary-bg)",
-                              color: "#FFFFFF"
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = "var(--theme-action-primary-border)";
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
-                            }}
-                          >
-                            <Download size={14} />
-                            Download
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <EntityAttachmentsTab
+                entityId={customer.id}
+                entityType="customers"
+                currentUser={user ? { id: user.id, name: user.name || "", email: user.email || "", department: user.department || "" } : null}
+              />
             )}
             </div>
           </div>

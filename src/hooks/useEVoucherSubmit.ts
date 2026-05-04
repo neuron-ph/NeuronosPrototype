@@ -10,6 +10,7 @@ import {
   type ActivityActor,
 } from "../utils/activityLog";
 import { determineSubmittedEVoucherStatus } from "../utils/evoucherApproval";
+import { recordNotificationEvent } from "../utils/notifications";
 import {
   FUNCTIONAL_CURRENCY,
   normalizeCurrency,
@@ -428,6 +429,48 @@ export function useEVoucherSubmit(
       await insertHistoryEntries([
         buildHistoryEntry(createdId, "Submitted for Approval", submittedStatus, "draft"),
       ]);
+
+      // Notify the next approvers (managers in submitter dept, or accounting if
+      // it skipped review). Best-effort, never blocks the submission.
+      try {
+        let recipientIds: string[] = [];
+        if (submittedStatus === "pending_manager" && actor?.department) {
+          const { data } = await supabase
+            .from("users")
+            .select("id")
+            .eq("department", actor.department)
+            .in("role", ["manager", "team_leader", "supervisor"])
+            .eq("is_active", true);
+          recipientIds = (data || []).map((u) => u.id);
+        } else if (submittedStatus === "pending_accounting") {
+          const { data } = await supabase
+            .from("users")
+            .select("id")
+            .eq("department", "Accounting")
+            .eq("is_active", true);
+          recipientIds = (data || []).map((u) => u.id);
+        }
+        if (recipientIds.length > 0) {
+          void recordNotificationEvent({
+            actorUserId: actor?.id || null,
+            module: "accounting",
+            subSection: "evouchers",
+            entityType: "evoucher",
+            entityId: createdId,
+            kind: "submitted",
+            summary: {
+              label: `E-Voucher ${createdVoucherNumber ?? createdId} submitted for approval`,
+              reference: createdVoucherNumber ?? undefined,
+              amount: data.totalAmount,
+              currency: data.currency,
+              to_status: submittedStatus,
+            },
+            recipientIds,
+          });
+        }
+      } catch (e) {
+        console.warn("[notifications] evoucher submit fan-out failed", e);
+      }
 
       console.log("E-Voucher submitted for approval");
       return { ...normalized, status: submittedStatus };

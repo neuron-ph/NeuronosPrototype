@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { Search, FileText } from "lucide-react";
 import { DataTable, ColumnDef } from "../../common/DataTable";
+import { useUnreadEntityIds } from "../../../hooks/useNotifications";
 import { CustomDatePicker } from "../../common/CustomDatePicker";
 import { CustomDropdown } from "../../bd/CustomDropdown";
 import { EVoucherStatusBadge } from "./EVoucherStatusBadge";
@@ -108,6 +109,13 @@ export function UnifiedEVouchersTable({
   const totalAmount = useMemo(() => {
     return filteredEvouchers.reduce((sum, item) => sum + (item.amount || 0), 0);
   }, [filteredEvouchers]);
+
+  // -- Unread row dots --
+  const visibleEvoucherIds = useMemo(
+    () => filteredEvouchers.map((e) => e.id),
+    [filteredEvouchers],
+  );
+  const unreadEvoucherIds = useUnreadEntityIds("evoucher", visibleEvoucherIds);
 
   const getUrgencyColor = (dateString: string) => {
     const submitted = new Date(dateString);
@@ -310,6 +318,7 @@ export function UnifiedEVouchersTable({
       <DataTable
         data={filteredEvouchers}
         columns={columns}
+        unreadIds={unreadEvoucherIds}
         isLoading={isLoading}
         emptyMessage="No E-Vouchers found matching your filters."
         onRowClick={onViewDetail}

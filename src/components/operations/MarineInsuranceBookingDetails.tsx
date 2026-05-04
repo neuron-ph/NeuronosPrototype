@@ -19,6 +19,7 @@ import { useUser } from "../../hooks/useUser";
 import { usePermission } from "../../context/PermissionProvider";
 import { fireBillingTicketOnCompletion } from "../../utils/workflowTickets";
 import { logStatusChange } from "../../utils/activityLog";
+import { notifyBookingStatusChange } from "../../utils/notifyBookingStatusChange";
 
 
 interface MarineInsuranceBookingDetailsProps {
@@ -150,6 +151,14 @@ export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, curre
       const { error } = await supabase.from('bookings').update({ status: newStatus }).eq('id', booking.bookingId);
       if (error) throw error;
       logStatusChange("booking", booking.bookingId, (booking as any).booking_number ?? booking.bookingId, oldStatus, newStatus, { id: user?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
+      void notifyBookingStatusChange({
+        bookingId: booking.bookingId,
+        bookingNumber: (booking as any).booking_number ?? booking.bookingId,
+        serviceType: "Marine Insurance",
+        fromStatus: oldStatus,
+        toStatus: newStatus,
+        actorUserId: user?.id ?? null,
+      });
       toast.success(`Status updated to ${newStatus}`);
       onUpdate();
       if (newStatus === "Completed" && user?.id) {

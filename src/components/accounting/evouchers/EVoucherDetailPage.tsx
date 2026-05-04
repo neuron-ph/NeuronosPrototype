@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from "react-router";
 import { ArrowLeft, User, Building2, ClipboardList } from "lucide-react";
 import { supabase } from "../../../utils/supabase/client";
 import { useUser } from "../../../hooks/useUser";
+import { useMarkEntityReadOnMount } from "../../../hooks/useNotifications";
 import { EVoucherStatusBadge } from "./EVoucherStatusBadge";
 import { EVoucherWorkflowPanel } from "./EVoucherWorkflowPanel";
 import { EVoucherHistoryTimeline } from "./EVoucherHistoryTimeline";
@@ -30,6 +31,8 @@ export function EVoucherDetailPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useUser();
+
+  useMarkEntityReadOnMount("evoucher", id);
 
   const [evoucher, setEvoucher] = useState<EVoucher | null>(null);
   const [loading, setLoading] = useState(true);

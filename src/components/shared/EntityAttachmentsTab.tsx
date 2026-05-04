@@ -17,8 +17,8 @@ import { toast } from "../ui/toast-utils";
 
 interface EntityAttachmentsTabProps {
   entityId: string;
-  /** API path segment: "projects" or "contracts" */
-  entityType: "projects" | "contracts";
+  /** API path segment */
+  entityType: "projects" | "contracts" | "customers" | "contacts";
   currentUser?: {
     id?: string;
     name: string;
@@ -42,6 +42,8 @@ interface Attachment {
 const TABLE_MAP: Record<string, { table: string; fkColumn: string }> = {
   projects: { table: "project_attachments", fkColumn: "project_id" },
   contracts: { table: "contract_attachments", fkColumn: "contract_id" },
+  customers: { table: "customer_attachments", fkColumn: "customer_id" },
+  contacts: { table: "contact_attachments", fkColumn: "contact_id" },
 };
 
 export function EntityAttachmentsTab({ entityId, entityType, currentUser }: EntityAttachmentsTabProps) {
