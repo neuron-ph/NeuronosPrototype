@@ -4,6 +4,8 @@
  */
 import { supabase } from "../utils/supabase/client";
 
+const APPROX_COUNT = "planned" as any;
+
 // ─── Shared types ─────────────────────────────────────────────────────────────
 
 export interface TicketItem {
@@ -151,11 +153,11 @@ export async function fetchDeptQueue(dept: string, userId: string): Promise<Dept
 
   if (dept === "Executive") {
     const [inqR, quotR, bkgR, tickR, evR] = await Promise.all([
-      supabase.from("quotations").select("id", { count: "exact", head: true }).in("status", ["New", "Pending"]),
-      supabase.from("quotations").select("id", { count: "exact", head: true }).in("status", ["Pricing in Progress", "Draft"]),
-      supabase.from("bookings").select("id", { count: "exact", head: true }).not("status", "in", '("Completed","Cancelled")'),
-      supabase.from("tickets").select("id", { count: "exact", head: true }).eq("status", "open"),
-      supabase.from("evouchers").select("id", { count: "exact", head: true }).in("status", ["pending_manager", "pending_ceo", "pending_accounting"]),
+      supabase.from("quotations").select("id", { count: APPROX_COUNT, head: true }).in("status", ["New", "Pending"]),
+      supabase.from("quotations").select("id", { count: APPROX_COUNT, head: true }).in("status", ["Pricing in Progress", "Draft"]),
+      supabase.from("bookings").select("id", { count: APPROX_COUNT, head: true }).not("status", "in", '("Completed","Cancelled")'),
+      supabase.from("tickets").select("id", { count: APPROX_COUNT, head: true }).eq("status", "open"),
+      supabase.from("evouchers").select("id", { count: APPROX_COUNT, head: true }).in("status", ["pending_manager", "pending_ceo", "pending_accounting"]),
     ]);
     return {
       ...empty,

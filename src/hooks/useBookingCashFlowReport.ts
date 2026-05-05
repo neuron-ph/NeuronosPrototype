@@ -8,7 +8,7 @@ import {
   mapEvoucherExpensesForScope,
 } from "../utils/financialSelectors";
 import { calculateFinancialTotals } from "../utils/financialCalculations";
-import { isInScope } from "../components/accounting/aggregate/types";
+import { isInScope, getDateScopeQueryRange } from "../components/accounting/aggregate/types";
 import type { DateScope } from "../components/accounting/aggregate/types";
 import { queryKeys } from "../lib/queryKeys";
 
@@ -41,6 +41,17 @@ export interface BookingCashFlowSummary {
   bookingCount: number;
 }
 
+function mergeRowsById<T extends { id?: string }>(...groups: T[][]): T[] {
+  const byId = new Map<string, T>();
+
+  groups.flat().forEach((row) => {
+    if (!row?.id) return;
+    byId.set(row.id, row);
+  });
+
+  return Array.from(byId.values());
+}
+
 export function useBookingCashFlowReport(scope: DateScope) {
   const queryClient = useQueryClient();
   const filters = { scope } as Record<string, unknown>;
@@ -48,40 +59,75 @@ export function useBookingCashFlowReport(scope: DateScope) {
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.financials.bookingCashFlow(filters),
     queryFn: async () => {
-      // Limit data to last 2 years to avoid full-table scans
-      const cutoff = new Date();
-      cutoff.setFullYear(cutoff.getFullYear() - 2);
-      const cutoffISO = cutoff.toISOString();
+      const { fromIso, toIso } = getDateScopeQueryRange(scope);
+
+      const { data: bookingRows, error: bookingError } = await supabase
+        .from("bookings")
+        .select("id, booking_number, service_type, customer_name, project_id, status, created_at")
+        .gte("created_at", fromIso)
+        .lte("created_at", toIso)
+        .order("created_at", { ascending: false });
+
+      if (bookingError) throw bookingError;
+
+      const bookings = bookingRows ?? [];
+      const bookingIds = bookings.map((booking: any) => booking.id).filter(Boolean);
+      if (bookingIds.length === 0) {
+        return {
+          bookings: [],
+          billingItems: [],
+          evouchers: [],
+          invoices: [],
+          collections: [],
+        };
+      }
 
       const [
-        { data: bookingRows },
-        { data: billingRows },
-        { data: evoucherRows },
-        { data: invoiceRows },
-        { data: collectionRows },
+        { data: billingRows, error: billingError },
+        { data: evoucherRows, error: evoucherError },
+        { data: invoiceRows, error: invoiceError },
+        { data: collectionsByBooking, error: collectionsByBookingError },
+        { data: collectionsByRecentDate, error: collectionsByDateError },
       ] = await Promise.all([
         supabase
-          .from("bookings")
-          .select("id, booking_number, service_type, customer_name, project_id, status, created_at")
-          .gte("created_at", cutoffISO)
-          .order("created_at", { ascending: false }),
-        supabase.from("billing_line_items").select("*").gte("created_at", cutoffISO),
+          .from("billing_line_items")
+          .select("*")
+          .in("booking_id", bookingIds),
         supabase
           .from("evouchers")
           .select("*")
+          .in("booking_id", bookingIds)
           .in("transaction_type", ["expense", "budget_request"])
-          .in("status", ["approved", "posted", "paid", "partial"])
-          .gte("created_at", cutoffISO),
-        supabase.from("invoices").select("*").gte("created_at", cutoffISO),
-        supabase.from("collections").select("*").gte("created_at", cutoffISO),
+          .in("status", ["approved", "posted", "paid", "partial"]),
+        supabase
+          .from("invoices")
+          .select("*")
+          .in("booking_id", bookingIds),
+        supabase
+          .from("collections")
+          .select("*")
+          .in("booking_id", bookingIds),
+        supabase
+          .from("collections")
+          .select("*")
+          .gte("created_at", fromIso),
       ]);
 
+      if (billingError) throw billingError;
+      if (evoucherError) throw evoucherError;
+      if (invoiceError) throw invoiceError;
+      if (collectionsByBookingError) throw collectionsByBookingError;
+      if (collectionsByDateError) throw collectionsByDateError;
+
       return {
-        bookings: bookingRows || [],
-        billingItems: billingRows || [],
-        evouchers: evoucherRows || [],
-        invoices: invoiceRows || [],
-        collections: collectionRows || [],
+        bookings,
+        billingItems: billingRows ?? [],
+        evouchers: evoucherRows ?? [],
+        invoices: invoiceRows ?? [],
+        collections: mergeRowsById(
+          (collectionsByBooking ?? []) as Array<{ id?: string }>,
+          (collectionsByRecentDate ?? []) as Array<{ id?: string }>
+        ),
       };
     },
     staleTime: 30_000,
@@ -100,7 +146,6 @@ export function useBookingCashFlowReport(scope: DateScope) {
         const bookingId = booking.id as string;
         if (!bookingId) return null;
 
-        // Scope all financial data to this booking using V2 selectors
         const scopedBillingItems = filterBillingItemsForScope(
           billingItems,
           [bookingId],
@@ -186,7 +231,7 @@ export function useBookingCashFlowReport(scope: DateScope) {
   }, [data, scope]);
 
   const refresh = () =>
-    queryClient.invalidateQueries({ queryKey: queryKeys.financials.reportsData() });
+    queryClient.invalidateQueries({ queryKey: queryKeys.financials.bookingCashFlow(filters) });
 
   return { rows, summary, isLoading, refresh };
 }

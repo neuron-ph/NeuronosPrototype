@@ -1,18 +1,16 @@
-// useReceivablesAgingReport — Outstanding AR by aging bucket.
-// Aging is measured from invoice due_date → invoice_date → created_at (first available).
+// useReceivablesAgingReport â€” Outstanding AR by aging bucket.
+// Aging is measured from invoice due_date â†’ invoice_date â†’ created_at (first available).
 // Only financially-active invoices in the selected scope with outstanding > 0 are included.
 
 import { useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../utils/supabase/client";
-import { isInScope } from "../components/accounting/aggregate/types";
+import { isInScope, getDateScopeQueryRange } from "../components/accounting/aggregate/types";
 import type { DateScope } from "../components/accounting/aggregate/types";
 import { isInvoiceFinanciallyActive } from "../utils/invoiceReversal";
 import { isCollectionAppliedToInvoice } from "../utils/collectionResolution";
 import { pickReportingAmount } from "../utils/accountingCurrency";
 import { queryKeys } from "../lib/queryKeys";
-
-// ── Types ──────────────────────────────────────────────────────────────────────
 
 export type AgingBucket = "current" | "31-60" | "61-90" | "91+";
 
@@ -46,8 +44,6 @@ export interface AgingSummary {
   customerCount: number;
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
 function getAgingBucket(daysOld: number): AgingBucket {
   if (daysOld <= 30) return "current";
   if (daysOld <= 60) return "31-60";
@@ -55,7 +51,16 @@ function getAgingBucket(daysOld: number): AgingBucket {
   return "91+";
 }
 
-// ── Hook ───────────────────────────────────────────────────────────────────────
+function mergeRowsById<T extends { id?: string }>(...groups: T[][]): T[] {
+  const byId = new Map<string, T>();
+
+  groups.flat().forEach((row) => {
+    if (!row?.id) return;
+    byId.set(row.id, row);
+  });
+
+  return Array.from(byId.values());
+}
 
 export function useReceivablesAgingReport(scope: DateScope) {
   const queryClient = useQueryClient();
@@ -64,25 +69,48 @@ export function useReceivablesAgingReport(scope: DateScope) {
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.financials.receivablesAging(filters),
     queryFn: async () => {
-      // Skip fully paid invoices at the DB level; limit to 2 years
-      const cutoff = new Date();
-      cutoff.setFullYear(cutoff.getFullYear() - 2);
-      const cutoffISO = cutoff.toISOString();
+      const { fromIso, toIso } = getDateScopeQueryRange(scope);
+
+      const { data: invoiceRows, error: invoiceError } = await supabase
+        .from("invoices")
+        .select("*")
+        .neq("status", "paid")
+        .gte("created_at", fromIso)
+        .lte("created_at", toIso);
+
+      if (invoiceError) throw invoiceError;
+
+      const invoices = invoiceRows ?? [];
+      const invoiceIds = invoices.map((invoice: any) => invoice.id).filter(Boolean);
+      const bookingIds = Array.from(new Set(invoices.map((invoice: any) => invoice.booking_id).filter(Boolean)));
 
       const [
-        { data: invoiceRows },
-        { data: collectionRows },
-        { data: bookingRows },
+        { data: collectionsByInvoice, error: collectionsByInvoiceError },
+        { data: collectionsByBooking, error: collectionsByBookingError },
+        { data: bookingRows, error: bookingError },
       ] = await Promise.all([
-        supabase.from("invoices").select("*").neq("status", "paid").gte("created_at", cutoffISO),
-        supabase.from("collections").select("*").gte("created_at", cutoffISO),
-        supabase.from("bookings").select("id, booking_number, customer_name").gte("created_at", cutoffISO),
+        invoiceIds.length > 0
+          ? supabase.from("collections").select("*").in("invoice_id", invoiceIds)
+          : Promise.resolve({ data: [] as any[], error: null }),
+        bookingIds.length > 0
+          ? supabase.from("collections").select("*").in("booking_id", bookingIds)
+          : Promise.resolve({ data: [] as any[], error: null }),
+        bookingIds.length > 0
+          ? supabase.from("bookings").select("id, booking_number, customer_name").in("id", bookingIds)
+          : Promise.resolve({ data: [] as any[], error: null }),
       ]);
 
+      if (collectionsByInvoiceError) throw collectionsByInvoiceError;
+      if (collectionsByBookingError) throw collectionsByBookingError;
+      if (bookingError) throw bookingError;
+
       return {
-        invoices: invoiceRows || [],
-        collections: collectionRows || [],
-        bookings: bookingRows || [],
+        invoices,
+        collections: mergeRowsById(
+          (collectionsByInvoice ?? []) as Array<{ id?: string }>,
+          (collectionsByBooking ?? []) as Array<{ id?: string }>
+        ),
+        bookings: bookingRows ?? [],
       };
     },
     staleTime: 30_000,
@@ -96,20 +124,15 @@ export function useReceivablesAgingReport(scope: DateScope) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Booking lookup
     const bookingMap = new Map<string, any>();
     bookings.forEach((b: any) => bookingMap.set(b.id as string, b));
 
-    // Invoice rate lookup so cross-currency collections can be normalized to PHP base.
     const invoiceRateById = new Map<string, number>();
     invoices.forEach((inv: any) => {
       const r = Number(inv.exchange_rate);
       invoiceRateById.set(inv.id as string, Number.isFinite(r) && r > 0 ? r : 1);
     });
 
-    // Collected-per-invoice map in PHP base. Direct hits use the collection's
-    // own base_amount; linked_billings entries are in invoice currency, so we
-    // multiply by the invoice's locked rate to normalize.
     const collectedByInvoice = new Map<string, number>();
     collections.filter(isCollectionAppliedToInvoice).forEach((c: any) => {
       const directId = c.invoice_id || c.invoiceId;
@@ -131,9 +154,6 @@ export function useReceivablesAgingReport(scope: DateScope) {
       .filter((inv: any) => isInScope(inv.created_at, scope))
       .map((inv: any): AgingRow | null => {
         const invoiceId = inv.id as string;
-        // Aging aggregates in PHP base across the whole AR portfolio. Per-invoice
-        // figures here are PHP-normalized; per-row source-currency display is
-        // the consumer's responsibility.
         const totalAmount = pickReportingAmount(inv) || Number(inv.subtotal) || 0;
         const collected   = collectedByInvoice.get(invoiceId) || 0;
         const outstanding = Math.max(0, totalAmount - collected);
@@ -152,7 +172,7 @@ export function useReceivablesAgingReport(scope: DateScope) {
           invoiceNumber: (inv.invoice_number as string) || invoiceId,
           customerName,
           bookingRef,
-          issueDate:   inv.invoice_date || inv.created_at || "",
+          issueDate: inv.invoice_date || inv.created_at || "",
           totalAmount,
           collected,
           outstanding,
@@ -164,10 +184,10 @@ export function useReceivablesAgingReport(scope: DateScope) {
       .sort((a, b) => b.daysOld - a.daysOld);
 
     const totalOutstanding = computedRows.reduce((s, r) => s + r.outstanding, 0);
-    const current   = computedRows.filter(r => r.bucket === "current").reduce((s, r) => s + r.outstanding, 0);
-    const d31_60    = computedRows.filter(r => r.bucket === "31-60").reduce((s, r) => s + r.outstanding, 0);
-    const d61_90    = computedRows.filter(r => r.bucket === "61-90").reduce((s, r) => s + r.outstanding, 0);
-    const d91plus   = computedRows.filter(r => r.bucket === "91+").reduce((s, r) => s + r.outstanding, 0);
+    const current = computedRows.filter(r => r.bucket === "current").reduce((s, r) => s + r.outstanding, 0);
+    const d31_60 = computedRows.filter(r => r.bucket === "31-60").reduce((s, r) => s + r.outstanding, 0);
+    const d61_90 = computedRows.filter(r => r.bucket === "61-90").reduce((s, r) => s + r.outstanding, 0);
+    const d91plus = computedRows.filter(r => r.bucket === "91+").reduce((s, r) => s + r.outstanding, 0);
 
     return {
       rows: computedRows,
@@ -177,14 +197,14 @@ export function useReceivablesAgingReport(scope: DateScope) {
         days31_60: d31_60,
         days61_90: d61_90,
         days91plus: d91plus,
-        invoiceCount:  computedRows.length,
+        invoiceCount: computedRows.length,
         customerCount: new Set(computedRows.map(r => r.customerName)).size,
       } as AgingSummary,
     };
   }, [data, scope]);
 
   const refresh = () =>
-    queryClient.invalidateQueries({ queryKey: queryKeys.financials.reportsData() });
+    queryClient.invalidateQueries({ queryKey: queryKeys.financials.receivablesAging(filters) });
 
   return { rows, summary, isLoading, refresh };
 }

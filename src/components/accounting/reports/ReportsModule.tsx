@@ -79,7 +79,7 @@ const REPORTS: ReportEntry[] = [
 export function ReportsModule() {
   const [activeReport, setActiveReport] = useState("sales");
   const [scope, setScope] = useState<DateScope>(() => createDateScope("this-month"));
-  const data = useReportsData();
+  const data = useReportsData(scope);
 
   const activeEntry = REPORTS.find((r) => r.id === activeReport) || REPORTS[0];
 

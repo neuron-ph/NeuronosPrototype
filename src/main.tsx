@@ -33,8 +33,10 @@ const queryClient = new QueryClient({
       staleTime: 30 * 1000,           // 30s — data is considered fresh for 30s
       gcTime: 5 * 60 * 1000,          // 5min — cache kept for background refetch
       retry: 1,
-      refetchOnWindowFocus: true,      // Refetch when tab regains focus
-      refetchOnMount: true,            // Refetch when component mounts with stale data
+      // Heavy Supabase screens already use manual refresh or realtime.
+      // Global focus/mount refetches were replaying too many expensive reads.
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
       refetchOnReconnect: true,        // Refetch after network reconnect
     },
   },

@@ -222,7 +222,7 @@ export function ActivityLogPage() {
     try {
       let q = supabase
         .from("activity_log")
-        .select("*", { count: "exact" })
+        .select("*", { count: "planned" as any })
         .order("created_at", { ascending: false })
         .limit(100);
 
@@ -895,7 +895,7 @@ export function ActivityLogPage() {
           {!isLoading && displayed.length > 0 && (
             <div className="px-4 py-4" style={{ borderTop: "1px solid var(--neuron-ui-border)" }}>
               <span style={{ fontSize: 12, color: "var(--theme-text-muted)" }}>
-                Showing {displayed.length.toLocaleString()} of {total.toLocaleString()} events
+                Showing {displayed.length.toLocaleString()} of about {total.toLocaleString()} events
               </span>
             </div>
           )}

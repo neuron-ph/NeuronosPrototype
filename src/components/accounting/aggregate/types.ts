@@ -16,6 +16,11 @@ export interface DateScope {
   to: Date;
 }
 
+export interface DateScopeQueryRange {
+  fromIso: string;
+  toIso: string;
+}
+
 /** Returns a DateScope for the given preset (relative to today). */
 export function createDateScope(preset: ScopePreset, customFrom?: Date, customTo?: Date): DateScope {
   const now = new Date();
@@ -66,6 +71,20 @@ export function isInScope(dateStr: string | undefined, scope: DateScope): boolea
   // Normalize to start of day for comparison
   const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   return day >= scope.from && day <= scope.to;
+}
+
+/** Returns an inclusive ISO timestamp range suitable for DB queries. */
+export function getDateScopeQueryRange(scope: DateScope): DateScopeQueryRange {
+  const from = new Date(scope.from);
+  from.setHours(0, 0, 0, 0);
+
+  const to = new Date(scope.to);
+  to.setHours(23, 59, 59, 999);
+
+  return {
+    fromIso: from.toISOString(),
+    toIso: to.toISOString(),
+  };
 }
 
 

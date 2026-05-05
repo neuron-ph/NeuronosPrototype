@@ -48,7 +48,7 @@ import type { Expense as OperationsExpense } from "../../types/operations";
 
 // Aggregate shell (Phase 1)
 import { AggregateFinancialShell } from "./aggregate/AggregateFinancialShell";
-import { createDateScope, isInScope, formatCurrencyCompact, formatCurrencyFull } from "./aggregate/types";
+import { createDateScope, getDateScopeQueryRange, isInScope, formatCurrencyCompact, formatCurrencyFull } from "./aggregate/types";
 import type { DateScope, KPICard, GroupedItems, GroupOption, StatusOption } from "./aggregate/types";
 
 // Phase 2: GroupingToolbar + GroupedDataTable
@@ -257,19 +257,30 @@ export function FinancialsModule() {
 
   // Centralised data (fetched once, shared across all tabs)
   const { data: financialsData, isLoading, refetch: fetchAll } = useQuery({
-    queryKey: [...queryKeys.financials.reportsData(), JSON.stringify(dataScope)],
+    queryKey: [
+      ...queryKeys.financials.reportsData(),
+      JSON.stringify(dataScope),
+      scope.preset,
+      scope.from.toISOString(),
+      scope.to.toISOString(),
+    ],
     enabled: isScopeLoaded,
     queryFn: async () => {
+      const { fromIso, toIso } = getDateScopeQueryRange(scope);
+      const applyTimeRange = (query: any): any => (
+        scope.preset === "all" ? query : query.gte("created_at", fromIso).lte("created_at", toIso)
+      );
+
       const [
         { data: billingRows, error: e1 },
         { data: invoiceRows, error: e2 },
         { data: collectionRows, error: e3 },
         { data: expenseRows, error: e4 },
       ] = await Promise.all([
-        applyScope(supabase.from('billing_line_items').select('*, bookings:booking_id(booking_number)'), dataScope),
-        applyScope(supabase.from('invoices').select('*'), dataScope),
-        applyScope(supabase.from('collections').select('*'), dataScope),
-        applyScope(supabase.from('evouchers').select('*'), dataScope),
+        applyTimeRange(applyScope(supabase.from('billing_line_items').select('*, bookings:booking_id(booking_number)'), dataScope)),
+        applyTimeRange(applyScope(supabase.from('invoices').select('*'), dataScope)),
+        applyTimeRange(applyScope(supabase.from('collections').select('*'), dataScope)),
+        applyTimeRange(applyScope(supabase.from('evouchers').select('*'), dataScope)),
       ]);
 
       const billingItems = (!e1 && billingRows)
