@@ -1,17 +1,15 @@
-// useCollectionsReport — Payment receipts for reconciliation.
+// useCollectionsReport â€” Payment receipts for reconciliation.
 // Fetches all applied collections within the selected scope.
 // Groups by payment method for summary breakdown.
 
 import { useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../utils/supabase/client";
-import { isInScope } from "../components/accounting/aggregate/types";
+import { isInScope, getDateScopeQueryRange } from "../components/accounting/aggregate/types";
 import type { DateScope } from "../components/accounting/aggregate/types";
 import { isCollectionAppliedToInvoice } from "../utils/collectionResolution";
 import { pickReportingAmount } from "../utils/accountingCurrency";
 import { queryKeys } from "../lib/queryKeys";
-
-// ── Types ──────────────────────────────────────────────────────────────────────
 
 export interface CollectionRow {
   collectionId: string;
@@ -39,8 +37,6 @@ export interface CollectionSummary {
   byMethod: CollectionsByMethod[];
 }
 
-// ── Hook ───────────────────────────────────────────────────────────────────────
-
 export function useCollectionsReport(scope: DateScope) {
   const queryClient = useQueryClient();
   const filters = { scope } as Record<string, unknown>;
@@ -48,25 +44,53 @@ export function useCollectionsReport(scope: DateScope) {
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.financials.collectionsReport(filters),
     queryFn: async () => {
-      // Limit data to last 2 years
-      const cutoff = new Date();
-      cutoff.setFullYear(cutoff.getFullYear() - 2);
-      const cutoffISO = cutoff.toISOString();
+      const { fromIso, toIso } = getDateScopeQueryRange(scope);
 
-      const [
-        { data: collectionRows },
-        { data: invoiceRows },
-        { data: bookingRows },
-      ] = await Promise.all([
-        supabase.from("collections").select("*").gte("created_at", cutoffISO),
-        supabase.from("invoices").select("id, invoice_number, booking_id, customer_name").gte("created_at", cutoffISO),
-        supabase.from("bookings").select("id, booking_number, customer_name").gte("created_at", cutoffISO),
-      ]);
+      const { data: collectionRows, error: collectionError } = await supabase
+        .from("collections")
+        .select("*")
+        .gte("created_at", fromIso)
+        .lte("created_at", toIso);
+
+      if (collectionError) throw collectionError;
+
+      const collections = collectionRows ?? [];
+      const invoiceIds = Array.from(new Set(
+        collections.flatMap((collection: any) => {
+          const linked = Array.isArray(collection.linked_billings) ? collection.linked_billings : [];
+          return [
+            collection.invoice_id,
+            ...linked.map((entry: any) => entry?.id || entry?.invoice_id || entry?.invoiceId),
+          ].filter(Boolean);
+        })
+      ));
+
+      const { data: invoiceRows, error: invoiceError } = invoiceIds.length > 0
+        ? await supabase
+            .from("invoices")
+            .select("id, invoice_number, booking_id, customer_name")
+            .in("id", invoiceIds)
+        : { data: [] as any[], error: null };
+
+      if (invoiceError) throw invoiceError;
+
+      const bookingIds = Array.from(new Set(
+        (invoiceRows ?? []).map((invoice: any) => invoice.booking_id).filter(Boolean)
+      ));
+
+      const { data: bookingRows, error: bookingError } = bookingIds.length > 0
+        ? await supabase
+            .from("bookings")
+            .select("id, booking_number, customer_name")
+            .in("id", bookingIds)
+        : { data: [] as any[], error: null };
+
+      if (bookingError) throw bookingError;
 
       return {
-        collections: collectionRows || [],
-        invoices: invoiceRows || [],
-        bookings: bookingRows || [],
+        collections,
+        invoices: invoiceRows ?? [],
+        bookings: bookingRows ?? [],
       };
     },
     staleTime: 30_000,
@@ -77,7 +101,6 @@ export function useCollectionsReport(scope: DateScope) {
     const invoices = data?.invoices ?? [];
     const bookings = data?.bookings ?? [];
 
-    // Lookup maps
     const invoiceMap = new Map<string, any>();
     invoices.forEach((inv: any) => invoiceMap.set(inv.id as string, inv));
 
@@ -90,7 +113,6 @@ export function useCollectionsReport(scope: DateScope) {
       .map((c: any): CollectionRow => {
         const collectionId = c.id as string;
 
-        // Resolve customer name — collection → linked invoice → booking
         const linkedInvoiceId = c.invoice_id || c.invoiceId;
         const linkedInvoice = linkedInvoiceId ? invoiceMap.get(linkedInvoiceId as string) : null;
         const linkedBooking = linkedInvoice?.booking_id
@@ -103,7 +125,6 @@ export function useCollectionsReport(scope: DateScope) {
           linkedBooking?.customer_name ||
           "—";
 
-        // Invoice reference — from direct invoice_id or first linked_billing
         const firstLinkedId =
           linkedInvoiceId ||
           (Array.isArray(c.linked_billings) && c.linked_billings[0]?.id) ||
@@ -129,7 +150,6 @@ export function useCollectionsReport(scope: DateScope) {
         return new Date(b.receiptDate).getTime() - new Date(a.receiptDate).getTime();
       });
 
-    // By-method breakdown
     const methodMap = new Map<string, { count: number; total: number }>();
     computedRows.forEach((r) => {
       const existing = methodMap.get(r.paymentMethod) || { count: 0, total: 0 };
@@ -159,7 +179,7 @@ export function useCollectionsReport(scope: DateScope) {
   }, [data, scope]);
 
   const refresh = () =>
-    queryClient.invalidateQueries({ queryKey: queryKeys.financials.reportsData() });
+    queryClient.invalidateQueries({ queryKey: queryKeys.financials.collectionsReport(filters) });
 
   return { rows, summary, isLoading, refresh };
 }

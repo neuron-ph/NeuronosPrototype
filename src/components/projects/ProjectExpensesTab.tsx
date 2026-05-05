@@ -19,27 +19,28 @@ interface ProjectExpensesTabProps {
 export function ProjectExpensesTab({ project, currentUser, title, subtitle }: ProjectExpensesTabProps) {
   const queryClient = useQueryClient();
   const linkedBookings = project.linkedBookings || [];
+  const validBookingIds = Array.from(
+    new Set(
+      linkedBookings
+        .map((booking) => booking.bookingId)
+        .filter(Boolean)
+    )
+  ) as string[];
 
   const expensesQueryKey = ["project_expenses", project.id];
 
   const { data: expenses = [], isLoading } = useQuery({
     queryKey: expensesQueryKey,
     queryFn: async () => {
-      const { data: allEVouchers, error } = await supabase.from('evouchers').select('*');
+      if (validBookingIds.length === 0) return [] as OperationsExpense[];
+
+      const { data: relevantEVouchers, error } = await supabase
+        .from('evouchers')
+        .select('*')
+        .in('booking_id', validBookingIds)
+        .in('transaction_type', ["expense", "budget_request"]);
       if (error) throw error;
-      if (!allEVouchers) return [] as OperationsExpense[];
-
-      const validBookingIds = new Set(
-        linkedBookings
-          .map((booking) => booking.bookingId)
-          .filter(Boolean)
-      );
-
-      const relevantEVouchers = allEVouchers.filter((ev: any) => {
-        if (!ev.booking_id || !validBookingIds.has(ev.booking_id)) return false;
-        const type = (ev.transaction_type || "").toLowerCase();
-        return type === "expense" || type === "budget_request";
-      });
+      if (!relevantEVouchers) return [] as OperationsExpense[];
 
       const mappedExpenses: OperationsExpense[] = relevantEVouchers.map((ev: any) => {
         const targetBookingId = ev.booking_id;
@@ -107,6 +108,7 @@ export function ProjectExpensesTab({ project, currentUser, title, subtitle }: Pr
       return uniqueExpenses;
     },
     staleTime: 30_000,
+    enabled: validBookingIds.length > 0,
   });
 
   const fetchAllExpenses = () => {

@@ -1,20 +1,15 @@
 /**
  * useReferenceDataPrefetch
  *
- * Eagerly warms the TanStack Query cache with reference data that feeds
- * dropdowns across all creation panels (users, customers). Called once in
- * AppContent immediately after authentication so that every downstream
- * useUsers / useCustomers call gets a cache hit instead of a cold fetch.
- *
- * The query keys here must exactly match those used by useUsers and
- * useCustomers so the cache is shared — not duplicated.
+ * Warms only the small, high-hit user lists that feed common dropdowns.
+ * The previous customer-wide prefetch was loading the full customers table
+ * on every authenticated app boot, which was unnecessary pressure on prod.
  */
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../utils/supabase/client";
 import { queryKeys } from "../lib/queryKeys";
 
 export function useReferenceDataPrefetch() {
-  // All active users — matches useUsers() with no filters
   useQuery({
     queryKey: queryKeys.users.filtered({}),
     queryFn: async () => {
@@ -29,7 +24,6 @@ export function useReferenceDataPrefetch() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // BD users — matches useUsers({ department: 'Business Development' })
   useQuery({
     queryKey: queryKeys.users.filtered({ department: "Business Development" }),
     queryFn: async () => {
@@ -43,19 +37,5 @@ export function useReferenceDataPrefetch() {
       return data ?? [];
     },
     staleTime: 5 * 60 * 1000,
-  });
-
-  // All customers (no scope) — matches useCustomers() with no arguments
-  useQuery({
-    queryKey: [...queryKeys.customers.list(), { scope: undefined }],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("customers")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
-    },
-    staleTime: 30_000,
   });
 }
