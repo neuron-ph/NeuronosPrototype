@@ -185,8 +185,6 @@ Authoritative post-migration doc:
 ## Pending (Requires Manual Action in Supabase Dashboard)
 
 These SQL migrations are written and ready but must be applied manually in the Supabase SQL Editor:
-- `/src/supabase/migrations/004_role_constraints.sql` — canonical dept/role CHECK constraints
-- `/src/supabase/migrations/005_rls_policies.sql` — full RLS enforcement
 - `ALTER TABLE users DROP COLUMN IF EXISTS password;`
 
 The dead Edge Function directory `/src/supabase/functions/server/` should also be deleted from the repo.
