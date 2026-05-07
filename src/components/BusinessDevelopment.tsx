@@ -1,6 +1,7 @@
 import { supabase } from '../utils/supabase/client';
 import { logActivity, logCreation } from '../utils/activityLog';
 import { createWorkflowTicket, getOpenWorkflowTicket } from '../utils/workflowTickets';
+import { recordNotificationEvent, fetchDeptManagerIds } from '../utils/notifications';
 import { trackRecent } from '../lib/recents';
 import { useState, useEffect, useRef } from "react";
 import { ContactsListWithFilters } from "./crm/ContactsListWithFilters";
@@ -495,6 +496,25 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
           }
         }
 
+        // Red-dot ping: BD inquiry creation → BD managers; if handed off to Pricing, also pricing managers
+        const bdManagers = await fetchDeptManagerIds('Business Development');
+        const pricingManagers = dbPayload.status === 'Pending Pricing'
+          ? await fetchDeptManagerIds('Pricing')
+          : [];
+        void recordNotificationEvent({
+          actorUserId: user?.id ?? null,
+          module: dbPayload.status === 'Pending Pricing' ? 'pricing' : 'bd',
+          subSection: dbPayload.status === 'Pending Pricing' ? 'quotations' : 'inquiries',
+          entityType: 'inquiry',
+          entityId: newId,
+          kind: dbPayload.status === 'Pending Pricing' ? 'handoff' : 'updated',
+          summary: {
+            label: `New inquiry from ${dbPayload.customer_name || 'Unknown'}`,
+            customer_name: dbPayload.customer_name ?? undefined,
+          },
+          recipientIds: [...bdManagers, ...pricingManagers],
+        });
+
         toast.success('Inquiry created.');
         queryClient.invalidateQueries({ queryKey: queryKeys.quotations.list() });
         setSubView("list");
@@ -682,9 +702,10 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
         {view === "customers" && (
           <>
             {subView === "list" && (
-              <CustomersListWithFilters 
+              <CustomersListWithFilters
                 userDepartment="Business Development"
-                onViewCustomer={handleViewCustomer} 
+                moduleId="bd_customers"
+                onViewCustomer={handleViewCustomer}
               />
             )}
             {subView === "detail" && selectedCustomer && (

@@ -8,6 +8,8 @@ import { useProjectsFinancialsMap } from "../../hooks/useProjectsFinancialsMap";
 import { SkeletonTable, SkeletonControlBar } from "../shared/NeuronSkeleton";
 import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
 import { usePermission } from "../../context/PermissionProvider";
+import { useUnreadEntityIds } from "../../hooks/useNotifications";
+import { PROJECT_MODULE_IDS, type ProjectDept } from "../../config/access/accessSchema";
 
 interface ProjectsListProps {
   projects: Project[];
@@ -32,9 +34,13 @@ export function ProjectsList({
   onRefresh,
 }: ProjectsListProps) {
   const { can } = usePermission();
-  const canViewAll = can("ops_projects_all_tab", "view");
-  const canViewActive = can("ops_projects_active_tab", "view");
-  const canViewCompleted = can("ops_projects_completed_tab", "view");
+  // Resolve dept-scoped moduleId family from the parent module's `department`
+  // string. BD is treated as ops projects (BD doesn't have its own projects matrix today).
+  const projectDept: ProjectDept = department === "Accounting" ? "accounting" : "ops";
+  const ids = PROJECT_MODULE_IDS[projectDept];
+  const canViewAll = can(ids.all, "view");
+  const canViewActive = can(ids.active, "view");
+  const canViewCompleted = can(ids.completed, "view");
 
   const defaultTab = canViewAll ? "all" : canViewActive ? "active" : canViewCompleted ? "completed" : "all";
   const [searchQuery, setSearchQuery] = useState("");
@@ -135,6 +141,8 @@ export function ProjectsList({
     
     return true;
   });
+
+  const unreadProjectIds = useUnreadEntityIds("project", filteredProjects.map((p) => p.id));
 
   // Calculate counts
   const allCount = projects.length;
@@ -512,6 +520,7 @@ export function ProjectsList({
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: "12px", overflow: "hidden" }}>
                     <div style={{
+                        position: "relative",
                         width: "32px",
                         height: "32px",
                         borderRadius: "6px",
@@ -523,6 +532,9 @@ export function ProjectsList({
                         border: "1px solid var(--theme-status-success-border)"
                     }}>
                         <Briefcase size={16} color="var(--theme-action-primary-bg)" />
+                        {unreadProjectIds.has(project.id) && (
+                          <span aria-label="Unread" style={{ position: "absolute", top: -2, right: -2, width: 8, height: 8, borderRadius: 4, backgroundColor: "var(--theme-status-danger-fg)" }} />
+                        )}
                     </div>
                     
                     <div style={{ overflow: "hidden", width: "100%" }}>

@@ -95,6 +95,7 @@ export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, curre
   const [showTimeline, setShowTimeline] = useState(false);
   const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>(initialActivityLog);
   const { user } = useUser();
+  useMarkEntityReadOnMount("booking", booking.id || booking.bookingId);
   const [editedBooking, setEditedBooking] = useState<MarineInsuranceBooking>(booking);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showCancelDeletePanel, setShowCancelDeletePanel] = useState(false);

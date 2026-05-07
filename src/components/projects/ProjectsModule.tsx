@@ -151,13 +151,7 @@ export function ProjectsModule({ currentUser, onCreateTicket, initialProject, de
           onBack={handleBackToList}
           onUpdate={handleProjectUpdated}
           currentUser={currentUser}
-          // If in Accounting mode, we might want to pass "Operations" or "BD" to the detail view 
-          // depending on what's appropriate, or update ProjectDetail to handle "Accounting" too.
-          // For now, let's treat Accounting users as "Operations" level access in Detail View
-          // or just pass "Accounting" if ProjectDetail supports it.
-          // Let's coerce it to "Operations" for Detail View if it's Accounting to be safe for now,
-          // as ProjectDetail might not expect "Accounting".
-          department={department === "Accounting" ? "Operations" : department}
+          department={department}
           onCreateTicket={onCreateTicket}
           initialTab={initialTab}
           highlightId={highlightId}

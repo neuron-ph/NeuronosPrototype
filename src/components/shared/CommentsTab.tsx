@@ -4,6 +4,25 @@ import { Send, Paperclip, X, Download, FileText } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "sonner@2.0.3";
+import { recordNotificationEvent, type NotifModule, type NotifSubSection, type NotifEntityType } from "../../utils/notifications";
+
+// Map a comment's entity_type to its sidebar module + sub_section
+function entityTarget(entityType: string): { module: NotifModule; sub: NotifSubSection; entity: NotifEntityType } | null {
+  switch (entityType) {
+    case 'booking':     return { module: 'operations', sub: '', entity: 'booking' };
+    case 'invoice':     return { module: 'accounting', sub: 'invoices', entity: 'invoice' };
+    case 'collection':  return { module: 'accounting', sub: 'collections', entity: 'collection' };
+    case 'billing':     return { module: 'accounting', sub: 'billings', entity: 'billing' };
+    case 'evoucher':    return { module: 'accounting', sub: 'evouchers', entity: 'evoucher' };
+    case 'quotation':   return { module: 'pricing', sub: 'quotations', entity: 'quotation' };
+    case 'project':     return { module: 'bd', sub: 'projects', entity: 'project' };
+    case 'contract':    return { module: 'bd', sub: 'contracts', entity: 'contract' };
+    case 'inquiry':     return { module: 'bd', sub: 'inquiries', entity: 'inquiry' };
+    case 'customer':    return { module: 'bd', sub: 'customers', entity: 'customer' };
+    case 'task':        return { module: 'bd', sub: 'tasks', entity: 'task' };
+    default:            return null;
+  }
+}
 
 interface FileAttachment {
   file_name: string;
@@ -129,6 +148,26 @@ export function CommentsTab({
         setAttachedFiles([]);
         queryClient.invalidateQueries({ queryKey: ["comments", entityType, entityId] });
         toast.success("Comment added");
+
+        // Red-dot ping: notify everyone else who has previously commented on this entity
+        const target = entityTarget(entityType);
+        if (target) {
+          const priorCommenters = Array.from(new Set(
+            (comments || []).map((c) => c.user_id).filter((uid) => uid && uid !== currentUserId)
+          ));
+          void recordNotificationEvent({
+            actorUserId: currentUserId,
+            module: target.module,
+            subSection: target.sub,
+            entityType: target.entity,
+            entityId,
+            kind: 'commented',
+            summary: {
+              label: `${currentUserName} commented`,
+            },
+            recipientIds: priorCommenters,
+          });
+        }
       } else {
         toast.error(insertError.message || "Failed to add comment");
       }

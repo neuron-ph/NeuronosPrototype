@@ -14,6 +14,7 @@ import {
   QUOTATION_INQUIRY_STATUSES,
   QUOTATION_NEGOTIATION_STATUSES,
 } from "../../utils/quotationStatus";
+import { useUnreadEntityIds } from "../../hooks/useNotifications";
 
 // Default column widths
 const DEFAULT_COLUMN_WIDTHS = {
@@ -59,9 +60,10 @@ interface QuotationTableRowProps {
   showStatus?: boolean;
   showAssignee?: boolean;
   assigneeName?: string;
+  unread?: boolean;
 }
 
-function QuotationTableRow({ item, index, totalItems, onItemClick, gridTemplateColumns, showStatus, showAssignee, assigneeName }: QuotationTableRowProps) {
+function QuotationTableRow({ item, index, totalItems, onItemClick, gridTemplateColumns, showStatus, showAssignee, assigneeName, unread }: QuotationTableRowProps) {
   const [showTooltip, setShowTooltip] = useState(false);
   const [showNameTooltip, setShowNameTooltip] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
@@ -129,8 +131,11 @@ function QuotationTableRow({ item, index, totalItems, onItemClick, gridTemplateC
       }}
     >
       {/* Icon — type-aware (Project vs Contract) */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
         <QuotationTypeIcon type={item.quotation_type} size={16} />
+        {unread && (
+          <span aria-label="Unread" style={{ position: "absolute", top: -2, right: -2, width: 8, height: 8, borderRadius: 4, backgroundColor: "var(--theme-status-danger-fg)" }} />
+        )}
       </div>
 
       {/* Quotation Name with type sub-label */}
@@ -451,6 +456,11 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
 
     return filtered;
   }, [quotations, searchQuery, dateFrom, dateTo, statusFilter, serviceFilter, customerFilter, workflowTab, typeFilter, userRole, currentUserId]);
+
+  const filteredQuotationIds = useMemo(() => filteredQuotations.map((q) => q.id), [filteredQuotations]);
+  const unreadQuotationIds = useUnreadEntityIds("quotation", filteredQuotationIds);
+  const unreadInquiryIds = useUnreadEntityIds("inquiry", filteredQuotationIds);
+  const unreadContractIds = useUnreadEntityIds("contract", filteredQuotationIds);
 
   // Calculate tab counts (Inquiries respects staff scoping)
   const tabCounts = useMemo(() => {
@@ -1050,6 +1060,7 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
                 showStatus={showStatus}
                 showAssignee={showAssigneeCol}
                 assigneeName={pricingUserMap[(item as any).assigned_to] || ""}
+                unread={unreadQuotationIds.has(item.id) || unreadInquiryIds.has(item.id) || unreadContractIds.has(item.id)}
               />
             ))}
           </div>

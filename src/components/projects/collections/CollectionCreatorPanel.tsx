@@ -25,6 +25,7 @@ import {
   type AccountingCurrency,
 } from "../../../utils/accountingCurrency";
 import { resolveExchangeRate } from "../../../utils/exchangeRates";
+import { recordNotificationEvent } from "../../../utils/notifications";
 
 interface CollectionCreatorPanelProps {
   isOpen: boolean;
@@ -480,6 +481,30 @@ export function CollectionCreatorPanel({
       logCreation("collection", created.id, created.collection_number ?? created.id, actor);
 
       toast.success(`Collection ${collectionNumber} recorded successfully!`);
+
+      // Red-dot ping: notify accounting managers + project owner
+      const { data: arManagers } = await supabase
+        .from('users')
+        .select('id')
+        .eq('department', 'Accounting')
+        .in('role', ['manager', 'executive']);
+      const projectOwnerId = (project as any).created_by as string | undefined;
+      void recordNotificationEvent({
+        actorUserId: user?.id ?? null,
+        module: 'accounting',
+        subSection: 'collections',
+        entityType: 'collection',
+        entityId: created.id,
+        kind: 'recorded',
+        summary: {
+          label: `Collection ${collectionNumber} recorded`,
+          reference: collectionNumber,
+          customer_name: project.customer_name,
+          amount: amountReceived,
+          currency: collectionCurrency,
+        },
+        recipientIds: [projectOwnerId, ...(arManagers || []).map((u: any) => u.id)],
+      });
 
       if (user?.id) {
         fireGLPostingTicketOnCollection({

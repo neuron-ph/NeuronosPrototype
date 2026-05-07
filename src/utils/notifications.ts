@@ -152,6 +152,21 @@ export async function recordNotificationEvent(
   return (data as string) || null;
 }
 
+/**
+ * Fetch user IDs for managers/executives of a department. Used by write sites
+ * that want to ping a department's managers in addition to a directly-associated
+ * recipient. Returns an empty array on error so notification calls stay non-fatal.
+ */
+export async function fetchDeptManagerIds(department: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('users')
+    .select('id')
+    .eq('department', department)
+    .in('role', ['manager', 'executive']);
+  if (error) return [];
+  return (data || []).map((u: any) => u.id).filter(Boolean);
+}
+
 /** Mark all unread events for a single entity as read for the given user. */
 export async function markEntityRead(
   userId: string,

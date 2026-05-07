@@ -16,6 +16,7 @@ import {
 } from "../../../utils/invoiceReversal";
 import { toast } from "../../ui/toast-utils";
 import { InvoiceGLPostingSheet } from "../invoices/InvoiceGLPostingSheet";
+import { useMarkEntityReadOnMount } from "../../../hooks/useNotifications";
 
 interface BillingDetailsSheetProps {
   isOpen: boolean;
@@ -32,6 +33,7 @@ export function BillingDetailsSheet({ isOpen, onClose, billingId }: BillingDetai
   const [isCreatingReversal, setIsCreatingReversal] = useState(false);
   const [isCompletingReversal, setIsCompletingReversal] = useState(false);
   const [showGLPosting, setShowGLPosting] = useState(false);
+  useMarkEntityReadOnMount("invoice", isOpen ? billingId : null);
 
   useEffect(() => {
     async function fetchBilling() {

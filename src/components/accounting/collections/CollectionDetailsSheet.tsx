@@ -11,6 +11,7 @@ import {
 } from "../../../utils/collectionResolution";
 import { toast } from "../../ui/toast-utils";
 import { CollectionGLPostingSheet } from "./CollectionGLPostingSheet";
+import { useMarkEntityReadOnMount } from "../../../hooks/useNotifications";
 
 interface CollectionDetailsSheetProps {
   isOpen: boolean;
@@ -25,6 +26,7 @@ export function CollectionDetailsSheet({ isOpen, onClose, collectionId }: Collec
   const [error, setError] = useState<string | null>(null);
   const [isResolving, setIsResolving] = useState(false);
   const [showGLPosting, setShowGLPosting] = useState(false);
+  useMarkEntityReadOnMount("collection", isOpen ? collectionId : null);
 
   useEffect(() => {
     async function fetchCollection() {

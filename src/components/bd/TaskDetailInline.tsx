@@ -5,6 +5,8 @@ import { supabase } from '../../utils/supabase/client';
 import { useUser } from "../../hooks/useUser";
 import { useUsers } from "../../hooks/useUsers";
 import { logActivity, logDeletion, logStatusChange } from "../../utils/activityLog";
+import { recordNotificationEvent } from "../../utils/notifications";
+import { useMarkEntityReadOnMount } from "../../hooks/useNotifications";
 import { toast } from "../ui/toast-utils";
 import type { Task, TaskPriority, TaskStatus, TaskType } from "../../types/bd";
 
@@ -25,6 +27,7 @@ interface Comment {
 }
 
 export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, contacts }: TaskDetailInlineProps) {
+  useMarkEntityReadOnMount("task", task.id);
   const [editedTask, setEditedTask] = useState(task);
   const [newComment, setNewComment] = useState("");
   const [comments, setComments] = useState<Comment[]>([]);
@@ -134,6 +137,19 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
       if (error) throw error;
       const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
       logActivity("task", task.id, task.title ?? task.id, "updated", _actor);
+
+      const assigneeChanged = (editedTask as any).assigned_to !== (task as any).assigned_to;
+      void recordNotificationEvent({
+        actorUserId: user?.id ?? null,
+        module: 'bd',
+        subSection: 'tasks',
+        entityType: 'task',
+        entityId: task.id,
+        kind: assigneeChanged ? 'assigned' : 'updated',
+        summary: { label: `Task ${task.title ?? ''} updated` },
+        recipientIds: [(editedTask as any).assigned_to],
+      });
+
       toast.success('Task updated successfully');
       setIsEditing(false);
       if (onUpdate) onUpdate();

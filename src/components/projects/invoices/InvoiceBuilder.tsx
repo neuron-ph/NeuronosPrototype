@@ -30,6 +30,7 @@ import {
   toBaseAmount,
   type AccountingCurrency,
 } from "../../../utils/accountingCurrency";
+import { recordNotificationEvent } from "../../../utils/notifications";
 
 
 // A4 Dimensions in pixels at 96 DPI
@@ -710,6 +711,30 @@ export function InvoiceBuilder({
         .in('id', finalBillingItemIds);
       if (updateError) console.warn('[InvoiceBuilder] Failed to mark items as invoiced:', updateError.message);
       else logActivity("invoice", invoiceData.id, invoiceData.invoice_number ?? invoiceData.id, "updated", actor, { description: "Marked as invoiced" });
+
+      // Red-dot ping: notify accounting managers (AR review) + project owner
+      const { data: arManagers } = await supabase
+        .from('users')
+        .select('id')
+        .eq('department', 'Accounting')
+        .in('role', ['manager', 'executive']);
+      const projectOwnerId = (project as any).created_by as string | undefined;
+      void recordNotificationEvent({
+        actorUserId: user?.id ?? null,
+        module: 'accounting',
+        subSection: 'invoices',
+        entityType: 'invoice',
+        entityId: invoiceData.id,
+        kind: 'issued',
+        summary: {
+          label: `Invoice ${invoiceData.invoice_number} issued`,
+          reference: invoiceData.invoice_number,
+          customer_name: invoiceRow.customer_name,
+          amount: invoiceRow.total_amount,
+          currency: invoiceCurrency,
+        },
+        recipientIds: [projectOwnerId, ...(arManagers || []).map((u: any) => u.id)],
+      });
 
       toast.success(`Invoice ${invoiceData.invoice_number} created`);
       if (onSuccess) onSuccess();

@@ -11,11 +11,18 @@ interface PermissionContextType {
    * Respects per-user module_grants overrides; falls back to inherited baseline.
    */
   can: (moduleId: ModuleId, action: ActionId) => boolean;
+  /**
+   * True only when an explicit per-user override grants this module+action.
+   * This is used by route/sidebar guards so custom access can bypass default
+   * department/role ownership rules without changing the inherited baseline.
+   */
+  hasExplicitGrant: (moduleId: ModuleId, action: ActionId) => boolean;
   isLoaded: boolean;
 }
 
 const PermissionContext = createContext<PermissionContextType>({
   can: () => false,
+  hasExplicitGrant: () => false,
   isLoaded: false,
 });
 
@@ -51,9 +58,17 @@ export function PermissionProvider({ children }: { children: ReactNode }) {
     };
   }, [moduleGrants, effectiveDepartment, effectiveRole]);
 
+  const hasExplicitGrant = useMemo(
+    () => (moduleId: ModuleId, action: ActionId): boolean => {
+      const key = `${moduleId}:${action}`;
+      return moduleGrants[key] === true;
+    },
+    [moduleGrants],
+  );
+
   const value = useMemo<PermissionContextType>(
-    () => ({ can, isLoaded: !isLoading }),
-    [can, isLoading],
+    () => ({ can, hasExplicitGrant, isLoaded: !isLoading }),
+    [can, hasExplicitGrant, isLoading],
   );
 
   return (

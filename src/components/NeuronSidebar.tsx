@@ -11,7 +11,6 @@ import {
   Calendar,
   Activity,
   Inbox,
-  Bell,
   ChevronDown,
   ChevronRight,
   ChevronLeft,
@@ -38,10 +37,13 @@ import { NeuronLogo } from "./NeuronLogo";
 import { usePermission } from "../context/PermissionProvider";
 import { useUser } from "../hooks/useUser";
 import { useNotifications } from "../hooks/useNotifications";
-import { NotificationsPanel } from "./notifications/NotificationsPanel";
 import { supabase } from "../utils/supabase/client";
 import type { ModuleId } from "./admin/permissionsConfig";
 import type { NotifModule, NotifSubSection } from "../utils/notifications";
+import {
+  getSidebarModulesForDepartment,
+  ACCESS_MODULE_BY_PAGE,
+} from "../config/access/accessSchema";
 
 // Map sidebar Page id → notification (module, sub_section) for badge counts
 const PAGE_TO_NOTIF: Record<string, { module: NotifModule; sub: NotifSubSection }> = {
@@ -140,50 +142,17 @@ const prefetchInbox      = () => void import("./InboxPage");
 
 type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" |"pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" |"ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" |"operations" | "acct-transactions" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-journal" | "acct-coa" | "acct-reports" | "acct-statements" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "calendar" | "inbox" | "my-evouchers" | "ticket-queue" | "settings" | "admin-users" | "admin-profiling" | "admin" | "ticket-testing" | "activity-log" | "design-system";
 
+// Sidebar permission map — derived from canonical schema for sidebar-backed pages,
+// plus explicit entries for legacy non-sidebar accounting routes that still need
+// permission gating when reached via direct URL.
 const sidebarPermissionMap: Partial<Record<Page, ModuleId>> = {
-  // Business Development
-  "bd-contacts": "bd_contacts",
-  "bd-customers": "bd_customers",
-  "bd-inquiries": "bd_inquiries",
-  "bd-projects": "bd_projects",
-  "bd-contracts": "bd_contracts",
-  "bd-tasks": "bd_tasks",
-  "bd-activities": "bd_activities",
-  "bd-budget-requests": "bd_budget_requests",
-  // Pricing
-  "pricing-contacts": "pricing_contacts",
-  "pricing-customers": "pricing_customers",
-  "pricing-quotations": "pricing_quotations",
-  "pricing-projects": "pricing_projects",
-  "pricing-contracts": "pricing_contracts",
-  "pricing-vendors": "pricing_network_partners",
-  // Operations
-  "ops-forwarding": "ops_forwarding",
-  "ops-brokerage": "ops_brokerage",
-  "ops-trucking": "ops_trucking",
-  "ops-marine-insurance": "ops_marine_insurance",
-  "ops-others": "ops_others",
-  // Accounting
-  "acct-financials": "acct_financials",
-  "acct-evouchers": "acct_evouchers",
-  "acct-journal": "acct_journal",
-  "acct-coa": "acct_coa",
-  "acct-projects": "acct_projects",
-  "acct-contracts": "acct_contracts",
-  "acct-bookings": "acct_bookings",
-  "acct-customers": "acct_customers",
-  "acct-catalog": "acct_catalog",
-  "acct-reports": "acct_reports",
-  "acct-statements": "acct_statements",
-  // Legacy non-sidebar routes — kept for direct URL access; mapped to financials sub-tabs
+  ...Object.fromEntries(
+    Object.entries(ACCESS_MODULE_BY_PAGE).map(([page, mod]) => [page, mod.moduleId]),
+  ) as Partial<Record<Page, ModuleId>>,
+  // Legacy non-sidebar routes — direct URL access maps to financials sub-tabs
   "acct-billings": "accounting_financials_billings_tab",
   "acct-collections": "accounting_financials_collections_tab",
   "acct-expenses": "accounting_financials_expenses_tab",
-  // HR / Executive
-  "hr": "hr",
-  "activity-log": "exec_activity_log",
-  "admin-users": "exec_users",
-  "admin-profiling": "exec_profiling",
 };
 
 // SVG for Philippine Peso icon
@@ -345,9 +314,8 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
 
   // Use effectiveDepartment from context for dev role override support
   const { user, effectiveDepartment, effectiveRole } = useUser();
-  const { moduleCount, subSectionCount, total: notifTotal } = useNotifications();
-  const [notifPanelOpen, setNotifPanelOpen] = useState(false);
-  const { can, isLoaded: permissionsLoaded } = usePermission();
+  const { moduleCount, subSectionCount } = useNotifications();
+  const { can, hasExplicitGrant, isLoaded: permissionsLoaded } = usePermission();
 
   // Fetch inbox unread count — with hard timeout so a hung Supabase client
   // doesn't block the main thread or accumulate zombie requests.
@@ -381,62 +349,66 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
   // Determine what modules to show based on effective department
   const userDepartment = effectiveDepartment || currentUser?.department || "Operations";
   const isExecutive = userDepartment === "Executive";
-  const isManager = effectiveRole === 'manager';
-  const showBD = isExecutive || userDepartment === "Business Development";
-  const showPricing = isExecutive || userDepartment === "Pricing";
-  const showOperations = isExecutive || userDepartment === "Operations";
-  const showAccounting = isExecutive || userDepartment === "Accounting";
   const showHR = !import.meta.env.PROD && (isExecutive || userDepartment === "HR");
   
   // Dashboard - standalone
   const dashboardItem = { id: "dashboard" as Page, label: "Dashboard", icon: Home };
   // const transactionsItem = { id: "transactions" as Page, label: "Transactions", icon: CreditCard };
   
-  // Business Development sub-items
-  const bdSubItems = [
-    { id: "bd-contacts" as Page, label: "Contacts", icon: User },
-    { id: "bd-customers" as Page, label: "Customers", icon: Building },
-    { id: "bd-inquiries" as Page, label: "Inquiries", icon: ShoppingCart },
-    { id: "bd-projects" as Page, label: "Projects", icon: Briefcase },
-    { id: "bd-contracts" as Page, label: "Contracts", icon: Handshake },
-    { id: "bd-tasks" as Page, label: "Tasks", icon: Package },
-    { id: "bd-activities" as Page, label: "Activities", icon: Activity },
-    { id: "bd-budget-requests" as Page, label: "Budget Requests", icon: Banknote },
-  ];
+  // Sidebar entries derive their order + labels from the canonical access schema.
+  // Icons and per-item minRole gates live here because they are sidebar-only
+  // presentation concerns, keyed by sidebar pageId.
+  const SIDEBAR_PAGE_ICON: Record<string, any> = {
+    "bd-contacts":         User,
+    "bd-customers":        Building,
+    "bd-inquiries":        ShoppingCart,
+    "bd-projects":         Briefcase,
+    "bd-contracts":        Handshake,
+    "bd-tasks":            Package,
+    "bd-activities":       Activity,
+    "bd-budget-requests":  Banknote,
+    "pricing-contacts":    User,
+    "pricing-customers":   Building,
+    "pricing-quotations":  FileText,
+    "pricing-projects":    Briefcase,
+    "pricing-contracts":   Handshake,
+    "pricing-vendors":     Palette,
+    "ops-forwarding":      Container,
+    "ops-brokerage":       Palette,
+    "ops-trucking":        Truck,
+    "ops-marine-insurance":Ship,
+    "ops-others":          FileText,
+    "acct-financials":     CreditCard,
+    "acct-evouchers":      Receipt,
+    "acct-journal":        ScrollText,
+    "acct-coa":            BookOpen,
+    "acct-projects":       Briefcase,
+    "acct-contracts":      Handshake,
+    "acct-bookings":       Package,
+    "acct-customers":      Users,
+    "acct-catalog":        ClipboardCheck,
+    "acct-reports":        BarChart3,
+    "acct-statements":     TrendingUp,
+  };
+  const SIDEBAR_PAGE_MIN_ROLE: Partial<Record<string, string>> = {
+    "acct-financials": "manager",
+  };
 
-  // Pricing sub-items
-  const pricingSubItems = [
-    { id: "pricing-contacts" as Page, label: "Contacts", icon: User },
-    { id: "pricing-customers" as Page, label: "Customers", icon: Building },
-    { id: "pricing-quotations" as Page, label: "Quotations", icon: FileText },
-    { id: "pricing-projects" as Page, label: "Projects", icon: Briefcase },
-    { id: "pricing-contracts" as Page, label: "Contracts", icon: Handshake },
-    { id: "pricing-vendors" as Page, label: "Vendor", icon: Palette },
-  ];
+  type SubItem = { id: Page; label: string; icon: any; minRole?: string };
+  const buildSubItems = (deptLabel: string): SubItem[] =>
+    getSidebarModulesForDepartment(deptLabel)
+      .filter(m => !!m.pageId)
+      .map(m => ({
+        id: m.pageId as Page,
+        label: m.label,
+        icon: SIDEBAR_PAGE_ICON[m.pageId as string] ?? FileText,
+        minRole: SIDEBAR_PAGE_MIN_ROLE[m.pageId as string],
+      }));
 
-  // Operations sub-items
-  const operationsSubItems = [
-    { id: "ops-forwarding" as Page, label: "Forwarding", icon: Container },
-    { id: "ops-brokerage" as Page, label: "Brokerage", icon: Palette },
-    { id: "ops-trucking" as Page, label: "Trucking", icon: Truck },
-    { id: "ops-marine-insurance" as Page, label: "Marine Insurance", icon: Ship },
-    { id: "ops-others" as Page, label: "Others", icon: FileText },
-  ];
-
-  // Accounting sub-items — minRole hides items the user's role can't access (mirrors RouteGuard)
-  const acctSubItems: { id: Page; label: string; icon: any; minRole?: string }[] = [
-    { id: "acct-financials" as Page, label: "Finance Overview", icon: CreditCard, minRole: "manager" },
-    { id: "acct-evouchers" as Page, label: "E-Vouchers", icon: Receipt },
-    { id: "acct-journal" as Page, label: "General Journal", icon: ScrollText },
-    { id: "acct-coa" as Page, label: "Chart of Accounts", icon: BookOpen },
-    { id: "acct-projects" as Page, label: "Projects", icon: Briefcase },
-    { id: "acct-contracts" as Page, label: "Contracts", icon: Handshake },
-    { id: "acct-bookings" as Page, label: "Bookings", icon: Package },
-    { id: "acct-customers" as Page, label: "Customers", icon: Users },
-    { id: "acct-catalog" as Page, label: "Catalog", icon: ClipboardCheck },
-    { id: "acct-reports" as Page, label: "Reports", icon: BarChart3 },
-    { id: "acct-statements" as Page, label: "Financial Statements", icon: TrendingUp },
-  ];
+  const bdSubItems         = buildSubItems("Business Development");
+  const pricingSubItems    = buildSubItems("Pricing");
+  const operationsSubItems = buildSubItems("Operations");
+  const acctSubItems       = buildSubItems("Accounting");
 
   const canViewPage = useCallback((page: Page) => {
     const moduleId = sidebarPermissionMap[page];
@@ -451,19 +423,20 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
   const visibleAcctSubItems = acctSubItems
     .filter((item) => {
       if (!item.minRole || isExecutive) return true;
+      if (hasExplicitGrant(sidebarPermissionMap[item.id] ?? "acct_financials", "view")) return true;
       const userLevel = ROLE_LEVEL[effectiveRole || "staff"] ?? 0;
       return userLevel >= (ROLE_LEVEL[item.minRole] ?? 0);
     })
     .filter((item) => canViewPage(item.id));
 
-  const showBDSection = showBD && visibleBdSubItems.length > 0;
-  const showPricingSection = showPricing && visiblePricingSubItems.length > 0;
-  const showOperationsSection = showOperations && visibleOperationsSubItems.length > 0;
-  const showAccountingSection = showAccounting && visibleAcctSubItems.length > 0;
+  const showBDSection = visibleBdSubItems.length > 0;
+  const showPricingSection = visiblePricingSubItems.length > 0;
+  const showOperationsSection = visibleOperationsSubItems.length > 0;
+  const showAccountingSection = visibleAcctSubItems.length > 0;
   const showHRItem = showHR && canViewPage("hr");
-  const showActivityLog = isExecutive && canViewPage("activity-log");
-  const showAdminUsers = isExecutive && canViewPage("admin-users");
-  const showAdminProfiling = isExecutive && canViewPage("admin-profiling");
+  const showActivityLog = canViewPage("activity-log");
+  const showAdminUsers = canViewPage("admin-users");
+  const showAdminProfiling = canViewPage("admin-profiling");
   
   // Check if any section page is active
   const isBDActive = currentPage.startsWith("bd-");
@@ -775,7 +748,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
                   )}
                 </AnimatePresence>
               </div>
-              {!isCollapsed && !isBDExpanded && moduleCount("bd") > 0 && (
+              {!isCollapsed && moduleCount("bd") > 0 && (
                 <SidebarBadge count={moduleCount("bd")} variant="trailing" />
               )}
               <AnimatePresence initial={false}>
@@ -878,7 +851,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
                   )}
                 </AnimatePresence>
               </div>
-              {!isCollapsed && !isPricingExpanded && moduleCount("pricing") > 0 && (
+              {!isCollapsed && moduleCount("pricing") > 0 && (
                 <SidebarBadge count={moduleCount("pricing")} variant="trailing" />
               )}
               <AnimatePresence initial={false}>
@@ -981,7 +954,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
                   )}
                 </AnimatePresence>
               </div>
-              {!isCollapsed && !isOperationsExpanded && moduleCount("operations") > 0 && (
+              {!isCollapsed && moduleCount("operations") > 0 && (
                 <SidebarBadge count={moduleCount("operations")} variant="trailing" />
               )}
               <AnimatePresence initial={false}>
@@ -1089,7 +1062,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
                   )}
                 </AnimatePresence>
               </div>
-              {!isCollapsed && !isAcctExpanded && moduleCount("accounting") > 0 && (
+              {!isCollapsed && moduleCount("accounting") > 0 && (
                 <SidebarBadge count={moduleCount("accounting")} variant="trailing" />
               )}
               <AnimatePresence initial={false}>
@@ -1133,50 +1106,6 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
         
         {/* Personal Section */}
         {renderSectionHeader("PERSONAL")}
-
-        {/* Notifications — opens side panel rather than navigating */}
-        <button
-          onClick={() => setNotifPanelOpen(true)}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--neuron-ui-active-border)]"
-          style={{
-            height: "40px",
-            backgroundColor: "transparent",
-            border: "1.5px solid transparent",
-            color: "var(--neuron-ink-secondary)",
-            justifyContent: isCollapsed ? "center" : "flex-start",
-            paddingLeft: isCollapsed ? "0" : "12px",
-            paddingRight: isCollapsed ? "0" : "12px",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = "transparent";
-          }}
-          title={isCollapsed ? "Notifications" : undefined}
-        >
-          <div style={{ position: "relative", flexShrink: 0 }}>
-            <Bell size={20} style={{ color: "var(--neuron-ink-muted)" }} />
-            {isCollapsed && <SidebarBadge count={notifTotal} variant="icon-overlay" />}
-          </div>
-          <AnimatePresence initial={false}>
-            {!isCollapsed && (
-              <motion.span
-                key="notif-label"
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -6 }}
-                transition={{ duration: 0.18, ease: [0.25, 1, 0.5, 1] }}
-                style={{ fontSize: "14px", lineHeight: "20px", flex: 1, textAlign: "left" }}
-              >
-                Notifications
-              </motion.span>
-            )}
-          </AnimatePresence>
-          {!isCollapsed && notifTotal > 0 && (
-            <SidebarBadge count={notifTotal} variant="trailing" />
-          )}
-        </button>
 
         {personalItems.map(item => {
           if (item.id === "inbox") {
@@ -1496,7 +1425,6 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
         )}
       </div>
 
-      <NotificationsPanel isOpen={notifPanelOpen} onClose={() => setNotifPanelOpen(false)} />
     </div>
   );
 }

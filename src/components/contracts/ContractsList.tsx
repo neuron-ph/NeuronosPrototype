@@ -18,6 +18,8 @@ import { CustomDatePicker } from "../common/CustomDatePicker";
 import { SkeletonTable, SkeletonControlBar } from "../shared/NeuronSkeleton";
 import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
 import { getNormalizedContractStatus } from "../../utils/quotationStatus";
+import { useUnreadEntityIds } from "../../hooks/useNotifications";
+import { CONTRACT_MODULE_IDS, type ContractDept } from "../../config/access/accessSchema";
 
 interface ContractsListProps {
   contracts: QuotationNew[];
@@ -42,9 +44,12 @@ export function ContractsList({
   onRefresh,
 }: ContractsListProps) {
   const { can } = usePermission();
-  const canViewAllTab = can("pricing_contracts_all_tab", "view");
-  const canViewActiveTab = can("pricing_contracts_active_tab", "view");
-  const canViewExpiringTab = can("pricing_contracts_expiring_tab", "view");
+  // Resolve dept-scoped moduleId family. BD reuses Pricing's contracts matrix today.
+  const contractDept: ContractDept = department === "Accounting" ? "accounting" : "pricing";
+  const ids = CONTRACT_MODULE_IDS[contractDept];
+  const canViewAllTab      = can(ids.all,      "view");
+  const canViewActiveTab   = can(ids.active,   "view");
+  const canViewExpiringTab = can(ids.expiring, "view");
 
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | "active" | "expiring">(
@@ -129,6 +134,8 @@ export function ContractsList({
     
     return true;
   });
+
+  const unreadContractIds = useUnreadEntityIds("contract", filteredContracts.map((c) => c.id));
 
   // Calculate counts
   const allCount = contracts.length;
@@ -469,6 +476,7 @@ export function ContractsList({
                   {/* CONTRACT — icon + name + number */}
                   <div style={{ display: "flex", alignItems: "center", gap: "12px", overflow: "hidden" }}>
                     <div style={{
+                        position: "relative",
                         width: "32px",
                         height: "32px",
                         borderRadius: "6px",
@@ -480,6 +488,9 @@ export function ContractsList({
                         border: "1px solid var(--theme-status-success-border)"
                     }}>
                         <Handshake size={16} color="var(--theme-action-primary-bg)" />
+                        {unreadContractIds.has(contract.id) && (
+                          <span aria-label="Unread" style={{ position: "absolute", top: -2, right: -2, width: 8, height: 8, borderRadius: 4, backgroundColor: "var(--theme-status-danger-fg)" }} />
+                        )}
                     </div>
                     
                     <div style={{ overflow: "hidden", width: "100%" }}>

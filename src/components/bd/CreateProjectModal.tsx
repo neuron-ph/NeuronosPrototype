@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import { supabase } from '../../utils/supabase/client';
 import { logCreation } from "../../utils/activityLog";
 import { fireProjectCreationTickets } from "../../utils/workflowTickets";
+import { recordNotificationEvent, fetchDeptManagerIds } from "../../utils/notifications";
 import { toast } from "../ui/toast-utils";
 import type { QuotationNew } from "../../types/pricing";
 import { buildProjectInsertFromQuotation } from "../../utils/projectHydration";
@@ -74,6 +75,23 @@ export function CreateProjectModal({ quotation, onClose, onSuccess, currentUser 
         userId: currentUser?.id ?? "",
         userName: currentUser?.name ?? "",
         userDept: currentUser?.department ?? "",
+      });
+
+      // Red-dot ping: project owner + ops managers
+      const opsManagers = await fetchDeptManagerIds('Operations');
+      void recordNotificationEvent({
+        actorUserId: currentUser?.id ?? null,
+        module: 'bd',
+        subSection: 'projects',
+        entityType: 'project',
+        entityId: data.id,
+        kind: 'updated',
+        summary: {
+          label: `New project ${data.project_number ?? ''}`,
+          reference: data.project_number ?? undefined,
+          customer_name: quotation.customer_name ?? undefined,
+        },
+        recipientIds: [(data as any).owner_id, ...opsManagers],
       });
 
       toast.success("Project created successfully!");
