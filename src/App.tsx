@@ -864,17 +864,19 @@ function AccountingJournalPage() {
 }
 
 function AccountingProjectsPage() {
+  const { user } = useUser();
   return (
     <RouteWrapper page="acct-projects">
-      <ProjectsModule />
+      <ProjectsModule currentUser={user || undefined} departmentOverride="Accounting" />
     </RouteWrapper>
   );
 }
 
 function AccountingContractsPage() {
+  const { user } = useUser();
   return (
     <RouteWrapper page="acct-contracts">
-      <ContractsModule />
+      <ContractsModule currentUser={user || undefined} departmentOverride="Accounting" />
     </RouteWrapper>
   );
 }
@@ -1074,27 +1076,31 @@ function AppContent() {
         <Route path="/dashboard" element={<DashboardPage />} />
         
         {/* Business Development — guarded */}
-        <Route element={<GuardedLayout allowedDepartments={['Business Development']} />}>
-          <Route element={<GuardedLayout requiredPermission={{ moduleId: "bd_contacts", action: "view" }} />}>
-            <Route path="/bd/contacts" element={<BDContactsPage />} />
-            <Route path="/bd/contacts/:contactId" element={<BDContactsPage />} />
-          </Route>
-          <Route element={<GuardedLayout requiredPermission={{ moduleId: "bd_customers", action: "view" }} />}>
-            <Route path="/bd/customers" element={<BDCustomersPage />} />
-          </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "bd_contacts", action: "view" }} />}>
+          <Route path="/bd/contacts" element={<BDContactsPage />} />
+          <Route path="/bd/contacts/:contactId" element={<BDContactsPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "bd_customers", action: "view" }} />}>
+          <Route path="/bd/customers" element={<BDCustomersPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "bd_inquiries", action: "view" }} />}>
           <Route path="/bd/inquiries" element={<BDInquiriesPage />} />
           <Route path="/bd/inquiries/:inquiryId" element={<BDInquiriesPage />} />
-          <Route element={<GuardedLayout requiredPermission={{ moduleId: "bd_tasks", action: "view" }} />}>
-            <Route path="/bd/tasks" element={<BDTasksPage />} />
-          </Route>
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "bd_tasks", action: "view" }} />}>
+          <Route path="/bd/tasks" element={<BDTasksPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "bd_projects", action: "view" }} />}>
           <Route path="/bd/projects" element={<BDProjectsPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "bd_contracts", action: "view" }} />}>
           <Route path="/bd/contracts" element={<BDContractsPage />} />
-          <Route element={<GuardedLayout requiredPermission={{ moduleId: "bd_activities", action: "view" }} />}>
-            <Route path="/bd/activities" element={<BDActivitiesPage />} />
-          </Route>
-          <Route element={<GuardedLayout requiredPermission={{ moduleId: "bd_budget_requests", action: "view" }} />}>
-            <Route path="/bd/budget-requests" element={<BDBudgetRequestsPage />} />
-          </Route>
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "bd_activities", action: "view" }} />}>
+          <Route path="/bd/activities" element={<BDActivitiesPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "bd_budget_requests", action: "view" }} />}>
+          <Route path="/bd/budget-requests" element={<BDBudgetRequestsPage />} />
         </Route>
         
         {/* Unified Projects Page */}
@@ -1104,87 +1110,117 @@ function AppContent() {
         <Route path="/contracts" element={<ContractsPage />} />
         
         {/* Pricing — guarded */}
-        <Route element={<GuardedLayout allowedDepartments={['Pricing']} />}>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "pricing_contacts", action: "view" }} />}>
           <Route path="/pricing/contacts" element={<PricingContactsPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "pricing_customers", action: "view" }} />}>
           <Route path="/pricing/customers" element={<PricingCustomersPage />} />
-          <Route element={<GuardedLayout requiredPermission={{ moduleId: "pricing_quotations", action: "view" }} />}>
-            <Route path="/pricing/quotations" element={<PricingQuotationsPage />} />
-            <Route path="/pricing/quotations/:inquiryId" element={<PricingQuotationsPage />} />
-          </Route>
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "pricing_quotations", action: "view" }} />}>
+          <Route path="/pricing/quotations" element={<PricingQuotationsPage />} />
+          <Route path="/pricing/quotations/:inquiryId" element={<PricingQuotationsPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "pricing_projects", action: "view" }} />}>
           <Route path="/pricing/projects" element={<PricingProjectsPage />} />
-          <Route element={<GuardedLayout requiredPermission={{ moduleId: "pricing_contracts", action: "view" }} />}>
-            <Route path="/pricing/contracts" element={<PricingContractsPage />} />
-          </Route>
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "pricing_contracts", action: "view" }} />}>
+          <Route path="/pricing/contracts" element={<PricingContractsPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "pricing_network_partners", action: "view" }} />}>
           <Route path="/pricing/vendors" element={<PricingVendorsPage />} />
         </Route>
         
         {/* Operations — guarded */}
-        <Route element={<GuardedLayout allowedDepartments={['Operations']} />}>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "ops_forwarding", action: "view" }} />}>
           <Route path="/operations" element={<OperationsPage />} />
+          <Route path="/operations/forwarding" element={<ForwardingBookingsPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "ops_trucking", action: "view" }} />}>
+          <Route path="/operations/trucking" element={<TruckingBookingsPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "ops_brokerage", action: "view" }} />}>
+          <Route path="/operations/brokerage" element={<BrokerageBookingsPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "ops_marine_insurance", action: "view" }} />}>
+          <Route path="/operations/marine-insurance" element={<MarineInsuranceBookingsPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "ops_others", action: "view" }} />}>
+          <Route path="/operations/others" element={<OthersBookingsPage />} />
+        </Route>
+        <Route element={<GuardedLayout allowedDepartments={['Operations']} />}>
           <Route path="/operations/create" element={<CreateBookingPage />} />
           <Route path="/operations/:bookingId" element={<BookingDetailPage />} />
-          <Route path="/operations/forwarding" element={<ForwardingBookingsPage />} />
-          <Route path="/operations/trucking" element={<TruckingBookingsPage />} />
-          <Route path="/operations/brokerage" element={<BrokerageBookingsPage />} />
-          <Route path="/operations/marine-insurance" element={<MarineInsuranceBookingsPage />} />
-          <Route path="/operations/others" element={<OthersBookingsPage />} />
         </Route>
         
         {/* Accounting — guarded */}
-        <Route element={<GuardedLayout allowedDepartments={['Accounting']} />}>
-          <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_evouchers", action: "view" }} />}>
-            <Route path="/accounting/evouchers" element={<AccountingEVouchersPage />} />
-          </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_evouchers", action: "view" }} />}>
+          <Route path="/accounting/evouchers" element={<AccountingEVouchersPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "accounting_financials_invoices_tab", action: "view" }} />}>
           <Route path="/accounting/invoices" element={<AccountingInvoicesPage />} />
-          <Route element={<GuardedLayout requiredPermission={{ moduleId: "accounting_financials_billings_tab", action: "view" }} />}>
-            <Route path="/accounting/billings" element={<AccountingBillingsPage />} />
-          </Route>
-          <Route element={<GuardedLayout requiredPermission={{ moduleId: "accounting_financials_collections_tab", action: "view" }} />}>
-            <Route path="/accounting/collections" element={<AccountingCollectionsPage />} />
-          </Route>
-          <Route element={<GuardedLayout requiredPermission={{ moduleId: "accounting_financials_expenses_tab", action: "view" }} />}>
-            <Route path="/accounting/expenses" element={<AccountingExpensesPage />} />
-          </Route>
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "accounting_financials_billings_tab", action: "view" }} />}>
+          <Route path="/accounting/billings" element={<AccountingBillingsPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "accounting_financials_collections_tab", action: "view" }} />}>
+          <Route path="/accounting/collections" element={<AccountingCollectionsPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "accounting_financials_expenses_tab", action: "view" }} />}>
+          <Route path="/accounting/expenses" element={<AccountingExpensesPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_coa", action: "view" }} />}>
           <Route path="/accounting/coa" element={<AccountingCoaPage />} />
           <Route path="/accounting/ledger" element={<AccountingLedgerPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_projects", action: "view" }} />}>
           <Route path="/accounting/projects" element={<AccountingProjectsPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_contracts", action: "view" }} />}>
           <Route path="/accounting/contracts" element={<AccountingContractsPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_customers", action: "view" }} />}>
           <Route path="/accounting/customers" element={<AccountingCustomersPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_bookings", action: "view" }} />}>
           <Route path="/accounting/bookings" element={<AccountingBookingsPage />} />
-          <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_reports", action: "view" }} />}>
-            <Route path="/accounting/reports" element={<AccountingReportsPage />} />
-          </Route>
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_reports", action: "view" }} />}>
+          <Route path="/accounting/reports" element={<AccountingReportsPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_catalog", action: "view" }} />}>
           <Route path="/accounting/catalog" element={<AccountingCatalogPage />} />
         </Route>
 
         {/* General Journal + Financial Statements — Accounting + Executive */}
-        <Route element={<GuardedLayout allowedDepartments={['Accounting', 'Executive']} />}>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_journal", action: "view" }} />}>
           <Route path="/accounting/journal" element={<AccountingJournalPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_statements", action: "view" }} />}>
           <Route path="/accounting/statements" element={<AccountingStatementsPage />} />
         </Route>
 
         {/* Finance Overview — Accounting Manager or Executive only */}
-        <Route element={<GuardedLayout allowedDepartments={['Accounting']} requireMinRole="manager" />}>
+        <Route element={<GuardedLayout requireMinRole="manager" requiredPermission={{ moduleId: "acct_financials", action: "view" }} />}>
           <Route path="/accounting/financials" element={<AccountingFinancialsPage />} />
         </Route>
         
         {/* HR — guarded */}
-        <Route element={<GuardedLayout allowedDepartments={['HR']} requiredPermission={{ moduleId: "hr", action: "view" }} />}>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "hr", action: "view" }} />}>
           <Route path="/hr" element={<HRPage />} />
         </Route>
 
         {/* Manager+ only routes */}
-        <Route element={<GuardedLayout requireMinRole="manager" requiredPermission={{ moduleId: "exec_activity_log", action: "view" }} />}>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "exec_activity_log", action: "view" }} />}>
           <Route path="/activity-log" element={<ActivityLogPageWrapper />} />
         </Route>
 
         {/* Executive only routes */}
-        <Route element={<GuardedLayout allowedDepartments={["Executive"]} requiredPermission={{ moduleId: "exec_users", action: "view" }} />}>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "exec_users", action: "view" }} />}>
           <Route path="/admin/users" element={<UserManagementPage />} />
           <Route path="/admin/users/new" element={<CreateUserPageWrapper />} />
           <Route path="/admin/users/:userId" element={<UserDetailPageWrapper />} />
         </Route>
-        <Route element={<GuardedLayout allowedDepartments={["Executive"]} requiredPermission={{ moduleId: "exec_profiling", action: "view" }} />}>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "exec_profiling", action: "view" }} />}>
           <Route path="/admin/profiling" element={<RouteWrapper page="admin-profiling"><ProfilingModule /></RouteWrapper>} />
         </Route>
 
@@ -1192,7 +1228,9 @@ function AppContent() {
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/inbox" element={<InboxPageWrapper />} />
         <Route path="/my-evouchers" element={<MyEVouchersPageWrapper />} />
-        <Route path="/evouchers/:id/disburse" element={<RouteWrapper page="acct-evouchers"><DisburseEVoucherPage /></RouteWrapper>} />
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_evouchers", action: "view" }} />}>
+          <Route path="/evouchers/:id/disburse" element={<RouteWrapper page="acct-evouchers"><DisburseEVoucherPage /></RouteWrapper>} />
+        </Route>
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/design-system" element={<DesignSystemPage />} />
         

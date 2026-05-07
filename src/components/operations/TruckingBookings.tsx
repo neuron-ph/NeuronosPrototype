@@ -17,6 +17,7 @@ import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
 import { logDeletion } from "../../utils/activityLog";
 import type { ExecutionStatus } from "../../types/operations";
 import { NeuronModal } from "../ui/NeuronModal";
+import { useUnreadEntityIds } from "../../hooks/useNotifications";
 
 interface TruckingBooking {
   bookingId: string;
@@ -222,6 +223,11 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
 
     return true;
   });
+
+  const unreadBookingIds = useUnreadEntityIds(
+    "booking",
+    filteredBookings.map((b) => b.bookingId),
+  );
 
   // Calculate counts for tabs
   const allCount = bookings.length;
@@ -599,6 +605,9 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
                     >
                       <td className="py-4 px-4">
                         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                          {unreadBookingIds.has(booking.bookingId) && (
+                            <span aria-label="Unread" style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "var(--theme-status-danger-fg)", flexShrink: 0 }} />
+                          )}
                           <Truck size={20} color="var(--theme-action-primary-bg)" style={{ flexShrink: 0 }} />
                           <div>
                             <div style={{

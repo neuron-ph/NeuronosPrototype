@@ -10,11 +10,13 @@ import { ActivityTimelineTable } from "./ActivityTimelineTable";
 import { supabase } from "../../utils/supabase/client";
 import { useUser } from "../../hooks/useUser";
 import { logActivity, logCreation } from "../../utils/activityLog";
+import { useMarkEntityReadOnMount } from "../../hooks/useNotifications";
 import { toast } from "sonner@2.0.3";
 import { CreateQuotationMenu } from "../pricing/CreateQuotationMenu";
 import { ContactTeamsTab } from "./ContactTeamsTab";
 import { CommentsTab } from "../shared/CommentsTab";
 import { EntityAttachmentsTab } from "../shared/EntityAttachmentsTab";
+import { CONTACT_MODULE_IDS, type ContactDept } from "../../config/access/accessSchema";
 
 // Local attachment shape for in-memory task/activity proof uploads (not persisted)
 interface Attachment {
@@ -32,18 +34,20 @@ interface ContactDetailProps {
   contact: Contact;
   onBack: () => void;
   onCreateInquiry?: (customer: Customer, contact?: Contact, quotationType?: QuotationType) => void;
-  variant?: "bd" | "pricing";
+  variant?: ContactDept;
 }
 
 export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd" }: ContactDetailProps) {
   const { can } = usePermission();
-  const canViewActivitiesTab  = can("bd_contacts_activities_tab", "view");
-  const canViewTasksTab       = can("bd_contacts_tasks_tab", "view");
-  const canViewInquiriesTab   = can("bd_contacts_inquiries_tab", "view");
-  const canViewAttachmentsTab = can("bd_contacts_attachments_tab", "view");
-  const canViewCommentsTab    = can("bd_contacts_comments_tab", "view");
-  const canViewTeamsTab       = can("bd_contacts_teams_tab", "view");
-  const canEditTeamsTab       = can("bd_contacts_teams_tab", "edit");
+  useMarkEntityReadOnMount("user", contact.id);
+  const ids = CONTACT_MODULE_IDS[variant];
+  const canViewActivitiesTab  = can(ids.activities,  "view");
+  const canViewTasksTab       = can(ids.tasks,       "view");
+  const canViewInquiriesTab   = can(ids.inquiries,   "view");
+  const canViewAttachmentsTab = can(ids.attachments, "view");
+  const canViewCommentsTab    = can(ids.comments,    "view");
+  const canViewTeamsTab       = can(ids.teams,       "view");
+  const canEditTeamsTab       = can(ids.teams,       "edit");
 
   const [activeTab, setActiveTab] = useState<"activities" | "tasks" | "inquiries" | "attachments" | "comments" | "teams">(() => {
     if (variant === "pricing") {

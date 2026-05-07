@@ -3,6 +3,8 @@ import { Search, Plus, Calendar, Flag, Phone, Mail, Send, Users, MessageSquare, 
 import { supabase } from '../../utils/supabase/client';
 import { useUser } from "../../hooks/useUser";
 import { logCreation } from "../../utils/activityLog";
+import { recordNotificationEvent } from "../../utils/notifications";
+import { useUnreadEntityIds } from "../../hooks/useNotifications";
 import { toast } from "../ui/toast-utils";
 import { useDataScope } from '../../hooks/useDataScope';
 import type { Task, TaskPriority, TaskStatus, TaskType } from "../../types/bd";
@@ -53,6 +55,18 @@ export function TasksList({ onViewTask }: TasksListProps) {
       if (error) throw error;
       const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
       logCreation("task", newTask.id, newTask.title ?? newTask.id, _actor);
+
+      void recordNotificationEvent({
+        actorUserId: user?.id ?? null,
+        module: 'bd',
+        subSection: 'tasks',
+        entityType: 'task',
+        entityId: newTask.id,
+        kind: 'assigned',
+        summary: { label: `Task assigned: ${newTask.title ?? ''}` },
+        recipientIds: [newTask.assigned_to],
+      });
+
       toast.success('Task created successfully');
       invalidateTasks();
     } catch (error) {
@@ -88,6 +102,8 @@ export function TasksList({ onViewTask }: TasksListProps) {
     Medium: sortedTasks.filter(task => task.priority === "Medium"),
     Low: sortedTasks.filter(task => task.priority === "Low"),
   };
+
+  const unreadTaskIds = useUnreadEntityIds("task", sortedTasks.map((t) => t.id));
 
   const getContactName = (contactId: string | null) => {
     if (!contactId) return null;
@@ -361,8 +377,11 @@ export function TasksList({ onViewTask }: TasksListProps) {
                         }}
                         onClick={() => onViewTask(task)}
                       >
-                        <div className="flex items-center justify-center">
+                        <div className="flex items-center justify-center" style={{ position: "relative" }}>
                           {getTaskTypeIcon(task.type)}
+                          {unreadTaskIds.has(task.id) && (
+                            <span aria-label="Unread" style={{ position: "absolute", top: -2, right: -2, width: 8, height: 8, borderRadius: 4, backgroundColor: "var(--theme-status-danger-fg)" }} />
+                          )}
                         </div>
 
                         <div>
@@ -443,8 +462,11 @@ export function TasksList({ onViewTask }: TasksListProps) {
                         }}
                         onClick={() => onViewTask(task)}
                       >
-                        <div className="flex items-center justify-center">
+                        <div className="flex items-center justify-center" style={{ position: "relative" }}>
                           {getTaskTypeIcon(task.type)}
+                          {unreadTaskIds.has(task.id) && (
+                            <span aria-label="Unread" style={{ position: "absolute", top: -2, right: -2, width: 8, height: 8, borderRadius: 4, backgroundColor: "var(--theme-status-danger-fg)" }} />
+                          )}
                         </div>
 
                         <div>
@@ -525,8 +547,11 @@ export function TasksList({ onViewTask }: TasksListProps) {
                         }}
                         onClick={() => onViewTask(task)}
                       >
-                        <div className="flex items-center justify-center">
+                        <div className="flex items-center justify-center" style={{ position: "relative" }}>
                           {getTaskTypeIcon(task.type)}
+                          {unreadTaskIds.has(task.id) && (
+                            <span aria-label="Unread" style={{ position: "absolute", top: -2, right: -2, width: 8, height: 8, borderRadius: 4, backgroundColor: "var(--theme-status-danger-fg)" }} />
+                          )}
                         </div>
 
                         <div>

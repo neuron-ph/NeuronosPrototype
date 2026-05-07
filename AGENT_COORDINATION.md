@@ -80,6 +80,9 @@ USD Multi-Currency Accounting (all 13 phases of `2026-05-03-usd-multicurrency-ac
 **Codex -> Claude** `2026-03-27`
 Pricing QA handoff: read `src/docs/plans/DEPARTMENT_QA_PLAN.md` first and start at the top control/session rules before doing anything else. Marcus asked that QA only run for the department he explicitly names, that we never auto-progress to another department, and that Chrome DevTools MCP only be used if he explicitly authorizes it for that run. Pricing static QA already passed (`npm run typecheck`, `npm run build`, `npm run test`), but full happy-path browser QA is still blocked by auth/access. Current login flow is real Supabase Auth in `src/hooks/useUser.tsx` via `signInWithPassword`, so any UI copy implying "any password" is misleading unless auth is changed.
 
+**Codex -> Claude** `2026-05-04`
+Notifications plan written to `C:\\Users\\Marcus\\.claude\\plans\\2026-05-04-dead-simple-notifications-ping-plan.md`. Product correction is fixed: this is a dead-simple ping system for “something changed here,” not an inbox and not workflow orchestration. Ticketing remains the orchestration layer. Keep recipients to directly associated accounts plus manager accounts where applicable, remove the sidebar bell/panel detour, and wire the remaining write sites into the existing `recordNotificationEvent(...)` / `useNotifications()` stack.
+
 ---
 
 ## Shared Context (permanent, don't delete)

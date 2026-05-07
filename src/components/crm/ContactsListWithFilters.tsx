@@ -6,6 +6,8 @@ import { supabase } from "../../utils/supabase/client";
 import { useUsers } from "../../hooks/useUsers";
 import { useUser } from "../../hooks/useUser";
 import { logCreation } from "../../utils/activityLog";
+import { recordNotificationEvent, fetchDeptManagerIds } from "../../utils/notifications";
+import { useUnreadEntityIds } from "../../hooks/useNotifications";
 import { useContacts } from "../../hooks/useContacts";
 import { useCRMActivities } from "../../hooks/useCRMActivities";
 import { usePermission } from "../../context/PermissionProvider";
@@ -42,7 +44,8 @@ interface BackendContact {
 
 interface ContactsListWithFiltersProps {
   userDepartment: "Business Development" | "Pricing";
-  moduleId?: ModuleId;
+  /** Required — drives all create/edit/view permission checks. No fallback. */
+  moduleId: ModuleId;
   onViewContact: (contact: Contact) => void;
 }
 
@@ -63,7 +66,7 @@ export function ContactsListWithFilters({ userDepartment, moduleId, onViewContac
   const { contacts: allContacts, isLoading, invalidate: invalidateContacts } = useContacts({ enabled: isLoaded });
   const { activities } = useCRMActivities();
 
-  const canViewModule = moduleId ? can(moduleId, "view") : true;
+  const canViewModule = can(moduleId, "view");
   const showAdvancedFilters = userDepartment === "Business Development" && canViewModule;
 
   // Apply scope + search client-side
@@ -82,8 +85,8 @@ export function ContactsListWithFilters({ userDepartment, moduleId, onViewContac
   });
 
   const permissions = {
-    canCreate: moduleId ? can(moduleId, "create") : (userDepartment === "Business Development" || userDepartment === "Pricing"),
-    canEdit: moduleId ? can(moduleId, "edit") : (userDepartment === "Business Development" || userDepartment === "Pricing"),
+    canCreate: can(moduleId, "create"),
+    canEdit:   can(moduleId, "edit"),
     showKPIs: canViewModule,
     showOwnerFilter: showAdvancedFilters,
     showAdvancedFilters,
@@ -118,6 +121,19 @@ export function ContactsListWithFilters({ userDepartment, moduleId, onViewContac
       if (error) throw error;
       const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
       logCreation("contact", data.id, data.name ?? data.id, _actor);
+
+      const bdManagers = await fetchDeptManagerIds('Business Development');
+      void recordNotificationEvent({
+        actorUserId: user?.id ?? null,
+        module: 'bd',
+        subSection: 'contacts',
+        entityType: 'user',
+        entityId: data.id,
+        kind: 'updated',
+        summary: { label: `New contact ${data.name ?? data.id}` },
+        recipientIds: [data.owner_id, ...bdManagers],
+      });
+
       invalidateContacts();
       toast.success("Contact created.");
       setIsAddContactOpen(false);
@@ -141,6 +157,8 @@ export function ContactsListWithFilters({ userDepartment, moduleId, onViewContac
     const lifecycle = mapStatusToLifecycle(contact.status || "");
     return lifecycleFilter === "All" || lifecycle === lifecycleFilter;
   });
+
+  const unreadContactIds = useUnreadEntityIds("user", filteredContacts.map((c) => c.id));
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -699,22 +717,26 @@ export function ContactsListWithFilters({ userDepartment, moduleId, onViewContac
                   onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--theme-state-hover)"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
                 >
-                  {/* Initial avatar */}
-                  <div style={{
-                    width: "38px",
-                    height: "38px",
-                    borderRadius: "50%",
-                    backgroundColor: "var(--theme-bg-surface-tint)",
-                    color: "var(--theme-action-primary-bg)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "14px",
-                    fontWeight: 700,
-                    flexShrink: 0,
-                    letterSpacing: "0.02em",
-                  }}>
-                    {name.charAt(0).toUpperCase()}
+                  {/* Initial avatar + unread dot */}
+                  <div style={{ position: "relative", flexShrink: 0 }}>
+                    <div style={{
+                      width: "38px",
+                      height: "38px",
+                      borderRadius: "50%",
+                      backgroundColor: "var(--theme-bg-surface-tint)",
+                      color: "var(--theme-action-primary-bg)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "14px",
+                      fontWeight: 700,
+                      letterSpacing: "0.02em",
+                    }}>
+                      {name.charAt(0).toUpperCase()}
+                    </div>
+                    {unreadContactIds.has(contact.id) && (
+                      <span aria-label="Unread" style={{ position: "absolute", top: -2, right: -2, width: 8, height: 8, borderRadius: 4, backgroundColor: "var(--theme-status-danger-fg)" }} />
+                    )}
                   </div>
 
                   {/* Name + company */}

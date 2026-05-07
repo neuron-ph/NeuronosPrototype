@@ -6,6 +6,7 @@ import { QuotationBuilderV3 } from "../pricing/quotations/QuotationBuilderV3";
 import { supabase } from "../../utils/supabase/client";
 import { useUser } from "../../hooks/useUser";
 import { logActivity, logCreation } from "../../utils/activityLog";
+import { recordNotificationEvent, fetchDeptManagerIds } from "../../utils/notifications";
 import { toast } from "../ui/toast-utils";
 import type { QuotationNew } from "../../types/pricing";
 import { CustomDropdown } from "../bd/CustomDropdown";
@@ -92,6 +93,19 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
       if (error) throw error;
       const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
       logCreation("contact", newId, transformedData.name, _actor);
+
+      const bdManagers = await fetchDeptManagerIds('Business Development');
+      void recordNotificationEvent({
+        actorUserId: user?.id ?? null,
+        module: 'bd',
+        subSection: 'contacts',
+        entityType: 'user',
+        entityId: newId,
+        kind: 'updated',
+        summary: { label: `New contact ${transformedData.name}` },
+        recipientIds: [transformedData.owner_id, ...bdManagers],
+      });
+
       queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all() });
       setIsAddContactOpen(false);
     } catch (error) {
@@ -107,6 +121,20 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
       if (error) throw error;
       const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
       logActivity("contact", id, updates.name ?? selectedContact?.name ?? id, "updated", _actor);
+
+      const ownerChanged = (updates as any).owner_id !== undefined && (updates as any).owner_id !== selectedContact?.owner_id;
+      const bdManagers = await fetchDeptManagerIds('Business Development');
+      void recordNotificationEvent({
+        actorUserId: user?.id ?? null,
+        module: 'bd',
+        subSection: 'contacts',
+        entityType: 'user',
+        entityId: id,
+        kind: ownerChanged ? 'assigned' : 'updated',
+        summary: { label: `Contact ${updates.name ?? selectedContact?.name ?? id} updated` },
+        recipientIds: [(updates as any).owner_id, ...bdManagers],
+      });
+
       queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all() });
       if (selectedContact && selectedContact.id === id) {
         setSelectedContact({ ...selectedContact, ...updates });

@@ -5,6 +5,8 @@ import { supabase } from "../../utils/supabase/client";
 import { useUsers } from "../../hooks/useUsers";
 import { useUser } from "../../hooks/useUser";
 import { logCreation, logDeletion } from "../../utils/activityLog";
+import { recordNotificationEvent, fetchDeptManagerIds } from "../../utils/notifications";
+import { useUnreadEntityIds } from "../../hooks/useNotifications";
 import { useCustomers } from "../../hooks/useCustomers";
 import { useContacts } from "../../hooks/useContacts";
 import { useCRMActivities } from "../../hooks/useCRMActivities";
@@ -12,13 +14,17 @@ import type { Customer, Industry, CustomerStatus } from "../../types/bd";
 import { useDataScope } from "../../hooks/useDataScope";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { AddCustomerPanel } from "../bd/AddCustomerPanel";
+import { usePermission } from "../../context/PermissionProvider";
+import type { ModuleId } from "../admin/permissionsConfig";
 
 interface CustomersListWithFiltersProps {
   userDepartment: "Business Development" | "Pricing";
+  /** Required — drives all create/edit/view permission checks. No fallback. */
+  moduleId: ModuleId;
   onViewCustomer: (customer: Customer) => void;
 }
 
-export function CustomersListWithFilters({ userDepartment, onViewCustomer }: CustomersListWithFiltersProps) {
+export function CustomersListWithFilters({ userDepartment, moduleId, onViewCustomer }: CustomersListWithFiltersProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [industryFilter, setIndustryFilter] = useState<Industry | "All">("All");
   const [statusFilter, setStatusFilter] = useState<CustomerStatus | "All">("All");
@@ -31,10 +37,11 @@ export function CustomersListWithFilters({ userDepartment, onViewCustomer }: Cus
 
   const { scope, isLoaded } = useDataScope('customers');
 
-  // Permissions based on department
+  // Permissions — explicit, driven by moduleId. No dept-string fallbacks.
+  const { can } = usePermission();
   const permissions = {
-    canCreate: userDepartment === "Business Development" || userDepartment === "Pricing",
-    canEdit: userDepartment === "Business Development" || userDepartment === "Pricing",
+    canCreate: can(moduleId, "create"),
+    canEdit:   can(moduleId, "edit"),
     showKPIs: true, // Both BD and PD see KPIs
     showOwnerFilter: userDepartment === "Business Development",
   };
@@ -111,6 +118,21 @@ export function CustomersListWithFilters({ userDepartment, onViewCustomer }: Cus
       if (error) throw error;
       const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
       logCreation("customer", newCustId, customerData.name ?? newCustId, _actor);
+
+      // Red-dot ping: notify assigned account owner (if any) + BD managers
+      const accountOwnerId = (customerData as any).account_owner_id as string | undefined;
+      const bdManagers = await fetchDeptManagerIds('Business Development');
+      void recordNotificationEvent({
+        actorUserId: user?.id ?? null,
+        module: 'bd',
+        subSection: 'customers',
+        entityType: 'customer',
+        entityId: newCustId,
+        kind: 'updated',
+        summary: { label: `New customer ${customerData.name ?? newCustId}`, customer_name: customerData.name ?? undefined },
+        recipientIds: [accountOwnerId, ...bdManagers],
+      });
+
       invalidateCustomers();
       invalidateContacts();
       setIsAddCustomerOpen(false);
@@ -146,6 +168,8 @@ export function CustomersListWithFilters({ userDepartment, onViewCustomer }: Cus
     const matchesOwner = ownerFilter === "All" || customer.owner_id === ownerFilter;
     return matchesOwner;
   });
+
+  const unreadCustomerIds = useUnreadEntityIds("customer", filteredCustomers.map((c) => c.id));
 
   const getOwnerName = (ownerId: string) => {
     const owner = users.find(u => u.id === ownerId);
@@ -475,11 +499,11 @@ export function CustomersListWithFilters({ userDepartment, onViewCustomer }: Cus
                     e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
                   }}
                 >
-                  {/* Company Logo */}
-                  <div>
-                    <div 
+                  {/* Company Logo + unread dot */}
+                  <div style={{ position: "relative" }}>
+                    <div
                       className="w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-semibold"
-                      style={{ 
+                      style={{
                         backgroundColor: `${logoColor}15`,
                         color: logoColor,
                         border: `1px solid ${logoColor}30`
@@ -487,6 +511,9 @@ export function CustomersListWithFilters({ userDepartment, onViewCustomer }: Cus
                     >
                       {getCompanyInitials(customer.name || customer.company_name || '')}
                     </div>
+                    {unreadCustomerIds.has(customer.id) && (
+                      <span aria-label="Unread" style={{ position: "absolute", top: -2, right: -2, width: 8, height: 8, borderRadius: 4, backgroundColor: "var(--theme-status-danger-fg)" }} />
+                    )}
                   </div>
 
                   {/* Company Info (Name & Lead Source) */}

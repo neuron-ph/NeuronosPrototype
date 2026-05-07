@@ -1,10 +1,13 @@
 import { useState, useEffect } from "react";
 import { ArrowLeft, MoreVertical, Edit3, Copy, Archive, Trash2, Layout, FileText, Briefcase, Receipt, FileStack, DollarSign, TrendingUp, Paperclip, MessageSquare, Layers, Users } from "lucide-react";
 import { usePermission } from "../../context/PermissionProvider";
+import { PROJECT_MODULE_IDS, type ProjectDept } from "../../config/access/accessSchema";
 import type { Project, ProjectStatus } from "../../types/pricing";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
 import { logStatusChange } from "../../utils/activityLog";
+import { recordNotificationEvent, fetchDeptManagerIds } from "../../utils/notifications";
+import { useMarkEntityReadOnMount } from "../../hooks/useNotifications";
 import { useProjectFinancials } from "../../hooks/useProjectFinancials";
 import { ProjectStatusSelector } from "./ProjectStatusSelector";
 import { ProjectBookingsTab } from "./ProjectBookingsTab";
@@ -37,7 +40,7 @@ interface ProjectDetailProps {
     email: string; 
     department: string;
   } | null;
-  department: "BD" | "Operations";
+  department: "BD" | "Operations" | "Accounting";
   onCreateTicket?: (entity: { type: string; id: string; name: string }) => void;
   initialTab?: string | null;
   highlightId?: string | null;
@@ -122,15 +125,18 @@ export function ProjectDetail({
   highlightId
 }: ProjectDetailProps) {
   const { can } = usePermission();
-  const canViewInfoTab = can("ops_projects_info_tab", "view");
-  const canViewQuotationTab = can("ops_projects_quotation_tab", "view");
-  const canViewBookingsTab = can("ops_projects_bookings_tab", "view");
-  const canViewExpensesTab = can("ops_projects_expenses_tab", "view");
-  const canViewBillingsTab = can("ops_projects_billings_tab", "view");
-  const canViewInvoicesTab = can("ops_projects_invoices_tab", "view");
-  const canViewCollectionsTab = can("ops_projects_collections_tab", "view");
-  const canViewAttachmentsTab = can("ops_projects_attachments_tab", "view");
-  const canViewCommentsTab = can("ops_projects_comments_tab", "view");
+  useMarkEntityReadOnMount("project", project.id);
+  const projectDept: ProjectDept = department === "Accounting" ? "accounting" : "ops";
+  const ids = PROJECT_MODULE_IDS[projectDept];
+  const canViewInfoTab        = can(ids.info,        "view");
+  const canViewQuotationTab   = can(ids.quotation,   "view");
+  const canViewBookingsTab    = can(ids.bookings,    "view");
+  const canViewExpensesTab    = can(ids.expenses,    "view");
+  const canViewBillingsTab    = can(ids.billings,    "view");
+  const canViewInvoicesTab    = can(ids.invoices,    "view");
+  const canViewCollectionsTab = can(ids.collections, "view");
+  const canViewAttachmentsTab = can(ids.attachments, "view");
+  const canViewCommentsTab    = can(ids.comments,    "view");
 
   const defaultTab: ProjectTab = (() => {
     if (initialTab) return initialTab as ProjectTab;
@@ -256,6 +262,23 @@ export function ProjectDetail({
 
       const _actor = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
       logStatusChange("project", project.id, project.project_number ?? project.id, previousStatus, newStatus, _actor);
+
+      const opsManagers = await fetchDeptManagerIds('Operations');
+      void recordNotificationEvent({
+        actorUserId: currentUser?.id ?? null,
+        module: 'bd',
+        subSection: 'projects',
+        entityType: 'project',
+        entityId: project.id,
+        kind: 'status_changed',
+        summary: {
+          label: `Project ${project.project_number ?? ''} → ${newStatus}`,
+          reference: project.project_number ?? undefined,
+          from_status: previousStatus,
+          to_status: newStatus,
+        },
+        recipientIds: [(project as any).owner_id, ...opsManagers],
+      });
 
       toast.success(`Project status updated to ${newStatus}`);
       onUpdate(); // Refresh parent to show new status (server confirmation)

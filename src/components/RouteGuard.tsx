@@ -33,7 +33,7 @@ interface RouteGuardProps {
 export function RouteGuard({ children, allowedDepartments, requireMinRole, requiredPermission }: RouteGuardProps) {
   const navigate = useNavigate();
   const { effectiveDepartment, effectiveRole, isAuthenticated, isLoading } = useUser();
-  const { can, isLoaded: permissionsLoaded } = usePermission();
+  const { can, hasExplicitGrant, isLoaded: permissionsLoaded } = usePermission();
 
   useEffect(() => {
     // Don't check while loading or if not authenticated
@@ -43,11 +43,14 @@ export function RouteGuard({ children, allowedDepartments, requireMinRole, requi
     const dept = effectiveDepartment || "";
     const role = effectiveRole || "staff";
     const isExecutive = dept === "Executive";
+    const hasRouteOverride = requiredPermission
+      ? hasExplicitGrant(requiredPermission.moduleId, requiredPermission.action)
+      : false;
 
     if (!isExecutive) {
       // Check department access
       if (allowedDepartments && allowedDepartments.length > 0) {
-        if (!allowedDepartments.includes(dept)) {
+        if (!allowedDepartments.includes(dept) && !hasRouteOverride) {
           console.warn(`[RouteGuard] Access denied: department "${dept}" not in allowed list [${allowedDepartments.join(", ")}]`);
           navigate("/dashboard", { replace: true });
           return;
@@ -58,7 +61,7 @@ export function RouteGuard({ children, allowedDepartments, requireMinRole, requi
       if (requireMinRole) {
         const userLevel = ROLE_LEVEL[role] ?? 0;
         const requiredLevel = ROLE_LEVEL[requireMinRole] ?? 0;
-        if (userLevel < requiredLevel) {
+        if (userLevel < requiredLevel && !hasRouteOverride) {
           console.warn(`[RouteGuard] Access denied: role "${role}" below minimum "${requireMinRole}"`);
           navigate("/dashboard", { replace: true });
           return;
@@ -82,6 +85,7 @@ export function RouteGuard({ children, allowedDepartments, requireMinRole, requi
     requiredPermission,
     permissionsLoaded,
     can,
+    hasExplicitGrant,
     navigate,
   ]);
 

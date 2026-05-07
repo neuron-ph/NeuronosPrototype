@@ -20,7 +20,10 @@ import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
 import { useUser } from "../../hooks/useUser";
 import { logActivity } from "../../utils/activityLog";
+import { recordNotificationEvent, fetchDeptManagerIds } from "../../utils/notifications";
+import { useMarkEntityReadOnMount } from "../../hooks/useNotifications";
 import { usePermission } from "../../context/PermissionProvider";
+import { CUSTOMER_MODULE_IDS, type CustomerDept } from "../../config/access/accessSchema";
 
 interface CustomerDetailProps {
   customer: Customer;
@@ -28,22 +31,24 @@ interface CustomerDetailProps {
   onCreateInquiry?: (customer: Customer, quotationType?: QuotationType) => void;
   onViewInquiry?: (inquiryId: string) => void;
   onViewProject?: (project: Project) => void;
-  variant?: "bd" | "pricing";
+  variant?: CustomerDept;
 }
 
 export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquiry, onViewProject, variant = "bd" }: CustomerDetailProps) {
   const navigate = useNavigate();
   const { can } = usePermission();
-  const canViewContactsTab    = can("bd_customers_contacts_tab", "view");
-  const canViewActivitiesTab  = can("bd_customers_activities_tab", "view");
-  const canViewTasksTab       = can("bd_customers_tasks_tab", "view");
-  const canViewInquiriesTab   = can("bd_customers_inquiries_tab", "view");
-  const canViewProjectsTab    = can("bd_customers_projects_tab", "view");
-  const canViewContractsTab   = can("bd_customers_contracts_tab", "view");
-  const canViewCommentsTab    = can("bd_customers_comments_tab", "view");
-  const canViewAttachmentsTab = can("bd_customers_attachments_tab", "view");
-  const canViewTeamsTab       = can("bd_customers_teams_tab", "view");
-  const canEditTeamsTab       = can("bd_customers_teams_tab", "edit");
+  useMarkEntityReadOnMount("customer", customer.id);
+  const ids = CUSTOMER_MODULE_IDS[variant];
+  const canViewContactsTab    = can(ids.contacts,    "view");
+  const canViewActivitiesTab  = can(ids.activities,  "view");
+  const canViewTasksTab       = can(ids.tasks,       "view");
+  const canViewInquiriesTab   = can(ids.inquiries,   "view");
+  const canViewProjectsTab    = can(ids.projects,    "view");
+  const canViewContractsTab   = can(ids.contracts,   "view");
+  const canViewCommentsTab    = can(ids.comments,    "view");
+  const canViewAttachmentsTab = can(ids.attachments, "view");
+  const canViewTeamsTab       = can(ids.teams,       "view");
+  const canEditTeamsTab       = can(ids.teams,       "edit");
   const [activeTab, setActiveTab] = useState<"contacts" | "activities" | "tasks" | "inquiries" | "comments" | "attachments" | "projects" | "contracts" | "teams">(() => {
     if (variant === "pricing") {
       if (canViewInquiriesTab) return "inquiries";
@@ -303,6 +308,21 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
       if (error) throw error;
       const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
       logActivity("customer", customer.id, customer.name ?? customer.id, "updated", _actor);
+
+      // Red-dot ping: notify owner + BD managers when assignment changed; otherwise just managers
+      const ownerChanged = (localCustomer as any).owner_id !== editedCustomer.owner_id;
+      const bdManagers = await fetchDeptManagerIds('Business Development');
+      void recordNotificationEvent({
+        actorUserId: user?.id ?? null,
+        module: 'bd',
+        subSection: 'customers',
+        entityType: 'customer',
+        entityId: customer.id,
+        kind: ownerChanged ? 'assigned' : 'updated',
+        summary: { label: `Customer ${customer.name ?? customer.id} updated`, customer_name: customer.name ?? undefined },
+        recipientIds: [editedCustomer.owner_id, ...bdManagers],
+      });
+
       queryClient.invalidateQueries({ queryKey: queryKeys.customers.all() });
       setLocalCustomer({ ...localCustomer, ...editedCustomer });
       toast.success("Customer saved successfully");

@@ -466,9 +466,10 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
         {view === "contacts" && (
           <>
             {subView === "list" && (
-              <ContactsListWithFilters 
+              <ContactsListWithFilters
                 userDepartment="Pricing"
-                onViewContact={handleViewContact} 
+                moduleId="pricing_contacts"
+                onViewContact={handleViewContact}
               />
             )}
             {subView === "detail" && selectedContact && (
@@ -480,9 +481,10 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
         {view === "customers" && (
           <>
             {subView === "list" && (
-              <CustomersListWithFilters 
+              <CustomersListWithFilters
                 userDepartment="Pricing"
-                onViewCustomer={handleViewCustomer} 
+                moduleId="pricing_customers"
+                onViewCustomer={handleViewCustomer}
               />
             )}
             {subView === "detail" && selectedCustomer && (

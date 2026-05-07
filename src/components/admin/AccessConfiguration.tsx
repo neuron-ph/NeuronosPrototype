@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "sonner@2.0.3";
-import { ArrowLeft, Save, AlertTriangle, RotateCcw, BookMarked, ChevronDown, BookOpen } from "lucide-react";
+import { ArrowLeft, Save, AlertTriangle, RotateCcw, BookMarked, ChevronDown, BookOpen, Check } from "lucide-react";
 import { useUser } from "../../hooks/useUser";
 import { PermissionGrantEditor } from "./accessProfiles/PermissionGrantEditor";
 import type { ModuleGrants, AccessProfileSummary } from "./accessProfiles/accessProfileTypes";
@@ -336,7 +336,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
                 </h2>
                 <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: 0 }}>
                   Access rules for <strong style={{ fontWeight: 600, color: "var(--neuron-ink-secondary, var(--neuron-ink-primary))" }}>{user.name}</strong>.
-                  A teal dot beneath a toggle means it differs from the role baseline.
+                  A teal dot beneath a cell means it differs from the role baseline.
                 </p>
               </div>
 
@@ -345,17 +345,17 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
                 {[
                   {
                     indicator: (
-                      <div style={{ position: "relative", width: 36, height: 20, borderRadius: 10, backgroundColor: "var(--neuron-action-primary)" }}>
-                        <span style={{ position: "absolute", top: 2, left: 18, width: 16, height: 16, borderRadius: "50%", backgroundColor: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.18)" }} />
+                      <div style={{ width: 18, height: 18, borderRadius: 5, backgroundColor: "var(--neuron-action-primary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <Check size={12} strokeWidth={3} color="#fff" />
                       </div>
                     ),
                     label: "Enabled",
                   },
                   {
                     indicator: (
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                        <div style={{ position: "relative", width: 36, height: 20, borderRadius: 10, backgroundColor: "var(--neuron-action-primary)" }}>
-                          <span style={{ position: "absolute", top: 2, left: 18, width: 16, height: 16, borderRadius: "50%", backgroundColor: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.18)" }} />
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+                        <div style={{ width: 18, height: 18, borderRadius: 5, backgroundColor: "var(--neuron-action-primary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <Check size={12} strokeWidth={3} color="#fff" />
                         </div>
                         <div style={{ width: 4, height: 4, borderRadius: "50%", backgroundColor: "var(--neuron-action-primary)" }} />
                       </div>
@@ -364,14 +364,12 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
                   },
                   {
                     indicator: (
-                      <div style={{ position: "relative", width: 36, height: 20, borderRadius: 10, backgroundColor: "transparent", border: "1.5px solid var(--neuron-ui-border)" }}>
-                        <span style={{ position: "absolute", top: 1.5, left: 1.5, width: 16, height: 16, borderRadius: "50%", backgroundColor: "var(--neuron-ui-border)" }} />
-                      </div>
+                      <div style={{ width: 18, height: 18, borderRadius: 5, backgroundColor: "transparent", border: "1.25px solid color-mix(in oklch, var(--neuron-ui-border) 70%, transparent)" }} />
                     ),
                     label: "Disabled",
                   },
                   {
-                    indicator: <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)", opacity: 0.4, minWidth: 36, textAlign: "center" as const, cursor: "not-allowed" }}>—</span>,
+                    indicator: <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)", opacity: 0.4, minWidth: 18, textAlign: "center" as const, cursor: "not-allowed" }}>—</span>,
                     label: "N/A",
                   },
                 ].map(({ indicator, label }) => (
@@ -534,6 +532,72 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
           />
         </div>
       </div>
+
+      {/* Sticky save bar — visible only while there are unsaved changes.
+          Sits below the scrollable body so it remains visible during matrix scroll. */}
+      <AnimatePresence>
+        {isDirty && !loading && (
+          <motion.div
+            key="sticky-save-bar"
+            initial={{ y: 56, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 56, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            style={{
+              flexShrink: 0,
+              borderTop: "1px solid var(--neuron-ui-border)",
+              backgroundColor: "var(--neuron-bg-elevated)",
+              padding: "10px 40px",
+              boxShadow: "0 -8px 20px rgba(0,0,0,0.06)",
+            }}
+          >
+            <div style={{ maxWidth: 1080, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: "var(--theme-status-warning-fg)", padding: "5px 10px", borderRadius: 8, backgroundColor: "var(--theme-status-warning-bg)" }}>
+                  <AlertTriangle size={12} /> You have unsaved access changes
+                </div>
+                {appliedProfileId && changedAfterProfileApply && (
+                  <span style={{ fontSize: 11, color: "var(--neuron-ink-muted)" }}>
+                    Profile <strong>{appliedProfileName}</strong> will be detached on save.
+                  </span>
+                )}
+                {appliedProfileId && !changedAfterProfileApply && (
+                  <span style={{ fontSize: 11, color: "var(--neuron-ink-muted)" }}>
+                    Applying profile <strong>{appliedProfileName}</strong> — save to confirm.
+                  </span>
+                )}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                <button
+                  onClick={handleReset}
+                  disabled={saving}
+                  style={{ display: "flex", alignItems: "center", gap: 5, height: 34, padding: "0 12px", borderRadius: 8, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-muted)", fontSize: 13, fontWeight: 500, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.6 : 1 }}
+                  title="Discard all unsaved changes"
+                >
+                  <RotateCcw size={12} /> Discard changes
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  style={{
+                    height: 34, padding: "0 18px", borderRadius: 8,
+                    background: "var(--neuron-action-primary)",
+                    border: "none",
+                    color: "var(--neuron-action-primary-text)",
+                    fontSize: 13, fontWeight: 600,
+                    cursor: saving ? "not-allowed" : "pointer",
+                    display: "flex", alignItems: "center", gap: 6,
+                    opacity: saving ? 0.7 : 1,
+                  }}
+                >
+                  <Save size={13} />
+                  {saving ? "Saving changes…" : "Save changes"}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <NeuronModal
         isOpen={confirmLeave}

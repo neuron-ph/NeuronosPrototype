@@ -13,6 +13,7 @@ import { BookingCancelDeletePanel } from "./shared/BookingCancelDeletePanel";
 import { RequestBillingButton } from "../common/RequestBillingButton";
 import { loadBookingActivityLog, appendBookingActivity } from "../../utils/bookingActivityLog";
 import { useUser } from "../../hooks/useUser";
+import { useMarkEntityReadOnMount } from "../../hooks/useNotifications";
 import { usePermission } from "../../context/PermissionProvider";
 import { fireBillingTicketOnCompletion } from "../../utils/workflowTickets";
 import { logStatusChange } from "../../utils/activityLog";
@@ -113,6 +114,7 @@ export function BrokerageBookingDetails({ booking, onBack, onUpdate, currentUser
   const [showTimeline, setShowTimeline] = useState(false);
   const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>(initialActivityLog);
   const { user } = useUser();
+  useMarkEntityReadOnMount("booking", booking.id || booking.bookingId);
   const [editedBooking, setEditedBooking] = useState<BrokerageBooking>(booking);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showCancelDeletePanel, setShowCancelDeletePanel] = useState(false);

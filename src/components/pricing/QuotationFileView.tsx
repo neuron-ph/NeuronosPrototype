@@ -20,6 +20,8 @@ import type { QuotationPrintOptions } from "../projects/quotation/screen/useQuot
 import { useCompanySettings } from "../../hooks/useCompanySettings";
 import { supabase } from "../../utils/supabase/client";
 import { createWorkflowTicket, getOpenWorkflowTicket } from "../../utils/workflowTickets";
+import { recordNotificationEvent, fetchDeptManagerIds } from "../../utils/notifications";
+import { useMarkEntityReadOnMount } from "../../hooks/useNotifications";
 import { logActivity, logCreation, logStatusChange } from "../../utils/activityLog";
 import { buildProjectInsertFromQuotation, normalizeProjectRow } from "../../utils/projectHydration";
 import {
@@ -49,6 +51,10 @@ type TabType = "details" | "comments";
 
 export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, onAcceptQuotation, onDelete, onUpdate, onSaveQuotation, onDuplicate, onCreateTicket, onConvertToProject, onConvertToContract, currentUser }: QuotationFileViewProps) {
   const { can } = usePermission();
+  // Clear unread for both possible entity types — quotations and inquiries share the same row
+  useMarkEntityReadOnMount("quotation", quotation.id);
+  useMarkEntityReadOnMount("inquiry", quotation.id);
+  useMarkEntityReadOnMount("contract", quotation.id);
   const canViewDetailsTab = can("pricing_quotations_details_tab", "view");
   const canViewCommentsTab = can("pricing_quotations_comments_tab", "view");
   const [activeTab, setActiveTab] = useState<TabType>(
@@ -372,6 +378,24 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
     // Contract expiry — update contract_status only, leave status untouched
     if (newStatus === "Mark as Expired") {
       onUpdate({ ...quotation, contract_status: "Expired" });
+      if (currentUser) {
+        const acctManagers = await fetchDeptManagerIds('Accounting');
+        void recordNotificationEvent({
+          actorUserId: currentUser.id,
+          module: 'bd',
+          subSection: 'contracts',
+          entityType: 'contract',
+          entityId: quotation.id,
+          kind: 'status_changed',
+          summary: {
+            label: `Contract expired: ${quotation.quote_number ?? ''}`,
+            reference: quotation.quote_number ?? undefined,
+            customer_name: quotation.customer_name ?? undefined,
+            to_status: 'Expired',
+          },
+          recipientIds: [(quotation as any).created_by, ...acctManagers],
+        });
+      }
       return;
     }
 
@@ -406,6 +430,28 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
           createdByDept: currentUser.department,
         });
       }
+
+      // Red-dot ping: notify assigned Pricing reviewer + Pricing managers
+      const assignedPricingId = (quotation as any).assigned_to as string | undefined;
+      const { data: pricingManagers } = await supabase
+        .from('users')
+        .select('id')
+        .eq('department', 'Pricing')
+        .in('role', ['manager', 'executive']);
+      void recordNotificationEvent({
+        actorUserId: currentUser.id,
+        module: 'pricing',
+        subSection: 'quotations',
+        entityType: 'quotation',
+        entityId: quotation.id,
+        kind: 'submitted',
+        summary: {
+          label: `Quotation submitted for pricing`,
+          reference: quotation.quote_number ?? undefined,
+          customer_name: quotation.customer_name,
+        },
+        recipientIds: [assignedPricingId, ...(pricingManagers || []).map((u: any) => u.id)],
+      });
     }
 
     // Pricing → BD handoff: notify BD rep when quotation is priced and ready to send
@@ -424,6 +470,65 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
         createdByDept: currentUser.department,
         autoCreated: true,
       });
+
+      // Red-dot ping: notify BD creator
+      void recordNotificationEvent({
+        actorUserId: currentUser.id,
+        module: 'pricing',
+        subSection: 'quotations',
+        entityType: 'quotation',
+        entityId: quotation.id,
+        kind: 'approved',
+        summary: {
+          label: `Quotation priced — ready to send`,
+          reference: quotation.quote_number ?? undefined,
+          customer_name: quotation.customer_name,
+        },
+        recipientIds: [bdRepId],
+      });
+    }
+
+    // Revision request → notify BD creator
+    if (normalizeQuotationStatus(newStatus, quotation) === "Needs Revision" && currentUser) {
+      const bdRepId = (quotation as any).created_by as string | undefined;
+      void recordNotificationEvent({
+        actorUserId: currentUser.id,
+        module: 'pricing',
+        subSection: 'quotations',
+        entityType: 'quotation',
+        entityId: quotation.id,
+        kind: 'rejected',
+        summary: {
+          label: `Quotation needs revision`,
+          reference: quotation.quote_number ?? undefined,
+          customer_name: quotation.customer_name,
+          to_status: 'Needs Revision',
+        },
+        recipientIds: [bdRepId],
+      });
+    }
+
+    // Disapproved/Rejected/Cancelled → notify BD creator (when actor isn't them)
+    {
+      const _ns = normalizeQuotationStatus(newStatus, quotation);
+      if ((_ns === 'Disapproved' || _ns === 'Rejected by Client' || _ns === 'Cancelled') && currentUser) {
+        const bdRepId = (quotation as any).created_by as string | undefined;
+        void recordNotificationEvent({
+          actorUserId: currentUser.id,
+          module: 'pricing',
+          subSection: 'quotations',
+          entityType: 'quotation',
+          entityId: quotation.id,
+          kind: 'rejected',
+          summary: {
+            label: `Quotation ${_ns.toLowerCase()}`,
+            reference: quotation.quote_number ?? undefined,
+            customer_name: quotation.customer_name,
+            to_status: _ns,
+          },
+          recipientIds: [bdRepId],
+        });
+      }
     }
 
     // Project cascade: cancel linked project when quotation is rejected/cancelled
@@ -572,6 +677,24 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
 
       const updatedContract = { ...quotation, ...contractActivationPayload };
       onUpdate(updatedContract);
+
+      const acctManagers = await fetchDeptManagerIds('Accounting');
+      const opsManagers = await fetchDeptManagerIds('Operations');
+      void recordNotificationEvent({
+        actorUserId: currentUser.id,
+        module: 'bd',
+        subSection: 'contracts',
+        entityType: 'contract',
+        entityId: quotation.id,
+        kind: 'status_changed',
+        summary: {
+          label: `Contract activated: ${quotation.quote_number ?? ''}`,
+          reference: quotation.quote_number ?? undefined,
+          customer_name: quotation.customer_name ?? undefined,
+          to_status: 'Active',
+        },
+        recipientIds: [(quotation as any).created_by, ...acctManagers, ...opsManagers],
+      });
 
       toast.success(`✓ Contract ${quotation.quote_number} activated! View in Contracts module.`);
 

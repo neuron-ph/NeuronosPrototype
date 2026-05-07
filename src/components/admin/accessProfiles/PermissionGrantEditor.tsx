@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { ChevronDown, ChevronRight, ChevronsDown, ChevronsUp, EyeOff, Search, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, ChevronsDown, ChevronsUp, EyeOff, Search, X } from "lucide-react";
 import {
   PERM_MODULES, PERM_ACTIONS,
   getInheritedPermission,
@@ -45,6 +45,16 @@ const GROUP_ORDER = [
 ];
 
 export const GRID_COLS = "1fr 68px 68px 68px 72px 68px 68px";
+
+// Visual zones: read (view) | write (create, edit) | sensitive (approve, delete, export).
+// A faint divider is drawn before the first column of each new zone.
+const ZONE_BOUNDARY_ACTIONS = new Set<ActionId>(["create", "approve"]);
+const ZONE_DIVIDER_COLOR = "color-mix(in oklch, var(--neuron-ui-border) 35%, transparent)";
+function zoneDividerStyle(action: ActionId): React.CSSProperties {
+  return ZONE_BOUNDARY_ACTIONS.has(action)
+    ? { boxShadow: `inset 1px 0 0 ${ZONE_DIVIDER_COLOR}` }
+    : {};
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -126,26 +136,25 @@ function PermToggle({
         }}
         aria-pressed={granted}
         style={{
-          width: 36, height: 20, borderRadius: 10,
-          border: granted ? "none" : "1.5px solid var(--neuron-ui-border)",
+          width: 18, height: 18, borderRadius: 5,
+          border: granted ? "none" : "1.25px solid color-mix(in oklch, var(--neuron-ui-border) 70%, transparent)",
           backgroundColor: granted ? "var(--neuron-action-primary)" : "transparent",
           cursor: "pointer", position: "relative",
+          display: "flex", alignItems: "center", justifyContent: "center",
           transition: "background-color 0.15s cubic-bezier(0.16,1,0.3,1), border-color 0.15s",
-          flexShrink: 0,
+          flexShrink: 0, padding: 0,
+        }}
+        onMouseEnter={e => {
+          if (!granted) e.currentTarget.style.borderColor = "var(--neuron-ink-muted)";
+        }}
+        onMouseLeave={e => {
+          if (!granted) e.currentTarget.style.borderColor = "color-mix(in oklch, var(--neuron-ui-border) 70%, transparent)";
         }}
       >
-        <span style={{
-          position: "absolute",
-          top: granted ? 2 : 1.5,
-          left: granted ? 18 : 1.5,
-          width: 16, height: 16, borderRadius: "50%",
-          backgroundColor: granted ? "#fff" : "var(--neuron-ui-border)",
-          transition: "left 0.15s cubic-bezier(0.16,1,0.3,1)",
-          boxShadow: granted ? "0 1px 3px rgba(0,0,0,0.18)" : "none",
-        }} />
+        {granted && <Check size={12} strokeWidth={3} color="#fff" />}
       </button>
       <div style={{
-        width: 5, height: 5, borderRadius: "50%",
+        width: 4, height: 4, borderRadius: "50%",
         backgroundColor: isDirty ? "var(--neuron-action-primary)" : "transparent",
         transition: "background-color 0.15s",
         flexShrink: 0,
@@ -219,7 +228,7 @@ function SkeletonLoader() {
                   <div className="animate-pulse" style={{ height: 12, width: 60 + j * 18, borderRadius: 3, backgroundColor: "var(--neuron-bg-surface-subtle)" }} />
                   {PERM_ACTIONS.map(a => (
                     <div key={a} style={{ display: "flex", justifyContent: "center" }}>
-                      <div className="animate-pulse" style={{ width: 36, height: 20, borderRadius: 10, backgroundColor: "var(--neuron-bg-surface-subtle)" }} />
+                      <div className="animate-pulse" style={{ width: 18, height: 18, borderRadius: 5, backgroundColor: "var(--neuron-bg-surface-subtle)" }} />
                     </div>
                   ))}
                 </div>
@@ -290,7 +299,7 @@ function ModuleRow({
         const isCellHighlighted = highlightedCellKeys.has(cellKey);
         if (!applicable.has(action)) {
           return (
-            <div key={action} style={{ display: "flex", justifyContent: "center", alignItems: "center", height: 28, cursor: "not-allowed" }} title="This action doesn't apply to this module">
+            <div key={action} style={{ display: "flex", justifyContent: "center", alignItems: "center", height: 28, cursor: "not-allowed", ...zoneDividerStyle(action) }} title="This action doesn't apply to this module">
               <span style={{ fontSize: 12, color: "var(--neuron-ui-muted)", opacity: 0.3, userSelect: "none" }}>—</span>
             </div>
           );
@@ -305,6 +314,7 @@ function ModuleRow({
             backgroundColor: isCellHighlighted ? "color-mix(in oklch, var(--neuron-action-primary) 14%, transparent)" : undefined,
             borderRadius: isCellHighlighted ? 6 : undefined,
             transition: "background-color 0.15s",
+            ...zoneDividerStyle(action),
           }}>
             <PermToggle
               granted={granted}
@@ -449,16 +459,22 @@ function GroupAccordion({
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {effectiveOpen && !searching && !activeActionFilter && (
-            <div style={{ display: "flex", gap: 3, alignItems: "center" }} onClick={e => e.stopPropagation()}>
-              <button onClick={() => handleBulkGrant("view", true)} style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 5, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-muted)", cursor: "pointer", whiteSpace: "nowrap" }}>
-                +View
-              </button>
-              <button onClick={() => handleBulkGrant("all", true)} style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 5, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-muted)", cursor: "pointer", whiteSpace: "nowrap" }}>
-                +All
-              </button>
-              <button onClick={() => handleBulkGrant("all", false)} style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 5, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-muted)", cursor: "pointer", whiteSpace: "nowrap" }}>
-                Clear
-              </button>
+            <div style={{ display: "flex", gap: 2, alignItems: "center" }} onClick={e => e.stopPropagation()}>
+              {([
+                { label: "+View",  onClick: () => handleBulkGrant("view", true)  },
+                { label: "+All",   onClick: () => handleBulkGrant("all", true)   },
+                { label: "Clear",  onClick: () => handleBulkGrant("all", false)  },
+              ]).map(({ label, onClick }) => (
+                <button
+                  key={label}
+                  onClick={onClick}
+                  style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 5, border: "1px solid transparent", background: "transparent", color: "var(--neuron-ink-muted)", cursor: "pointer", whiteSpace: "nowrap", transition: "border-color 0.12s, color 0.12s" }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--neuron-ui-border)"; e.currentTarget.style.color = "var(--neuron-ink-primary)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = "transparent"; e.currentTarget.style.color = "var(--neuron-ink-muted)"; }}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
           )}
           {segmentsWithChildren.length > 0 && effectiveOpen && !searching && (
@@ -466,13 +482,16 @@ function GroupAccordion({
               onClick={toggleAllTabs}
               style={{
                 display: "flex", alignItems: "center", gap: 4,
-                fontSize: 11, fontWeight: 600,
-                color: "var(--neuron-action-primary)",
+                fontSize: 11, fontWeight: 500,
+                color: "var(--neuron-ink-muted)",
                 padding: "3px 9px", borderRadius: 6,
-                border: "1.5px solid color-mix(in oklch, var(--neuron-action-primary) 40%, transparent)",
-                background: "color-mix(in oklch, var(--neuron-action-primary) 8%, transparent)",
+                border: "1px solid transparent",
+                background: "transparent",
                 cursor: "pointer", whiteSpace: "nowrap",
+                transition: "border-color 0.12s, color 0.12s",
               }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--neuron-ui-border)"; e.currentTarget.style.color = "var(--neuron-ink-primary)"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "transparent"; e.currentTarget.style.color = "var(--neuron-ink-muted)"; }}
             >
               {allTabsExpanded
                 ? <><ChevronsUp size={11} /> Collapse tabs</>
@@ -509,11 +528,13 @@ function GroupAccordion({
               </span>
               {PERM_ACTIONS.map(action => (
                 <span key={action} style={{
+                  display: "flex", alignItems: "center", justifyContent: "center", height: "100%",
                   fontSize: 9, fontWeight: 700,
                   color: activeActionFilter === action ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
                   textTransform: "uppercase", letterSpacing: "0.08em",
                   textAlign: "center", opacity: activeActionFilter === action ? 1 : 0.6,
                   transition: "color 0.14s, opacity 0.14s",
+                  ...zoneDividerStyle(action),
                 }}>
                   {ACTION_LABELS[action]}
                 </span>
@@ -532,13 +553,15 @@ function GroupAccordion({
 
               return (
                 <div key={seg.parent.id} style={{ borderTop: si > 0 ? "1px solid var(--neuron-ui-border)" : undefined }}>
-                  {/* Parent row */}
+                  {/* Parent row — zebra stripe via segment index for easier scanning */}
                   <div style={{
                     display: "grid", gridTemplateColumns: GRID_COLS,
                     padding: "10px 20px", alignItems: "center",
                     backgroundColor: parentHighlighted
                       ? "color-mix(in oklch, var(--neuron-action-primary) 7%, var(--neuron-bg-elevated))"
-                      : "var(--neuron-bg-elevated)",
+                      : si % 2 === 1
+                        ? "color-mix(in oklch, var(--neuron-bg-surface-subtle) 35%, var(--neuron-bg-elevated))"
+                        : "var(--neuron-bg-elevated)",
                     transition: "background-color 0.15s",
                   }}>
                     <div style={{ display: "flex", alignItems: "center", paddingRight: 12, minWidth: 0 }}>
@@ -573,7 +596,7 @@ function GroupAccordion({
                         const isCellHighlighted = highlightedCellKeys.has(cellKey);
                         if (!applicable.has(action)) {
                           return (
-                            <div key={action} style={{ display: "flex", justifyContent: "center", alignItems: "center", height: 38, cursor: "not-allowed" }} title="This action doesn't apply to this module">
+                            <div key={action} style={{ display: "flex", justifyContent: "center", alignItems: "center", height: 38, cursor: "not-allowed", ...zoneDividerStyle(action) }} title="This action doesn't apply to this module">
                               <span style={{ fontSize: 12, color: "var(--neuron-ui-muted)", opacity: 0.6, userSelect: "none" }}>—</span>
                             </div>
                           );
@@ -588,6 +611,7 @@ function GroupAccordion({
                             backgroundColor: isCellHighlighted ? "color-mix(in oklch, var(--neuron-action-primary) 14%, transparent)" : undefined,
                             borderRadius: isCellHighlighted ? 6 : undefined,
                             transition: "background-color 0.15s",
+                            ...zoneDividerStyle(action),
                           }}>
                             <PermToggle
                               granted={granted}
@@ -834,8 +858,13 @@ export function PermissionGrantEditor({
         <RbacRuleSwitch checked={blockHigherRankVisibility} onChange={handleHigherRankRuleChange} disabled={disabled} />
       </div>
 
-      {/* Column header */}
-      <div style={{ marginBottom: 10 }}>
+      {/* Column header — sticky to keep action labels visible while scrolling the matrix */}
+      <div style={{
+        position: "sticky", top: 0, zIndex: 5,
+        marginBottom: 10,
+        paddingTop: 4, paddingBottom: 4,
+        backgroundColor: "var(--neuron-bg-elevated)",
+      }}>
         <div style={{
           display: "grid", gridTemplateColumns: GRID_COLS,
           padding: "0 20px", height: 32, alignItems: "center",
@@ -847,10 +876,12 @@ export function PermissionGrantEditor({
           </span>
           {PERM_ACTIONS.map(action => (
             <span key={action} style={{
+              display: "flex", alignItems: "center", justifyContent: "center", height: "100%",
               fontSize: 10, fontWeight: 700,
               color: activeActionFilter === action ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
               textTransform: "uppercase", letterSpacing: "0.07em", textAlign: "center",
               transition: "color 0.14s",
+              ...zoneDividerStyle(action),
             }}>
               {ACTION_LABELS[action]}
             </span>

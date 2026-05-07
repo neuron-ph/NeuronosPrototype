@@ -17,6 +17,7 @@ import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
 import { logDeletion } from "../../utils/activityLog";
 import type { ExecutionStatus } from "../../types/operations";
 import { NeuronModal } from "../ui/NeuronModal";
+import { useUnreadEntityIds } from "../../hooks/useNotifications";
 
 interface MarineInsuranceBooking {
   bookingId: string;
@@ -224,6 +225,11 @@ export function MarineInsuranceBookings({ currentUser, pendingBookingId, initial
 
     return true;
   });
+
+  const unreadBookingIds = useUnreadEntityIds(
+    "booking",
+    filteredBookings.map((b) => b.bookingId),
+  );
 
   // Calculate counts for tabs
   const allCount = bookings.length;
@@ -598,6 +604,9 @@ export function MarineInsuranceBookings({ currentUser, pendingBookingId, initial
                     >
                       <td className="py-4 px-4">
                         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                          {unreadBookingIds.has(booking.bookingId) && (
+                            <span aria-label="Unread" style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "var(--theme-status-danger-fg)", flexShrink: 0 }} />
+                          )}
                           <Shield size={20} color="var(--theme-action-primary-bg)" style={{ flexShrink: 0 }} />
                           <div>
                             <div style={{

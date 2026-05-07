@@ -14,6 +14,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { usePermission } from "../../context/PermissionProvider";
+import { CONTRACT_MODULE_IDS, type ContractDept } from "../../config/access/accessSchema";
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "../../lib/queryKeys";
 import { ArrowLeft, Edit3, RefreshCw, FileText, Calendar, Building2, Briefcase, Ship, Shield, Truck, Clock, Zap, Plus, ChevronDown, Layout, Layers, Users, Receipt, FileStack, DollarSign, TrendingUp, Paperclip, MessageSquare, Eye, MoreVertical } from "lucide-react";
@@ -23,6 +24,8 @@ import { ContractRateCardV2 as ContractRateMatrixEditor } from "./quotations/Con
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
 import { logCreation, logStatusChange } from "../../utils/activityLog";
+import { recordNotificationEvent, fetchDeptManagerIds } from "../../utils/notifications";
+import { useMarkEntityReadOnMount } from "../../hooks/useNotifications";
 import { CreateBookingFromContractPanel } from "../contracts/CreateBookingFromContractPanel";
 import type { InquiryService } from "../../types/pricing";
 import { useContractFinancials } from "../../hooks/useContractFinancials";
@@ -56,6 +59,8 @@ interface ContractDetailViewProps {
   currentUser?: { name: string; email: string; department: string } | null;
   initialTab?: string | null;
   highlightId?: string | null;
+  /** Which dept-scoped moduleId family to consult. Defaults to "pricing". */
+  contractDept?: ContractDept;
 }
 
 type ContractTab = "financial_overview" | "quotation" | "rate-card" | "bookings" | "billings" | "invoices" | "collections" | "expenses" | "attachments" | "comments" | "activity";
@@ -104,19 +109,22 @@ export function ContractDetailView({
   currentUser,
   initialTab,
   highlightId,
+  contractDept = "pricing",
 }: ContractDetailViewProps) {
   const { can } = usePermission();
-  const canViewFinancialOverviewTab = can("pricing_contracts_financial_overview_tab", "view");
-  const canViewQuotationTab = can("pricing_contracts_quotation_tab", "view");
-  const canViewRateCardTab = can("pricing_contracts_rate_card_tab", "view");
-  const canViewBookingsTab = can("pricing_contracts_bookings_tab", "view");
-  const canViewBillingsTab = can("pricing_contracts_billings_tab", "view");
-  const canViewInvoicesTab = can("pricing_contracts_invoices_tab", "view");
-  const canViewCollectionsTab = can("pricing_contracts_collections_tab", "view");
-  const canViewExpensesTab = can("pricing_contracts_expenses_tab", "view");
-  const canViewAttachmentsTab = can("pricing_contracts_attachments_tab", "view");
-  const canViewCommentsTab = can("pricing_contracts_comments_tab", "view");
-  const canViewActivityTab = can("pricing_contracts_activity_tab", "view");
+  useMarkEntityReadOnMount("contract", quotation.id);
+  const ids = CONTRACT_MODULE_IDS[contractDept];
+  const canViewFinancialOverviewTab = can(ids.financialOverview, "view");
+  const canViewQuotationTab    = can(ids.quotation,   "view");
+  const canViewRateCardTab     = can(ids.rateCard,    "view");
+  const canViewBookingsTab     = can(ids.bookings,    "view");
+  const canViewBillingsTab     = can(ids.billings,    "view");
+  const canViewInvoicesTab     = can(ids.invoices,    "view");
+  const canViewCollectionsTab  = can(ids.collections, "view");
+  const canViewExpensesTab     = can(ids.expenses,    "view");
+  const canViewAttachmentsTab  = can(ids.attachments, "view");
+  const canViewCommentsTab     = can(ids.comments,    "view");
+  const canViewActivityTab     = can(ids.activity,    "view");
 
   const resolveInitialTab = (): ContractTab => {
     if (initialTab) return initialTab as ContractTab;
@@ -232,6 +240,25 @@ export function ContractDetailView({
       if (!error) {
         const _actorAct = { id: "current-user", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
         logStatusChange("contract", quotation.id, quotation.quote_number ?? quotation.id, quotation.contract_status ?? "", "Active", _actorAct);
+
+        const acctManagers = await fetchDeptManagerIds('Accounting');
+        const opsManagers = await fetchDeptManagerIds('Operations');
+        void recordNotificationEvent({
+          actorUserId: (currentUser as any)?.id ?? null,
+          module: 'bd',
+          subSection: 'contracts',
+          entityType: 'contract',
+          entityId: quotation.id,
+          kind: 'status_changed',
+          summary: {
+            label: `Contract activated: ${quotation.quote_number ?? ''}`,
+            reference: quotation.quote_number ?? undefined,
+            customer_name: quotation.customer_name ?? undefined,
+            to_status: 'Active',
+          },
+          recipientIds: [(quotation as any).created_by, ...acctManagers, ...opsManagers],
+        });
+
         toast.success("Contract activated successfully! Operations can now link bookings.");
         if (onUpdate) {
           onUpdate(updatedQuotation);

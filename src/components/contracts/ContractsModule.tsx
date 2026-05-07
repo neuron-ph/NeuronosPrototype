@@ -205,6 +205,7 @@ export function ContractsModule({ currentUser, onCreateTicket, initialContract, 
           currentUser={currentUser}
           initialTab={initialTab}
           highlightId={highlightId}
+          contractDept={department === "Accounting" ? "accounting" : "pricing"}
         />
       )}
     </div>

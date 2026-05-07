@@ -16,6 +16,7 @@ import { NeuronRefreshButton } from "../../shared/NeuronRefreshButton";
 import { usePermission } from "../../../context/PermissionProvider";
 import { logDeletion } from "../../../utils/activityLog";
 import { NeuronModal } from "../../ui/NeuronModal";
+import { useUnreadEntityIds } from "../../../hooks/useNotifications";
 
 interface ForwardingBookingsProps {
   onSelectBooking: (booking: ForwardingBooking) => void;
@@ -236,6 +237,11 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
 
     return true;
   });
+
+  const unreadBookingIds = useUnreadEntityIds(
+    "booking",
+    filteredBookings.map((b) => b.bookingId),
+  );
 
   // Calculate counts for tabs
   const allCount = bookings.length;
@@ -602,6 +608,9 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
                     >
                       <td className="py-4 px-4">
                         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                          {unreadBookingIds.has(booking.bookingId) && (
+                            <span aria-label="Unread" style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "var(--theme-status-danger-fg)", flexShrink: 0 }} />
+                          )}
                           <Package size={20} color="var(--theme-action-primary-bg)" style={{ flexShrink: 0 }} />
                           <div>
                             <div style={{
