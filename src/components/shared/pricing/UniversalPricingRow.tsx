@@ -51,6 +51,13 @@ export interface UniversalPricingRowProps {
   categoryId?: string; // Filters combobox to items in this catalog category
 }
 
+export function buildCatalogSelectionPatch(description: string, catalogItemId?: string | null) {
+  return {
+    description,
+    catalog_item_id: catalogItemId ?? null,
+  };
+}
+
 export function UniversalPricingRow({
   data,
   mode = "view",
@@ -183,18 +190,10 @@ export function UniversalPricingRow({
               serviceType={serviceType}
               side="revenue"
               categoryId={categoryId}
-              onChange={(description, catalogItemId, meta) => {
-                handleFieldChange('description', description);
-                handleFieldChange('catalog_item_id', catalogItemId ?? null);
-                // Apply catalog defaults on selection. Only stamp when the row
-                // has not been customized yet (avoid clobbering user edits).
-                if (meta?.currency && meta.currency !== data.currency) {
-                  handleFieldChange('currency', meta.currency);
-                }
-                if (meta?.default_price && !data.base_cost && !data.final_price) {
-                  handleFieldChange('base_cost', meta.default_price);
-                  handleFieldChange('final_price', meta.default_price);
-                }
+              onChange={(description, catalogItemId) => {
+                const patch = buildCatalogSelectionPatch(description, catalogItemId);
+                handleFieldChange('description', patch.description);
+                handleFieldChange('catalog_item_id', patch.catalog_item_id);
               }}
               placeholder="Item description"
             />

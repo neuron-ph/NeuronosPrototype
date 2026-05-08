@@ -13,19 +13,11 @@ export interface CatalogItem {
   id: string;
   name: string;
   category_id: string | null;
-  /** Master currency for this item (e.g. "USD" for ocean freight billed by carrier in USD). */
-  currency?: string | null;
-  /** Master default unit price in `currency`. */
-  default_price?: number | null;
   created_at?: string;
   updated_at?: string;
 }
 
-/** Metadata emitted alongside the description when a catalog item is selected. */
-export interface CatalogSelectionMeta {
-  currency?: string | null;
-  default_price?: number | null;
-}
+export const CATALOG_ITEM_SELECT_FIELDS = "id, name, category_id, created_at, updated_at";
 
 export interface CatalogCategory {
   id: string;
@@ -42,7 +34,7 @@ interface CatalogItemComboboxProps {
   serviceType?: string;                 // kept for future smart-sort when we link catalog → service
   side?: "revenue" | "expense" | "both"; // filter items by category side
   categoryId?: string;                  // when set, shows only items in this catalog category + assigns on quick-create
-  onChange: (description: string, catalogItemId?: string, meta?: CatalogSelectionMeta) => void;
+  onChange: (description: string, catalogItemId?: string) => void;
   disabled?: boolean;
   placeholder?: string;
 }
@@ -124,7 +116,7 @@ async function fetchCatalogItems(forceRefresh = false): Promise<CatalogItem[]> {
 async function doFetchCatalogItems(): Promise<CatalogItem[]> {
   try {
     const [itemsRes, catsRes] = await Promise.all([
-      supabase.from('catalog_items').select('id, name, category_id, currency, default_price, created_at, updated_at').order('name'),
+      supabase.from('catalog_items').select(CATALOG_ITEM_SELECT_FIELDS).order('name'),
       supabase.from('catalog_categories').select('id, side'),
     ]);
 
@@ -153,6 +145,11 @@ function filterBySide(items: CatalogItem[], side?: string): CatalogItem[] {
     const catSide = cachedCategorySides[item.category_id];
     return catSide === side || catSide === "both";
   });
+}
+
+export function filterCatalogItemsByCategory(items: CatalogItem[], categoryId?: string): CatalogItem[] {
+  if (!categoryId) return items;
+  return items.filter((item) => item.category_id === categoryId);
 }
 
 // Invalidate cache (called after creating a new item)
@@ -262,16 +259,11 @@ export function CatalogItemCombobox({
   // Filter items — category items first, then rest alphabetically
   const getFilteredItems = useCallback((): CatalogItem[] => {
     const query = searchText.toLowerCase().trim();
+    const scopedItems = filterCatalogItemsByCategory(items, categoryId);
     const filtered = query
-      ? items.filter(item => item.name.toLowerCase().includes(query))
-      : [...items];
-    return filtered.sort((a, b) => {
-      // Items in the current category sort before others
-      const aInCat = categoryId && a.category_id === categoryId ? 0 : 1;
-      const bInCat = categoryId && b.category_id === categoryId ? 0 : 1;
-      if (aInCat !== bInCat) return aInCat - bInCat;
-      return a.name.localeCompare(b.name);
-    });
+      ? scopedItems.filter(item => item.name.toLowerCase().includes(query))
+      : [...scopedItems];
+    return filtered.sort((a, b) => a.name.localeCompare(b.name));
   }, [items, searchText, categoryId]);
 
   // Check if typed text exactly matches an existing item
@@ -283,10 +275,7 @@ export function CatalogItemCombobox({
   // Handle selecting an existing item
   const handleSelect = (item: CatalogItem) => {
     setSearchText(item.name);
-    onChange(item.name, item.id, {
-      currency: item.currency ?? null,
-      default_price: item.default_price ?? null,
-    });
+    onChange(item.name, item.id);
     setIsOpen(false);
   };
 
@@ -318,7 +307,7 @@ export function CatalogItemCombobox({
         supabase
           .from('catalog_items')
           .insert({ id: `ci-${Date.now()}`, name, ...(categoryId ? { category_id: categoryId } : {}) })
-          .select('id, name, category_id, currency, default_price, created_at, updated_at')
+          .select(CATALOG_ITEM_SELECT_FIELDS)
           .single(),
         new Promise<{ data: null; error: { message: string } }>((resolve) =>
           setTimeout(() => resolve({ data: null, error: { message: 'Request timed out' } }), 10_000)
@@ -359,7 +348,7 @@ export function CatalogItemCombobox({
   const handleInputChange = (text: string) => {
     setSearchText(text);
     if (!isOpen) setIsOpen(true);
-    onChange(text, undefined, undefined);
+    onChange(text, undefined);
   };
 
   const filteredItems = getFilteredItems();
