@@ -30,6 +30,45 @@ BEGIN
   RAISE NOTICE 'Found % Neuron users. Proceeding with seed...', user_count;
 END $$;
 
+-- ============================================================================
+-- PROFILING VOCABULARIES — Customer CRM fields
+-- ============================================================================
+
+INSERT INTO profile_industries (value, sort_order)
+VALUES
+  ('Garments', 10),
+  ('Garments/Textile', 20),
+  ('Automobile', 30),
+  ('Energy', 40),
+  ('Food & Beverage', 50),
+  ('Heavy Equipment', 60),
+  ('Construction', 70),
+  ('Agricultural', 80),
+  ('Pharmaceutical', 90),
+  ('IT', 100),
+  ('Electronics', 110),
+  ('General Merchandise', 120)
+ON CONFLICT (value) DO NOTHING;
+
+INSERT INTO profile_lead_sources (value, sort_order)
+VALUES
+  ('Referral', 10),
+  ('Trade Show', 20),
+  ('Cold Outreach', 30),
+  ('Website', 40)
+ON CONFLICT (value) DO NOTHING;
+
+INSERT INTO profile_carriers (name, sort_order)
+VALUES
+  ('Evergreen', 10),
+  ('PIL', 20),
+  ('KMTC', 30)
+ON CONFLICT (name) DO NOTHING;
+
+INSERT INTO profile_forwarders (name, sort_order)
+VALUES
+  ('Globe Forwarding Ltd.', 10)
+ON CONFLICT (name) DO NOTHING;
 
 -- ============================================================================
 -- TIER 1A — Customers

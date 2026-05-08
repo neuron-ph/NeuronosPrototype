@@ -5066,6 +5066,86 @@ CREATE POLICY "service_providers_update_mgr"
   ON service_providers FOR UPDATE TO authenticated
   USING (is_manager_or_above()) WITH CHECK (is_manager_or_above());
 
+-- 089: customer profiling enum tables
+CREATE TABLE IF NOT EXISTS profile_industries (
+  id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  value       text        NOT NULL UNIQUE,
+  label       text,
+  sort_order  integer     NOT NULL DEFAULT 999,
+  is_active   boolean     NOT NULL DEFAULT true,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS profile_lead_sources (
+  id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  value       text        NOT NULL UNIQUE,
+  label       text,
+  sort_order  integer     NOT NULL DEFAULT 999,
+  is_active   boolean     NOT NULL DEFAULT true,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS profile_carriers (
+  id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        text        NOT NULL UNIQUE,
+  sort_order  integer     NOT NULL DEFAULT 999,
+  is_active   boolean     NOT NULL DEFAULT true,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS profile_forwarders (
+  id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        text        NOT NULL UNIQUE,
+  sort_order  integer     NOT NULL DEFAULT 999,
+  is_active   boolean     NOT NULL DEFAULT true,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE profile_industries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profile_lead_sources ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profile_carriers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profile_forwarders ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS profile_industries_read ON profile_industries;
+CREATE POLICY profile_industries_read ON profile_industries
+  FOR SELECT TO authenticated
+  USING (EXISTS (SELECT 1 FROM users WHERE auth_id = auth.uid() AND department != 'HR'));
+DROP POLICY IF EXISTS profile_industries_write_exec ON profile_industries;
+CREATE POLICY profile_industries_write_exec ON profile_industries
+  FOR ALL TO authenticated
+  USING (is_executive()) WITH CHECK (is_executive());
+
+DROP POLICY IF EXISTS profile_lead_sources_read ON profile_lead_sources;
+CREATE POLICY profile_lead_sources_read ON profile_lead_sources
+  FOR SELECT TO authenticated
+  USING (EXISTS (SELECT 1 FROM users WHERE auth_id = auth.uid() AND department != 'HR'));
+DROP POLICY IF EXISTS profile_lead_sources_write_exec ON profile_lead_sources;
+CREATE POLICY profile_lead_sources_write_exec ON profile_lead_sources
+  FOR ALL TO authenticated
+  USING (is_executive()) WITH CHECK (is_executive());
+
+DROP POLICY IF EXISTS profile_carriers_read ON profile_carriers;
+CREATE POLICY profile_carriers_read ON profile_carriers
+  FOR SELECT TO authenticated
+  USING (EXISTS (SELECT 1 FROM users WHERE auth_id = auth.uid() AND department != 'HR'));
+DROP POLICY IF EXISTS profile_carriers_write_exec ON profile_carriers;
+CREATE POLICY profile_carriers_write_exec ON profile_carriers
+  FOR ALL TO authenticated
+  USING (is_executive()) WITH CHECK (is_executive());
+
+DROP POLICY IF EXISTS profile_forwarders_read ON profile_forwarders;
+CREATE POLICY profile_forwarders_read ON profile_forwarders
+  FOR SELECT TO authenticated
+  USING (EXISTS (SELECT 1 FROM users WHERE auth_id = auth.uid() AND department != 'HR'));
+DROP POLICY IF EXISTS profile_forwarders_write_exec ON profile_forwarders;
+CREATE POLICY profile_forwarders_write_exec ON profile_forwarders
+  FOR ALL TO authenticated
+  USING (is_executive()) WITH CHECK (is_executive());
+
 -- ════════════════════════════════════════════════════════════════════════════
 -- 063: V1 team structure overhaul (compatibility-first)
 -- Mirrors migrations/063_v1_team_structure_overhaul.sql so local rebuilds work.

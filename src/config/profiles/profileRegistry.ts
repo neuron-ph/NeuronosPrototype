@@ -109,12 +109,11 @@ export const profileRegistry: Record<string, ProfileRegistryEntry> = {
     // No admin — covered by Consignees and Shippers sections.
   },
   carrier: {
-    source: 'service_providers',
+    source: 'profile_carriers',
     searchFields: ['name'],
     strictness: 'combo',
     quickCreateAllowed: true,
-    providerTag: 'carrier',
-    admin: serviceProviderAdmin('Carrier', 'Carriers', 'Sea and air carriers used in shipment fields.', 'carrier'),
+    admin: namedProfileAdmin('Carrier', 'Carriers', 'Standalone carrier list used in shipment fields. Decoupled from Vendors/Network Partners.'),
   },
   // Agents are a derived view of Vendors filtered by where the vendor is based.
   // Two flavors share the same Vendor dataset (service_providers) but differ
@@ -151,12 +150,11 @@ export const profileRegistry: Record<string, ProfileRegistryEntry> = {
     admin: serviceProviderAdmin('Consolidator', 'Consolidators', 'LCL consolidators.', 'consolidator'),
   },
   forwarder: {
-    source: 'service_providers',
+    source: 'profile_forwarders',
     searchFields: ['name'],
     strictness: 'combo',
     quickCreateAllowed: true,
-    providerTag: 'forwarder',
-    admin: serviceProviderAdmin('Forwarder', 'Forwarders', 'Forwarders backing the operational party in shipment fields.', 'forwarder'),
+    admin: namedProfileAdmin('Forwarder', 'Forwarders', 'Standalone forwarder list used in shipment fields. Decoupled from Vendors/Network Partners.'),
   },
   shipping_line: {
     source: 'service_providers',
@@ -274,11 +272,13 @@ export const profileRegistry: Record<string, ProfileRegistryEntry> = {
     },
   },
 
-  // ---- Enum-style governance lists (migration 088) ----
+  // ---- Enum-style governance lists ----
   // Each is a single-column controlled vocabulary that used to be hardcoded
   // in src/config/booking/bookingFieldOptions.ts. Now editable from
   // Admin → Profiling. All share the same shape: searchFields=['value','label'],
   // strict select, no quick-create, sort by sort_order.
+  industry: enumProfile('Industry', 'Industries', 'Customer industries used in CRM and accounting filters.', 'profile_industries'),
+  lead_source: enumProfile('Lead Source', 'Lead Sources', 'Customer acquisition sources used in CRM customer records.', 'profile_lead_sources'),
   mode: enumProfile('Mode', 'Modes', 'Transport mode for quotations and bookings (FCL, LCL, Air Freight).', 'profile_modes'),
   movement: {
     ...enumProfile('Movement', 'Movements', 'Direction of cargo flow (Import, Export, Domestic).', 'profile_movements'),
@@ -387,6 +387,26 @@ function serviceProviderAdmin(
       { key: 'contact_phone' as const, label: 'Contact Phone', control: 'text' as const },
       { key: 'address' as const, label: 'Address', control: 'textarea' as const },
       { key: 'notes' as const, label: 'Notes', control: 'textarea' as const },
+    ],
+  };
+}
+
+function namedProfileAdmin(
+  label: string,
+  pluralLabel: string,
+  description: string,
+) {
+  return {
+    label,
+    pluralLabel,
+    description,
+    orderBy: { column: 'sort_order', ascending: true },
+    columns: [
+      { key: 'name', header: 'Name' },
+      { key: 'sort_order', header: 'Order', width: '100px', align: 'right' },
+    ],
+    formFields: [
+      { key: 'name' as const, label: 'Name', control: 'text' as const, required: true },
     ],
   };
 }

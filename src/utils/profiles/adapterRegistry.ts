@@ -7,6 +7,7 @@ import { locationAdapter } from './adapters/locationAdapter';
 import { countryAdapter } from './adapters/countryAdapter';
 import { dispatchPeopleAdapter } from './adapters/dispatchPeopleAdapter';
 import { vehicleAdapter } from './adapters/vehicleAdapter';
+import { createNamedProfileAdapter } from './adapters/namedProfileAdapter';
 import { profileRegistry } from '../../config/profiles/profileRegistry';
 
 /**
@@ -38,6 +39,10 @@ export function getAdapterForType(profileType: string): {
       return { adapter: locationAdapter, providerTag: profileType };
     case 'profile_countries':
       return { adapter: countryAdapter };
+    case 'profile_carriers':
+      return { adapter: createNamedProfileAdapter('profile_carriers', profileType) };
+    case 'profile_forwarders':
+      return { adapter: createNamedProfileAdapter('profile_forwarders', profileType) };
     case 'dispatch_people':
       return { adapter: dispatchPeopleAdapter, providerTag: profileType };
     case 'vehicles':

@@ -24,6 +24,7 @@ import { recordNotificationEvent, fetchDeptManagerIds } from "../../utils/notifi
 import { useMarkEntityReadOnMount } from "../../hooks/useNotifications";
 import { usePermission } from "../../context/PermissionProvider";
 import { CUSTOMER_MODULE_IDS, type CustomerDept } from "../../config/access/accessSchema";
+import { useCustomerProfileOptions } from "../../hooks/useCustomerProfileOptions";
 
 interface CustomerDetailProps {
   customer: Customer;
@@ -95,6 +96,10 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
   const { user, effectiveRole, effectiveDepartment } = useUser();
   const canAssignOwner = effectiveDepartment === "Executive" || effectiveRole === "manager" || effectiveRole === "executive";
   const queryClient = useQueryClient();
+  const { industryOptions, leadSourceOptions } = useCustomerProfileOptions({
+    currentIndustry: editedCustomer.industry,
+    currentLeadSource: editedCustomer.lead_source,
+  });
 
   // Fetch quotations for this customer
   const { data: quotations = [], isLoading: isLoadingQuotations } = useQuery({
@@ -626,18 +631,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                     </label>
                     <CustomDropdown
                       value={editedCustomer.industry || ""}
-                      options={[
-                        { value: "Garments", label: "Garments" },
-                        { value: "Automobile", label: "Automobile" },
-                        { value: "Energy", label: "Energy" },
-                        { value: "Food & Beverage", label: "Food & Beverage" },
-                        { value: "Heavy Equipment", label: "Heavy Equipment" },
-                        { value: "Construction", label: "Construction" },
-                        { value: "Pharmaceutical", label: "Pharmaceutical" },
-                        { value: "IT", label: "IT" },
-                        { value: "Electronics", label: "Electronics" },
-                        { value: "General Merchandise", label: "General Merchandise" }
-                      ]}
+                      options={industryOptions}
                       onChange={(val) => setEditedCustomer({ ...editedCustomer, industry: val as Industry })}
                       fullWidth
                     />
@@ -683,16 +677,14 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                     <label className="block text-[11px] font-medium uppercase tracking-wide mb-1.5" style={{ color: "var(--neuron-ink-muted)" }}>
                       Lead Source
                     </label>
-                    <input
-                      type="text"
+                    <CustomDropdown
                       value={editedCustomer.lead_source || ""}
-                      onChange={(e) => setEditedCustomer({ ...editedCustomer, lead_source: e.target.value })}
-                      className="w-full px-3 py-2 rounded-lg text-[13px] focus:outline-none focus:ring-2"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)"
-                      }}
+                      options={[
+                        { value: "", label: "No lead source" },
+                        ...leadSourceOptions,
+                      ]}
+                      onChange={(val) => setEditedCustomer({ ...editedCustomer, lead_source: val })}
+                      fullWidth
                     />
                   </div>
 

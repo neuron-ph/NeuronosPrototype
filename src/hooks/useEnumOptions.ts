@@ -27,6 +27,8 @@ import { queryKeys } from '../lib/queryKeys';
 // ---------------------------------------------------------------------------
 
 export type EnumKind =
+  | 'industry'
+  | 'lead_source'
   | 'mode'
   | 'movement'
   | 'incoterms'
@@ -46,6 +48,8 @@ export type EnumKind =
   | 'service_status';
 
 const TABLE_BY_KIND: Record<EnumKind, string> = {
+  industry: 'profile_industries',
+  lead_source: 'profile_lead_sources',
   mode: 'profile_modes',
   movement: 'profile_movements',
   incoterms: 'profile_incoterms',
@@ -71,6 +75,21 @@ const TABLE_BY_KIND: Record<EnumKind, string> = {
 // ---------------------------------------------------------------------------
 
 export const ENUM_SEEDS: Record<EnumKind, string[]> = {
+  industry: [
+    'Garments',
+    'Garments/Textile',
+    'Automobile',
+    'Energy',
+    'Food & Beverage',
+    'Heavy Equipment',
+    'Construction',
+    'Agricultural',
+    'Pharmaceutical',
+    'IT',
+    'Electronics',
+    'General Merchandise',
+  ],
+  lead_source: ['Referral', 'Trade Show', 'Cold Outreach', 'Website'],
   mode: ['FCL', 'LCL', 'Air Freight'],
   movement: ['Import', 'Export', 'Domestic'],
   incoterms: ['EXW', 'FCA', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DDU', 'DDP'],
@@ -188,6 +207,7 @@ function applyScope(kind: EnumKind, rows: Row[], scope: EnumOptionsScope): Row[]
 // ---------------------------------------------------------------------------
 
 const FLAT_ENUM_KINDS = [
+  'industry', 'lead_source',
   'mode', 'movement', 'incoterms', 'cargo_type', 'cargo_nature', 'brokerage_type',
   'customs_entry', 'customs_entry_procedure', 'truck_type', 'selectivity_color',
   'examination', 'container_type', 'package_type', 'preferential_treatment',

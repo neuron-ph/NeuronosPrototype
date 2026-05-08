@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import type { CustomerStatus } from "../../types/bd";
 import { CustomSelect } from "./CustomSelect";
 import { useUsers } from "../../hooks/useUsers";
+import { useCustomerProfileOptions } from "../../hooks/useCustomerProfileOptions";
 
 interface AddCustomerPanelProps {
   isOpen: boolean;
@@ -20,20 +21,6 @@ interface BackendUser {
   is_active: boolean;
 }
 
-const INDUSTRIES = [
-  "Garments",
-  "Automobile",
-  "Energy",
-  "Food & Beverage",
-  "Heavy Equipment",
-  "Construction",
-  "Agricultural",
-  "Pharmaceutical",
-  "IT",
-  "Electronics",
-  "General Merchandise"
-];
-
 export function AddCustomerPanel({ isOpen, onClose, onSave }: AddCustomerPanelProps) {
   const [formData, setFormData] = useState({
     company_name: "",
@@ -48,6 +35,7 @@ export function AddCustomerPanel({ isOpen, onClose, onSave }: AddCustomerPanelPr
 
   // Direct Supabase query for BD users (replaces Edge Function fetch)
   const { users } = useUsers({ department: 'Business Development', enabled: isOpen });
+  const { industries, leadSources } = useCustomerProfileOptions();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -235,7 +223,7 @@ export function AddCustomerPanel({ isOpen, onClose, onSave }: AddCustomerPanelPr
                     onChange={(value) => handleChange("industry", value)}
                     options={[
                       { value: "", label: "Select an industry..." },
-                      ...INDUSTRIES.map(industry => ({ value: industry, label: industry }))
+                      ...industries.map(industry => ({ value: industry, label: industry }))
                     ]}
                     placeholder="Select an industry..."
                     required
@@ -309,18 +297,15 @@ export function AddCustomerPanel({ isOpen, onClose, onSave }: AddCustomerPanelPr
                   >
                     Lead Source
                   </label>
-                  <input
+                  <CustomSelect
                     id="lead_source"
-                    type="text"
                     value={formData.lead_source}
-                    onChange={(e) => handleChange("lead_source", e.target.value)}
-                    placeholder="Website, Referral, Trade Show, etc."
-                    className="w-full px-3.5 py-2.5 rounded-lg focus:outline-none focus:ring-2 text-[13px]"
-                    style={{
-                      border: "1px solid var(--neuron-ui-border)",
-                      backgroundColor: "var(--theme-bg-surface)",
-                      color: "var(--neuron-ink-primary)",
-                    }}
+                    onChange={(value) => handleChange("lead_source", value)}
+                    options={[
+                      { value: "", label: "Select a lead source..." },
+                      ...leadSources.map(source => ({ value: source, label: source }))
+                    ]}
+                    placeholder="Select a lead source..."
                   />
                 </div>
 

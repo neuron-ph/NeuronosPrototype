@@ -9,20 +9,18 @@ import { profileRegistry } from '../../../config/profiles/profileRegistry';
 type ManualEntry = { profile_type: string; manual_value: string; booking_count: number };
 
 const VENDOR_PROFILE_TYPES = new Set([
-  'carrier',
   'agent',
   'consolidator',
-  'forwarder',
   'shipping_line',
   'trucking_company',
   'insurer',
 ]);
 
 const RULES = [
-  { label: 'Strict select-only', desc: 'customer, user, country — no manual entry allowed', color: 'var(--theme-status-danger-fg)' },
-  { label: 'Strict + privileged quick-create', desc: 'port — Executive/manager can create inline', color: 'var(--theme-status-warning-fg)' },
-  { label: 'Vendor-managed', desc: 'carrier, agent, consolidator, forwarder, shipping_line, trucking_company, insurer — maintained in Vendors', color: 'var(--theme-status-success-fg)' },
-  { label: 'Profiling-managed', desc: 'consignee, shipper, warehouse, driver, helper, vehicle', color: 'var(--theme-action-primary-bg)' },
+  { label: 'Strict select-only', desc: 'customer, user, country - no manual entry allowed', color: 'var(--theme-status-danger-fg)' },
+  { label: 'Strict + privileged quick-create', desc: 'port - Executive/manager can create inline', color: 'var(--theme-status-warning-fg)' },
+  { label: 'Vendor-backed', desc: 'agent, consolidator, shipping_line, trucking_company, insurer - backed by vendor records', color: 'var(--theme-status-success-fg)' },
+  { label: 'Profiling-managed', desc: 'carrier, forwarder, consignee, shipper, warehouse, driver, helper, vehicle', color: 'var(--theme-action-primary-bg)' },
 ];
 
 export function ProfilingGovernanceTab() {
@@ -94,10 +92,10 @@ export function ProfilingGovernanceTab() {
       cell: r => {
         const vendorManaged = VENDOR_PROFILE_TYPES.has(r.profile_type);
         const hasProfileSection = !!profileRegistry[r.profile_type]?.admin;
-        const destination = vendorManaged
-          ? `/pricing/vendors?q=${encodeURIComponent(r.manual_value)}`
-          : hasProfileSection
-            ? `/admin/profiling?section=${r.profile_type}&q=${encodeURIComponent(r.manual_value)}`
+        const destination = hasProfileSection
+          ? `/admin/profiling?section=${r.profile_type}&q=${encodeURIComponent(r.manual_value)}`
+          : vendorManaged
+            ? `/pricing/vendors?q=${encodeURIComponent(r.manual_value)}`
             : `/admin/profiling`;
 
         return (
@@ -105,7 +103,7 @@ export function ProfilingGovernanceTab() {
             onClick={() => navigate(destination)}
             style={linkBtnStyle}
           >
-            {vendorManaged ? 'Open vendors' : 'Link to profile'}
+            {hasProfileSection ? 'Open profile' : vendorManaged ? 'Open vendors' : 'Link to profile'}
             <ArrowRight size={11} />
           </button>
         );
@@ -117,7 +115,6 @@ export function ProfilingGovernanceTab() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 36 }}>
-      {/* Header */}
       <div>
         <h2 style={titleStyle}>Governance</h2>
         <p style={descStyle}>
@@ -125,7 +122,6 @@ export function ProfilingGovernanceTab() {
         </p>
       </div>
 
-      {/* Manual-entry section */}
       <section>
         <div style={sectionHeaderStyle}>
           <div>
@@ -172,11 +168,10 @@ export function ProfilingGovernanceTab() {
           data={manualEntries}
           columns={manualColumns}
           isLoading={loadingManual}
-          emptyMessage="No manual entries — every profile field is linked to a live record."
+          emptyMessage="No manual entries - every profile field is linked to a live record."
         />
       </section>
 
-      {/* Rules section */}
       <section>
         <h3 style={h3Style}>Strictness rules</h3>
         <p style={subStyle}>How each profile type behaves in booking forms.</p>
@@ -189,7 +184,7 @@ export function ProfilingGovernanceTab() {
               }} />
               <div style={{ fontSize: 13, lineHeight: 1.5 }}>
                 <span style={{ fontWeight: 500, color: 'var(--theme-text-primary)' }}>{rule.label}</span>
-                <span style={{ color: 'var(--theme-text-muted)' }}> — {rule.desc}</span>
+                <span style={{ color: 'var(--theme-text-muted)' }}> - {rule.desc}</span>
               </div>
             </div>
           ))}
@@ -202,10 +197,6 @@ export function ProfilingGovernanceTab() {
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
 
 const titleStyle: React.CSSProperties = {
   fontSize: 16,
@@ -262,22 +253,22 @@ const warningStyle: React.CSSProperties = {
   display: 'flex',
   gap: 10,
   alignItems: 'flex-start',
-  padding: '10px 14px',
-  borderRadius: 6,
+  padding: '12px 14px',
   background: 'var(--theme-status-warning-bg)',
-  border: '1px solid var(--theme-status-warning-border)',
-  marginBottom: 12,
+  border: '1px solid color-mix(in srgb, var(--theme-status-warning-fg) 24%, transparent)',
+  borderRadius: 10,
+  marginBottom: 14,
 };
 
 const linkBtnStyle: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
-  gap: 4,
-  padding: '4px 8px',
-  borderRadius: 5,
-  border: 'none',
-  background: 'transparent',
-  color: 'var(--theme-action-primary-bg)',
+  gap: 6,
+  padding: '6px 10px',
+  borderRadius: 6,
+  border: '1px solid var(--theme-border-default)',
+  background: 'var(--theme-bg-surface)',
+  color: 'var(--theme-text-primary)',
   fontSize: 12,
   fontWeight: 500,
   cursor: 'pointer',
@@ -285,9 +276,9 @@ const linkBtnStyle: React.CSSProperties = {
 
 const codeStyle: React.CSSProperties = {
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-  fontSize: 11,
-  padding: '1px 5px',
-  borderRadius: 3,
+  fontSize: '11px',
   background: 'var(--theme-bg-surface-tint)',
+  borderRadius: 4,
+  padding: '1px 4px',
   color: 'var(--theme-text-primary)',
 };
