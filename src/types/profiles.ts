@@ -72,6 +72,10 @@ export type ProfileRegistryEntry = {
     | 'profile_preferential_treatments'
     | 'profile_credit_terms'
     | 'profile_cpe_codes'
+    | 'profile_carriers'
+    | 'profile_forwarders'
+    | 'profile_industries'
+    | 'profile_lead_sources'
     | 'profile_service_statuses';
   /** Fields to search against in the lookup query. */
   searchFields: string[];

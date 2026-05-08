@@ -8,6 +8,7 @@ import type { Customer, Industry, CustomerStatus } from "../../types/bd";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { AddCustomerPanel } from "../bd/AddCustomerPanel";
 import { CustomerLedgerDetail } from "./CustomerLedgerDetail";
+import { useCustomerProfileOptions } from "../../hooks/useCustomerProfileOptions";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,9 @@ export function AccountingCustomers() {
       return data ?? [];
     },
     staleTime: 30_000,
+  });
+  const { industries } = useCustomerProfileOptions({
+    industryValuesFromRecords: customers.map(customer => customer.industry),
   });
 
   const { data: allContacts = [] } = useQuery({
@@ -203,17 +207,7 @@ export function AccountingCustomers() {
               onChange={(v) => setIndustryFilter(v as Industry | "All")}
               options={[
                 { value: "All",                label: "All Industries" },
-                { value: "Garments",           label: "Garments" },
-                { value: "Automobile",         label: "Automobile" },
-                { value: "Energy",             label: "Energy" },
-                { value: "Food & Beverage",    label: "Food & Beverage" },
-                { value: "Heavy Equipment",    label: "Heavy Equipment" },
-                { value: "Construction",       label: "Construction" },
-                { value: "Agricultural",       label: "Agricultural" },
-                { value: "Pharmaceutical",     label: "Pharmaceutical" },
-                { value: "IT",                 label: "IT" },
-                { value: "Electronics",        label: "Electronics" },
-                { value: "General Merchandise",label: "General Merchandise" },
+                ...industries.map(industry => ({ value: industry, label: industry })),
               ]}
             />
           </div>

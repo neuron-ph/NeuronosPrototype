@@ -85,6 +85,17 @@ export async function quickCreateProfileRecord(
         if (error || !data) return null;
         return { id: data.id, label: data.company_name, profileType, source: 'linked' };
       }
+
+      case 'profile_carriers':
+      case 'profile_forwarders': {
+        const { data, error } = await supabase
+          .from(entry.source)
+          .insert({ name: trimmed })
+          .select('id, name')
+          .single();
+        if (error || !data) return null;
+        return { id: data.id, label: data.name, profileType, source: 'linked' };
+      }
       default:
         return null;
     }

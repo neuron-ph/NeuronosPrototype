@@ -7,8 +7,10 @@ import { DataTable } from '../../common/DataTable';
 import type { ColumnDef } from '../../common/DataTable';
 import { NeuronModal } from '../../ui/NeuronModal';
 import { profileRegistry } from '../../../config/profiles/profileRegistry';
+import { ENUM_SEEDS } from '../../../hooks/useEnumOptions';
 
 type Row = Record<string, unknown> & { id: string; is_active?: boolean; __isAdd?: boolean };
+type LoadIssue = { kind: 'missing_table' | 'error'; message: string } | null;
 
 const ADD_ROW_ID = '__add__';
 
@@ -25,6 +27,27 @@ const SOURCES_WITH_AUDIT_USERS = new Set([
  */
 function primaryKeyFor(profileType: string): string {
   return profileRegistry[profileType]?.admin?.formFields[0]?.key ?? 'name';
+}
+
+function fallbackSeedRows(profileType: string): Row[] | null {
+  if (!(profileType in ENUM_SEEDS)) return null;
+  const seededValues = ENUM_SEEDS[profileType as keyof typeof ENUM_SEEDS];
+  return seededValues.map((value, index) => ({
+    id: `seed:${profileType}:${value}`,
+    value,
+    label: null,
+    sort_order: (index + 1) * 10,
+    is_active: true,
+  }));
+}
+
+function isMissingTableError(error: { code?: string; message?: string } | null | undefined) {
+  const message = (error?.message ?? '').toLowerCase();
+  return error?.code === '42P01'
+    || message.includes('does not exist')
+    || message.includes('could not find the table')
+    || message.includes('relation')
+    || message.includes('schema cache');
 }
 
 export function ProfileSection({
@@ -48,6 +71,7 @@ export function ProfileSection({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
   const [archiveTarget, setArchiveTarget] = useState<Row | null>(null);
+  const [loadIssue, setLoadIssue] = useState<LoadIssue>(null);
 
   useEffect(() => {
     setSearch(initialQuery);
@@ -59,6 +83,7 @@ export function ProfileSection({
     setNewValue('');
     setEditingId(null);
     setEditingValue('');
+    setLoadIssue(null);
   }, [profileType]);
 
   const primaryKey = useMemo(() => primaryKeyFor(profileType), [profileType]);
@@ -66,6 +91,7 @@ export function ProfileSection({
   const load = useCallback(async () => {
     if (!entry || !admin) return;
     setLoading(true);
+    setLoadIssue(null);
     let q = supabase.from(entry.source).select('*');
 
     if (admin.filter) {
@@ -93,13 +119,23 @@ export function ProfileSection({
 
     const { data, error } = await q;
     if (error) {
-      toast.error(`Failed to load ${admin.pluralLabel.toLowerCase()}`);
-      setItems([]);
+      const fallbackRows = fallbackSeedRows(profileType);
+      if (isMissingTableError(error) && (fallbackRows || entry.source === 'profile_carriers' || entry.source === 'profile_forwarders')) {
+        setItems(fallbackRows ?? []);
+        setLoadIssue({
+          kind: 'missing_table',
+          message: `The source table "${entry.source}" is not available in this environment yet. Apply the matching Supabase migration to enable live editing here.`,
+        });
+      } else {
+        toast.error(`Failed to load ${admin.pluralLabel.toLowerCase()}`);
+        setItems([]);
+        setLoadIssue({ kind: 'error', message: error.message });
+      }
     } else {
       setItems((data ?? []) as Row[]);
     }
     setLoading(false);
-  }, [entry, admin, showInactive, primaryKey]);
+  }, [entry, admin, showInactive, primaryKey, profileType]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -126,6 +162,10 @@ export function ProfileSection({
   }
 
   function startAdd() {
+    if (readOnlyFallback) {
+      toast.error('Apply the required Supabase migration before editing this section.');
+      return;
+    }
     // Cancel any in-progress edit
     setEditingId(null);
     setEditingValue('');
@@ -139,7 +179,7 @@ export function ProfileSection({
   }
 
   async function handleCreate() {
-    if (!entry || !admin) return;
+    if (!entry || !admin || readOnlyFallback) return;
     const value = newValue.trim();
     if (!value) {
       cancelAdd();
@@ -168,6 +208,10 @@ export function ProfileSection({
   }
 
   function startEdit(item: Row) {
+    if (readOnlyFallback) {
+      toast.error('Apply the required Supabase migration before editing this section.');
+      return;
+    }
     if (adding) cancelAdd();
     setEditingId(item.id);
     setEditingValue(String(item[primaryKey] ?? ''));
@@ -179,7 +223,7 @@ export function ProfileSection({
   }
 
   async function commitEdit(item: Row) {
-    if (!entry) return;
+    if (!entry || readOnlyFallback) return;
     const value = editingValue.trim();
     if (!value) {
       cancelEdit();
@@ -198,7 +242,7 @@ export function ProfileSection({
   }
 
   async function handleArchive(item: Row, activate: boolean) {
-    if (!entry || !admin) return;
+    if (!entry || !admin || readOnlyFallback) return;
     const update: Record<string, unknown> = { is_active: activate };
     if (SOURCES_WITH_AUDIT_USERS.has(entry.source)) update.updated_by = user?.id ?? null;
     const { error } = await supabase.from(entry.source).update(update).eq('id', item.id);
@@ -210,6 +254,7 @@ export function ProfileSection({
 
   const supportsArchive = entry.source !== 'service_providers';
   const inputLabel = admin.formFields[0]?.label ?? admin.label;
+  const readOnlyFallback = loadIssue?.kind === 'missing_table';
 
   // Prepend the synthetic add-row when in add mode
   const tableData: Row[] = useMemo(() => {
@@ -325,46 +370,48 @@ export function ProfileSection({
         }
         return (
           <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
-            {editingId === r.id ? (
-              <>
-                <IconButton
-                  onMouseDown={e => { e.preventDefault(); e.stopPropagation(); commitEdit(r); }}
-                  color="var(--theme-action-primary-bg)"
-                  title="Save"
-                >
-                  <Check size={14} />
-                </IconButton>
-                <IconButton
-                  onMouseDown={e => { e.preventDefault(); e.stopPropagation(); cancelEdit(); }}
-                  title="Cancel"
-                >
-                  <X size={14} />
-                </IconButton>
-              </>
-            ) : (
-              <>
-                <IconButton onClick={e => { e.stopPropagation(); startEdit(r); }} title="Edit">
-                  <Pencil size={13} />
-                </IconButton>
-                {r.is_active === false ? (
+            {readOnlyFallback ? null : (
+              editingId === r.id ? (
+                <>
                   <IconButton
-                    onClick={e => { e.stopPropagation(); handleArchive(r, true); }}
+                    onMouseDown={e => { e.preventDefault(); e.stopPropagation(); commitEdit(r); }}
                     color="var(--theme-action-primary-bg)"
-                    title="Reactivate"
+                    title="Save"
                   >
-                    <RotateCcw size={13} />
+                    <Check size={14} />
                   </IconButton>
-                ) : (
-                  supportsArchive && (
+                  <IconButton
+                    onMouseDown={e => { e.preventDefault(); e.stopPropagation(); cancelEdit(); }}
+                    title="Cancel"
+                  >
+                    <X size={14} />
+                  </IconButton>
+                </>
+              ) : (
+                <>
+                  <IconButton onClick={e => { e.stopPropagation(); startEdit(r); }} title="Edit">
+                    <Pencil size={13} />
+                  </IconButton>
+                  {r.is_active === false ? (
                     <IconButton
-                      onClick={e => { e.stopPropagation(); setArchiveTarget(r); }}
-                      title="Archive"
+                      onClick={e => { e.stopPropagation(); handleArchive(r, true); }}
+                      color="var(--theme-action-primary-bg)"
+                      title="Reactivate"
                     >
-                      <Archive size={13} />
+                      <RotateCcw size={13} />
                     </IconButton>
-                  )
-                )}
-              </>
+                  ) : (
+                    supportsArchive && (
+                      <IconButton
+                        onClick={e => { e.stopPropagation(); setArchiveTarget(r); }}
+                        title="Archive"
+                      >
+                        <Archive size={13} />
+                      </IconButton>
+                    )
+                  )}
+                </>
+              )
             )}
           </div>
         );
@@ -372,7 +419,7 @@ export function ProfileSection({
     });
 
     return cols;
-  }, [admin, editingId, editingValue, primaryKey, showInactive, supportsArchive, adding, newValue, creating, inputLabel]);
+  }, [admin, editingId, editingValue, primaryKey, showInactive, supportsArchive, adding, newValue, creating, inputLabel, readOnlyFallback]);
 
   return (
     <div>
@@ -381,6 +428,11 @@ export function ProfileSection({
         <h2 style={sectionTitleStyle}>{admin.pluralLabel}</h2>
         {admin.description && (
           <p style={sectionDescStyle}>{admin.description}</p>
+        )}
+        {loadIssue && (
+          <div style={loadIssue.kind === 'missing_table' ? migrationCalloutStyle : errorCalloutStyle}>
+            {loadIssue.message}
+          </div>
         )}
       </div>
 
@@ -414,8 +466,12 @@ export function ProfileSection({
         </span>
         <button
           onClick={startAdd}
-          disabled={adding}
-          style={{ ...newBtnStyle, opacity: adding ? 0.5 : 1, cursor: adding ? 'default' : 'pointer' }}
+          disabled={adding || readOnlyFallback}
+          style={{
+            ...newBtnStyle,
+            opacity: adding || readOnlyFallback ? 0.5 : 1,
+            cursor: adding || readOnlyFallback ? 'default' : 'pointer',
+          }}
         >
           <Plus size={13} />
           New {admin.label.toLowerCase()}
@@ -460,6 +516,30 @@ const sectionDescStyle: React.CSSProperties = {
   color: 'var(--theme-text-muted)',
   margin: '4px 0 0',
   maxWidth: '60ch',
+};
+
+const migrationCalloutStyle: React.CSSProperties = {
+  marginTop: 12,
+  padding: '10px 12px',
+  borderRadius: 8,
+  border: '1px solid var(--theme-status-warning-fg)',
+  background: 'var(--theme-status-warning-bg)',
+  color: 'var(--theme-text-primary)',
+  fontSize: 12,
+  lineHeight: 1.5,
+  maxWidth: '72ch',
+};
+
+const errorCalloutStyle: React.CSSProperties = {
+  marginTop: 12,
+  padding: '10px 12px',
+  borderRadius: 8,
+  border: '1px solid var(--theme-status-danger-fg)',
+  background: 'var(--theme-status-danger-bg)',
+  color: 'var(--theme-text-primary)',
+  fontSize: 12,
+  lineHeight: 1.5,
+  maxWidth: '72ch',
 };
 
 const toolbarStyle: React.CSSProperties = {

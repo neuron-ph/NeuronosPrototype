@@ -16,6 +16,7 @@ import { CustomDropdown } from "../bd/CustomDropdown";
 import { AddCustomerPanel } from "../bd/AddCustomerPanel";
 import { usePermission } from "../../context/PermissionProvider";
 import type { ModuleId } from "../admin/permissionsConfig";
+import { useCustomerProfileOptions } from "../../hooks/useCustomerProfileOptions";
 
 interface CustomersListWithFiltersProps {
   userDepartment: "Business Development" | "Pricing";
@@ -57,6 +58,9 @@ export function CustomersListWithFilters({ userDepartment, moduleId, onViewCusto
   });
   const { contacts: allContacts, invalidate: invalidateContacts } = useContacts();
   const { activities } = useCRMActivities();
+  const { industries } = useCustomerProfileOptions({
+    industryValuesFromRecords: allCustomers.map(customer => customer.industry),
+  });
 
   // Client-side filtering for search, industry, status (replaces server-side filtering)
   const customers = allCustomers.filter(customer => {
@@ -397,17 +401,7 @@ export function CustomersListWithFilters({ userDepartment, moduleId, onViewCusto
                   onChange={(value) => setIndustryFilter(value as Industry | "All")}
                   options={[
                     { value: "All", label: "All Industries" },
-                    { value: "Garments", label: "Garments" },
-                    { value: "Automobile", label: "Automobile" },
-                    { value: "Energy", label: "Energy" },
-                    { value: "Food & Beverage", label: "Food & Beverage" },
-                    { value: "Heavy Equipment", label: "Heavy Equipment" },
-                    { value: "Construction", label: "Construction" },
-                    { value: "Agricultural", label: "Agricultural" },
-                    { value: "Pharmaceutical", label: "Pharmaceutical" },
-                    { value: "IT", label: "IT" },
-                    { value: "Electronics", label: "Electronics" },
-                    { value: "General Merchandise", label: "General Merchandise" }
+                    ...industries.map(industry => ({ value: industry, label: industry }))
                   ]}
                 />
               </div>

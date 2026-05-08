@@ -12,6 +12,7 @@ type SidebarItem = {
   label: string;
   description: string;
   isGovernance?: boolean;
+  group: 'profiles' | 'vendors' | 'system';
 };
 
 export function ProfilingModule() {
@@ -20,19 +21,35 @@ export function ProfilingModule() {
 
   const sidebarItems: SidebarItem[] = useMemo(() => {
     const profileSections: SidebarItem[] = Object.entries(profileRegistry)
-      // Vendor-managed types (anything with a providerTag) live in /pricing/vendors,
-      // not Profiling — they require id-generation and richer fields the Vendors
-      // module owns. Excluding them from the sidebar matches the governance rules.
       .filter(([, entry]) => !!entry.admin && !entry.providerTag)
       .map(([key, entry]) => ({
         key,
         label: entry.admin!.pluralLabel,
         description: entry.admin!.description,
+        group: 'profiles',
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
+
+    const vendorSections: SidebarItem[] = Object.entries(profileRegistry)
+      .filter(([, entry]) => !!entry.admin && !!entry.providerTag)
+      .map(([key, entry]) => ({
+        key,
+        label: entry.admin!.pluralLabel,
+        description: entry.admin!.description,
+        group: 'vendors',
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+
     return [
       ...profileSections,
-      { key: GOVERNANCE_KEY, label: 'Governance', description: 'Manual-entry risk and strictness rules.', isGovernance: true },
+      ...vendorSections,
+      {
+        key: GOVERNANCE_KEY,
+        label: 'Governance',
+        description: 'Manual-entry risk and strictness rules.',
+        isGovernance: true,
+        group: 'system',
+      },
     ];
   }, []);
 
@@ -42,7 +59,6 @@ export function ProfilingModule() {
   const rawSection = searchParams.get('section');
   const urlQuery = searchParams.get('q') ?? '';
 
-  // Legacy redirects
   useEffect(() => {
     if (rawTab === 'assignment_roles') {
       navigate('/admin/users?tab=teams&section=operations', { replace: true });
@@ -51,16 +67,12 @@ export function ProfilingModule() {
     if (rawTab === 'providers' || rawSection === 'providers') {
       const query = urlQuery ? `?q=${encodeURIComponent(urlQuery)}` : '';
       navigate(`/pricing/vendors${query}`, { replace: true });
-      return;
-    }
-    // Vendor-managed profile types live in /pricing/vendors
-    if (rawSection && profileRegistry[rawSection]?.providerTag) {
-      const query = urlQuery ? `?q=${encodeURIComponent(urlQuery)}` : '';
-      navigate(`/pricing/vendors${query}`, { replace: true });
     }
   }, [navigate, rawTab, rawSection, urlQuery]);
 
-  const selected = (rawSection && validKeys.has(rawSection)) ? rawSection : sidebarItems[0]?.key ?? GOVERNANCE_KEY;
+  const selected = rawSection && validKeys.has(rawSection)
+    ? rawSection
+    : sidebarItems[0]?.key ?? GOVERNANCE_KEY;
   const selectedItem = sidebarItems.find(s => s.key === selected);
 
   function setSelected(key: string) {
@@ -110,8 +122,9 @@ function Sidebar({
   selected: string;
   onSelect: (key: string) => void;
 }) {
-  const profileItems = items.filter(i => !i.isGovernance);
-  const systemItems = items.filter(i => i.isGovernance);
+  const profileItems = items.filter(i => i.group === 'profiles');
+  const vendorItems = items.filter(i => i.group === 'vendors');
+  const systemItems = items.filter(i => i.group === 'system');
 
   return (
     <nav style={sidebarStyle}>
@@ -119,6 +132,14 @@ function Sidebar({
       {profileItems.map(item => (
         <SidebarButton key={item.key} item={item} active={item.key === selected} onSelect={onSelect} />
       ))}
+      {vendorItems.length > 0 && (
+        <>
+          <div style={{ ...sidebarGroupLabelStyle, marginTop: 16 }}>Vendor Profiles</div>
+          {vendorItems.map(item => (
+            <SidebarButton key={item.key} item={item} active={item.key === selected} onSelect={onSelect} />
+          ))}
+        </>
+      )}
       {systemItems.length > 0 && (
         <>
           <div style={{ ...sidebarGroupLabelStyle, marginTop: 16 }}>System</div>
@@ -157,10 +178,6 @@ function SidebarButton({
     </button>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
 
 const pageTitleStyle: React.CSSProperties = {
   fontSize: '28px',

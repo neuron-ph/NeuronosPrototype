@@ -11,18 +11,7 @@ export type LeadStatus =
   | "Connected" 
   | "Bad timing";
 
-export type Industry =
-  | "Garments"
-  | "Automobile"
-  | "Energy"
-  | "Food & Beverage"
-  | "Heavy Equipment"
-  | "Construction"
-  | "Agricultural"
-  | "Pharmaceutical"
-  | "IT"
-  | "Electronics"
-  | "General Merchandise";
+export type Industry = string;
 
 export type CustomerStatus = "Prospect" | "Active" | "Inactive";
 
@@ -90,7 +79,7 @@ export interface Customer {
   registered_address?: string;
   status: CustomerStatus;
   lead_source?: string;
-  owner_id?: string;
+  owner_id?: string | null;
   client_type?: "Local" | "International";
   credit_terms?: string;
   phone?: string;

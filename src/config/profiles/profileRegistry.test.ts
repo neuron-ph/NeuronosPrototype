@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { profileRegistry } from './profileRegistry';
 
 const EXPECTED_ADMIN_TYPES = [
+  'country',
   'port',
   'warehouse',
-  'country',
   'carrier',
   'forwarder',
   'consolidator',
@@ -14,6 +14,24 @@ const EXPECTED_ADMIN_TYPES = [
   'driver',
   'helper',
   'vehicle',
+  'industry',
+  'lead_source',
+  'mode',
+  'movement',
+  'incoterms',
+  'cargo_type',
+  'cargo_nature',
+  'brokerage_type',
+  'customs_entry',
+  'customs_entry_procedure',
+  'truck_type',
+  'selectivity_color',
+  'examination',
+  'container_type',
+  'package_type',
+  'preferential_treatment',
+  'credit_terms',
+  'cpe_code',
 ];
 
 const EXPECTED_NON_ADMIN_TYPES = [
@@ -28,7 +46,7 @@ const EXPECTED_NON_ADMIN_TYPES = [
 ];
 
 describe('profileRegistry admin metadata', () => {
-  it('exposes exactly the 12 expected sections as flat admin entries', () => {
+  it('exposes exactly the expected admin profiling sections', () => {
     const adminTypes = Object.entries(profileRegistry)
       .filter(([, e]) => !!e.admin)
       .map(([k]) => k)
@@ -52,12 +70,21 @@ describe('profileRegistry admin metadata', () => {
     }
   });
 
-  it('service_provider sections all use arrayContainsFilter on booking_profile_tags', () => {
-    const serviceProviderTypes = ['carrier', 'forwarder', 'consolidator', 'shipping_line', 'trucking_company', 'insurer'];
+  it('shared vendor sections use arrayContainsFilter on booking_profile_tags', () => {
+    const serviceProviderTypes = ['consolidator', 'shipping_line', 'trucking_company', 'insurer'];
     for (const t of serviceProviderTypes) {
       const admin = profileRegistry[t]?.admin;
       expect(admin?.arrayContainsFilter?.booking_profile_tags).toBe(t);
     }
+  });
+
+  it('carrier and forwarder are decoupled into standalone profile tables', () => {
+    expect(profileRegistry.carrier?.source).toBe('profile_carriers');
+    expect(profileRegistry.forwarder?.source).toBe('profile_forwarders');
+    expect(profileRegistry.carrier?.admin?.columns[0]?.key).toBe('name');
+    expect(profileRegistry.forwarder?.admin?.columns[0]?.key).toBe('name');
+    expect(profileRegistry.carrier?.admin?.arrayContainsFilter).toBeUndefined();
+    expect(profileRegistry.forwarder?.admin?.arrayContainsFilter).toBeUndefined();
   });
 
   it('trade-party types are managed inside each Customer profile, not as flat sections', () => {
