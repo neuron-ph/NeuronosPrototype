@@ -50,6 +50,10 @@ function isMissingTableError(error: { code?: string; message?: string } | null |
     || message.includes('schema cache');
 }
 
+function normalizeDuplicateKey(value: string) {
+  return value.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
 export function ProfileSection({
   profileType,
   initialQuery = '',
@@ -87,6 +91,7 @@ export function ProfileSection({
   }, [profileType]);
 
   const primaryKey = useMemo(() => primaryKeyFor(profileType), [profileType]);
+  const duplicateGuardEnabled = admin?.duplicateGuard === 'normalized-primary';
 
   const load = useCallback(async () => {
     if (!entry || !admin) return;
@@ -139,6 +144,38 @@ export function ProfileSection({
 
   useEffect(() => { load(); }, [load]);
 
+  const findDuplicate = useCallback(async (candidate: string, excludeId?: string) => {
+    if (!entry || !admin || !duplicateGuardEnabled) return null;
+    const normalizedCandidate = normalizeDuplicateKey(candidate);
+    if (!normalizedCandidate) return null;
+
+    let q = supabase.from(entry.source).select(`id, ${primaryKey}, is_active`);
+    if (admin.filter) {
+      for (const [col, val] of Object.entries(admin.filter)) {
+        if (Array.isArray(val)) {
+          q = q.in(col, val as never[]);
+        } else {
+          q = q.eq(col, val as never);
+        }
+      }
+    }
+    if (admin.arrayContainsFilter) {
+      for (const [col, val] of Object.entries(admin.arrayContainsFilter)) {
+        q = q.contains(col, [val]);
+      }
+    }
+
+    const { data, error } = await q;
+    if (error) return null;
+
+    return ((data ?? []) as Row[]).find(row => {
+      if (excludeId && row.id === excludeId) return false;
+      const currentValue = row[primaryKey];
+      return typeof currentValue === 'string'
+        && normalizeDuplicateKey(currentValue) === normalizedCandidate;
+    }) ?? null;
+  }, [entry, admin, duplicateGuardEnabled, primaryKey]);
+
   const filtered = useMemo(() => {
     if (!entry || !admin) return [];
     const q = search.trim().toLowerCase();
@@ -183,6 +220,15 @@ export function ProfileSection({
     const value = newValue.trim();
     if (!value) {
       cancelAdd();
+      return;
+    }
+    const duplicate = await findDuplicate(value);
+    if (duplicate) {
+      toast.error(
+        duplicate.is_active === false
+          ? `${admin.label} already exists as an archived entry. Reactivate it instead of creating a duplicate.`
+          : `${admin.label} already exists. Duplicates are not allowed in Profiling.`,
+      );
       return;
     }
     setCreating(true);
@@ -231,6 +277,15 @@ export function ProfileSection({
     }
     if (value === String(item[primaryKey] ?? '')) {
       cancelEdit();
+      return;
+    }
+    const duplicate = await findDuplicate(value, item.id);
+    if (duplicate) {
+      toast.error(
+        duplicate.is_active === false
+          ? `${admin.label} already exists as an archived entry. Reactivate it instead of creating a duplicate.`
+          : `${admin.label} already exists. Duplicates are not allowed in Profiling.`,
+      );
       return;
     }
     const update: Record<string, unknown> = { [primaryKey]: value };

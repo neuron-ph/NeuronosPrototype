@@ -36,6 +36,7 @@ export const profileRegistry: Record<string, ProfileRegistryEntry> = {
       label: 'Country',
       pluralLabel: 'Countries',
       description: 'Country records, priority order, and active availability.',
+      duplicateGuard: 'normalized-primary',
       orderBy: { column: 'sort_order', ascending: true },
       columns: [
         { key: 'iso_code', header: 'ISO', width: '80px', type: 'monospace' },
@@ -61,6 +62,7 @@ export const profileRegistry: Record<string, ProfileRegistryEntry> = {
       label: 'Port',
       pluralLabel: 'Ports',
       description: 'Ports and airports referenced from quotations and bookings.',
+      duplicateGuard: 'normalized-primary',
       filter: { kind: 'port' },
       insertDefaults: { kind: 'port' },
       columns: [
@@ -189,6 +191,7 @@ export const profileRegistry: Record<string, ProfileRegistryEntry> = {
       label: 'Warehouse',
       pluralLabel: 'Warehouses',
       description: 'Warehouses, yards, and empty-return locations.',
+      duplicateGuard: 'normalized-primary',
       filter: { kind: 'warehouse' },
       insertDefaults: { kind: 'warehouse' },
       columns: [
@@ -258,6 +261,7 @@ export const profileRegistry: Record<string, ProfileRegistryEntry> = {
       label: 'Vehicle',
       pluralLabel: 'Vehicles',
       description: 'Vehicle records and capacity references.',
+      duplicateGuard: 'normalized-primary',
       orderBy: { column: 'plate_number', ascending: true },
       columns: [
         { key: 'plate_number', header: 'Plate Number', width: '160px', type: 'monospace' },
@@ -339,6 +343,7 @@ function enumProfile(
       label,
       pluralLabel,
       description,
+      duplicateGuard: 'normalized-primary',
       orderBy: { column: 'sort_order', ascending: true },
       columns: [
         { key: 'value', header: 'Value' },
@@ -373,6 +378,7 @@ function serviceProviderAdmin(
     label,
     pluralLabel,
     description,
+    duplicateGuard: 'normalized-primary',
     arrayContainsFilter: { booking_profile_tags: providerTag },
     insertDefaults: { booking_profile_tags: [providerTag], provider_type: providerTag },
     orderBy: { column: 'company_name', ascending: true },
@@ -400,6 +406,7 @@ function namedProfileAdmin(
     label,
     pluralLabel,
     description,
+    duplicateGuard: 'normalized-primary',
     orderBy: { column: 'sort_order', ascending: true },
     columns: [
       { key: 'name', header: 'Name' },
