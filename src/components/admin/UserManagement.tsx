@@ -43,6 +43,10 @@ import {
   TeamAssignmentRoleChips,
   TeamPoolEditor,
 } from "./TeamPoolEditor";
+import {
+  canCreateAdminUsers,
+  canViewAdminUsersTab,
+} from "../../lib/adminUsersPermissions";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -340,6 +344,7 @@ function UsersTab({
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { can } = usePermission();
   const [filters, setFilters] = useState<FiltersState>({ search: "", dept: "", role: "", status: "", overrides: "all" });
 
   useEffect(() => {
@@ -509,13 +514,19 @@ function UsersTab({
     <div style={{ textAlign: "center", padding: "64px 0" }}>
       <Users size={36} style={{ color: "var(--neuron-ui-muted)", margin: "0 auto 16px" }} />
       <p style={{ fontSize: 14, fontWeight: 500, color: "var(--neuron-ink-primary)", marginBottom: 4 }}>No members yet</p>
-      <p style={{ fontSize: 13, color: "var(--neuron-ink-muted)", marginBottom: 20 }}>Create an account to add someone to your workspace.</p>
-      <button
-        onClick={() => navigate("/admin/users/new")}
-        style={{ height: 38, padding: "0 18px", borderRadius: 8, background: "var(--neuron-bg-elevated)", border: "1px solid var(--neuron-action-primary)", color: "var(--neuron-action-primary)", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}
-      >
-        <Plus size={15} /> Create Account
-      </button>
+      <p style={{ fontSize: 13, color: "var(--neuron-ink-muted)", marginBottom: 20 }}>
+        {canCreateAdminUsers(can)
+          ? "Create an account to add someone to your workspace."
+          : "No user accounts have been created yet."}
+      </p>
+      {canCreateAdminUsers(can) && (
+        <button
+          onClick={() => navigate("/admin/users/new")}
+          style={{ height: 38, padding: "0 18px", borderRadius: 8, background: "var(--neuron-bg-elevated)", border: "1px solid var(--neuron-action-primary)", color: "var(--neuron-action-primary)", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}
+        >
+          <Plus size={15} /> Create Account
+        </button>
+      )}
     </div>
   );
 
@@ -528,14 +539,16 @@ function UsersTab({
             ({filtered.length}{filtered.length !== users.length ? ` of ${users.length}` : ""})
           </span>
         </p>
-        <button
-          onClick={() => navigate("/admin/users/new")}
-          style={{ height: 36, padding: "0 14px", borderRadius: 8, background: "var(--neuron-action-primary)", border: "none", color: "var(--neuron-action-primary-text)", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
-          onMouseEnter={e => { e.currentTarget.style.background = "var(--neuron-action-primary-hover)"; }}
-          onMouseLeave={e => { e.currentTarget.style.background = "var(--neuron-action-primary)"; }}
-        >
-          <Plus size={15} /> Create Account
-        </button>
+        {canCreateAdminUsers(can) && (
+          <button
+            onClick={() => navigate("/admin/users/new")}
+            style={{ height: 36, padding: "0 14px", borderRadius: 8, background: "var(--neuron-action-primary)", border: "none", color: "var(--neuron-action-primary-text)", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
+            onMouseEnter={e => { e.currentTarget.style.background = "var(--neuron-action-primary-hover)"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "var(--neuron-action-primary)"; }}
+          >
+            <Plus size={15} /> Create Account
+          </button>
+        )}
       </div>
 
       <FilterBar filters={filters} onChange={setFilters} />
@@ -2030,9 +2043,9 @@ export function UserManagement() {
   const { can } = usePermission();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const canViewUsersTab          = can("admin_users_tab", "view");
-  const canViewTeamsTab          = can("admin_teams_tab", "view");
-  const canViewAccessProfilesTab = can("admin_access_profiles_tab", "view");
+  const canViewUsersTab = canViewAdminUsersTab(can, "users");
+  const canViewTeamsTab = canViewAdminUsersTab(can, "teams");
+  const canViewAccessProfilesTab = canViewAdminUsersTab(can, "profiles");
 
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     const requestedTab = searchParams.get("tab");

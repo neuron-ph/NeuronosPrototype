@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
+import { hasAdminUsersGrant } from "./adminUsersPermissions.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -41,10 +42,10 @@ serve(async (req) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // Fetch caller's id and department (id needed for granted_by on profile application)
+    // Fetch caller identity (id needed for granted_by on profile application).
     const { data: callerProfile, error: profileError } = await adminClient
       .from("users")
-      .select("id, department")
+      .select("id, department, role")
       .eq("auth_id", callerAuthId)
       .maybeSingle();
 
@@ -55,9 +56,28 @@ serve(async (req) => {
       );
     }
 
-    if (callerProfile.department !== "Executive") {
+    const { data: callerOverride, error: callerOverrideError } = await adminClient
+      .from("permission_overrides")
+      .select("module_grants")
+      .eq("user_id", callerProfile.id)
+      .maybeSingle();
+
+    if (callerOverrideError) {
       return new Response(
-        JSON.stringify({ success: false, error: "Only Executive accounts can create users" }),
+        JSON.stringify({ success: false, error: "Could not verify caller permissions" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const callerModuleGrants = (callerOverride?.module_grants ?? {}) as Record<string, boolean>;
+    const canCreateUsers =
+      callerProfile.department === "Executive" ||
+      callerProfile.role === "executive" ||
+      hasAdminUsersGrant(callerModuleGrants, "create", "users");
+
+    if (!canCreateUsers) {
+      return new Response(
+        JSON.stringify({ success: false, error: "You do not have permission to create users" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

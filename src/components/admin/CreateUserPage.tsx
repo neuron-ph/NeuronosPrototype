@@ -8,6 +8,8 @@ import { useUser } from "../../hooks/useUser";
 import { useTeams } from "../../hooks/useTeams";
 import { queryKeys } from "../../lib/queryKeys";
 import { logCreation } from "../../utils/activityLog";
+import { usePermission } from "../../context/PermissionProvider";
+import { canCreateAdminUsers } from "../../lib/adminUsersPermissions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import {
   DEPARTMENTS, ROLES, TEAM_ROLES, SERVICE_TYPE_OPTIONS,
@@ -103,6 +105,7 @@ export function CreateUserPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user: currentUser } = useUser();
+  const { can } = usePermission();
 
   const [name, setName]           = useState("");
   const [email, setEmail]         = useState("");
@@ -238,6 +241,49 @@ export function CreateUserPage() {
   const initials = name.trim().split(/\s+/).map(w => w[0]).join("").toUpperCase().slice(0, 2) || "?";
   const deptColor = DEPT_COLOR[department];
   const isExecutive = role === "executive" || department === "Executive";
+  const canCreateUsers = canCreateAdminUsers(can);
+
+  if (!canCreateUsers) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", height: "100%", backgroundColor: "var(--neuron-bg-elevated)" }}>
+        <div style={{ padding: "14px 32px", borderBottom: "1px solid var(--neuron-ui-border)", display: "flex", alignItems: "center", gap: 16 }}>
+          <button
+            type="button"
+            onClick={() => navigate("/admin/users")}
+            aria-label="Back to Users"
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              border: "none",
+              background: "none",
+              cursor: "pointer",
+              color: "var(--neuron-ink-muted)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <ArrowLeft size={18} />
+          </button>
+          <div>
+            <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: "0 0 2px" }}>Users / New Account</p>
+            <h1 style={{ fontSize: 20, fontWeight: 600, color: "var(--neuron-ink-primary)", margin: 0 }}>Create New Account</h1>
+          </div>
+        </div>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 32 }}>
+          <div style={{ maxWidth: 420, width: "100%", border: "1px solid var(--neuron-ui-border)", borderRadius: 12, padding: 24, backgroundColor: "var(--neuron-bg-elevated)" }}>
+            <p style={{ fontSize: 16, fontWeight: 600, color: "var(--neuron-ink-primary)", margin: "0 0 8px" }}>
+              You can view users, but you do not have permission to create accounts.
+            </p>
+            <p style={{ fontSize: 13, color: "var(--neuron-ink-muted)", margin: 0 }}>
+              Grant `create` access on the Users admin module to allow account creation for this role.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", backgroundColor: "var(--neuron-bg-elevated)" }}>
