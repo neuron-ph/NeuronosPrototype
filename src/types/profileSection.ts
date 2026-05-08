@@ -39,6 +39,12 @@ export type ProfileAdminConfig = {
   pluralLabel: string;
   description: string;
   /**
+   * Optional duplicate-prevention rule applied by the generic Profiling UI.
+   * `normalized-primary` compares the first form field after trim +
+   * whitespace-collapse + case-folding, scoped by the section filter.
+   */
+  duplicateGuard?: 'none' | 'normalized-primary';
+  /**
    * Filter applied to the source table. Values may be scalar (uses .eq) or
    * arrays (uses .in). e.g. { kind: 'port' } or { role_scope: ['consignee', 'both'] }
    */
