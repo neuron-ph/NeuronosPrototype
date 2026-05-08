@@ -54,6 +54,25 @@ function normalizeDuplicateKey(value: string) {
   return value.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
+function humanizeProfileError(
+  error: { code?: string; message?: string } | null | undefined,
+  label: string,
+  action: 'create' | 'save',
+): string {
+  const message = error?.message ?? '';
+  const isUniqueViolation =
+    error?.code === '23505' ||
+    /duplicate key value/i.test(message) ||
+    /unique constraint/i.test(message);
+  if (isUniqueViolation) {
+    return `That ${label.toLowerCase()} already exists. Try a different name, or reactivate the archived entry if you have one.`;
+  }
+  if (action === 'create') {
+    return `Couldn't add the ${label.toLowerCase()}. Please try again.`;
+  }
+  return `Couldn't save your changes. Please try again.`;
+}
+
 export function ProfileSection({
   profileType,
   initialQuery = '',
@@ -226,8 +245,8 @@ export function ProfileSection({
     if (duplicate) {
       toast.error(
         duplicate.is_active === false
-          ? `${admin.label} already exists as an archived entry. Reactivate it instead of creating a duplicate.`
-          : `${admin.label} already exists. Duplicates are not allowed in Profiling.`,
+          ? `That ${admin.label.toLowerCase()} is already in your archive — reactivate it instead of adding a new one.`
+          : `That ${admin.label.toLowerCase()} already exists. Try a different name.`,
       );
       return;
     }
@@ -244,7 +263,7 @@ export function ProfileSection({
     const { error } = await supabase.from(entry.source).insert(insertPayload);
     setCreating(false);
     if (error) {
-      toast.error(`Create failed: ${error.message}`);
+      toast.error(humanizeProfileError(error, admin.label, 'create'));
       return;
     }
     toast.success(`${admin.label} created`);
@@ -283,15 +302,15 @@ export function ProfileSection({
     if (duplicate) {
       toast.error(
         duplicate.is_active === false
-          ? `${admin.label} already exists as an archived entry. Reactivate it instead of creating a duplicate.`
-          : `${admin.label} already exists. Duplicates are not allowed in Profiling.`,
+          ? `That ${admin.label.toLowerCase()} is already in your archive — reactivate it instead of adding a new one.`
+          : `That ${admin.label.toLowerCase()} already exists. Try a different name.`,
       );
       return;
     }
     const update: Record<string, unknown> = { [primaryKey]: value };
     if (SOURCES_WITH_AUDIT_USERS.has(entry.source)) update.updated_by = user?.id ?? null;
     const { error } = await supabase.from(entry.source).update(update).eq('id', item.id);
-    if (error) { toast.error('Save failed'); return; }
+    if (error) { toast.error(humanizeProfileError(error, admin.label, 'save')); return; }
     cancelEdit();
     load();
   }
