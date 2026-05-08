@@ -4,6 +4,8 @@ import { toast } from "sonner@2.0.3";
 import { supabase } from "../../utils/supabase/client";
 import { useUser } from "../../hooks/useUser";
 import { logCreation } from "../../utils/activityLog";
+import { usePermission } from "../../context/PermissionProvider";
+import { canCreateAdminUsers } from "../../lib/adminUsersPermissions";
 import { SidePanel } from "../common/SidePanel";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import {
@@ -33,6 +35,7 @@ interface Props {
 
 export function CreateUserPanel({ isOpen, onClose, onCreated }: Props) {
   const { user } = useUser();
+  const { can } = usePermission();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [department, setDepartment] = useState("");
@@ -72,6 +75,10 @@ export function CreateUserPanel({ isOpen, onClose, onCreated }: Props) {
   };
 
   const handleSubmit = async () => {
+    if (!canCreateAdminUsers(can)) {
+      toast.error("You do not have permission to create accounts.");
+      return;
+    }
     if (!validate()) return;
     setSubmitting(true);
     try {
