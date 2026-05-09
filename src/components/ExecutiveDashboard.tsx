@@ -21,6 +21,7 @@ import { NeuronCard } from "./NeuronCard";
 import { EVoucherApprovalQueue } from "./accounting/evouchers/EVoucherApprovalQueue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { useState, useMemo, memo, useRef, useEffect } from "react";
+import { useUser } from "../hooks/useUser";
 
 interface ExecutiveDashboardProps {
   currentUser?: { name: string; email: string } | null;
@@ -101,6 +102,7 @@ HeroMetric.displayName = 'HeroMetric';
 
 export function ExecutiveDashboard({ currentUser }: ExecutiveDashboardProps) {
   const [timeframe, setTimeframe] = useState("month");
+  const { user: authUser } = useUser();
 
   // ⚡ PERFORMANCE: Memoize all chart data to prevent recreation on every render
   const cashFlowData = useMemo(() => [
@@ -694,7 +696,7 @@ export function ExecutiveDashboard({ currentUser }: ExecutiveDashboardProps) {
         {/* CEO E-Voucher Approval Queue */}
         <EVoucherApprovalQueue
           view="pending-ceo"
-          currentUser={currentUser ? { id: "", name: currentUser.name, email: currentUser.email, department: "Executive", role: "director" } : undefined}
+          currentUser={authUser ? { id: authUser.id, name: authUser.name, email: authUser.email, department: authUser.department ?? "Executive", role: authUser.role ?? "executive" } : undefined}
           title="E-Vouchers Awaiting CEO Approval"
         />
       </div>

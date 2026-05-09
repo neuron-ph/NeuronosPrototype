@@ -10,6 +10,7 @@ import { ExecutionStatus } from "../../types/operations";
 import { toast } from "../ui/toast-utils";
 import { UnifiedBillingsTab } from "../shared/billings/UnifiedBillingsTab";
 import { BookingCommentsTab } from "../shared/BookingCommentsTab";
+import { usePermission } from "../../context/PermissionProvider";
 
 interface ProjectBookingReadOnlyViewProps {
   bookingId: string;
@@ -36,8 +37,9 @@ export function ProjectBookingReadOnlyView({
   onOpenCancelDelete,
 }: ProjectBookingReadOnlyViewProps) {
   const [activeTab, setActiveTab] = useState<DetailTab>("booking-info");
+  const { can } = usePermission();
 
-  const isPricing = currentUser?.department === "Pricing";
+  const canCancelOrDelete = can("ops_bookings", "delete");
 
   const { data: booking = null, isFetching: isLoading } = useQuery({
     queryKey: [...queryKeys.bookings.detail(bookingId), bookingType],
@@ -191,8 +193,8 @@ export function ProjectBookingReadOnlyView({
                   />
                 )}
 
-                {/* Cancel / Delete — Pricing only */}
-                {isPricing && booking && (
+                {/* Cancel / Delete — anyone with delete grant */}
+                {canCancelOrDelete && booking && (
                   <button
                     onClick={() => onOpenCancelDelete?.()}
                     style={{

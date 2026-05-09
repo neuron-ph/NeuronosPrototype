@@ -94,7 +94,7 @@ export type ModuleId =
   // ─── HR ──────────────────────────────────────────────────────────────────────
   | "hr"
   // ─── Executive / Admin ────────────────────────────────────────────────────────
-  | "exec_activity_log" | "exec_users" | "exec_profiling"
+  | "exec_activity_log" | "exec_users" | "exec_profiling" | "exec_memos"
   | "admin_users_tab" | "admin_teams_tab" | "admin_access_profiles_tab"
   // ─── Inbox ───────────────────────────────────────────────────────────────────
   | "inbox" | "inbox_entity_picker"
@@ -157,67 +157,8 @@ export const PERM_MODULES: PermModule[] = (() => {
 
 // ─── Baseline role constants ─────────────────────────────────────────────────
 
-const MANAGER_ACTIONS: ActionId[]    = ["view", "create", "edit", "approve", "delete", "export"];
-const SUPERVISOR_ACTIONS: ActionId[] = ["view", "create", "edit", "approve"];
-const LEADER_ACTIONS: ActionId[]     = ["view", "create", "edit"];
-const STAFF_ACTIONS: ActionId[]      = ["view"];
-
-const INBOX_DEPT    = "Inbox";
-const PERSONAL_DEPT = "Personal";
-
-export function getInheritedPermission(
-  role: string,
-  department: string,
-  moduleId: ModuleId,
-  action: ActionId
-): boolean {
-  const mod = PERM_MODULES.find((m) => m.id === moduleId);
-  if (!mod) return false;
-
-  // Executive dept or executive role → full access
-  if (department === "Executive" || role === "executive") return true;
-
-  // Inbox and personal tabs: all authenticated users can view
-  if (mod.dept === INBOX_DEPT || mod.dept === PERSONAL_DEPT) {
-    return action === "view";
-  }
-
-  const ownDept = mod.dept === department;
-  if (!ownDept) return false;
-
-  // ─── Tab-specific baseline rules ─────────────────────────────────────────────
-
-  // Booking billings tab: supervisor+ can view; manager+ for mutations
-  if (moduleId === "ops_bookings_billings_tab") {
-    if (action === "view") return role === "supervisor" || role === "manager";
-    return role === "manager";
-  }
-
-  // Project billings tab: same rule as booking billings
-  if (moduleId === "ops_projects_billings_tab") {
-    if (action === "view") return role === "supervisor" || role === "manager";
-    return false;
-  }
-
-  // ─── Standard role checks ─────────────────────────────────────────────────────
-  if (role === "manager")     return MANAGER_ACTIONS.includes(action);
-  if (role === "supervisor")  return SUPERVISOR_ACTIONS.includes(action);
-  if (role === "team_leader") return LEADER_ACTIONS.includes(action);
-  if (role === "staff")       return STAFF_ACTIONS.includes(action);
-
-  return false;
-}
-
-export function getEffectivePermission(
-  role: string,
-  department: string,
-  moduleId: ModuleId,
-  action: ActionId,
-  moduleGrants: Record<string, boolean>
-): { granted: boolean; isCustom: boolean } {
-  const key = `${moduleId}:${action}`;
-  if (key in moduleGrants) {
-    return { granted: moduleGrants[key], isCustom: true };
-  }
-  return { granted: getInheritedPermission(role, department, moduleId, action), isCustom: false };
-}
+// getInheritedPermission and getEffectivePermission have been retired.
+// Access Configuration is now the source of truth — all access decisions go
+// through PermissionProvider's `can(...)` (frontend) or
+// public.current_user_has_module_permission(...) (DB). Do not reintroduce
+// role/department-derived baselines.

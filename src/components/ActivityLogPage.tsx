@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Activity, Download, ArrowRight, Circle, Search, ChevronRight } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useUser } from "../hooks/useUser";
 import { supabase } from "../utils/supabase/client";
 import { useNavigate } from "react-router";
 import { CustomDropdown } from "./bd/CustomDropdown";
 import { NeuronRefreshButton } from "./shared/NeuronRefreshButton";
+import { usePermission } from "../context/PermissionProvider";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -176,17 +176,16 @@ function SkeletonRow() {
 // ─── Main component ────────────────────────────────────────────────────────────
 
 export function ActivityLogPage() {
-  const { effectiveRole, effectiveDepartment } = useUser();
+  const { can } = usePermission();
   const navigate = useNavigate();
 
-  const isExecutive = effectiveDepartment === "Executive";
-  const isManager   = effectiveRole === "manager" || effectiveRole === "director";
-  const hasAccess   = isExecutive || isManager;
+  const canViewActivityLog = can("exec_activity_log", "view");
+  const canExportActivityLog = can("exec_activity_log", "export");
 
   // ── Filters ────────────────────────────────────────────────────────────────
   const [entityFilter, setEntityFilter]   = useState("all");
   const [actionFilter, setActionFilter]   = useState("all");
-  const [deptFilter,   setDeptFilter]     = useState(isExecutive ? "all" : (effectiveDepartment ?? "all"));
+  const [deptFilter,   setDeptFilter]     = useState("all");
   const [userFilter,   setUserFilter]     = useState("all");
   const [dateFrom,     setDateFrom]       = useState(() => new Date().toISOString().split("T")[0]);
   const [dateTo,       setDateTo]         = useState(() => new Date().toISOString().split("T")[0]);
@@ -207,14 +206,14 @@ export function ActivityLogPage() {
 
   // ── Users dropdown by dept ──────────────────────────────────────────────────
   useEffect(() => {
-    const dept = !isExecutive ? effectiveDepartment : deptFilter !== "all" ? deptFilter : null;
+    const dept = deptFilter !== "all" ? deptFilter : null;
     if (!dept) { setUsersInDept([]); return; }
     supabase
       .from("users")
       .select("id, name")
       .eq("department", dept)
       .then(({ data }) => setUsersInDept(data ?? []));
-  }, [deptFilter, isExecutive, effectiveDepartment]);
+  }, [deptFilter]);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const loadActivities = useCallback(async () => {
@@ -226,13 +225,12 @@ export function ActivityLogPage() {
         .order("created_at", { ascending: false })
         .limit(100);
 
-      if (entityFilter !== "all")                q = q.eq("entity_type", entityFilter);
-      if (actionFilter !== "all")                q = q.eq("action_type", actionFilter);
-      if (!isExecutive)                          q = q.eq("user_department", effectiveDepartment ?? "");
-      else if (deptFilter !== "all")             q = q.eq("user_department", deptFilter);
-      if (userFilter !== "all")                  q = q.eq("user_id", userFilter);
-      if (dateFrom)                              q = q.gte("created_at", dateFrom);
-      if (dateTo)                                q = q.lte("created_at", dateTo + "T23:59:59");
+      if (entityFilter !== "all") q = q.eq("entity_type", entityFilter);
+      if (actionFilter !== "all") q = q.eq("action_type", actionFilter);
+      if (deptFilter !== "all") q = q.eq("user_department", deptFilter);
+      if (userFilter !== "all") q = q.eq("user_id", userFilter);
+      if (dateFrom) q = q.gte("created_at", dateFrom);
+      if (dateTo) q = q.lte("created_at", dateTo + "T23:59:59");
 
       const { data, count } = await q;
       if (data) {
@@ -243,11 +241,11 @@ export function ActivityLogPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [entityFilter, actionFilter, deptFilter, userFilter, dateFrom, dateTo, isExecutive, effectiveDepartment]);
+  }, [entityFilter, actionFilter, deptFilter, userFilter, dateFrom, dateTo]);
 
   // ── Realtime + initial load ─────────────────────────────────────────────────
   useEffect(() => {
-    if (!hasAccess) return;
+    if (!canViewActivityLog) return;
 
     loadActivities();
 
@@ -261,11 +259,11 @@ export function ActivityLogPage() {
     channelRef.current = ch;
     return () => { supabase.removeChannel(ch); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasAccess]);
+  }, [canViewActivityLog]);
 
   useEffect(() => {
-    if (hasAccess) loadActivities();
-  }, [entityFilter, actionFilter, deptFilter, userFilter, dateFrom, dateTo, loadActivities, hasAccess]);
+    if (canViewActivityLog) loadActivities();
+  }, [entityFilter, actionFilter, deptFilter, userFilter, dateFrom, dateTo, loadActivities, canViewActivityLog]);
 
   // ── CSV export ─────────────────────────────────────────────────────────────
   const exportCSV = () => {
@@ -299,7 +297,7 @@ export function ActivityLogPage() {
     : activities;
 
   // ── Access guard ───────────────────────────────────────────────────────────
-  if (!hasAccess) {
+  if (!canViewActivityLog) {
     return (
       <div className="h-full flex items-center justify-center" style={{ backgroundColor: "var(--theme-bg-page)" }}>
         <div style={{ maxWidth: 360, textAlign: "center" }}>
@@ -308,7 +306,7 @@ export function ActivityLogPage() {
             Access restricted
           </h2>
           <p style={{ fontSize: 13, color: "var(--theme-text-muted)", lineHeight: 1.6 }}>
-            The Activity Monitor is available to managers and executives only.
+            Your access profile does not currently include Activity Monitor access.
           </p>
         </div>
       </div>
@@ -332,9 +330,7 @@ export function ActivityLogPage() {
               Activity Monitor
             </h1>
             <p style={{ fontSize: 14, color: "var(--theme-text-muted)" }}>
-              {isExecutive
-                ? "Real-time system-wide audit trail across all departments."
-                : `Real-time audit trail for ${effectiveDepartment}.`}
+              Real-time audit trail across the areas visible to your access profile.
             </p>
           </div>
 
@@ -352,21 +348,23 @@ export function ActivityLogPage() {
               </span>
             </div>
 
-            <button
-              onClick={exportCSV}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors"
-              style={{
-                border: "1px solid var(--neuron-ui-border)",
-                backgroundColor: "var(--theme-bg-surface)",
-                color: "var(--theme-text-muted)",
-                fontSize: 13, fontWeight: 500, cursor: "pointer",
-              }}
-              onMouseEnter={e => (e.currentTarget.style.color = "var(--theme-text-primary)")}
-              onMouseLeave={e => (e.currentTarget.style.color = "var(--theme-text-muted)")}
-            >
-              <Download size={13} />
-              Export
-            </button>
+            {canExportActivityLog && (
+              <button
+                onClick={exportCSV}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors"
+                style={{
+                  border: "1px solid var(--neuron-ui-border)",
+                  backgroundColor: "var(--theme-bg-surface)",
+                  color: "var(--theme-text-muted)",
+                  fontSize: 13, fontWeight: 500, cursor: "pointer",
+                }}
+                onMouseEnter={e => (e.currentTarget.style.color = "var(--theme-text-primary)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "var(--theme-text-muted)")}
+              >
+                <Download size={13} />
+                Export
+              </button>
+            )}
 
             <NeuronRefreshButton
               onRefresh={loadActivities}
@@ -434,25 +432,22 @@ export function ActivityLogPage() {
           />
         </div>
 
-        {/* Department (executive only) */}
-        {isExecutive && (
-          <div style={{ minWidth: 148 }}>
-            <CustomDropdown
-              label=""
-              value={deptFilter}
-              onChange={v => { setDeptFilter(v); setUserFilter("all"); }}
-              options={[
-                { value: "all",                 label: "All departments" },
-                { value: "Executive",            label: "Executive" },
-                { value: "Business Development", label: "Business Dev." },
-                { value: "Pricing",              label: "Pricing" },
-                { value: "Operations",           label: "Operations" },
-                { value: "Accounting",           label: "Accounting" },
-                { value: "HR",                   label: "HR" },
-              ]}
-            />
-          </div>
-        )}
+        <div style={{ minWidth: 148 }}>
+          <CustomDropdown
+            label=""
+            value={deptFilter}
+            onChange={v => { setDeptFilter(v); setUserFilter("all"); }}
+            options={[
+              { value: "all",                  label: "All departments" },
+              { value: "Executive",            label: "Executive" },
+              { value: "Business Development", label: "Business Dev." },
+              { value: "Pricing",              label: "Pricing" },
+              { value: "Operations",           label: "Operations" },
+              { value: "Accounting",           label: "Accounting" },
+              { value: "HR",                   label: "HR" },
+            ]}
+          />
+        </div>
 
         {/* User filter (when dept is selected) */}
         {usersInDept.length > 0 && (

@@ -2,7 +2,6 @@ import { useState, useMemo } from "react";
 import { Check, ChevronDown, ChevronRight, ChevronsDown, ChevronsUp, EyeOff, Search, X } from "lucide-react";
 import {
   PERM_MODULES, PERM_ACTIONS,
-  getInheritedPermission,
   type ModuleId, type ActionId,
 } from "../permissionsConfig";
 import type { ModuleGrants } from "./accessProfileTypes";
@@ -13,8 +12,7 @@ import { BLOCK_HIGHER_RANK_VISIBILITY_GRANT } from "../../../lib/rbacGrantKeys";
 export interface PermissionGrantEditorProps {
   grants: ModuleGrants;
   onChange: (nextGrants: ModuleGrants, metadata: { manual: boolean }) => void;
-  baselineRole?: string;
-  baselineDepartment?: string;
+  baselineGrants?: ModuleGrants;
   /** When true, toggles show the inherited baseline and the dirty-dot indicator */
   showInheritedBaseline?: boolean;
   /** Shows skeleton loading state */
@@ -245,8 +243,7 @@ function SkeletonLoader() {
 
 function ModuleRow({
   mod,
-  baselineRole,
-  baselineDepartment,
+  baselineGrants,
   showInheritedBaseline,
   grants,
   onToggle,
@@ -254,8 +251,7 @@ function ModuleRow({
   highlightedCellKeys,
 }: {
   mod: typeof PERM_MODULES[0];
-  baselineRole: string;
-  baselineDepartment: string;
+  baselineGrants: ModuleGrants;
   showInheritedBaseline: boolean;
   grants: ModuleGrants;
   onToggle: (moduleId: ModuleId, action: ActionId, next: boolean) => void;
@@ -304,9 +300,7 @@ function ModuleRow({
             </div>
           );
         }
-        const inherited = showInheritedBaseline
-          ? getInheritedPermission(baselineRole, baselineDepartment, mod.id, action)
-          : undefined;
+        const inherited = showInheritedBaseline ? baselineGrants[cellKey] : undefined;
         const granted = cellKey in grants ? grants[cellKey] : (inherited ?? false);
         return (
           <div key={action} style={{
@@ -332,13 +326,12 @@ function ModuleRow({
 // ─── GroupAccordion ───────────────────────────────────────────────────────────
 
 function GroupAccordion({
-  group, modules, baselineRole, baselineDepartment, showInheritedBaseline,
+  group, modules, baselineGrants, showInheritedBaseline,
   grants, onToggle, onChange, defaultOpen, searchQuery, matchedIds, highlightedCellKeys, activeActionFilter,
 }: {
   group: string;
   modules: typeof PERM_MODULES;
-  baselineRole: string;
-  baselineDepartment: string;
+  baselineGrants: ModuleGrants;
   showInheritedBaseline: boolean;
   grants: ModuleGrants;
   onToggle: (moduleId: ModuleId, action: ActionId, next: boolean) => void;
@@ -410,8 +403,8 @@ function GroupAccordion({
       for (const a of actions) {
         if (!applicable.has(a)) continue;
         const key = `${mod.id}:${a}`;
-        if (showInheritedBaseline && baselineRole && baselineDepartment) {
-          const inherited = getInheritedPermission(baselineRole, baselineDepartment, mod.id as ModuleId, a);
+        if (showInheritedBaseline) {
+          const inherited = baselineGrants[`${mod.id}:${a}`] ?? false;
           if (next === inherited) delete newGrants[key];
           else newGrants[key] = next;
         } else {
@@ -601,9 +594,7 @@ function GroupAccordion({
                             </div>
                           );
                         }
-                        const inherited = showInheritedBaseline
-                          ? getInheritedPermission(baselineRole, baselineDepartment, seg.parent.id, action)
-                          : undefined;
+                        const inherited = showInheritedBaseline ? baselineGrants[cellKey] : undefined;
                         const granted = cellKey in grants ? grants[cellKey] : (inherited ?? false);
                         return (
                           <div key={action} style={{
@@ -637,8 +628,7 @@ function GroupAccordion({
                           <ModuleRow
                             key={child.id}
                             mod={child}
-                            baselineRole={baselineRole}
-                            baselineDepartment={baselineDepartment}
+                            baselineGrants={baselineGrants}
                             showInheritedBaseline={showInheritedBaseline}
                             grants={grants}
                             onToggle={onToggle}
@@ -664,8 +654,7 @@ function GroupAccordion({
 export function PermissionGrantEditor({
   grants,
   onChange,
-  baselineRole = "",
-  baselineDepartment = "",
+  baselineGrants = {},
   showInheritedBaseline = false,
   loading = false,
   disabled = false,
@@ -710,20 +699,16 @@ export function PermissionGrantEditor({
     const key = `${moduleId}:${action}`;
     const newGrants = { ...grants };
 
-    if (showInheritedBaseline && baselineRole && baselineDepartment) {
-      const inherited = getInheritedPermission(baselineRole, baselineDepartment, moduleId, action);
+    if (showInheritedBaseline) {
+      const inherited = baselineGrants[key] ?? false;
       if (next === inherited) {
         delete newGrants[key];
       } else {
         newGrants[key] = next;
       }
     } else {
-      // Profile mode: remove key instead of storing explicit false
-      if (!next) {
-        delete newGrants[key];
-      } else {
-        newGrants[key] = true;
-      }
+      // Profile mode persists both explicit allows and explicit denies.
+      newGrants[key] = next;
     }
 
     onChange(newGrants, { manual: true });
@@ -896,8 +881,7 @@ export function PermissionGrantEditor({
             key={group}
             group={group}
             modules={modules}
-            baselineRole={baselineRole}
-            baselineDepartment={baselineDepartment}
+            baselineGrants={baselineGrants}
             showInheritedBaseline={showInheritedBaseline}
             grants={grants}
             onToggle={handleToggle}

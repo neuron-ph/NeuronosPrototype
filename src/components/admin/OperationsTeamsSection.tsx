@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { supabase } from "../../utils/supabase/client";
+import { usePermission } from "../../context/PermissionProvider";
 import { queryKeys } from "../../lib/queryKeys";
 import { logCreation, logDeletion } from "../../utils/activityLog";
 import type { OperationalService, ServiceAssignmentRole } from "../../types/assignments";
@@ -107,10 +108,10 @@ export function OperationsTeamsSection({
   onRefresh,
 }: OperationsTeamsSectionProps) {
   const queryClient = useQueryClient();
+  const { can } = usePermission();
   const [expandedServiceType, setExpandedServiceType] = useState<string | null>(null);
 
-  const canEditServiceConfig =
-    currentUser?.department === "Executive" || currentUser?.role === "executive";
+  const canEditServiceConfig = can("admin_teams_tab", "edit");
 
   const { data: services = [], isLoading: servicesLoading } = useQuery<OperationalService[]>({
     queryKey: queryKeys.assignments.services(),

@@ -6,10 +6,20 @@ import { Loader2, Check, Minus } from "lucide-react";
 import {
   PERM_MODULES,
   PERM_ACTIONS,
-  getEffectivePermission,
   type ModuleId,
   type ActionId,
 } from "./permissionsConfig";
+import {
+  chooseRoleDefaultProfile,
+  cloneGrants,
+  deriveGrantOverrides,
+  mergeGrantLayers,
+} from "./accessProfiles/accessGrantUtils";
+import type {
+  AccessProfileSummary,
+  ModuleGrants,
+  PermissionOverrideAccessSummary,
+} from "./accessProfiles/accessProfileTypes";
 
 export interface PermissionsMatrixProps {
   userId: string;
@@ -136,30 +146,49 @@ export function PermissionsMatrix({
 }: PermissionsMatrixProps) {
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
-  const [pendingGrants, setPendingGrants] = useState<Record<string, boolean> | null>(null);
+  const [pendingGrants, setPendingGrants] = useState<ModuleGrants | null>(null);
 
-  const { data: dbRow, isLoading } = useQuery({
+  const { data: dbRow, isLoading: isAccessLoading } = useQuery({
     queryKey: ["permission_overrides", userId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("permission_overrides")
-        .select("module_grants")
+        .select("user_id, module_grants, applied_profile_id, profile:applied_profile_id(id, name, description, target_department, target_role, module_grants, visibility_scope, visibility_departments, updated_at)")
         .eq("user_id", userId)
         .maybeSingle();
       if (error) throw error;
-      return data;
+      return data as PermissionOverrideAccessSummary | null;
     },
     enabled: !!userId,
   });
 
-  const grants: Record<string, boolean> =
-    pendingGrants ?? (dbRow?.module_grants as Record<string, boolean> | null) ?? {};
+  const { data: activeProfiles = [], isLoading: isProfilesLoading } = useQuery({
+    queryKey: ["access_profiles", "permissions-matrix-baselines"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("access_profiles")
+        .select("id, name, description, target_department, target_role, module_grants, visibility_scope, visibility_departments, updated_at")
+        .eq("is_active", true)
+        .order("updated_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as AccessProfileSummary[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const baselineProfile =
+    (dbRow?.profile as AccessProfileSummary | null | undefined)
+    ?? chooseRoleDefaultProfile(activeProfiles, userRole, userDepartment);
+  const baselineGrants = cloneGrants(baselineProfile?.module_grants);
+  const explicitGrants = pendingGrants ?? cloneGrants(dbRow?.module_grants as ModuleGrants | null | undefined);
+  const resolvedGrants = mergeGrantLayers(baselineGrants, explicitGrants);
 
   function toggleCell(moduleId: ModuleId, action: ActionId) {
     if (readonly) return;
     const key = `${moduleId}:${action}`;
-    const current = getEffectivePermission(userRole, userDepartment, moduleId, action, grants);
-    setPendingGrants((prev) => ({ ...(prev ?? grants), [key]: !current.granted }));
+    const currentGranted = resolvedGrants[key] === true;
+    const nextResolved = { ...resolvedGrants, [key]: !currentGranted };
+    setPendingGrants(deriveGrantOverrides(nextResolved, baselineGrants));
   }
 
   async function handleSave() {
@@ -199,7 +228,7 @@ export function PermissionsMatrix({
     }
   }
 
-  if (isLoading) {
+  if (isAccessLoading || isProfilesLoading) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 120, color: "var(--neuron-ink-muted)" }}>
         <Loader2 size={20} style={{ animation: "spin 1s linear infinite" }} />
@@ -250,9 +279,9 @@ export function PermissionsMatrix({
                         {mod.label}
                       </td>
                       {PERM_ACTIONS.map((action) => {
-                        const { granted, isCustom } = getEffectivePermission(
-                          userRole, userDepartment, mod.id as ModuleId, action, grants
-                        );
+                        const key = `${mod.id}:${action}`;
+                        const granted = resolvedGrants[key] === true;
+                        const isCustom = key in explicitGrants;
                         return (
                           <PermCell
                             key={action}

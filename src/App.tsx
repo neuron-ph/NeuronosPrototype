@@ -1004,22 +1004,14 @@ function DesignSystemPage() {
   );
 }
 
-// Layout route that enforces department, role, and explicit module permission guards on child routes
+// Layout route that enforces explicit module permission on child routes
 function GuardedLayout({
-  allowedDepartments,
-  requireMinRole,
   requiredPermission,
 }: {
-  allowedDepartments?: string[];
-  requireMinRole?: "staff" | "team_leader" | "supervisor" | "manager" | "executive";
   requiredPermission?: { moduleId: ModuleId; action: ActionId };
 }) {
   return (
-    <RouteGuard
-      allowedDepartments={allowedDepartments}
-      requireMinRole={requireMinRole}
-      requiredPermission={requiredPermission}
-    >
+    <RouteGuard requiredPermission={requiredPermission}>
       <Outlet />
     </RouteGuard>
   );
@@ -1147,8 +1139,10 @@ function AppContent() {
         <Route element={<GuardedLayout requiredPermission={{ moduleId: "ops_others", action: "view" }} />}>
           <Route path="/operations/others" element={<OthersBookingsPage />} />
         </Route>
-        <Route element={<GuardedLayout allowedDepartments={['Operations']} />}>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "ops_bookings", action: "create" }} />}>
           <Route path="/operations/create" element={<CreateBookingPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "ops_bookings", action: "view" }} />}>
           <Route path="/operations/:bookingId" element={<BookingDetailPage />} />
         </Route>
         
@@ -1200,7 +1194,7 @@ function AppContent() {
         </Route>
 
         {/* Finance Overview — Accounting Manager or Executive only */}
-        <Route element={<GuardedLayout requireMinRole="manager" requiredPermission={{ moduleId: "acct_financials", action: "view" }} />}>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_financials", action: "view" }} />}>
           <Route path="/accounting/financials" element={<AccountingFinancialsPage />} />
         </Route>
         

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Clipboard, Plus } from "lucide-react";
 import type { Project, InquiryService } from "../../types/pricing";
+import { usePermission } from "../../context/PermissionProvider";
 import { ProjectBookingReadOnlyView } from "./ProjectBookingReadOnlyView";
 import { CreateBookingFromProjectModal } from "./CreateBookingFromProjectModal";
 import { ForwardingSpecsDisplay } from "../bd/service-displays/ForwardingSpecsDisplay";
@@ -25,20 +26,12 @@ export function ProjectBookingsTabBD({ project, currentUser, onUpdate }: Project
   const [selectedBooking, setSelectedBooking] = useState<{ bookingId: string; bookingType: string } | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedService, setSelectedService] = useState<InquiryService | null>(null);
+  const { can } = usePermission();
 
   const servicesMetadata = project.services_metadata || [];
   const linkedBookings = project.linkedBookings || [];
-  
-  // Check if current user can create bookings (Pricing, PD, Executive, or BD)
-  // BD needs to add instructions for Operations when PD makes bookings
-  const canCreateBookings = 
-    currentUser?.department === "Pricing" || 
-    currentUser?.department === "PD" || 
-    currentUser?.department === "Executive" ||
-    currentUser?.department === "BD" ||
-    currentUser?.department === "Business Development";
-  
-  console.log("ProjectBookingsTabBD - User:", currentUser?.name, "| Department:", currentUser?.department, "| Can Create Bookings:", canCreateBookings);
+
+  const canCreateBookings = can("ops_bookings", "create");
 
   const toggleServiceExpanded = (index: number) => {
     setExpandedServices(prev => ({

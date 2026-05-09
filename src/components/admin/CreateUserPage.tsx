@@ -15,9 +15,9 @@ import {
   DEPARTMENTS, ROLES, TEAM_ROLES, SERVICE_TYPE_OPTIONS,
   FieldLabel, FieldError, INPUT_BASE, INPUT_ERROR,
 } from "./userFormShared";
-import { getEffectivePermission } from "./permissionsConfig";
 import type { ModuleId, ActionId } from "./permissionsConfig";
 import type { AccessProfileSummary } from "./accessProfiles/accessProfileTypes";
+import { chooseRoleDefaultProfile, mergeGrantLayers } from "./accessProfiles/accessGrantUtils";
 
 // Matches INPUT_BASE visually so Radix Select looks identical to CustomDropdown
 const ST = "h-10 rounded-lg border-[var(--neuron-ui-border)] bg-[var(--neuron-bg-elevated)] px-3 text-[13px] text-[var(--neuron-ink-primary)] data-[placeholder]:text-[var(--neuron-ink-muted)] focus-visible:ring-0 focus-visible:border-[var(--theme-border-strong)] dark:bg-[var(--neuron-bg-elevated)]";
@@ -85,13 +85,10 @@ const CAP_BADGE: Record<string, { label: string; bg: string; color: string }> = 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function capLevel(
-  role: string,
-  dept: string,
   moduleId: ModuleId,
-  overrides: Record<string, boolean>
+  grants: Record<string, boolean>,
 ): "full" | "approve" | "edit" | "view" | "none" {
-  const eff = (action: ActionId) =>
-    getEffectivePermission(role, dept, moduleId, action, overrides).granted;
+  const eff = (action: ActionId) => grants[`${moduleId}:${action}`] === true;
   if (eff("delete") || eff("export")) return "full";
   if (eff("approve")) return "approve";
   if (eff("edit") || eff("create")) return "edit";
@@ -127,7 +124,7 @@ export function CreateUserPage() {
   useEffect(() => {
     supabase
       .from("access_profiles")
-      .select("id, name, description, target_department, target_role, module_grants, updated_at")
+      .select("id, name, description, target_department, target_role, module_grants, visibility_scope, visibility_departments, updated_at")
       .eq("is_active", true)
       .order("name")
       .then(({ data }) => { if (data) setProfiles(data as AccessProfileSummary[]); });
@@ -144,17 +141,23 @@ export function CreateUserPage() {
   // ─── Derived ──────────────────────────────────────────────────────────────
 
   const selectedProfile = profiles.find(p => p.id === accessProfileId) ?? null;
-  const profileOverrides: Record<string, boolean> = selectedProfile?.module_grants ?? {};
+  const roleDefaultProfile = useMemo(
+    () => chooseRoleDefaultProfile(profiles, role || "staff", department || null),
+    [profiles, role, department],
+  );
+  const previewGrants = useMemo(
+    () => mergeGrantLayers(roleDefaultProfile?.module_grants, selectedProfile?.module_grants),
+    [roleDefaultProfile, selectedProfile],
+  );
 
   const moduleRows = useMemo(() => {
     if (!department || !role) return [];
     const modules = DEPT_PREVIEW[department] ?? [];
     return modules.map(m => ({
       ...m,
-      level: capLevel(role, department, m.id, profileOverrides),
+      level: capLevel(m.id, previewGrants),
     }));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [department, role, accessProfileId]);
+  }, [department, role, previewGrants]);
 
   const profileMismatch = selectedProfile && (
     (selectedProfile.target_department && selectedProfile.target_department !== department) ||

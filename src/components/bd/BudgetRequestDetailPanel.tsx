@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { CheckCircle2, FileText } from "lucide-react";
 import { supabase } from '../../utils/supabase/client';
+import { usePermission } from "../../context/PermissionProvider";
 import { logApproval } from "../../utils/activityLog";
 import { toast } from "sonner@2.0.3";
 import { AddRequestForPaymentPanel } from "../accounting/AddRequestForPaymentPanel";
@@ -30,23 +31,22 @@ export function BudgetRequestDetailPanel({
   const [showBillingCreation, setShowBillingCreation] = useState(false);
   const [showPostToLedger, setShowPostToLedger] = useState(false);
 
+  const { can } = usePermission();
+
   if (!isOpen || !request) return null;
 
-  // Check if user is accounting staff and can approve/post
-  const isAccountingStaff = 
-    currentUser?.department === "Accounting" || 
-    currentUser?.department === "Executive" ||
-    (currentUser?.department === "Accounting" && currentUser?.role === "manager");
-    
-  const canApprove = showAccountingControls && isAccountingStaff && (
-    request.status === "Submitted" || 
-    request.status === "Draft" || 
-    request.status === "pending" || 
+  const canApproveBudget = can("bd_budget_requests", "approve");
+  const canPostEntries = can("acct_evouchers", "approve") || can("acct_journal", "create");
+
+  const canApprove = showAccountingControls && canApproveBudget && (
+    request.status === "Submitted" ||
+    request.status === "Draft" ||
+    request.status === "pending" ||
     request.status === "Under Review" ||
     request.status === "Processing"
   );
-  
-  const canPostToLedger = showAccountingControls && isAccountingStaff && request.status === "Approved" && !(request as any).journal_entry_id;
+
+  const canPostToLedger = showAccountingControls && canPostEntries && request.status === "Approved" && !(request as any).journal_entry_id;
 
   const handleApprove = async () => {
     if (!canApprove) return;

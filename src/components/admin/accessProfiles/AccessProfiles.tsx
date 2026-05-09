@@ -12,8 +12,14 @@ import {
 import { DataTable, type ColumnDef } from "../../common/DataTable";
 import { NeuronModal } from "../../ui/NeuronModal";
 import { PermissionGrantEditor } from "./PermissionGrantEditor";
-import type { AccessProfile, AccessProfileSummary, ModuleGrants } from "./accessProfileTypes";
-import { cloneGrants, countGrantOverrides, normalizeProfileName } from "./accessGrantUtils";
+import type { AccessProfile, AccessProfileSummary, ModuleGrants, VisibilityScope } from "./accessProfileTypes";
+import {
+  chooseRoleDefaultProfile,
+  cloneGrants,
+  countGrantOverrides,
+  normalizeProfileName,
+  resolveProfileVisibilityScope,
+} from "./accessGrantUtils";
 import type { ConfigUser } from "../AccessConfiguration";
 import { SidePanel } from "../../common/SidePanel";
 
@@ -34,6 +40,14 @@ const ROLES = [
   { value: "supervisor",  label: "Supervisor" },
   { value: "manager",     label: "Manager" },
   { value: "executive",   label: "Executive" },
+];
+
+const VISIBILITY_OPTIONS: Array<{ value: VisibilityScope; label: string; description: string }> = [
+  { value: "own", label: "Own Records", description: "Only records personally owned or assigned to the user." },
+  { value: "team", label: "Team Wide", description: "Records owned by users in the same team." },
+  { value: "department", label: "Department Wide", description: "Records owned by users in the same department." },
+  { value: "selected_departments", label: "Selected Departments", description: "Records in the specific departments chosen below." },
+  { value: "all", label: "Company Wide", description: "All records across the company." },
 ];
 
 function formatDate(iso: string): string {
@@ -258,8 +272,11 @@ function ApplyProfileContent({
       const { error } = await supabase.from("permission_overrides").upsert(
         {
           user_id: u.id,
-          scope: "department_wide",
-          module_grants: cloneGrants(profile.module_grants),
+          scope: profile.visibility_scope ?? "department",
+          departments: profile.visibility_scope === "selected_departments"
+            ? (profile.visibility_departments ?? [])
+            : null,
+          module_grants: {},
           applied_profile_id: profile.id,
           granted_by: currentUser?.id ?? null,
           notes: `Applied access profile: ${profile.name}`,
@@ -554,12 +571,24 @@ export function ProfileEditor({
   const [description, setDescription] = useState(profile?.description ?? "");
   const [targetDepartment, setTargetDepartment] = useState(profile?.target_department ?? "");
   const [targetRole, setTargetRole] = useState(profile?.target_role ?? "");
+  const [visibilityScope, setVisibilityScope] = useState<VisibilityScope>(
+    resolveProfileVisibilityScope(profile?.visibility_scope ?? null, profile?.target_role ?? "staff"),
+  );
+  const [visibilityDepartments, setVisibilityDepartments] = useState<string[]>(
+    profile?.visibility_departments ?? [],
+  );
   const [grants, setGrants] = useState<ModuleGrants>(profile?.module_grants ?? {});
   const [savedGrants, setSavedGrants] = useState<ModuleGrants>(profile?.module_grants ?? {});
   const [savedName, setSavedName] = useState(profile?.name ?? "");
   const [savedDescription, setSavedDescription] = useState(profile?.description ?? "");
   const [savedTargetDepartment, setSavedTargetDepartment] = useState(profile?.target_department ?? "");
   const [savedTargetRole, setSavedTargetRole] = useState(profile?.target_role ?? "");
+  const [savedVisibilityScope, setSavedVisibilityScope] = useState<VisibilityScope>(
+    resolveProfileVisibilityScope(profile?.visibility_scope ?? null, profile?.target_role ?? "staff"),
+  );
+  const [savedVisibilityDepartments, setSavedVisibilityDepartments] = useState<string[]>(
+    profile?.visibility_departments ?? [],
+  );
   const [saving, setSaving] = useState(false);
   const [nameError, setNameError] = useState("");
   const [metaOpen, setMetaOpen] = useState(isNew);
@@ -567,16 +596,48 @@ export function ProfileEditor({
   const [emptyGrantsWarning, setEmptyGrantsWarning] = useState(false);
   const [confirmExitOpen, setConfirmExitOpen] = useState(false);
   const prevGrantsRef = useRef<ModuleGrants>({});
+  const { data: profiles = [] } = useQuery<AccessProfileSummary[]>({
+    queryKey: ["access_profiles", "role-default-baselines"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("access_profiles")
+        .select("id, name, description, target_department, target_role, module_grants, visibility_scope, visibility_departments, updated_at")
+        .eq("is_active", true);
+      if (error) throw error;
+      return (data ?? []) as AccessProfileSummary[];
+    },
+    staleTime: 60_000,
+  });
 
   const isDirty = useMemo(() => {
     if (name !== savedName) return true;
     if (description !== savedDescription) return true;
     if (targetDepartment !== savedTargetDepartment) return true;
     if (targetRole !== savedTargetRole) return true;
+    if (visibilityScope !== savedVisibilityScope) return true;
+    if (visibilityScope === "selected_departments") {
+      if (visibilityDepartments.length !== savedVisibilityDepartments.length) return true;
+      if (visibilityDepartments.some((department, index) => department !== savedVisibilityDepartments[index])) return true;
+    }
     const gk = Object.keys(grants), sk = Object.keys(savedGrants);
     if (gk.length !== sk.length) return true;
     return gk.some(k => grants[k] !== savedGrants[k]);
-  }, [name, savedName, description, savedDescription, targetDepartment, savedTargetDepartment, targetRole, savedTargetRole, grants, savedGrants]);
+  }, [
+    description,
+    grants,
+    name,
+    savedDescription,
+    savedGrants,
+    savedName,
+    savedTargetDepartment,
+    savedTargetRole,
+    savedVisibilityDepartments,
+    savedVisibilityScope,
+    targetDepartment,
+    targetRole,
+    visibilityDepartments,
+    visibilityScope,
+  ]);
 
   useEffect(() => {
     if (!isDirty) return;
@@ -591,7 +652,15 @@ export function ProfileEditor({
   };
 
   const handleDiscard = () => {
-    const snapshot = { grants: { ...grants }, name, description, targetDepartment, targetRole };
+    const snapshot = {
+      grants: { ...grants },
+      name,
+      description,
+      targetDepartment,
+      targetRole,
+      visibilityScope,
+      visibilityDepartments: [...visibilityDepartments],
+    };
     let undone = false;
     setConfirmExitOpen(false);
     toast("Changes discarded.", {
@@ -604,6 +673,8 @@ export function ProfileEditor({
           setDescription(snapshot.description);
           setTargetDepartment(snapshot.targetDepartment);
           setTargetRole(snapshot.targetRole);
+          setVisibilityScope(snapshot.visibilityScope);
+          setVisibilityDepartments(snapshot.visibilityDepartments);
         },
       },
       duration: 5000,
@@ -620,13 +691,25 @@ export function ProfileEditor({
     });
   };
 
-  const canShowBaseline = !!targetRole && !!targetDepartment;
+  const baselineProfile = useMemo(
+    () => chooseRoleDefaultProfile(profiles, targetRole || "staff", targetDepartment || null),
+    [profiles, targetDepartment, targetRole],
+  );
+  const baselineGrants = useMemo(
+    () => cloneGrants(baselineProfile?.module_grants),
+    [baselineProfile],
+  );
+  const canShowBaseline = !!baselineProfile;
   const grantCount = countGrantOverrides(grants);
 
   const handleSave = async () => {
     const trimmed = normalizeProfileName(name);
     if (!trimmed) { setNameError("Profile name is required"); return; }
     setNameError("");
+    if (visibilityScope === "selected_departments" && visibilityDepartments.length === 0) {
+      toast.error("Select at least one department for the selected visibility scope.");
+      return;
+    }
 
     if (Object.keys(grants).length === 0 && !emptyGrantsWarning) {
       setEmptyGrantsWarning(true);
@@ -646,6 +729,8 @@ export function ProfileEditor({
         target_department: targetDepartment || null,
         target_role: targetRole || null,
         module_grants: grants,
+        visibility_scope: visibilityScope,
+        visibility_departments: visibilityScope === "selected_departments" ? visibilityDepartments : null,
         created_by: currentUser?.id ?? null,
         updated_by: currentUser?.id ?? null,
       }));
@@ -656,6 +741,8 @@ export function ProfileEditor({
         target_department: targetDepartment || null,
         target_role: targetRole || null,
         module_grants: grants,
+        visibility_scope: visibilityScope,
+        visibility_departments: visibilityScope === "selected_departments" ? visibilityDepartments : null,
         updated_by: currentUser?.id ?? null,
         updated_at: now,
       }).eq("id", profile!.id!));
@@ -692,6 +779,8 @@ export function ProfileEditor({
     setSavedDescription(description);
     setSavedTargetDepartment(targetDepartment);
     setSavedTargetRole(targetRole);
+    setSavedVisibilityScope(visibilityScope);
+    setSavedVisibilityDepartments([...visibilityDepartments]);
     onSaved();
   };
 
@@ -836,6 +925,75 @@ export function ProfileEditor({
                 {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
             </div>
+            <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: 8 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Record Visibility</label>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
+                {VISIBILITY_OPTIONS.map((option) => {
+                  const active = visibilityScope === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        setVisibilityScope(option.value);
+                        if (option.value !== "selected_departments") setVisibilityDepartments([]);
+                      }}
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "flex-start",
+                        gap: 4,
+                        padding: "12px 14px",
+                        borderRadius: 10,
+                        border: `1px solid ${active ? "var(--neuron-action-primary)" : "var(--neuron-ui-border)"}`,
+                        background: active ? "color-mix(in oklch, var(--neuron-action-primary) 10%, transparent)" : "var(--neuron-bg-elevated)",
+                        cursor: "pointer",
+                        textAlign: "left",
+                      }}
+                    >
+                      <span style={{ fontSize: 12, fontWeight: 600, color: active ? "var(--neuron-action-primary)" : "var(--neuron-ink-primary)" }}>
+                        {option.label}
+                      </span>
+                      <span style={{ fontSize: 11, lineHeight: 1.45, color: "var(--neuron-ink-muted)" }}>
+                        {option.description}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              {visibilityScope === "selected_departments" && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {DEPARTMENTS.map((department) => {
+                    const selected = visibilityDepartments.includes(department);
+                    return (
+                      <button
+                        key={department}
+                        type="button"
+                        onClick={() =>
+                          setVisibilityDepartments((current) =>
+                            current.includes(department)
+                              ? current.filter((value) => value !== department)
+                              : [...current, department],
+                          )
+                        }
+                        style={{
+                          padding: "4px 10px",
+                          borderRadius: 999,
+                          border: `1px solid ${selected ? "var(--neuron-action-primary)" : "var(--neuron-ui-border)"}`,
+                          background: selected ? "color-mix(in oklch, var(--neuron-action-primary) 12%, transparent)" : "var(--neuron-bg-elevated)",
+                          color: selected ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
+                          fontSize: 12,
+                          fontWeight: 500,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {department}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -880,8 +1038,7 @@ export function ProfileEditor({
         grants={grants}
         onChange={(nextGrants) => setGrants(nextGrants)}
         showInheritedBaseline={showBaseline && canShowBaseline}
-        baselineRole={targetRole}
-        baselineDepartment={targetDepartment}
+        baselineGrants={baselineGrants}
       />
 
       {/* Exit confirmation */}
@@ -910,7 +1067,7 @@ export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditPr
     queryFn: async () => {
       const { data, error } = await supabase
         .from("access_profiles")
-        .select("id, name, description, target_department, target_role, module_grants, updated_at")
+        .select("id, name, description, target_department, target_role, module_grants, visibility_scope, visibility_departments, updated_at")
         .eq("is_active", true)
         .order("name");
       if (error) throw error;
@@ -1026,7 +1183,7 @@ export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditPr
             <h2 style={{ fontSize: 16, fontWeight: 600, color: "var(--neuron-ink-primary)", margin: 0 }}>Access Profiles</h2>
           </div>
           <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: 0 }}>
-            Saved access rule templates. Apply them to users as a one-time snapshot — editing a profile does not affect users who already received it.
+            Saved access rule templates. Applying a profile links the user to that baseline while keeping user-specific overrides separate.
           </p>
         </div>
         <button

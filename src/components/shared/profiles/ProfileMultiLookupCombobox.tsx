@@ -4,7 +4,7 @@ import { Check, Plus, Search, X } from 'lucide-react';
 import type { ProfileSelectionValue, ProfileLookupRecord } from '../../../types/profiles';
 import { profileRegistry } from '../../../config/profiles/profileRegistry';
 import { getAdapterForType } from '../../../utils/profiles/adapterRegistry';
-import { useUser } from '../../../hooks/useUser';
+import { usePermission } from '../../../context/PermissionProvider';
 
 // ==================== TYPES ====================
 
@@ -36,15 +36,6 @@ function normalizeValues(
   });
 }
 
-function isPrivileged(user: ReturnType<typeof useUser>['user']): boolean {
-  if (!user) return false;
-  const dept = user.department ?? '';
-  const role = (user.role ?? '').toLowerCase();
-  if (dept === 'Executive') return true;
-  if (role === 'manager' || role === 'director' || role === 'tl') return true;
-  return false;
-}
-
 // ==================== STYLES ====================
 
 const DROPDOWN_STYLE: React.CSSProperties = {
@@ -71,7 +62,7 @@ export function ProfileMultiLookupCombobox({
   onQuickCreate,
   portalZIndex = 9999,
 }: Props) {
-  const { user } = useUser();
+  const { can } = usePermission();
   const selected = normalizeValues(value, profileType);
 
   const [open, setOpen] = useState(false);
@@ -89,7 +80,9 @@ export function ProfileMultiLookupCombobox({
 
   const registryEntry = profileRegistry[profileType];
   const isCombo = registryEntry?.strictness === 'combo';
-  const canQuickCreate = !!onQuickCreate && (registryEntry?.quickCreateAllowed ?? false) && isPrivileged(user);
+  const canQuickCreate = !!onQuickCreate
+    && (registryEntry?.quickCreateAllowed ?? false)
+    && can('exec_profiling', 'create');
   // Memoize: getAdapterForType returns a fresh object literal every call.
   // Without this, doSearch gets a new identity every render and the debounced
   // search effect re-fires constantly, flickering loading/results and

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight, Plus, Eye } from "lucide-react";
 import type { Project, InquiryService } from "../../types/pricing";
+import { usePermission } from "../../context/PermissionProvider";
 import { ForwardingSpecsDisplay } from "../bd/service-displays/ForwardingSpecsDisplay";
 import { BrokerageSpecsDisplay } from "../bd/service-displays/BrokerageSpecsDisplay";
 import { TruckingSpecsDisplay } from "../bd/service-displays/TruckingSpecsDisplay";
@@ -26,25 +27,11 @@ export function ProjectServiceCard({ service, project, currentUser, onUpdate, on
   const [isExpanded, setIsExpanded] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<{ bookingId: string; bookingType: string } | null>(null);
+  const { can } = usePermission();
 
   const linkedBookings = project.linkedBookings || [];
-  
-  // DEBUG: Log when project prop changes
-  console.log(`🔍 ProjectServiceCard [${service.service_type}] - Project updated:`, {
-    projectId: project.id,
-    projectNumber: project.project_number,
-    totalLinkedBookings: linkedBookings.length,
-    linkedBookings: linkedBookings,
-    lastUpdated: project.updated_at
-  });
 
-  // Check if current user can create bookings
-  const canCreateBookings = 
-    currentUser?.department === "Pricing" || 
-    currentUser?.department === "PD" || 
-    currentUser?.department === "Executive" ||
-    currentUser?.department === "BD" ||
-    currentUser?.department === "Business Development";
+  const canCreateBookings = can("ops_bookings", "create");
 
   // Get bookings for this service
   const getBookingsForService = () => {

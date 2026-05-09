@@ -234,7 +234,7 @@ export function GeneralJournal() {
   const canInvoice = can("accounting_journal_invoice_tab", "view");
   const canCollection = can("accounting_journal_collection_tab", "view");
   const canManual = can("accounting_journal_manual_tab", "view");
-  const isAccounting = user?.department === "Accounting";
+  const canCreateJournal = can("acct_journal", "view") && (can("accounting_journal_manual_tab", "view") || can("accounting_journal_all_sources_tab", "view"));
 
   // ── Data state ──
   const [entries, setEntries] = useState<JournalEntry[]>([]);
@@ -455,7 +455,7 @@ export function GeneralJournal() {
               Export
             </button>
             {/* New Entry */}
-            {isAccounting && (
+            {canCreateJournal && (
               <button
                 onClick={() => setViewMode("new-entry")}
                 className="h-10 px-4 flex items-center gap-2 bg-[var(--theme-action-primary-bg)] text-white rounded-lg hover:bg-[var(--theme-action-primary-border)] transition-colors font-medium text-[14px]"
@@ -751,7 +751,7 @@ export function GeneralJournal() {
               setSelectedEntry(null);
               handleEntryCreated();
             }}
-            canAct={isAccounting}
+            canAct={canCreateJournal}
             highlightAccountId={filters.accountId || undefined}
           />
         )}

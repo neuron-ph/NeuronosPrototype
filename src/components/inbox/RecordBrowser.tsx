@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { useUser } from "../../hooks/useUser";
+import { useDataScope } from "../../hooks/useDataScope";
 import { SidePanel } from "../common/SidePanel";
 
 const PesoIcon = ({ size = 20 }: { size?: number }) => (
@@ -149,9 +150,8 @@ function StatusBadge({ status }: { status?: string }) {
   return <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 4, color: colors.color, backgroundColor: colors.bg, textTransform: "capitalize", flexShrink: 0 }}>{status}</span>;
 }
 
-function getVisibleSections(department: string | null | undefined) {
-  const isExecutive = department === "Executive";
-  return NAV.filter((section) => isExecutive || section.ownerDepts.includes(department ?? ""));
+function getVisibleSections(department: string | null | undefined, hasFullScope: boolean) {
+  return NAV.filter((section) => hasFullScope || section.ownerDepts.includes(department ?? ""));
 }
 
 function getSearchPlaceholder(entity: EntityDef) {
@@ -165,7 +165,8 @@ function getNoResultsCopy(entity: EntityDef, query: string) {
 
 export function RecordBrowser({ isOpen, onClose, onLink, alreadyLinked = [] }: RecordBrowserProps) {
   const { effectiveDepartment } = useUser();
-  const visibleSections = getVisibleSections(effectiveDepartment);
+  const { scope } = useDataScope();
+  const visibleSections = getVisibleSections(effectiveDepartment, scope.type === 'all');
   const initialSection = visibleSections.find((section) => section.id === DEPT_DEFAULT[effectiveDepartment ?? ""]) ?? visibleSections[0] ?? null;
 
   const [activeSectionId, setActiveSectionId] = useState<string | null>(initialSection?.id ?? null);

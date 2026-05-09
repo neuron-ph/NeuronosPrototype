@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence, useAnimation } from "motion/react";
 import { useUser } from "../hooks/useUser";
+import { usePermission } from "../context/PermissionProvider";
 import { supabase } from "../utils/supabase/client";
 import {
   fetchMyWork, fetchDeptQueue,
@@ -1110,6 +1111,7 @@ interface MyHomepageProps {
 export function MyHomepage({ currentUser }: MyHomepageProps) {
   const navigate = useNavigate();
   const { user, session, effectiveDepartment, effectiveRole } = useUser();
+  const { can } = usePermission();
 
   const dept      = effectiveDepartment || currentUser?.department || "";
   const role      = (effectiveRole || currentUser?.role || "").toLowerCase();
@@ -1156,7 +1158,7 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
     openInquiries: 0, inProgressQuotations: 0, activeBookings: 0, openTickets: 0, pendingEVs: 0,
   };
 
-  const canWriteMemos = user?.department === "Executive" || user?.role === "executive";
+  const canWriteMemos = can("exec_memos", "create");
 
   const [memoOpen, setMemoOpen] = useState(false);
   const [latestMemo, setLatestMemo] = useState<{ id: string; title: string; created_at: string } | null>(null);

@@ -67,7 +67,7 @@ export function ThreadListPanel({
   draftCount,
   unreadCount,
   queueCount,
-  isManager,
+  isManager: _isManager,
   selectedId,
   onTabChange,
   onSelectThread,
@@ -90,7 +90,7 @@ export function ThreadListPanel({
 
   const tabs: { key: InboxTab; label: string; icon: React.ReactNode; count?: number }[] = [
     ...(can("inbox_inbox_tab", "view") ? [{ key: "inbox" as InboxTab, label: "Inbox", icon: <Inbox size={13} />, count: unreadCount || undefined }] : []),
-    ...(isManager && can("inbox_queue_tab", "view") ? [{ key: "queue" as InboxTab, label: "Queue", icon: <Layers size={13} />, count: queueCount || undefined }] : []),
+    ...(can("inbox_queue_tab", "view") ? [{ key: "queue" as InboxTab, label: "Queue", icon: <Layers size={13} />, count: queueCount || undefined }] : []),
     ...(can("inbox_sent_tab", "view") ? [{ key: "sent" as InboxTab, label: "Sent", icon: <Send size={13} /> }] : []),
     ...(can("inbox_drafts_tab", "view") ? [{ key: "drafts" as InboxTab, label: "Drafts", icon: <FileText size={13} />, count: draftCount || undefined }] : []),
   ];
