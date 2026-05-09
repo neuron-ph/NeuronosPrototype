@@ -13,6 +13,7 @@ import type { RecipientChip } from "./RecipientField";
 import { AssignModal } from "./AssignModal";
 import { TICKET_PRIORITY_TONES, TICKET_STATUS_TONES, TICKET_TYPE_TONES, ticketBadgeStyle } from "./ticketingTheme";
 import { executeResolutionAction } from "../../utils/workflowTickets";
+import { usePermission } from "../../context/PermissionProvider";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -50,7 +51,8 @@ interface ThreadDetailPanelProps {
 // ── Component ────────────────────────────────────────────────────────────────
 
 export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavigate }: ThreadDetailPanelProps) {
-  const { user, effectiveRole } = useUser();
+  const { user } = useUser();
+  const { can } = usePermission();
   const { thread, isLoading, refresh } = useThread(ticketId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [showAssignModal, setShowAssignModal] = useState(false);
@@ -97,11 +99,10 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
   const isRecipient = !isSender && thread.participants.some(
     (p) => p.participant_type === "user" && p.participant_user_id === user?.id
   );
-  const isManagerOrDirector = effectiveRole === "manager" || effectiveRole === "team_leader";
   const deptParticipants = thread.participants.filter(
     (p) => p.participant_type === "department" && p.role === "to"
   );
-  const canAssign = isManagerOrDirector && deptParticipants.length > 0;
+  const canAssign = can("inbox_queue_tab", "view") && deptParticipants.length > 0;
   const canAdvanceStatus = isRecipient && !["done", "returned", "archived", "draft"].includes(thread.status);
   const isApprovalPending = thread.type === "approval" && thread.approval_result === null && isRecipient;
   const isDone = thread.status === "done";

@@ -3,6 +3,7 @@ import { Plus, Search, Archive, RotateCcw, Check, X, Pencil } from 'lucide-react
 import { toast } from 'sonner@2.0.3';
 import { supabase } from '../../../utils/supabase/client';
 import { useUser } from '../../../hooks/useUser';
+import { usePermission } from '../../../context/PermissionProvider';
 import { DataTable } from '../../common/DataTable';
 import type { ColumnDef } from '../../common/DataTable';
 import { NeuronModal } from '../../ui/NeuronModal';
@@ -81,8 +82,12 @@ export function ProfileSection({
   initialQuery?: string;
 }) {
   const { user } = useUser();
+  const { can } = usePermission();
   const entry = profileRegistry[profileType];
   const admin = entry?.admin;
+  const canCreate = can('exec_profiling', 'create');
+  const canEdit = can('exec_profiling', 'edit');
+  const canDelete = can('exec_profiling', 'delete');
 
   const [items, setItems] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
@@ -218,6 +223,10 @@ export function ProfileSection({
   }
 
   function startAdd() {
+    if (!canCreate) {
+      toast.error(`You don't have permission to add ${admin?.pluralLabel?.toLowerCase() ?? 'items'}.`);
+      return;
+    }
     if (readOnlyFallback) {
       toast.error('Apply the required Supabase migration before editing this section.');
       return;
@@ -235,7 +244,7 @@ export function ProfileSection({
   }
 
   async function handleCreate() {
-    if (!entry || !admin || readOnlyFallback) return;
+    if (!entry || !admin || readOnlyFallback || !canCreate) return;
     const value = newValue.trim();
     if (!value) {
       cancelAdd();
@@ -273,6 +282,10 @@ export function ProfileSection({
   }
 
   function startEdit(item: Row) {
+    if (!canEdit) {
+      toast.error(`You don't have permission to edit ${admin?.pluralLabel?.toLowerCase() ?? 'items'}.`);
+      return;
+    }
     if (readOnlyFallback) {
       toast.error('Apply the required Supabase migration before editing this section.');
       return;
@@ -288,7 +301,7 @@ export function ProfileSection({
   }
 
   async function commitEdit(item: Row) {
-    if (!entry || readOnlyFallback) return;
+    if (!entry || readOnlyFallback || !canEdit) return;
     const value = editingValue.trim();
     if (!value) {
       cancelEdit();
@@ -316,7 +329,7 @@ export function ProfileSection({
   }
 
   async function handleArchive(item: Row, activate: boolean) {
-    if (!entry || !admin || readOnlyFallback) return;
+    if (!entry || !admin || readOnlyFallback || !canDelete) return;
     const update: Record<string, unknown> = { is_active: activate };
     if (SOURCES_WITH_AUDIT_USERS.has(entry.source)) update.updated_by = user?.id ?? null;
     const { error } = await supabase.from(entry.source).update(update).eq('id', item.id);
@@ -463,25 +476,29 @@ export function ProfileSection({
                 </>
               ) : (
                 <>
-                  <IconButton onClick={e => { e.stopPropagation(); startEdit(r); }} title="Edit">
-                    <Pencil size={13} />
-                  </IconButton>
-                  {r.is_active === false ? (
-                    <IconButton
-                      onClick={e => { e.stopPropagation(); handleArchive(r, true); }}
-                      color="var(--theme-action-primary-bg)"
-                      title="Reactivate"
-                    >
-                      <RotateCcw size={13} />
+                  {canEdit && (
+                    <IconButton onClick={e => { e.stopPropagation(); startEdit(r); }} title="Edit">
+                      <Pencil size={13} />
                     </IconButton>
-                  ) : (
-                    supportsArchive && (
+                  )}
+                  {canDelete && (
+                    r.is_active === false ? (
                       <IconButton
-                        onClick={e => { e.stopPropagation(); setArchiveTarget(r); }}
-                        title="Archive"
+                        onClick={e => { e.stopPropagation(); handleArchive(r, true); }}
+                        color="var(--theme-action-primary-bg)"
+                        title="Reactivate"
                       >
-                        <Archive size={13} />
+                        <RotateCcw size={13} />
                       </IconButton>
+                    ) : (
+                      supportsArchive && (
+                        <IconButton
+                          onClick={e => { e.stopPropagation(); setArchiveTarget(r); }}
+                          title="Archive"
+                        >
+                          <Archive size={13} />
+                        </IconButton>
+                      )
                     )
                   )}
                 </>
@@ -540,11 +557,11 @@ export function ProfileSection({
         </span>
         <button
           onClick={startAdd}
-          disabled={adding || readOnlyFallback}
+          disabled={adding || readOnlyFallback || !canCreate}
           style={{
             ...newBtnStyle,
-            opacity: adding || readOnlyFallback ? 0.5 : 1,
-            cursor: adding || readOnlyFallback ? 'default' : 'pointer',
+            opacity: adding || readOnlyFallback || !canCreate ? 0.5 : 1,
+            cursor: adding || readOnlyFallback || !canCreate ? 'default' : 'pointer',
           }}
         >
           <Plus size={13} />

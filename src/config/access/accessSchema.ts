@@ -474,6 +474,7 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
         ],
       },
       { kind: "module", id: "exec_profiling", moduleId: "exec_profiling", label: "Profiling", pageId: "admin-profiling", tabs: [] },
+      { kind: "module", id: "exec_memos", moduleId: "exec_memos", label: "Memos", pageId: "homepage", tabs: [] },
     ],
   },
 
@@ -563,18 +564,6 @@ export const ACCESS_MODULE_BY_PAGE: Record<string, AccessModuleNode> =
       .filter(m => !!m.pageId)
       .map(m => [m.pageId as string, m]),
   );
-
-/** moduleId → owning department label (for getInheritedPermission compat). */
-export const MODULE_DEPT_LABEL: Record<string, string> = (() => {
-  const out: Record<string, string> = {};
-  for (const dept of ACCESS_SCHEMA) {
-    for (const m of dept.modules) {
-      out[m.moduleId] = dept.label;
-      for (const t of m.tabs) out[t.moduleId] = dept.label;
-    }
-  }
-  return out;
-})();
 
 export function getAccessDepartmentNodes(): AccessDepartmentNode[] {
   return ACCESS_SCHEMA;

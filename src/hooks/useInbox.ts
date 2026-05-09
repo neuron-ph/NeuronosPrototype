@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../utils/supabase/client";
 import { useUser } from "./useUser";
 import { queryKeys } from "../lib/queryKeys";
+import { usePermission } from "../context/PermissionProvider";
 
 export type TicketType = "fyi" | "request" | "approval";
 export type TicketStatus = "draft" | "open" | "acknowledged" | "in_progress" | "done" | "returned" | "archived";
@@ -49,10 +50,11 @@ function stripHtml(html: string): string {
 
 export function useInbox() {
   const { user, effectiveDepartment, effectiveRole } = useUser();
+  const { can } = usePermission();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<InboxTab>("inbox");
 
-  const isManager = effectiveRole === "manager" || effectiveRole === "director";
+  const canAccessQueue = can("inbox_queue_tab", "view");
 
   const { data: threads = [], isLoading } = useQuery({
     queryKey: [...queryKeys.inbox.list(), activeTab, user?.id, effectiveDepartment, effectiveRole],
@@ -65,12 +67,12 @@ export function useInbox() {
         const { data: rpcThreads } = await supabase.rpc("get_inbox_threads", {
           p_user_id: user.id,
           p_dept: effectiveDepartment || "",
-          p_role: effectiveRole || "rep",
+          p_role: effectiveRole || "staff",
         });
 
         if (!rpcThreads || rpcThreads.length === 0) return [];
 
-        if (activeTab === "queue" && isManager) {
+        if (activeTab === "queue" && canAccessQueue) {
           const deptTicketIds = new Set<string>();
           const { data: deptParticipants } = await supabase
             .from("ticket_participants")
@@ -223,12 +225,12 @@ export function useInbox() {
         supabase.rpc("get_unread_count", {
           p_user_id: user.id,
           p_dept: effectiveDepartment || "",
-          p_role: effectiveRole || "rep",
+          p_role: effectiveRole || "staff",
         }),
       ]);
 
       let queueCount = 0;
-      if (isManager) {
+      if (canAccessQueue) {
         const { data: queueParticipants } = await supabase
           .from("ticket_participants")
           .select("ticket_id")
@@ -264,7 +266,7 @@ export function useInbox() {
     draftCount: counts.draftCount,
     unreadCount: counts.unreadCount,
     queueCount: counts.queueCount,
-    isManager,
+    isManager: canAccessQueue,
     refresh,
   };
 }

@@ -74,7 +74,7 @@ interface TeamWithMembers extends Team {
   }[];
 }
 
-type OverrideScope = "department_wide" | "cross_department" | "full";
+type OverrideScope = "own" | "team" | "department" | "selected_departments" | "all";
 
 interface PermissionOverride {
   id: string;
@@ -149,9 +149,36 @@ const STATUS_BADGE: Record<UserStatus, { bg: string; text: string; dot: string }
 };
 
 const SCOPE_LABELS: Record<OverrideScope, { label: string; description: string; bg: string; text: string }> = {
-  full:             { label: "Full Access",        description: "Sees everything across all departments.", bg: "var(--neuron-status-accent-bg)", text: "var(--neuron-status-accent-fg)" },
-  department_wide:  { label: "Department Wide",    description: "Sees all records in their own department.", bg: "var(--theme-status-warning-bg)", text: "var(--theme-status-warning-fg)" },
-  cross_department: { label: "Cross Department",   description: "Sees records in selected departments.", bg: "var(--neuron-semantic-info-bg)", text: "var(--neuron-semantic-info)" },
+  own: {
+    label: "Own Records",
+    description: "Sees only records they personally own or are assigned to.",
+    bg: "var(--neuron-pill-inactive-bg)",
+    text: "var(--theme-text-secondary)",
+  },
+  team: {
+    label: "Team Wide",
+    description: "Sees records owned by users in their team.",
+    bg: "var(--neuron-semantic-info-bg)",
+    text: "var(--neuron-semantic-info)",
+  },
+  department: {
+    label: "Department Wide",
+    description: "Sees all records in their department.",
+    bg: "var(--theme-status-warning-bg)",
+    text: "var(--theme-status-warning-fg)",
+  },
+  selected_departments: {
+    label: "Selected Departments",
+    description: "Sees records in the departments you explicitly choose.",
+    bg: "var(--theme-status-success-bg)",
+    text: "var(--theme-action-primary-bg)",
+  },
+  all: {
+    label: "Company Wide",
+    description: "Sees everything across the company.",
+    bg: "var(--neuron-status-accent-bg)",
+    text: "var(--neuron-status-accent-fg)",
+  },
 };
 
 // ─── Shared cell components ───────────────────────────────────────────────────
@@ -1705,7 +1732,7 @@ function AccessOverridesTab({ onCountUpdate }: { onCountUpdate: (count: number) 
   const [matrixUser, setMatrixUser] = useState<{ id: string; name: string; role: string; department: string } | null>(null);
 
   const [formUserId, setFormUserId]   = useState("");
-  const [formScope, setFormScope]     = useState<OverrideScope>("department_wide");
+  const [formScope, setFormScope]     = useState<OverrideScope>("department");
   const [formDepts, setFormDepts]     = useState<string[]>([]);
   const [formNotes, setFormNotes]     = useState("");
 
@@ -1745,12 +1772,12 @@ function AccessOverridesTab({ onCountUpdate }: { onCountUpdate: (count: number) 
 
   const handleAdd = async () => {
     if (!formUserId) { toast.error("Select a user."); return; }
-    if (formScope === "cross_department" && formDepts.length === 0) { toast.error("Select at least one department."); return; }
+    if (formScope === "selected_departments" && formDepts.length === 0) { toast.error("Select at least one department."); return; }
     setSaving(true);
     const payload = {
       user_id: formUserId,
       scope: formScope,
-      departments: formScope === "cross_department" ? formDepts : null,
+      departments: formScope === "selected_departments" ? formDepts : null,
       granted_by: currentUser?.id ?? null,
       notes: formNotes.trim() || null,
       applied_profile_id: null,
@@ -1763,7 +1790,7 @@ function AccessOverridesTab({ onCountUpdate }: { onCountUpdate: (count: number) 
     logActivity("user", formUserId, targetUser?.name ?? formUserId, "updated", actor, { description: "Permissions updated" });
     toast.success("Access override saved.");
     setAdding(false);
-    setFormUserId(""); setFormScope("department_wide"); setFormDepts([]); setFormNotes("");
+    setFormUserId(""); setFormScope("department"); setFormDepts([]); setFormNotes("");
     queryClient.invalidateQueries({ queryKey: ["permission_overrides"] });
     queryClient.invalidateQueries({ queryKey: ["permission_overrides", "access-summary"] });
   };
@@ -1866,7 +1893,7 @@ function AccessOverridesTab({ onCountUpdate }: { onCountUpdate: (count: number) 
                     {scopeMeta.label}
                   </span>
                   <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>
-                    {ov.scope === "cross_department" && ov.departments?.length ? ov.departments.join(", ") : "—"}
+                    {ov.scope === "selected_departments" && ov.departments?.length ? ov.departments.join(", ") : "—"}
                   </span>
                   <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>{ov.grantor?.name ?? "—"}</span>
                   <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>{ov.notes ?? "—"}</span>
@@ -1985,7 +2012,7 @@ function AccessOverridesTab({ onCountUpdate }: { onCountUpdate: (count: number) 
                   ))}
                 </div>
               </div>
-              {formScope === "cross_department" && (
+              {formScope === "selected_departments" && (
                 <div>
                   <Label style={{ fontSize: 13, marginBottom: 6, display: "block" }}>Visible Departments</Label>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>

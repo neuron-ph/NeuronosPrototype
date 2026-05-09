@@ -10,6 +10,21 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+type AccessProfileRow = {
+  id: string;
+  name: string;
+  module_grants: Record<string, boolean>;
+  visibility_scope: string | null;
+  visibility_departments: string[] | null;
+};
+
+function roleDefaultVisibilityScope(role: string): string {
+  if (role === "executive") return "all";
+  if (role === "manager") return "department";
+  if (role === "team_leader" || role === "supervisor") return "team";
+  return "own";
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -70,6 +85,9 @@ serve(async (req) => {
     }
 
     const callerModuleGrants = (callerOverride?.module_grants ?? {}) as Record<string, boolean>;
+    // Transitional: executives retain implicit caller auth until an Executive role-default
+    // profile is seeded. Per the Access Configuration source-of-truth migration, this bypass
+    // should be removed once that profile exists.
     const canCreateUsers =
       callerProfile.department === "Executive" ||
       callerProfile.role === "executive" ||
@@ -114,11 +132,11 @@ serve(async (req) => {
     }
 
     // Validate access profile if provided
-    let profileData: { id: string; name: string; module_grants: Record<string, boolean> } | null = null;
+    let profileData: AccessProfileRow | null = null;
     if (access_profile_id) {
       const { data: profile, error: pfErr } = await adminClient
         .from("access_profiles")
-        .select("id, name, module_grants, is_active")
+        .select("id, name, module_grants, visibility_scope, visibility_departments, is_active")
         .eq("id", access_profile_id)
         .maybeSingle();
 
@@ -135,6 +153,17 @@ serve(async (req) => {
         );
       }
       profileData = profile;
+    } else {
+      const { data: fallbackProfile } = await adminClient
+        .from("access_profiles")
+        .select("id, name, module_grants, visibility_scope, visibility_departments")
+        .eq("is_active", true)
+        .eq("target_role", role)
+        .or(`target_department.eq.${department},target_department.is.null`)
+        .order("target_department", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      profileData = (fallbackProfile as AccessProfileRow | null) ?? null;
     }
 
     // Create the Supabase Auth user
@@ -197,28 +226,32 @@ serve(async (req) => {
 
     const newUserId = updateResult.data.id;
 
-    // Apply access profile snapshot into permission_overrides
-    if (profileData) {
-      const { error: overrideError } = await adminClient
-        .from("permission_overrides")
-        .upsert({
-          user_id: newUserId,
-          scope: "department_wide",
-          module_grants: profileData.module_grants,
-          applied_profile_id: profileData.id,
-          granted_by: callerProfile.id,
-          notes: `Applied during user creation: ${profileData.name}`,
-        }, { onConflict: "user_id" });
+    const effectiveScope = profileData?.visibility_scope ?? roleDefaultVisibilityScope(role);
+    const effectiveDepartments = effectiveScope === "selected_departments"
+      ? (profileData?.visibility_departments ?? [])
+      : null;
+    const { error: overrideError } = await adminClient
+      .from("permission_overrides")
+      .upsert({
+        user_id: newUserId,
+        scope: effectiveScope,
+        departments: effectiveDepartments,
+        module_grants: {},
+        applied_profile_id: profileData?.id ?? null,
+        granted_by: callerProfile.id,
+        notes: profileData
+          ? `Applied during user creation: ${profileData.name}`
+          : `Default role visibility applied during user creation: ${effectiveScope}`,
+      }, { onConflict: "user_id" });
 
-      if (overrideError) {
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: `User created but profile application failed: ${overrideError.message}`,
-          }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+    if (overrideError) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: `User created but access initialization failed: ${overrideError.message}`,
+        }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     return new Response(

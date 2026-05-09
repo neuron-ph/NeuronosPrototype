@@ -4,7 +4,6 @@ import { CustomDatePicker } from "../common/CustomDatePicker";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { QuotationNew, Project } from "../../types/pricing";
-import { useUser } from "../../hooks/useUser";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { QuotationActionMenu } from "./QuotationActionMenu";
 import { StatusChangeButton } from "./StatusChangeButton";
@@ -84,16 +83,16 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
   const normalizedContractStatus = getNormalizedContractStatus(quotation);
   const isLocked = isQuotationLocked(quotation);
 
-  const { effectiveRole } = useUser();
-
   // TODO: Replace with actual user data from context/auth
   const currentUserId = currentUser?.id || "user-123";
   const currentUserName = currentUser?.name || "John Doe";
   const currentUserDepartment = currentUser?.department || userDepartment || "BD";
-  const activeUserRole = currentUser?.role || effectiveRole;
 
-  // Can assign if user is a Pricing Manager only (handles both old "manager" and new "Manager" role values)
-  const canAssign = userDepartment === "Pricing" && activeUserRole?.toLowerCase() === "manager";
+  const canAssign = can("pricing_quotations", "approve");
+  const canEditPricing = can("pricing_quotations", "edit");
+  const canCreateProject = can("bd_projects", "create") || can("pricing_projects", "create");
+  const canActivateContract = can("pricing_contracts", "edit");
+  const canCreateBookings = can("ops_bookings", "create");
 
   // Fetch all Pricing users for the assignment dropdown, filter out managers/above in JS
   // No 'enabled' guard — query always runs; the UI is already gated by canAssign
@@ -311,10 +310,9 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
 
   const adaptedProject = adaptQuotationToProject(quotation);
 
-  // Check if pricing information should be visible
-  // Visible if: user is PD, OR status indicates quotation has been priced
-  const showPricing = userDepartment === "Pricing" || 
-    normalizedStatus === "Priced" || 
+  // Pricing is visible to anyone who can edit it, or once status indicates the quotation has been priced
+  const showPricing = canEditPricing ||
+    normalizedStatus === "Priced" ||
     normalizedStatus === "Sent to Client" ||
     normalizedStatus === "Accepted by Client" ||
     normalizedStatus === "Rejected by Client" ||
@@ -635,12 +633,10 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
 
       setCreatedProject(normalizeProjectRow(project));
 
-      if (userDepartment === "Pricing") {
+      if (canCreateBookings) {
         setShowCreateBookingsModal(true);
-      } else {
-        if (onConvertToProject) {
-          onConvertToProject(project.id);
-        }
+      } else if (onConvertToProject) {
+        onConvertToProject(project.id);
       }
 
     } catch (error) {
@@ -981,8 +977,8 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
             </>
           )}
 
-          {/* Deadline — visible to all Pricing users when a deadline is set */}
-          {userDepartment === "Pricing" && !pendingAssigneeId && (() => {
+          {/* Deadline — visible to anyone who can edit pricing when a deadline is set */}
+          {canEditPricing && !pendingAssigneeId && (() => {
             const deadline = localDeadline;
             if (!deadline) return null;
             const deadlineDate = new Date(deadline + "T00:00:00");
@@ -1028,7 +1024,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
             );
           })()}
           {/* Edit Button (Ghost Style) — hidden when locked, or when "Add Pricing" is shown (same action, better label) */}
-          {!isLocked && !(userDepartment === "Pricing" && normalizedStatus === "Pending Pricing") && (
+          {!isLocked && !(canEditPricing && normalizedStatus === "Pending Pricing") && (
             <button
               onClick={onEdit}
               style={{
@@ -1065,8 +1061,8 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
             userDepartment={userDepartment}
           />
           
-          {/* Edit Pricing - PD Only, Pending Pricing Status */}
-          {userDepartment === "Pricing" && normalizedStatus === "Pending Pricing" && (
+          {/* Edit Pricing — anyone with pricing edit grant, only at Pending Pricing status */}
+          {canEditPricing && normalizedStatus === "Pending Pricing" && (
             <button
               onClick={onEdit}
               style={{
@@ -1095,8 +1091,8 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
             </button>
           )}
 
-          {/* Create Project - BD and PD, Accepted by Client Status (Project quotations only) */}
-          {(userDepartment === "Business Development" || userDepartment === "Pricing") && normalizedStatus === "Accepted by Client" && !quotation.project_id && quotation.quotation_type !== "contract" && (
+          {/* Create Project — anyone with create grant, Accepted by Client status (Project quotations only) */}
+          {canCreateProject && normalizedStatus === "Accepted by Client" && !quotation.project_id && quotation.quotation_type !== "contract" && (
             <button
               onClick={handleAcceptAndCreateProject}
               disabled={isCreatingProject}
@@ -1131,8 +1127,8 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
             </button>
           )}
 
-          {/* Activate Contract - BD and PD, Accepted by Client Status (Contract quotations only) */}
-          {(userDepartment === "Business Development" || userDepartment === "Pricing") && normalizedStatus === "Accepted by Client" && quotation.quotation_type === "contract" && normalizedContractStatus !== "Active" && (
+          {/* Activate Contract — anyone with contract edit grant, Accepted by Client status (Contract quotations only) */}
+          {canActivateContract && normalizedStatus === "Accepted by Client" && quotation.quotation_type === "contract" && normalizedContractStatus !== "Active" && (
             <button
               onClick={handleActivateContract}
               disabled={isActivatingContract}

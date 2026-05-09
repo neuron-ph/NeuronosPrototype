@@ -2,8 +2,18 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../utils/supabase/client';
 import { useUser } from '../hooks/useUser';
-import { getInheritedPermission } from '../components/admin/permissionsConfig';
 import type { ModuleId, ActionId } from '../components/admin/permissionsConfig';
+import type { AccessProfileSummary, ModuleGrants } from '../components/admin/accessProfiles/accessProfileTypes';
+import {
+  chooseRoleDefaultProfile,
+  mergeGrantLayers,
+} from '../components/admin/accessProfiles/accessGrantUtils';
+
+type PermissionOverrideRow = {
+  module_grants: ModuleGrants | null;
+  applied_profile_id: string | null;
+  profile?: AccessProfileSummary | null;
+};
 
 interface PermissionContextType {
   /**
@@ -29,41 +39,62 @@ const PermissionContext = createContext<PermissionContextType>({
 export function PermissionProvider({ children }: { children: ReactNode }) {
   const { user, effectiveDepartment, effectiveRole } = useUser();
 
-  const { data: moduleGrants = {}, isLoading } = useQuery<Record<string, boolean>>({
-    queryKey: ['permission_overrides', 'module_grants', user?.id ?? ''],
+  const { data, isLoading } = useQuery<{
+    moduleGrants: ModuleGrants;
+    explicitGrants: ModuleGrants;
+  }>({
+    queryKey: ['permission_overrides', 'resolved_module_grants', user?.id ?? '', effectiveRole ?? '', effectiveDepartment ?? ''],
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      if (!user) return {};
-      const { data, error } = await supabase
-        .from('permission_overrides')
-        .select('module_grants')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      if (error) {
-        console.warn('[PermissionProvider] fetch failed:', error.message);
-        return {};
+      if (!user) return { moduleGrants: {}, explicitGrants: {} };
+
+      const [{ data: overrideData, error: overrideError }, { data: profilesData, error: profilesError }] = await Promise.all([
+        supabase
+          .from('permission_overrides')
+          .select('module_grants, applied_profile_id, profile:applied_profile_id(id, name, description, target_department, target_role, module_grants, visibility_scope, visibility_departments, updated_at)')
+          .eq('user_id', user.id)
+          .maybeSingle(),
+        supabase
+          .from('access_profiles')
+          .select('id, name, description, target_department, target_role, module_grants, visibility_scope, visibility_departments, updated_at')
+          .eq('is_active', true),
+      ]);
+
+      if (overrideError) {
+        console.warn('[PermissionProvider] override fetch failed:', overrideError.message);
       }
-      return (data?.module_grants as Record<string, boolean>) ?? {};
+      if (profilesError) {
+        console.warn('[PermissionProvider] profiles fetch failed:', profilesError.message);
+      }
+
+      const override = (overrideData ?? null) as PermissionOverrideRow | null;
+      const profiles = (profilesData ?? []) as AccessProfileSummary[];
+      const baselineProfile = override?.profile
+        ?? chooseRoleDefaultProfile(profiles, effectiveRole ?? 'staff', effectiveDepartment);
+      const explicitGrants = (override?.module_grants ?? {}) as ModuleGrants;
+      const moduleGrants = mergeGrantLayers(baselineProfile?.module_grants, explicitGrants);
+
+      return { moduleGrants, explicitGrants };
     },
   });
 
+  const moduleGrants = data?.moduleGrants ?? {};
+  const explicitGrants = data?.explicitGrants ?? {};
+
   const can = useMemo(() => {
-    const dept = effectiveDepartment ?? '';
-    const role = effectiveRole ?? 'staff';
     return (moduleId: ModuleId, action: ActionId): boolean => {
       const key = `${moduleId}:${action}`;
-      if (key in moduleGrants) return moduleGrants[key];
-      return getInheritedPermission(role, dept, moduleId, action);
+      return moduleGrants[key] === true;
     };
-  }, [moduleGrants, effectiveDepartment, effectiveRole]);
+  }, [moduleGrants]);
 
   const hasExplicitGrant = useMemo(
     () => (moduleId: ModuleId, action: ActionId): boolean => {
       const key = `${moduleId}:${action}`;
-      return moduleGrants[key] === true;
+      return explicitGrants[key] === true;
     },
-    [moduleGrants],
+    [explicitGrants],
   );
 
   const value = useMemo<PermissionContextType>(

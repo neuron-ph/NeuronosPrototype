@@ -202,8 +202,7 @@ export function ProjectDetail({
     }
   };
 
-  // BD and PD users see the actions menu (not Operations)
-  const showActions = department === "BD";
+  const showActions = can("bd_projects", "edit") || can("pricing_projects", "edit");
 
   // Define the Tab Structure
   const TAB_STRUCTURE = {
