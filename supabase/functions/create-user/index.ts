@@ -85,13 +85,7 @@ serve(async (req) => {
     }
 
     const callerModuleGrants = (callerOverride?.module_grants ?? {}) as Record<string, boolean>;
-    // Transitional: executives retain implicit caller auth until an Executive role-default
-    // profile is seeded. Per the Access Configuration source-of-truth migration, this bypass
-    // should be removed once that profile exists.
-    const canCreateUsers =
-      callerProfile.department === "Executive" ||
-      callerProfile.role === "executive" ||
-      hasAdminUsersGrant(callerModuleGrants, "create", "users");
+    const canCreateUsers = hasAdminUsersGrant(callerModuleGrants, "create", "users");
 
     if (!canCreateUsers) {
       return new Response(
