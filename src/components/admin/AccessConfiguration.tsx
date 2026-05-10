@@ -228,7 +228,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
       setLoading(true);
       const { data } = await supabase
         .from("permission_overrides")
-        .select("module_grants, applied_profile_id, profile:applied_profile_id(id, name, description, target_department, target_role, module_grants, visibility_scope, visibility_departments, updated_at)")
+        .select("module_grants, applied_profile_id, scope, departments, profile:applied_profile_id(id, name, description, target_department, target_role, module_grants, visibility_scope, visibility_departments, updated_at)")
         .eq("user_id", user.id)
         .maybeSingle();
       if (!cancelled) {
