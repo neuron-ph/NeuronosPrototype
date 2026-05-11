@@ -43,6 +43,14 @@ export function getAdapterForType(profileType: string): {
       return { adapter: createNamedProfileAdapter('profile_carriers', profileType) };
     case 'profile_forwarders':
       return { adapter: createNamedProfileAdapter('profile_forwarders', profileType) };
+    case 'profile_shipping_lines':
+      return { adapter: createNamedProfileAdapter('profile_shipping_lines', profileType) };
+    case 'profile_trucking_companies':
+      return { adapter: createNamedProfileAdapter('profile_trucking_companies', profileType) };
+    case 'profile_consolidators':
+      return { adapter: createNamedProfileAdapter('profile_consolidators', profileType) };
+    case 'profile_insurers':
+      return { adapter: createNamedProfileAdapter('profile_insurers', profileType) };
     case 'dispatch_people':
       return { adapter: dispatchPeopleAdapter, providerTag: profileType };
     case 'vehicles':

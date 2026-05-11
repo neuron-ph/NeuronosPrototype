@@ -71,23 +71,12 @@ export async function quickCreateProfileRecord(
         return { id: data.id, label: data.plate_number, profileType, source: 'linked' };
       }
 
-      case 'service_providers': {
-        const providerTag = entry.providerTag ?? profileType;
-        const { data, error } = await supabase
-          .from('service_providers')
-          .insert({
-            company_name: trimmed,
-            provider_type: 'international',
-            booking_profile_tags: [providerTag],
-          })
-          .select('id, company_name')
-          .single();
-        if (error || !data) return null;
-        return { id: data.id, label: data.company_name, profileType, source: 'linked' };
-      }
-
       case 'profile_carriers':
-      case 'profile_forwarders': {
+      case 'profile_forwarders':
+      case 'profile_shipping_lines':
+      case 'profile_trucking_companies':
+      case 'profile_consolidators':
+      case 'profile_insurers': {
         const { data, error } = await supabase
           .from(entry.source)
           .insert({ name: trimmed })
