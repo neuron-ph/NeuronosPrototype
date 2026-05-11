@@ -74,6 +74,10 @@ export type ProfileRegistryEntry = {
     | 'profile_cpe_codes'
     | 'profile_carriers'
     | 'profile_forwarders'
+    | 'profile_shipping_lines'
+    | 'profile_trucking_companies'
+    | 'profile_consolidators'
+    | 'profile_insurers'
     | 'profile_industries'
     | 'profile_lead_sources'
     | 'profile_service_statuses';

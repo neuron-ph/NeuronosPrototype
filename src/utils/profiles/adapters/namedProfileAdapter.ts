@@ -4,7 +4,15 @@ import type { ProfileAdapter, ProfileLookupRecord } from '../profileAdapters';
 import type { ProfileRegistryEntry } from '../../../types/profiles';
 
 export function createNamedProfileAdapter(
-  source: Extract<ProfileRegistryEntry['source'], 'profile_carriers' | 'profile_forwarders'>,
+  source: Extract<
+    ProfileRegistryEntry['source'],
+    | 'profile_carriers'
+    | 'profile_forwarders'
+    | 'profile_shipping_lines'
+    | 'profile_trucking_companies'
+    | 'profile_consolidators'
+    | 'profile_insurers'
+  >,
   profileType: string,
 ): ProfileAdapter {
   return {

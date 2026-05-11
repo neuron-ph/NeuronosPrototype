@@ -70,21 +70,22 @@ describe('profileRegistry admin metadata', () => {
     }
   });
 
-  it('shared vendor sections use arrayContainsFilter on booking_profile_tags', () => {
-    const serviceProviderTypes = ['consolidator', 'shipping_line', 'trucking_company', 'insurer'];
-    for (const t of serviceProviderTypes) {
-      const admin = profileRegistry[t]?.admin;
-      expect(admin?.arrayContainsFilter?.booking_profile_tags).toBe(t);
+  it('vendor-profile sections are decoupled into standalone profile tables', () => {
+    const decoupled: Array<[string, string]> = [
+      ['carrier', 'profile_carriers'],
+      ['forwarder', 'profile_forwarders'],
+      ['shipping_line', 'profile_shipping_lines'],
+      ['trucking_company', 'profile_trucking_companies'],
+      ['consolidator', 'profile_consolidators'],
+      ['insurer', 'profile_insurers'],
+    ];
+    for (const [profileType, expectedSource] of decoupled) {
+      const entry = profileRegistry[profileType];
+      expect(entry?.source, `${profileType} source`).toBe(expectedSource);
+      expect(entry?.admin?.columns[0]?.key, `${profileType} primary column`).toBe('name');
+      expect(entry?.admin?.arrayContainsFilter, `${profileType} arrayContainsFilter`).toBeUndefined();
+      expect(entry?.providerTag, `${profileType} providerTag`).toBeUndefined();
     }
-  });
-
-  it('carrier and forwarder are decoupled into standalone profile tables', () => {
-    expect(profileRegistry.carrier?.source).toBe('profile_carriers');
-    expect(profileRegistry.forwarder?.source).toBe('profile_forwarders');
-    expect(profileRegistry.carrier?.admin?.columns[0]?.key).toBe('name');
-    expect(profileRegistry.forwarder?.admin?.columns[0]?.key).toBe('name');
-    expect(profileRegistry.carrier?.admin?.arrayContainsFilter).toBeUndefined();
-    expect(profileRegistry.forwarder?.admin?.arrayContainsFilter).toBeUndefined();
   });
 
   it('trade-party types are managed inside each Customer profile, not as flat sections', () => {

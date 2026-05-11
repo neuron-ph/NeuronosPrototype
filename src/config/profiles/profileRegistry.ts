@@ -144,12 +144,11 @@ export const profileRegistry: Record<string, ProfileRegistryEntry> = {
     quickCreateAllowed: false,
   },
   consolidator: {
-    source: 'service_providers',
+    source: 'profile_consolidators',
     searchFields: ['name'],
     strictness: 'combo',
     quickCreateAllowed: true,
-    providerTag: 'consolidator',
-    admin: serviceProviderAdmin('Consolidator', 'Consolidators', 'LCL consolidators.', 'consolidator'),
+    admin: namedProfileAdmin('Consolidator', 'Consolidators', 'LCL consolidators.'),
   },
   forwarder: {
     source: 'profile_forwarders',
@@ -159,28 +158,25 @@ export const profileRegistry: Record<string, ProfileRegistryEntry> = {
     admin: namedProfileAdmin('Forwarder', 'Forwarders', 'Standalone forwarder list used in shipment fields. Decoupled from Vendors/Network Partners.'),
   },
   shipping_line: {
-    source: 'service_providers',
+    source: 'profile_shipping_lines',
     searchFields: ['name'],
     strictness: 'combo',
     quickCreateAllowed: true,
-    providerTag: 'shipping_line',
-    admin: serviceProviderAdmin('Shipping Line', 'Shipping Lines', 'Shipping lines used in trucking and FCL bookings.', 'shipping_line'),
+    admin: namedProfileAdmin('Shipping Line', 'Shipping Lines', 'Shipping lines used in trucking and FCL bookings.'),
   },
   trucking_company: {
-    source: 'service_providers',
+    source: 'profile_trucking_companies',
     searchFields: ['name'],
     strictness: 'combo',
     quickCreateAllowed: true,
-    providerTag: 'trucking_company',
-    admin: serviceProviderAdmin('Trucking Company', 'Trucking Companies', 'Subcontracted trucking companies.', 'trucking_company'),
+    admin: namedProfileAdmin('Trucking Company', 'Trucking Companies', 'Subcontracted trucking companies.'),
   },
   insurer: {
-    source: 'service_providers',
+    source: 'profile_insurers',
     searchFields: ['name'],
     strictness: 'combo',
     quickCreateAllowed: true,
-    providerTag: 'insurer',
-    admin: serviceProviderAdmin('Insurer', 'Insurers', 'Marine insurance providers.', 'insurer'),
+    admin: namedProfileAdmin('Insurer', 'Insurers', 'Marine insurance providers.'),
   },
   warehouse: {
     source: 'profile_locations',
@@ -359,43 +355,6 @@ function enumProfile(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function serviceProviderAdmin(
-  label: string,
-  pluralLabel: string,
-  description: string,
-  providerTag: string,
-  extraColumns: string[] = [],
-) {
-  const baseColumns = [
-    { key: 'company_name', header: 'Name' },
-    { key: 'country', header: 'Country', width: '160px' },
-    ...(extraColumns.includes('territory') ? [{ key: 'territory', header: 'Territory', width: '160px' }] : []),
-    { key: 'contact_person', header: 'Contact Person' },
-    { key: 'contact_email', header: 'Contact Email' },
-  ];
-  return {
-    label,
-    pluralLabel,
-    description,
-    duplicateGuard: 'normalized-primary',
-    arrayContainsFilter: { booking_profile_tags: providerTag },
-    insertDefaults: { booking_profile_tags: [providerTag], provider_type: providerTag },
-    orderBy: { column: 'company_name', ascending: true },
-    columns: baseColumns,
-    formFields: [
-      { key: 'company_name' as const, label: 'Company Name', control: 'text' as const, required: true },
-      { key: 'country' as const, label: 'Country', control: 'text' as const },
-      { key: 'territory' as const, label: 'Territory', control: 'text' as const },
-      { key: 'wca_number' as const, label: 'WCA Number', control: 'text' as const },
-      { key: 'contact_person' as const, label: 'Contact Person', control: 'text' as const },
-      { key: 'contact_email' as const, label: 'Contact Email', control: 'text' as const },
-      { key: 'contact_phone' as const, label: 'Contact Phone', control: 'text' as const },
-      { key: 'address' as const, label: 'Address', control: 'textarea' as const },
-      { key: 'notes' as const, label: 'Notes', control: 'textarea' as const },
-    ],
-  };
-}
 
 function namedProfileAdmin(
   label: string,
