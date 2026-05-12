@@ -6,7 +6,7 @@ import { useUser } from "../../../hooks/useUser";
 import { toast } from "sonner@2.0.3";
 import { logFieldUpdate } from "../../../utils/activityLog";
 import type { JournalEntry } from "./GeneralJournal";
-import { getSource } from "./GeneralJournal";
+import { getSource, isReversalEntry, ReversalBadge, VoidBadge } from "./GeneralJournal";
 import {
   FUNCTIONAL_CURRENCY,
   formatMoney,
@@ -400,11 +400,12 @@ export function JournalEntryDetailPanel({
         gap: "12px",
       }}>
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px", flexWrap: "wrap" }}>
             <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--theme-text-primary)", fontVariantNumeric: "tabular-nums" }}>
               {entry.entry_number}
             </span>
-            <StatusChip status={entry.status} />
+            {entry.status === "void" ? <VoidBadge size="md" /> : <StatusChip status={entry.status} />}
+            {isReversalEntry(entry) && <ReversalBadge size="md" />}
           </div>
           <span style={{ fontSize: "12px", color: "var(--theme-text-muted)" }}>
             {new Date(entry.entry_date.slice(0, 10) + "T12:00:00").toLocaleDateString("en-PH", {
@@ -459,6 +460,39 @@ export function JournalEntryDetailPanel({
               {txnCurrency} @ {exchangeRate} = {FUNCTIONAL_CURRENCY}
               {(entry as any).exchange_rate_date ? ` (rate date ${(entry as any).exchange_rate_date})` : ""}
             </span>
+          </div>
+        )}
+
+        {/* Reversal / Void context banner */}
+        {!isEditing && isReversalEntry(entry) && entry.reference && (
+          <div style={{
+            marginBottom: "16px",
+            padding: "10px 12px",
+            borderRadius: "8px",
+            backgroundColor: "rgba(139, 92, 246, 0.08)",
+            border: "1px solid rgba(139, 92, 246, 0.25)",
+            display: "flex", alignItems: "center", gap: "8px",
+            fontSize: "12px", color: "var(--theme-text-primary)",
+          }}>
+            <span style={{ color: "rgb(167, 139, 250)", fontWeight: 600 }}>↩</span>
+            <span>
+              Auto-generated reversal of <strong style={{ fontVariantNumeric: "tabular-nums" }}>{entry.reference}</strong>
+            </span>
+          </div>
+        )}
+        {!isEditing && entry.status === "void" && (
+          <div style={{
+            marginBottom: "16px",
+            padding: "10px 12px",
+            borderRadius: "8px",
+            backgroundColor: "var(--theme-status-danger-bg)",
+            border: "1px solid var(--theme-status-danger-border)",
+            display: "flex", alignItems: "center", gap: "8px",
+            fontSize: "12px", color: "var(--theme-status-danger-fg)",
+            fontWeight: 500,
+          }}>
+            <AlertTriangle size={13} />
+            <span>This entry was voided — an offsetting reversal has been posted to the ledger.</span>
           </div>
         )}
 

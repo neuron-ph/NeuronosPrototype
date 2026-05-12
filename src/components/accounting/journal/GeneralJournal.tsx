@@ -3,7 +3,7 @@ import { usePermission } from "../../../context/PermissionProvider";
 import {
   BookOpen, Plus, Download, Search, ChevronLeft, ChevronRight,
   CheckCircle, AlertTriangle, Loader2, RefreshCw,
-  FileText, Receipt, CreditCard, Wallet,
+  FileText, Receipt, CreditCard, Wallet, RotateCcw, Ban,
 } from "lucide-react";
 import { supabase } from "../../../utils/supabase/client";
 import { useUser } from "../../../hooks/useUser";
@@ -202,6 +202,54 @@ function StatusChip({ status }: { status: JournalEntry["status"] }) {
       border: `1px solid ${cfg.border}`,
     }}>
       {cfg.label}
+    </span>
+  );
+}
+
+// ─── Reversal / Void badges ──────────────────────────────────────────────────
+
+export function isReversalEntry(entry: Pick<JournalEntry, "id">): boolean {
+  return entry.id.startsWith("JE-VOID-");
+}
+
+export function ReversalBadge({ size = "sm" }: { size?: "sm" | "md" } = {}) {
+  const pad = size === "md" ? "2px 8px" : "1px 7px";
+  const iconSize = size === "md" ? 11 : 10;
+  return (
+    <span
+      title="Auto-generated reversal of a voided entry"
+      style={{
+        display: "inline-flex", alignItems: "center", gap: "4px",
+        padding: pad, borderRadius: "4px", fontSize: "11px", fontWeight: 600,
+        letterSpacing: "0.02em", textTransform: "uppercase",
+        backgroundColor: "rgba(139, 92, 246, 0.14)",
+        color: "rgb(167, 139, 250)",
+        border: "1px solid rgba(139, 92, 246, 0.35)",
+      }}
+    >
+      <RotateCcw size={iconSize} />
+      Reversal
+    </span>
+  );
+}
+
+export function VoidBadge({ size = "sm" }: { size?: "sm" | "md" } = {}) {
+  const pad = size === "md" ? "2px 8px" : "1px 7px";
+  const iconSize = size === "md" ? 11 : 10;
+  return (
+    <span
+      title="This entry was voided — see its reversal for the offsetting posting"
+      style={{
+        display: "inline-flex", alignItems: "center", gap: "4px",
+        padding: pad, borderRadius: "4px", fontSize: "11px", fontWeight: 600,
+        letterSpacing: "0.02em", textTransform: "uppercase",
+        backgroundColor: "var(--theme-status-danger-bg)",
+        color: "var(--theme-status-danger-fg)",
+        border: "1px solid var(--theme-status-danger-border)",
+      }}
+    >
+      <Ban size={iconSize} />
+      Voided
     </span>
   );
 }
@@ -648,6 +696,7 @@ export function GeneralJournal() {
                       {group.rows.map((entry) => {
                         const isSelected = selectedEntry?.id === entry.id;
                         const isVoid = entry.status === "void";
+                        const isReversal = isReversalEntry(entry);
                         return (
                           <tr
                             key={entry.id}
@@ -699,7 +748,10 @@ export function GeneralJournal() {
                               {entry.total_credit > 0 ? PHP.format(entry.total_credit) : "—"}
                             </td>
                             <td style={{ padding: "10px 12px" }}>
-                              <StatusChip status={entry.status} />
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "3px" }}>
+                                {isVoid ? <VoidBadge /> : <StatusChip status={entry.status} />}
+                                {isReversal && <ReversalBadge />}
+                              </div>
                             </td>
                           </tr>
                         );
