@@ -204,7 +204,7 @@ export function StatusChip({ status, isReversal }: { status: JournalEntry["statu
           bg: "var(--neuron-pill-inactive-bg)",
           color: "var(--neuron-pill-inactive-text)",
           border: "var(--neuron-pill-inactive-border)",
-          label: "Voided",
+          label: "Reversed",
           icon: null,
         },
       }[status];
@@ -392,12 +392,12 @@ export function GeneralJournal() {
         .update({ status: "void", updated_at: new Date().toISOString() })
         .eq("id", voidTarget.id);
       if (voidErr) throw voidErr;
-      toast.success("Entry voided — reversal recorded");
+      toast.success("Entry reversed — offsetting entry recorded");
       setVoidTarget(null);
       if (selectedEntry?.id === voidTarget.id) setSelectedEntry(null);
       handleEntryCreated();
     } catch {
-      toast.error("Failed to void entry");
+      toast.error("Failed to reverse entry");
     } finally {
       setIsVoiding(false);
     }
@@ -520,7 +520,7 @@ export function GeneralJournal() {
             <option value="all">All Statuses</option>
             <option value="draft">Draft</option>
             <option value="posted">Posted</option>
-            <option value="void">Void</option>
+            <option value="void">Reversed</option>
           </select>
           {/* Account filter */}
           <select
@@ -830,7 +830,7 @@ export function GeneralJournal() {
               </div>
               <div>
                 <h3 style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
-                  Void Journal Entry?
+                  Reverse Journal Entry?
                 </h3>
                 <p style={{ margin: 0, fontSize: "12px", color: "var(--theme-text-muted)", lineHeight: 1.5 }}>
                   <strong>{voidTarget.entry_number}</strong> — {PHP.format(voidTarget.total_debit)}
@@ -838,7 +838,7 @@ export function GeneralJournal() {
               </div>
             </div>
             <p style={{ margin: "0 0 20px", fontSize: "12px", color: "var(--theme-text-muted)", lineHeight: 1.6, padding: "10px 12px", backgroundColor: "var(--theme-status-danger-bg)", borderRadius: "6px", border: "1px solid var(--theme-status-danger-border)" }}>
-              This will permanently void this entry and record an automatic reversal. This cannot be undone.
+              This will mark the entry as reversed and post an offsetting entry to the ledger. This cannot be undone.
             </p>
             <div style={{ display: "flex", gap: "8px" }}>
               <button
@@ -854,7 +854,7 @@ export function GeneralJournal() {
                 style={{ flex: 1, height: "36px", border: "none", borderRadius: "7px", backgroundColor: "var(--theme-status-danger-fg)", color: "var(--theme-text-inverse)", fontSize: "13px", fontWeight: 600, cursor: isVoiding ? "not-allowed" : "pointer", opacity: isVoiding ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
               >
                 {isVoiding && <Loader2 size={13} className="animate-spin" />}
-                {isVoiding ? "Voiding…" : "Void Entry"}
+                {isVoiding ? "Reversing…" : "Reverse Entry"}
               </button>
             </div>
           </div>
