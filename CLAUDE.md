@@ -1,319 +1,109 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+**Neuron OS** — desktop web app for asset-light freight forwarding SMEs in the Philippines. Sales → quotations → contracts → operations → accounting → HR → executive reporting.
 
-## Project Summary
+## Branch & Deployment
 
-**Neuron OS** — a desktop web app for asset-light freight forwarding SMEs in the Philippines. Manages the full business lifecycle: sales → quotations → contracts → operations bookings → accounting (billings, expenses, invoices, collections) → HR → executive reporting.
-
-Development is now fully local with Claude Code. No Figma Make. All data access goes through the Supabase JS client directly. Edge Functions are reserved for operations that cannot be done from the frontend client (see below).
-
-## Branch & Deployment Workflow
-
-| Branch | Vercel Environment | Supabase |
+| Branch | Vercel | Supabase |
 |---|---|---|
-| `dev` | Preview deployment | `oqermaidggvanahumjmj` (dev/staging) |
-| `main` | Production deployment | `ubspbukgcxmzegnomlgi` (prod) |
+| `dev` | Preview | `oqermaidggvanahumjmj` (dev) |
+| `main` | Production | `ubspbukgcxmzegnomlgi` (prod) |
 
-- **Always develop and commit on `dev`** — pushing to `dev` triggers a Vercel preview build against the dev Supabase
-- **Never commit directly to `main`** — it is production
-- **To release to prod**: Marcus says **"Release dev to prod"** — this triggers a full checklist (see below), not just a git merge. Never do a partial release.
-- Vercel env vars are scoped per environment: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set to the dev instance for Preview, and the prod instance for Production
+- Always develop on `dev`. Never commit directly to `main`.
 
 ### "Release dev to prod" — Full Checklist
 
-When Marcus says **"Release dev to prod"**, always do ALL of these in order:
+When Marcus says **"Release dev to prod"**, do ALL of these in order:
 
-1. **Edge Functions** — compare every function in `supabase/functions/` against what's deployed on prod (via MCP). Redeploy any that differ.
-2. **SQL migrations** — check `supabase/migrations/` for any files not yet applied to prod. Surface them to Marcus for manual confirmation before applying.
+1. **Edge Functions** — compare every function in `supabase/functions/` against prod (via MCP). Redeploy any that differ.
+2. **SQL migrations** — check `supabase/migrations/` for files not yet applied to prod. Surface them to Marcus before applying.
 3. **Merge `dev → main`** and push.
 4. **Tag the release** — `git tag stable/YYYY-MM-DD && git push origin stable/YYYY-MM-DD`.
 
-Never do just the git merge alone — Edge Functions and DB schema are separate systems that don't move with git. Skipping steps 1–2 is how dev/prod drift happens.
+Never do just the git merge alone — Edge Functions and DB schema don't move with git.
 
-### Locking a Stable Prod State
-
-When a prod release is stable and you want to keep developing without risk:
-
-```bash
-# Tag the stable commit so you can always return to it
-git tag stable/YYYY-MM-DD        # e.g. stable/2026-04-15
-git push origin stable/2026-04-15
-
-# Then keep developing on dev as normal
-```
-
-To roll prod back to the last stable tag if something goes wrong:
-```bash
-git checkout main
-git reset --hard stable/YYYY-MM-DD
-git push origin main --force      # confirm with Marcus before doing this
-```
-
-**The rule**: tag `main` every time a prod release is confirmed working. Tags are cheap and give you a safe rollback point without needing a separate branch.
-
-## Commands
-
-```bash
-npm run dev      # Start Vite dev server
-npm run build    # Build for production
-```
+Rollback: `git checkout main && git reset --hard stable/YYYY-MM-DD && git push origin main --force` (confirm with Marcus first).
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Frontend | React 18 + TypeScript |
-| Styling | Tailwind CSS v4.0 — **no `tailwind.config.js`**, config is in `/src/styles/globals.css` |
-| UI Library | shadcn/ui (Radix UI) in `/src/components/ui/` |
-| Icons | `lucide-react` (20px standard, 16px small, 24px headers) |
-| Routing | `react-router` (NOT `react-router-dom`) |
-| State | React hooks only — no Redux/Zustand |
-| Backend | Supabase — Postgres + Auth + RLS (direct client; Edge Functions only when necessary) |
-| Charts | Recharts |
-| Toasts | `sonner@2.0.3` |
-| Animations | `motion/react` |
+React 18 + TS, Tailwind v4 (config in `/src/styles/globals.css`, no `tailwind.config.js`), shadcn/ui, `react-router` (NOT `react-router-dom`), Supabase (direct client), Recharts, `sonner@2.0.3`, `motion/react`, `lucide-react`.
 
-## Key Import Patterns
+## Key Imports
 
 ```tsx
-// All data operations — use this, never apiFetch or API_URL
-import { supabase } from "../utils/supabase/client";
-
-// User/auth context
+import { supabase } from "../utils/supabase/client";  // never apiFetch / API_URL
 import { useUser } from "../hooks/useUser";
-
-// User picker dropdowns
-import { useUsers } from "../hooks/useUsers";
-
-// Toasts (version number is REQUIRED)
-import { toast } from "sonner@2.0.3";
-
-// Routing
+import { toast } from "sonner@2.0.3";  // version is REQUIRED
 import { useNavigate, useParams } from "react-router";
 ```
 
-## Data Fetching Patterns
+JSONB `details` columns (quotations, projects, bookings, evouchers): always merge `{ ...data?.details, ...data }`.
 
-```tsx
-// Fetch list
-const { data, error } = await supabase.from('customers').select('*');
+## Edge Function Rules
 
-// Fetch with joins
-const { data, error } = await supabase
-  .from('bookings')
-  .select('*, projects(project_number), customers(name)')
-  .eq('project_id', projectId);
+Default to `supabase.from()`. Edge Functions only for server-side privileges (admin auth ops requiring `SUPABASE_SERVICE_ROLE_KEY`).
 
-// Fetch single row
-const { data } = await supabase.from('quotations').select('*').eq('id', id).maybeSingle();
+1. **Never edit Edge Functions in the Supabase dashboard.** Edit `supabase/functions/<name>/index.ts` locally, deploy via MCP/CLI.
+2. **Use `verify_jwt: false` + manual auth inside the function.** Read Authorization header, decode JWT manually (`atob(jwt.split(".")[1])`), verify with admin client.
+3. **Deploy to prod immediately after dev changes** — don't leave versions out of sync.
 
-// Tables with JSONB details column — merge details into the row
-const merged = { ...data?.details, ...data };
+## Catalog Architecture (non-negotiable)
 
-// Create
-const { data, error } = await supabase.from('customers').insert(payload).select().single();
+- No revenue line-item form may use free-text outside Billing Catalog (`side="revenue"`)
+- No expense line-item form may use free-text outside Expense Catalog (`side="expense"`)
+- No `billing_line_items` insert may omit `catalog_item_id`
+- No `evoucher_line_items` insert may omit `catalog_item_id`
+- Every catalog write must include `catalog_snapshot` from `buildCatalogSnapshot()` (`src/utils/catalogSnapshot.ts`)
+- Categories come from `catalog_categories` table — never hardcode
+- Usage counts via `get_catalog_usage_counts()` RPC — never manual
 
-// Update
-const { data, error } = await supabase.from('customers').update(payload).eq('id', id);
+Components: `CatalogItemCombobox` (`src/components/shared/pricing/`), `CategoryDropdown` (`src/components/pricing/quotations/`).
 
-// Delete
-const { error } = await supabase.from('customers').delete().eq('id', id);
-```
+## Critical Patterns
 
-## Canonical Taxonomy
-
-```
-department:      'Business Development' | 'Pricing' | 'Operations' | 'Accounting' | 'Executive' | 'HR'
-role:            'rep' | 'manager' | 'director'
-service_type:    'Forwarding' | 'Brokerage' | 'Trucking' | 'Marine Insurance' | 'Others'  (Operations only)
-operations_role: 'Manager' | 'Supervisor' | 'Handler'  (Operations only)
-```
-
-Role hierarchy: rep (0) < manager (1) < director (2). Executive department auto-promotes to director privileges.
-
-## Development Workflow
-
-1. Wait for explicit "Go Ahead" before writing code
-2. Check `AGENT_COORDINATION.md` in the project root when Marcus says "check the board." Claim tasks before starting them, update when done, and leave messages for Claude if needed.
+- **CustomDropdown** (`src/components/bd/CustomDropdown.tsx`) — `createPortal` to body, `position: fixed`, `zIndex: 9999`, scroll-reposition (don't close). Never change.
+- **Unified tab components** — always reuse, never recreate: `UnifiedBillingsTab`, `UnifiedExpensesTab`, `UnifiedInvoicesTab`, `UnifiedCollectionsTab`.
+- **Quotations vs Contracts**: same `quotations` table, `quotation_type: "spot" | "contract"`.
+- **DataTable**: use `src/components/common/DataTable.tsx`, not custom tables.
+- **RouteGuard**: use `src/components/RouteGuard.tsx` for protected routes.
 
 ## Protected Files (NEVER modify)
 
 - `/src/components/figma/ImageWithFallback.tsx`
 - `/src/utils/supabase/info.tsx`
 
-## Critical Patterns
-
-**CustomDropdown** (`/src/components/bd/CustomDropdown.tsx`): Uses `createPortal` to `document.body`, `position: fixed`, `zIndex: 9999`, scroll-repositioning (not closing). Never change this pattern.
-
-**Unified tab components** — shared across Projects, Contracts, Bookings, and Aggregate views. Always reuse, never recreate:
-- `UnifiedBillingsTab` — `/src/components/shared/billings/`
-- `UnifiedExpensesTab` — `/src/components/accounting/`
-- `UnifiedInvoicesTab` — `/src/components/shared/invoices/`
-- `UnifiedCollectionsTab` — `/src/components/shared/collections/`
-
-**Quotations vs Contracts**: Same `quotations` table, distinguished by `quotation_type: "spot" | "contract"`.
-
-**Billing Items vs Invoices**: `billing_items` are line-item atoms; `billings` with `invoice_number` are invoice documents.
-
-**DataTable**: Use `/src/components/common/DataTable.tsx` for all tables, not custom-built tables.
-
-**Route Guards**: `/src/components/RouteGuard.tsx` wraps routes in `App.tsx` by department/role. Always use this for protected routes.
-
-**JSONB details columns**: Tables like `quotations`, `projects`, `bookings`, `evouchers` store overflow fields in a `details` JSONB column. Always merge: `{ ...data?.details, ...data }`.
-
-## Context Navigation — Use Dora First
-
-Before reading any file, use dora to navigate without burning tokens:
-
-```bash
-dora symbol useUser              # find symbol definition + exact location
-dora refs CustomDropdown         # see all 60 import sites before touching it
-dora file src/App.tsx            # see all 33 deps — know what's safe to change
-dora docs search "billing"       # search doc content without reading files
-dora query "SELECT ..."          # custom SQL against the code index
-```
-
-Still-valid context files in `/src/context/`:
-- `MODULE_MAP.md` — module inventory, still accurate
-- `WORKING_CONVENTIONS.md` — code style and DRY rules, still applies
-- `PROJECT_OVERVIEW.md` — high-level domain overview, still useful
-
-Authoritative post-migration doc:
-- `/src/docs/handoff/Claude_Instructions_Handoff.md`
-
-## Pending (Requires Manual Action in Supabase Dashboard)
-
-These SQL migrations are written and ready but must be applied manually in the Supabase SQL Editor:
-- `ALTER TABLE users DROP COLUMN IF EXISTS password;`
-
-The dead Edge Function directory `/src/supabase/functions/server/` should also be deleted from the repo.
-
-## Edge Functions — Use Only When Necessary
-
-Default to `supabase.from()` for all data operations. Only reach for an Edge Function when the operation **requires server-side privileges** that cannot be done from the frontend client. Approved use cases:
-
-- **Admin auth operations** — creating users with a set password (`auth.admin.createUser`), deleting auth accounts, etc. These require the `SUPABASE_SERVICE_ROLE_KEY`, which must never be exposed to the frontend.
-
-Do not write a new Edge Function for anything achievable with the Supabase JS client and RLS.
-
-### Edge Function Rules (learned from prod incident)
-
-1. **Never edit Edge Functions directly in the Supabase dashboard.** Always edit the local file in `supabase/functions/<name>/index.ts` first, then deploy via MCP or CLI. Dashboard edits create invisible drift between dev and prod.
-
-2. **Always use `verify_jwt: false` + manual auth inside the function.** Never rely on `verify_jwt: true` (the Supabase gateway JWT check) — it can silently reject requests before the function runs, making errors hard to diagnose. Instead, read the `Authorization` header inside the function, decode the JWT manually (`atob(jwt.split(".")[1])`), and use the admin client (service role key) to verify the caller.
-
-3. **After any Edge Function change on dev, deploy to prod immediately** — don't leave the two projects running different function versions.
-
-4. **Current Edge Function pattern** (use this as the template):
-   ```ts
-   // verify_jwt: false — function handles its own auth
-   const authHeader = req.headers.get("Authorization");
-   const jwt = authHeader.replace("Bearer ", "");
-   const { sub: callerAuthId } = JSON.parse(atob(jwt.split(".")[1]));
-   // use adminClient.from("users").eq("auth_id", callerAuthId).maybeSingle() to verify caller
-   ```
-
-## Catalog Architecture (enforced — do not regress)
-
-All line-item entry across billing, expenses, and contracts is catalog-first. These rules are non-negotiable:
-
-- **No new revenue-side line item form** may use free-text item selection outside the Billing Catalog (`side="revenue"`)
-- **No new expense-side line item form** may use free-text item selection outside the Expense Catalog (`side="expense"`)
-- **No billing insert** into `billing_line_items` may omit `catalog_item_id`
-- **No expense insert** into `evoucher_line_items` may omit `catalog_item_id`
-- Every save path that writes a catalog item must also write a `catalog_snapshot` (use `buildCatalogSnapshot()` from `src/utils/catalogSnapshot.ts`)
-- Category-first UX is enforced structurally — users must create/select a category section before adding items. Use `CategoryDropdown` for the section header, pass `categoryId` to `CatalogItemCombobox`
-- Usage counts are RPC-based (`get_catalog_usage_counts()`) — never increment a counter manually
-- Archived items (`is_active = false`) are filtered at the DB layer in both `CatalogItemCombobox` and `CategoryDropdown`
-
-Key components:
-- `src/utils/catalogSnapshot.ts` — `buildCatalogSnapshot()` — always use this, never inline a snapshot object
-- `src/types/catalogLineItems.ts` — `CatalogSnapshot`, `BillingLineItemPayload`, `ExpenseLineItemPayload`
-- `src/components/shared/pricing/CatalogItemCombobox.tsx` — universal item picker (pass `side` + `categoryId`)
-- `src/components/pricing/quotations/CategoryDropdown.tsx` — category picker (pass `side`)
-
 ## Things to Avoid
 
-- Don't use `apiFetch`, `fetchWithRetry`, or `API_URL` — migration to `supabase.from()` is complete
-- Don't use `react-router-dom` — use `react-router`
-- Don't use `react-resizable` — use `re-resizable`
-- Don't import sonner without version — must be `"sonner@2.0.3"`
-- Don't add shadows where borders are expected (Neuron design system)
-- Don't duplicate Unified tab component UI — always reuse with props
-- Don't leak `SUPABASE_SERVICE_ROLE_KEY` to the frontend
-- Don't create a `tailwind.config.js` — Tailwind v4 uses `@theme inline` in `globals.css`
-- Don't create mock data when real Supabase tables exist
-- Don't add hardcoded category or sub-category lists — all categories come from `catalog_categories` table
-- Don't use `ChargeTypeCombobox` or `chargeTypeRegistry` for billing-side items — replaced by `CatalogItemCombobox`
-- Don't use the old `expenseCategory` / `subCategory` state pattern in E-Voucher forms — replaced by `categorySections`
+- `apiFetch`, `fetchWithRetry`, `API_URL` (migration complete)
+- `react-router-dom` (use `react-router`), `react-resizable` (use `re-resizable`)
+- `sonner` without version pin
+- `tailwind.config.js` (Tailwind v4 uses `@theme inline` in `globals.css`)
+- Mock data when real Supabase tables exist
+- Leaking `SUPABASE_SERVICE_ROLE_KEY` to frontend
+- `ChargeTypeCombobox` / `chargeTypeRegistry` (replaced by `CatalogItemCombobox`)
 
 ## Design Tokens
 
-Colors: `#12332B` (primary text/ink), `#0F766E` (teal actions), `#667085` (muted text), `#E5E9F0` (borders), `#F9FAFB` (subtle backgrounds), `#FFFFFF` (elevated), `#F7FAF8` (page bg)
+Colors: `#12332B` ink, `#0F766E` teal, `#667085` muted, `#E5E9F0` borders, `#F9FAFB` subtle bg, `#F7FAF8` page bg.
+Font sizes: `text-[13px]` body, `text-[14px]` labels, `text-[32px]` titles.
+Currency: `Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" })`.
 
-Font sizes: `text-[13px]` body, `text-[14px]` labels, `text-[32px]` page titles
+## Workflow
 
-Currency: `Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" })`
+1. Wait for explicit "Go Ahead" before writing code.
+2. Check `AGENT_COORDINATION.md` when Marcus says "check the board."
+3. Use `dora` first for code search (`dora symbol`, `dora refs`, `dora file`, `dora docs search`).
 
 ## Karpathy Coding Principles
 
-Behavioral guidelines to reduce common LLM coding mistakes.
-
-**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
-
 ### 1. Think Before Coding
-
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
-
-Before implementing:
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
+Don't assume. State assumptions; ask if uncertain. Present multiple interpretations rather than picking silently. Push back when a simpler approach exists.
 
 ### 2. Simplicity First
-
-**Minimum code that solves the problem. Nothing speculative.**
-
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
-
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+Minimum code that solves the problem. No speculative features, single-use abstractions, unrequested flexibility, or error handling for impossible scenarios. If 200 lines could be 50, rewrite.
 
 ### 3. Surgical Changes
-
-**Touch only what you must. Clean up only your own mess.**
-
-When editing existing code:
-- Don't "improve" adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it - don't delete it.
-
-When your changes create orphans:
-- Remove imports/variables/functions that YOUR changes made unused.
-- Don't remove pre-existing dead code unless asked.
-
-The test: Every changed line should trace directly to the user's request.
+Touch only what you must. Don't "improve" adjacent code or refactor things that aren't broken. Match existing style. Remove orphans YOUR changes created; don't delete pre-existing dead code unless asked. Every changed line should trace to the user's request.
 
 ### 4. Goal-Driven Execution
-
-**Define success criteria. Loop until verified.**
-
-Transform tasks into verifiable goals:
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
-
-For multi-step tasks, state a brief plan:
-```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
-```
-
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+Transform tasks into verifiable goals ("Fix the bug" → "Write a test that reproduces it, then make it pass"). For multi-step work, state a brief numbered plan with verification per step.
