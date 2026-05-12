@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
-import { X, ExternalLink, AlertTriangle, CheckCircle, User, Clock, Loader2, Send, Pencil, Save, History } from "lucide-react";
+import { X, ExternalLink, AlertTriangle, CheckCircle, User, Clock, Loader2, Send, Pencil, Save, History, RotateCcw } from "lucide-react";
 import { useNavigate } from "react-router";
 import { supabase } from "../../../utils/supabase/client";
 import { useUser } from "../../../hooks/useUser";
 import { toast } from "sonner@2.0.3";
 import { logFieldUpdate } from "../../../utils/activityLog";
 import type { JournalEntry } from "./GeneralJournal";
-import { getSource, isReversalEntry, ReversalBadge, VoidBadge } from "./GeneralJournal";
+import { getSource, isReversalEntry } from "./GeneralJournal";
 import {
   FUNCTIONAL_CURRENCY,
   formatMoney,
@@ -47,35 +47,47 @@ function formatDateTime(iso: string) {
 
 // ─── Status chip ──────────────────────────────────────────────────────────────
 
-function StatusChip({ status }: { status: JournalEntry["status"] }) {
-  const cfg = {
-    posted: {
-      bg: "var(--theme-status-success-bg)",
-      color: "var(--theme-status-success-fg)",
-      border: "var(--theme-status-success-border)",
-      label: "Posted",
-    },
-    draft: {
-      bg: "var(--theme-status-warning-bg)",
-      color: "var(--theme-status-warning-fg)",
-      border: "var(--theme-status-warning-border)",
-      label: "Draft",
-    },
-    void: {
-      bg: "var(--neuron-pill-inactive-bg)",
-      color: "var(--neuron-pill-inactive-text)",
-      border: "var(--neuron-pill-inactive-border)",
-      label: "Void",
-    },
-  }[status];
+function StatusChip({ status, isReversal }: { status: JournalEntry["status"]; isReversal?: boolean }) {
+  const cfg = isReversal && status === "posted"
+    ? {
+        bg: "var(--theme-status-success-bg)",
+        color: "var(--theme-status-success-fg)",
+        border: "var(--theme-status-success-border)",
+        label: "Reversal",
+        icon: <RotateCcw size={11} strokeWidth={2.5} />,
+      }
+    : {
+        posted: {
+          bg: "var(--theme-status-success-bg)",
+          color: "var(--theme-status-success-fg)",
+          border: "var(--theme-status-success-border)",
+          label: "Posted",
+          icon: null,
+        },
+        draft: {
+          bg: "var(--theme-status-warning-bg)",
+          color: "var(--theme-status-warning-fg)",
+          border: "var(--theme-status-warning-border)",
+          label: "Draft",
+          icon: null,
+        },
+        void: {
+          bg: "var(--neuron-pill-inactive-bg)",
+          color: "var(--neuron-pill-inactive-text)",
+          border: "var(--neuron-pill-inactive-border)",
+          label: "Voided",
+          icon: null,
+        },
+      }[status];
   return (
     <span style={{
-      display: "inline-flex", alignItems: "center",
+      display: "inline-flex", alignItems: "center", gap: "5px",
       padding: "2px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: 600,
       letterSpacing: "0.03em", textTransform: "uppercase",
       backgroundColor: cfg.bg, color: cfg.color,
       border: `1px solid ${cfg.border}`,
     }}>
+      {cfg.icon}
       {cfg.label}
     </span>
   );
@@ -404,8 +416,7 @@ export function JournalEntryDetailPanel({
             <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--theme-text-primary)", fontVariantNumeric: "tabular-nums" }}>
               {entry.entry_number}
             </span>
-            {entry.status === "void" ? <VoidBadge size="md" /> : <StatusChip status={entry.status} />}
-            {isReversalEntry(entry) && <ReversalBadge size="md" />}
+            <StatusChip status={entry.status} isReversal={isReversalEntry(entry)} />
           </div>
           <span style={{ fontSize: "12px", color: "var(--theme-text-muted)" }}>
             {new Date(entry.entry_date.slice(0, 10) + "T12:00:00").toLocaleDateString("en-PH", {
@@ -463,39 +474,6 @@ export function JournalEntryDetailPanel({
           </div>
         )}
 
-        {/* Reversal / Void context banner */}
-        {!isEditing && isReversalEntry(entry) && entry.reference && (
-          <div style={{
-            marginBottom: "16px",
-            padding: "10px 12px",
-            borderRadius: "8px",
-            backgroundColor: "rgba(139, 92, 246, 0.08)",
-            border: "1px solid rgba(139, 92, 246, 0.25)",
-            display: "flex", alignItems: "center", gap: "8px",
-            fontSize: "12px", color: "var(--theme-text-primary)",
-          }}>
-            <span style={{ color: "rgb(167, 139, 250)", fontWeight: 600 }}>↩</span>
-            <span>
-              Auto-generated reversal of <strong style={{ fontVariantNumeric: "tabular-nums" }}>{entry.reference}</strong>
-            </span>
-          </div>
-        )}
-        {!isEditing && entry.status === "void" && (
-          <div style={{
-            marginBottom: "16px",
-            padding: "10px 12px",
-            borderRadius: "8px",
-            backgroundColor: "var(--theme-status-danger-bg)",
-            border: "1px solid var(--theme-status-danger-border)",
-            display: "flex", alignItems: "center", gap: "8px",
-            fontSize: "12px", color: "var(--theme-status-danger-fg)",
-            fontWeight: 500,
-          }}>
-            <AlertTriangle size={13} />
-            <span>This entry was voided — an offsetting reversal has been posted to the ledger.</span>
-          </div>
-        )}
-
         {/* Description */}
         {isEditing ? (
           <div style={{ marginBottom: "16px", display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -548,9 +526,14 @@ export function JournalEntryDetailPanel({
         {entry.reference && entry.reference !== entry.evoucher_id && (
           <div style={{ marginBottom: "16px" }}>
             <label style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "4px" }}>
-              Reference
+              {isReversalEntry(entry) ? "Reverses" : "Reference"}
             </label>
-            <span style={{ fontSize: "12px", color: "var(--theme-text-muted)", fontVariantNumeric: "tabular-nums" }}>{entry.reference}</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--theme-text-primary)", fontVariantNumeric: "tabular-nums" }}>
+              {isReversalEntry(entry) && (
+                <RotateCcw size={11} strokeWidth={2.5} style={{ color: "var(--theme-status-success-fg)" }} />
+              )}
+              {entry.reference}
+            </span>
           </div>
         )}
 
