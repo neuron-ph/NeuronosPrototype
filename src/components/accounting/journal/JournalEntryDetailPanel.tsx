@@ -142,7 +142,7 @@ export function JournalEntryDetailPanel({
   const needsAssignment = entry.status === "draft" && canAct && !hasLines;
   const canEdit =
     canAct &&
-    entry.status === "posted" &&
+    (entry.status === "posted" || (entry.status === "draft" && hasLines)) &&
     !entry.id.startsWith("JE-VOID-");
 
   // Reset edit mode when switching to a different entry
@@ -780,18 +780,35 @@ export function JournalEntryDetailPanel({
         </div>
       )}
 
-      {canAct && entry.status === "draft" && (
+      {!isEditing && canAct && entry.status === "draft" && (
         <div style={{
           flexShrink: 0,
           padding: "14px 20px",
           borderTop: "1px solid var(--theme-border-default)",
           backgroundColor: "var(--theme-bg-page)",
+          display: "flex", gap: "8px",
         }}>
+          {canEdit && (
+            <button
+              onClick={handleStartEdit}
+              style={{
+                height: "40px", padding: "0 16px",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                border: "1px solid var(--theme-border-default)", borderRadius: "7px",
+                backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-primary)",
+                fontSize: "13px", fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              <Pencil size={13} />
+              Edit
+            </button>
+          )}
           <button
             onClick={handlePost}
             disabled={isPosting || !canPost}
             style={{
-              height: "40px", width: "100%",
+              height: "40px", flex: 1,
               display: "flex", alignItems: "center", justifyContent: "center", gap: "7px",
               borderRadius: "7px", fontSize: "13px", fontWeight: 600,
               cursor: isPosting || !canPost ? "not-allowed" : "pointer",
