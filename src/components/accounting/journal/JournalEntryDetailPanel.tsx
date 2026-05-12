@@ -75,7 +75,7 @@ function StatusChip({ status, isReversal }: { status: JournalEntry["status"]; is
           bg: "var(--neuron-pill-inactive-bg)",
           color: "var(--neuron-pill-inactive-text)",
           border: "var(--neuron-pill-inactive-border)",
-          label: "Voided",
+          label: "Reversed",
           icon: null,
         },
       }[status];
@@ -791,8 +791,8 @@ export function JournalEntryDetailPanel({
             onClick={() => onVoid(entry)}
             className={(canEdit ? "flex-1" : "w-full") + " h-[34px] flex items-center justify-center gap-[6px] border border-[var(--theme-status-danger-border)] rounded-[6px] bg-[var(--theme-status-danger-bg)] text-[var(--theme-status-danger-fg)] text-[12px] font-semibold cursor-pointer hover:bg-[var(--theme-status-danger-fg)] hover:text-white hover:border-[var(--theme-status-danger-fg)] transition-colors"}
           >
-            <AlertTriangle size={13} />
-            Void Entry
+            <RotateCcw size={13} />
+            Reverse Entry
           </button>
         </div>
       )}
