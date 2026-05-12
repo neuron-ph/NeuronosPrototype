@@ -4,6 +4,7 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import ReactMarkdown from "react-markdown";
+import DOMPurify from "dompurify";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "sonner@2.0.3";
 import {
@@ -72,7 +73,7 @@ function MemoBody({ body, className }: { body: string; className?: string }) {
   return isHtml ? (
     <div
       className={`memo-body ${className ?? ""}`}
-      dangerouslySetInnerHTML={{ __html: body }}
+      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(body, { USE_PROFILES: { html: true } }) }}
     />
   ) : (
     <div className={`memo-body ${className ?? ""}`}>
