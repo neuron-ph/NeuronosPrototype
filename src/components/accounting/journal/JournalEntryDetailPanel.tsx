@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
-import { X, ExternalLink, AlertTriangle, CheckCircle, User, Clock, Loader2, Send, Pencil, Save, History } from "lucide-react";
+import { X, ExternalLink, AlertTriangle, CheckCircle, User, Clock, Loader2, Send, Pencil, Save, History, RotateCcw } from "lucide-react";
 import { useNavigate } from "react-router";
 import { supabase } from "../../../utils/supabase/client";
 import { useUser } from "../../../hooks/useUser";
 import { toast } from "sonner@2.0.3";
 import { logFieldUpdate } from "../../../utils/activityLog";
 import type { JournalEntry } from "./GeneralJournal";
-import { getSource } from "./GeneralJournal";
+import { getSource, isReversalEntry } from "./GeneralJournal";
 import {
   FUNCTIONAL_CURRENCY,
   formatMoney,
@@ -47,35 +47,47 @@ function formatDateTime(iso: string) {
 
 // ─── Status chip ──────────────────────────────────────────────────────────────
 
-function StatusChip({ status }: { status: JournalEntry["status"] }) {
-  const cfg = {
-    posted: {
-      bg: "var(--theme-status-success-bg)",
-      color: "var(--theme-status-success-fg)",
-      border: "var(--theme-status-success-border)",
-      label: "Posted",
-    },
-    draft: {
-      bg: "var(--theme-status-warning-bg)",
-      color: "var(--theme-status-warning-fg)",
-      border: "var(--theme-status-warning-border)",
-      label: "Draft",
-    },
-    void: {
-      bg: "var(--neuron-pill-inactive-bg)",
-      color: "var(--neuron-pill-inactive-text)",
-      border: "var(--neuron-pill-inactive-border)",
-      label: "Void",
-    },
-  }[status];
+function StatusChip({ status, isReversal }: { status: JournalEntry["status"]; isReversal?: boolean }) {
+  const cfg = isReversal && status === "posted"
+    ? {
+        bg: "var(--theme-status-success-bg)",
+        color: "var(--theme-status-success-fg)",
+        border: "var(--theme-status-success-border)",
+        label: "Reversal",
+        icon: <RotateCcw size={11} strokeWidth={2.5} />,
+      }
+    : {
+        posted: {
+          bg: "var(--theme-status-success-bg)",
+          color: "var(--theme-status-success-fg)",
+          border: "var(--theme-status-success-border)",
+          label: "Posted",
+          icon: null,
+        },
+        draft: {
+          bg: "var(--theme-status-warning-bg)",
+          color: "var(--theme-status-warning-fg)",
+          border: "var(--theme-status-warning-border)",
+          label: "Draft",
+          icon: null,
+        },
+        void: {
+          bg: "var(--neuron-pill-inactive-bg)",
+          color: "var(--neuron-pill-inactive-text)",
+          border: "var(--neuron-pill-inactive-border)",
+          label: "Voided",
+          icon: null,
+        },
+      }[status];
   return (
     <span style={{
-      display: "inline-flex", alignItems: "center",
+      display: "inline-flex", alignItems: "center", gap: "5px",
       padding: "2px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: 600,
       letterSpacing: "0.03em", textTransform: "uppercase",
       backgroundColor: cfg.bg, color: cfg.color,
       border: `1px solid ${cfg.border}`,
     }}>
+      {cfg.icon}
       {cfg.label}
     </span>
   );
@@ -400,11 +412,11 @@ export function JournalEntryDetailPanel({
         gap: "12px",
       }}>
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px", flexWrap: "wrap" }}>
             <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--theme-text-primary)", fontVariantNumeric: "tabular-nums" }}>
               {entry.entry_number}
             </span>
-            <StatusChip status={entry.status} />
+            <StatusChip status={entry.status} isReversal={isReversalEntry(entry)} />
           </div>
           <span style={{ fontSize: "12px", color: "var(--theme-text-muted)" }}>
             {new Date(entry.entry_date.slice(0, 10) + "T12:00:00").toLocaleDateString("en-PH", {
@@ -514,9 +526,14 @@ export function JournalEntryDetailPanel({
         {entry.reference && entry.reference !== entry.evoucher_id && (
           <div style={{ marginBottom: "16px" }}>
             <label style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "4px" }}>
-              Reference
+              {isReversalEntry(entry) ? "Reverses" : "Reference"}
             </label>
-            <span style={{ fontSize: "12px", color: "var(--theme-text-muted)", fontVariantNumeric: "tabular-nums" }}>{entry.reference}</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--theme-text-primary)", fontVariantNumeric: "tabular-nums" }}>
+              {isReversalEntry(entry) && (
+                <RotateCcw size={11} strokeWidth={2.5} style={{ color: "var(--theme-status-success-fg)" }} />
+              )}
+              {entry.reference}
+            </span>
           </div>
         )}
 

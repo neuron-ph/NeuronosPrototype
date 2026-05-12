@@ -3,7 +3,7 @@ import { usePermission } from "../../../context/PermissionProvider";
 import {
   BookOpen, Plus, Download, Search, ChevronLeft, ChevronRight,
   CheckCircle, AlertTriangle, Loader2, RefreshCw,
-  FileText, Receipt, CreditCard, Wallet,
+  FileText, Receipt, CreditCard, Wallet, RotateCcw,
 } from "lucide-react";
 import { supabase } from "../../../utils/supabase/client";
 import { useUser } from "../../../hooks/useUser";
@@ -172,35 +172,51 @@ const SOURCE_TABS: { id: SourceType; label: string; icon: React.ElementType }[] 
 
 // ─── Status chip ──────────────────────────────────────────────────────────────
 
-function StatusChip({ status }: { status: JournalEntry["status"] }) {
-  const cfg = {
-    posted: {
-      bg: "var(--theme-status-success-bg)",
-      color: "var(--theme-status-success-fg)",
-      border: "var(--theme-status-success-border)",
-      label: "Posted",
-    },
-    draft: {
-      bg: "var(--theme-status-warning-bg)",
-      color: "var(--theme-status-warning-fg)",
-      border: "var(--theme-status-warning-border)",
-      label: "Draft",
-    },
-    void: {
-      bg: "var(--neuron-pill-inactive-bg)",
-      color: "var(--neuron-pill-inactive-text)",
-      border: "var(--neuron-pill-inactive-border)",
-      label: "Void",
-    },
-  }[status];
+export function isReversalEntry(entry: Pick<JournalEntry, "id">): boolean {
+  return entry.id.startsWith("JE-VOID-");
+}
+
+export function StatusChip({ status, isReversal }: { status: JournalEntry["status"]; isReversal?: boolean }) {
+  const cfg = isReversal && status === "posted"
+    ? {
+        bg: "var(--theme-status-success-bg)",
+        color: "var(--theme-status-success-fg)",
+        border: "var(--theme-status-success-border)",
+        label: "Reversal",
+        icon: <RotateCcw size={10} strokeWidth={2.5} />,
+      }
+    : {
+        posted: {
+          bg: "var(--theme-status-success-bg)",
+          color: "var(--theme-status-success-fg)",
+          border: "var(--theme-status-success-border)",
+          label: "Posted",
+          icon: null,
+        },
+        draft: {
+          bg: "var(--theme-status-warning-bg)",
+          color: "var(--theme-status-warning-fg)",
+          border: "var(--theme-status-warning-border)",
+          label: "Draft",
+          icon: null,
+        },
+        void: {
+          bg: "var(--neuron-pill-inactive-bg)",
+          color: "var(--neuron-pill-inactive-text)",
+          border: "var(--neuron-pill-inactive-border)",
+          label: "Voided",
+          icon: null,
+        },
+      }[status];
   return (
     <span style={{
-      display: "inline-flex", alignItems: "center",
+      display: "inline-flex", alignItems: "center", gap: "4px",
       padding: "1px 7px", borderRadius: "4px", fontSize: "11px", fontWeight: 600,
       letterSpacing: "0.02em", textTransform: "uppercase",
       backgroundColor: cfg.bg, color: cfg.color,
       border: `1px solid ${cfg.border}`,
     }}>
+      {cfg.icon}
       {cfg.label}
     </span>
   );
@@ -580,7 +596,7 @@ export function GeneralJournal() {
                 <col style={{ width: "64px" }} />
                 <col style={{ width: "124px" }} />
                 <col style={{ width: "124px" }} />
-                <col style={{ width: "88px" }} />
+                <col style={{ width: "124px" }} />
               </colgroup>
 
               <thead>
@@ -648,6 +664,7 @@ export function GeneralJournal() {
                       {group.rows.map((entry) => {
                         const isSelected = selectedEntry?.id === entry.id;
                         const isVoid = entry.status === "void";
+                        const isReversal = isReversalEntry(entry);
                         return (
                           <tr
                             key={entry.id}
@@ -699,7 +716,7 @@ export function GeneralJournal() {
                               {entry.total_credit > 0 ? PHP.format(entry.total_credit) : "—"}
                             </td>
                             <td style={{ padding: "10px 12px" }}>
-                              <StatusChip status={entry.status} />
+                              <StatusChip status={entry.status} isReversal={isReversal} />
                             </td>
                           </tr>
                         );
