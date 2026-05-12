@@ -5,10 +5,16 @@ import { hasAdminUsersGrant } from "./adminUsersPermissions.ts";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const ALLOWED_ORIGIN_RE = /^https?:\/\/(localhost(:\d+)?|127\.0\.0\.1(:\d+)?|[\w-]+\.vercel\.app)$/;
+function buildCors(req: Request) {
+  const origin = req.headers.get("Origin") ?? "";
+  const allow = ALLOWED_ORIGIN_RE.test(origin) ? origin : "";
+  return {
+    "Access-Control-Allow-Origin": allow,
+    "Vary": "Origin",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  };
+}
 
 type AccessProfileRow = {
   id: string;
@@ -26,8 +32,9 @@ function roleDefaultVisibilityScope(role: string): string {
 }
 
 serve(async (req) => {
+  const cors = buildCors(req);
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: cors });
   }
 
   try {
@@ -35,27 +42,24 @@ serve(async (req) => {
     if (!authHeader) {
       return new Response(
         JSON.stringify({ success: false, error: "Missing authorization" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Decode the JWT to get the caller's auth_id (sub claim)
-    const jwt = authHeader.replace("Bearer ", "");
-    let callerAuthId: string;
-    try {
-      const payload = JSON.parse(atob(jwt.split(".")[1]));
-      callerAuthId = payload.sub;
-      if (!callerAuthId) throw new Error("No sub");
-    } catch {
-      return new Response(
-        JSON.stringify({ success: false, error: "Invalid authorization token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 401, headers: { ...cors, "Content-Type": "application/json" } }
       );
     }
 
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
+
+    // Verify JWT signature via admin client (does not rely on gateway verify_jwt setting).
+    const jwt = authHeader.replace("Bearer ", "");
+    const { data: authUserData, error: authUserError } = await adminClient.auth.getUser(jwt);
+    if (authUserError || !authUserData?.user) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Invalid authorization token" }),
+        { status: 401, headers: { ...cors, "Content-Type": "application/json" } }
+      );
+    }
+    const callerAuthId = authUserData.user.id;
 
     // Fetch caller identity (id needed for granted_by on profile application).
     const { data: callerProfile, error: profileError } = await adminClient
@@ -67,7 +71,7 @@ serve(async (req) => {
     if (profileError || !callerProfile) {
       return new Response(
         JSON.stringify({ success: false, error: "Could not verify caller identity" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 403, headers: { ...cors, "Content-Type": "application/json" } }
       );
     }
 
@@ -80,7 +84,7 @@ serve(async (req) => {
     if (callerOverrideError) {
       return new Response(
         JSON.stringify({ success: false, error: "Could not verify caller permissions" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 403, headers: { ...cors, "Content-Type": "application/json" } }
       );
     }
 
@@ -90,7 +94,7 @@ serve(async (req) => {
     if (!canCreateUsers) {
       return new Response(
         JSON.stringify({ success: false, error: "You do not have permission to create users" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 403, headers: { ...cors, "Content-Type": "application/json" } }
       );
     }
 
@@ -103,7 +107,7 @@ serve(async (req) => {
     if (!name || !email || !password || !department || !role) {
       return new Response(
         JSON.stringify({ success: false, error: "Missing required fields: name, email, password, department, role" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...cors, "Content-Type": "application/json" } }
       );
     }
 
@@ -114,14 +118,14 @@ serve(async (req) => {
     if (!validDepartments.includes(department) || !validRoles.includes(role)) {
       return new Response(
         JSON.stringify({ success: false, error: "Invalid department or role value" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...cors, "Content-Type": "application/json" } }
       );
     }
 
     if (status && !validStatuses.includes(status)) {
       return new Response(
         JSON.stringify({ success: false, error: "Invalid status value" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...cors, "Content-Type": "application/json" } }
       );
     }
 
@@ -137,13 +141,13 @@ serve(async (req) => {
       if (pfErr || !profile) {
         return new Response(
           JSON.stringify({ success: false, error: "Access profile not found" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 400, headers: { ...cors, "Content-Type": "application/json" } }
         );
       }
       if (!profile.is_active) {
         return new Response(
           JSON.stringify({ success: false, error: "Access profile is not active" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 400, headers: { ...cors, "Content-Type": "application/json" } }
         );
       }
       profileData = profile;
@@ -172,7 +176,7 @@ serve(async (req) => {
       const httpStatus = authError.message.toLowerCase().includes("already registered") ? 409 : 400;
       return new Response(
         JSON.stringify({ success: false, error: authError.message }),
-        { status: httpStatus, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: httpStatus, headers: { ...cors, "Content-Type": "application/json" } }
       );
     }
 
@@ -214,7 +218,7 @@ serve(async (req) => {
     if (updateResult.error || !updateResult.data) {
       return new Response(
         JSON.stringify({ success: false, error: updateResult.error?.message ?? "Failed to update user profile" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...cors, "Content-Type": "application/json" } }
       );
     }
 
@@ -244,7 +248,7 @@ serve(async (req) => {
           success: false,
           error: `User created but access initialization failed: ${overrideError.message}`,
         }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...cors, "Content-Type": "application/json" } }
       );
     }
 
@@ -254,12 +258,12 @@ serve(async (req) => {
         user: updateResult.data,
         applied_profile: profileData ? { id: profileData.id, name: profileData.name } : null,
       }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...cors, "Content-Type": "application/json" } }
     );
   } catch (err) {
     return new Response(
       JSON.stringify({ success: false, error: String(err) }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...cors, "Content-Type": "application/json" } }
     );
   }
 });

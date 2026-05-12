@@ -11,11 +11,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping Supabase REST API
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_KEEPALIVE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_KEEPALIVE_ANON_KEY }}
         run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "Missing SUPABASE_KEEPALIVE_URL or SUPABASE_KEEPALIVE_ANON_KEY secret"
+            exit 1
+          fi
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            "https://ubspbukgcxmzegnomlgi.supabase.co/rest/v1/users?select=id&limit=1" \
-            -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVic3BidWtnY3htemVnbm9tbGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0MjY2ODEsImV4cCI6MjA4OTAwMjY4MX0.KsadQq3kvfp2Ud8gkjc0tSsukj4m4LbL5r9FF17Iq74" \
-            -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVic3BidWtnY3htemVnbm9tbGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0MjY2ODEsImV4cCI6MjA4OTAwMjY4MX0.KsadQq3kvfp2Ud8gkjc0tSsukj4m4LbL5r9FF17Iq74")
+            "${SUPABASE_URL}/rest/v1/users?select=id&limit=1" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}")
           echo "Supabase ping status: $STATUS"
           if [ "$STATUS" -lt 200 ] || [ "$STATUS" -ge 300 ]; then
             echo "Ping failed with HTTP $STATUS"

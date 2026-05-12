@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
-import { X, ExternalLink, AlertTriangle, CheckCircle, User, Clock, Loader2, Send } from "lucide-react";
+import { X, ExternalLink, AlertTriangle, CheckCircle, User, Clock, Loader2, Send, Pencil, Save, History } from "lucide-react";
 import { useNavigate } from "react-router";
 import { supabase } from "../../../utils/supabase/client";
 import { useUser } from "../../../hooks/useUser";
 import { toast } from "sonner@2.0.3";
+import { logFieldUpdate } from "../../../utils/activityLog";
 import type { JournalEntry } from "./GeneralJournal";
 import { getSource } from "./GeneralJournal";
 import {
@@ -11,6 +12,16 @@ import {
   formatMoney,
   type AccountingCurrency,
 } from "../../../utils/accountingCurrency";
+import {
+  JournalLineEditor,
+  makeEmptyLine,
+  computeJournalTotals,
+  buildJournalLines,
+  findSameSideDuplicate,
+  parseAmount,
+  type EditableLine,
+  type COAAccount,
+} from "./JournalLineEditor";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -21,12 +32,6 @@ interface JournalEntryDetailPanelProps {
   onPosted?: () => void;
   canAct: boolean;
   highlightAccountId?: string;
-}
-
-interface COAAccount {
-  id: string;
-  code: string;
-  name: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -127,24 +132,180 @@ export function JournalEntryDetailPanel({
 
   // ── Posting state ──
   const [isPosting, setIsPosting] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [accounts, setAccounts] = useState<COAAccount[]>([]);
-  const [drAccountId, setDrAccountId] = useState("");
-  const [crAccountId, setCrAccountId] = useState("");
+  const [loadingAccounts, setLoadingAccounts] = useState(false);
+  const [editLines, setEditLines] = useState<EditableLine[]>([]);
+  const [editDate, setEditDate] = useState(entry.entry_date.slice(0, 10));
+  const [editDescription, setEditDescription] = useState(entry.description ?? "");
+  const needsAssignment = entry.status === "draft" && canAct && !hasLines;
+  const canEdit =
+    canAct &&
+    entry.status === "posted" &&
+    !entry.id.startsWith("JE-VOID-");
 
-  // Load CoA accounts when this is a draft that needs account assignment
+  // Reset edit mode when switching to a different entry
   useEffect(() => {
-    if (entry.status === "draft" && canAct && !hasLines) {
-      supabase
-        .from("accounts")
-        .select("id, code, name")
-        .eq("is_active", true)
-        .order("code")
-        .then(({ data }) => setAccounts((data ?? []) as COAAccount[]));
+    setIsEditing(false);
+  }, [entry.id]);
+
+  // Load CoA accounts when needed (assignment OR editing)
+  useEffect(() => {
+    if (needsAssignment) {
+      setEditLines([makeEmptyLine(), makeEmptyLine()]);
+    } else if (!isEditing) {
+      setEditLines([]);
     }
-    // Reset selections when entry changes
-    setDrAccountId("");
-    setCrAccountId("");
-  }, [entry.id, entry.status, canAct, hasLines]);
+    if (needsAssignment || isEditing) {
+      if (accounts.length === 0) {
+        setLoadingAccounts(true);
+        supabase
+          .from("accounts")
+          .select("id, code, name, type")
+          .eq("is_active", true)
+          .order("code")
+          .then(({ data }) => {
+            setAccounts((data ?? []) as COAAccount[]);
+            setLoadingAccounts(false);
+          });
+      }
+    }
+  }, [entry.id, needsAssignment, isEditing, accounts.length]);
+
+  // Derived editor totals (when assigning)
+  const editorTotals = computeJournalTotals(editLines, exchangeRate, entry.total_debit);
+  const editorActiveLines = editLines.filter(
+    (l) => parseAmount(l.debit) > 0 || parseAmount(l.credit) > 0,
+  );
+  const editorAllAccountsPicked = editorActiveLines.every((l) => l.account_id);
+  const editorHasDup = findSameSideDuplicate(editLines) !== null;
+  const editorReady =
+    needsAssignment &&
+    editorTotals.isBalanced &&
+    editorActiveLines.length >= 2 &&
+    editorAllAccountsPicked &&
+    !editorHasDup;
+
+  // ── Edit helpers ──
+  const entryLinesToEditable = (): EditableLine[] =>
+    lines.map((l) => {
+      const fd = (l as any).foreign_debit ?? 0;
+      const fc = (l as any).foreign_credit ?? 0;
+      const drVal = fd > 0 ? fd : l.debit;
+      const crVal = fc > 0 ? fc : l.credit;
+      return {
+        id: crypto.randomUUID(),
+        account_id: l.account_id,
+        description: l.description ?? "",
+        debit: drVal > 0 ? String(drVal) : "",
+        credit: crVal > 0 ? String(crVal) : "",
+      };
+    });
+
+  const summarizeLine = (l: any): string => {
+    const acct = `${l.account_code ?? "?"} ${l.account_name ?? ""}`.trim();
+    const dr = l.debit > 0 ? `DR ${PHP.format(l.debit)}` : "";
+    const cr = l.credit > 0 ? `CR ${PHP.format(l.credit)}` : "";
+    return [acct, dr, cr, l.description].filter(Boolean).join(" · ");
+  };
+
+  const handleStartEdit = () => {
+    setEditDate(entry.entry_date.slice(0, 10));
+    setEditDescription(entry.description ?? "");
+    setEditLines(entryLinesToEditable());
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditLines([]);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!user) return;
+    const editorActive = editLines.filter((l) => parseAmount(l.debit) > 0 || parseAmount(l.credit) > 0);
+    if (editorActive.length < 2) { toast.error("Need at least one debit and one credit line"); return; }
+    if (editorActive.some((l) => !l.account_id)) { toast.error("Every line must have an account"); return; }
+    const dup = findSameSideDuplicate(editLines);
+    if (dup) { toast.error(dup); return; }
+    const t = computeJournalTotals(editLines, exchangeRate);
+    if (!t.isBalanced) { toast.error("Entry is out of balance"); return; }
+
+    setIsSavingEdit(true);
+    try {
+      const newLines = buildJournalLines({
+        lines: editLines,
+        accounts,
+        transactionCurrency: txnCurrency,
+        exchangeRate,
+        defaultDescription: editDescription,
+      });
+      const now = new Date().toISOString();
+      const { error } = await supabase
+        .from("journal_entries")
+        .update({
+          entry_date: editDate,
+          description: editDescription.trim() || null,
+          lines: newLines,
+          total_debit: t.totalDebits,
+          total_credit: t.totalCredits,
+          updated_at: now,
+        })
+        .eq("id", entry.id);
+      if (error) throw error;
+
+      // ── Audit log: one row per changed attribute ──
+      const actor = { id: user.id, name: user.name, department: user.department ?? "" };
+      const entityName = entry.entry_number;
+      const log = (field: string, oldV: string, newV: string) =>
+        logFieldUpdate("journal_entry", entry.id, entityName, field, oldV, newV, actor);
+
+      if (editDate !== entry.entry_date.slice(0, 10)) {
+        log("Date", entry.entry_date.slice(0, 10), editDate);
+      }
+      if ((editDescription.trim() || "") !== (entry.description ?? "")) {
+        log("Description", entry.description ?? "—", editDescription.trim() || "—");
+      }
+      // Per-line, per-attribute diff (paired by index)
+      const oldLines = lines as any[];
+      const maxLen = Math.max(oldLines.length, newLines.length);
+      for (let i = 0; i < maxLen; i++) {
+        const oldL = oldLines[i];
+        const newL = newLines[i];
+        const lineLabel = `Line ${i + 1}`;
+        if (!oldL && newL) {
+          log(`${lineLabel} added`, "—", summarizeLine(newL));
+        } else if (oldL && !newL) {
+          log(`${lineLabel} removed`, summarizeLine(oldL), "—");
+        } else if (oldL && newL) {
+          if (oldL.account_id !== newL.account_id) {
+            const oldAcct = `${oldL.account_code ?? "?"} ${oldL.account_name ?? ""}`.trim();
+            const newAcct = `${newL.account_code ?? "?"} ${newL.account_name ?? ""}`.trim();
+            log(`${lineLabel} account`, oldAcct, newAcct);
+          }
+          if (Math.abs((oldL.debit ?? 0) - (newL.debit ?? 0)) > 0.005) {
+            log(`${lineLabel} debit`, PHP.format(oldL.debit ?? 0), PHP.format(newL.debit ?? 0));
+          }
+          if (Math.abs((oldL.credit ?? 0) - (newL.credit ?? 0)) > 0.005) {
+            log(`${lineLabel} credit`, PHP.format(oldL.credit ?? 0), PHP.format(newL.credit ?? 0));
+          }
+          if ((oldL.description ?? "") !== (newL.description ?? "")) {
+            log(`${lineLabel} note`, oldL.description ?? "—", newL.description ?? "—");
+          }
+        }
+      }
+
+      toast.success(`${entry.entry_number} updated`);
+      setIsEditing(false);
+      onPosted?.();
+    } catch (err) {
+      console.error("[JE edit] save failed:", err);
+      toast.error("Failed to save changes");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
 
   // Navigate to source document
   const handleOpenSource = () => {
@@ -157,14 +318,23 @@ export function JournalEntryDetailPanel({
   const handlePost = async () => {
     if (!user) return;
 
-    // For entries without lines, validate account selections
     if (!hasLines) {
-      if (!drAccountId || !crAccountId) {
-        toast.error("Select both a debit and credit account before posting");
+      if (editorActiveLines.length < 2) {
+        toast.error("Add at least one debit and one credit line");
         return;
       }
-      if (drAccountId === crAccountId) {
-        toast.error("Debit and credit accounts must be different");
+      if (!editorAllAccountsPicked) {
+        toast.error("Every line must have an account selected");
+        return;
+      }
+      const dup = findSameSideDuplicate(editLines);
+      if (dup) { toast.error(dup); return; }
+      if (!editorTotals.matchesLockedTotal) {
+        toast.error(`Each side must total ${PHP.format(entry.total_debit)}`);
+        return;
+      }
+      if (!editorTotals.isBalanced) {
+        toast.error("Entry is out of balance — debits must equal credits");
         return;
       }
     } else if (!isBalanced) {
@@ -180,28 +350,15 @@ export function JournalEntryDetailPanel({
         updated_at: new Date().toISOString(),
       };
 
-      // If no lines yet, build them from the account picker selections
       if (!hasLines) {
-        const drAcct = accounts.find((a) => a.id === drAccountId);
-        const crAcct = accounts.find((a) => a.id === crAccountId);
-        updatePayload.lines = [
-          {
-            account_id: drAccountId,
-            account_code: drAcct?.code ?? "",
-            account_name: drAcct?.name ?? "",
-            debit: entry.total_debit,
-            credit: 0,
-            description: entry.description ?? "",
-          },
-          {
-            account_id: crAccountId,
-            account_code: crAcct?.code ?? "",
-            account_name: crAcct?.name ?? "",
-            debit: 0,
-            credit: entry.total_credit,
-            description: entry.description ?? "",
-          },
-        ];
+        updatePayload.lines = buildJournalLines({
+          lines: editLines,
+          accounts,
+          transactionCurrency: txnCurrency,
+          exchangeRate,
+          defaultDescription: entry.description ?? "",
+          lockedTotal: entry.total_debit,
+        });
       }
 
       const { error } = await supabase
@@ -219,9 +376,7 @@ export function JournalEntryDetailPanel({
     }
   };
 
-  const canPost = hasLines
-    ? isBalanced
-    : (!!drAccountId && !!crAccountId && drAccountId !== crAccountId);
+  const canPost = hasLines ? isBalanced : editorReady;
 
   return (
     <div style={{
@@ -308,7 +463,43 @@ export function JournalEntryDetailPanel({
         )}
 
         {/* Description */}
-        {entry.description && (
+        {isEditing ? (
+          <div style={{ marginBottom: "16px", display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div>
+              <label style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "4px" }}>
+                Entry Date
+              </label>
+              <input
+                type="date"
+                value={editDate}
+                onChange={(e) => setEditDate(e.target.value)}
+                style={{
+                  height: "32px", padding: "0 8px", fontSize: "12px",
+                  border: "1px solid var(--theme-border-default)", borderRadius: "6px",
+                  backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-primary)",
+                  outline: "none",
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "4px" }}>
+                Description
+              </label>
+              <input
+                type="text"
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                placeholder="Entry description"
+                style={{
+                  width: "100%", height: "32px", padding: "0 8px", fontSize: "12px",
+                  border: "1px solid var(--theme-border-default)", borderRadius: "6px",
+                  backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-primary)",
+                  outline: "none", boxSizing: "border-box",
+                }}
+              />
+            </div>
+          </div>
+        ) : entry.description ? (
           <div style={{ marginBottom: "16px" }}>
             <label style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "4px" }}>
               Description
@@ -317,7 +508,7 @@ export function JournalEntryDetailPanel({
               {entry.description}
             </p>
           </div>
-        )}
+        ) : null}
 
         {/* Reference */}
         {entry.reference && entry.reference !== entry.evoucher_id && (
@@ -337,7 +528,18 @@ export function JournalEntryDetailPanel({
             Journal Lines
           </label>
 
-          {hasLines ? (
+          {isEditing ? (
+            <JournalLineEditor
+              lines={editLines}
+              onChange={setEditLines}
+              accounts={accounts}
+              transactionCurrency={txnCurrency}
+              exchangeRate={exchangeRate}
+              loading={loadingAccounts}
+              compact
+              hideDescriptionColumn
+            />
+          ) : hasLines ? (
             <div style={{ border: "1px solid var(--theme-border-default)", borderRadius: "8px", overflow: "hidden" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
@@ -451,98 +653,35 @@ export function JournalEntryDetailPanel({
         </div>
 
         {/* ── Assign Accounts (draft + no lines) ── */}
-        {entry.status === "draft" && canAct && !hasLines && (
+        {needsAssignment && (
           <div style={{ marginTop: "16px" }}>
             <div style={{
-              border: "1px solid var(--theme-border-default)",
-              borderRadius: "8px",
-              overflow: "hidden",
+              marginBottom: "10px",
+              display: "flex", justifyContent: "space-between", alignItems: "baseline",
             }}>
-
-              {/* Header */}
-              <div style={{
-                padding: "11px 14px",
-                backgroundColor: "var(--theme-bg-page)",
-                borderBottom: "1px solid var(--theme-border-default)",
-                display: "flex", justifyContent: "space-between", alignItems: "center",
-              }}>
-                <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--theme-text-primary)" }}>
-                  Assign Accounts
-                </span>
-                <span style={{ fontSize: "11px", color: "var(--theme-text-muted)" }}>Both required to post</span>
-              </div>
-
-              {/* Debit row */}
-              <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--theme-border-subtle)" }}>
-                <div style={{
-                  display: "flex", justifyContent: "space-between", alignItems: "center",
-                  marginBottom: "7px",
-                }}>
-                  <span style={{
-                    fontSize: "10px", fontWeight: 700, letterSpacing: "0.07em",
-                    color: "var(--theme-text-muted)", textTransform: "uppercase",
-                  }}>Debit (DR)</span>
-                  <span style={{
-                    fontSize: "12px", fontWeight: 600, color: "var(--theme-text-primary)",
-                    fontVariantNumeric: "tabular-nums",
-                  }}>{PHP.format(entry.total_debit)}</span>
-                </div>
-                <select
-                  value={drAccountId}
-                  onChange={(e) => setDrAccountId(e.target.value)}
-                  style={{
-                    width: "100%", height: "34px", padding: "0 8px",
-                    border: "1px solid " + (drAccountId ? "var(--theme-action-primary-bg)" : "var(--theme-border-default)"),
-                    borderRadius: "6px", fontSize: "12px",
-                    color: drAccountId ? "var(--theme-text-primary)" : "var(--theme-text-muted)",
-                    backgroundColor: "var(--theme-bg-surface)",
-                    outline: "none", cursor: "pointer",
-                  }}
-                >
-                  <option value="">Select debit account…</option>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>{a.code} — {a.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Credit row */}
-              <div style={{ padding: "12px 14px" }}>
-                <div style={{
-                  display: "flex", justifyContent: "space-between", alignItems: "center",
-                  marginBottom: "7px",
-                }}>
-                  <span style={{
-                    fontSize: "10px", fontWeight: 700, letterSpacing: "0.07em",
-                    color: "var(--theme-text-muted)", textTransform: "uppercase",
-                  }}>Credit (CR)</span>
-                  <span style={{
-                    fontSize: "12px", fontWeight: 600, color: "var(--theme-text-primary)",
-                    fontVariantNumeric: "tabular-nums",
-                  }}>{PHP.format(entry.total_credit)}</span>
-                </div>
-                <select
-                  value={crAccountId}
-                  onChange={(e) => setCrAccountId(e.target.value)}
-                  style={{
-                    width: "100%", height: "34px", padding: "0 8px",
-                    border: "1px solid " + (crAccountId ? "var(--theme-action-primary-bg)" : "var(--theme-border-default)"),
-                    borderRadius: "6px", fontSize: "12px",
-                    color: crAccountId ? "var(--theme-text-primary)" : "var(--theme-text-muted)",
-                    backgroundColor: "var(--theme-bg-surface)",
-                    outline: "none", cursor: "pointer",
-                  }}
-                >
-                  <option value="">Select credit account…</option>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>{a.code} — {a.name}</option>
-                  ))}
-                </select>
-              </div>
-
+              <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--theme-text-primary)" }}>
+                Assign Accounts
+              </span>
+              <span style={{ fontSize: "11px", color: "var(--theme-text-muted)" }}>
+                Split across multiple accounts if needed
+              </span>
             </div>
+            <JournalLineEditor
+              lines={editLines}
+              onChange={setEditLines}
+              accounts={accounts}
+              transactionCurrency={txnCurrency}
+              exchangeRate={exchangeRate}
+              lockedTotal={entry.total_debit}
+              loading={loadingAccounts}
+              compact
+              hideDescriptionColumn
+            />
           </div>
         )}
+
+        {/* Edit history */}
+        {!isEditing && <EditHistory entryId={entry.id} />}
 
         {/* Metadata */}
         <div style={{ marginTop: "auto", paddingTop: "20px", display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -565,16 +704,75 @@ export function JournalEntryDetailPanel({
       </div>
 
       {/* ── Footer actions ── */}
-      {canAct && entry.status === "posted" && (
+      {isEditing && (
         <div style={{
           flexShrink: 0,
           padding: "14px 20px",
           borderTop: "1px solid var(--theme-border-default)",
           backgroundColor: "var(--theme-bg-page)",
+          display: "flex", gap: "8px",
         }}>
           <button
+            onClick={handleCancelEdit}
+            disabled={isSavingEdit}
+            style={{
+              flex: 1, height: "34px",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+              border: "1px solid var(--theme-border-default)", borderRadius: "6px",
+              backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-muted)",
+              fontSize: "12px", fontWeight: 500,
+              cursor: isSavingEdit ? "not-allowed" : "pointer",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSaveEdit}
+            disabled={isSavingEdit}
+            style={{
+              flex: 1, height: "34px",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+              border: "none", borderRadius: "6px",
+              backgroundColor: "var(--theme-action-primary-bg)", color: "#fff",
+              fontSize: "12px", fontWeight: 600,
+              cursor: isSavingEdit ? "not-allowed" : "pointer",
+              opacity: isSavingEdit ? 0.7 : 1,
+            }}
+          >
+            {isSavingEdit ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+            {isSavingEdit ? "Saving…" : "Save Changes"}
+          </button>
+        </div>
+      )}
+
+      {/* (footer continued below) */}
+      {!isEditing && canAct && entry.status === "posted" && (
+        <div style={{
+          flexShrink: 0,
+          padding: "14px 20px",
+          borderTop: "1px solid var(--theme-border-default)",
+          backgroundColor: "var(--theme-bg-page)",
+          display: "flex", gap: "8px",
+        }}>
+          {canEdit && (
+            <button
+              onClick={handleStartEdit}
+              style={{
+                flex: 1, height: "34px",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                border: "1px solid var(--theme-border-default)", borderRadius: "6px",
+                backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-primary)",
+                fontSize: "12px", fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              <Pencil size={13} />
+              Edit Entry
+            </button>
+          )}
+          <button
             onClick={() => onVoid(entry)}
-            className="w-full h-[34px] flex items-center justify-center gap-[6px] border border-[var(--theme-status-danger-border)] rounded-[6px] bg-[var(--theme-status-danger-bg)] text-[var(--theme-status-danger-fg)] text-[12px] font-semibold cursor-pointer hover:bg-[var(--theme-status-danger-fg)] hover:text-white hover:border-[var(--theme-status-danger-fg)] transition-colors"
+            className={(canEdit ? "flex-1" : "w-full") + " h-[34px] flex items-center justify-center gap-[6px] border border-[var(--theme-status-danger-border)] rounded-[6px] bg-[var(--theme-status-danger-bg)] text-[var(--theme-status-danger-fg)] text-[12px] font-semibold cursor-pointer hover:bg-[var(--theme-status-danger-fg)] hover:text-white hover:border-[var(--theme-status-danger-fg)] transition-colors"}
           >
             <AlertTriangle size={13} />
             Void Entry
@@ -611,6 +809,153 @@ export function JournalEntryDetailPanel({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Edit history ────────────────────────────────────────────────────────────
+
+interface ActivityRow {
+  id: string;
+  created_at: string;
+  user_name: string;
+  metadata: { description?: string } | null;
+  old_value: string | null;
+  new_value: string | null;
+}
+
+function EditHistory({ entryId }: { entryId: string }) {
+  const [rows, setRows] = useState<ActivityRow[] | null>(null);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase
+      .from("activity_log")
+      .select("id, created_at, user_name, metadata, old_value, new_value")
+      .eq("entity_type", "journal_entry")
+      .eq("entity_id", entryId)
+      .eq("action_type", "updated")
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        if (cancelled) return;
+        setRows((data ?? []) as ActivityRow[]);
+      });
+    return () => { cancelled = true; };
+  }, [entryId]);
+
+  if (!rows || rows.length === 0) return null;
+
+  // Group rows by created_at (rounded to the minute) — one "edit session" produces multiple rows
+  const groups = new Map<string, ActivityRow[]>();
+  for (const r of rows) {
+    const key = `${r.user_name}|${r.created_at.slice(0, 16)}`;
+    const arr = groups.get(key) ?? [];
+    arr.push(r);
+    groups.set(key, arr);
+  }
+  const sessions = Array.from(groups.entries()).slice(0, expanded ? undefined : 3);
+
+  return (
+    <div style={{ marginTop: "16px" }}>
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        style={{
+          display: "flex", alignItems: "center", gap: "6px",
+          background: "none", border: "none", padding: 0,
+          fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)",
+          textTransform: "uppercase", letterSpacing: "0.04em", cursor: "pointer",
+          marginBottom: "8px",
+        }}
+      >
+        <History size={12} />
+        Edit History · {rows.length} change{rows.length === 1 ? "" : "s"}
+      </button>
+      <div style={{
+        border: "1px solid var(--theme-border-default)",
+        borderRadius: "8px",
+        overflow: "hidden",
+      }}>
+        {sessions.map(([key, sessionRows], idx) => {
+          const first = sessionRows[0];
+          const when = new Date(first.created_at).toLocaleString("en-PH", {
+            month: "short", day: "numeric",
+            hour: "numeric", minute: "2-digit", hour12: true,
+          });
+          return (
+            <div key={key} style={{
+              padding: "12px 14px",
+              borderBottom: idx < sessions.length - 1 ? "1px solid var(--theme-border-subtle)" : "none",
+              backgroundColor: "var(--theme-bg-surface)",
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "10px" }}>
+                <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
+                  {first.user_name}
+                </span>
+                <span style={{ fontSize: "11px", color: "var(--theme-text-muted)" }}>{when}</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {sessionRows.map((r) => {
+                  const label = (r.metadata?.description ?? "")
+                    .replace(/^Updated\s+/i, "")
+                    .trim() || "Field";
+                  return (
+                    <ChangeRow
+                      key={r.id}
+                      label={label}
+                      oldValue={r.old_value || "—"}
+                      newValue={r.new_value || "—"}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+        {!expanded && groups.size > 3 && (
+          <button
+            onClick={() => setExpanded(true)}
+            style={{
+              width: "100%", padding: "8px",
+              background: "var(--theme-bg-page)", border: "none",
+              borderTop: "1px solid var(--theme-border-subtle)",
+              fontSize: "11px", color: "var(--theme-action-primary-bg)", fontWeight: 500,
+              cursor: "pointer",
+            }}
+          >
+            Show {groups.size - 3} earlier change{groups.size - 3 === 1 ? "" : "s"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ChangeRow({ label, oldValue, newValue }: { label: string; oldValue: string; newValue: string }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+      <span style={{
+        fontSize: "10px", fontWeight: 700, letterSpacing: "0.05em",
+        color: "var(--theme-text-muted)", textTransform: "uppercase",
+      }}>
+        {label}
+      </span>
+      <div style={{
+        display: "flex", alignItems: "center", gap: "8px",
+        fontSize: "12px", lineHeight: 1.4,
+        fontVariantNumeric: "tabular-nums",
+      }}>
+        <span style={{
+          textDecoration: "line-through",
+          color: "var(--theme-text-muted)",
+          opacity: 0.75,
+        }}>{oldValue}</span>
+        <span style={{ color: "var(--theme-text-muted)", fontSize: "11px" }}>→</span>
+        <span style={{
+          color: "var(--theme-status-success-fg)",
+          fontWeight: 600,
+        }}>{newValue}</span>
+      </div>
     </div>
   );
 }
