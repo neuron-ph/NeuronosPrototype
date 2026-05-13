@@ -1059,6 +1059,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
             quotation={quotation}
             onStatusChange={handleStatusChange}
             userDepartment={userDepartment}
+            userRole={currentUser?.role}
           />
           
           {/* Edit Pricing — anyone with pricing edit grant, only at Pending Pricing status */}

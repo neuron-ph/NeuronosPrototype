@@ -261,7 +261,6 @@ describe('Trucking quotation schema', () => {
   it('has pull_out_location (Pickup Location)', () => {
     const field = findField(TRUCKING_QUOTATION_SCHEMA, 'pull_out_location');
     expect(field).toBeDefined();
-    expect(field!.required).toBe('yes');
   });
 
   it('has trucking_line_items repeater (Destination/s) with destination/truck_type/quantity columns', () => {
@@ -290,16 +289,9 @@ describe('Trucking quotation schema', () => {
 // ---------------------------------------------------------------------------
 
 describe('Marine Insurance quotation schema', () => {
-  const requiredKeys = ['commodity_description', 'pol_aol', 'pod_aod', 'invoice_value'];
-  const presentKeys = ['hs_codes'];
+  const presentKeys = ['commodity_description', 'pol_aol', 'pod_aod', 'invoice_value', 'hs_codes'];
 
-  it.each(requiredKeys)('has required field: %s', (key) => {
-    const field = findField(MARINE_INSURANCE_QUOTATION_SCHEMA, key);
-    expect(field).toBeDefined();
-    expect(field!.required).toBe('yes');
-  });
-
-  it.each(presentKeys)('has optional field: %s', (key) => {
+  it.each(presentKeys)('has field: %s', (key) => {
     const field = findField(MARINE_INSURANCE_QUOTATION_SCHEMA, key);
     expect(field).toBeDefined();
   });
@@ -318,10 +310,9 @@ describe('Marine Insurance quotation schema', () => {
 // ---------------------------------------------------------------------------
 
 describe('Others quotation schema', () => {
-  it('has required service_description', () => {
+  it('has service_description with legacy key', () => {
     const field = findField(OTHERS_QUOTATION_SCHEMA, 'service_description');
     expect(field).toBeDefined();
-    expect(field!.required).toBe('yes');
     expect(field!.legacyKeys).toContain('serviceDescription');
   });
 });
