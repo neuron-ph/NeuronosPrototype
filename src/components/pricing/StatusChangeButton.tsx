@@ -10,9 +10,20 @@ interface StatusChangeButtonProps {
   quotation: QuotationNew;
   onStatusChange: (newStatus: string, reason?: string) => void;
   userDepartment?: "Business Development" | "Pricing";
+  userRole?: string;
 }
 
-export function StatusChangeButton({ quotation, onStatusChange, userDepartment }: StatusChangeButtonProps) {
+// Manager and Executive can perform any transition regardless of department.
+// Staff/Team Leader/Supervisor remain gated by department.
+function isElevatedRole(role?: string): boolean {
+  if (!role) return false;
+  const normalized = role.toLowerCase();
+  return normalized === "manager" || normalized === "executive";
+}
+
+export function StatusChangeButton({ quotation, onStatusChange, userDepartment, userRole }: StatusChangeButtonProps) {
+  const canActAsBD = userDepartment === "Business Development" || isElevatedRole(userRole);
+  const canActAsPricing = userDepartment === "Pricing" || isElevatedRole(userRole);
   const [showMenu, setShowMenu] = useState(false);
   const [showDisapproveModal, setShowDisapproveModal] = useState(false);
   const [selectedDisapprovalStatus, setSelectedDisapprovalStatus] = useState<"Rejected by Client" | "Disapproved" | "Cancelled">("Disapproved");
@@ -86,7 +97,7 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment }
     }
 
     // BD WORKFLOW: Submit for Pricing - BD ONLY (when status = "Draft")
-    if (normalizedStatus === "Draft" && userDepartment === "Business Development") {
+    if (normalizedStatus === "Draft" && canActAsBD) {
       actions.push({
         label: "Submit for Pricing",
         sublabel: "Send to Pricing department for review",
@@ -100,7 +111,7 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment }
     }
 
     // PD WORKFLOW: Mark as Priced - PD ONLY (when quotation is awaiting pricing)
-    if (normalizedStatus === "Pending Pricing" && userDepartment === "Pricing") {
+    if (normalizedStatus === "Pending Pricing" && canActAsPricing) {
       actions.push({
         label: "Mark as Priced",
         sublabel: "Pricing complete, ready for BD",
@@ -114,7 +125,7 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment }
     }
 
     // PD WORKFLOW: Send back for revision - PD ONLY (if quotation needs more info)
-    if (normalizedStatus === "Pending Pricing" && userDepartment === "Pricing") {
+    if (normalizedStatus === "Pending Pricing" && canActAsPricing) {
       actions.push({
         label: "Request Revision",
         sublabel: "Need more information from BD",
@@ -128,7 +139,7 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment }
     }
 
     // Mark as Ongoing (for revisions/negotiations) - BD ONLY
-    if ((normalizedStatus === "Sent to Client" || normalizedStatus === "Priced") && userDepartment === "Business Development") {
+    if ((normalizedStatus === "Sent to Client" || normalizedStatus === "Priced") && canActAsBD) {
       actions.push({
         label: "Mark as Ongoing",
         sublabel: "Send back for revisions",
@@ -142,7 +153,7 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment }
     }
 
     // Recall for Edits - BD ONLY (pull back a sent or ongoing quotation to Draft)
-    if ((normalizedStatus === "Sent to Client" || normalizedStatus === "Needs Revision") && userDepartment === "Business Development") {
+    if ((normalizedStatus === "Sent to Client" || normalizedStatus === "Needs Revision") && canActAsBD) {
       actions.push({
         label: "Recall for Edits",
         sublabel: "Pull back to Draft for corrections",
@@ -156,7 +167,7 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment }
     }
 
     // Send to Client - BD ONLY (after PD finishes pricing)
-    if ((normalizedStatus === "Priced" || normalizedStatus === "Needs Revision") && userDepartment === "Business Development") {
+    if ((normalizedStatus === "Priced" || normalizedStatus === "Needs Revision") && canActAsBD) {
       actions.push({
         label: "Send to Client",
         sublabel: "Mark as Waiting Approval",
@@ -170,7 +181,7 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment }
     }
 
     // Mark as Approved - BD ONLY (client accepted)
-    if (normalizedStatus === "Sent to Client" && userDepartment === "Business Development") {
+    if (normalizedStatus === "Sent to Client" && canActAsBD) {
       actions.push({
         label: "Mark as Approved",
         sublabel: "Client accepted quotation",
