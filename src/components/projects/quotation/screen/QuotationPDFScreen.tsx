@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, Printer, Save, ZoomIn, ZoomOut, Maximize, User, Layout, FileText, Settings, UserCheck } from "lucide-react";
+import { ArrowLeft, Printer, Save, ZoomIn, ZoomOut, Maximize, User, Layout, FileText, Settings, UserCheck, Building2, Phone } from "lucide-react";
+import { toast } from "sonner@2.0.3";
 import type { Project, QuotationNew } from "../../../../types/pricing";
 import { QuotationDocument } from "../QuotationDocument";
 import { useQuotationDocumentState } from "./useQuotationDocumentState";
 import { SignatoryControl } from "./controls/SignatoryControl";
 import { DisplayOptionsControl } from "./controls/DisplayOptionsControl";
 import { NotesControl } from "./controls/NotesControl";
+import { BankDetailsControl } from "./controls/BankDetailsControl";
+import { ContactFooterControl } from "./controls/ContactFooterControl";
 import { CollapsibleSection } from "./controls/CollapsibleSection";
+import { useCompanySettings, useUpdateCompanySettings } from "../../../../hooks/useCompanySettings";
 
 interface QuotationPDFScreenProps {
   project: Project;
@@ -23,6 +27,43 @@ interface QuotationPDFScreenProps {
 // A4 Dimensions in pixels at 96 DPI
 const A4_WIDTH_PX = 794; // 210mm
 const A4_HEIGHT_PX = 1123; // 297mm
+const QUOTATION_PRINT_BODY_CLASS = "neuron-printing-quotation-pdf";
+const QUOTATION_PRINT_STYLE_ID = "quotation-print-portal-styles";
+
+const QUOTATION_PRINT_CSS = `
+  @media print {
+    @page { size: A4; margin: 0; }
+    html,
+    body {
+      margin: 0 !important;
+      padding: 0 !important;
+      width: 210mm !important;
+      min-height: 297mm !important;
+      height: auto !important;
+      overflow: visible !important;
+      background: white !important;
+    }
+    body.${QUOTATION_PRINT_BODY_CLASS} > *:not(.print-portal-container) {
+      display: none !important;
+    }
+    body.${QUOTATION_PRINT_BODY_CLASS} .print-portal-container {
+      display: block !important;
+      position: static !important;
+      width: 210mm !important;
+      min-height: 297mm !important;
+      background: white !important;
+      z-index: 9999 !important;
+    }
+    body.${QUOTATION_PRINT_BODY_CLASS} .print-portal-container .p-page {
+      break-after: page;
+      page-break-after: always;
+    }
+    body.${QUOTATION_PRINT_BODY_CLASS} .print-portal-container .p-page:last-child {
+      break-after: auto;
+      page-break-after: auto;
+    }
+  }
+`;
 
 export function QuotationPDFScreen({ project, quotation: quotationProp, onClose, onSave, currentUser, isEmbedded = false }: QuotationPDFScreenProps) {
   // Resolve the authoritative quotation:
@@ -30,6 +71,9 @@ export function QuotationPDFScreen({ project, quotation: quotationProp, onClose,
   // 2. Nested inside an adapted Project (legacy path)
   // 3. The Project itself cast as QuotationNew (ProjectOverviewTab path)
   const resolvedQuotation: QuotationNew = quotationProp ?? ((project as any).quotation as QuotationNew) ?? (project as any as QuotationNew);
+
+  const { settings: companySettings } = useCompanySettings();
+  const updateCompanySettings = useUpdateCompanySettings();
 
   const {
     options,
@@ -41,15 +85,52 @@ export function QuotationPDFScreen({ project, quotation: quotationProp, onClose,
     setPaymentTerms,
     toggleDisplay,
     setCustomNotes,
-  } = useQuotationDocumentState(resolvedQuotation as any, currentUser);
+    updateBankDetails,
+    updateContactFooter,
+    updateCallNumber,
+    addCallNumber,
+    removeCallNumber,
+  } = useQuotationDocumentState(resolvedQuotation as any, currentUser, companySettings);
+
+  const handleSaveBankAsDefault = async () => {
+    if (!options.bank_details) return;
+    try {
+      await updateCompanySettings.mutateAsync({
+        bank_name: options.bank_details.bank_name || null,
+        bank_account_name: options.bank_details.account_name || null,
+        bank_account_number: options.bank_details.account_number || null,
+      });
+      toast.success("Bank details saved as company default.");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to save bank details.");
+    }
+  };
+
+  const handleSaveContactAsDefault = async () => {
+    if (!options.contact_footer) return;
+    const lines = options.contact_footer.office_address.split("\n").map((l) => l.trim()).filter(Boolean);
+    try {
+      await updateCompanySettings.mutateAsync({
+        phone_numbers: options.contact_footer.call_numbers.map((p) => p.trim()).filter(Boolean),
+        email: options.contact_footer.email || null,
+        address_line1: lines[0] || null,
+        address_line2: lines[1] || null,
+        city: lines[2]?.split(",")[0]?.trim() || null,
+        country: lines[2]?.split(",").slice(1).join(",").trim() || null,
+      });
+      toast.success("Contact footer saved as company default.");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to save contact footer.");
+    }
+  };
 
   const [isSaving, setIsSaving] = useState(false);
   const [scale, setScale] = useState(0.75);
   const [autoScale, setAutoScale] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
   const [pageCount, setPageCount] = useState(1);
-
   const containerRef = useRef<HTMLDivElement>(null);
+  const previewScrollerRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
 
   // Measure actual document height to determine page count
@@ -58,6 +139,10 @@ export function QuotationPDFScreen({ project, quotation: quotationProp, onClose,
     const h = measureRef.current.scrollHeight;
     setPageCount(Math.max(1, Math.ceil(h / A4_HEIGHT_PX)));
   }, [options, resolvedQuotation]);
+
+  useEffect(() => {
+    previewScrollerRef.current?.scrollTo({ top: 0, left: 0 });
+  }, [resolvedQuotation.id]);
 
   // Auto-scale logic — fits to width only so multi-page docs scroll naturally
   useEffect(() => {
@@ -77,16 +162,36 @@ export function QuotationPDFScreen({ project, quotation: quotationProp, onClose,
     return () => observer.disconnect();
   }, [autoScale]);
 
-  // Lazy print: mount portal content first, then open print dialog after DOM settles
+  // Lazy print: mount portal content first, then open print dialog after DOM settles.
+  // Keep it mounted until `afterprint`; Chromium can return from window.print()
+  // while the system preview is still reading DOM/CSS.
   useEffect(() => {
     if (!isPrinting) return;
+    document.body.classList.add(QUOTATION_PRINT_BODY_CLASS);
+
+    let styleEl = document.getElementById(QUOTATION_PRINT_STYLE_ID) as HTMLStyleElement | null;
+    if (!styleEl) {
+      styleEl = document.createElement("style");
+      styleEl.id = QUOTATION_PRINT_STYLE_ID;
+      styleEl.textContent = QUOTATION_PRINT_CSS;
+      document.head.appendChild(styleEl);
+    }
+
+    const finishPrint = () => setIsPrinting(false);
+    window.addEventListener("afterprint", finishPrint, { once: true });
+
     const id = requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         window.print();
-        setIsPrinting(false);
       });
     });
-    return () => cancelAnimationFrame(id);
+
+    return () => {
+      cancelAnimationFrame(id);
+      window.removeEventListener("afterprint", finishPrint);
+      document.body.classList.remove(QUOTATION_PRINT_BODY_CLASS);
+      document.getElementById(QUOTATION_PRINT_STYLE_ID)?.remove();
+    };
   }, [isPrinting]);
 
   const handlePrint = () => setIsPrinting(true);
@@ -104,6 +209,15 @@ export function QuotationPDFScreen({ project, quotation: quotationProp, onClose,
         payment_terms: options.payment_terms,
         custom_notes: options.custom_notes,
         valid_until: options.validity_override || undefined,
+        display: options.display,
+        details: {
+          ...(options.bank_details
+            ? { bank_details_override: { ...options.bank_details } }
+            : {}),
+          ...(options.contact_footer
+            ? { contact_footer_override: { ...options.contact_footer } }
+            : {}),
+        },
       });
       markClean();
     } finally {
@@ -156,7 +270,7 @@ export function QuotationPDFScreen({ project, quotation: quotationProp, onClose,
             <QuotationDocument project={project} quotation={resolvedQuotation} mode="preview" currentUser={currentUser} options={options} />
           </div>
 
-          <div className="absolute inset-0 overflow-auto flex justify-center p-8 pb-32">
+          <div ref={previewScrollerRef} className="absolute inset-0 overflow-auto flex justify-center p-8 pb-32">
             <div className="print-portal-root flex flex-col items-center gap-4">
               {Array.from({ length: pageCount }, (_, pageIndex) => (
                 <div
@@ -241,6 +355,35 @@ export function QuotationPDFScreen({ project, quotation: quotationProp, onClose,
               />
             </CollapsibleSection>
 
+            {options.bank_details && (
+              <CollapsibleSection title="Bank Details" icon={<Building2 size={16} />} defaultOpen={false}>
+                <BankDetailsControl
+                  bankDetails={options.bank_details}
+                  onUpdate={updateBankDetails}
+                  onSaveAsDefault={handleSaveBankAsDefault}
+                  isSavingDefault={updateCompanySettings.isPending}
+                />
+              </CollapsibleSection>
+            )}
+
+            {options.contact_footer && (
+              <CollapsibleSection title="Contact Footer" icon={<Phone size={16} />} defaultOpen={false}>
+                <ContactFooterControl
+                  contactFooter={options.contact_footer}
+                  onUpdateField={updateContactFooter}
+                  onUpdateCallNumber={updateCallNumber}
+                  onAddCallNumber={addCallNumber}
+                  onRemoveCallNumber={removeCallNumber}
+                  onSaveAsDefault={handleSaveContactAsDefault}
+                  isSavingDefault={updateCompanySettings.isPending}
+                />
+              </CollapsibleSection>
+            )}
+
+            <CollapsibleSection title="Display Options" icon={<Layout size={16} />} defaultOpen={true}>
+              <DisplayOptionsControl options={options.display} onToggle={toggleDisplay} />
+            </CollapsibleSection>
+
             <CollapsibleSection title="Quote Settings" icon={<Settings size={16} />} defaultOpen={true}>
               <div className="space-y-3">
                 <div>
@@ -265,10 +408,6 @@ export function QuotationPDFScreen({ project, quotation: quotationProp, onClose,
                   />
                 </div>
               </div>
-            </CollapsibleSection>
-
-            <CollapsibleSection title="Display Options" icon={<Layout size={16} />} defaultOpen={false}>
-              <DisplayOptionsControl options={options.display} onToggle={toggleDisplay} />
             </CollapsibleSection>
 
             <CollapsibleSection title="Addressed To" icon={<UserCheck size={16} />} defaultOpen={false}>
@@ -325,16 +464,6 @@ export function QuotationPDFScreen({ project, quotation: quotationProp, onClose,
           </div>
         </div>
       </div>
-
-      {/* Print Styles */}
-      <style>{`
-        @media print {
-          @page { size: A4; margin: 0; }
-          body { margin: 0 !important; padding: 0 !important; background: white !important; }
-          #root, .app-root, body > div:not(.print-portal-container) { display: none !important; }
-          .print-portal-container { display: block !important; position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; background: white; }
-        }
-      `}</style>
 
       {/* Print Portal — only mounted when printing to avoid a persistent hidden render tree */}
       {isPrinting && createPortal(

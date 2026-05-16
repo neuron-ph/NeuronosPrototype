@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { FileCheck, Users } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
@@ -28,6 +28,7 @@ import { fireBookingAssignmentTickets } from "../../utils/workflowTickets";
 import { generateBookingNumber, peekNextBookingNumber } from "../../utils/bookingNumberUtils";
 import { getSelectedCustomer } from "../../utils/bookings/selectedCustomer";
 import { useCustomerAccountOwnerAutofill } from "./shared/useCustomerAccountOwnerAutofill";
+import { saveBookingDraft } from "./shared/saveBookingDraft";
 
 interface CreateBrokerageBookingPanelProps {
   isOpen: boolean;
@@ -38,6 +39,8 @@ interface CreateBrokerageBookingPanelProps {
   customerId?: string;
   serviceType?: string;
   currentUser?: User | null;
+  draftBookingId?: string;
+  draftData?: Record<string, unknown>;
 }
 
 export function CreateBrokerageBookingPanel({
@@ -48,14 +51,19 @@ export function CreateBrokerageBookingPanel({
   source = "operations",
   customerId,
   currentUser,
+  draftBookingId,
+  draftData,
 }: CreateBrokerageBookingPanelProps) {
   const [loading, setLoading] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(draftBookingId ?? null);
   const [assignmentPayload, setAssignmentPayload] = useState<ServiceRoleAssignmentPayload | null>(null);
   const [detectedContractId, setDetectedContractId] = useState<string | null>(null);
   const [contractsList, setContractsList] = useState<ContractSummary[]>([]);
   const [submitErrors, setSubmitErrors] = useState<Record<string, string>>({});
+  const hasHydratedDraft = useRef(false);
 
-  const { formState, setField, initFromPrefill, context } = useBookingFormState("Brokerage", {
+  const { formState, setField, initFromPrefill, initFromRecord, context } = useBookingFormState("Brokerage", {
     status: "Draft",
     movement_type: "Import",
   });
@@ -63,7 +71,20 @@ export function CreateBrokerageBookingPanel({
   useCustomerAccountOwnerAutofill(selectedCustomer.customerId, setField);
 
   useEffect(() => {
-    if (prefillData && isOpen) initFromPrefill(prefillData);
+    if (!isOpen) {
+      hasHydratedDraft.current = false;
+      return;
+    }
+    if (draftData && !hasHydratedDraft.current) {
+      hasHydratedDraft.current = true;
+      initFromRecord(draftData);
+      const existingContract = (draftData as { contract_id?: string }).contract_id;
+      if (existingContract) setDetectedContractId(existingContract);
+    }
+  }, [draftData, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (prefillData && isOpen && !draftData) initFromPrefill(prefillData);
   }, [prefillData, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Preview the upcoming booking number when the panel opens. Non-allocating —
@@ -101,13 +122,14 @@ export function CreateBrokerageBookingPanel({
     setLoading(true);
 
     try {
-      const bookingNumber = await generateBookingNumber("Brokerage");
+      const existingBookingNumber = String((draftData as { booking_number?: string } | undefined)?.booking_number ?? "");
+      const bookingNumber = existingBookingNumber || (await generateBookingNumber("Brokerage"));
       const { topLevel, details } = buildBookingPayload(formState, "Brokerage");
 
-      const row = toSupabaseRow(
+      const rowBody = toSupabaseRow(
         {
-          id: crypto.randomUUID(),
           ...topLevel,
+          status: "Created",
           booking_number: bookingNumber,
           ...(detectedContractId ? { contract_id: detectedContractId } : {}),
           ...legacyProjectionFromAssignment(assignmentPayload),
@@ -115,8 +137,17 @@ export function CreateBrokerageBookingPanel({
         details,
       );
 
-      const { data, error } = await supabase.from("bookings").insert(row).select().single();
-      if (error) throw new Error(error.message);
+      let data: any = null;
+      if (editingId) {
+        const res = await supabase.from("bookings").update(rowBody).eq("id", editingId).select().single();
+        if (res.error) throw new Error(res.error.message);
+        data = res.data;
+      } else {
+        const res = await supabase.from("bookings").insert({ id: crypto.randomUUID(), ...rowBody }).select().single();
+        if (res.error) throw new Error(res.error.message);
+        data = res.data;
+      }
+      if (!data) throw new Error("Booking save returned no row");
 
       const assignRes = await persistAssignmentsForNewBooking({
         bookingId: data.id,
@@ -175,8 +206,30 @@ export function CreateBrokerageBookingPanel({
     }
   };
 
+  const handleSaveDraft = async () => {
+    setSavingDraft(true);
+    try {
+      const result = await saveBookingDraft(formState, "Brokerage", {
+        bookingId: editingId,
+        currentUser,
+        detectedContractId,
+      });
+      if (!result) return;
+      setEditingId(result.id);
+      toast.success(result.isNew ? "Draft saved" : "Draft updated");
+      onSuccess({ id: result.id, status: "Draft" });
+      onClose();
+    } catch (err) {
+      console.error("CreateBrokerageBookingPanel saveDraft:", err);
+      toast.error("Failed to save draft. Please try again.");
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
   if (!isOpen) return null;
 
+  const isEditingDraft = editingId !== null;
   const customerName = selectedCustomer.customerName;
   const bookingName = String(formState.booking_name ?? "");
   const isStandardBrokerage = String(formState.brokerage_type ?? "") === "Standard";
@@ -190,9 +243,11 @@ export function CreateBrokerageBookingPanel({
       isOpen={isOpen}
       onClose={onClose}
       icon={<FileCheck size={20} />}
-      title="New Brokerage Booking"
+      title={isEditingDraft ? "Edit Draft Brokerage Booking" : "New Brokerage Booking"}
       subtitle={
-        source === "pricing"
+        isEditingDraft
+          ? "Finish the draft and submit, or keep saving as draft"
+          : source === "pricing"
           ? "Create a new brokerage booking from project specifications"
           : "Create a new customs brokerage entry booking"
       }
@@ -200,8 +255,10 @@ export function CreateBrokerageBookingPanel({
       onSubmit={handleSubmit}
       isSubmitting={loading}
       isFormValid={isFormValid}
-      submitLabel="Create Booking"
+      submitLabel={isEditingDraft ? "Submit Booking" : "Create Booking"}
       submitIcon={<FileCheck size={16} />}
+      onSaveDraft={handleSaveDraft}
+      isSavingDraft={savingDraft}
     >
       <BookingDynamicForm
         serviceType="Brokerage"

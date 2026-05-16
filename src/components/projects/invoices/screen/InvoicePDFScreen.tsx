@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Printer, Save, ZoomIn, ZoomOut, Maximize, User, Layout, FileText, Download } from "lucide-react";
+import { ArrowLeft, Printer, Save, ZoomIn, ZoomOut, Maximize, User, Layout, FileText, Download, Building2, Phone } from "lucide-react";
 import type { Project } from "../../../../types/pricing";
 import { Invoice } from "../../../../types/accounting";
 import { InvoiceDocument } from "../InvoiceDocument";
@@ -7,8 +7,11 @@ import { useInvoiceDocumentState } from "./useInvoiceDocumentState";
 import { SignatoryControl } from "./controls/SignatoryControl";
 import { DisplayOptionsControl } from "./controls/DisplayOptionsControl";
 import { NotesControl } from "./controls/NotesControl";
+import { BankDetailsControl } from "../../quotation/screen/controls/BankDetailsControl";
+import { ContactFooterControl } from "../../quotation/screen/controls/ContactFooterControl";
 import { CollapsibleSection } from "./controls/CollapsibleSection";
 import { toast } from "../../../ui/toast-utils";
+import { useCompanySettings, useUpdateCompanySettings } from "../../../../hooks/useCompanySettings";
 
 interface InvoicePDFScreenProps {
   project: Project;
@@ -23,7 +26,51 @@ const A4_WIDTH_PX = 794; // 210mm
 const A4_HEIGHT_PX = 1123; // 297mm
 
 export function InvoicePDFScreen({ project, invoice, onClose, currentUser, isEmbedded = false }: InvoicePDFScreenProps) {
-  const { options, updateSignatory, toggleDisplay, setCustomNotes } = useInvoiceDocumentState(project, invoice, currentUser);
+  const { settings: companySettings } = useCompanySettings();
+  const updateCompanySettings = useUpdateCompanySettings();
+  const {
+    options,
+    updateSignatory,
+    toggleDisplay,
+    setCustomNotes,
+    updateBankDetails,
+    updateContactFooter,
+    updateCallNumber,
+    addCallNumber,
+    removeCallNumber,
+  } = useInvoiceDocumentState(project, invoice, currentUser, companySettings);
+
+  const handleSaveBankAsDefault = async () => {
+    if (!options.bank_details) return;
+    try {
+      await updateCompanySettings.mutateAsync({
+        bank_name: options.bank_details.bank_name || null,
+        bank_account_name: options.bank_details.account_name || null,
+        bank_account_number: options.bank_details.account_number || null,
+      });
+      toast.success("Bank details saved as company default.");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to save bank details.");
+    }
+  };
+
+  const handleSaveContactAsDefault = async () => {
+    if (!options.contact_footer) return;
+    const lines = options.contact_footer.office_address.split("\n").map((l) => l.trim()).filter(Boolean);
+    try {
+      await updateCompanySettings.mutateAsync({
+        phone_numbers: options.contact_footer.call_numbers.map((p) => p.trim()).filter(Boolean),
+        email: options.contact_footer.email || null,
+        address_line1: lines[0] || null,
+        address_line2: lines[1] || null,
+        city: lines[2]?.split(",")[0]?.trim() || null,
+        country: lines[2]?.split(",").slice(1).join(",").trim() || null,
+      });
+      toast.success("Contact footer saved as company default.");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to save contact footer.");
+    }
+  };
   const [isSaving, setIsSaving] = useState(false);
   const [scale, setScale] = useState(0.85);
   const [autoScale, setAutoScale] = useState(true);
@@ -192,15 +239,40 @@ export function InvoicePDFScreen({ project, invoice, onClose, currentUser, isEmb
             {/* Scrollable Content */}
             <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent">
                 <CollapsibleSection title="Signatories" icon={<User size={18} />} defaultOpen={true}>
-                    <SignatoryControl 
+                    <SignatoryControl
                         preparedBy={options.signatories.prepared_by}
                         approvedBy={options.signatories.approved_by}
                         onUpdate={updateSignatory}
                     />
                 </CollapsibleSection>
-                
+
+                {options.bank_details && (
+                  <CollapsibleSection title="Bank Details" icon={<Building2 size={18} />} defaultOpen={false}>
+                    <BankDetailsControl
+                      bankDetails={options.bank_details}
+                      onUpdate={updateBankDetails as any}
+                      onSaveAsDefault={handleSaveBankAsDefault}
+                      isSavingDefault={updateCompanySettings.isPending}
+                    />
+                  </CollapsibleSection>
+                )}
+
+                {options.contact_footer && (
+                  <CollapsibleSection title="Contact Footer" icon={<Phone size={18} />} defaultOpen={false}>
+                    <ContactFooterControl
+                      contactFooter={options.contact_footer}
+                      onUpdateField={updateContactFooter}
+                      onUpdateCallNumber={updateCallNumber}
+                      onAddCallNumber={addCallNumber}
+                      onRemoveCallNumber={removeCallNumber}
+                      onSaveAsDefault={handleSaveContactAsDefault}
+                      isSavingDefault={updateCompanySettings.isPending}
+                    />
+                  </CollapsibleSection>
+                )}
+
                 <CollapsibleSection title="Display Options" icon={<Layout size={18} />} defaultOpen={true}>
-                    <DisplayOptionsControl 
+                    <DisplayOptionsControl
                         options={options.display}
                         onToggle={toggleDisplay as any}
                     />

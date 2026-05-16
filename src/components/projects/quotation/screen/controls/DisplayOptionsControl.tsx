@@ -31,9 +31,24 @@ export function DisplayOptionsControl({ options, onToggle }: DisplayOptionsContr
           onClick={() => onToggle("show_bank_details")}
       />
       <ToggleItem
+          label="Show Notes"
+          checked={options.show_notes}
+          onClick={() => onToggle("show_notes")}
+      />
+      <ToggleItem
           label="Show Tax Breakdown"
           checked={options.show_tax_summary}
           onClick={() => onToggle("show_tax_summary")}
+      />
+      <ToggleItem
+          label="Show Signatories"
+          checked={options.show_signatories}
+          onClick={() => onToggle("show_signatories")}
+      />
+      <ToggleItem
+          label="Show Contact Footer"
+          checked={options.show_contact_footer}
+          onClick={() => onToggle("show_contact_footer")}
       />
     </div>
   );

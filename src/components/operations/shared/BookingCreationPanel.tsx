@@ -38,6 +38,12 @@ interface BookingCreationPanelProps {
   submitLabel?: string;
   /** Icon shown in the submit button (e.g. <FileCheck size={16} />) */
   submitIcon?: React.ReactNode;
+  /** Optional Save-as-Draft handler. When provided, renders a secondary button next to Submit that bypasses validation. */
+  onSaveDraft?: () => void | Promise<void>;
+  /** Whether a draft save is in progress — disables the draft button + shows "Saving..." */
+  isSavingDraft?: boolean;
+  /** Save-Draft button label (default: "Save as Draft") */
+  saveDraftLabel?: string;
   /** Form fields — rendered inside the scrollable form area */
   children: React.ReactNode;
 }
@@ -54,6 +60,9 @@ export function BookingCreationPanel({
   isFormValid,
   submitLabel = "Create Booking",
   submitIcon,
+  onSaveDraft,
+  isSavingDraft = false,
+  saveDraftLabel = "Save as Draft",
   children,
 }: BookingCreationPanelProps) {
   const horizontalPadding = "clamp(24px, 3vw, 40px)";
@@ -125,6 +134,33 @@ export function BookingCreationPanel({
       >
         Cancel
       </button>
+      {onSaveDraft && (
+        <button
+          type="button"
+          onClick={() => void onSaveDraft()}
+          disabled={isSavingDraft || isSubmitting}
+          className="px-6 py-2.5 rounded-lg transition-colors"
+          style={{
+            border: "1px solid var(--theme-action-primary-bg)",
+            backgroundColor: "var(--theme-bg-surface)",
+            color: "var(--theme-action-primary-bg)",
+            fontSize: "14px",
+            fontWeight: 600,
+            cursor: isSavingDraft || isSubmitting ? "not-allowed" : "pointer",
+            opacity: isSavingDraft || isSubmitting ? 0.6 : 1,
+          }}
+          onMouseEnter={(e) => {
+            if (!isSavingDraft && !isSubmitting) {
+              e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)";
+            }
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
+          }}
+        >
+          {isSavingDraft ? "Saving..." : saveDraftLabel}
+        </button>
+      )}
       <button
         type="submit"
         form={formId}

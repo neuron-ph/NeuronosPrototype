@@ -63,6 +63,23 @@ function buildQuotationUpdatePayload(data: any): Record<string, unknown> {
   const existingPricing = data.pricing && typeof data.pricing === 'object' ? data.pricing : {};
   const mergedPricing = { ...existingPricing, ...pricingFields };
 
+  const existingDetails = data.details && typeof data.details === "object" ? data.details : {};
+  const displayDetails =
+    data.display && typeof data.display === "object"
+      ? {
+          pdf_show_bank_details: data.display.show_bank_details ?? true,
+          pdf_show_notes: data.display.show_notes ?? true,
+          pdf_show_tax_summary: data.display.show_tax_summary ?? true,
+          pdf_show_letterhead: data.display.show_letterhead ?? true,
+          pdf_show_signatories: data.display.show_signatories ?? true,
+          pdf_show_contact_footer: data.display.show_contact_footer ?? true,
+        }
+      : {};
+  const mergedDetails =
+    data.rate_matrices !== undefined
+      ? { ...existingDetails, ...displayDetails, rate_matrices: data.rate_matrices }
+      : { ...existingDetails, ...displayDetails };
+
   const payload: Record<string, unknown> = {
     quotation_name: data.quotation_name,
     quotation_number: data.quotation_number,
@@ -92,11 +109,17 @@ function buildQuotationUpdatePayload(data: any): Record<string, unknown> {
     validity_date: data.validity_date,
     contract_start_date: data.contract_validity_start ?? data.contract_start_date,
     contract_end_date: data.contract_validity_end ?? data.contract_end_date,
+    prepared_by: data.prepared_by,
+    prepared_by_title: data.prepared_by_title,
+    approved_by: data.approved_by,
+    approved_by_title: data.approved_by_title,
+    addressed_to_name: data.addressed_to_name,
+    addressed_to_title: data.addressed_to_title,
+    payment_terms: data.payment_terms,
+    custom_notes: data.custom_notes,
     project_id: data.project_id,
     pricing: Object.keys(mergedPricing).length > 0 ? mergedPricing : undefined,
-    details: data.rate_matrices !== undefined
-      ? { ...(data.details ?? {}), rate_matrices: data.rate_matrices }
-      : data.details ?? undefined,
+    details: Object.keys(mergedDetails).length > 0 ? mergedDetails : undefined,
   };
 
   const dateColumns = ['quotation_date', 'expiry_date', 'validity_date', 'contract_start_date', 'contract_end_date'];

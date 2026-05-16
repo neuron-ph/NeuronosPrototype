@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Truck, Users } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
@@ -27,6 +27,7 @@ import { fireBookingAssignmentTickets } from "../../utils/workflowTickets";
 import { generateBookingNumber, peekNextBookingNumber } from "../../utils/bookingNumberUtils";
 import { getSelectedCustomer } from "../../utils/bookings/selectedCustomer";
 import { useCustomerAccountOwnerAutofill } from "./shared/useCustomerAccountOwnerAutofill";
+import { saveBookingDraft } from "./shared/saveBookingDraft";
 
 interface CreateTruckingBookingPanelProps {
   isOpen: boolean;
@@ -38,6 +39,8 @@ interface CreateTruckingBookingPanelProps {
   customerId?: string;
   serviceType?: string;
   currentUser?: { id?: string; name?: string; department?: string } | null;
+  draftBookingId?: string;
+  draftData?: Record<string, unknown>;
 }
 
 export function CreateTruckingBookingPanel({
@@ -49,13 +52,18 @@ export function CreateTruckingBookingPanel({
   source = "operations",
   customerId,
   currentUser,
+  draftBookingId,
+  draftData,
 }: CreateTruckingBookingPanelProps) {
   const [loading, setLoading] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(draftBookingId ?? null);
   const [assignmentPayload, setAssignmentPayload] = useState<ServiceRoleAssignmentPayload | null>(null);
   const [detectedContractId, setDetectedContractId] = useState<string | null>(null);
   const [submitErrors, setSubmitErrors] = useState<Record<string, string>>({});
+  const hasHydratedDraft = useRef(false);
 
-  const { formState, setField, setFields, initFromPrefill, context } = useBookingFormState("Trucking", {
+  const { formState, setField, setFields, initFromPrefill, initFromRecord, context } = useBookingFormState("Trucking", {
     status: "Draft",
     movement_type: "Import",
     // Seed one empty destination row so the repeater shows the right columns immediately
@@ -65,7 +73,20 @@ export function CreateTruckingBookingPanel({
   useCustomerAccountOwnerAutofill(selectedCustomer.customerId, setField);
 
   useEffect(() => {
-    if (prefillData && isOpen) initFromPrefill(prefillData);
+    if (!isOpen) {
+      hasHydratedDraft.current = false;
+      return;
+    }
+    if (draftData && !hasHydratedDraft.current) {
+      hasHydratedDraft.current = true;
+      initFromRecord(draftData);
+      const existingContract = (draftData as { contract_id?: string }).contract_id;
+      if (existingContract) setDetectedContractId(existingContract);
+    }
+  }, [draftData, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (prefillData && isOpen && !draftData) initFromPrefill(prefillData);
   }, [prefillData, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -114,13 +135,14 @@ export function CreateTruckingBookingPanel({
     setLoading(true);
 
     try {
-      const bookingNumber = await generateBookingNumber("Trucking");
+      const existingBookingNumber = String((draftData as { booking_number?: string } | undefined)?.booking_number ?? "");
+      const bookingNumber = existingBookingNumber || (await generateBookingNumber("Trucking"));
       const { topLevel, details } = buildBookingPayload(formState, "Trucking");
 
-      const row = toSupabaseRow(
+      const rowBody = toSupabaseRow(
         {
-          id: crypto.randomUUID(),
           ...topLevel,
+          status: "Created",
           booking_number: bookingNumber,
           ...(detectedContractId ? { contract_id: detectedContractId } : {}),
           ...legacyProjectionFromAssignment(assignmentPayload),
@@ -128,8 +150,17 @@ export function CreateTruckingBookingPanel({
         details,
       );
 
-      const { data, error } = await supabase.from("bookings").insert(row).select().single();
-      if (error) throw new Error(error.message);
+      let data: any = null;
+      if (editingId) {
+        const res = await supabase.from("bookings").update(rowBody).eq("id", editingId).select().single();
+        if (res.error) throw new Error(res.error.message);
+        data = res.data;
+      } else {
+        const res = await supabase.from("bookings").insert({ id: crypto.randomUUID(), ...rowBody }).select().single();
+        if (res.error) throw new Error(res.error.message);
+        data = res.data;
+      }
+      if (!data) throw new Error("Booking save returned no row");
 
       const assignRes = await persistAssignmentsForNewBooking({
         bookingId: data.id,
@@ -184,8 +215,31 @@ export function CreateTruckingBookingPanel({
     }
   };
 
+  const handleSaveDraft = async () => {
+    setSavingDraft(true);
+    try {
+      const result = await saveBookingDraft(formState, "Trucking", {
+        bookingId: editingId,
+        currentUser,
+        detectedContractId,
+      });
+      if (!result) return;
+      setEditingId(result.id);
+      toast.success(result.isNew ? "Draft saved" : "Draft updated");
+      onSuccess?.({ id: result.id, status: "Draft" });
+      onBookingCreated?.({ id: result.id, status: "Draft" });
+      onClose();
+    } catch (err) {
+      console.error("CreateTruckingBookingPanel saveDraft:", err);
+      toast.error("Failed to save draft. Please try again.");
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
   if (!isOpen) return null;
 
+  const isEditingDraft = editingId !== null;
   const customerName = selectedCustomer.customerName;
   const bookingName = String(formState.booking_name ?? "");
   const isFormValid = customerName.trim() !== "" && bookingName.trim() !== "";
@@ -195,9 +249,11 @@ export function CreateTruckingBookingPanel({
       isOpen={isOpen}
       onClose={onClose}
       icon={<Truck size={20} />}
-      title="New Trucking Booking"
+      title={isEditingDraft ? "Edit Draft Trucking Booking" : "New Trucking Booking"}
       subtitle={
-        source === "pricing"
+        isEditingDraft
+          ? "Finish the draft and submit, or keep saving as draft"
+          : source === "pricing"
           ? "Create a trucking booking from project specifications"
           : "Create a new trucking delivery booking"
       }
@@ -205,8 +261,10 @@ export function CreateTruckingBookingPanel({
       onSubmit={handleSubmit}
       isSubmitting={loading}
       isFormValid={isFormValid}
-      submitLabel="Create Booking"
+      submitLabel={isEditingDraft ? "Submit Booking" : "Create Booking"}
       submitIcon={<Truck size={16} />}
+      onSaveDraft={handleSaveDraft}
+      isSavingDraft={savingDraft}
     >
       <BookingDynamicForm
         serviceType="Trucking"
