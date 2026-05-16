@@ -93,6 +93,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
   const [ownerFilter, setOwnerFilter] = useState<string>("all");
   const [handlerFilter, setHandlerFilter] = useState<string>("all");
   const [modeFilter, setModeFilter] = useState<string>("all");
+  const [resumeDraft, setResumeDraft] = useState<Record<string, unknown> | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; label: string } | null>(null);
 
   const { scope, isLoaded: scopeLoaded } = useDataScope('bookings');
@@ -604,7 +605,13 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
                     <tr
                       key={`${booking.bookingId}-${index}`}
                       className="border-b border-[var(--theme-text-primary)]/5 hover:bg-[var(--theme-action-primary-bg)]/5 transition-colors cursor-pointer"
-                      onClick={() => onSelectBooking(booking)}
+                      onClick={() => {
+                        if (booking.status === "Draft") {
+                          setResumeDraft({ ...(booking as any), id: booking.bookingId });
+                        } else {
+                          onSelectBooking(booking);
+                        }
+                      }}
                     >
                       <td className="py-4 px-4">
                         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -755,6 +762,19 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
           onClose={() => setShowCreateModal(false)}
           onBookingCreated={handleBookingCreated}
           currentUser={currentUser}
+        />
+      )}
+      {resumeDraft && (
+        <CreateForwardingBookingPanel
+          isOpen={!!resumeDraft}
+          onClose={() => setResumeDraft(null)}
+          onBookingCreated={() => {
+            setResumeDraft(null);
+            refetch();
+          }}
+          currentUser={currentUser}
+          draftBookingId={String(resumeDraft.id)}
+          draftData={resumeDraft}
         />
       )}
       <NeuronModal

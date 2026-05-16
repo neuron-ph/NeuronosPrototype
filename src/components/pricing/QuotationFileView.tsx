@@ -1,7 +1,7 @@
 import { ArrowLeft, Download, Edit3, FileText, FolderPlus, Layout, UserCircle } from "lucide-react";
 import { usePermission } from "../../context/PermissionProvider";
 import { CustomDatePicker } from "../common/CustomDatePicker";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { QuotationNew, Project } from "../../types/pricing";
 import { CustomDropdown } from "../bd/CustomDropdown";
@@ -77,6 +77,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
     setLocalDeadline((quotation as any).details?.pricing_deadline || "");
   }, [(quotation as any).details?.pricing_deadline]);
   const [isQuickDownloading, setIsQuickDownloading] = useState(false);
+  const contentPanelRef = useRef<HTMLDivElement>(null);
   const { settings: companySettings } = useCompanySettings();
 
   const normalizedStatus = getNormalizedQuotationStatus(quotation);
@@ -87,6 +88,38 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
   const currentUserId = currentUser?.id || "user-123";
   const currentUserName = currentUser?.name || "John Doe";
   const currentUserDepartment = currentUser?.department || userDepartment || "BD";
+
+  useEffect(() => {
+    if (viewMode !== "pdf") return;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+
+    const resetScroll = () => {
+      contentPanelRef.current?.scrollTo({ top: 0, left: 0 });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      window.scrollTo({ top: 0, left: 0 });
+    };
+
+    resetScroll();
+    const frameId = requestAnimationFrame(resetScroll);
+    const handleWindowScroll = () => {
+      if (window.scrollY !== 0) {
+        window.scrollTo({ top: 0, left: 0 });
+      }
+    };
+    window.addEventListener("scroll", handleWindowScroll, { passive: true });
+
+    return () => {
+      cancelAnimationFrame(frameId);
+      window.removeEventListener("scroll", handleWindowScroll);
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+    };
+  }, [quotation.id, viewMode]);
 
   const canAssign = can("pricing_quotations", "approve");
   const canEditPricing = can("pricing_quotations", "edit");
@@ -712,22 +745,35 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
     if (isQuickDownloading) return;
     setIsQuickDownloading(true);
     try {
+      const legacyDetails = (quotation as any).details && typeof (quotation as any).details === "object"
+        ? (quotation as any).details
+        : {};
       const defaultOptions: QuotationPrintOptions = {
         signatories: {
           prepared_by: {
-            name: currentUser?.name || quotation.prepared_by || "System User",
-            title: "Sales Representative",
+            name: currentUser?.name || quotation.prepared_by || (quotation as any).pdf_prepared_by || legacyDetails.pdf_prepared_by || "System User",
+            title: quotation.prepared_by_title || (quotation as any).pdf_prepared_by_title || legacyDetails.pdf_prepared_by_title || "Sales Representative",
           },
-          approved_by: { name: "Management", title: "Authorized Signatory" },
+          approved_by: {
+            name: quotation.approved_by || (quotation as any).pdf_approved_by || legacyDetails.pdf_approved_by || "Management",
+            title: quotation.approved_by_title || (quotation as any).pdf_approved_by_title || legacyDetails.pdf_approved_by_title || "Authorized Signatory",
+          },
         },
         addressed_to: {
-          name: quotation.contact_person_name || "",
-          title: "",
+          name: quotation.addressed_to_name || (quotation as any).pdf_addressed_to_name || legacyDetails.pdf_addressed_to_name || quotation.contact_person_name || "",
+          title: quotation.addressed_to_title || (quotation as any).pdf_addressed_to_title || legacyDetails.pdf_addressed_to_title || "",
         },
-        validity_override: quotation.valid_until || "",
-        payment_terms: "",
-        custom_notes: "",
-        display: { show_bank_details: true, show_tax_summary: true },
+        validity_override: quotation.valid_until || (quotation as any).expiry_date || "",
+        payment_terms: quotation.payment_terms || (quotation as any).pdf_payment_terms || legacyDetails.pdf_payment_terms || "",
+        custom_notes: quotation.custom_notes || (quotation as any).pdf_custom_notes || legacyDetails.pdf_custom_notes || quotation.notes || "",
+        display: {
+          show_bank_details: (quotation as any).pdf_show_bank_details ?? legacyDetails.pdf_show_bank_details ?? true,
+          show_notes: (quotation as any).pdf_show_notes ?? legacyDetails.pdf_show_notes ?? true,
+          show_tax_summary: (quotation as any).pdf_show_tax_summary ?? legacyDetails.pdf_show_tax_summary ?? true,
+          show_letterhead: (quotation as any).pdf_show_letterhead ?? legacyDetails.pdf_show_letterhead ?? true,
+          show_signatories: (quotation as any).pdf_show_signatories ?? legacyDetails.pdf_show_signatories ?? true,
+          show_contact_footer: (quotation as any).pdf_show_contact_footer ?? legacyDetails.pdf_show_contact_footer ?? true,
+        },
       };
       await downloadQuotationPDF(quotation, defaultOptions, companySettings);
     } catch (err: any) {
@@ -741,6 +787,21 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
   // fields directly as explicit DB columns (migration 028 added them all).
   const handlePDFSave = async (data: any) => {
     try {
+      const updatedDetails = {
+        ...((quotation as any).details || {}),
+        pdf_show_bank_details: data.display?.show_bank_details ?? true,
+        pdf_show_notes: data.display?.show_notes ?? true,
+        pdf_show_tax_summary: data.display?.show_tax_summary ?? true,
+        pdf_show_letterhead: data.display?.show_letterhead ?? true,
+        pdf_show_signatories: data.display?.show_signatories ?? true,
+        pdf_show_contact_footer: data.display?.show_contact_footer ?? true,
+        ...(data.details?.bank_details_override
+          ? { bank_details_override: data.details.bank_details_override }
+          : {}),
+        ...(data.details?.contact_footer_override
+          ? { contact_footer_override: data.details.contact_footer_override }
+          : {}),
+      };
       const { error } = await supabase
         .from('quotations')
         .update({
@@ -752,7 +813,8 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
           addressed_to_title: data.addressed_to_title || null,
           payment_terms: data.payment_terms || null,
           custom_notes: data.custom_notes || null,
-          valid_until: data.valid_until || null,
+          expiry_date: data.valid_until || null,
+          details: updatedDetails,
           updated_at: new Date().toISOString(),
         })
         .eq('id', quotation.id);
@@ -770,7 +832,15 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
         payment_terms: data.payment_terms ?? quotation.payment_terms,
         custom_notes: data.custom_notes ?? quotation.custom_notes,
         valid_until: data.valid_until ?? quotation.valid_until,
-      });
+        expiry_date: data.valid_until ?? (quotation as any).expiry_date,
+        details: updatedDetails,
+        pdf_show_bank_details: updatedDetails.pdf_show_bank_details,
+        pdf_show_notes: updatedDetails.pdf_show_notes,
+        pdf_show_tax_summary: updatedDetails.pdf_show_tax_summary,
+        pdf_show_letterhead: updatedDetails.pdf_show_letterhead,
+        pdf_show_signatories: updatedDetails.pdf_show_signatories,
+        pdf_show_contact_footer: updatedDetails.pdf_show_contact_footer,
+      } as QuotationNew);
       toast.success("PDF settings saved");
     } catch (err: any) {
       toast.error("Failed to save: " + (err?.message ?? "Unknown error"));
@@ -1233,22 +1303,24 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
 
       {/* Main Content Area */}
       <div
+        ref={contentPanelRef}
         role="tabpanel"
         id={activeTab === "details" ? "tab-panel-details" : "tab-panel-comments"}
         aria-labelledby={activeTab === "details" ? "tab-details" : "tab-comments"}
         style={{
           flex: 1,
-          overflow: "auto",
+          overflow: viewMode === "pdf" ? "hidden" : "auto",
           display: "flex",
           flexDirection: "column",
+          minHeight: 0,
         }}
       >
         {activeTab === "details" && canViewDetailsTab ? (
           viewMode === "pdf" ? (
-            // PDF mode: same container as form view
-            <div style={{ padding: "32px 48px", maxWidth: "1400px", margin: "0 auto", width: "100%" }}>
+            // PDF mode: bounded workspace with all scrolling owned by the PDF preview/sidebar.
+            <div style={{ padding: "32px 48px", maxWidth: "1400px", margin: "0 auto", width: "100%", height: "100%", minHeight: 0, display: "flex", flexDirection: "column" }}>
               {/* View Switcher */}
-              <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center justify-between mb-8 shrink-0">
                 <SegmentedToggle
                   value={viewMode}
                   onChange={setViewMode}
@@ -1259,7 +1331,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
                 />
               </div>
               {/* PDF screen in a bounded card */}
-              <div style={{ height: "calc(100vh - 260px)", borderRadius: "12px", overflow: "hidden", border: "1px solid var(--neuron-ui-border)" }}>
+              <div style={{ flex: 1, minHeight: 0, borderRadius: "12px", overflow: "hidden", border: "1px solid var(--neuron-ui-border)" }}>
                 <QuotationPDFScreen
                   project={adaptedProject}
                   quotation={quotation}

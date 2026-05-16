@@ -78,68 +78,69 @@ export function PartnerSheet({ isOpen, onClose, initialData, onSave }: PartnerSh
 
   // Reset form when opening/closing or changing data
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = "hidden";
-      if (initialData) {
-        // Parse emails
-        const emails = initialData.emails && initialData.emails.length > 0
-          ? initialData.emails.map(e => ({ value: e }))
-          : [{ value: "" }];
+    if (!isOpen) return;
 
-        // Parse phones (handle string or string[] compatibility)
-        let phones = [{ value: "" }];
-        if (initialData.phone) {
-           // If it's a comma separated string, split it
-           phones = initialData.phone.split(",").map(p => ({ value: p.trim() }));
-        }
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
 
-        // Parse mobiles
-        let mobiles = [{ value: "" }];
-        if (initialData.mobile) {
-           mobiles = initialData.mobile.split(",").map(m => ({ value: m.trim() }));
-        }
+    if (initialData) {
+      // Parse emails
+      const emails = initialData.emails && initialData.emails.length > 0
+        ? initialData.emails.map(e => ({ value: e }))
+        : [{ value: "" }];
 
-        reset({
-          company_name: initialData.company_name,
-          partner_type: initialData.partner_type || "international",
-          wca_id: initialData.wca_id || "",
-          country: initialData.country,
-          territory: initialData.territory || "",
-          address: initialData.address || "",
-          contact_person: initialData.contact_person || "",
-          emails,
-          phones,
-          mobiles,
-          website: initialData.website || "",
-          expires: initialData.expires || "",
-          services: initialData.services || [],
-          notes: initialData.notes || "",
-          is_wca_conference: initialData.is_wca_conference || false
-        });
-      } else {
-        reset({
-          company_name: "",
-          partner_type: "international",
-          wca_id: "",
-          country: "China",
-          territory: "",
-          address: "",
-          contact_person: "",
-          emails: [{ value: "" }],
-          phones: [{ value: "" }],
-          mobiles: [{ value: "" }],
-          website: "",
-          expires: "",
-          services: [],
-          notes: "",
-          is_wca_conference: false
-        });
+      // Parse phones (handle string or string[] compatibility)
+      let phones = [{ value: "" }];
+      if (initialData.phone) {
+         // If it's a comma separated string, split it
+         phones = initialData.phone.split(",").map(p => ({ value: p.trim() }));
       }
+
+      // Parse mobiles
+      let mobiles = [{ value: "" }];
+      if (initialData.mobile) {
+         mobiles = initialData.mobile.split(",").map(m => ({ value: m.trim() }));
+      }
+
+      reset({
+        company_name: initialData.company_name,
+        partner_type: initialData.partner_type || "international",
+        wca_id: initialData.wca_id || "",
+        country: initialData.country,
+        territory: initialData.territory || "",
+        address: initialData.address || "",
+        contact_person: initialData.contact_person || "",
+        emails,
+        phones,
+        mobiles,
+        website: initialData.website || "",
+        expires: initialData.expires || "",
+        services: initialData.services || [],
+        notes: initialData.notes || "",
+        is_wca_conference: initialData.is_wca_conference || false
+      });
     } else {
-      document.body.style.overflow = "unset";
+      reset({
+        company_name: "",
+        partner_type: "international",
+        wca_id: "",
+        country: "China",
+        territory: "",
+        address: "",
+        contact_person: "",
+        emails: [{ value: "" }],
+        phones: [{ value: "" }],
+        mobiles: [{ value: "" }],
+        website: "",
+        expires: "",
+        services: [],
+        notes: "",
+        is_wca_conference: false
+      });
     }
+
     return () => {
-      document.body.style.overflow = "unset";
+      document.body.style.overflow = previousOverflow;
     };
   }, [isOpen, initialData, reset]);
 

@@ -31,6 +31,7 @@ import {
   type AccountingCurrency,
 } from "../../../utils/accountingCurrency";
 import { recordNotificationEvent } from "../../../utils/notifications";
+import { useCompanySettings } from "../../../hooks/useCompanySettings";
 
 
 // A4 Dimensions in pixels at 96 DPI
@@ -75,6 +76,7 @@ export function InvoiceBuilder({
 }: InvoiceBuilderProps) {
   // -- Common State --
   const { user } = useUser();
+  const { settings: companySettings } = useCompanySettings();
   const { can } = usePermission();
   const canViewItemsTab = can("ops_invoices_items_tab", "view");
   const canViewDetailsTab = can("ops_invoices_details_tab", "view");
@@ -458,14 +460,14 @@ export function InvoiceBuilder({
   const handleDownloadPDF = useCallback(async () => {
     setIsGeneratingPDF(true);
     try {
-      await downloadInvoicePDF(viewInvoice as any, printOptions);
+      await downloadInvoicePDF(viewInvoice as any, printOptions, companySettings);
     } catch (err) {
       console.error("PDF generation failed:", err);
       toast.error("PDF generation failed. Try the print option instead.");
     } finally {
       setIsGeneratingPDF(false);
     }
-  }, [viewInvoice, printOptions]);
+  }, [viewInvoice, printOptions, companySettings]);
 
   // -- Actions --
 

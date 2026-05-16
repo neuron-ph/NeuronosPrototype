@@ -308,11 +308,34 @@ export function ContractDetailView({
         'charge_categories', 'financial_summary', 'buying_price', 'selling_price',
         'commodity', 'special_instructions',
       ]);
+      const pdfSettingKeys = new Set([
+        'prepared_by', 'prepared_by_title', 'approved_by', 'approved_by_title',
+        'addressed_to_name', 'addressed_to_title', 'payment_terms', 'custom_notes',
+        'valid_until',
+      ]);
       const top: Record<string, unknown> = {};
       const details: Record<string, unknown> = { ...(quotation as any).details };
       Object.entries(updates).forEach(([key, value]) => {
         if (key === 'id' || key === 'project_id' || key === 'project_number') return;
         if (dateColumns.includes(key) && (!value || value === '')) return;
+        if (key === 'display' && value && typeof value === 'object') {
+          const display = value as Record<string, unknown>;
+          details.pdf_show_bank_details = display.show_bank_details ?? true;
+          details.pdf_show_notes = display.show_notes ?? true;
+          details.pdf_show_tax_summary = display.show_tax_summary ?? true;
+          details.pdf_show_letterhead = display.show_letterhead ?? true;
+          details.pdf_show_signatories = display.show_signatories ?? true;
+          details.pdf_show_contact_footer = display.show_contact_footer ?? true;
+          return;
+        }
+        if (key === 'valid_until') {
+          top.expiry_date = value || null;
+          return;
+        }
+        if (pdfSettingKeys.has(key)) {
+          top[key] = value || null;
+          return;
+        }
         if (detailsKeys.has(key)) {
           details[key] = value;
         } else {

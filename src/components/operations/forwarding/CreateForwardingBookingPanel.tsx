@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Package, Users } from "lucide-react";
 import { supabase } from "../../../utils/supabase/client";
 import { toast } from "../../ui/toast-utils";
@@ -28,6 +28,7 @@ import { fireBookingAssignmentTickets } from "../../../utils/workflowTickets";
 import { generateBookingNumber, peekNextBookingNumber } from "../../../utils/bookingNumberUtils";
 import { getSelectedCustomer } from "../../../utils/bookings/selectedCustomer";
 import { useCustomerAccountOwnerAutofill } from "../shared/useCustomerAccountOwnerAutofill";
+import { saveBookingDraft } from "../shared/saveBookingDraft";
 
 interface CreateForwardingBookingPanelProps {
   isOpen: boolean;
@@ -38,6 +39,8 @@ interface CreateForwardingBookingPanelProps {
   source?: "operations" | "pricing";
   customerId?: string;
   serviceType?: string;
+  draftBookingId?: string;
+  draftData?: Record<string, unknown>;
 }
 
 export function CreateForwardingBookingPanel({
@@ -48,14 +51,19 @@ export function CreateForwardingBookingPanel({
   prefillData,
   source = "operations",
   customerId,
+  draftBookingId,
+  draftData,
 }: CreateForwardingBookingPanelProps) {
   const [loading, setLoading] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(draftBookingId ?? null);
   const [assignmentPayload, setAssignmentPayload] = useState<ServiceRoleAssignmentPayload | null>(null);
   const [detectedContractId, setDetectedContractId] = useState<string | null>(null);
   const [fetchedProject, setFetchedProject] = useState<Project | null>(null);
   const [submitErrors, setSubmitErrors] = useState<Record<string, string>>({});
+  const hasHydratedDraft = useRef(false);
 
-  const { formState, setField, initFromPrefill, context } = useBookingFormState("Forwarding", {
+  const { formState, setField, initFromPrefill, initFromRecord, context } = useBookingFormState("Forwarding", {
     status: "Draft",
     movement_type: "Import",
     mode: "FCL",
@@ -64,7 +72,20 @@ export function CreateForwardingBookingPanel({
   useCustomerAccountOwnerAutofill(selectedCustomer.customerId, setField);
 
   useEffect(() => {
-    if (prefillData && isOpen) initFromPrefill(prefillData);
+    if (!isOpen) {
+      hasHydratedDraft.current = false;
+      return;
+    }
+    if (draftData && !hasHydratedDraft.current) {
+      hasHydratedDraft.current = true;
+      initFromRecord(draftData);
+      const existingContract = (draftData as { contract_id?: string }).contract_id;
+      if (existingContract) setDetectedContractId(existingContract);
+    }
+  }, [draftData, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (prefillData && isOpen && !draftData) initFromPrefill(prefillData);
   }, [prefillData, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -102,13 +123,14 @@ export function CreateForwardingBookingPanel({
     setLoading(true);
 
     try {
-      const bookingNumber = await generateBookingNumber("Forwarding");
+      const existingBookingNumber = String((draftData as { booking_number?: string } | undefined)?.booking_number ?? "");
+      const bookingNumber = existingBookingNumber || (await generateBookingNumber("Forwarding"));
       const { topLevel, details } = buildBookingPayload(formState, "Forwarding");
 
-      const row = toSupabaseRow(
+      const rowBody = toSupabaseRow(
         {
-          id: crypto.randomUUID(),
           ...topLevel,
+          status: "Created",
           booking_number: bookingNumber,
           ...(detectedContractId ? { contract_id: detectedContractId } : {}),
           ...(fetchedProject ? { project_id: fetchedProject.id } : {}),
@@ -117,8 +139,17 @@ export function CreateForwardingBookingPanel({
         details,
       );
 
-      const { data, error } = await supabase.from("bookings").insert(row).select().single();
-      if (error) throw new Error(error.message);
+      let data: any = null;
+      if (editingId) {
+        const res = await supabase.from("bookings").update(rowBody).eq("id", editingId).select().single();
+        if (res.error) throw new Error(res.error.message);
+        data = res.data;
+      } else {
+        const res = await supabase.from("bookings").insert({ id: crypto.randomUUID(), ...rowBody }).select().single();
+        if (res.error) throw new Error(res.error.message);
+        data = res.data;
+      }
+      if (!data) throw new Error("Booking save returned no row");
 
       const assignRes = await persistAssignmentsForNewBooking({
         bookingId: data.id,
@@ -188,8 +219,33 @@ export function CreateForwardingBookingPanel({
     }
   };
 
+  const handleSaveDraft = async () => {
+    setSavingDraft(true);
+    try {
+      const result = await saveBookingDraft(formState, "Forwarding", {
+        bookingId: editingId,
+        currentUser: currentUser
+          ? { id: currentUser.id ?? "", name: currentUser.name, department: currentUser.department }
+          : null,
+        detectedContractId,
+        projectId: fetchedProject?.id ?? null,
+      });
+      if (!result) return;
+      setEditingId(result.id);
+      toast.success(result.isNew ? "Draft saved" : "Draft updated");
+      onBookingCreated({ id: result.id, status: "Draft" });
+      onClose();
+    } catch (err) {
+      console.error("CreateForwardingBookingPanel saveDraft:", err);
+      toast.error("Failed to save draft. Please try again.");
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
   if (!isOpen) return null;
 
+  const isEditingDraft = editingId !== null;
   const customerName = selectedCustomer.customerName;
   const bookingName = String(formState.booking_name ?? "");
   const isFormValid = customerName.trim() !== "" && bookingName.trim() !== "";
@@ -199,9 +255,11 @@ export function CreateForwardingBookingPanel({
       isOpen={isOpen}
       onClose={onClose}
       icon={<Package size={20} />}
-      title="New Forwarding Booking"
+      title={isEditingDraft ? "Edit Draft Forwarding Booking" : "New Forwarding Booking"}
       subtitle={
-        source === "pricing"
+        isEditingDraft
+          ? "Finish the draft and submit, or keep saving as draft"
+          : source === "pricing"
           ? "Create a forwarding booking from project specifications"
           : "Create a new freight forwarding booking"
       }
@@ -209,8 +267,10 @@ export function CreateForwardingBookingPanel({
       onSubmit={handleSubmit}
       isSubmitting={loading}
       isFormValid={isFormValid}
-      submitLabel="Create Booking"
+      submitLabel={isEditingDraft ? "Submit Booking" : "Create Booking"}
       submitIcon={<Package size={16} />}
+      onSaveDraft={handleSaveDraft}
+      isSavingDraft={savingDraft}
     >
       {/* Project autofill — operations source only */}
       {source === "operations" && (
