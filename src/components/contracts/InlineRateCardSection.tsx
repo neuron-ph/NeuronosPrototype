@@ -176,6 +176,11 @@ export function InlineRateCardSection({
     setIsSaving(true);
     try {
       const bookingId = booking.bookingId || booking.id;
+      // Thread selections + multi-line trucking extractions into apply so the
+      // saved billing items match the preview the user just confirmed.
+      const truckingExtractions = isMultiLine
+        ? extractMultiLineSelectionsAndQuantities(truckingLineItems!, rateMatrices)
+        : undefined;
       const result = generateRateCardBillingItems({
         rateMatrices,
         serviceType,
@@ -186,6 +191,8 @@ export function InlineRateCardSection({
         contractNumber,
         customerName,
         currency,
+        selections,
+        truckingExtractions,
       });
       if (result.items.length === 0) {
         toast.warning("No billing items generated — check rate card configuration.");

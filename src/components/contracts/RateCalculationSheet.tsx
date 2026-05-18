@@ -128,6 +128,10 @@ export function RateCalculationSheet({
     try {
       const bookingId = booking.bookingId || booking.id;
 
+      const truckingExtractions = isMultiLine
+        ? extractMultiLineSelectionsAndQuantities(truckingLineItems!, rateMatrices)
+        : undefined;
+
       const result = generateRateCardBillingItems({
         rateMatrices,
         serviceType,
@@ -138,6 +142,8 @@ export function RateCalculationSheet({
         contractNumber,
         customerName,
         currency,
+        selections,
+        truckingExtractions,
       });
 
       if (result.items.length === 0) {

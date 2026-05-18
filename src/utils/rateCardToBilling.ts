@@ -16,6 +16,7 @@ import {
   resolveModeColumn,
   type BookingQuantities,
 } from "./contractRateEngine";
+import type { LineItemExtraction } from "./contractQuantityExtractor";
 import type { BillingItem } from "../components/shared/billings/UnifiedBillingsTab";
 import { buildCatalogSnapshot } from "./catalogSnapshot";
 
@@ -42,6 +43,21 @@ export interface RateCardGenerationContext {
   customerName?: string;
   /** Currency from the contract */
   currency?: string;
+  /**
+   * Selection-group picks for mutually-exclusive alternative rows
+   * (@see SELECTION_GROUP_BLUEPRINT.md). When omitted on a service
+   * that uses selection groups (e.g. trucking), all alternative rows
+   * are emitted — almost never desired. Pass the same selections the
+   * preview was computed with so apply matches what the user saw.
+   */
+  selections?: Record<string, string>;
+  /**
+   * Pre-extracted per-line tuples for multi-line trucking. When provided,
+   * the generator loops over each extraction and runs the engine with its
+   * own selections + quantities, instead of using `quantities`/`selections`
+   * once for the whole booking. @see MULTI_LINE_TRUCKING_BLUEPRINT.md
+   */
+  truckingExtractions?: LineItemExtraction[];
 }
 
 export interface RateCardGenerationResult {
@@ -98,8 +114,23 @@ export function generateRateCardBillingItems(
     return { items: [], total: 0, count: 0, modeColumn: null };
   }
 
-  // 3. Run the rate engine
-  const appliedRates = instantiateRates(matrix, modeColumn, ctx.quantities);
+  // 3. Run the rate engine. For multi-line trucking we loop per extraction so
+  //    each leg's selections + quantities gate its own rows. For everything
+  //    else (single-line trucking, brokerage, forwarding…) we run once with
+  //    the booking-level selections.
+  const appliedRates: AppliedRate[] = [];
+  const useMultiLine = Array.isArray(ctx.truckingExtractions)
+    && ctx.truckingExtractions.length > 0
+    && ctx.serviceType.toLowerCase() === "trucking";
+
+  if (useMultiLine) {
+    for (const { selections, quantities } of ctx.truckingExtractions!) {
+      const rates = instantiateRates(matrix, modeColumn, quantities, selections);
+      appliedRates.push(...rates);
+    }
+  } else {
+    appliedRates.push(...instantiateRates(matrix, modeColumn, ctx.quantities, ctx.selections));
+  }
 
   if (appliedRates.length === 0) {
     return { items: [], total: 0, count: 0, modeColumn };
