@@ -269,6 +269,8 @@ export function calculateContractBilling(
   quantities: BookingQuantities,
   selections?: Record<string, string>,
   facts?: BookingFacts,
+  containers?: BookingContainer[],
+  deliveryAddress?: string,
 ): { appliedRates: AppliedRate[]; total: number } {
   // Find the matrix for this service type
   const matrix = rateMatrices.find(
@@ -287,7 +289,16 @@ export function calculateContractBilling(
     return { appliedRates: [], total: 0 };
   }
 
-  const appliedRates = instantiateRates(matrix, modeColumn, quantities, selections, facts);
+  // Delegate to the category-dispatch entry point so preview output matches
+  // what the apply path emits (otherwise preview shows pre-dispatch totals and
+  // apply shows post-dispatch — confusing for the user).
+  const appliedRates = generateContractBilling(matrix, modeColumn, {
+    quantities,
+    selections,
+    facts,
+    containers,
+    deliveryAddress,
+  });
   const total = appliedRates.reduce((sum, r) => sum + r.subtotal, 0);
 
   return { appliedRates, total };
@@ -623,6 +634,18 @@ export function multiLineRatesToSellingPrice(
 import type { ContractRateCategory, RateCategoryKind } from "../types/pricing";
 
 /**
+ * A single container as the booking declares it. Used by the delivery
+ * dispatcher to match against rate-matrix rows whose `particular` names a
+ * container type ("20ft", "40ft", "BACK TO BACK", "4 WHEELER" etc.) and
+ * whose `remarks` name a location keyword ("within Valenzuela City").
+ */
+export interface BookingContainer {
+  container_number: string;
+  container_type?: string;
+  delivery_address?: string;
+}
+
+/**
  * Full context the dispatchers need to evaluate a category's rows. Bundled
  * so each strategy gets every signal it might need without re-deriving.
  */
@@ -630,6 +653,10 @@ export interface BillingDispatchContext {
   quantities: BookingQuantities;
   facts?: BookingFacts;
   selections?: Record<string, string>;
+  /** Per-container detail for the delivery dispatcher. Empty array when not applicable. */
+  containers?: BookingContainer[];
+  /** Booking-level delivery address fallback when per-container address is empty. */
+  deliveryAddress?: string;
 }
 
 /**
@@ -703,14 +730,100 @@ const dispatchOptional: CategoryDispatcher = (category, matrix, modeColumn, ctx)
   return instantiateRates(slice, modeColumn, ctx.quantities, ctx.selections, ctx.facts);
 };
 
+/**
+ * Normalise a location string for fuzzy matching. Lowercases, strips
+ * punctuation, and removes common stopwords that appear in either booking
+ * delivery_address strings ("VALENZUELA CITY") or matrix row remarks
+ * ("within Valenzuela City", "to Carmona Cavite area"). Returns the
+ * remaining tokens joined by single spaces.
+ */
+function normaliseLocation(s: string | undefined | null): string {
+  if (!s) return '';
+  const STOPWORDS = new Set(['within', 'to', 'from', 'at', 'in', 'the', 'city', 'area', 'province']);
+  return s
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .filter((tok) => tok.length > 0 && !STOPWORDS.has(tok))
+    .join(' ');
+}
+
+/**
+ * Fuzzy location match: each side normalised, then check substring containment
+ * in either direction. Returns true if either string contains the other.
+ * Both-empty returns false (engine should skip rather than guess).
+ */
+function locationsMatch(addressA: string | undefined | null, addressB: string | undefined | null): boolean {
+  const a = normaliseLocation(addressA);
+  const b = normaliseLocation(addressB);
+  if (!a || !b) return false;
+  return a.includes(b) || b.includes(a);
+}
+
+/**
+ * 'delivery' — per-container matching. For each container declared on the
+ * booking, find the rate-matrix row whose `particular` matches the container's
+ * type (case-insensitive, e.g. "20ft" ↔ "20FT") AND whose `remarks` fuzzy-match
+ * the container's delivery address (or the booking-level fallback). Emit one
+ * AppliedRate per matched container with quantity 1.
+ *
+ * Containers with no container_type are skipped (legacy bookings need Ops to
+ * backfill). Containers whose type matches a row but whose address matches no
+ * row's remarks are skipped — we don't guess. Unbilled containers surface as
+ * a smaller bill rather than a wrong bill; Accounting reviews.
+ */
+const dispatchDelivery: CategoryDispatcher = (category, matrix, modeColumn, ctx) => {
+  const currentRows = resolveCategoryRows(category, matrix);
+  if (currentRows.length === 0 || !ctx.containers || ctx.containers.length === 0) return [];
+
+  // Build row-id → category-name map for AppliedRate.category passthrough.
+  const fallbackCategory = `${matrix.service_type} Charges`;
+  const categoryName = category.category_name || fallbackCategory;
+
+  const applied: AppliedRate[] = [];
+
+  for (const container of ctx.containers) {
+    if (!container.container_type) continue;  // legacy data → skip, don't guess
+    const containerType = container.container_type.trim().toLowerCase();
+    const containerAddress = container.delivery_address || ctx.deliveryAddress;
+
+    // Candidate rows whose particular matches the container type.
+    const candidates = currentRows.filter((row) =>
+      (row.particular || '').trim().toLowerCase() === containerType
+    );
+    if (candidates.length === 0) continue;
+
+    // Narrow by address. If only one candidate exists across the matrix for
+    // this type, the address constraint can be skipped (Pricing didn't bother
+    // splitting by location). Otherwise require a fuzzy match.
+    const match = candidates.length === 1
+      ? candidates[0]
+      : candidates.find((row) => locationsMatch(row.remarks, containerAddress));
+    if (!match) continue;
+
+    const rate = match.rates[modeColumn];
+    if (rate === undefined || rate === null || rate === 0) continue;
+
+    applied.push({
+      particular: match.particular,
+      rate,
+      quantity: 1,
+      subtotal: rate,
+      rule_applied: `1 × P${rate.toLocaleString('en-PH')} (${container.container_number || 'container'} → ${containerAddress || 'no address'})`,
+      catalog_item_id: match.catalog_item_id,
+      category: categoryName,
+    });
+  }
+
+  return applied;
+};
+
 const DISPATCHERS: Record<RateCategoryKind, CategoryDispatcher> = {
-  // Phase 1 shipped 'standard'. Phase 2 ships 'optional'. 'delivery' still
-  // delegates to standard until Phase 3 — contracts tagged 'delivery' ahead
-  // of time keep producing the legacy bill (no surprises before Phase 3
-  // brings the real container/address matcher).
+  // Phase 1 shipped 'standard'. Phase 2 ships 'optional'. Phase 3 ships
+  // 'delivery'. All three are now real strategies.
   standard: dispatchStandard,
   optional: dispatchOptional,
-  delivery: dispatchStandard,
+  delivery: dispatchDelivery,
 };
 
 /**

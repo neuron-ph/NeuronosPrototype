@@ -15,7 +15,7 @@
  * @see /docs/blueprints/CONTRACT_RATE_AUTOMATION_BLUEPRINT.md — Phase 1
  */
 
-import type { BookingQuantities, BookingFacts } from "./contractRateEngine";
+import type { BookingQuantities, BookingFacts, BookingContainer } from "./contractRateEngine";
 import { resolveModeColumn } from "./contractRateEngine";
 import type { ContractRateMatrix } from "../types/pricing";
 import type { TruckingLineItem } from "../types/pricing";
@@ -582,6 +582,53 @@ export function countEntries(text?: string | Array<string | Record<string, unkno
  *
  * @see RateRowTrigger in types/pricing.ts
  */
+/**
+ * Extract per-container detail from a booking for the delivery dispatcher.
+ *
+ * Handles three shapes that exist in production data:
+ *   1. The current FCL repeater shape (new): an array of
+ *      { container_number, container_type, delivery_address }
+ *   2. Legacy repeater (pre-Phase 3): { container_number, delivery_address }
+ *      with no container_type. Returned as-is — the dispatcher will skip these
+ *      with no bill emitted; Ops backfills container_type going forward.
+ *   3. Even older legacy: a flat array of strings (just container numbers).
+ *      Each string becomes a BookingContainer with container_number set and
+ *      container_type/delivery_address undefined → dispatcher skips.
+ *
+ * The booking-level `delivery_address` field (top-level Brokerage form input)
+ * is NOT mixed in here — it's passed separately as the dispatch context's
+ * `deliveryAddress` fallback.
+ *
+ * Accepts both camelCase and snake_case shapes since saved bookings merge both.
+ */
+export function extractBookingContainers(
+  booking: Record<string, any> | null | undefined
+): BookingContainer[] {
+  if (!booking) return [];
+  const raw = booking.containerNumbers ?? booking.container_numbers;
+  if (!Array.isArray(raw)) return [];
+
+  const out: BookingContainer[] = [];
+  for (const entry of raw) {
+    if (typeof entry === 'string') {
+      const num = entry.trim();
+      if (num) out.push({ container_number: num });
+    } else if (entry && typeof entry === 'object') {
+      const num = (entry.container_number ?? entry.containerNumber ?? '').toString().trim();
+      const type = (entry.container_type ?? entry.containerType ?? '').toString().trim() || undefined;
+      const addr = (entry.delivery_address ?? entry.deliveryAddress ?? '').toString().trim() || undefined;
+      if (num || type || addr) {
+        out.push({
+          container_number: num,
+          container_type: type,
+          delivery_address: addr,
+        });
+      }
+    }
+  }
+  return out;
+}
+
 export function extractBookingFacts(
   booking: Record<string, any> | null | undefined
 ): BookingFacts {

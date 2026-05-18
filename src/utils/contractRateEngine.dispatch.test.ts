@@ -131,7 +131,7 @@ describe("generateContractBilling — Phase 1 dispatch", () => {
     expect(result).toHaveLength(0);  // Phase 2: untagged in optional → skipped
   });
 
-  it("Phase 1: kind:'delivery' falls back to standard (no Phase 3 logic yet)", () => {
+  it("Phase 3: kind:'delivery' without containers context emits nothing (separate suite covers the dispatcher in detail)", () => {
     const rows = [
       makeRow({ id: "r1", particular: "20ft", unit: "per_container", rates: { FCL: 18500 }, remarks: "within Valenzuela City" }),
       makeRow({ id: "r2", particular: "40ft", unit: "per_container", rates: { FCL: 18500 }, remarks: "within Valenzuela City" }),
@@ -140,11 +140,10 @@ describe("generateContractBilling — Phase 1 dispatch", () => {
       rows,
       categories: [{ id: "c1", category_name: "Delivery Charges", kind: "delivery", rows }],
     });
-    // Phase 1: both rows still fire × 3 containers (the prod bug behaviour, preserved
-    // intentionally until Phase 3 ships the real delivery dispatcher).
+    // Phase 3: delivery dispatcher requires containers. Without it: zero rows.
+    // This replaces the Phase 1 placeholder that asserted Cartesian-product fallback.
     const result = generateContractBilling(matrix, "FCL", { quantities: { containers: 3 } });
-    expect(result).toHaveLength(2);
-    expect(result.every((r) => r.quantity === 3)).toBe(true);
+    expect(result).toHaveLength(0);
   });
 
   it("multiple categories: each runs its dispatcher and results concatenate in order", () => {
@@ -313,5 +312,201 @@ describe("generateContractBilling — Phase 2 optional dispatcher", () => {
       facts: { permits: ["bai"] },  // lowercase
     });
     expect(result).toHaveLength(1);
+  });
+});
+
+// ============================================
+// Phase 3 — 'delivery' category dispatcher
+// ============================================
+
+describe("generateContractBilling — Phase 3 delivery dispatcher", () => {
+  // Reusable delivery-category matrix mirroring the DAFFID shape:
+  // two locations (Valenzuela / Carmona) × five vehicle types each.
+  function makeDeliveryMatrix() {
+    const rows = [
+      makeRow({ id: "vz20", particular: "20ft", unit: "per_container", rates: { FCL: 18500 }, remarks: "within Valenzuela City" }),
+      makeRow({ id: "vz40", particular: "40ft", unit: "per_container", rates: { FCL: 18500 }, remarks: "within Valenzuela City" }),
+      makeRow({ id: "vzbb", particular: "BACK TO BACK", unit: "per_container", rates: { FCL: 31500 }, remarks: "within Valenzuela City" }),
+      makeRow({ id: "ca20", particular: "20ft", unit: "per_container", rates: { FCL: 20000 }, remarks: "within Carmona Cavite" }),
+      makeRow({ id: "ca40", particular: "40ft", unit: "per_container", rates: { FCL: 20000 }, remarks: "within Carmona Cavite" }),
+    ];
+    return makeMatrix({
+      rows,
+      categories: [{ id: "del", category_name: "Delivery Charges", kind: "delivery", rows }],
+    });
+  }
+
+  it("3 containers, same type, same address → emits 3 rows (one per container, qty 1 each)", () => {
+    const matrix = makeDeliveryMatrix();
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { containers: 3 },
+      containers: [
+        { container_number: "A1", container_type: "20ft", delivery_address: "VALENZUELA CITY" },
+        { container_number: "A2", container_type: "20ft", delivery_address: "VALENZUELA CITY" },
+        { container_number: "A3", container_type: "20ft", delivery_address: "VALENZUELA CITY" },
+      ],
+    });
+    expect(result).toHaveLength(3);
+    expect(result.every((r) => r.particular === "20ft")).toBe(true);
+    expect(result.every((r) => r.quantity === 1)).toBe(true);
+    expect(result.reduce((sum, r) => sum + r.subtotal, 0)).toBe(55500);  // 3 × 18,500 Valenzuela
+  });
+
+  it("mixed types: emits one row per container with that container's matched type", () => {
+    const matrix = makeDeliveryMatrix();
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { containers: 2 },
+      containers: [
+        { container_number: "A1", container_type: "20ft", delivery_address: "VALENZUELA CITY" },
+        { container_number: "A2", container_type: "40ft", delivery_address: "VALENZUELA CITY" },
+      ],
+    });
+    expect(result).toHaveLength(2);
+    expect(result.map((r) => r.particular).sort()).toEqual(["20ft", "40ft"]);
+  });
+
+  it("mixed addresses: each container picks the row for its own location", () => {
+    const matrix = makeDeliveryMatrix();
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { containers: 2 },
+      containers: [
+        { container_number: "A1", container_type: "20ft", delivery_address: "VALENZUELA CITY" },
+        { container_number: "A2", container_type: "20ft", delivery_address: "Carmona, Cavite" },
+      ],
+    });
+    expect(result).toHaveLength(2);
+    expect(result.map((r) => r.subtotal).sort()).toEqual([18500, 20000]); // VZ + Carmona rates
+  });
+
+  it("container with no container_type is skipped (no bill emitted)", () => {
+    const matrix = makeDeliveryMatrix();
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { containers: 1 },
+      containers: [
+        { container_number: "LEGACY", delivery_address: "VALENZUELA CITY" }, // no type
+      ],
+    });
+    expect(result).toHaveLength(0);
+  });
+
+  it("container with type but unmatched address is skipped (not silently mis-billed)", () => {
+    const matrix = makeDeliveryMatrix();
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { containers: 1 },
+      containers: [
+        { container_number: "A1", container_type: "20ft", delivery_address: "Davao" },
+      ],
+    });
+    expect(result).toHaveLength(0);
+  });
+
+  it("falls back to booking-level deliveryAddress when per-container address is empty", () => {
+    const matrix = makeDeliveryMatrix();
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { containers: 1 },
+      deliveryAddress: "VALENZUELA CITY",
+      containers: [
+        { container_number: "A1", container_type: "20ft" }, // no per-container address
+      ],
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0].subtotal).toBe(18500);
+  });
+
+  it("single candidate (only one row of that type, no other locations): address constraint relaxed", () => {
+    const rows = [
+      makeRow({ id: "wheel4", particular: "4 WHEELER", unit: "per_container", rates: { FCL: 7500 }, remarks: "within Valenzuela City" }),
+      // Note: no other "4 WHEELER" rows in the matrix
+    ];
+    const matrix = makeMatrix({
+      rows,
+      categories: [{ id: "del", category_name: "Delivery", kind: "delivery", rows }],
+    });
+    // Booking address doesn't match the row's remarks fuzzy-wise, but since
+    // it's the only candidate of that type, the dispatcher accepts it.
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { containers: 1 },
+      containers: [
+        { container_number: "A1", container_type: "4 WHEELER", delivery_address: "somewhere else entirely" },
+      ],
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0].subtotal).toBe(7500);
+  });
+
+  it("type match is case-insensitive ('20FT' booking matches '20ft' row)", () => {
+    const matrix = makeDeliveryMatrix();
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { containers: 1 },
+      containers: [
+        { container_number: "A1", container_type: "20FT", delivery_address: "VALENZUELA CITY" },
+      ],
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0].subtotal).toBe(18500);
+  });
+
+  it("fuzzy address: 'VALENZUELA CITY' matches 'within Valenzuela City'", () => {
+    // This is the DAFFID prod data shape.
+    const matrix = makeDeliveryMatrix();
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { containers: 1 },
+      containers: [
+        { container_number: "A1", container_type: "20ft", delivery_address: "VALENZUELA CITY" },
+      ],
+    });
+    expect(result).toHaveLength(1);
+  });
+
+  it("empty containers array → no rows emitted (delivery dispatcher needs containers)", () => {
+    const matrix = makeDeliveryMatrix();
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { containers: 3 },
+      // containers: not provided
+    });
+    expect(result).toHaveLength(0);
+  });
+
+  it("DAFFID scenario end-to-end: 3 × 20ft Valenzuela, mixed-category matrix", () => {
+    // Full scenario reproducing the bug fix: brokerage + optional + delivery
+    // categories together. Booking has 3 20ft containers to Valenzuela, X-ray
+    // exam performed, no permits. Expected: brokerage charges all fire, only
+    // X-ray fires from optional, only 1 delivery row × 3 from delivery.
+    const brokerRows = [
+      makeRow({ id: "bf", particular: "Brokerage Fee", unit: "per_bl", rates: { FCL: 5300 } }),
+      makeRow({ id: "st", particular: "Stamps and Notary", unit: "per_bl", rates: { FCL: 1000 } }),
+    ];
+    const optionalRows = [
+      makeRow({ id: "xr", particular: "X-Ray", unit: "per_container", rates: { FCL: 3500 }, applies_when: { kind: "examination", value: "X-ray" } }),
+      makeRow({ id: "bai", particular: "BAI", unit: "per_shipment", rates: { FCL: 3500 }, applies_when: { kind: "permit", value: "BAI" } }),
+      makeRow({ id: "sra", particular: "SRA", unit: "per_shipment", rates: { FCL: 3500 }, applies_when: { kind: "permit", value: "SRA" } }),
+    ];
+    const deliveryRows = [
+      makeRow({ id: "vz20", particular: "20ft", unit: "per_container", rates: { FCL: 18500 }, remarks: "within Valenzuela City" }),
+      makeRow({ id: "vz40", particular: "40ft", unit: "per_container", rates: { FCL: 18500 }, remarks: "within Valenzuela City" }),
+      makeRow({ id: "ca20", particular: "20ft", unit: "per_container", rates: { FCL: 20000 }, remarks: "within Carmona" }),
+    ];
+    const matrix = makeMatrix({
+      rows: [...brokerRows, ...optionalRows, ...deliveryRows],
+      categories: [
+        { id: "broker", category_name: "Brokerage Charges", kind: "standard", rows: brokerRows },
+        { id: "opt", category_name: "Other Charges", kind: "optional", rows: optionalRows },
+        { id: "del", category_name: "Delivery Charges", kind: "delivery", rows: deliveryRows },
+      ],
+    });
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { containers: 3, bls: 1, shipments: 1 },
+      facts: { examinations: ["X-ray"] },  // no permits
+      containers: [
+        { container_number: "A1", container_type: "20ft", delivery_address: "VALENZUELA CITY" },
+        { container_number: "A2", container_type: "20ft", delivery_address: "VALENZUELA CITY" },
+        { container_number: "A3", container_type: "20ft", delivery_address: "VALENZUELA CITY" },
+      ],
+    });
+    // Brokerage Fee + Stamps (2) + X-Ray (1 row × 3 qty) + 3 delivery rows × 1 qty each
+    expect(result).toHaveLength(2 + 1 + 3);
+    const total = result.reduce((sum, r) => sum + r.subtotal, 0);
+    // 5300 + 1000 + 3*3500 + 3*18500 = 5300 + 1000 + 10500 + 55500 = 72300
+    expect(total).toBe(72300);
   });
 });

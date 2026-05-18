@@ -1260,6 +1260,29 @@ function RowGroup({
                   NO TRIGGER
                 </span>
               )}
+              {/* Match-key hint for delivery-category rows. The delivery dispatcher
+                  matches a booking's container TYPE against this row's particular
+                  and the container's DELIVERY ADDRESS against this row's remarks
+                  (fuzzy). Surface it so Pricing structures new rows correctly. */}
+              {parentKind === 'delivery' && (
+                <span
+                  title="Delivery match keys: particular = container type (e.g. 20ft, 40ft, BACK TO BACK); remarks = location keyword (fuzzy-matched against booking's delivery address)."
+                  style={{
+                    padding: '3px 6px',
+                    background: '#DBEAFE',
+                    border: '1px solid #93C5FD',
+                    borderRadius: '3px',
+                    color: '#1E40AF',
+                    fontSize: '9px',
+                    fontWeight: 700,
+                    letterSpacing: '0.3px',
+                    whiteSpace: 'nowrap',
+                    marginLeft: '2px',
+                  }}
+                >
+                  TYPE × ADDR
+                </span>
+              )}
             </div>
           )}
         </td>

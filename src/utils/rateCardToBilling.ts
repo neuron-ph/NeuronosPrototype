@@ -17,6 +17,7 @@ import {
   resolveModeColumn,
   type BookingQuantities,
   type BookingFacts,
+  type BookingContainer,
 } from "./contractRateEngine";
 import type { LineItemExtraction } from "./contractQuantityExtractor";
 import type { BillingItem } from "../components/shared/billings/UnifiedBillingsTab";
@@ -68,6 +69,20 @@ export interface RateCardGenerationContext {
    * Rows without `applies_when` are unaffected.
    */
   facts?: BookingFacts;
+  /**
+   * Per-container detail used by the 'delivery' category dispatcher. Each
+   * container is matched against the matrix's delivery rows by container_type
+   * (against row.particular) + delivery_address (fuzzy against row.remarks).
+   * Build via `extractBookingContainers()`. Standard / optional categories
+   * ignore this; delivery categories skip containers with no type.
+   */
+  containers?: BookingContainer[];
+  /**
+   * Booking-level delivery address fallback used by the delivery dispatcher
+   * when a container's own delivery_address is empty (common when Ops fills
+   * the top-level address but not the per-container one).
+   */
+  deliveryAddress?: string;
 }
 
 export interface RateCardGenerationResult {
@@ -152,6 +167,8 @@ export function generateRateCardBillingItems(
         quantities: ctx.quantities,
         selections: ctx.selections,
         facts: ctx.facts,
+        containers: ctx.containers,
+        deliveryAddress: ctx.deliveryAddress,
       }),
     );
   }

@@ -439,9 +439,11 @@ const BROKERAGE_FCL_DETAILS: SectionDef = {
   showWhen: [{ field: 'mode', op: 'eq', value: 'FCL' }],
   fields: [
     {
-      // Per-container delivery address: each container can route to its own
-      // consignee site. Legacy string[] values are coerced to row objects in
-      // useBookingFormState.initFromRecord so old bookings still render.
+      // Per-container detail: container number + type + delivery address.
+      // container_type drives the delivery dispatcher's row matching in the
+      // contract billing engine — without it the dispatcher skips the
+      // container entirely. Legacy string[] values are coerced to row objects
+      // in useBookingFormState.initFromRecord so old bookings still render.
       key: 'container_numbers',
       label: 'Containers',
       control: 'repeater',
@@ -449,6 +451,7 @@ const BROKERAGE_FCL_DETAILS: SectionDef = {
       storage: 'details',
       repeaterColumns: [
         { key: 'container_number', label: 'Container Number', control: 'free-text' },
+        { key: 'container_type', label: 'Type', control: 'dropdown', optionsKind: 'container_type' },
         { key: 'delivery_address', label: 'Delivery Address', control: 'free-text' },
       ],
     },

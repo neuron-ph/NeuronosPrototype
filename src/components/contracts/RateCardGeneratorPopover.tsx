@@ -18,6 +18,7 @@ import {
   normalizeTruckingLineItems,
   extractMultiLineSelectionsAndQuantities,
   extractBookingFacts,
+  extractBookingContainers,
 } from "../../utils/contractQuantityExtractor";
 import {
   generateRateCardBillingItems,
@@ -118,6 +119,9 @@ export function RateCardGeneratorPopover({
     }
 
     const facts = extractBookingFacts(booking);
+    const containers = extractBookingContainers(booking);
+    const deliveryAddress: string | undefined =
+      (booking as any)?.deliveryAddress ?? (booking as any)?.delivery_address ?? undefined;
 
     return {
       booking,
@@ -131,6 +135,8 @@ export function RateCardGeneratorPopover({
       selections,
       truckingExtractions,
       facts,
+      containers,
+      deliveryAddress,
     };
   });
 
@@ -154,6 +160,8 @@ export function RateCardGeneratorPopover({
         selections: row.selections,
         truckingExtractions: row.truckingExtractions,
         facts: row.facts,
+        containers: row.containers,
+        deliveryAddress: row.deliveryAddress,
       });
 
       if (result.items.length > 0) {
@@ -185,6 +193,8 @@ export function RateCardGeneratorPopover({
           selections: row.selections,
           truckingExtractions: row.truckingExtractions,
           facts: row.facts,
+          containers: row.containers,
+          deliveryAddress: row.deliveryAddress,
         });
         allItems.push(...result.items);
       }

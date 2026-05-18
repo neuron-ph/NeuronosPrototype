@@ -25,7 +25,7 @@ import { toast } from "../ui/toast-utils";
 import { supabase } from "../../utils/supabase/client";
 import { RateBreakdownTable, formatCurrency } from "../pricing/shared/RateBreakdownTable";
 import { QuantityDisplaySection } from "../pricing/shared/QuantityDisplaySection";
-import { normalizeTruckingLineItems, extractMultiLineSelectionsAndQuantities, extractBookingFacts } from "../../utils/contractQuantityExtractor";
+import { normalizeTruckingLineItems, extractMultiLineSelectionsAndQuantities, extractBookingFacts, extractBookingContainers } from "../../utils/contractQuantityExtractor";
 
 // ============================================
 // TYPES
@@ -96,6 +96,14 @@ export function RateCalculationSheet({
     [JSON.stringify(booking?.examinations), JSON.stringify(booking?.permits)],
   );
 
+  // Containers + delivery address drive the delivery category dispatcher.
+  const containers = useMemo(
+    () => extractBookingContainers(booking),
+    [JSON.stringify(booking?.container_numbers ?? booking?.containerNumbers)],
+  );
+  const deliveryAddress: string | undefined =
+    booking?.deliveryAddress ?? booking?.delivery_address ?? undefined;
+
   const multiLineResults = useMemo(() => {
     if (!isMultiLine) return null;
     const extractions = extractMultiLineSelectionsAndQuantities(truckingLineItems!, rateMatrices);
@@ -105,8 +113,8 @@ export function RateCalculationSheet({
   // Run the rate engine with current quantities (reactive — recalculates on every change)
   const calculation = useMemo(() => {
     if (isMultiLine) return { appliedRates: [] as AppliedRate[], total: 0 };
-    return calculateContractBilling(rateMatrices, serviceType, bookingMode, quantities, selections, facts);
-  }, [rateMatrices, serviceType, bookingMode, quantities, selections, isMultiLine, facts]);
+    return calculateContractBilling(rateMatrices, serviceType, bookingMode, quantities, selections, facts, containers, deliveryAddress);
+  }, [rateMatrices, serviceType, bookingMode, quantities, selections, isMultiLine, facts, containers, deliveryAddress]);
 
   // Grand total
   const grandTotal = isMultiLine && multiLineResults
@@ -151,6 +159,8 @@ export function RateCalculationSheet({
         selections,
         truckingExtractions,
         facts,
+        containers,
+        deliveryAddress,
       });
 
       if (result.items.length === 0) {
