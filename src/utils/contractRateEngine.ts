@@ -73,8 +73,17 @@ function getQuantityForUnit(unit: string, quantities: BookingQuantities): number
       return quantities.bls ?? 1;
     case "per_set":
       return quantities.sets ?? quantities.quantity ?? 1;
+    case "per_entry":
+      // One customs entry per shipment. Without this case the row silently
+      // billed × containers — see Phase 1 fix in the category-dispatch refactor.
+      return quantities.shipments ?? 1;
+    case "flat":
+      // Flat fees apply once regardless of booking shape.
+      return 1;
     default:
-      // Fallback: try containers, then generic, then 1
+      // Fallback: try containers, then generic, then 1.
+      // `per_kg` and `per_cbm` deliberately not handled here yet — they need
+      // structured weight/volume on bookings (deferred from Phase 1).
       return quantities.containers ?? quantities.quantity ?? 1;
   }
 }
@@ -604,4 +613,97 @@ export function multiLineRatesToSellingPrice(
   }
 
   return allCategories;
+}
+
+// ============================================
+// CATEGORY-DISPATCH ENGINE (Phase 1 of category-dispatch refactor)
+// @see /docs/blueprints/CATEGORY_DISPATCH_BLUEPRINT.md
+// ============================================
+
+import type { ContractRateCategory, RateCategoryKind } from "../types/pricing";
+
+/**
+ * Full context the dispatchers need to evaluate a category's rows. Bundled
+ * so each strategy gets every signal it might need without re-deriving.
+ */
+export interface BillingDispatchContext {
+  quantities: BookingQuantities;
+  facts?: BookingFacts;
+  selections?: Record<string, string>;
+}
+
+/**
+ * Category dispatcher signature. Each kind ('standard' | 'optional' | 'delivery')
+ * implements one of these. Phase 1 ships 'standard' only; the others delegate
+ * to it as no-ops so any matrix tagged ahead of time still bills correctly.
+ */
+type CategoryDispatcher = (
+  category: ContractRateCategory,
+  matrix: ContractRateMatrix,
+  modeColumn: string,
+  context: BillingDispatchContext,
+) => AppliedRate[];
+
+/**
+ * 'standard' — every row applies. Quantity from unit, rate × quantity, with
+ * succeeding-rule support. Behaviour identical to the legacy `instantiateRates`
+ * when no category metadata is involved; this dispatcher just scopes the rows
+ * to the category and lets the existing kernel do the math.
+ */
+const dispatchStandard: CategoryDispatcher = (category, matrix, modeColumn, ctx) => {
+  // Reuse the legacy kernel by synthesising a per-category matrix slice. This
+  // preserves every existing behaviour (mode-column fuzzy match, selection_group
+  // gating, applies_when row-level filter from Phase B) without duplicating logic.
+  const slice: ContractRateMatrix = {
+    ...matrix,
+    rows: category.rows,
+    categories: [category],
+  };
+  return instantiateRates(slice, modeColumn, ctx.quantities, ctx.selections, ctx.facts);
+};
+
+const DISPATCHERS: Record<RateCategoryKind, CategoryDispatcher> = {
+  // Phase 1: only 'standard' is real. 'optional' and 'delivery' fall through
+  // to standard so contracts tagged ahead of time keep producing the legacy bill
+  // (no behaviour change, no surprises). Phase 2 + 3 swap in the real strategies.
+  standard: dispatchStandard,
+  optional: dispatchStandard,
+  delivery: dispatchStandard,
+};
+
+/**
+ * Top-level billing entry point for the category-dispatch refactor.
+ *
+ * Iterates each category in the matrix, looks up the dispatcher by `category.kind`
+ * (defaulting to 'standard' when absent), and concatenates the per-category
+ * AppliedRate output.
+ *
+ * Backwards compatible: matrices without `categories` fall back to a single
+ * synthetic standard category wrapping the flat `rows` array, producing identical
+ * output to a direct `instantiateRates` call.
+ */
+export function generateContractBilling(
+  matrix: ContractRateMatrix,
+  modeColumn: string,
+  context: BillingDispatchContext,
+): AppliedRate[] {
+  // Resolve the working set of categories. When the matrix has no explicit
+  // categories, treat the flat rows as one implicit standard category so
+  // dispatch produces the same result as legacy `instantiateRates`.
+  const categories: ContractRateCategory[] = (matrix.categories && matrix.categories.length > 0)
+    ? matrix.categories
+    : [{
+        id: `__implicit__${matrix.id}`,
+        category_name: `${matrix.service_type} Charges`,
+        rows: matrix.rows,
+        kind: 'standard',
+      }];
+
+  const applied: AppliedRate[] = [];
+  for (const category of categories) {
+    const kind = category.kind ?? 'standard';
+    const dispatcher = DISPATCHERS[kind] ?? dispatchStandard;
+    applied.push(...dispatcher(category, matrix, modeColumn, context));
+  }
+  return applied;
 }

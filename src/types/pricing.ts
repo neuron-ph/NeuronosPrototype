@@ -543,7 +543,27 @@ export interface ContractRateCategory {
   category_name: string;               // "Container Handling", "Documentation", etc.
   catalog_category_id?: string;        // Billing Catalog category UUID — enforces category-first UX
   rows: ContractRateRow[];
+  kind?: RateCategoryKind;             // Dispatch hint for the rate engine. Absent => 'standard'.
+                                       // @see RateCategoryKind for semantics.
 }
+
+/**
+ * How a rate-matrix category should be evaluated by the billing engine.
+ *
+ * - `'standard'` — every row always applies; quantity from unit. Today's behaviour.
+ * - `'optional'` — rows only apply when booking declares the matching fact via `applies_when`.
+ *                  Suits regulatory processing fees (BAI/SRA/BPI/FDA) and exam fees.
+ * - `'delivery'` — engine matches container type + delivery address against row particular
+ *                  + remarks, emitting one line per matched container. Suits trucking
+ *                  destination/truck-type rows (whether they live in a Trucking matrix
+ *                  or are embedded inside a Brokerage matrix).
+ *
+ * Phase 1 ships the type + 'standard' dispatcher only. 'optional' and 'delivery' fall
+ * back to standard behaviour until Phase 2 / Phase 3.
+ *
+ * @see /docs/blueprints/CATEGORY_DISPATCH_BLUEPRINT.md
+ */
+export type RateCategoryKind = 'standard' | 'optional' | 'delivery';
 
 /**
  * A rate matrix for one service type within a contract quotation.

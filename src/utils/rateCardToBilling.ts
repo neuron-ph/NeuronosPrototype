@@ -13,6 +13,7 @@
 import type { ContractRateMatrix, AppliedRate } from "../types/pricing";
 import {
   instantiateRates,
+  generateContractBilling,
   resolveModeColumn,
   type BookingQuantities,
   type BookingFacts,
@@ -133,13 +134,25 @@ export function generateRateCardBillingItems(
     && ctx.serviceType.toLowerCase() === "trucking";
 
   if (useMultiLine) {
+    // Multi-line trucking still routes through instantiateRates per leg because
+    // each leg carries its own selections + quantities. Category dispatch isn't
+    // a fit here — every leg evaluates the same Trucking matrix in full. This
+    // path stays unchanged through Phase 1.
     for (const { selections, quantities } of ctx.truckingExtractions!) {
       const rates = instantiateRates(matrix, modeColumn, quantities, selections, ctx.facts);
       appliedRates.push(...rates);
     }
   } else {
+    // Single-pass: use the new category-dispatch entry point. In Phase 1 the
+    // dispatcher only does 'standard' (delegates to instantiateRates per category),
+    // so output is identical to calling instantiateRates directly — but the call
+    // path is now ready for Phase 2's 'optional' and Phase 3's 'delivery' dispatchers.
     appliedRates.push(
-      ...instantiateRates(matrix, modeColumn, ctx.quantities, ctx.selections, ctx.facts),
+      ...generateContractBilling(matrix, modeColumn, {
+        quantities: ctx.quantities,
+        selections: ctx.selections,
+        facts: ctx.facts,
+      }),
     );
   }
 
