@@ -119,7 +119,7 @@ export function BookingSectionRenderer({
                 : { fontSize: '13px', fontWeight: 500, color: 'var(--neuron-ink-base)' };
 
             return (
-              <div key={field.key} style={{ gridColumn }}>
+              <div key={field.key} style={{ gridColumn, minWidth: 0 }}>
                 <label
                   style={{
                     display: 'flex', alignItems: 'center', gap: '5px',
@@ -217,7 +217,7 @@ export function BookingSectionRenderer({
           return (
             <div
               key={field.key}
-              style={{ gridColumn }}
+              style={{ gridColumn, minWidth: 0 }}
             >
               <label
                 style={{

@@ -263,8 +263,8 @@ export function ProfileLookupCombobox({
           display: 'flex',
           alignItems: 'center',
           gap: 6,
-          padding: '0 10px',
-          height: 38,
+          padding: '8px 10px',
+          minHeight: 38,
           borderRadius: 8,
           cursor: disabled ? 'default' : 'pointer',
           userSelect: 'none',
@@ -277,11 +277,10 @@ export function ProfileLookupCombobox({
         <span
           style={{
             flex: 1,
+            minWidth: 0,
             fontSize: 13,
             color: hasValue ? 'var(--theme-text-primary)' : 'var(--theme-text-muted)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
+            wordBreak: 'break-word',
           }}
         >
           {hasValue ? displayLabel : (placeholder ?? `Search ${profileType}…`)}
