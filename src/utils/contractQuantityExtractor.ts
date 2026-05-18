@@ -15,7 +15,7 @@
  * @see /docs/blueprints/CONTRACT_RATE_AUTOMATION_BLUEPRINT.md — Phase 1
  */
 
-import type { BookingQuantities } from "./contractRateEngine";
+import type { BookingQuantities, BookingFacts } from "./contractRateEngine";
 import { resolveModeColumn } from "./contractRateEngine";
 import type { ContractRateMatrix } from "../types/pricing";
 import type { TruckingLineItem } from "../types/pricing";
@@ -569,6 +569,39 @@ export function countEntries(text?: string | Array<string | Record<string, unkno
  *
  * @see /docs/blueprints/DERIVED_QUANTITIES_BLUEPRINT.md — Phase 1
  */
+/**
+ * Extract the fact set a booking declares for rate-engine `applies_when` gating.
+ *
+ * Reads two existing booking fields:
+ *   - `examinations[].type` → BookingFacts.examinations  (e.g. ['X-ray'])
+ *   - `permits[]`           → BookingFacts.permits       (e.g. ['BAI', 'SRA'])
+ *
+ * Accepts both camelCase and snake_case shapes since saved bookings merge both.
+ * Defensive against missing/null/non-array values — returns empty arrays so
+ * the engine's match check simply skips applies_when-tagged rows.
+ *
+ * @see RateRowTrigger in types/pricing.ts
+ */
+export function extractBookingFacts(
+  booking: Record<string, any> | null | undefined
+): BookingFacts {
+  if (!booking) return { examinations: [], permits: [] };
+
+  const rawExams = booking.examinations ?? booking.exams;
+  const examinations = Array.isArray(rawExams)
+    ? rawExams
+        .map((e) => (typeof e === 'string' ? e : e?.type))
+        .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+    : [];
+
+  const rawPermits = booking.permits;
+  const permits = Array.isArray(rawPermits)
+    ? rawPermits.filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
+    : [];
+
+  return { examinations, permits };
+}
+
 export function deriveQuantitiesFromBooking(
   booking: {
     containerNumbers?: string | Array<string | Record<string, unknown>>;

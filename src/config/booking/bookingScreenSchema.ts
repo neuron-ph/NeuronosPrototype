@@ -725,9 +725,13 @@ const BROKERAGE_IMPORT_CUSTOMS: SectionDef = {
       storage: 'details',
     },
     {
+      // Governed multi-select (migration 105). Values drive the contract rate
+      // engine's `applies_when` filter — e.g. a row tagged `permit: BAI` only
+      // applies when 'BAI' is in this list. Free-text would break that match.
       key: 'permits',
       label: 'Permit/s',
-      control: 'multi-value',
+      control: 'multi-select',
+      optionsKind: 'permits',
       required: 'no',
       storage: 'details',
     },

@@ -15,6 +15,7 @@ import {
   instantiateRates,
   resolveModeColumn,
   type BookingQuantities,
+  type BookingFacts,
 } from "./contractRateEngine";
 import type { LineItemExtraction } from "./contractQuantityExtractor";
 import type { BillingItem } from "../components/shared/billings/UnifiedBillingsTab";
@@ -58,6 +59,14 @@ export interface RateCardGenerationContext {
    * once for the whole booking. @see MULTI_LINE_TRUCKING_BLUEPRINT.md
    */
   truckingExtractions?: LineItemExtraction[];
+  /**
+   * Facts the booking declares (examinations performed, permits filed).
+   * Required to gate `applies_when`-tagged rate-card rows so optional fees
+   * (e.g. BAI/SRA/BPI processing, X-ray exam) only apply when the booking
+   * actually consumed those services. Build via `extractBookingFacts()`.
+   * Rows without `applies_when` are unaffected.
+   */
+  facts?: BookingFacts;
 }
 
 export interface RateCardGenerationResult {
@@ -125,11 +134,13 @@ export function generateRateCardBillingItems(
 
   if (useMultiLine) {
     for (const { selections, quantities } of ctx.truckingExtractions!) {
-      const rates = instantiateRates(matrix, modeColumn, quantities, selections);
+      const rates = instantiateRates(matrix, modeColumn, quantities, selections, ctx.facts);
       appliedRates.push(...rates);
     }
   } else {
-    appliedRates.push(...instantiateRates(matrix, modeColumn, ctx.quantities, ctx.selections));
+    appliedRates.push(
+      ...instantiateRates(matrix, modeColumn, ctx.quantities, ctx.selections, ctx.facts),
+    );
   }
 
   if (appliedRates.length === 0) {

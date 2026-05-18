@@ -39,6 +39,25 @@ export interface BookingQuantities {
   quantity?: number;
 }
 
+/**
+ * Facts the booking declares about what services it actually consumed.
+ * Used by the engine to gate `applies_when`-tagged rate-card rows so optional
+ * fees (examinations, processing permits) only appear when the booking opted in.
+ *
+ * Values are matched case-insensitively against `RateRowTrigger.value`.
+ */
+export interface BookingFacts {
+  /** Examination types performed (e.g., ['X-ray']). From booking.examinations[].type. */
+  examinations?: string[];
+  /** Permits/clearances declared (e.g., ['BAI', 'SRA']). From booking.permits[]. */
+  permits?: string[];
+}
+
+/** Case-insensitive trim helper for fact matching. */
+function normalizeFact(s: string): string {
+  return (s ?? '').trim().toUpperCase();
+}
+
 // ============================================
 // HELPERS
 // ============================================
@@ -113,7 +132,8 @@ export function instantiateRates(
   matrix: ContractRateMatrix,
   modeColumn: string,
   quantities: BookingQuantities,
-  selections?: Record<string, string>
+  selections?: Record<string, string>,
+  facts?: BookingFacts,
 ): AppliedRate[] {
   const appliedRates: AppliedRate[] = [];
 
@@ -158,6 +178,19 @@ export function instantiateRates(
       if (picked !== row.particular && picked !== row.charge_type_id) {
         continue; // Right destination, wrong truck type → skip
       }
+    }
+
+    // ── applies_when filter: skip rows whose trigger fact isn't declared ──
+    // Orthogonal to selection_group. Rows without applies_when (or with
+    // kind: 'always') pass through unchanged for backwards compatibility.
+    if (row.applies_when && row.applies_when.kind !== 'always') {
+      const { kind, value } = row.applies_when;
+      if (!value) continue; // misconfigured row — skip rather than silently apply
+      const factSet = kind === 'examination'
+        ? (facts?.examinations ?? [])
+        : (facts?.permits ?? []);
+      const target = normalizeFact(value);
+      if (!factSet.some((f) => normalizeFact(f) === target)) continue;
     }
 
     const rate = row.rates[modeColumn];
@@ -225,7 +258,8 @@ export function calculateContractBilling(
   serviceType: string,
   bookingMode: string,
   quantities: BookingQuantities,
-  selections?: Record<string, string>
+  selections?: Record<string, string>,
+  facts?: BookingFacts,
 ): { appliedRates: AppliedRate[]; total: number } {
   // Find the matrix for this service type
   const matrix = rateMatrices.find(
@@ -244,7 +278,7 @@ export function calculateContractBilling(
     return { appliedRates: [], total: 0 };
   }
 
-  const appliedRates = instantiateRates(matrix, modeColumn, quantities, selections);
+  const appliedRates = instantiateRates(matrix, modeColumn, quantities, selections, facts);
   const total = appliedRates.reduce((sum, r) => sum + r.subtotal, 0);
 
   return { appliedRates, total };
@@ -494,7 +528,8 @@ import type { LineItemExtraction } from "./contractQuantityExtractor";
 export function calculateMultiLineTruckingBilling(
   rateMatrices: ContractRateMatrix[],
   bookingMode: string,
-  extractions: LineItemExtraction[]
+  extractions: LineItemExtraction[],
+  facts?: BookingFacts,
 ): MultiLineTruckingResult {
   const lineResults: TruckingLineResult[] = extractions.map(({ lineItem, selections, quantities }) => {
     const { appliedRates, total } = calculateContractBilling(
@@ -502,7 +537,8 @@ export function calculateMultiLineTruckingBilling(
       "Trucking",
       bookingMode,
       quantities,
-      selections
+      selections,
+      facts,
     );
     return { lineItem, appliedRates, subtotal: total };
   });

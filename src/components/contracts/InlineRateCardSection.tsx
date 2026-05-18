@@ -24,7 +24,7 @@ import { toast } from "../ui/toast-utils";
 import { supabase } from "../../utils/supabase/client";
 import { RateBreakdownTable, formatCurrency } from "../pricing/shared/RateBreakdownTable";
 import { QuantityDisplaySection } from "../pricing/shared/QuantityDisplaySection";
-import { extractMultiLineSelectionsAndQuantities } from "../../utils/contractQuantityExtractor";
+import { extractMultiLineSelectionsAndQuantities, extractBookingFacts } from "../../utils/contractQuantityExtractor";
 
 interface InlineRateCardSectionProps {
   booking: any;
@@ -86,16 +86,23 @@ export function InlineRateCardSection({
   const isMultiLine = serviceType.toLowerCase() === "trucking"
     && truckingLineItems && truckingLineItems.length > 1;
 
+  // Booking facts gate applies_when-tagged rows (e.g. permit/exam processing fees).
+  // Memoized on the raw fields so the engine re-runs when Ops edits them.
+  const facts = useMemo(
+    () => extractBookingFacts(booking),
+    [JSON.stringify(booking?.examinations), JSON.stringify(booking?.permits)],
+  );
+
   const multiLineResults = useMemo(() => {
     if (!isMultiLine) return null;
     const extractions = extractMultiLineSelectionsAndQuantities(truckingLineItems!, rateMatrices);
-    return calculateMultiLineTruckingBilling(rateMatrices, bookingMode, extractions);
-  }, [isMultiLine, rateMatrices, bookingMode, JSON.stringify(truckingLineItems)]);
+    return calculateMultiLineTruckingBilling(rateMatrices, bookingMode, extractions, facts);
+  }, [isMultiLine, rateMatrices, bookingMode, JSON.stringify(truckingLineItems), facts]);
 
   const calculation = useMemo(() => {
     if (isMultiLine) return { appliedRates: [] as AppliedRate[], total: 0 };
-    return calculateContractBilling(rateMatrices, serviceType, bookingMode, quantities, selections);
-  }, [rateMatrices, serviceType, bookingMode, quantities, selections, isMultiLine]);
+    return calculateContractBilling(rateMatrices, serviceType, bookingMode, quantities, selections, facts);
+  }, [rateMatrices, serviceType, bookingMode, quantities, selections, isMultiLine, facts]);
 
   const grandTotal = isMultiLine && multiLineResults ? multiLineResults.grandTotal : calculation.total;
   const totalItems = isMultiLine && multiLineResults
@@ -193,6 +200,7 @@ export function InlineRateCardSection({
         currency,
         selections,
         truckingExtractions,
+        facts,
       });
       if (result.items.length === 0) {
         toast.warning("No billing items generated — check rate card configuration.");

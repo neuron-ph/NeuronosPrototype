@@ -25,7 +25,7 @@ import { toast } from "../ui/toast-utils";
 import { supabase } from "../../utils/supabase/client";
 import { RateBreakdownTable, formatCurrency } from "../pricing/shared/RateBreakdownTable";
 import { QuantityDisplaySection } from "../pricing/shared/QuantityDisplaySection";
-import { normalizeTruckingLineItems, extractMultiLineSelectionsAndQuantities } from "../../utils/contractQuantityExtractor";
+import { normalizeTruckingLineItems, extractMultiLineSelectionsAndQuantities, extractBookingFacts } from "../../utils/contractQuantityExtractor";
 
 // ============================================
 // TYPES
@@ -90,17 +90,23 @@ export function RateCalculationSheet({
   const isMultiLine = serviceType.toLowerCase() === "trucking"
     && truckingLineItems && truckingLineItems.length > 1;
 
+  // Booking facts gate applies_when-tagged rows.
+  const facts = useMemo(
+    () => extractBookingFacts(booking),
+    [JSON.stringify(booking?.examinations), JSON.stringify(booking?.permits)],
+  );
+
   const multiLineResults = useMemo(() => {
     if (!isMultiLine) return null;
     const extractions = extractMultiLineSelectionsAndQuantities(truckingLineItems!, rateMatrices);
-    return calculateMultiLineTruckingBilling(rateMatrices, bookingMode, extractions);
-  }, [isMultiLine, rateMatrices, bookingMode, JSON.stringify(truckingLineItems)]);
+    return calculateMultiLineTruckingBilling(rateMatrices, bookingMode, extractions, facts);
+  }, [isMultiLine, rateMatrices, bookingMode, JSON.stringify(truckingLineItems), facts]);
 
   // Run the rate engine with current quantities (reactive — recalculates on every change)
   const calculation = useMemo(() => {
     if (isMultiLine) return { appliedRates: [] as AppliedRate[], total: 0 };
-    return calculateContractBilling(rateMatrices, serviceType, bookingMode, quantities, selections);
-  }, [rateMatrices, serviceType, bookingMode, quantities, selections, isMultiLine]);
+    return calculateContractBilling(rateMatrices, serviceType, bookingMode, quantities, selections, facts);
+  }, [rateMatrices, serviceType, bookingMode, quantities, selections, isMultiLine, facts]);
 
   // Grand total
   const grandTotal = isMultiLine && multiLineResults
@@ -144,6 +150,7 @@ export function RateCalculationSheet({
         currency,
         selections,
         truckingExtractions,
+        facts,
       });
 
       if (result.items.length === 0) {

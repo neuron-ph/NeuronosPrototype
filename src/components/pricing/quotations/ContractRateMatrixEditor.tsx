@@ -17,9 +17,45 @@
  * @see /docs/blueprints/CONTRACT_QUOTATION_BLUEPRINT.md - Phase 1, Task 1.3
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Plus, Trash2, ChevronDown, ChevronRight, GripVertical, Info } from "lucide-react";
-import type { ContractRateMatrix, ContractRateRow, ServiceType } from "../../../types/pricing";
+import type { ContractRateMatrix, ContractRateRow, RateRowTrigger, ServiceType } from "../../../types/pricing";
+import { useEnumOptions } from "../../../hooks/useEnumOptions";
+
+// ============================================
+// TRIGGER (applies_when) SUGGESTIONS
+// ============================================
+
+/**
+ * Maps known particular-name keywords to a suggested RateRowTrigger so the
+ * editor can offer click-to-apply hints during the manual sweep. Suggestions
+ * are NEVER auto-applied — Pricing reviews them via the trigger popover.
+ * Order matters: more specific patterns first (e.g. "X-RAY" before generic).
+ */
+const TRIGGER_SUGGESTIONS: Array<{ pattern: RegExp; trigger: RateRowTrigger }> = [
+  { pattern: /\bX[-\s]?RAY\b|\bXRAY\b/i, trigger: { kind: 'examination', value: 'X-ray' } },
+  { pattern: /\bSPOT\s?CHECK\b/i,         trigger: { kind: 'examination', value: 'Spotcheck' } },
+  { pattern: /\bDEA\b/i,                  trigger: { kind: 'examination', value: 'DEA' } },
+  { pattern: /\bBAI\b/i,                  trigger: { kind: 'permit', value: 'BAI' } },
+  { pattern: /\bSRA\b/i,                  trigger: { kind: 'permit', value: 'SRA' } },
+  { pattern: /\bBPI\b/i,                  trigger: { kind: 'permit', value: 'BPI' } },
+  { pattern: /\bFDA\b/i,                  trigger: { kind: 'permit', value: 'FDA' } },
+  { pattern: /\bBPS\b/i,                  trigger: { kind: 'permit', value: 'BPS' } },
+  { pattern: /\bLTO\b/i,                  trigger: { kind: 'permit', value: 'LTO' } },
+];
+
+function suggestTrigger(particular: string): RateRowTrigger | null {
+  for (const { pattern, trigger } of TRIGGER_SUGGESTIONS) {
+    if (pattern.test(particular)) return trigger;
+  }
+  return null;
+}
+
+function triggerLabel(t: RateRowTrigger | undefined): string {
+  if (!t || t.kind === 'always') return 'TRIGGER';
+  if (t.kind === 'examination') return `EXAM:${t.value}`;
+  return `PERMIT:${t.value}`;
+}
 
 // ============================================
 // UNIT OPTIONS
@@ -258,6 +294,11 @@ export function ContractRateMatrixEditor({
   const [isExpanded, setIsExpanded] = useState(true);
   const [editingColumnIndex, setEditingColumnIndex] = useState<number | null>(null);
   const [editingColumnValue, setEditingColumnValue] = useState("");
+
+  // Trigger popover value lists — fetched once per editor instance and passed
+  // into each row to avoid one Supabase query per row.
+  const examOptions = useEnumOptions('examination');
+  const permitOptions = useEnumOptions('permits');
 
   const displayLabel = serviceLabel || matrix.service_type;
   const columns = matrix.columns;
@@ -633,6 +674,8 @@ export function ContractRateMatrixEditor({
                   onToggleSucceeding={toggleSucceedingRule}
                   formatCurrency={formatCurrency}
                   getUnitLabel={getUnitLabel}
+                  examOptions={examOptions}
+                  permitOptions={permitOptions}
                 />
               ))}
             </tbody>
@@ -679,6 +722,8 @@ function RowGroup({
   onToggleSucceeding,
   formatCurrency,
   getUnitLabel,
+  examOptions,
+  permitOptions,
 }: {
   row: ContractRateRow;
   columns: string[];
@@ -689,8 +734,43 @@ function RowGroup({
   onToggleSucceeding: (id: string) => void;
   formatCurrency: (val: number) => string;
   getUnitLabel: (unit: string) => string;
+  examOptions: string[];
+  permitOptions: string[];
 }) {
   const [isHovered, setIsHovered] = useState(false);
+  const [triggerPopoverOpen, setTriggerPopoverOpen] = useState(false);
+  const triggerButtonRef = useRef<HTMLButtonElement | null>(null);
+  const triggerPopoverRef = useRef<HTMLDivElement | null>(null);
+
+  // Close popover on outside click
+  useEffect(() => {
+    if (!triggerPopoverOpen) return;
+    const handle = (e: MouseEvent) => {
+      if (
+        triggerPopoverRef.current && !triggerPopoverRef.current.contains(e.target as Node) &&
+        triggerButtonRef.current && !triggerButtonRef.current.contains(e.target as Node)
+      ) {
+        setTriggerPopoverOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [triggerPopoverOpen]);
+
+  const hasTrigger = !!row.applies_when && row.applies_when.kind !== 'always';
+  const suggestion = useMemo(() => suggestTrigger(row.particular || ''), [row.particular]);
+  const showSuggestion = !viewMode && !hasTrigger && !!suggestion;
+
+  const applyTrigger = (next: RateRowTrigger | undefined) => {
+    if (!next || next.kind === 'always') {
+      // Clear by re-emitting the row without applies_when
+      const { applies_when, ...rest } = row;
+      onUpdateRow(row.id, { ...rest, applies_when: undefined } as Partial<ContractRateRow>);
+    } else {
+      onUpdateRow(row.id, { applies_when: next });
+    }
+    setTriggerPopoverOpen(false);
+  };
 
   // ---- Group Header Row ----
   if (row.group_label !== undefined) {
@@ -944,6 +1024,117 @@ function RowGroup({
                   {row.succeeding_rule ? "TIERED" : "+TIER"}
                 </button>
               )}
+              {/* Trigger (applies_when) toggle — sets which booking fact gates this row.
+                  Highlight glow when a suggestion is available but no trigger is set. */}
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                <button
+                  ref={triggerButtonRef}
+                  onClick={() => setTriggerPopoverOpen((v) => !v)}
+                  title={
+                    hasTrigger
+                      ? `Only applies when booking declares ${row.applies_when!.kind} "${row.applies_when!.value}". Click to change.`
+                      : showSuggestion
+                        ? `Suggested: ${triggerLabel(suggestion!)} — click to configure`
+                        : 'Always applies. Click to gate by a booking fact.'
+                  }
+                  style={{
+                    padding: '3px 6px',
+                    background: hasTrigger ? '#FEF3C7' : (showSuggestion ? '#FEF9C3' : 'none'),
+                    border: hasTrigger
+                      ? '1px solid #FCD34D'
+                      : (showSuggestion ? '1px dashed #FCD34D' : 'none'),
+                    borderRadius: '3px',
+                    cursor: 'pointer',
+                    color: hasTrigger ? '#92400E' : (showSuggestion ? '#92400E' : 'var(--neuron-ink-muted)'),
+                    opacity: hasTrigger || showSuggestion ? 1 : (isHovered ? 0.6 : 0.2),
+                    transition: 'all 0.15s ease',
+                    fontSize: '9px',
+                    fontWeight: 700,
+                    whiteSpace: 'nowrap',
+                    marginLeft: '2px',
+                    letterSpacing: '0.3px',
+                  }}
+                >
+                  {triggerLabel(row.applies_when)}
+                </button>
+                {triggerPopoverOpen && (
+                  <div
+                    ref={triggerPopoverRef}
+                    style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 4px)',
+                      right: 0,
+                      width: '280px',
+                      backgroundColor: 'var(--theme-bg-surface)',
+                      border: '1px solid var(--neuron-ui-border)',
+                      borderRadius: '8px',
+                      boxShadow: '0 10px 25px -5px rgba(0,0,0,0.15)',
+                      padding: '12px',
+                      zIndex: 100,
+                    }}
+                  >
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--neuron-ink-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>
+                      Triggered by
+                    </div>
+                    {showSuggestion && (
+                      <button
+                        onClick={() => applyTrigger(suggestion!)}
+                        style={{
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: '6px 8px',
+                          marginBottom: '8px',
+                          background: '#FEF9C3',
+                          border: '1px dashed #FCD34D',
+                          borderRadius: '4px',
+                          fontSize: '11px',
+                          color: '#92400E',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Suggested: {triggerLabel(suggestion!)} — apply
+                      </button>
+                    )}
+                    {(['always', 'examination', 'permit'] as const).map((kind) => (
+                      <label key={kind} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 0', fontSize: '12px', cursor: 'pointer' }}>
+                        <input
+                          type="radio"
+                          name={`trigger-${row.id}`}
+                          checked={(row.applies_when?.kind ?? 'always') === kind}
+                          onChange={() => {
+                            if (kind === 'always') {
+                              applyTrigger({ kind: 'always' });
+                            } else {
+                              const list = kind === 'examination' ? examOptions : permitOptions;
+                              applyTrigger({ kind, value: row.applies_when?.value ?? list[0] ?? '' });
+                            }
+                          }}
+                        />
+                        <span style={{ textTransform: 'capitalize' }}>{kind === 'always' ? 'Always (no gate)' : kind}</span>
+                      </label>
+                    ))}
+                    {row.applies_when && row.applies_when.kind !== 'always' && (
+                      <select
+                        value={row.applies_when.value ?? ''}
+                        onChange={(e) => applyTrigger({ kind: row.applies_when!.kind, value: e.target.value })}
+                        style={{
+                          width: '100%',
+                          marginTop: '6px',
+                          padding: '5px 8px',
+                          fontSize: '12px',
+                          border: '1px solid var(--neuron-ui-border)',
+                          borderRadius: '4px',
+                          backgroundColor: 'var(--theme-bg-surface)',
+                        }}
+                      >
+                        {(row.applies_when.kind === 'examination' ? examOptions : permitOptions).map((v) => (
+                          <option key={v} value={v}>{v}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </td>
