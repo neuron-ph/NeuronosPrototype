@@ -9,15 +9,33 @@ import { supabase } from "../../../utils/supabase/client";
 
 // ==================== TYPES ====================
 
+/**
+ * Dispatch metadata that lives on the catalog item and drives how the
+ * contract billing engine evaluates the row that references this item.
+ * @see /docs/blueprints/CATALOG_FIRST_BILLING_BLUEPRINT.md
+ * @see migration 106_catalog_dispatch_metadata.sql
+ *
+ * - `'standard'` (or null) → row always applies, quantity from unit.
+ * - `'optional'` → row applies only when booking[trigger_field] includes trigger_value.
+ * - `'delivery'` → row applies per booking container, matched by name + remarks.
+ */
+export type CatalogDispatchKind = 'standard' | 'optional' | 'delivery';
+
 export interface CatalogItem {
   id: string;
   name: string;
   category_id: string | null;
   created_at?: string;
   updated_at?: string;
+  /** Dispatch behaviour for the contract billing engine. Null = standard. */
+  dispatch_kind?: CatalogDispatchKind | null;
+  /** When dispatch_kind = 'optional', which booking field is checked. */
+  trigger_field?: 'permits' | 'examinations' | null;
+  /** When dispatch_kind = 'optional', the value that must appear in trigger_field. */
+  trigger_value?: string | null;
 }
 
-export const CATALOG_ITEM_SELECT_FIELDS = "id, name, category_id, created_at, updated_at";
+export const CATALOG_ITEM_SELECT_FIELDS = "id, name, category_id, created_at, updated_at, dispatch_kind, trigger_field, trigger_value";
 
 export interface CatalogCategory {
   id: string;
@@ -488,6 +506,22 @@ export function CatalogItemCombobox({
 
 // ==================== ITEM OPTION ====================
 
+/**
+ * Render a small caption describing how this catalog item bills, derived from
+ * its dispatch metadata. Null kind → no caption (standard items don't need
+ * documentation; they bill the obvious way).
+ */
+function dispatchCaption(item: CatalogItem): string | null {
+  const kind = item.dispatch_kind;
+  if (!kind || kind === 'standard') return null;
+  if (kind === 'delivery') return 'per container · matched by destination';
+  if (kind === 'optional' && item.trigger_field && item.trigger_value) {
+    const fieldLabel = item.trigger_field === 'permits' ? 'Permit' : 'Examination';
+    return `when applicable · ${fieldLabel}: ${item.trigger_value}`;
+  }
+  return null;
+}
+
 function ItemOption({
   item,
   onSelect,
@@ -495,6 +529,7 @@ function ItemOption({
   item: CatalogItem;
   onSelect: (item: CatalogItem) => void;
 }) {
+  const caption = dispatchCaption(item);
   return (
     <button
       type="button"
@@ -517,7 +552,12 @@ function ItemOption({
       onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)"; }}
       onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
     >
-      {item.name}
+      <div>{item.name}</div>
+      {caption && (
+        <div style={{ fontSize: "11px", color: "var(--theme-text-muted)", marginTop: "1px" }}>
+          {caption}
+        </div>
+      )}
     </button>
   );
 }

@@ -26,7 +26,8 @@ import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
 import { ChargeExpenseMatrix } from "./ChargeExpenseMatrix";
 import { CustomDropdown } from "../bd/CustomDropdown";
-import { CatalogItem, CatalogCategory, CATALOG_ITEM_SELECT_FIELDS } from "../shared/pricing/CatalogItemCombobox";
+import { CatalogItem, CatalogCategory, CATALOG_ITEM_SELECT_FIELDS, type CatalogDispatchKind } from "../shared/pricing/CatalogItemCombobox";
+import { useEnumOptions } from "../../hooks/useEnumOptions";
 
 // ==================== TYPES ====================
 
@@ -304,9 +305,18 @@ function ItemsTab() {
 
   const handleSave = async (id: string) => {
     const { catalog_categories: _cc, category_name: _cn, ...updates } = editForm as any;
+    // Normalise dispatch fields: standard or null kinds must null out trigger
+    // fields to satisfy the catalog_items_trigger_consistency CHECK constraint
+    // added in migration 106.
+    const kind = updates.dispatch_kind ?? null;
+    const triggerField = kind === 'optional' ? (updates.trigger_field ?? null) : null;
+    const triggerValue = kind === 'optional' ? (updates.trigger_value ?? null) : null;
     const { error } = await supabase.from("catalog_items").update({
       name: updates.name,
       category_id: updates.category_id ?? null,
+      dispatch_kind: kind,
+      trigger_field: triggerField,
+      trigger_value: triggerValue,
     }).eq("id", id);
     if (!error) {
       toast.success("Item updated");
@@ -904,33 +914,139 @@ function ItemEditRow({
     ...categories.map(c => ({ value: c.id, label: c.name })),
   ];
 
+  // Dispatch metadata (migration 106). Three nullable fields; null kind =
+  // standard. Defaults derived from the item's current state.
+  const currentKind: CatalogDispatchKind | null = (editForm.dispatch_kind ?? null) as CatalogDispatchKind | null;
+  const effectiveKind: CatalogDispatchKind = currentKind ?? 'standard';
+  const triggerField = editForm.trigger_field ?? null;
+  const triggerValue = editForm.trigger_value ?? null;
+
+  // Trigger value options come from the same governance lists Ops sees when
+  // filling out the booking form. Single hook call covers both — fast & cached.
+  const permitOptions = useEnumOptions('permits');
+  const examOptions = useEnumOptions('examination');
+
+  const setDispatchKind = (next: CatalogDispatchKind) => {
+    if (next === 'standard') {
+      setEditForm({ ...editForm, dispatch_kind: null as any, trigger_field: null, trigger_value: null });
+    } else if (next === 'delivery') {
+      setEditForm({ ...editForm, dispatch_kind: 'delivery', trigger_field: null, trigger_value: null });
+    } else {
+      // Optional — pre-fill trigger_field if absent, leave value for the user
+      setEditForm({
+        ...editForm,
+        dispatch_kind: 'optional',
+        trigger_field: triggerField ?? 'permits',
+        trigger_value: triggerValue ?? null,
+      });
+    }
+  };
+
+  const setTriggerField = (next: 'permits' | 'examinations') => {
+    // Changing field invalidates the value since they're from different lists
+    setEditForm({ ...editForm, trigger_field: next, trigger_value: null });
+  };
+
+  const valueOptionsForField = triggerField === 'examinations' ? examOptions : permitOptions;
+
   return (
     <div style={{
-      display: "flex", gap: "8px", alignItems: "center",
-      padding: "6px 16px",
+      display: "flex", flexDirection: "column", gap: "6px",
+      padding: "8px 16px",
       borderTop: "1px solid var(--theme-border-subtle)",
       backgroundColor: "var(--theme-bg-surface-subtle)",
     }}>
-      <input
-        type="text"
-        value={editForm.name || ""}
-        onChange={e => setEditForm({ ...editForm, name: e.target.value })}
-        onKeyDown={e => { if (e.key === "Enter") onSave(); if (e.key === "Escape") onCancel(); }}
-        style={{ ...inputStyle, fontWeight: 500, flex: 1 }}
-        autoFocus
-      />
-      <div style={{ flex: "0 0 160px" }}>
-        <CustomDropdown
-          value={(editForm as any).category_id || ""}
-          options={categoryOptions}
-          onChange={val => setEditForm({ ...editForm, category_id: val || null } as any)}
-          placeholder="— No category —"
-          size="sm"
+      {/* Main row: name + category + save/cancel */}
+      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+        <input
+          type="text"
+          value={editForm.name || ""}
+          onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+          onKeyDown={e => { if (e.key === "Enter") onSave(); if (e.key === "Escape") onCancel(); }}
+          style={{ ...inputStyle, fontWeight: 500, flex: 1 }}
+          autoFocus
         />
+        <div style={{ flex: "0 0 160px" }}>
+          <CustomDropdown
+            value={(editForm as any).category_id || ""}
+            options={categoryOptions}
+            onChange={val => setEditForm({ ...editForm, category_id: val || null } as any)}
+            placeholder="— No category —"
+            size="sm"
+          />
+        </div>
+        <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
+          <button onClick={onSave} title="Save" style={{ ...iconBtnStyle, color: "var(--theme-action-primary-bg)" }}><Check size={14} /></button>
+          <button onClick={onCancel} title="Cancel" style={{ ...iconBtnStyle, color: "var(--theme-text-muted)" }}><X size={14} /></button>
+        </div>
       </div>
-      <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
-        <button onClick={onSave} title="Save" style={{ ...iconBtnStyle, color: "var(--theme-action-primary-bg)" }}><Check size={14} /></button>
-        <button onClick={onCancel} title="Cancel" style={{ ...iconBtnStyle, color: "var(--theme-text-muted)" }}><X size={14} /></button>
+
+      {/* Billing behaviour row — drives how the contract billing engine
+          dispatches rows that reference this catalog item. @see migration 106 */}
+      <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+        <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.4px" }}>
+          Bills
+        </span>
+        {(['standard', 'optional', 'delivery'] as const).map((k) => {
+          const selected = effectiveKind === k;
+          const labels: Record<CatalogDispatchKind, string> = {
+            standard: 'Always',
+            optional: 'When applicable',
+            delivery: 'Per destination',
+          };
+          return (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setDispatchKind(k)}
+              style={{
+                padding: "3px 10px",
+                fontSize: "11px",
+                fontWeight: 600,
+                border: selected ? "1px solid var(--theme-action-primary-bg)" : "1px solid var(--theme-border-default)",
+                borderRadius: "4px",
+                background: selected ? "var(--theme-bg-surface-tint)" : "transparent",
+                color: selected ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)",
+                cursor: "pointer",
+              }}
+            >
+              {labels[k]}
+            </button>
+          );
+        })}
+
+        {effectiveKind === 'optional' && (
+          <>
+            <span style={{ fontSize: "11px", color: "var(--theme-text-muted)" }}>when booking declares</span>
+            <div style={{ flex: "0 0 140px" }}>
+              <CustomDropdown
+                value={triggerField ?? 'permits'}
+                options={[{ value: 'permits', label: 'Permit' }, { value: 'examinations', label: 'Examination' }]}
+                onChange={(v) => setTriggerField(v as 'permits' | 'examinations')}
+                placeholder=""
+                size="sm"
+              />
+            </div>
+            <div style={{ flex: "0 0 160px" }}>
+              <CustomDropdown
+                value={triggerValue ?? ''}
+                options={[
+                  { value: '', label: '— Pick a value —' },
+                  ...valueOptionsForField.map((v) => ({ value: v, label: v })),
+                ]}
+                onChange={(v) => setEditForm({ ...editForm, trigger_value: v || null })}
+                placeholder="— Pick a value —"
+                size="sm"
+              />
+            </div>
+          </>
+        )}
+
+        {effectiveKind === 'delivery' && (
+          <span style={{ fontSize: "11px", color: "var(--theme-text-muted)", fontStyle: "italic" }}>
+            Engine matches this item against booking container types; address narrows by contract row remarks.
+          </span>
+        )}
       </div>
     </div>
   );
