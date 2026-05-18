@@ -66,6 +66,8 @@ const SECTION_LAYOUT_HELP: Record<RateCategoryKind, string> = {
   delivery: "Matched per container using container type and destination.",
 };
 
+const NO_BOOKING_SELECTION = "__none__";
+
 // ============================================
 // ID GENERATOR
 // ============================================
@@ -541,6 +543,9 @@ export function ContractRateCardV2({
                     {/* Grid Header */}
                     <div style={{ display: "grid", gridTemplateColumns: buildGridTemplate(columns, viewMode, false, sectionLayout), gap: "0", padding: "10px 16px", backgroundColor: "var(--theme-bg-surface)", borderBottom: "2px solid var(--neuron-ui-border)", minWidth: "fit-content", alignItems: "center" }}>
                       <div style={gridHeaderCell}>{sectionLayout === "delivery" ? "Container Type" : "Particular"}</div>
+                      {sectionLayout === "optional" && (
+                        <div style={gridHeaderCell}>Charge When Booking Has</div>
+                      )}
                       {columns.map((col, colIdx) => (
                         <div key={col} style={{ ...gridHeaderCell, textAlign: "right", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "6px" }}>
                           {editingColumnIndex === colIdx ? (
@@ -624,6 +629,9 @@ function buildGridTemplate(
 ): string {
   const parts: string[] = [];
   parts.push("minmax(160px, 2.5fr)"); // Particular / Truck Config
+  if (!isTrucking && sectionLayout === "optional") {
+    parts.push("minmax(180px, 1.7fr)"); // Charge When Booking Has
+  }
   columns.forEach(() => parts.push("minmax(100px, 1.2fr)")); // Rate columns
   if (isTrucking) {
     parts.push("minmax(140px, 2fr)"); // Destination
@@ -718,38 +726,35 @@ function RateLineItem({
   const isAtCost = row.is_at_cost === true;
   const hasTiered = !isAtCost && row.succeeding_rule != null;
 
-  const [selectionPopoverOpen, setSelectionPopoverOpen] = useState(false);
-  const selectionButtonRef = useRef<HTMLButtonElement | null>(null);
-  const selectionPopoverRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!selectionPopoverOpen) return;
-    const handle = (e: MouseEvent) => {
-      if (
-        selectionPopoverRef.current && !selectionPopoverRef.current.contains(e.target as Node) &&
-        selectionButtonRef.current && !selectionButtonRef.current.contains(e.target as Node)
-      ) setSelectionPopoverOpen(false);
-    };
-    document.addEventListener('mousedown', handle);
-    return () => document.removeEventListener('mousedown', handle);
-  }, [selectionPopoverOpen]);
-
   const hasSelection = !!row.applies_when && row.applies_when.kind !== 'always';
-  const showSelectionControl = parentCategoryKind === 'optional';
-  const showNeedsSelectionWarning = showSelectionControl && !hasSelection && !viewMode;
   const selectionLabel = (() => {
-    if (!hasSelection) return 'Set selection';
+    if (!hasSelection) return 'Select booking item';
     const t = row.applies_when!;
     if (t.kind === 'examination') return `Exam: ${t.value}`;
     return `Permit: ${t.value}`;
   })();
-  const applySelection = (next: { kind: 'always' | 'examination' | 'permit'; value?: string } | undefined) => {
-    if (!next || next.kind === 'always') {
+  const bookingSelectionOptions = useMemo(
+    () => [
+      { value: NO_BOOKING_SELECTION, label: "Select booking item" },
+      ...permitOptions.map((value) => ({ value: `permit:${value}`, label: `Permit: ${value}` })),
+      ...examOptions.map((value) => ({ value: `examination:${value}`, label: `Exam: ${value}` })),
+    ],
+    [permitOptions, examOptions],
+  );
+  const bookingSelectionValue = hasSelection
+    ? `${row.applies_when!.kind}:${row.applies_when!.value ?? ""}`
+    : NO_BOOKING_SELECTION;
+  const applySelection = (nextValue: string) => {
+    if (!nextValue || nextValue === NO_BOOKING_SELECTION) {
       const { applies_when: _drop, ...rest } = row;
       onUpdate({ ...rest, applies_when: undefined } as Partial<ContractRateRow>);
-    } else {
-      onUpdate({ applies_when: next });
+      return;
     }
-    setSelectionPopoverOpen(false);
+    const [kind, ...valueParts] = nextValue.split(":");
+    const value = valueParts.join(":");
+    if ((kind === "permit" || kind === "examination") && value) {
+      onUpdate({ applies_when: { kind, value } });
+    }
   };
 
   return (
@@ -825,6 +830,39 @@ function RateLineItem({
             </div>
           )}
         </div>
+
+        {parentCategoryKind === "optional" && (
+          <div style={gridDataCell}>
+            {viewMode ? (
+              <div
+                style={{
+                  ...cellInputStyle,
+                  cursor: "default",
+                  color: hasSelection ? "var(--neuron-ink-primary)" : "var(--neuron-semantic-danger)",
+                }}
+              >
+                {selectionLabel}
+              </div>
+            ) : (
+              <CustomDropdown
+                value={bookingSelectionValue}
+                options={bookingSelectionOptions}
+                onChange={applySelection}
+                size="sm"
+                fullWidth
+                buttonStyle={{
+                  padding: "6px 8px",
+                  fontSize: "12px",
+                  borderRadius: "6px",
+                  border: hasSelection ? "1px solid var(--neuron-ui-border)" : "1px solid #FCA5A5",
+                  backgroundColor: "var(--theme-bg-surface)",
+                  color: hasSelection ? "var(--neuron-ink-primary)" : "#991B1B",
+                  fontWeight: 600,
+                }}
+              />
+            )}
+          </div>
+        )}
 
         {/* Rate Columns */}
         {columns.map((col) => (
@@ -1201,109 +1239,6 @@ function RateLineItem({
               }}
             />
           </>
-        )}
-        {showSelectionControl && !viewMode && (
-          <div style={{ position: 'relative', flexShrink: 0 }}>
-            <button
-              ref={selectionButtonRef}
-              onClick={() => setSelectionPopoverOpen((v) => !v)}
-              title={
-                hasSelection
-                  ? `Included when booking has ${selectionLabel}. Click to change.`
-                  : 'Choose the permit or exam that includes this charge.'
-              }
-              style={{
-                padding: '3px 8px',
-                background: hasSelection ? '#FEF3C7' : 'transparent',
-                border: hasSelection ? '1px solid #FCD34D' : '1px dashed #FCD34D',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                color: '#92400E',
-                fontSize: '11px',
-                fontWeight: 600,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {selectionLabel}
-            </button>
-            {selectionPopoverOpen && (
-              <div
-                ref={selectionPopoverRef}
-                style={{
-                  position: 'absolute',
-                  top: 'calc(100% + 4px)',
-                  right: 0,
-                  width: '280px',
-                  backgroundColor: 'var(--theme-bg-surface)',
-                  border: '1px solid var(--neuron-ui-border)',
-                  borderRadius: '8px',
-                  boxShadow: '0 10px 25px -5px rgba(0,0,0,0.15)',
-                  padding: '12px',
-                  zIndex: 100,
-                }}
-              >
-                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--theme-text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>
-                  Included when
-                </div>
-                {(['always', 'examination', 'permit'] as const).map((kind) => (
-                  <label key={kind} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 0', fontSize: '12px', cursor: 'pointer' }}>
-                    <input
-                      type="radio"
-                      name={`trigger-${row.id}`}
-                      checked={(row.applies_when?.kind ?? 'always') === kind}
-                      onChange={() => {
-                        if (kind === 'always') {
-                          applySelection({ kind: 'always' });
-                        } else {
-                          const list = kind === 'examination' ? examOptions : permitOptions;
-                          applySelection({ kind, value: row.applies_when?.value ?? list[0] ?? '' });
-                        }
-                      }}
-                    />
-                    <span>{kind === 'always' ? 'Every booking' : kind === 'examination' ? 'Examination' : 'Permit'}</span>
-                  </label>
-                ))}
-                {row.applies_when && row.applies_when.kind !== 'always' && (
-                  <select
-                    value={row.applies_when.value ?? ''}
-                    onChange={(e) => applySelection({ kind: row.applies_when!.kind, value: e.target.value })}
-                    style={{
-                      width: '100%',
-                      marginTop: '6px',
-                      padding: '5px 8px',
-                      fontSize: '12px',
-                      border: '1px solid var(--neuron-ui-border)',
-                      borderRadius: '4px',
-                      backgroundColor: 'var(--theme-bg-surface)',
-                    }}
-                  >
-                    {(row.applies_when.kind === 'examination' ? examOptions : permitOptions).map((v) => (
-                      <option key={v} value={v}>{v}</option>
-                    ))}
-                  </select>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-        {showNeedsSelectionWarning && (
-          <span
-            title="This row is in a booking-selected section but has no permit or exam selected, so it will not be included."
-            style={{
-              padding: '3px 6px',
-              background: '#FEE2E2',
-              border: '1px solid #FCA5A5',
-              borderRadius: '3px',
-              color: '#991B1B',
-              fontSize: '9px',
-              fontWeight: 700,
-              letterSpacing: '0.3px',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-            }}
-          >
-            Needs selection
-          </span>
         )}
       </div>
       )}
