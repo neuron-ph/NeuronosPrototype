@@ -652,16 +652,45 @@ function RateLineItem({
               {row.particular || "\u2014"}
             </div>
           ) : (
-            <CatalogItemCombobox
-              value={row.particular}
-              catalogItemId={row.catalog_item_id}
-              categoryId={catalogCategoryId}
-              side="revenue"
-              onChange={(description, catalogItemId) => {
-                onUpdate({ particular: description, catalog_item_id: catalogItemId ?? undefined });
-              }}
-              placeholder="Select or type a charge..."
-            />
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", width: "100%" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <CatalogItemCombobox
+                  value={row.particular}
+                  catalogItemId={row.catalog_item_id}
+                  categoryId={catalogCategoryId}
+                  side="revenue"
+                  onChange={(description, catalogItemId) => {
+                    onUpdate({ particular: description, catalog_item_id: catalogItemId ?? undefined });
+                  }}
+                  placeholder="Select or type a charge..."
+                />
+              </div>
+              {/* UNBOUND badge — visible when the row has text but no catalog
+                  binding. Without a binding the engine can't read dispatch
+                  metadata (Phase B), so this row always falls through to
+                  legacy precedence (row.applies_when / category.kind). The
+                  badge nudges Pricing to pick a catalog item via the
+                  combobox to the left so dispatch metadata flows from there. */}
+              {!row.catalog_item_id && (row.particular ?? "").trim() !== "" && (
+                <span
+                  title="This row isn't linked to a catalog item. Pick one from the dropdown so its billing behaviour (always / when applicable / per destination) flows from the catalog."
+                  style={{
+                    padding: "2px 6px",
+                    fontSize: "9px",
+                    fontWeight: 700,
+                    letterSpacing: "0.4px",
+                    color: "#92400E",
+                    background: "#FEF3C7",
+                    border: "1px solid #FCD34D",
+                    borderRadius: "3px",
+                    whiteSpace: "nowrap",
+                    flexShrink: 0,
+                  }}
+                >
+                  UNBOUND
+                </span>
+              )}
+            </div>
           )}
         </div>
 
