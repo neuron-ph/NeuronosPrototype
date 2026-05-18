@@ -17,6 +17,7 @@ import { usePermission } from "../../../context/PermissionProvider";
 import { logDeletion } from "../../../utils/activityLog";
 import { NeuronModal } from "../../ui/NeuronModal";
 import { useUnreadEntityIds } from "../../../hooks/useNotifications";
+import { normalizeDetails } from "../../../utils/bookings/bookingDetailsCompat";
 
 interface ForwardingBookingsProps {
   onSelectBooking: (booking: ForwardingBooking) => void;
@@ -27,7 +28,7 @@ interface ForwardingBookingsProps {
 
 /** Maps a unified bookings row to the ForwardingBooking shape */
 function mapToForwardingBooking(row: Record<string, any>): ForwardingBooking {
-  const d = row.details || {};
+  const d = normalizeDetails(row.details || {}, "Forwarding");
   return {
     // Spread details first so top-level fields override
     ...d,

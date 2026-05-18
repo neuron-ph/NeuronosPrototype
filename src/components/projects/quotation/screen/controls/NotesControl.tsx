@@ -9,7 +9,7 @@ export function NotesControl({ value, onChange }: NotesControlProps) {
   return (
     <div className="space-y-2">
       <label htmlFor="client-note-textarea" className="sr-only">
-        Client note
+        Terms and conditions
       </label>
       <textarea
         id="client-note-textarea"

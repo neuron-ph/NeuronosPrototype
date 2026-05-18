@@ -11,6 +11,7 @@ interface StatusChangeButtonProps {
   onStatusChange: (newStatus: string, reason?: string) => void;
   userDepartment?: "Business Development" | "Pricing";
   userRole?: string;
+  variant?: "button" | "chip";
 }
 
 // Manager and Executive can perform any transition regardless of department.
@@ -21,7 +22,7 @@ function isElevatedRole(role?: string): boolean {
   return normalized === "manager" || normalized === "executive";
 }
 
-export function StatusChangeButton({ quotation, onStatusChange, userDepartment, userRole }: StatusChangeButtonProps) {
+export function StatusChangeButton({ quotation, onStatusChange, userDepartment, userRole, variant = "button" }: StatusChangeButtonProps) {
   const canActAsBD = userDepartment === "Business Development" || isElevatedRole(userRole);
   const canActAsPricing = userDepartment === "Pricing" || isElevatedRole(userRole);
   const [showMenu, setShowMenu] = useState(false);
@@ -206,39 +207,79 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment, 
 
   return (
     <div style={{ position: "relative" }} ref={menuRef}>
-      {/* Status Indicator Button - Outline Style */}
-      <button
-        onClick={() => setShowMenu(!showMenu)}
-        aria-haspopup="menu"
-        aria-expanded={showMenu}
-        aria-label={`Status: ${displayStatus}. Click to change.`}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          padding: "8px 14px",
-          backgroundColor: "var(--theme-bg-surface)",
-          border: `1px solid ${statusStyle.borderColor}`,
-          borderRadius: "8px",
-          fontSize: "13px",
-          fontWeight: 600,
-          color: statusStyle.color,
-          cursor: "pointer",
-          transition: "all 0.2s ease"
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = statusStyle.bgColor;
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
-        }}
-      >
-        <span style={{ color: statusStyle.color, display: "flex", alignItems: "center" }}>
-          <StatusIcon size={16} />
-        </span>
-        <span>{displayStatus}</span>
-        <ChevronDown size={14} style={{ color: statusStyle.color }} />
-      </button>
+      {/* Status Indicator — Chip variant (quiet, dot-led) or Button variant (outline) */}
+      {variant === "chip" ? (
+        <button
+          onClick={() => availableActions.length > 0 && setShowMenu(!showMenu)}
+          aria-haspopup={availableActions.length > 0 ? "menu" : undefined}
+          aria-expanded={showMenu}
+          aria-label={availableActions.length > 0 ? `Status: ${displayStatus}. Click to change.` : `Status: ${displayStatus}`}
+          disabled={availableActions.length === 0}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+            height: "24px",
+            padding: "0 10px",
+            backgroundColor: statusStyle.bgColor,
+            border: `1px solid ${statusStyle.borderColor}`,
+            borderRadius: "999px",
+            fontSize: "12px",
+            fontWeight: 500,
+            color: statusStyle.color,
+            cursor: availableActions.length > 0 ? "pointer" : "default",
+            transition: "all 0.15s ease",
+            whiteSpace: "nowrap",
+          }}
+        >
+          <span style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            backgroundColor: statusStyle.color,
+            display: "inline-block",
+            flexShrink: 0,
+          }} />
+          <span>{displayStatus}</span>
+          {availableActions.length > 0 && (
+            <ChevronDown size={12} style={{ color: statusStyle.color, opacity: 0.7 }} />
+          )}
+        </button>
+      ) : (
+        <button
+          onClick={() => setShowMenu(!showMenu)}
+          aria-haspopup="menu"
+          aria-expanded={showMenu}
+          aria-label={`Status: ${displayStatus}. Click to change.`}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            height: "36px",
+            padding: "0 14px",
+            backgroundColor: "var(--theme-bg-surface)",
+            border: "1px solid var(--theme-border-default)",
+            borderRadius: "6px",
+            fontSize: "13px",
+            fontWeight: 600,
+            color: statusStyle.color,
+            cursor: "pointer",
+            transition: "all 0.2s ease"
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
+          }}
+        >
+          <span style={{ color: statusStyle.color, display: "flex", alignItems: "center" }}>
+            <StatusIcon size={16} />
+          </span>
+          <span>{displayStatus}</span>
+          <ChevronDown size={14} style={{ color: statusStyle.color }} />
+        </button>
+      )}
 
       {/* Dropdown Menu */}
       {showMenu && (
