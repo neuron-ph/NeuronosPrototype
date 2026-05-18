@@ -15,6 +15,7 @@ import { SkeletonTable } from "../shared/NeuronSkeleton";
 import { usePermission } from "../../context/PermissionProvider";
 import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
 import { logDeletion } from "../../utils/activityLog";
+import { normalizeDetails } from "../../utils/bookings/bookingDetailsCompat";
 import type { ExecutionStatus } from "../../types/operations";
 import { NeuronModal } from "../ui/NeuronModal";
 import { useUnreadEntityIds } from "../../hooks/useNotifications";
@@ -81,7 +82,7 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
         .order('created_at', { ascending: false });
       if (error) throw error;
       return (data || []).map((row) => {
-        const d = row.details || {};
+        const d = normalizeDetails(row.details || {}, "Others");
         return {
           ...d,
           ...row,
@@ -94,7 +95,7 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
           status: row.status,
           createdAt: row.created_at,
           updatedAt: row.updated_at || row.created_at,
-          serviceDescription: d.description || row.notes,
+          serviceDescription: d.service_description || d.description || row.notes,
         } as OthersBooking;
       });
     },

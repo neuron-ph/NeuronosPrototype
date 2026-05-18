@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Calendar, FileText, Layout } from "lucide-react";
+import { Printer } from "lucide-react";
 import type { Project, QuotationNew } from "../../types/pricing";
 import {
   BrokerageServiceDisplay,
@@ -8,8 +8,7 @@ import {
   MarineInsuranceServiceDisplay,
   OthersServiceDisplay
 } from "../pricing/ServiceDetailsDisplay";
-import { SegmentedToggle } from "../ui/SegmentedToggle";
-import { QuotationPDFScreen } from "./quotation/screen/QuotationPDFScreen";
+import { PDFStudioOverlay } from "./quotation/screen/PDFStudioOverlay";
 import { QuotationFormView } from "./quotation/QuotationFormView";
 import { QuotationBuilderV3 } from "../pricing/quotations/QuotationBuilderV3";
 
@@ -27,7 +26,7 @@ interface ProjectOverviewTabProps {
 }
 
 export function ProjectOverviewTab({ project, currentUser, onUpdate, onViewBooking, onSaveQuotation }: ProjectOverviewTabProps) {
-  const [viewMode, setViewMode] = useState<"form" | "pdf">("form");
+  const [isPDFStudioOpen, setIsPDFStudioOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   // ✨ Optimistic UI: Local state to show updates immediately while background fetch happens
   const [displayProject, setDisplayProject] = useState<Project>(project);
@@ -166,35 +165,30 @@ export function ProjectOverviewTab({ project, currentUser, onUpdate, onViewBooki
       margin: "0 auto"
     }}>
       
-      {/* View Switcher */}
-      <div className="flex items-center justify-between mb-8">
-        <SegmentedToggle
-            value={viewMode}
-            onChange={setViewMode}
-            options={[
-                { value: "form", label: "Form View", icon: <Layout size={16} /> },
-                { value: "pdf", label: "PDF View", icon: <FileText size={16} /> }
-            ]}
-        />
+      {/* Open PDF Studio — publishing surface lives in a full-screen overlay, not a peer view */}
+      <div className="flex items-center justify-end mb-6">
+        <button
+          onClick={() => setIsPDFStudioOpen(true)}
+          className="inline-flex items-center gap-2 h-9 px-4 rounded-lg text-sm font-semibold text-white bg-[var(--theme-action-primary-bg)] hover:opacity-90 transition-all shadow-sm"
+        >
+          <Printer size={15} />
+          Print PDF
+        </button>
       </div>
 
-      {viewMode === "pdf" ? (
-        <div className="h-[800px] border border-[var(--theme-border-default)] rounded-xl overflow-hidden bg-[var(--theme-bg-surface)]">
-            <QuotationPDFScreen 
-                project={displayProject}
-                onClose={() => setViewMode("form")}
-                onSave={handlePDFSave}
-                currentUser={currentUser}
-                isEmbedded={true}
-            />
-        </div>
-      ) : (
-        <QuotationFormView 
-          project={displayProject} 
-          onSave={onSaveQuotation}
-          onAmend={() => setIsEditing(true)}
-        />
-      )}
+      <QuotationFormView
+        project={displayProject}
+        onSave={onSaveQuotation}
+        onAmend={() => setIsEditing(true)}
+      />
+
+      <PDFStudioOverlay
+        isOpen={isPDFStudioOpen}
+        onClose={() => setIsPDFStudioOpen(false)}
+        project={displayProject}
+        onSave={handlePDFSave}
+        currentUser={currentUser}
+      />
     </div>
   );
 }

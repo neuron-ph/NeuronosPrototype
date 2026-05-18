@@ -15,6 +15,7 @@ import { SkeletonTable } from "../shared/NeuronSkeleton";
 import { usePermission } from "../../context/PermissionProvider";
 import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
 import { logDeletion } from "../../utils/activityLog";
+import { normalizeDetails } from "../../utils/bookings/bookingDetailsCompat";
 import type { ExecutionStatus } from "../../types/operations";
 import { NeuronModal } from "../ui/NeuronModal";
 import { useUnreadEntityIds } from "../../hooks/useNotifications";
@@ -32,6 +33,7 @@ interface BrokerageBooking {
   accountOwner?: string;
   accountHandler?: string;
   entryType?: string;
+  entryNumber?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -86,7 +88,7 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
         .order('created_at', { ascending: false });
       if (error) throw error;
       return (data || []).map((row) => {
-        const d = row.details || {};
+        const d = normalizeDetails(row.details || {}, "Brokerage");
         return {
           ...d,
           ...row,
@@ -100,7 +102,8 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
           createdAt: row.created_at,
           updatedAt: row.updated_at || row.created_at,
           movement: d.movement_type,
-          mblMawb: d.entry_number,
+          mblMawb: d.mbl_mawb || d.mblMawb,
+          entryNumber: d.entry_number,
           entryType: d.entry_type,
         } as BrokerageBooking;
       });
@@ -201,6 +204,7 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
       ((booking as any).booking_number || booking.bookingId).toLowerCase().includes(searchTerm.toLowerCase()) ||
       booking.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (booking.mblMawb && booking.mblMawb.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (booking.entryNumber && booking.entryNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (booking.projectNumber && booking.projectNumber.toLowerCase().includes(searchTerm.toLowerCase()));
     
     if (!matchesSearch) return false;
@@ -593,6 +597,9 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
                       MBL/MAWB
                     </th>
                     <th className="text-left py-3 px-4 text-[var(--theme-text-muted)] font-semibold text-xs uppercase tracking-wide">
+                      Entry Number
+                    </th>
+                    <th className="text-left py-3 px-4 text-[var(--theme-text-muted)] font-semibold text-xs uppercase tracking-wide">
                       Entry Type
                     </th>
                     <th className="text-left py-3 px-4 text-[var(--theme-text-muted)] font-semibold text-xs uppercase tracking-wide">
@@ -677,10 +684,15 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
                         </div>
                       </td>
                       <td className="py-4 px-4">
-                        <div style={{ 
-                          fontSize: "13px", 
+                        <div style={{ fontSize: "13px", color: "var(--theme-text-primary)" }}>
+                          {booking.entryNumber || <span style={{ color: "var(--theme-text-muted)" }}>—</span>}
+                        </div>
+                      </td>
+                      <td className="py-4 px-4">
+                        <div style={{
+                          fontSize: "13px",
                           fontWeight: 500,
-                          color: "var(--theme-text-primary)" 
+                          color: "var(--theme-text-primary)"
                         }}>
                           {booking.entryType || "—"}
                         </div>

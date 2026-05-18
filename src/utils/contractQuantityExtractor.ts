@@ -510,9 +510,18 @@ export function extractForBookingPreview(
  * countEntries("")
  * // => 0
  */
-export function countEntries(text?: string | string[]): number {
+export function countEntries(text?: string | Array<string | Record<string, unknown>>): number {
   if (!text) return 0;
-  if (Array.isArray(text)) return text.filter(s => s && s.trim() !== "").length;
+  if (Array.isArray(text)) {
+    return text.filter(item => {
+      if (typeof item === "string") return item.trim() !== "";
+      if (item && typeof item === "object") {
+        // Repeater rows: count when any cell has a non-blank value.
+        return Object.values(item).some(v => typeof v === "string" && v.trim() !== "");
+      }
+      return false;
+    }).length;
+  }
   return text.split(/[,;\n]/).map(s => s.trim()).filter(Boolean).length;
 }
 
@@ -562,8 +571,8 @@ export function countEntries(text?: string | string[]): number {
  */
 export function deriveQuantitiesFromBooking(
   booking: {
-    containerNumbers?: string | string[];
-    container_numbers?: string | string[];
+    containerNumbers?: string | Array<string | Record<string, unknown>>;
+    container_numbers?: string | Array<string | Record<string, unknown>>;
     containers?: ContainerEntry[];
     mblMawb?: string;
     mbl_mawb?: string;

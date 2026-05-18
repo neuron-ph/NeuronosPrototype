@@ -36,6 +36,30 @@ export function useBookingFormState(serviceType: string, seed?: FormState) {
     const merged = normalizeTopLevelFields(mergeBookingRecord(raw, serviceType));
     const schema = getServiceSchema(serviceType);
     if (schema) {
+      // Reverse-hydrate fields whose value lives under a different column name
+      // (e.g. booking_name → row.name). Without this, the form field reads
+      // formState[field.key] and finds undefined for any field with storageKey.
+      for (const section of schema.sections) {
+        for (const field of section.fields) {
+          if (!field.storageKey || field.storageKey === field.key) continue;
+          if (merged[field.key] === undefined && merged[field.storageKey] !== undefined) {
+            merged[field.key] = merged[field.storageKey];
+          }
+        }
+      }
+      // Coerce legacy string[] values for repeater fields into row objects keyed
+      // by the first repeater column. Lets old container_numbers data render in
+      // the new per-container repeater (Brokerage delivery-address-per-container).
+      for (const section of schema.sections) {
+        for (const field of section.fields) {
+          if (field.control !== 'repeater' || !field.repeaterColumns?.length) continue;
+          const val = merged[field.key];
+          if (Array.isArray(val) && val.length > 0 && val.every(v => typeof v === 'string')) {
+            const firstKey = field.repeaterColumns[0].key;
+            merged[field.key] = (val as string[]).map(s => ({ [firstKey]: s }));
+          }
+        }
+      }
       const seen = new Set<string>();
       const details = (raw.details as Record<string, unknown>) ?? {};
       for (const section of schema.sections) {

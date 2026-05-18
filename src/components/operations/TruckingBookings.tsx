@@ -15,6 +15,7 @@ import { SkeletonTable } from "../shared/NeuronSkeleton";
 import { usePermission } from "../../context/PermissionProvider";
 import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
 import { logDeletion } from "../../utils/activityLog";
+import { normalizeDetails } from "../../utils/bookings/bookingDetailsCompat";
 import type { ExecutionStatus } from "../../types/operations";
 import { NeuronModal } from "../ui/NeuronModal";
 import { useUnreadEntityIds } from "../../hooks/useNotifications";
@@ -84,7 +85,7 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
         .order('created_at', { ascending: false });
       if (error) throw error;
       return (data || []).map((row) => {
-        const d = row.details || {};
+        const d = normalizeDetails(row.details || {}, "Trucking");
         return {
           ...d,
           ...row,

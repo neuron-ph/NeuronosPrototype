@@ -103,7 +103,21 @@ function pickField(booking: any, ...keys: string[]): any {
 /** Parse raw booking field into chip entries (handles arrays and delimited strings) */
 function parseEntries(field: unknown): string[] {
   if (!field) return [];
-  if (Array.isArray(field)) return field.map((s) => String(s).trim()).filter(Boolean);
+  if (Array.isArray(field)) {
+    return field
+      .map((item) => {
+        if (typeof item === "string") return item.trim();
+        if (item && typeof item === "object") {
+          const rec = item as Record<string, unknown>;
+          const preferred = rec.container_number ?? rec.number ?? rec.id;
+          if (typeof preferred === "string" && preferred.trim() !== "") return preferred.trim();
+          const firstString = Object.values(rec).find((v) => typeof v === "string" && (v as string).trim() !== "");
+          return typeof firstString === "string" ? firstString.trim() : "";
+        }
+        return "";
+      })
+      .filter(Boolean);
+  }
   if (typeof field === "string") return field.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
   return [];
 }

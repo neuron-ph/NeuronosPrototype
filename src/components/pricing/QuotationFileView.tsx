@@ -1,4 +1,4 @@
-import { ArrowLeft, Download, Edit3, FileText, FolderPlus, Layout, UserCircle } from "lucide-react";
+import { ArrowLeft, Download, Edit3, FileDown, FolderPlus, Lock, UserCircle } from "lucide-react";
 import { usePermission } from "../../context/PermissionProvider";
 import { CustomDatePicker } from "../common/CustomDatePicker";
 import { useState, useEffect, useRef } from "react";
@@ -11,8 +11,7 @@ import { CreateProjectModal } from "../bd/CreateProjectModal";
 import { CreateBookingsFromProjectModal } from "./CreateBookingsFromProjectModal";
 import { toast } from "../ui/toast-utils";
 import { CommentsTab } from "../shared/CommentsTab";
-import { SegmentedToggle } from "../ui/SegmentedToggle";
-import { QuotationPDFScreen } from "../projects/quotation/screen/QuotationPDFScreen";
+import { PDFStudioOverlay } from "../projects/quotation/screen/PDFStudioOverlay";
 import { QuotationFormView } from "../projects/quotation/QuotationFormView";
 import { downloadQuotationPDF } from "./QuotationPDFRenderer";
 import type { QuotationPrintOptions } from "../projects/quotation/screen/useQuotationDocumentState";
@@ -59,7 +58,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
   const [activeTab, setActiveTab] = useState<TabType>(
     canViewDetailsTab ? "details" : canViewCommentsTab ? "comments" : "details"
   );
-  const [viewMode, setViewMode] = useState<"form" | "pdf">("form");
+  const [isPDFStudioOpen, setIsPDFStudioOpen] = useState(false);
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [showCreateBookingsModal, setShowCreateBookingsModal] = useState(false);
@@ -88,38 +87,6 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
   const currentUserId = currentUser?.id || "user-123";
   const currentUserName = currentUser?.name || "John Doe";
   const currentUserDepartment = currentUser?.department || userDepartment || "BD";
-
-  useEffect(() => {
-    if (viewMode !== "pdf") return;
-    const previousHtmlOverflow = document.documentElement.style.overflow;
-    const previousBodyOverflow = document.body.style.overflow;
-
-    document.documentElement.style.overflow = "hidden";
-    document.body.style.overflow = "hidden";
-
-    const resetScroll = () => {
-      contentPanelRef.current?.scrollTo({ top: 0, left: 0 });
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
-      window.scrollTo({ top: 0, left: 0 });
-    };
-
-    resetScroll();
-    const frameId = requestAnimationFrame(resetScroll);
-    const handleWindowScroll = () => {
-      if (window.scrollY !== 0) {
-        window.scrollTo({ top: 0, left: 0 });
-      }
-    };
-    window.addEventListener("scroll", handleWindowScroll, { passive: true });
-
-    return () => {
-      cancelAnimationFrame(frameId);
-      window.removeEventListener("scroll", handleWindowScroll);
-      document.documentElement.style.overflow = previousHtmlOverflow;
-      document.body.style.overflow = previousBodyOverflow;
-    };
-  }, [quotation.id, viewMode]);
 
   const canAssign = can("pricing_quotations", "approve");
   const canEditPricing = can("pricing_quotations", "edit");
@@ -861,11 +828,11 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
         backgroundColor: "var(--theme-bg-surface)",
         display: "flex",
         justifyContent: "space-between",
-        alignItems: "center",
+        alignItems: "flex-end",
         flexWrap: "wrap",
-        gap: "12px"
+        gap: "16px"
       }}>
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <button
             onClick={onBack}
             style={{
@@ -890,43 +857,73 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
             <ArrowLeft size={16} />
             Back to Quotations
           </button>
-          
+
           <h1 style={{
             fontSize: "24px",
             fontWeight: 600,
             color: "var(--neuron-ink-primary)",
             margin: 0,
-            lineHeight: 1.2
+            lineHeight: 1.3,
+            wordBreak: "break-word",
           }}>
             {quotation.quotation_name || "Untitled Quotation"}
             {quotation.quote_number && (
-              <span style={{ fontSize: "13px", fontWeight: 400, color: "var(--neuron-ink-muted)", marginLeft: "10px" }}>
+              <span style={{ fontSize: "13px", fontWeight: 400, color: "var(--neuron-ink-muted)", marginLeft: "10px", whiteSpace: "nowrap" }}>
                 {quotation.quote_number}
               </span>
             )}
           </h1>
         </div>
 
-        {/* Assign to — Pricing Manager only, top-right of header */}
-        {canAssign && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <UserCircle size={14} style={{ color: "var(--neuron-ink-muted)", flexShrink: 0 }} />
-            <span style={{ fontSize: "12px", color: "var(--neuron-ink-muted)", whiteSpace: "nowrap" }}>
-              Assign to:
+        {/* Top-right cluster: Status, Locked, Assign to */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0, flexWrap: "wrap" }}>
+          <StatusChangeButton
+            quotation={quotation}
+            onStatusChange={handleStatusChange}
+            userDepartment={userDepartment}
+            userRole={currentUser?.role}
+          />
+          {isLocked && (
+            <span style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              height: "36px",
+              padding: "0 14px",
+              backgroundColor: "var(--theme-bg-surface)",
+              border: "1px solid var(--theme-border-default)",
+              borderRadius: "6px",
+              fontSize: "13px",
+              fontWeight: 600,
+              color: "var(--theme-status-warning-fg)",
+              whiteSpace: "nowrap",
+            }}>
+              <Lock size={14} />
+              Locked
             </span>
-            <div style={{ minWidth: 160 }}>
-              <CustomDropdown
-                value={pendingAssigneeId ?? assignedToId}
-                onChange={handleDropdownChange}
-                options={[
-                  { value: "", label: "Unassigned" },
-                  ...pricingUsers.map(u => ({ value: u.id, label: u.name })),
-                ]}
-                placeholder={isAssigning ? "Saving…" : "Select staff"}
-              />
+          )}
+
+          {/* Assign to — Pricing Manager only */}
+          {canAssign && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <UserCircle size={14} style={{ color: "var(--neuron-ink-muted)", flexShrink: 0 }} />
+              <span style={{ fontSize: "12px", color: "var(--neuron-ink-muted)", whiteSpace: "nowrap" }}>
+                Assign to:
+              </span>
+              <div style={{ minWidth: 160 }}>
+                <CustomDropdown
+                  value={pendingAssigneeId ?? assignedToId}
+                  onChange={handleDropdownChange}
+                  options={[
+                    { value: "", label: "Unassigned" },
+                    ...pricingUsers.map(u => ({ value: u.id, label: u.name })),
+                  ]}
+                  placeholder={isAssigning ? "Saving…" : "Select staff"}
+                />
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Merged Toolbar: Tabs + Actions */}
@@ -1101,7 +1098,8 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
                 display: "flex",
                 alignItems: "center",
                 gap: "8px",
-                padding: "8px 16px",
+                height: "36px",
+                padding: "0 14px",
                 backgroundColor: "transparent",
                 border: "1px solid var(--theme-border-default)",
                 borderRadius: "6px",
@@ -1125,13 +1123,6 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
             </button>
           )}
 
-          <StatusChangeButton
-            quotation={quotation}
-            onStatusChange={handleStatusChange}
-            userDepartment={userDepartment}
-            userRole={currentUser?.role}
-          />
-          
           {/* Edit Pricing — anyone with pricing edit grant, only at Pending Pricing status */}
           {canEditPricing && normalizedStatus === "Pending Pricing" && (
             <button
@@ -1140,7 +1131,8 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
                 display: "flex",
                 alignItems: "center",
                 gap: "8px",
-                padding: "8px 16px",
+                height: "36px",
+                padding: "0 14px",
                 backgroundColor: "var(--neuron-brand-green)",
                 border: "none",
                 borderRadius: "6px",
@@ -1171,7 +1163,8 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
                 display: "flex",
                 alignItems: "center",
                 gap: "8px",
-                padding: "8px 16px",
+                height: "36px",
+                padding: "0 14px",
                 backgroundColor: isCreatingProject ? "var(--theme-border-default)" : "var(--neuron-brand-green)",
                 border: "none",
                 borderRadius: "6px",
@@ -1207,7 +1200,8 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
                 display: "flex",
                 alignItems: "center",
                 gap: "8px",
-                padding: "8px 16px",
+                height: "36px",
+                padding: "0 14px",
                 backgroundColor: isActivatingContract ? "var(--theme-border-default)" : "var(--neuron-brand-green)",
                 border: "none",
                 borderRadius: "6px",
@@ -1234,74 +1228,82 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
             </button>
           )}
           
-          {/* Locked Indicator — shown for converted projects or activated contracts */}
-          {isLocked && (
-            <div style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "8px 16px",
-              backgroundColor: "var(--theme-status-warning-bg)",
-              border: "1px solid var(--theme-status-warning-border)",
-              borderRadius: "6px",
-              fontSize: "13px",
-              fontWeight: 500,
-              color: "var(--theme-status-warning-fg)"
-            }}>
-              🔒 Locked
-            </div>
-          )}
-          
-          {/* Quick Download PDF — one-click export with default settings */}
+          {/* Export PDF — primary; opens the full-screen PDF Studio overlay */}
           <button
-            onClick={handleQuickDownload}
-            disabled={isQuickDownloading}
-            title="Download PDF"
+            onClick={() => setIsPDFStudioOpen(true)}
+            title="Open PDF Studio"
             style={{
               display: "flex",
               alignItems: "center",
               gap: "6px",
-              padding: "8px 14px",
-              backgroundColor: "transparent",
-              border: "1px solid var(--theme-border-default)",
+              height: "36px",
+              padding: "0 14px",
+              backgroundColor: "var(--theme-action-primary-bg)",
+              border: "1px solid var(--theme-action-primary-bg)",
               borderRadius: "6px",
               fontSize: "13px",
-              fontWeight: 500,
-              color: isQuickDownloading ? "var(--neuron-ink-muted)" : "var(--neuron-ink-secondary)",
-              cursor: isQuickDownloading ? "not-allowed" : "pointer",
-              opacity: isQuickDownloading ? 0.6 : 1,
-              transition: "all 0.15s ease",
+              fontWeight: 600,
+              color: "#fff",
+              cursor: "pointer",
+              transition: "opacity 0.15s ease",
             }}
-            onMouseEnter={(e) => {
-              if (!isQuickDownloading) {
-                e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
-                e.currentTarget.style.borderColor = "var(--theme-border-default)";
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = "transparent";
-              e.currentTarget.style.borderColor = "var(--theme-border-default)";
-            }}
+            onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.9"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
           >
-            {isQuickDownloading ? (
-              <div style={{ width: 14, height: 14, border: "2px solid currentColor", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-            ) : (
-              <Download size={14} />
-            )}
-            PDF
+            <FileDown size={14} />
+            Export PDF
           </button>
 
-          <QuotationActionMenu
-            quotation={quotation}
-            onEdit={onEdit}
-            onDuplicate={handleDuplicate}
-            onDelete={handleDelete}
-            onCreateTicket={onCreateTicket ? handleCreateTicket : undefined}
-          />
+          {/* Divider — separates primary action from icon-only utility cluster */}
+          <div style={{ width: 1, height: 24, background: "var(--neuron-ui-border)", margin: "0 4px" }} />
+
+          {/* Icon-only utility cluster: Quick Download + Action Menu */}
+          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+            <button
+              onClick={handleQuickDownload}
+              disabled={isQuickDownloading}
+              title="Download PDF (default settings)"
+              aria-label="Download PDF with default settings"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "36px",
+                height: "36px",
+                backgroundColor: "transparent",
+                border: "1px solid var(--theme-border-default)",
+                borderRadius: "6px",
+                color: isQuickDownloading ? "var(--neuron-ink-muted)" : "var(--neuron-ink-secondary)",
+                cursor: isQuickDownloading ? "not-allowed" : "pointer",
+                opacity: isQuickDownloading ? 0.6 : 1,
+                transition: "all 0.15s ease",
+              }}
+              onMouseEnter={(e) => {
+                if (!isQuickDownloading) e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "transparent";
+              }}
+            >
+              {isQuickDownloading ? (
+                <div style={{ width: 14, height: 14, border: "2px solid currentColor", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+              ) : (
+                <Download size={14} />
+              )}
+            </button>
+
+            <QuotationActionMenu
+              quotation={quotation}
+              onEdit={onEdit}
+              onDuplicate={handleDuplicate}
+              onDelete={handleDelete}
+              onCreateTicket={onCreateTicket ? handleCreateTicket : undefined}
+            />
+          </div>
         </div>
       </div>
 
-      {/* Main Content Area */}
+      {/* Main Content Area — Form View is canonical; PDF Studio opens as overlay from header button */}
       <div
         ref={contentPanelRef}
         role="tabpanel"
@@ -1309,73 +1311,32 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
         aria-labelledby={activeTab === "details" ? "tab-details" : "tab-comments"}
         style={{
           flex: 1,
-          overflow: viewMode === "pdf" ? "hidden" : "auto",
+          overflow: "auto",
           display: "flex",
           flexDirection: "column",
           minHeight: 0,
         }}
       >
         {activeTab === "details" && canViewDetailsTab ? (
-          viewMode === "pdf" ? (
-            // PDF mode: bounded workspace with all scrolling owned by the PDF preview/sidebar.
-            <div style={{ padding: "32px 48px", maxWidth: "1400px", margin: "0 auto", width: "100%", height: "100%", minHeight: 0, display: "flex", flexDirection: "column" }}>
-              {/* View Switcher */}
-              <div className="flex items-center justify-between mb-8 shrink-0">
-                <SegmentedToggle
-                  value={viewMode}
-                  onChange={setViewMode}
-                  options={[
-                    { value: "form", label: "Form View", icon: <Layout size={16} /> },
-                    { value: "pdf", label: "PDF View", icon: <FileText size={16} /> },
-                  ]}
-                />
-              </div>
-              {/* PDF screen in a bounded card */}
-              <div style={{ flex: 1, minHeight: 0, borderRadius: "12px", overflow: "hidden", border: "1px solid var(--neuron-ui-border)" }}>
-                <QuotationPDFScreen
-                  project={adaptedProject}
-                  quotation={quotation}
-                  onClose={() => setViewMode("form")}
-                  onSave={handlePDFSave}
-                  currentUser={currentUser}
-                  isEmbedded={true}
-                />
-              </div>
-            </div>
-          ) : (
-            // Form mode: padded, max-width constrained, scrollable
-            <div style={{ padding: "32px 48px", maxWidth: "1400px", margin: "0 auto", width: "100%" }}>
-              {/* View Switcher */}
-              <div className="flex items-center justify-between mb-8">
-                <SegmentedToggle
-                  value={viewMode}
-                  onChange={setViewMode}
-                  options={[
-                    { value: "form", label: "Form View", icon: <Layout size={16} /> },
-                    { value: "pdf", label: "PDF View", icon: <FileText size={16} /> },
-                  ]}
-                />
-              </div>
-
-              <QuotationFormView
-                project={adaptedProject}
-                onSave={async (data: any) => {
-                  if (onSaveQuotation) {
-                    try {
-                      await onSaveQuotation(data);
-                      toast.success("Quotation saved successfully");
-                    } catch (err: any) {
-                      toast.error(err?.message || 'Save failed');
-                    }
-                  } else {
-                    onUpdate(data);
-                    toast.success("Quotation updated");
+          <div style={{ padding: "32px 48px", maxWidth: "1400px", margin: "0 auto", width: "100%" }}>
+            <QuotationFormView
+              project={adaptedProject}
+              onSave={async (data: any) => {
+                if (onSaveQuotation) {
+                  try {
+                    await onSaveQuotation(data);
+                    toast.success("Quotation saved successfully");
+                  } catch (err: any) {
+                    toast.error(err?.message || 'Save failed');
                   }
-                }}
-                onAmend={onEdit}
-              />
-            </div>
-          )
+                } else {
+                  onUpdate(data);
+                  toast.success("Quotation updated");
+                }
+              }}
+              onAmend={onEdit}
+            />
+          </div>
         ) : activeTab === "comments" && canViewCommentsTab ? (
           <div style={{ flex: 1 }}>
             <CommentsTab
@@ -1388,6 +1349,16 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
           </div>
         ) : null}
       </div>
+
+      {/* PDF Studio — full-screen overlay launched from the header Print PDF button */}
+      <PDFStudioOverlay
+        isOpen={isPDFStudioOpen}
+        onClose={() => setIsPDFStudioOpen(false)}
+        project={adaptedProject}
+        quotation={quotation}
+        onSave={handlePDFSave}
+        currentUser={currentUser}
+      />
 
       {/* Create Project Modal */}
       {showCreateProjectModal && (
