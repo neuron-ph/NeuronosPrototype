@@ -24,7 +24,7 @@ import { toast } from "../ui/toast-utils";
 import { supabase } from "../../utils/supabase/client";
 import { RateBreakdownTable, formatCurrency } from "../pricing/shared/RateBreakdownTable";
 import { QuantityDisplaySection } from "../pricing/shared/QuantityDisplaySection";
-import { extractMultiLineSelectionsAndQuantities } from "../../utils/contractQuantityExtractor";
+import { extractMultiLineSelectionsAndQuantities, extractBookingFacts, extractBookingContainers } from "../../utils/contractQuantityExtractor";
 
 interface InlineRateCardSectionProps {
   booking: any;
@@ -86,16 +86,34 @@ export function InlineRateCardSection({
   const isMultiLine = serviceType.toLowerCase() === "trucking"
     && truckingLineItems && truckingLineItems.length > 1;
 
+  // Booking facts gate applies_when-tagged rows (e.g. permit/exam processing fees).
+  // Memoized on the raw fields so the engine re-runs when Ops edits them.
+  const facts = useMemo(
+    () => extractBookingFacts(booking),
+    [JSON.stringify(booking?.examinations), JSON.stringify(booking?.permits)],
+  );
+
+  // Containers + delivery address drive the delivery category dispatcher.
+  // Per-container detail comes from the FCL repeater; deliveryAddress is the
+  // top-level Brokerage field as fallback for legacy bookings that filled the
+  // overall delivery without per-container.
+  const containers = useMemo(
+    () => extractBookingContainers(booking),
+    [JSON.stringify(booking?.container_numbers ?? booking?.containerNumbers)],
+  );
+  const deliveryAddress: string | undefined =
+    booking?.deliveryAddress ?? booking?.delivery_address ?? undefined;
+
   const multiLineResults = useMemo(() => {
     if (!isMultiLine) return null;
     const extractions = extractMultiLineSelectionsAndQuantities(truckingLineItems!, rateMatrices);
-    return calculateMultiLineTruckingBilling(rateMatrices, bookingMode, extractions);
-  }, [isMultiLine, rateMatrices, bookingMode, JSON.stringify(truckingLineItems)]);
+    return calculateMultiLineTruckingBilling(rateMatrices, bookingMode, extractions, facts);
+  }, [isMultiLine, rateMatrices, bookingMode, JSON.stringify(truckingLineItems), facts]);
 
   const calculation = useMemo(() => {
     if (isMultiLine) return { appliedRates: [] as AppliedRate[], total: 0 };
-    return calculateContractBilling(rateMatrices, serviceType, bookingMode, quantities, selections);
-  }, [rateMatrices, serviceType, bookingMode, quantities, selections, isMultiLine]);
+    return calculateContractBilling(rateMatrices, serviceType, bookingMode, quantities, selections, facts, containers, deliveryAddress);
+  }, [rateMatrices, serviceType, bookingMode, quantities, selections, isMultiLine, facts, containers, deliveryAddress]);
 
   const grandTotal = isMultiLine && multiLineResults ? multiLineResults.grandTotal : calculation.total;
   const totalItems = isMultiLine && multiLineResults
@@ -176,6 +194,11 @@ export function InlineRateCardSection({
     setIsSaving(true);
     try {
       const bookingId = booking.bookingId || booking.id;
+      // Thread selections + multi-line trucking extractions into apply so the
+      // saved billing items match the preview the user just confirmed.
+      const truckingExtractions = isMultiLine
+        ? extractMultiLineSelectionsAndQuantities(truckingLineItems!, rateMatrices)
+        : undefined;
       const result = generateRateCardBillingItems({
         rateMatrices,
         serviceType,
@@ -186,6 +209,11 @@ export function InlineRateCardSection({
         contractNumber,
         customerName,
         currency,
+        selections,
+        truckingExtractions,
+        facts,
+        containers,
+        deliveryAddress,
       });
       if (result.items.length === 0) {
         toast.warning("No billing items generated — check rate card configuration.");

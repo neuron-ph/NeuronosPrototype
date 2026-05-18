@@ -13,9 +13,13 @@
 import type { ContractRateMatrix, AppliedRate } from "../types/pricing";
 import {
   instantiateRates,
+  generateContractBilling,
   resolveModeColumn,
   type BookingQuantities,
+  type BookingFacts,
+  type BookingContainer,
 } from "./contractRateEngine";
+import type { LineItemExtraction } from "./contractQuantityExtractor";
 import type { BillingItem } from "../components/shared/billings/UnifiedBillingsTab";
 import { buildCatalogSnapshot } from "./catalogSnapshot";
 
@@ -42,6 +46,43 @@ export interface RateCardGenerationContext {
   customerName?: string;
   /** Currency from the contract */
   currency?: string;
+  /**
+   * Selection-group picks for mutually-exclusive alternative rows
+   * (@see SELECTION_GROUP_BLUEPRINT.md). When omitted on a service
+   * that uses selection groups (e.g. trucking), all alternative rows
+   * are emitted — almost never desired. Pass the same selections the
+   * preview was computed with so apply matches what the user saw.
+   */
+  selections?: Record<string, string>;
+  /**
+   * Pre-extracted per-line tuples for multi-line trucking. When provided,
+   * the generator loops over each extraction and runs the engine with its
+   * own selections + quantities, instead of using `quantities`/`selections`
+   * once for the whole booking. @see MULTI_LINE_TRUCKING_BLUEPRINT.md
+   */
+  truckingExtractions?: LineItemExtraction[];
+  /**
+   * Facts the booking declares (examinations performed, permits filed).
+   * Required to gate `applies_when`-tagged rate-card rows so optional fees
+   * (e.g. BAI/SRA/BPI processing, X-ray exam) only apply when the booking
+   * actually consumed those services. Build via `extractBookingFacts()`.
+   * Rows without `applies_when` are unaffected.
+   */
+  facts?: BookingFacts;
+  /**
+   * Per-container detail used by the 'delivery' category dispatcher. Each
+   * container is matched against the matrix's delivery rows by container_type
+   * (against row.particular) + delivery_address (fuzzy against row.remarks).
+   * Build via `extractBookingContainers()`. Standard / optional categories
+   * ignore this; delivery categories skip containers with no type.
+   */
+  containers?: BookingContainer[];
+  /**
+   * Booking-level delivery address fallback used by the delivery dispatcher
+   * when a container's own delivery_address is empty (common when Ops fills
+   * the top-level address but not the per-container one).
+   */
+  deliveryAddress?: string;
 }
 
 export interface RateCardGenerationResult {
@@ -98,8 +139,39 @@ export function generateRateCardBillingItems(
     return { items: [], total: 0, count: 0, modeColumn: null };
   }
 
-  // 3. Run the rate engine
-  const appliedRates = instantiateRates(matrix, modeColumn, ctx.quantities);
+  // 3. Run the rate engine. For multi-line trucking we loop per extraction so
+  //    each leg's selections + quantities gate its own rows. For everything
+  //    else (single-line trucking, brokerage, forwarding…) we run once with
+  //    the booking-level selections.
+  const appliedRates: AppliedRate[] = [];
+  const useMultiLine = Array.isArray(ctx.truckingExtractions)
+    && ctx.truckingExtractions.length > 0
+    && ctx.serviceType.toLowerCase() === "trucking";
+
+  if (useMultiLine) {
+    // Multi-line trucking still routes through instantiateRates per leg because
+    // each leg carries its own selections + quantities. Category dispatch isn't
+    // a fit here — every leg evaluates the same Trucking matrix in full. This
+    // path stays unchanged through Phase 1.
+    for (const { selections, quantities } of ctx.truckingExtractions!) {
+      const rates = instantiateRates(matrix, modeColumn, quantities, selections, ctx.facts);
+      appliedRates.push(...rates);
+    }
+  } else {
+    // Single-pass: use the new category-dispatch entry point. In Phase 1 the
+    // dispatcher only does 'standard' (delegates to instantiateRates per category),
+    // so output is identical to calling instantiateRates directly — but the call
+    // path is now ready for Phase 2's 'optional' and Phase 3's 'delivery' dispatchers.
+    appliedRates.push(
+      ...generateContractBilling(matrix, modeColumn, {
+        quantities: ctx.quantities,
+        selections: ctx.selections,
+        facts: ctx.facts,
+        containers: ctx.containers,
+        deliveryAddress: ctx.deliveryAddress,
+      }),
+    );
+  }
 
   if (appliedRates.length === 0) {
     return { items: [], total: 0, count: 0, modeColumn };

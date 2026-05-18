@@ -12,7 +12,14 @@ import { useState, useRef, useEffect } from "react";
 import { Zap, ChevronDown, Check, AlertTriangle, Loader2, X } from "lucide-react";
 import type { ContractRateMatrix } from "../../types/pricing";
 import type { BillingItem } from "../shared/billings/UnifiedBillingsTab";
-import { deriveQuantitiesFromBooking } from "../../utils/contractQuantityExtractor";
+import {
+  deriveQuantitiesFromBooking,
+  extractTruckingSelections,
+  normalizeTruckingLineItems,
+  extractMultiLineSelectionsAndQuantities,
+  extractBookingFacts,
+  extractBookingContainers,
+} from "../../utils/contractQuantityExtractor";
 import {
   generateRateCardBillingItems,
   hasExistingRateCardBilling,
@@ -90,6 +97,32 @@ export function RateCardGeneratorPopover({
       (m) => m.service_type.toLowerCase() === serviceType.toLowerCase()
     );
 
+    // Derive selections + multi-line trucking extractions so apply matches
+    // what BookingRateCardButton's preview filter would produce. Without these
+    // the engine emits every alternative row in the matrix.
+    const isTrucking = serviceType.toLowerCase() === "trucking";
+    const truckingLineItems = isTrucking ? normalizeTruckingLineItems(booking) : undefined;
+    const isMultiLine = !!truckingLineItems && truckingLineItems.length > 1;
+
+    let selections: Record<string, string> | undefined;
+    let truckingExtractions: ReturnType<typeof extractMultiLineSelectionsAndQuantities> | undefined;
+
+    if (isTrucking) {
+      if (isMultiLine) {
+        truckingExtractions = extractMultiLineSelectionsAndQuantities(truckingLineItems!, rateMatrices);
+      } else {
+        selections = extractTruckingSelections(
+          { truckType: (booking as any).truckType, deliveryAddress: (booking as any).deliveryAddress },
+          rateMatrices,
+        );
+      }
+    }
+
+    const facts = extractBookingFacts(booking);
+    const containers = extractBookingContainers(booking);
+    const deliveryAddress: string | undefined =
+      (booking as any)?.deliveryAddress ?? (booking as any)?.delivery_address ?? undefined;
+
     return {
       booking,
       bookingId,
@@ -99,6 +132,11 @@ export function RateCardGeneratorPopover({
       quantities,
       alreadyBilled,
       hasMatrix,
+      selections,
+      truckingExtractions,
+      facts,
+      containers,
+      deliveryAddress,
     };
   });
 
@@ -119,6 +157,11 @@ export function RateCardGeneratorPopover({
         contractNumber,
         customerName,
         currency,
+        selections: row.selections,
+        truckingExtractions: row.truckingExtractions,
+        facts: row.facts,
+        containers: row.containers,
+        deliveryAddress: row.deliveryAddress,
       });
 
       if (result.items.length > 0) {
@@ -147,6 +190,11 @@ export function RateCardGeneratorPopover({
           contractNumber,
           customerName,
           currency,
+          selections: row.selections,
+          truckingExtractions: row.truckingExtractions,
+          facts: row.facts,
+          containers: row.containers,
+          deliveryAddress: row.deliveryAddress,
         });
         allItems.push(...result.items);
       }

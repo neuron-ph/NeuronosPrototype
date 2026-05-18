@@ -25,7 +25,7 @@ import { toast } from "../ui/toast-utils";
 import { supabase } from "../../utils/supabase/client";
 import { RateBreakdownTable, formatCurrency } from "../pricing/shared/RateBreakdownTable";
 import { QuantityDisplaySection } from "../pricing/shared/QuantityDisplaySection";
-import { normalizeTruckingLineItems, extractMultiLineSelectionsAndQuantities } from "../../utils/contractQuantityExtractor";
+import { normalizeTruckingLineItems, extractMultiLineSelectionsAndQuantities, extractBookingFacts, extractBookingContainers } from "../../utils/contractQuantityExtractor";
 
 // ============================================
 // TYPES
@@ -90,17 +90,31 @@ export function RateCalculationSheet({
   const isMultiLine = serviceType.toLowerCase() === "trucking"
     && truckingLineItems && truckingLineItems.length > 1;
 
+  // Booking facts gate applies_when-tagged rows.
+  const facts = useMemo(
+    () => extractBookingFacts(booking),
+    [JSON.stringify(booking?.examinations), JSON.stringify(booking?.permits)],
+  );
+
+  // Containers + delivery address drive the delivery category dispatcher.
+  const containers = useMemo(
+    () => extractBookingContainers(booking),
+    [JSON.stringify(booking?.container_numbers ?? booking?.containerNumbers)],
+  );
+  const deliveryAddress: string | undefined =
+    booking?.deliveryAddress ?? booking?.delivery_address ?? undefined;
+
   const multiLineResults = useMemo(() => {
     if (!isMultiLine) return null;
     const extractions = extractMultiLineSelectionsAndQuantities(truckingLineItems!, rateMatrices);
-    return calculateMultiLineTruckingBilling(rateMatrices, bookingMode, extractions);
-  }, [isMultiLine, rateMatrices, bookingMode, JSON.stringify(truckingLineItems)]);
+    return calculateMultiLineTruckingBilling(rateMatrices, bookingMode, extractions, facts);
+  }, [isMultiLine, rateMatrices, bookingMode, JSON.stringify(truckingLineItems), facts]);
 
   // Run the rate engine with current quantities (reactive — recalculates on every change)
   const calculation = useMemo(() => {
     if (isMultiLine) return { appliedRates: [] as AppliedRate[], total: 0 };
-    return calculateContractBilling(rateMatrices, serviceType, bookingMode, quantities, selections);
-  }, [rateMatrices, serviceType, bookingMode, quantities, selections, isMultiLine]);
+    return calculateContractBilling(rateMatrices, serviceType, bookingMode, quantities, selections, facts, containers, deliveryAddress);
+  }, [rateMatrices, serviceType, bookingMode, quantities, selections, isMultiLine, facts, containers, deliveryAddress]);
 
   // Grand total
   const grandTotal = isMultiLine && multiLineResults
@@ -128,6 +142,10 @@ export function RateCalculationSheet({
     try {
       const bookingId = booking.bookingId || booking.id;
 
+      const truckingExtractions = isMultiLine
+        ? extractMultiLineSelectionsAndQuantities(truckingLineItems!, rateMatrices)
+        : undefined;
+
       const result = generateRateCardBillingItems({
         rateMatrices,
         serviceType,
@@ -138,6 +156,11 @@ export function RateCalculationSheet({
         contractNumber,
         customerName,
         currency,
+        selections,
+        truckingExtractions,
+        facts,
+        containers,
+        deliveryAddress,
       });
 
       if (result.items.length === 0) {

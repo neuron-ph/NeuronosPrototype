@@ -40,6 +40,7 @@ export type EnumKind =
   | 'truck_type'
   | 'selectivity_color'
   | 'examination'
+  | 'permits'
   | 'container_type'
   | 'package_type'
   | 'preferential_treatment'
@@ -61,6 +62,7 @@ const TABLE_BY_KIND: Record<EnumKind, string> = {
   truck_type: 'profile_truck_types',
   selectivity_color: 'profile_selectivity_colors',
   examination: 'profile_examinations',
+  permits: 'profile_permits',
   container_type: 'profile_container_types',
   package_type: 'profile_package_types',
   preferential_treatment: 'profile_preferential_treatments',
@@ -101,6 +103,7 @@ export const ENUM_SEEDS: Record<EnumKind, string[]> = {
   truck_type: ['4W', '6W', '10W', '20ft', '40ft', '45ft'],
   selectivity_color: ['Yellow', 'Orange', 'Red'],
   examination: ['X-ray', 'Spotcheck', 'DEA'],
+  permits: ['BAI', 'SRA', 'BPI', 'FDA', 'BPS', 'LTO', 'PNP-FEO', 'NTC'],
   container_type: ['20ft', '40ft', '45ft'],
   package_type: ['Pallet', 'Carton', 'Crate', 'Bag', 'Drum', 'Bundle', 'Container', 'Other'],
   preferential_treatment: ['Form E', 'Form D'],
@@ -210,7 +213,7 @@ const FLAT_ENUM_KINDS = [
   'industry', 'lead_source',
   'mode', 'movement', 'incoterms', 'cargo_type', 'cargo_nature', 'brokerage_type',
   'customs_entry', 'customs_entry_procedure', 'truck_type', 'selectivity_color',
-  'examination', 'container_type', 'package_type', 'preferential_treatment',
+  'examination', 'permits', 'container_type', 'package_type', 'preferential_treatment',
   'credit_terms', 'cpe_code',
 ] as const satisfies readonly EnumKind[];
 

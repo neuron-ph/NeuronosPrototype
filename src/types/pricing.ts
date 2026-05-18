@@ -509,6 +509,27 @@ export interface ContractRateRow {
   selection_group?: string;            // When set, rows sharing the same value are mutually exclusive alternatives
                                        // — only billed if explicitly selected via `selections` param in the engine.
                                        // Rows without this field remain additive (always billed). @see SELECTION_GROUP_BLUEPRINT.md
+  applies_when?: RateRowTrigger;       // Optional fact-trigger. Absent => always-apply (current behaviour).
+                                       // When set, the engine only emits this row if the booking declares the matching fact.
+                                       // Orthogonal to selection_group: both filters are independently evaluated.
+}
+
+/**
+ * A declarative "this row applies only when the booking has this fact" trigger.
+ * Lets contract rate matrices express optional charges like processing fees
+ * (BAI/SRA/BPI/FDA) and exam fees (X-ray/Spotcheck/DEA) without forcing them
+ * onto every booking.
+ *
+ * - `kind: 'always'` (or `applies_when` absent) → emit unconditionally.
+ * - `kind: 'examination'` + `value: 'X-ray'` → emit only if booking.examinations[].type includes 'X-ray'.
+ * - `kind: 'permit'`      + `value: 'BAI'`   → emit only if booking.permits[] includes 'BAI'.
+ *
+ * Matched case-insensitively (uppercase+trim) so legacy free-text booking data
+ * still resolves correctly.
+ */
+export interface RateRowTrigger {
+  kind: 'always' | 'examination' | 'permit';
+  value?: string; // required when kind != 'always'
 }
 
 /**
@@ -522,7 +543,27 @@ export interface ContractRateCategory {
   category_name: string;               // "Container Handling", "Documentation", etc.
   catalog_category_id?: string;        // Billing Catalog category UUID — enforces category-first UX
   rows: ContractRateRow[];
+  kind?: RateCategoryKind;             // Dispatch hint for the rate engine. Absent => 'standard'.
+                                       // @see RateCategoryKind for semantics.
 }
+
+/**
+ * How a rate-matrix category should be evaluated by the billing engine.
+ *
+ * - `'standard'` — every row always applies; quantity from unit. Today's behaviour.
+ * - `'optional'` — rows only apply when booking declares the matching fact via `applies_when`.
+ *                  Suits regulatory processing fees (BAI/SRA/BPI/FDA) and exam fees.
+ * - `'delivery'` — engine matches container type + delivery address against row particular
+ *                  + remarks, emitting one line per matched container. Suits trucking
+ *                  destination/truck-type rows (whether they live in a Trucking matrix
+ *                  or are embedded inside a Brokerage matrix).
+ *
+ * Phase 1 ships the type + 'standard' dispatcher only. 'optional' and 'delivery' fall
+ * back to standard behaviour until Phase 2 / Phase 3.
+ *
+ * @see /docs/blueprints/CATEGORY_DISPATCH_BLUEPRINT.md
+ */
+export type RateCategoryKind = 'standard' | 'optional' | 'delivery';
 
 /**
  * A rate matrix for one service type within a contract quotation.

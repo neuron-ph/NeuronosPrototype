@@ -25,8 +25,11 @@ import type {
   ContractRateMatrix,
   ContractRateRow,
   ContractRateCategory,
+  RateCategoryKind,
   ServiceType,
 } from "../../../types/pricing";
+import { resolveRowDispatch, type CatalogDispatchHint } from "../../../utils/contractRateEngine";
+import { useEnumOptions } from "../../../hooks/useEnumOptions";
 
 // ============================================
 // CONSTANTS
@@ -49,6 +52,18 @@ const DEFAULT_COLUMNS: Record<string, string[]> = {
   Trucking: ["Cost"],
   "Marine Insurance": ["Standard"],
   Others: ["Standard"],
+};
+
+const SECTION_LAYOUT_OPTIONS: { value: RateCategoryKind; label: string }[] = [
+  { value: "standard", label: "Standard Rates" },
+  { value: "optional", label: "Other Charges" },
+  { value: "delivery", label: "Delivery Charges" },
+];
+
+const SECTION_LAYOUT_HELP: Record<RateCategoryKind, string> = {
+  standard: "Included whenever this contract is used.",
+  optional: "Included only when the booking has the selected permit or examination.",
+  delivery: "Matched per container using container type and destination.",
 };
 
 // ============================================
@@ -109,6 +124,11 @@ export function ContractRateCardV2({
   const columns = matrix.columns;
   const isTrucking = matrix.service_type === "Trucking";
   const isBrokerage = matrix.service_type === "Brokerage";
+
+  // Governed booking-selection value lists for rows inside booking-selected
+  // sections. Single hook call covers both — fast & cached.
+  const permitOptions = useEnumOptions('permits');
+  const examOptions = useEnumOptions('examination');
 
   // Derive active categories — auto-migrate flat rows for backward compat
   const activeCategories: ContractRateCategory[] = useMemo(() => {
@@ -197,6 +217,12 @@ export function ContractRateCardV2({
   const handleDeleteCategory = (catId: string) => {
     if (!confirm("Remove this category and all its charges?")) return;
     emitCategories(activeCategories.filter((c) => c.id !== catId));
+  };
+
+  // ---- Section layout ----
+  // User-facing rate-section layout maps directly to the existing engine kind.
+  const handleUpdateCategoryKind = (catId: string, nextKind: RateCategoryKind) => {
+    emitCategories(activeCategories.map((c) => c.id === catId ? { ...c, kind: nextKind } : c));
   };
 
   // ---- Row CRUD (per category) ----
@@ -421,6 +447,7 @@ export function ContractRateCardV2({
           {activeCategories.map((cat) => {
             const isExpanded = expandedCategories.has(cat.id);
             const usedInCat = cat.rows.map((r) => r.catalog_item_id).filter(Boolean) as string[];
+            const sectionLayout = (cat.kind ?? "standard") as RateCategoryKind;
             return (
               <div key={cat.id} style={{ border: "1px solid var(--neuron-ui-border)", borderRadius: "10px", marginBottom: "12px", overflow: "visible", backgroundColor: "var(--theme-bg-surface)" }}>
 
@@ -429,12 +456,58 @@ export function ContractRateCardV2({
                   onClick={() => toggleCategory(cat.id)}
                   style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", backgroundColor: "var(--theme-bg-surface-subtle)", borderRadius: isExpanded ? "10px 10px 0 0" : "10px", borderBottom: isExpanded ? "1px solid var(--neuron-ui-border)" : "none", cursor: "pointer", userSelect: "none" }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                     {isExpanded ? <ChevronDown size={13} style={{ color: "var(--theme-text-muted)", flexShrink: 0 }} /> : <ChevronRight size={13} style={{ color: "var(--theme-text-muted)", flexShrink: 0 }} />}
                     <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)" }}>{cat.category_name}</span>
                     <span style={{ fontSize: "11px", color: "var(--theme-text-muted)", backgroundColor: "var(--theme-bg-surface)", padding: "1px 7px", borderRadius: "3px", border: "1px solid var(--neuron-ui-border)" }}>
                       {cat.rows.length} {cat.rows.length === 1 ? "item" : "items"}
                     </span>
+                    {!viewMode && (
+                      <div
+                        style={{ display: "flex", alignItems: "center", gap: "6px", marginLeft: "4px" }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            fontWeight: 600,
+                            color: "var(--theme-text-muted)",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Rate section type
+                        </span>
+                        <div style={{ width: "180px" }}>
+                        <CustomDropdown
+                          value={sectionLayout}
+                          onChange={(value) => handleUpdateCategoryKind(cat.id, value as RateCategoryKind)}
+                          options={SECTION_LAYOUT_OPTIONS}
+                          size="sm"
+                          fullWidth
+                          buttonStyle={{
+                            padding: "4px 8px",
+                            fontSize: "11px",
+                            borderRadius: "5px",
+                            border: "1px solid var(--neuron-ui-border)",
+                            backgroundColor: "var(--theme-bg-surface)",
+                            fontWeight: 600,
+                          }}
+                        />
+                        </div>
+                      </div>
+                    )}
+                    {viewMode && (
+                      <span
+                        title={SECTION_LAYOUT_HELP[sectionLayout]}
+                        style={{
+                          fontSize: "11px",
+                          color: "var(--theme-text-muted)",
+                          fontWeight: 500,
+                        }}
+                      >
+                        {SECTION_LAYOUT_OPTIONS.find((o) => o.value === sectionLayout)?.label}
+                      </span>
+                    )}
                   </div>
                   {!viewMode && (
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }} onClick={(e) => e.stopPropagation()}>
@@ -462,9 +535,15 @@ export function ContractRateCardV2({
                 {/* Category body — grid + rows */}
                 {isExpanded && (
                   <div style={{ overflowX: "visible" as any }}>
+                    <div style={{ padding: "9px 16px", fontSize: "12px", color: "var(--theme-text-muted)", borderBottom: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--theme-bg-surface)" }}>
+                      {SECTION_LAYOUT_HELP[sectionLayout]}
+                    </div>
                     {/* Grid Header */}
-                    <div style={{ display: "grid", gridTemplateColumns: buildGridTemplate(columns, viewMode, false), gap: "0", padding: "10px 16px", backgroundColor: "var(--theme-bg-surface)", borderBottom: "2px solid var(--neuron-ui-border)", minWidth: "fit-content", alignItems: "center" }}>
-                      <div style={gridHeaderCell}>Particular</div>
+                    <div style={{ display: "grid", gridTemplateColumns: buildGridTemplate(columns, viewMode, false, sectionLayout), gap: "0", padding: "10px 16px", backgroundColor: "var(--theme-bg-surface)", borderBottom: "2px solid var(--neuron-ui-border)", minWidth: "fit-content", alignItems: "center" }}>
+                      <div style={gridHeaderCell}>{sectionLayout === "delivery" ? "Container Type" : "Particular"}</div>
+                      {sectionLayout === "optional" && (
+                        <div style={gridHeaderCell}>Booking Match</div>
+                      )}
                       {columns.map((col, colIdx) => (
                         <div key={col} style={{ ...gridHeaderCell, textAlign: "right", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "6px" }}>
                           {editingColumnIndex === colIdx ? (
@@ -485,7 +564,7 @@ export function ContractRateCardV2({
                           )}
                         </div>
                       ))}
-                      <div style={gridHeaderCell}>Unit</div>
+                      <div style={gridHeaderCell}>{sectionLayout === "delivery" ? "Area / Destination" : "Unit"}</div>
                       {!viewMode && <div style={gridHeaderCell} />}
                     </div>
 
@@ -506,6 +585,10 @@ export function ContractRateCardV2({
                           serviceType={matrix.service_type}
                           usedCatalogItemIds={usedInCat}
                           catalogCategoryId={cat.catalog_category_id}
+                          parentCategoryKind={sectionLayout}
+                          dispatchHint={resolveRowDispatch(row, cat)}
+                          examOptions={examOptions}
+                          permitOptions={permitOptions}
                           onUpdate={(updates) => handleUpdateRow(cat.id, row.id, updates)}
                           onUpdateRate={(col, val) => handleUpdateRowRate(cat.id, row.id, col, val)}
                           onDelete={() => handleDeleteRow(cat.id, row.id)}
@@ -536,12 +619,22 @@ export function ContractRateCardV2({
 // ============================================
 
 /** Build grid-template-columns for the data row */
-function buildGridTemplate(columns: string[], viewMode: boolean, isTrucking: boolean = false): string {
+function buildGridTemplate(
+  columns: string[],
+  viewMode: boolean,
+  isTrucking: boolean = false,
+  sectionLayout: RateCategoryKind = "standard",
+): string {
   const parts: string[] = [];
   parts.push("minmax(160px, 2.5fr)"); // Particular / Truck Config
+  if (!isTrucking && sectionLayout === "optional") {
+    parts.push("minmax(180px, 1.7fr)"); // Booking Match
+  }
   columns.forEach(() => parts.push("minmax(100px, 1.2fr)")); // Rate columns
   if (isTrucking) {
     parts.push("minmax(140px, 2fr)"); // Destination
+  } else if (sectionLayout === "delivery") {
+    parts.push("minmax(160px, 1.6fr)"); // Area / Destination
   } else {
     parts.push("minmax(120px, 1.2fr)"); // Unit
   }
@@ -591,6 +684,10 @@ function RateLineItem({
   serviceType,
   usedCatalogItemIds,
   catalogCategoryId,
+  parentCategoryKind,
+  dispatchHint,
+  examOptions,
+  permitOptions,
   onUpdate,
   onUpdateRate,
   onDelete,
@@ -606,6 +703,16 @@ function RateLineItem({
   serviceType: ServiceType;
   usedCatalogItemIds: string[];
   catalogCategoryId?: string;
+  /** User-facing section layout. It maps to the existing contract category kind. */
+  parentCategoryKind: RateCategoryKind;
+  /**
+   * Resolved dispatch behaviour for this row, derived upstream via
+   * `resolveRowDispatch`. Used for the read-only caption beneath the row.
+   */
+  dispatchHint?: CatalogDispatchHint;
+  /** Governed value lists for booking-selected charges. */
+  examOptions: string[];
+  permitOptions: string[];
   onUpdate: (updates: Partial<ContractRateRow>) => void;
   onUpdateRate: (column: string, value: number) => void;
   onDelete: () => void;
@@ -616,6 +723,29 @@ function RateLineItem({
   const [isHovered, setIsHovered] = useState(false);
   const isAtCost = row.is_at_cost === true;
   const hasTiered = !isAtCost && row.succeeding_rule != null;
+
+  const hasSelection = !!row.applies_when && row.applies_when.kind !== 'always';
+  const selectionLabel = (() => {
+    if (!hasSelection) return 'Choose permit or exam';
+    const t = row.applies_when!;
+    if (t.kind === 'examination') return `Exam: ${t.value}`;
+    return `Permit: ${t.value}`;
+  })();
+  const bookingSelectionValue = hasSelection
+    ? `${row.applies_when!.kind}:${row.applies_when!.value ?? ""}`
+    : "";
+  const applySelection = (nextValue: string) => {
+    if (!nextValue) {
+      const { applies_when: _drop, ...rest } = row;
+      onUpdate({ ...rest, applies_when: undefined } as Partial<ContractRateRow>);
+      return;
+    }
+    const [kind, ...valueParts] = nextValue.split(":");
+    const value = valueParts.join(":");
+    if ((kind === "permit" || kind === "examination") && value) {
+      onUpdate({ applies_when: { kind, value } });
+    }
+  };
 
   return (
     <div
@@ -631,7 +761,7 @@ function RateLineItem({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: buildGridTemplate(columns, !!viewMode, isTrucking),
+          gridTemplateColumns: buildGridTemplate(columns, !!viewMode, isTrucking, parentCategoryKind),
           gap: "0",
           padding: isTrucking ? "4px 16px 6px" : "0 16px",
           alignItems: "center",
@@ -652,18 +782,95 @@ function RateLineItem({
               {row.particular || "\u2014"}
             </div>
           ) : (
-            <CatalogItemCombobox
-              value={row.particular}
-              catalogItemId={row.catalog_item_id}
-              categoryId={catalogCategoryId}
-              side="revenue"
-              onChange={(description, catalogItemId) => {
-                onUpdate({ particular: description, catalog_item_id: catalogItemId ?? undefined });
-              }}
-              placeholder="Select or type a charge..."
-            />
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", width: "100%" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <CatalogItemCombobox
+                  value={row.particular}
+                  catalogItemId={row.catalog_item_id}
+                  categoryId={catalogCategoryId}
+                  side="revenue"
+                  onChange={(description, catalogItemId) => {
+                    onUpdate({ particular: description, catalog_item_id: catalogItemId ?? undefined });
+                  }}
+                  placeholder={parentCategoryKind === "delivery" ? "Select or type a container type..." : "Select or type a charge..."}
+                />
+              </div>
+              {/* UNBOUND badge — visible when the row has text but no catalog
+                  identity. Billing line items require catalog_item_id; dispatch
+                  remains contract-owned through row.applies_when/category.kind. */}
+              {!row.catalog_item_id && (row.particular ?? "").trim() !== "" && (
+                <span
+                  title="This row is not linked to a catalog item. Pick one from the dropdown so generated billing lines keep their required catalog identity."
+                  style={{
+                    padding: "2px 6px",
+                    fontSize: "9px",
+                    fontWeight: 700,
+                    letterSpacing: "0.4px",
+                    color: "#92400E",
+                    background: "#FEF3C7",
+                    border: "1px solid #FCD34D",
+                    borderRadius: "3px",
+                    whiteSpace: "nowrap",
+                    flexShrink: 0,
+                  }}
+                >
+                  UNBOUND
+                </span>
+              )}
+            </div>
           )}
         </div>
+
+        {parentCategoryKind === "optional" && (
+          <div style={gridDataCell}>
+            {viewMode ? (
+              <div
+                style={{
+                  ...cellInputStyle,
+                  cursor: "default",
+                  color: hasSelection ? "var(--neuron-ink-primary)" : "var(--neuron-semantic-danger)",
+                }}
+              >
+                {selectionLabel}
+              </div>
+            ) : (
+              <select
+                value={bookingSelectionValue}
+                onChange={(e) => applySelection(e.target.value)}
+                aria-label="Booking match"
+                style={{
+                  width: "100%",
+                  padding: "6px 8px",
+                  fontSize: "12px",
+                  borderRadius: "6px",
+                  border: "1px solid var(--neuron-ui-border)",
+                  backgroundColor: "var(--theme-bg-surface)",
+                  color: hasSelection ? "var(--neuron-ink-primary)" : "var(--theme-text-muted)",
+                  fontWeight: 500,
+                  outline: "none",
+                  fontFamily: "inherit",
+                  cursor: "pointer",
+                }}
+              >
+                <option value="">Choose permit or exam</option>
+                {permitOptions.length > 0 && (
+                  <optgroup label="Permits">
+                    {permitOptions.map((value) => (
+                      <option key={`permit:${value}`} value={`permit:${value}`}>{value}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {examOptions.length > 0 && (
+                  <optgroup label="Examinations">
+                    {examOptions.map((value) => (
+                      <option key={`examination:${value}`} value={`examination:${value}`}>{value}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            )}
+          </div>
+        )}
 
         {/* Rate Columns */}
         {columns.map((col) => (
@@ -711,10 +918,9 @@ function RateLineItem({
           </div>
         ))}
 
-        {/* Destination (Trucking) or Unit (other services) */}
+        {/* Destination (trucking/delivery layout) or Unit */}
         <div style={gridDataCell}>
-          {isTrucking ? (
-            /* Trucking: Destination input (maps to row.remarks) */
+          {isTrucking || parentCategoryKind === "delivery" ? (
             viewMode ? (
               <span
                 style={{
@@ -730,7 +936,7 @@ function RateLineItem({
                 type="text"
                 value={row.remarks || ""}
                 onChange={(e) => onUpdate({ remarks: e.target.value })}
-                placeholder="e.g., Valenzuela City"
+                placeholder={parentCategoryKind === "delivery" ? "Area or destination" : "e.g., Valenzuela City"}
                 style={{
                   ...cellInputStyle,
                 }}
@@ -806,8 +1012,8 @@ function RateLineItem({
         )}
       </div>
 
-      {/* ── Row 2: Detail Row (toggles + tiered config) — hidden for Trucking ── */}
-      {!isTrucking && (
+      {/* ── Row 2: Detail Row (toggles + tiered config + selection) ── */}
+      {!isTrucking && parentCategoryKind !== "delivery" && (
       <div
         style={{
           display: "flex",
@@ -1074,8 +1280,42 @@ function RateLineItem({
           )}
         </div>
       )}
+
+      {/* ── Row 4: Read-only inclusion summary for non-standard rows. */}
+      {!isTrucking && (() => {
+        if (!viewMode && dispatchHint?.dispatch_kind === "optional") return null;
+        const caption = dispatchCaptionFor(dispatchHint);
+        if (!caption) return null;
+        return (
+          <div style={{ padding: "0 20px 8px" }}>
+            <span
+              style={{
+                fontSize: "11px",
+                color: "var(--neuron-ink-muted)",
+                fontStyle: "italic",
+                letterSpacing: "0.1px",
+              }}
+            >
+              {caption}
+            </span>
+          </div>
+        );
+      })()}
     </div>
   );
+}
+
+/**
+ * Render a human-readable caption for a row's resolved contract inclusion rule.
+ */
+function dispatchCaptionFor(hint: CatalogDispatchHint | undefined): string | null {
+  if (!hint || hint.dispatch_kind === 'standard') return null;
+  if (hint.dispatch_kind === 'delivery') return 'Matched per container and destination';
+  if (hint.dispatch_kind === 'optional' && hint.trigger_field && hint.trigger_value) {
+    const fieldLabel = hint.trigger_field === 'permits' ? 'Permit' : 'Exam';
+    return `${fieldLabel}: ${hint.trigger_value}`;
+  }
+  return null;
 }
 
 // ============================================

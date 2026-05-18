@@ -39,6 +39,25 @@ export interface BookingQuantities {
   quantity?: number;
 }
 
+/**
+ * Facts the booking declares about what services it actually consumed.
+ * Used by the engine to gate `applies_when`-tagged rate-card rows so optional
+ * fees (examinations, processing permits) only appear when the booking opted in.
+ *
+ * Values are matched case-insensitively against `RateRowTrigger.value`.
+ */
+export interface BookingFacts {
+  /** Examination types performed (e.g., ['X-ray']). From booking.examinations[].type. */
+  examinations?: string[];
+  /** Permits/clearances declared (e.g., ['BAI', 'SRA']). From booking.permits[]. */
+  permits?: string[];
+}
+
+/** Case-insensitive trim helper for fact matching. */
+function normalizeFact(s: string): string {
+  return (s ?? '').trim().toUpperCase();
+}
+
 // ============================================
 // HELPERS
 // ============================================
@@ -54,8 +73,17 @@ function getQuantityForUnit(unit: string, quantities: BookingQuantities): number
       return quantities.bls ?? 1;
     case "per_set":
       return quantities.sets ?? quantities.quantity ?? 1;
+    case "per_entry":
+      // One customs entry per shipment. Without this case the row silently
+      // billed × containers — see Phase 1 fix in the category-dispatch refactor.
+      return quantities.shipments ?? 1;
+    case "flat":
+      // Flat fees apply once regardless of booking shape.
+      return 1;
     default:
-      // Fallback: try containers, then generic, then 1
+      // Fallback: try containers, then generic, then 1.
+      // `per_kg` and `per_cbm` deliberately not handled here yet — they need
+      // structured weight/volume on bookings (deferred from Phase 1).
       return quantities.containers ?? quantities.quantity ?? 1;
   }
 }
@@ -113,7 +141,8 @@ export function instantiateRates(
   matrix: ContractRateMatrix,
   modeColumn: string,
   quantities: BookingQuantities,
-  selections?: Record<string, string>
+  selections?: Record<string, string>,
+  facts?: BookingFacts,
 ): AppliedRate[] {
   const appliedRates: AppliedRate[] = [];
 
@@ -158,6 +187,19 @@ export function instantiateRates(
       if (picked !== row.particular && picked !== row.charge_type_id) {
         continue; // Right destination, wrong truck type → skip
       }
+    }
+
+    // ── applies_when filter: skip rows whose trigger fact isn't declared ──
+    // Orthogonal to selection_group. Rows without applies_when (or with
+    // kind: 'always') pass through unchanged for backwards compatibility.
+    if (row.applies_when && row.applies_when.kind !== 'always') {
+      const { kind, value } = row.applies_when;
+      if (!value) continue; // misconfigured row — skip rather than silently apply
+      const factSet = kind === 'examination'
+        ? (facts?.examinations ?? [])
+        : (facts?.permits ?? []);
+      const target = normalizeFact(value);
+      if (!factSet.some((f) => normalizeFact(f) === target)) continue;
     }
 
     const rate = row.rates[modeColumn];
@@ -225,7 +267,10 @@ export function calculateContractBilling(
   serviceType: string,
   bookingMode: string,
   quantities: BookingQuantities,
-  selections?: Record<string, string>
+  selections?: Record<string, string>,
+  facts?: BookingFacts,
+  containers?: BookingContainer[],
+  deliveryAddress?: string,
 ): { appliedRates: AppliedRate[]; total: number } {
   // Find the matrix for this service type
   const matrix = rateMatrices.find(
@@ -244,7 +289,16 @@ export function calculateContractBilling(
     return { appliedRates: [], total: 0 };
   }
 
-  const appliedRates = instantiateRates(matrix, modeColumn, quantities, selections);
+  // Delegate to the category-dispatch entry point so preview output matches
+  // what the apply path emits (otherwise preview shows pre-dispatch totals and
+  // apply shows post-dispatch — confusing for the user).
+  const appliedRates = generateContractBilling(matrix, modeColumn, {
+    quantities,
+    selections,
+    facts,
+    containers,
+    deliveryAddress,
+  });
   const total = appliedRates.reduce((sum, r) => sum + r.subtotal, 0);
 
   return { appliedRates, total };
@@ -494,7 +548,8 @@ import type { LineItemExtraction } from "./contractQuantityExtractor";
 export function calculateMultiLineTruckingBilling(
   rateMatrices: ContractRateMatrix[],
   bookingMode: string,
-  extractions: LineItemExtraction[]
+  extractions: LineItemExtraction[],
+  facts?: BookingFacts,
 ): MultiLineTruckingResult {
   const lineResults: TruckingLineResult[] = extractions.map(({ lineItem, selections, quantities }) => {
     const { appliedRates, total } = calculateContractBilling(
@@ -502,7 +557,8 @@ export function calculateMultiLineTruckingBilling(
       "Trucking",
       bookingMode,
       quantities,
-      selections
+      selections,
+      facts,
     );
     return { lineItem, appliedRates, subtotal: total };
   });
@@ -568,4 +624,341 @@ export function multiLineRatesToSellingPrice(
   }
 
   return allCategories;
+}
+
+// ============================================
+// CATEGORY-DISPATCH ENGINE (Phase 1 of category-dispatch refactor)
+// @see /docs/blueprints/CATEGORY_DISPATCH_BLUEPRINT.md
+// ============================================
+
+import type { ContractRateCategory, RateCategoryKind } from "../types/pricing";
+
+/**
+ * A single container as the booking declares it. Used by the delivery
+ * dispatcher to match against rate-matrix rows whose `particular` names a
+ * container type ("20ft", "40ft", "BACK TO BACK", "4 WHEELER" etc.) and
+ * whose `remarks` name a location keyword ("within Valenzuela City").
+ */
+export interface BookingContainer {
+  container_number: string;
+  container_type?: string;
+  delivery_address?: string;
+}
+
+/**
+ * Resolved dispatch behaviour for a single contract rate row. The dispatchers
+ * route on `dispatch_kind`; `trigger_field` + `trigger_value` carry the
+ * applies_when shape for the 'optional' dispatcher.
+ *
+ * Vocabulary note: this struct uses the plural `'permits'` / `'examinations'`
+ * trigger_field while `ContractRateRow.applies_when.kind` uses the singular
+ * `'permit'` / `'examination'`. `resolveRowDispatch` does the translation.
+ */
+export interface CatalogDispatchHint {
+  dispatch_kind: RateCategoryKind;
+  trigger_field?: 'permits' | 'examinations';
+  trigger_value?: string;
+}
+
+/**
+ * Full context the dispatchers need to evaluate a category's rows. Bundled
+ * so each strategy gets every signal it might need without re-deriving.
+ */
+export interface BillingDispatchContext {
+  quantities: BookingQuantities;
+  facts?: BookingFacts;
+  selections?: Record<string, string>;
+  /** Per-container detail for the delivery dispatcher. Empty array when not applicable. */
+  containers?: BookingContainer[];
+  /** Booking-level delivery address fallback when per-container address is empty. */
+  deliveryAddress?: string;
+}
+
+/**
+ * Resolve the effective dispatch behaviour for a single rate row using the
+ * precedence chain:
+ *
+ *   1. `row.applies_when` — per-row booking selection from the contract editor
+ *   2. `category.kind` — the wrapping section layout from the contract editor
+ *   3. Default `'standard'`
+ *
+ * Catalog items intentionally do NOT carry dispatch metadata. The catalog
+ * stays a pure-identity surface (name + category + side); dispatch is
+ * declared on the contract where Pricing controls it per-customer.
+ */
+export function resolveRowDispatch(
+  row: ContractRateRow,
+  category: ContractRateCategory | undefined,
+): CatalogDispatchHint {
+  // 1. Per-row applies_when
+  if (row.applies_when && row.applies_when.kind !== 'always') {
+    const triggerField = row.applies_when.kind === 'permit' ? 'permits' : 'examinations';
+    return {
+      dispatch_kind: 'optional',
+      trigger_field: triggerField,
+      trigger_value: row.applies_when.value,
+    };
+  }
+  // 2. Category kind
+  if (category?.kind && category.kind !== 'standard') {
+    return { dispatch_kind: category.kind };
+  }
+  // 3. Default
+  return { dispatch_kind: 'standard' };
+}
+
+/**
+ * Category dispatcher signature. Each kind ('standard' | 'optional' | 'delivery')
+ * implements one of these. Phase 1 ships 'standard' only; the others delegate
+ * to it as no-ops so any matrix tagged ahead of time still bills correctly.
+ */
+type CategoryDispatcher = (
+  category: ContractRateCategory,
+  matrix: ContractRateMatrix,
+  modeColumn: string,
+  context: BillingDispatchContext,
+) => AppliedRate[];
+
+/**
+ * 'standard' — every row applies. Quantity from unit, rate × quantity, with
+ * succeeding-rule support. Behaviour identical to the legacy `instantiateRates`
+ * when no category metadata is involved; this dispatcher just scopes the rows
+ * to the category and lets the existing kernel do the math.
+ */
+/**
+ * Resolve the current state of a category's rows from `matrix.rows` (the
+ * authoritative flat array) by id. `category.rows` is treated as a stale id
+ * snapshot — the editor mutates matrix.rows directly without updating the
+ * category grouping, so trusting category.rows blindly would lose edits made
+ * via the flat table view.
+ */
+function resolveCategoryRows(category: ContractRateCategory, matrix: ContractRateMatrix): ContractRateRow[] {
+  const wantedIds = new Set(category.rows.map((r) => r.id));
+  // Preserve category's row ordering when possible by intersecting with matrix.rows
+  // (the engine doesn't strictly care about order, but stable ordering helps debugging).
+  return matrix.rows.filter((r) => wantedIds.has(r.id));
+}
+
+const dispatchStandard: CategoryDispatcher = (category, matrix, modeColumn, ctx) => {
+  // Reuse the legacy kernel by synthesising a per-category matrix slice. This
+  // preserves every existing behaviour (mode-column fuzzy match, selection_group
+  // gating, applies_when row-level filter from Phase B) without duplicating logic.
+  const currentRows = resolveCategoryRows(category, matrix);
+  const slice: ContractRateMatrix = {
+    ...matrix,
+    rows: currentRows,
+    categories: [{ ...category, rows: currentRows }],
+  };
+  return instantiateRates(slice, modeColumn, ctx.quantities, ctx.selections, ctx.facts);
+};
+
+/**
+ * 'optional' — rows are opt-in. Each must declare `applies_when` so the engine
+ * knows what booking fact gates it. Rows without `applies_when` inside an
+ * optional category are misconfigured and silently skipped (the editor
+ * surfaces a warning badge so Pricing can fix them; we conservatively
+ * undercharge rather than wrongly bill).
+ *
+ * Implementation: pre-filter to rows that have `applies_when` set, then let
+ * the kernel's existing applies_when filter (Phase B) evaluate them against
+ * `ctx.facts`. Reusing the kernel keeps fact-matching semantics consistent
+ * with row-level configuration anywhere else in the codebase.
+ */
+const dispatchOptional: CategoryDispatcher = (category, matrix, modeColumn, ctx) => {
+  const currentRows = resolveCategoryRows(category, matrix);
+  const gatedRows = currentRows.filter((row) =>
+    row.applies_when && row.applies_when.kind !== 'always'
+  );
+  if (gatedRows.length === 0) return [];
+  const slice: ContractRateMatrix = {
+    ...matrix,
+    rows: gatedRows,
+    categories: [{ ...category, rows: gatedRows }],
+  };
+  return instantiateRates(slice, modeColumn, ctx.quantities, ctx.selections, ctx.facts);
+};
+
+/**
+ * Normalise a location string for fuzzy matching. Lowercases, strips
+ * punctuation, and removes common stopwords that appear in either booking
+ * delivery_address strings ("VALENZUELA CITY") or matrix row remarks
+ * ("within Valenzuela City", "to Carmona Cavite area"). Returns the
+ * remaining tokens joined by single spaces.
+ */
+function normaliseLocation(s: string | undefined | null): string {
+  if (!s) return '';
+  const STOPWORDS = new Set(['within', 'to', 'from', 'at', 'in', 'the', 'city', 'area', 'province']);
+  return s
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .filter((tok) => tok.length > 0 && !STOPWORDS.has(tok))
+    .join(' ');
+}
+
+/**
+ * Fuzzy location match: each side normalised, then check substring containment
+ * in either direction. Returns true if either string contains the other.
+ * Both-empty returns false (engine should skip rather than guess).
+ */
+function locationsMatch(addressA: string | undefined | null, addressB: string | undefined | null): boolean {
+  const a = normaliseLocation(addressA);
+  const b = normaliseLocation(addressB);
+  if (!a || !b) return false;
+  return a.includes(b) || b.includes(a);
+}
+
+/**
+ * 'delivery' — per-container matching. For each container declared on the
+ * booking, find the rate-matrix row whose `particular` matches the container's
+ * type (case-insensitive, e.g. "20ft" ↔ "20FT") AND whose `remarks` fuzzy-match
+ * the container's delivery address (or the booking-level fallback). Emit one
+ * AppliedRate per matched container with quantity 1.
+ *
+ * Containers with no container_type are skipped (legacy bookings need Ops to
+ * backfill). Containers whose type matches a row but whose address matches no
+ * row's remarks are skipped — we don't guess. Unbilled containers surface as
+ * a smaller bill rather than a wrong bill; Accounting reviews.
+ */
+const dispatchDelivery: CategoryDispatcher = (category, matrix, modeColumn, ctx) => {
+  const currentRows = resolveCategoryRows(category, matrix);
+  if (currentRows.length === 0 || !ctx.containers || ctx.containers.length === 0) return [];
+
+  // Build row-id → category-name map for AppliedRate.category passthrough.
+  const fallbackCategory = `${matrix.service_type} Charges`;
+  const categoryName = category.category_name || fallbackCategory;
+
+  const applied: AppliedRate[] = [];
+
+  for (const container of ctx.containers) {
+    if (!container.container_type) continue;  // legacy data → skip, don't guess
+    const containerType = container.container_type.trim().toLowerCase();
+    const containerAddress = container.delivery_address || ctx.deliveryAddress;
+
+    // Candidate rows whose particular matches the container type.
+    const candidates = currentRows.filter((row) =>
+      (row.particular || '').trim().toLowerCase() === containerType
+    );
+    if (candidates.length === 0) continue;
+
+    // Narrow by address. If only one candidate exists across the matrix for
+    // this type, the address constraint can be skipped (Pricing didn't bother
+    // splitting by location). Otherwise require a fuzzy match.
+    const match = candidates.length === 1
+      ? candidates[0]
+      : candidates.find((row) => locationsMatch(row.remarks, containerAddress));
+    if (!match) continue;
+
+    const rate = match.rates[modeColumn];
+    if (rate === undefined || rate === null || rate === 0) continue;
+
+    applied.push({
+      particular: match.particular,
+      rate,
+      quantity: 1,
+      subtotal: rate,
+      rule_applied: `1 × P${rate.toLocaleString('en-PH')} (${container.container_number || 'container'} → ${containerAddress || 'no address'})`,
+      catalog_item_id: match.catalog_item_id,
+      category: categoryName,
+    });
+  }
+
+  return applied;
+};
+
+const DISPATCHERS: Record<RateCategoryKind, CategoryDispatcher> = {
+  // Phase 1 shipped 'standard'. Phase 2 ships 'optional'. Phase 3 ships
+  // 'delivery'. All three are now real strategies.
+  standard: dispatchStandard,
+  optional: dispatchOptional,
+  delivery: dispatchDelivery,
+};
+
+/**
+ * Apply a resolved dispatch hint to a row: synthesise `row.applies_when` to
+ * mirror the hint so the kernel's filter agrees with the dispatcher routing.
+ *
+ * - `'optional'` hint with trigger → row gets the matching applies_when
+ * - `'standard'` or `'delivery'` hint → row's applies_when is cleared (any
+ *   legacy value on the row would otherwise re-gate inside the kernel)
+ */
+function applyHintToRow(row: ContractRateRow, hint: CatalogDispatchHint): ContractRateRow {
+  if (hint.dispatch_kind === 'optional' && hint.trigger_field && hint.trigger_value) {
+    return {
+      ...row,
+      applies_when: {
+        kind: hint.trigger_field === 'permits' ? 'permit' : 'examination',
+        value: hint.trigger_value,
+      },
+    };
+  }
+  // Standard or delivery — strip any legacy applies_when so it doesn't gate inside the kernel.
+  if (row.applies_when) {
+    const { applies_when: _stripped, ...rest } = row;
+    return rest as ContractRateRow;
+  }
+  return row;
+}
+
+/**
+ * Top-level billing entry point for contract-owned section dispatch.
+ *
+ * Iterates each row across all categories. For each row, `resolveRowDispatch`
+ * collapses its catalog metadata + legacy fallbacks into a single
+ * `CatalogDispatchHint`. Rows are bucketed by their resolved `dispatch_kind`
+ * within each category and dispatched through the appropriate strategy.
+ *
+ * The categories themselves keep their UI grouping role (each AppliedRate
+ * carries its source `category.category_name` for grouped rendering) but
+ * stop driving engine behaviour — routing is purely per-row.
+ *
+ * Backwards compatible: matrices without `categories` fall back to a single
+ * synthetic standard category wrapping the flat `rows`. Rows without a
+ * `catalog_item_id` fall back to legacy `row.applies_when` / `category.kind`
+ * via `resolveRowDispatch`.
+ */
+export function generateContractBilling(
+  matrix: ContractRateMatrix,
+  modeColumn: string,
+  context: BillingDispatchContext,
+): AppliedRate[] {
+  // Resolve the working set of categories. When the matrix has no explicit
+  // categories, treat the flat rows as one implicit standard category so
+  // dispatch produces the same result as legacy `instantiateRates`.
+  const categories: ContractRateCategory[] = (matrix.categories && matrix.categories.length > 0)
+    ? matrix.categories
+    : [{
+        id: `__implicit__${matrix.id}`,
+        category_name: `${matrix.service_type} Charges`,
+        rows: matrix.rows,
+        kind: 'standard',
+      }];
+
+  const applied: AppliedRate[] = [];
+  for (const category of categories) {
+    // Bucket rows by their resolved per-row dispatch kind. A category can mix
+    // standard + optional rows if individual rows declare applies_when even
+    // while the category's overall Kind is something else — each row gets
+    // routed correctly regardless.
+    const buckets = new Map<RateCategoryKind, ContractRateRow[]>();
+    for (const row of category.rows) {
+      const hint = resolveRowDispatch(row, category);
+      const rowWithHint = applyHintToRow(row, hint);
+      const existing = buckets.get(hint.dispatch_kind) ?? [];
+      existing.push(rowWithHint);
+      buckets.set(hint.dispatch_kind, existing);
+    }
+
+    // Dispatch each bucket through its strategy. The synthesised matrix /
+    // category contains only this bucket's rows so the dispatcher's internal
+    // `resolveCategoryRows` lookup finds the hint-applied versions, not the
+    // original ones from `matrix.rows`.
+    for (const [kind, bucketRows] of buckets) {
+      const dispatcher = DISPATCHERS[kind] ?? dispatchStandard;
+      const syntheticCategory: ContractRateCategory = { ...category, rows: bucketRows };
+      const syntheticMatrix: ContractRateMatrix = { ...matrix, rows: bucketRows };
+      applied.push(...dispatcher(syntheticCategory, syntheticMatrix, modeColumn, context));
+    }
+  }
+  return applied;
 }

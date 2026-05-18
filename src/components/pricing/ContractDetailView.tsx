@@ -20,7 +20,7 @@ import { queryKeys } from "../../lib/queryKeys";
 import { ArrowLeft, Edit3, RefreshCw, FileText, Calendar, Building2, Briefcase, Ship, Shield, Truck, Clock, Zap, Plus, ChevronDown, Layout, Layers, Users, Receipt, FileStack, DollarSign, TrendingUp, Paperclip, MessageSquare, Eye, MoreVertical } from "lucide-react";
 import type { QuotationNew, ContractRateMatrix } from "../../types/pricing";
 import type { FinancialContainer } from "../../types/financials";
-import { ContractRateCardV2 as ContractRateMatrixEditor } from "./quotations/ContractRateCardV2";
+import { ContractRateCardV2 } from "./quotations/ContractRateCardV2";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
 import { logCreation, logStatusChange } from "../../utils/activityLog";
@@ -448,7 +448,7 @@ export function ContractDetailView({
         </div>
       ) : (
         rateMatrices.map((matrix) => (
-          <ContractRateMatrixEditor
+          <ContractRateCardV2
             key={matrix.id}
             matrix={matrix}
             onChange={() => {}} // Read-only
