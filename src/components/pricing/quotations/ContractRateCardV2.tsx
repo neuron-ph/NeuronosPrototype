@@ -27,8 +27,8 @@ import type {
   ContractRateCategory,
   ServiceType,
 } from "../../../types/pricing";
-import { useCatalogDispatchIndex } from "../../../hooks/useCatalogDispatchIndex";
 import { resolveRowDispatch, type CatalogDispatchHint } from "../../../utils/contractRateEngine";
+import { useEnumOptions } from "../../../hooks/useEnumOptions";
 
 // ============================================
 // CONSTANTS
@@ -112,11 +112,11 @@ export function ContractRateCardV2({
   const isTrucking = matrix.service_type === "Trucking";
   const isBrokerage = matrix.service_type === "Brokerage";
 
-  // Catalog-first dispatch index. Drives the per-row "When applicable" /
-  // "Per container" caption beneath each row so Pricing sees passively how
-  // the engine will treat each charge. The hook takes matrices[], so wrap
-  // the single matrix; identical matrix shapes share the cached query result.
-  const catalogDispatchIndex = useCatalogDispatchIndex([matrix]);
+  // Trigger popover value lists — fetched once per editor instance and passed
+  // into each row that needs to show the TRIGGER picker (rows inside Optional
+  // categories). Single hook call covers both — fast & cached.
+  const permitOptions = useEnumOptions('permits');
+  const examOptions = useEnumOptions('examination');
 
   // Derive active categories — auto-migrate flat rows for backward compat
   const activeCategories: ContractRateCategory[] = useMemo(() => {
@@ -205,6 +205,16 @@ export function ContractRateCardV2({
   const handleDeleteCategory = (catId: string) => {
     if (!confirm("Remove this category and all its charges?")) return;
     emitCategories(activeCategories.filter((c) => c.id !== catId));
+  };
+
+  // ---- Category Kind (dispatch behaviour) ----
+  // Setting the kind tells the billing engine how to evaluate this category's rows:
+  //   - 'standard'  every row always applies
+  //   - 'optional'  rows gate on booking facts via per-row TRIGGER popover
+  //   - 'delivery'  rows match against booking container types + addresses
+  // The chip selector in the category header drives this; default is 'standard'.
+  const handleUpdateCategoryKind = (catId: string, nextKind: 'standard' | 'optional' | 'delivery') => {
+    emitCategories(activeCategories.map((c) => c.id === catId ? { ...c, kind: nextKind } : c));
   };
 
   // ---- Row CRUD (per category) ----
@@ -437,12 +447,84 @@ export function ContractRateCardV2({
                   onClick={() => toggleCategory(cat.id)}
                   style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", backgroundColor: "var(--theme-bg-surface-subtle)", borderRadius: isExpanded ? "10px 10px 0 0" : "10px", borderBottom: isExpanded ? "1px solid var(--neuron-ui-border)" : "none", cursor: "pointer", userSelect: "none" }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                     {isExpanded ? <ChevronDown size={13} style={{ color: "var(--theme-text-muted)", flexShrink: 0 }} /> : <ChevronRight size={13} style={{ color: "var(--theme-text-muted)", flexShrink: 0 }} />}
                     <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)" }}>{cat.category_name}</span>
                     <span style={{ fontSize: "11px", color: "var(--theme-text-muted)", backgroundColor: "var(--theme-bg-surface)", padding: "1px 7px", borderRadius: "3px", border: "1px solid var(--neuron-ui-border)" }}>
                       {cat.rows.length} {cat.rows.length === 1 ? "item" : "items"}
                     </span>
+                    {/* Kind chip selector — sets category.kind which drives engine dispatch.
+                        Pricing declares HOW this category bills here, then picks WHAT items
+                        go in it from the catalog (the row's particular field below). */}
+                    {!viewMode && (
+                      <div
+                        style={{ display: "inline-flex", gap: "0", border: "1px solid var(--neuron-ui-border)", borderRadius: "5px", overflow: "hidden", marginLeft: "4px" }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {(['standard', 'optional', 'delivery'] as const).map((k) => {
+                          const currentKind = (cat.kind ?? 'standard') as typeof k;
+                          const selected = currentKind === k;
+                          const labels: Record<typeof k, string> = {
+                            standard: 'Standard',
+                            optional: 'Optional',
+                            delivery: 'Delivery',
+                          };
+                          const accent: Record<typeof k, string> = {
+                            standard: 'var(--theme-text-primary)',
+                            optional: '#92400E',
+                            delivery: '#1E40AF',
+                          };
+                          const bg: Record<typeof k, string> = {
+                            standard: '#E5E7EB',
+                            optional: '#FEF3C7',
+                            delivery: '#DBEAFE',
+                          };
+                          return (
+                            <button
+                              key={k}
+                              type="button"
+                              onClick={() => handleUpdateCategoryKind(cat.id, k)}
+                              title={
+                                k === 'standard' ? 'Every row in this category always bills.' :
+                                k === 'optional' ? 'Rows only bill when the booking declares the matching fact (permit / examination).' :
+                                'Rows match per-container against the booking — type via row name, address via remarks.'
+                              }
+                              style={{
+                                padding: '3px 9px',
+                                fontSize: '10px',
+                                fontWeight: 700,
+                                letterSpacing: '0.3px',
+                                textTransform: 'uppercase',
+                                background: selected ? bg[k] : 'transparent',
+                                color: selected ? accent[k] : 'var(--theme-text-muted)',
+                                border: 'none',
+                                cursor: 'pointer',
+                                borderRight: k !== 'delivery' ? '1px solid var(--neuron-ui-border)' : 'none',
+                              }}
+                            >
+                              {labels[k]}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {viewMode && cat.kind && cat.kind !== 'standard' && (
+                      <span
+                        style={{
+                          padding: '2px 8px',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          letterSpacing: '0.3px',
+                          textTransform: 'uppercase',
+                          background: cat.kind === 'optional' ? '#FEF3C7' : '#DBEAFE',
+                          color: cat.kind === 'optional' ? '#92400E' : '#1E40AF',
+                          border: cat.kind === 'optional' ? '1px solid #FCD34D' : '1px solid #93C5FD',
+                          borderRadius: '4px',
+                        }}
+                      >
+                        {cat.kind}
+                      </span>
+                    )}
                   </div>
                   {!viewMode && (
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }} onClick={(e) => e.stopPropagation()}>
@@ -514,7 +596,10 @@ export function ContractRateCardV2({
                           serviceType={matrix.service_type}
                           usedCatalogItemIds={usedInCat}
                           catalogCategoryId={cat.catalog_category_id}
-                          dispatchHint={resolveRowDispatch(row, cat, catalogDispatchIndex)}
+                          parentCategoryKind={cat.kind ?? 'standard'}
+                          dispatchHint={resolveRowDispatch(row, cat)}
+                          examOptions={examOptions}
+                          permitOptions={permitOptions}
                           onUpdate={(updates) => handleUpdateRow(cat.id, row.id, updates)}
                           onUpdateRate={(col, val) => handleUpdateRowRate(cat.id, row.id, col, val)}
                           onDelete={() => handleDeleteRow(cat.id, row.id)}
@@ -600,7 +685,10 @@ function RateLineItem({
   serviceType,
   usedCatalogItemIds,
   catalogCategoryId,
+  parentCategoryKind,
   dispatchHint,
+  examOptions,
+  permitOptions,
   onUpdate,
   onUpdateRate,
   onDelete,
@@ -617,12 +705,19 @@ function RateLineItem({
   usedCatalogItemIds: string[];
   catalogCategoryId?: string;
   /**
+   * Parent category's declared dispatch kind. Drives whether the per-row
+   * TRIGGER popover renders (only in 'optional' categories) and whether the
+   * NO TRIGGER warning appears (optional category + row with no applies_when).
+   */
+  parentCategoryKind: 'standard' | 'optional' | 'delivery';
+  /**
    * Resolved dispatch behaviour for this row, derived upstream via
-   * `resolveRowDispatch` against the catalog dispatch index. Used purely
-   * for the read-only "When applicable" / "Per container" caption — the
-   * row never edits this directly; the catalog is the source of truth.
+   * `resolveRowDispatch`. Used for the read-only caption beneath the row.
    */
   dispatchHint?: CatalogDispatchHint;
+  /** Governed value lists for the TRIGGER popover's value dropdown. */
+  examOptions: string[];
+  permitOptions: string[];
   onUpdate: (updates: Partial<ContractRateRow>) => void;
   onUpdateRate: (column: string, value: number) => void;
   onDelete: () => void;
@@ -633,6 +728,42 @@ function RateLineItem({
   const [isHovered, setIsHovered] = useState(false);
   const isAtCost = row.is_at_cost === true;
   const hasTiered = !isAtCost && row.succeeding_rule != null;
+
+  // TRIGGER popover state — only meaningful inside Optional categories.
+  // applies_when on the row is the source of truth; the popover edits it.
+  const [triggerPopoverOpen, setTriggerPopoverOpen] = useState(false);
+  const triggerButtonRef = useRef<HTMLButtonElement | null>(null);
+  const triggerPopoverRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!triggerPopoverOpen) return;
+    const handle = (e: MouseEvent) => {
+      if (
+        triggerPopoverRef.current && !triggerPopoverRef.current.contains(e.target as Node) &&
+        triggerButtonRef.current && !triggerButtonRef.current.contains(e.target as Node)
+      ) setTriggerPopoverOpen(false);
+    };
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [triggerPopoverOpen]);
+
+  const hasTrigger = !!row.applies_when && row.applies_when.kind !== 'always';
+  const showTriggerControl = parentCategoryKind === 'optional';
+  const showNoTriggerWarning = showTriggerControl && !hasTrigger && !viewMode;
+  const triggerLabel = (() => {
+    if (!hasTrigger) return 'TRIGGER';
+    const t = row.applies_when!;
+    if (t.kind === 'examination') return `EXAM:${t.value}`;
+    return `PERMIT:${t.value}`;
+  })();
+  const applyTrigger = (next: { kind: 'always' | 'examination' | 'permit'; value?: string } | undefined) => {
+    if (!next || next.kind === 'always') {
+      const { applies_when: _drop, ...rest } = row;
+      onUpdate({ ...rest, applies_when: undefined } as Partial<ContractRateRow>);
+    } else {
+      onUpdate({ applies_when: next });
+    }
+    setTriggerPopoverOpen(false);
+  };
 
   return (
     <div
@@ -1087,6 +1218,116 @@ function RateLineItem({
               }}
             />
           </>
+        )}
+        {/* TRIGGER popover — only inside Optional categories. Lets Pricing
+            declare which booking fact gates this row (permit / examination
+            + value). Sets row.applies_when. Engine reads this directly. */}
+        {showTriggerControl && !viewMode && (
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <button
+              ref={triggerButtonRef}
+              onClick={() => setTriggerPopoverOpen((v) => !v)}
+              title={
+                hasTrigger
+                  ? `Only applies when booking declares ${row.applies_when!.kind} "${row.applies_when!.value}". Click to change.`
+                  : 'Set what booking fact gates this row (otherwise it will be skipped at billing time).'
+              }
+              style={{
+                padding: '3px 8px',
+                background: hasTrigger ? '#FEF3C7' : 'transparent',
+                border: hasTrigger ? '1px solid #FCD34D' : '1px dashed #FCD34D',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                color: hasTrigger ? '#92400E' : '#92400E',
+                fontSize: '10px',
+                fontWeight: 700,
+                letterSpacing: '0.3px',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {triggerLabel}
+            </button>
+            {triggerPopoverOpen && (
+              <div
+                ref={triggerPopoverRef}
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 4px)',
+                  right: 0,
+                  width: '280px',
+                  backgroundColor: 'var(--theme-bg-surface)',
+                  border: '1px solid var(--neuron-ui-border)',
+                  borderRadius: '8px',
+                  boxShadow: '0 10px 25px -5px rgba(0,0,0,0.15)',
+                  padding: '12px',
+                  zIndex: 100,
+                }}
+              >
+                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--theme-text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>
+                  Triggered by
+                </div>
+                {(['always', 'examination', 'permit'] as const).map((kind) => (
+                  <label key={kind} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 0', fontSize: '12px', cursor: 'pointer' }}>
+                    <input
+                      type="radio"
+                      name={`trigger-${row.id}`}
+                      checked={(row.applies_when?.kind ?? 'always') === kind}
+                      onChange={() => {
+                        if (kind === 'always') {
+                          applyTrigger({ kind: 'always' });
+                        } else {
+                          const list = kind === 'examination' ? examOptions : permitOptions;
+                          applyTrigger({ kind, value: row.applies_when?.value ?? list[0] ?? '' });
+                        }
+                      }}
+                    />
+                    <span style={{ textTransform: 'capitalize' }}>{kind === 'always' ? 'Always (no gate)' : kind}</span>
+                  </label>
+                ))}
+                {row.applies_when && row.applies_when.kind !== 'always' && (
+                  <select
+                    value={row.applies_when.value ?? ''}
+                    onChange={(e) => applyTrigger({ kind: row.applies_when!.kind, value: e.target.value })}
+                    style={{
+                      width: '100%',
+                      marginTop: '6px',
+                      padding: '5px 8px',
+                      fontSize: '12px',
+                      border: '1px solid var(--neuron-ui-border)',
+                      borderRadius: '4px',
+                      backgroundColor: 'var(--theme-bg-surface)',
+                    }}
+                  >
+                    {(row.applies_when.kind === 'examination' ? examOptions : permitOptions).map((v) => (
+                      <option key={v} value={v}>{v}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        {/* NO TRIGGER warning — row is in an Optional category but has no
+            applies_when set. The dispatcher silently skips it, which would
+            under-bill. Surface it so Pricing can fix. */}
+        {showNoTriggerWarning && (
+          <span
+            title="This row is in an Optional category but has no trigger set. The engine will skip it. Click TRIGGER to set what booking fact gates it."
+            style={{
+              padding: '3px 6px',
+              background: '#FEE2E2',
+              border: '1px solid #FCA5A5',
+              borderRadius: '3px',
+              color: '#991B1B',
+              fontSize: '9px',
+              fontWeight: 700,
+              letterSpacing: '0.3px',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+            }}
+          >
+            NO TRIGGER
+          </span>
         )}
       </div>
       )}

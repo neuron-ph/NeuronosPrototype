@@ -26,7 +26,6 @@ import { supabase } from "../../utils/supabase/client";
 import { RateBreakdownTable, formatCurrency } from "../pricing/shared/RateBreakdownTable";
 import { QuantityDisplaySection } from "../pricing/shared/QuantityDisplaySection";
 import { normalizeTruckingLineItems, extractMultiLineSelectionsAndQuantities, extractBookingFacts, extractBookingContainers } from "../../utils/contractQuantityExtractor";
-import { useCatalogDispatchIndex } from "../../hooks/useCatalogDispatchIndex";
 
 // ============================================
 // TYPES
@@ -105,9 +104,6 @@ export function RateCalculationSheet({
   const deliveryAddress: string | undefined =
     booking?.deliveryAddress ?? booking?.delivery_address ?? undefined;
 
-  // Catalog-first dispatch (Phase B).
-  const catalogIndex = useCatalogDispatchIndex(rateMatrices);
-
   const multiLineResults = useMemo(() => {
     if (!isMultiLine) return null;
     const extractions = extractMultiLineSelectionsAndQuantities(truckingLineItems!, rateMatrices);
@@ -117,8 +113,8 @@ export function RateCalculationSheet({
   // Run the rate engine with current quantities (reactive — recalculates on every change)
   const calculation = useMemo(() => {
     if (isMultiLine) return { appliedRates: [] as AppliedRate[], total: 0 };
-    return calculateContractBilling(rateMatrices, serviceType, bookingMode, quantities, selections, facts, containers, deliveryAddress, catalogIndex);
-  }, [rateMatrices, serviceType, bookingMode, quantities, selections, isMultiLine, facts, containers, deliveryAddress, catalogIndex]);
+    return calculateContractBilling(rateMatrices, serviceType, bookingMode, quantities, selections, facts, containers, deliveryAddress);
+  }, [rateMatrices, serviceType, bookingMode, quantities, selections, isMultiLine, facts, containers, deliveryAddress]);
 
   // Grand total
   const grandTotal = isMultiLine && multiLineResults
@@ -165,7 +161,6 @@ export function RateCalculationSheet({
         facts,
         containers,
         deliveryAddress,
-        catalogIndex,
       });
 
       if (result.items.length === 0) {
