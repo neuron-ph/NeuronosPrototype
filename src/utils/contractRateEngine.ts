@@ -678,8 +678,8 @@ export interface BillingDispatchContext {
  * Resolve the effective dispatch behaviour for a single rate row using the
  * precedence chain:
  *
- *   1. `row.applies_when` — per-row trigger set via the editor's TRIGGER popover
- *   2. `category.kind` — the wrapping category's dispatch kind from the Kind chip
+ *   1. `row.applies_when` — per-row booking selection from the contract editor
+ *   2. `category.kind` — the wrapping section layout from the contract editor
  *   3. Default `'standard'`
  *
  * Catalog items intentionally do NOT carry dispatch metadata. The catalog
@@ -730,7 +730,7 @@ type CategoryDispatcher = (
  * authoritative flat array) by id. `category.rows` is treated as a stale id
  * snapshot — the editor mutates matrix.rows directly without updating the
  * category grouping, so trusting category.rows blindly would lose edits made
- * via the flat table view (e.g. applies_when set via the TRIGGER popover).
+ * via the flat table view.
  */
 function resolveCategoryRows(category: ContractRateCategory, matrix: ContractRateMatrix): ContractRateRow[] {
   const wantedIds = new Set(category.rows.map((r) => r.id));
@@ -901,7 +901,7 @@ function applyHintToRow(row: ContractRateRow, hint: CatalogDispatchHint): Contra
 }
 
 /**
- * Top-level billing entry point for the catalog-first dispatch refactor.
+ * Top-level billing entry point for contract-owned section dispatch.
  *
  * Iterates each row across all categories. For each row, `resolveRowDispatch`
  * collapses its catalog metadata + legacy fallbacks into a single
