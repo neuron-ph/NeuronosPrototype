@@ -27,6 +27,8 @@ import type {
   ContractRateCategory,
   ServiceType,
 } from "../../../types/pricing";
+import { useCatalogDispatchIndex } from "../../../hooks/useCatalogDispatchIndex";
+import { resolveRowDispatch, type CatalogDispatchHint } from "../../../utils/contractRateEngine";
 
 // ============================================
 // CONSTANTS
@@ -109,6 +111,12 @@ export function ContractRateCardV2({
   const columns = matrix.columns;
   const isTrucking = matrix.service_type === "Trucking";
   const isBrokerage = matrix.service_type === "Brokerage";
+
+  // Catalog-first dispatch index. Drives the per-row "When applicable" /
+  // "Per container" caption beneath each row so Pricing sees passively how
+  // the engine will treat each charge. The hook takes matrices[], so wrap
+  // the single matrix; identical matrix shapes share the cached query result.
+  const catalogDispatchIndex = useCatalogDispatchIndex([matrix]);
 
   // Derive active categories — auto-migrate flat rows for backward compat
   const activeCategories: ContractRateCategory[] = useMemo(() => {
@@ -506,6 +514,7 @@ export function ContractRateCardV2({
                           serviceType={matrix.service_type}
                           usedCatalogItemIds={usedInCat}
                           catalogCategoryId={cat.catalog_category_id}
+                          dispatchHint={resolveRowDispatch(row, cat, catalogDispatchIndex)}
                           onUpdate={(updates) => handleUpdateRow(cat.id, row.id, updates)}
                           onUpdateRate={(col, val) => handleUpdateRowRate(cat.id, row.id, col, val)}
                           onDelete={() => handleDeleteRow(cat.id, row.id)}
@@ -591,6 +600,7 @@ function RateLineItem({
   serviceType,
   usedCatalogItemIds,
   catalogCategoryId,
+  dispatchHint,
   onUpdate,
   onUpdateRate,
   onDelete,
@@ -606,6 +616,13 @@ function RateLineItem({
   serviceType: ServiceType;
   usedCatalogItemIds: string[];
   catalogCategoryId?: string;
+  /**
+   * Resolved dispatch behaviour for this row, derived upstream via
+   * `resolveRowDispatch` against the catalog dispatch index. Used purely
+   * for the read-only "When applicable" / "Per container" caption — the
+   * row never edits this directly; the catalog is the source of truth.
+   */
+  dispatchHint?: CatalogDispatchHint;
   onUpdate: (updates: Partial<ContractRateRow>) => void;
   onUpdateRate: (column: string, value: number) => void;
   onDelete: () => void;
@@ -1103,8 +1120,46 @@ function RateLineItem({
           )}
         </div>
       )}
+
+      {/* ── Row 4: Dispatch caption (read-only) — surfaces the resolved
+            CatalogDispatchHint so Pricing sees passively how the engine will
+            treat this row. Standard rows show nothing (no configuration). */}
+      {!isTrucking && (() => {
+        const caption = dispatchCaptionFor(dispatchHint);
+        if (!caption) return null;
+        return (
+          <div style={{ padding: "0 20px 8px" }}>
+            <span
+              style={{
+                fontSize: "11px",
+                color: "var(--neuron-ink-muted)",
+                fontStyle: "italic",
+                letterSpacing: "0.1px",
+              }}
+            >
+              {caption}
+            </span>
+          </div>
+        );
+      })()}
     </div>
   );
+}
+
+/**
+ * Render a human-readable caption for a row's resolved dispatch hint. The
+ * catalog is the source of truth for these labels — they show Pricing
+ * exactly how the engine will treat this charge. Standard rows return null
+ * (no caption needed; rows look clean when always-billing).
+ */
+function dispatchCaptionFor(hint: CatalogDispatchHint | undefined): string | null {
+  if (!hint || hint.dispatch_kind === 'standard') return null;
+  if (hint.dispatch_kind === 'delivery') return 'Per container · matched by destination';
+  if (hint.dispatch_kind === 'optional' && hint.trigger_field && hint.trigger_value) {
+    const fieldLabel = hint.trigger_field === 'permits' ? 'Permit' : 'Examination';
+    return `When applicable · ${fieldLabel}: ${hint.trigger_value}`;
+  }
+  return null;
 }
 
 // ============================================

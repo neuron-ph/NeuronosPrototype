@@ -74,7 +74,7 @@ import { FinancialSummaryPanel } from "./FinancialSummaryPanel";
 import type { QuotationNew, QuotationChargeCategory, QuotationLineItemNew, InquiryService, QuotationStatus, BuyingPriceCategory, SellingPriceCategory, SellingPriceLineItem, Vendor, VendorType, ServiceType } from "../../../types/pricing";
 import type { VendorLineItem } from "../../../data/networkPartners"; // ⚠️ DEPRECATED - kept for backward compatibility
 import { calculateFinancialSummary, generateLineItemId, generateCategoryId } from "../../../utils/quotationCalculations";
-import { ContractRateCardV2 as ContractRateMatrixEditor, createEmptyMatrixV2 as createEmptyMatrix } from "./ContractRateCardV2";
+import { ContractRateCardV2, createEmptyMatrixV2 } from "./ContractRateCardV2";
 import type { ContractRateMatrix, QuotationType, ContractSummary } from "../../../types/pricing";
 import { findContractForCustomerService, fetchFullContract } from "../../../utils/contractLookup";
 import { contractRatesToSellingPrice, getContractModeColumns, multiLineRatesToSellingPrice } from "../../../utils/contractRateEngine";
@@ -506,7 +506,7 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
     selectedServices.forEach(service => {
       const exists = updatedMatrices.some(m => m.service_type === service as ServiceType);
       if (!exists) {
-        updatedMatrices.push(createEmptyMatrix(service as ServiceType));
+        updatedMatrices.push(createEmptyMatrixV2(service as ServiceType));
         changed = true;
       }
     });
@@ -2576,7 +2576,7 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
                 </div>
               )}
               {rateMatrices.map((matrix) => (
-                <ContractRateMatrixEditor
+                <ContractRateCardV2
                   key={matrix.id}
                   matrix={matrix}
                   onChange={(updated) => {
