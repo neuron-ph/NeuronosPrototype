@@ -351,11 +351,13 @@ const BROKERAGE_BOOKING_DETAILS: SectionDef = {
       storage: 'details',
     },
     {
+      // Governed dropdown — sourced from profile_preferential_treatments.
       key: 'preferential_treatment',
       label: 'Preferential Treatment',
-      control: 'free-text',
+      control: 'dropdown',
       required: 'yes',
       storage: 'details',
+      optionsKind: 'preferential_treatment',
     },
     // Documents
     MBL_MAWB,
@@ -437,11 +439,18 @@ const BROKERAGE_FCL_DETAILS: SectionDef = {
   showWhen: [{ field: 'mode', op: 'eq', value: 'FCL' }],
   fields: [
     {
+      // Per-container delivery address: each container can route to its own
+      // consignee site. Legacy string[] values are coerced to row objects in
+      // useBookingFormState.initFromRecord so old bookings still render.
       key: 'container_numbers',
-      label: 'Container Number/s',
-      control: 'multi-value',
+      label: 'Containers',
+      control: 'repeater',
       required: 'yes',
       storage: 'details',
+      repeaterColumns: [
+        { key: 'container_number', label: 'Container Number', control: 'free-text' },
+        { key: 'delivery_address', label: 'Delivery Address', control: 'free-text' },
+      ],
     },
     {
       key: 'seal_numbers',
