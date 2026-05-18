@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { instantiateRates, generateContractBilling } from "./contractRateEngine";
+import { instantiateRates, generateContractBilling, resolveRowDispatch, type CatalogDispatchHint } from "./contractRateEngine";
 import type { ContractRateMatrix, ContractRateRow, ContractRateCategory } from "../types/pricing";
 
 // ============================================
@@ -502,6 +502,283 @@ describe("generateContractBilling — Phase 3 delivery dispatcher", () => {
         { container_number: "A2", container_type: "20ft", delivery_address: "VALENZUELA CITY" },
         { container_number: "A3", container_type: "20ft", delivery_address: "VALENZUELA CITY" },
       ],
+    });
+    // Brokerage Fee + Stamps (2) + X-Ray (1 row × 3 qty) + 3 delivery rows × 1 qty each
+    expect(result).toHaveLength(2 + 1 + 3);
+    const total = result.reduce((sum, r) => sum + r.subtotal, 0);
+    // 5300 + 1000 + 3*3500 + 3*18500 = 5300 + 1000 + 10500 + 55500 = 72300
+    expect(total).toBe(72300);
+  });
+});
+
+// ============================================
+// Phase B — catalog-first dispatch (resolveRowDispatch + generateContractBilling)
+// ============================================
+
+describe("resolveRowDispatch — Phase B precedence chain", () => {
+  it("catalog wins over row.applies_when and category.kind", () => {
+    const row = makeRow({
+      id: "r1",
+      catalog_item_id: "ci-bai",
+      applies_when: { kind: "permit", value: "SRA" }, // legacy says SRA
+    });
+    const category: ContractRateCategory = {
+      id: "c1", category_name: "Other", kind: "delivery", rows: [row],
+    };
+    const catalogIndex = new Map<string, CatalogDispatchHint>([
+      ["ci-bai", { dispatch_kind: "optional", trigger_field: "permits", trigger_value: "BAI" }],
+    ]);
+    const hint = resolveRowDispatch(row, category, catalogIndex);
+    expect(hint).toEqual({ dispatch_kind: "optional", trigger_field: "permits", trigger_value: "BAI" });
+  });
+
+  it("legacy row.applies_when used when no catalog hint", () => {
+    const row = makeRow({
+      id: "r1",
+      applies_when: { kind: "permit", value: "BAI" },
+    });
+    const hint = resolveRowDispatch(row, undefined, undefined);
+    expect(hint).toEqual({ dispatch_kind: "optional", trigger_field: "permits", trigger_value: "BAI" });
+  });
+
+  it("legacy examination kind promotes to plural trigger_field", () => {
+    const row = makeRow({
+      id: "r1",
+      applies_when: { kind: "examination", value: "X-ray" },
+    });
+    const hint = resolveRowDispatch(row, undefined, undefined);
+    expect(hint).toEqual({ dispatch_kind: "optional", trigger_field: "examinations", trigger_value: "X-ray" });
+  });
+
+  it("legacy category.kind used when no catalog hint and no row.applies_when", () => {
+    const row = makeRow({ id: "r1" });
+    const category: ContractRateCategory = {
+      id: "c1", category_name: "Delivery", kind: "delivery", rows: [row],
+    };
+    const hint = resolveRowDispatch(row, category, undefined);
+    expect(hint).toEqual({ dispatch_kind: "delivery" });
+  });
+
+  it("defaults to standard when nothing carries dispatch info", () => {
+    const row = makeRow({ id: "r1" });
+    const hint = resolveRowDispatch(row, undefined, undefined);
+    expect(hint).toEqual({ dispatch_kind: "standard" });
+  });
+
+  it("catalog miss falls through to legacy precedence", () => {
+    const row = makeRow({
+      id: "r1",
+      catalog_item_id: "ci-unknown",
+      applies_when: { kind: "permit", value: "BAI" },
+    });
+    const catalogIndex = new Map<string, CatalogDispatchHint>(); // empty
+    const hint = resolveRowDispatch(row, undefined, catalogIndex);
+    expect(hint).toEqual({ dispatch_kind: "optional", trigger_field: "permits", trigger_value: "BAI" });
+  });
+});
+
+describe("generateContractBilling — Phase B catalog-driven dispatch", () => {
+  it("catalog optional row with matching fact: included", () => {
+    const rows = [
+      makeRow({ id: "r1", catalog_item_id: "ci-bai", particular: "BAI Processing", unit: "per_shipment", rates: { FCL: 3500 } }),
+    ];
+    const matrix = makeMatrix({ rows, categories: [{ id: "c1", category_name: "Other", rows }] });
+    const catalogIndex = new Map<string, CatalogDispatchHint>([
+      ["ci-bai", { dispatch_kind: "optional", trigger_field: "permits", trigger_value: "BAI" }],
+    ]);
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { shipments: 1 },
+      facts: { permits: ["BAI"] },
+      catalogIndex,
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0].particular).toBe("BAI Processing");
+  });
+
+  it("catalog optional row with mismatched fact: excluded", () => {
+    const rows = [
+      makeRow({ id: "r1", catalog_item_id: "ci-bai", unit: "per_shipment", rates: { FCL: 3500 } }),
+    ];
+    const matrix = makeMatrix({ rows, categories: [{ id: "c1", category_name: "Other", rows }] });
+    const catalogIndex = new Map<string, CatalogDispatchHint>([
+      ["ci-bai", { dispatch_kind: "optional", trigger_field: "permits", trigger_value: "BAI" }],
+    ]);
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { shipments: 1 },
+      facts: { permits: ["SRA"] }, // wrong permit
+      catalogIndex,
+    });
+    expect(result).toHaveLength(0);
+  });
+
+  it("catalog delivery row routed to delivery dispatcher", () => {
+    const rows = [
+      makeRow({ id: "r1", catalog_item_id: "ci-20ft", particular: "20ft", unit: "per_container", rates: { FCL: 18500 }, remarks: "within Valenzuela City" }),
+    ];
+    const matrix = makeMatrix({ rows, categories: [{ id: "c1", category_name: "Delivery", rows }] });
+    const catalogIndex = new Map<string, CatalogDispatchHint>([
+      ["ci-20ft", { dispatch_kind: "delivery" }],
+    ]);
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { containers: 3 },
+      containers: [
+        { container_number: "A1", container_type: "20ft", delivery_address: "VALENZUELA CITY" },
+      ],
+      catalogIndex,
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0].subtotal).toBe(18500);
+  });
+
+  it("catalog standard kind (null) routes to standard dispatcher (always-bill)", () => {
+    const rows = [
+      makeRow({ id: "r1", catalog_item_id: "ci-broker", unit: "per_bl", rates: { FCL: 5300 } }),
+    ];
+    const matrix = makeMatrix({ rows, categories: [{ id: "c1", category_name: "Brokerage", rows }] });
+    // Empty index → no catalog hint → falls back. With nothing else carrying dispatch info, defaults to standard.
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { bls: 1 },
+      catalogIndex: new Map(),
+    });
+    expect(result).toHaveLength(1);
+  });
+
+  it("catalog wins: standard catalog kind beats legacy optional category.kind", () => {
+    // Pre-Phase-B contract had the category tagged 'optional'. Phase A catalog
+    // says this item is standard. Catalog wins → row fires as standard.
+    const rows = [
+      makeRow({ id: "r1", catalog_item_id: "ci-broker", unit: "per_bl", rates: { FCL: 5300 } }),
+    ];
+    const matrix = makeMatrix({
+      rows,
+      categories: [{ id: "c1", category_name: "Other", kind: "optional", rows }],
+    });
+    const catalogIndex = new Map<string, CatalogDispatchHint>([
+      // dispatch_kind explicitly standard
+      ["ci-broker", { dispatch_kind: "standard" }],
+    ]);
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { bls: 1 },
+      catalogIndex,
+    });
+    // Standard dispatcher includes the row even though category.kind was 'optional'
+    expect(result).toHaveLength(1);
+    expect(result[0].subtotal).toBe(5300);
+  });
+
+  it("legacy row.applies_when still honoured when no catalog hint", () => {
+    const rows = [
+      makeRow({
+        id: "r1",
+        // No catalog_item_id → falls back to row.applies_when
+        unit: "per_shipment",
+        rates: { FCL: 3500 },
+        applies_when: { kind: "permit", value: "BAI" },
+      }),
+    ];
+    const matrix = makeMatrix({ rows, categories: [{ id: "c1", category_name: "Other", rows }] });
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { shipments: 1 },
+      facts: { permits: ["BAI"] },
+      catalogIndex: new Map(),
+    });
+    expect(result).toHaveLength(1);
+  });
+
+  it("legacy category.kind still honoured when no catalog hint and no row.applies_when", () => {
+    const rows = [
+      makeRow({
+        id: "r1",
+        unit: "per_shipment",
+        rates: { FCL: 3500 },
+        applies_when: { kind: "permit", value: "BAI" }, // category is 'optional', this gates
+      }),
+    ];
+    const matrix = makeMatrix({
+      rows,
+      categories: [{ id: "c1", category_name: "Other", kind: "optional", rows }],
+    });
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { shipments: 1 },
+      facts: { permits: ["BAI"] },
+      catalogIndex: undefined,
+    });
+    expect(result).toHaveLength(1);
+  });
+
+  it("mixed-source contract: some rows bound to catalog, others legacy — both work", () => {
+    const broker = [makeRow({ id: "b1", catalog_item_id: "ci-broker", particular: "Brokerage Fee", unit: "per_bl", rates: { FCL: 5300 } })];
+    const legacyOpt = [makeRow({
+      id: "o1",
+      particular: "Legacy Optional",
+      unit: "per_shipment",
+      rates: { FCL: 3500 },
+      applies_when: { kind: "permit", value: "SRA" },
+    })];
+    const catalogOpt = [makeRow({ id: "o2", catalog_item_id: "ci-bai", particular: "BAI", unit: "per_shipment", rates: { FCL: 3500 } })];
+    const matrix = makeMatrix({
+      rows: [...broker, ...legacyOpt, ...catalogOpt],
+      categories: [
+        { id: "c1", category_name: "Brokerage", rows: broker },
+        { id: "c2", category_name: "Other", rows: [...legacyOpt, ...catalogOpt] },
+      ],
+    });
+    const catalogIndex = new Map<string, CatalogDispatchHint>([
+      ["ci-broker", { dispatch_kind: "standard" }],
+      ["ci-bai", { dispatch_kind: "optional", trigger_field: "permits", trigger_value: "BAI" }],
+    ]);
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { bls: 1, shipments: 1 },
+      facts: { permits: ["BAI", "SRA"] },
+      catalogIndex,
+    });
+    // All three fire: Brokerage Fee always; SRA matches legacy row's permit; BAI matches catalog hint.
+    expect(result).toHaveLength(3);
+  });
+
+  it("DAFFID-shape end-to-end with catalog-only metadata (no category.kind, no applies_when)", () => {
+    // Replicates the DAFFID slice but with ALL dispatch info on catalog,
+    // none on contract. Proves the legacy metadata can be fully stripped
+    // post-backfill without changing the bill total.
+    const brokerRows = [
+      makeRow({ id: "bf", catalog_item_id: "ci-bf", particular: "Brokerage Fee", unit: "per_bl", rates: { FCL: 5300 } }),
+      makeRow({ id: "st", catalog_item_id: "ci-st", particular: "Stamps", unit: "per_bl", rates: { FCL: 1000 } }),
+    ];
+    const optionalRows = [
+      makeRow({ id: "xr", catalog_item_id: "ci-xr", particular: "X-Ray", unit: "per_container", rates: { FCL: 3500 } }),
+      makeRow({ id: "bai", catalog_item_id: "ci-bai", particular: "BAI", unit: "per_shipment", rates: { FCL: 3500 } }),
+      makeRow({ id: "sra", catalog_item_id: "ci-sra", particular: "SRA", unit: "per_shipment", rates: { FCL: 3500 } }),
+    ];
+    const deliveryRows = [
+      makeRow({ id: "vz20", catalog_item_id: "ci-20ft", particular: "20ft", unit: "per_container", rates: { FCL: 18500 }, remarks: "within Valenzuela City" }),
+      makeRow({ id: "ca20", catalog_item_id: "ci-20ft", particular: "20ft", unit: "per_container", rates: { FCL: 20000 }, remarks: "within Carmona" }),
+    ];
+    // No category.kind, no row.applies_when. Pure catalog-driven dispatch.
+    const matrix = makeMatrix({
+      rows: [...brokerRows, ...optionalRows, ...deliveryRows],
+      categories: [
+        { id: "broker", category_name: "Brokerage", rows: brokerRows },
+        { id: "opt", category_name: "Other", rows: optionalRows },
+        { id: "del", category_name: "Delivery", rows: deliveryRows },
+      ],
+    });
+    const catalogIndex = new Map<string, CatalogDispatchHint>([
+      ["ci-bf", { dispatch_kind: "standard" }],
+      ["ci-st", { dispatch_kind: "standard" }],
+      ["ci-xr", { dispatch_kind: "optional", trigger_field: "examinations", trigger_value: "X-ray" }],
+      ["ci-bai", { dispatch_kind: "optional", trigger_field: "permits", trigger_value: "BAI" }],
+      ["ci-sra", { dispatch_kind: "optional", trigger_field: "permits", trigger_value: "SRA" }],
+      ["ci-20ft", { dispatch_kind: "delivery" }],
+    ]);
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { containers: 3, bls: 1, shipments: 1 },
+      facts: { examinations: ["X-ray"] }, // no permits
+      containers: [
+        { container_number: "A1", container_type: "20ft", delivery_address: "VALENZUELA CITY" },
+        { container_number: "A2", container_type: "20ft", delivery_address: "VALENZUELA CITY" },
+        { container_number: "A3", container_type: "20ft", delivery_address: "VALENZUELA CITY" },
+      ],
+      catalogIndex,
     });
     // Brokerage Fee + Stamps (2) + X-Ray (1 row × 3 qty) + 3 delivery rows × 1 qty each
     expect(result).toHaveLength(2 + 1 + 3);

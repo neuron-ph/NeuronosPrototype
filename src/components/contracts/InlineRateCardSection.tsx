@@ -25,6 +25,7 @@ import { supabase } from "../../utils/supabase/client";
 import { RateBreakdownTable, formatCurrency } from "../pricing/shared/RateBreakdownTable";
 import { QuantityDisplaySection } from "../pricing/shared/QuantityDisplaySection";
 import { extractMultiLineSelectionsAndQuantities, extractBookingFacts, extractBookingContainers } from "../../utils/contractQuantityExtractor";
+import { useCatalogDispatchIndex } from "../../hooks/useCatalogDispatchIndex";
 
 interface InlineRateCardSectionProps {
   booking: any;
@@ -104,6 +105,11 @@ export function InlineRateCardSection({
   const deliveryAddress: string | undefined =
     booking?.deliveryAddress ?? booking?.delivery_address ?? undefined;
 
+  // Catalog-first dispatch (Phase B): for every catalog item referenced by
+  // the contract's rate matrix, fetch the dispatch metadata so the engine
+  // can route rows by catalog hint instead of legacy row/category metadata.
+  const catalogIndex = useCatalogDispatchIndex(rateMatrices);
+
   const multiLineResults = useMemo(() => {
     if (!isMultiLine) return null;
     const extractions = extractMultiLineSelectionsAndQuantities(truckingLineItems!, rateMatrices);
@@ -112,8 +118,8 @@ export function InlineRateCardSection({
 
   const calculation = useMemo(() => {
     if (isMultiLine) return { appliedRates: [] as AppliedRate[], total: 0 };
-    return calculateContractBilling(rateMatrices, serviceType, bookingMode, quantities, selections, facts, containers, deliveryAddress);
-  }, [rateMatrices, serviceType, bookingMode, quantities, selections, isMultiLine, facts, containers, deliveryAddress]);
+    return calculateContractBilling(rateMatrices, serviceType, bookingMode, quantities, selections, facts, containers, deliveryAddress, catalogIndex);
+  }, [rateMatrices, serviceType, bookingMode, quantities, selections, isMultiLine, facts, containers, deliveryAddress, catalogIndex]);
 
   const grandTotal = isMultiLine && multiLineResults ? multiLineResults.grandTotal : calculation.total;
   const totalItems = isMultiLine && multiLineResults
@@ -214,6 +220,7 @@ export function InlineRateCardSection({
         facts,
         containers,
         deliveryAddress,
+        catalogIndex,
       });
       if (result.items.length === 0) {
         toast.warning("No billing items generated — check rate card configuration.");

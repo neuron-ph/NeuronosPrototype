@@ -18,6 +18,7 @@ import {
   type BookingQuantities,
   type BookingFacts,
   type BookingContainer,
+  type CatalogDispatchHint,
 } from "./contractRateEngine";
 import type { LineItemExtraction } from "./contractQuantityExtractor";
 import type { BillingItem } from "../components/shared/billings/UnifiedBillingsTab";
@@ -83,6 +84,14 @@ export interface RateCardGenerationContext {
    * the top-level address but not the per-container one).
    */
   deliveryAddress?: string;
+  /**
+   * Phase B catalog-first dispatch: maps `catalog_item_id` → CatalogDispatchHint.
+   * When present, rows whose catalog_item_id resolves here have their dispatch
+   * behaviour driven by the catalog instead of legacy `row.applies_when` /
+   * `category.kind`. Build via `buildCatalogDispatchIndex()` in async paths or
+   * `useCatalogDispatchIndex()` in React paths.
+   */
+  catalogIndex?: Map<string, CatalogDispatchHint>;
 }
 
 export interface RateCardGenerationResult {
@@ -169,6 +178,7 @@ export function generateRateCardBillingItems(
         facts: ctx.facts,
         containers: ctx.containers,
         deliveryAddress: ctx.deliveryAddress,
+        catalogIndex: ctx.catalogIndex,
       }),
     );
   }

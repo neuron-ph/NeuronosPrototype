@@ -271,6 +271,7 @@ export function calculateContractBilling(
   facts?: BookingFacts,
   containers?: BookingContainer[],
   deliveryAddress?: string,
+  catalogIndex?: Map<string, CatalogDispatchHint>,
 ): { appliedRates: AppliedRate[]; total: number } {
   // Find the matrix for this service type
   const matrix = rateMatrices.find(
@@ -298,6 +299,7 @@ export function calculateContractBilling(
     facts,
     containers,
     deliveryAddress,
+    catalogIndex,
   });
   const total = appliedRates.reduce((sum, r) => sum + r.subtotal, 0);
 
@@ -646,6 +648,23 @@ export interface BookingContainer {
 }
 
 /**
+ * Resolved dispatch behaviour for a single contract rate row, normalised to
+ * the catalog-side vocabulary (`trigger_field` plural — `permits` /
+ * `examinations`). Phase B sources this from catalog metadata; pre-Phase-B
+ * legacy `row.applies_when` and `category.kind` are promoted into this shape
+ * by `resolveRowDispatch` so the dispatcher stays oblivious to where the
+ * hint came from.
+ *
+ * @see migration 106_catalog_dispatch_metadata.sql
+ * @see /docs/blueprints/CATALOG_FIRST_BILLING_BLUEPRINT.md
+ */
+export interface CatalogDispatchHint {
+  dispatch_kind: RateCategoryKind;
+  trigger_field?: 'permits' | 'examinations';
+  trigger_value?: string;
+}
+
+/**
  * Full context the dispatchers need to evaluate a category's rows. Bundled
  * so each strategy gets every signal it might need without re-deriving.
  */
@@ -657,6 +676,55 @@ export interface BillingDispatchContext {
   containers?: BookingContainer[];
   /** Booking-level delivery address fallback when per-container address is empty. */
   deliveryAddress?: string;
+  /**
+   * Map of catalog_item_id → CatalogDispatchHint, hydrated upstream from
+   * `catalog_items` (migration 106). When a row's `catalog_item_id` resolves
+   * via this index, the catalog hint takes precedence over legacy
+   * `row.applies_when` / `category.kind`. Pass an empty map (or omit) to
+   * fall back to legacy precedence entirely.
+   */
+  catalogIndex?: Map<string, CatalogDispatchHint>;
+}
+
+/**
+ * Resolve the effective dispatch behaviour for a single rate row using the
+ * Phase B precedence chain:
+ *
+ *   1. Catalog item — `row.catalog_item_id` resolves through `catalogIndex`
+ *   2. Legacy `row.applies_when` — promoted into a hint (singular → plural)
+ *   3. Legacy `category.kind` — the wrapping category's dispatch kind
+ *   4. Default `'standard'`
+ *
+ * The returned hint is what the dispatchers act on. Callers should clear or
+ * replace `row.applies_when` to match the returned hint before passing the
+ * row to a dispatcher (the kernel still reads `row.applies_when` for the
+ * actual gate evaluation; we want kernel input to agree with the hint).
+ */
+export function resolveRowDispatch(
+  row: ContractRateRow,
+  category: ContractRateCategory | undefined,
+  catalogIndex: Map<string, CatalogDispatchHint> | undefined,
+): CatalogDispatchHint {
+  // 1. Catalog
+  if (row.catalog_item_id && catalogIndex) {
+    const hint = catalogIndex.get(row.catalog_item_id);
+    if (hint) return hint;
+  }
+  // 2. Legacy row.applies_when
+  if (row.applies_when && row.applies_when.kind !== 'always') {
+    const triggerField = row.applies_when.kind === 'permit' ? 'permits' : 'examinations';
+    return {
+      dispatch_kind: 'optional',
+      trigger_field: triggerField,
+      trigger_value: row.applies_when.value,
+    };
+  }
+  // 3. Legacy category.kind
+  if (category?.kind && category.kind !== 'standard') {
+    return { dispatch_kind: category.kind };
+  }
+  // 4. Default
+  return { dispatch_kind: 'standard' };
 }
 
 /**
@@ -827,15 +895,47 @@ const DISPATCHERS: Record<RateCategoryKind, CategoryDispatcher> = {
 };
 
 /**
- * Top-level billing entry point for the category-dispatch refactor.
+ * Apply a resolved dispatch hint to a row: synthesise `row.applies_when` to
+ * mirror the hint so the kernel's filter agrees with the dispatcher routing.
  *
- * Iterates each category in the matrix, looks up the dispatcher by `category.kind`
- * (defaulting to 'standard' when absent), and concatenates the per-category
- * AppliedRate output.
+ * - `'optional'` hint with trigger → row gets the matching applies_when
+ * - `'standard'` or `'delivery'` hint → row's applies_when is cleared (any
+ *   legacy value on the row would otherwise re-gate inside the kernel)
+ */
+function applyHintToRow(row: ContractRateRow, hint: CatalogDispatchHint): ContractRateRow {
+  if (hint.dispatch_kind === 'optional' && hint.trigger_field && hint.trigger_value) {
+    return {
+      ...row,
+      applies_when: {
+        kind: hint.trigger_field === 'permits' ? 'permit' : 'examination',
+        value: hint.trigger_value,
+      },
+    };
+  }
+  // Standard or delivery — strip any legacy applies_when so it doesn't gate inside the kernel.
+  if (row.applies_when) {
+    const { applies_when: _stripped, ...rest } = row;
+    return rest as ContractRateRow;
+  }
+  return row;
+}
+
+/**
+ * Top-level billing entry point for the catalog-first dispatch refactor.
+ *
+ * Iterates each row across all categories. For each row, `resolveRowDispatch`
+ * collapses its catalog metadata + legacy fallbacks into a single
+ * `CatalogDispatchHint`. Rows are bucketed by their resolved `dispatch_kind`
+ * within each category and dispatched through the appropriate strategy.
+ *
+ * The categories themselves keep their UI grouping role (each AppliedRate
+ * carries its source `category.category_name` for grouped rendering) but
+ * stop driving engine behaviour — routing is purely per-row.
  *
  * Backwards compatible: matrices without `categories` fall back to a single
- * synthetic standard category wrapping the flat `rows` array, producing identical
- * output to a direct `instantiateRates` call.
+ * synthetic standard category wrapping the flat `rows`. Rows without a
+ * `catalog_item_id` fall back to legacy `row.applies_when` / `category.kind`
+ * via `resolveRowDispatch`.
  */
 export function generateContractBilling(
   matrix: ContractRateMatrix,
@@ -856,9 +956,28 @@ export function generateContractBilling(
 
   const applied: AppliedRate[] = [];
   for (const category of categories) {
-    const kind = category.kind ?? 'standard';
-    const dispatcher = DISPATCHERS[kind] ?? dispatchStandard;
-    applied.push(...dispatcher(category, matrix, modeColumn, context));
+    // Bucket rows by their resolved per-row dispatch kind. A category can mix
+    // standard + optional + delivery rows if its catalog items disagree on
+    // dispatch_kind — each row gets routed correctly regardless.
+    const buckets = new Map<RateCategoryKind, ContractRateRow[]>();
+    for (const row of category.rows) {
+      const hint = resolveRowDispatch(row, category, context.catalogIndex);
+      const rowWithHint = applyHintToRow(row, hint);
+      const existing = buckets.get(hint.dispatch_kind) ?? [];
+      existing.push(rowWithHint);
+      buckets.set(hint.dispatch_kind, existing);
+    }
+
+    // Dispatch each bucket through its strategy. The synthesised matrix /
+    // category contains only this bucket's rows so the dispatcher's internal
+    // `resolveCategoryRows` lookup finds the hint-applied versions, not the
+    // original ones from `matrix.rows`.
+    for (const [kind, bucketRows] of buckets) {
+      const dispatcher = DISPATCHERS[kind] ?? dispatchStandard;
+      const syntheticCategory: ContractRateCategory = { ...category, rows: bucketRows };
+      const syntheticMatrix: ContractRateMatrix = { ...matrix, rows: bucketRows };
+      applied.push(...dispatcher(syntheticCategory, syntheticMatrix, modeColumn, context));
+    }
   }
   return applied;
 }

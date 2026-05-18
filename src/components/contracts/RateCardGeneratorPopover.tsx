@@ -20,6 +20,7 @@ import {
   extractBookingFacts,
   extractBookingContainers,
 } from "../../utils/contractQuantityExtractor";
+import { useCatalogDispatchIndex } from "../../hooks/useCatalogDispatchIndex";
 import {
   generateRateCardBillingItems,
   hasExistingRateCardBilling,
@@ -66,6 +67,10 @@ export function RateCardGeneratorPopover({
   const [generating, setGenerating] = useState<string | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+
+  // Catalog-first dispatch (Phase B). Hydrated once for the whole contract
+  // since every booking we'd generate against shares the same rate matrices.
+  const catalogIndex = useCatalogDispatchIndex(rateMatrices);
 
   // Close popover on outside click
   useEffect(() => {
@@ -162,6 +167,7 @@ export function RateCardGeneratorPopover({
         facts: row.facts,
         containers: row.containers,
         deliveryAddress: row.deliveryAddress,
+        catalogIndex,
       });
 
       if (result.items.length > 0) {
@@ -195,6 +201,7 @@ export function RateCardGeneratorPopover({
           facts: row.facts,
           containers: row.containers,
           deliveryAddress: row.deliveryAddress,
+          catalogIndex,
         });
         allItems.push(...result.items);
       }
