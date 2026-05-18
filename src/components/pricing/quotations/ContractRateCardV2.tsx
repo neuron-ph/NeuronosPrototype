@@ -55,15 +55,15 @@ const DEFAULT_COLUMNS: Record<string, string[]> = {
 };
 
 const SECTION_LAYOUT_OPTIONS: { value: RateCategoryKind; label: string }[] = [
-  { value: "standard", label: "Applies to every booking" },
-  { value: "optional", label: "Applies by booking selection" },
-  { value: "delivery", label: "Matched by container and destination" },
+  { value: "standard", label: "Standard Rates" },
+  { value: "optional", label: "Other Charges" },
+  { value: "delivery", label: "Delivery Charges" },
 ];
 
 const SECTION_LAYOUT_HELP: Record<RateCategoryKind, string> = {
-  standard: "Rates in this section are included whenever this contract is used.",
-  optional: "Rows in this section are included only when Ops selected the matching permit or exam.",
-  delivery: "Rows in this section match booking containers by container type and destination.",
+  standard: "Included whenever this contract is used.",
+  optional: "Included only when the booking has the selected permit or examination.",
+  delivery: "Matched per container using container type and destination.",
 };
 
 // ============================================
@@ -464,9 +464,20 @@ export function ContractRateCardV2({
                     </span>
                     {!viewMode && (
                       <div
-                        style={{ width: "260px", marginLeft: "4px" }}
+                        style={{ display: "flex", alignItems: "center", gap: "6px", marginLeft: "4px" }}
                         onClick={(e) => e.stopPropagation()}
                       >
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            fontWeight: 600,
+                            color: "var(--theme-text-muted)",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Rate section type
+                        </span>
+                        <div style={{ width: "180px" }}>
                         <CustomDropdown
                           value={sectionLayout}
                           onChange={(value) => handleUpdateCategoryKind(cat.id, value as RateCategoryKind)}
@@ -482,6 +493,7 @@ export function ContractRateCardV2({
                             fontWeight: 600,
                           }}
                         />
+                        </div>
                       </div>
                     )}
                     {viewMode && (
