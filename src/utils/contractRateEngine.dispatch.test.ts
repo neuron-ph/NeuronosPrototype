@@ -119,10 +119,8 @@ describe("generateContractBilling — Phase 1 dispatch", () => {
     );
   });
 
-  it("Phase 1: kind:'optional' falls back to standard (no Phase 2 logic yet)", () => {
+  it("Phase 2: untagged row inside 'optional' category is skipped (separate suite covers the dispatcher in detail)", () => {
     const rows = [
-      // Row would be excluded by Phase 2's optional dispatcher (no applies_when, optional category)
-      // but in Phase 1 it must still appear so contracts tagged ahead of time don't lose revenue.
       makeRow({ id: "r1", particular: "BAI Processing", unit: "per_shipment", rates: { FCL: 3500 } }),
     ];
     const matrix = makeMatrix({
@@ -130,8 +128,7 @@ describe("generateContractBilling — Phase 1 dispatch", () => {
       categories: [{ id: "c1", category_name: "Other Charges", kind: "optional", rows }],
     });
     const result = generateContractBilling(matrix, "FCL", { quantities: { shipments: 1 } });
-    expect(result).toHaveLength(1);
-    expect(result[0].subtotal).toBe(3500);
+    expect(result).toHaveLength(0);  // Phase 2: untagged in optional → skipped
   });
 
   it("Phase 1: kind:'delivery' falls back to standard (no Phase 3 logic yet)", () => {
@@ -152,15 +149,24 @@ describe("generateContractBilling — Phase 1 dispatch", () => {
 
   it("multiple categories: each runs its dispatcher and results concatenate in order", () => {
     const broker = [makeRow({ id: "br1", particular: "Brokerage Fee", unit: "per_bl", rates: { FCL: 5300 } })];
-    const other = [makeRow({ id: "o1", particular: "X-Ray", unit: "per_container", rates: { FCL: 3500 } })];
+    const other = [makeRow({
+      id: "o1",
+      particular: "X-Ray",
+      unit: "per_container",
+      rates: { FCL: 3500 },
+      applies_when: { kind: "examination", value: "X-ray" },
+    })];
     const matrix = makeMatrix({
       rows: [...broker, ...other],
       categories: [
         { id: "c1", category_name: "Brokerage Charges", kind: "standard", rows: broker },
-        { id: "c2", category_name: "Other Charges", kind: "optional", rows: other }, // falls back to standard in Phase 1
+        { id: "c2", category_name: "Other Charges", kind: "optional", rows: other },
       ],
     });
-    const result = generateContractBilling(matrix, "FCL", { quantities: { containers: 3, bls: 1 } });
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { containers: 3, bls: 1 },
+      facts: { examinations: ["X-ray"] },
+    });
     expect(result).toHaveLength(2);
     expect(result[0].particular).toBe("Brokerage Fee");
     expect(result[0].category).toBe("Brokerage Charges");
@@ -175,6 +181,137 @@ describe("generateContractBilling — Phase 1 dispatch", () => {
       categories: [{ id: "c1", category_name: "X", kind: "bogus" as any, rows }],
     });
     const result = generateContractBilling(matrix, "FCL", { quantities: { bls: 1 } });
+    expect(result).toHaveLength(1);
+  });
+});
+
+// ============================================
+// Phase 2 — 'optional' category dispatcher
+// ============================================
+
+describe("generateContractBilling — Phase 2 optional dispatcher", () => {
+  it("includes a tagged row when booking fact matches", () => {
+    const rows = [
+      makeRow({
+        id: "r1",
+        particular: "BAI Processing",
+        unit: "per_shipment",
+        rates: { FCL: 3500 },
+        applies_when: { kind: "permit", value: "BAI" },
+      }),
+    ];
+    const matrix = makeMatrix({
+      rows,
+      categories: [{ id: "c1", category_name: "Other Charges", kind: "optional", rows }],
+    });
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { shipments: 1 },
+      facts: { permits: ["BAI"] },
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0].particular).toBe("BAI Processing");
+  });
+
+  it("excludes a tagged row when no facts are provided", () => {
+    const rows = [
+      makeRow({
+        id: "r1",
+        particular: "BAI Processing",
+        unit: "per_shipment",
+        rates: { FCL: 3500 },
+        applies_when: { kind: "permit", value: "BAI" },
+      }),
+    ];
+    const matrix = makeMatrix({
+      rows,
+      categories: [{ id: "c1", category_name: "Other Charges", kind: "optional", rows }],
+    });
+    const result = generateContractBilling(matrix, "FCL", { quantities: { shipments: 1 } });
+    expect(result).toHaveLength(0);
+  });
+
+  it("skips untagged rows inside an optional category (misconfig → conservative under-bill)", () => {
+    const rows = [
+      makeRow({
+        id: "r1",
+        particular: "Random Optional Row",
+        unit: "per_shipment",
+        rates: { FCL: 3500 },
+        // no applies_when — misconfigured
+      }),
+    ];
+    const matrix = makeMatrix({
+      rows,
+      categories: [{ id: "c1", category_name: "Other Charges", kind: "optional", rows }],
+    });
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { shipments: 1 },
+      facts: { permits: ["BAI"], examinations: ["X-ray"] },
+    });
+    expect(result).toHaveLength(0);
+  });
+
+  it("optional category with a mix: only tagged-and-matching rows survive", () => {
+    const r1 = makeRow({ id: "r1", particular: "BAI", unit: "per_shipment", rates: { FCL: 3500 }, applies_when: { kind: "permit", value: "BAI" } });
+    const r2 = makeRow({ id: "r2", particular: "SRA", unit: "per_shipment", rates: { FCL: 3500 }, applies_when: { kind: "permit", value: "SRA" } });
+    const r3 = makeRow({ id: "r3", particular: "X-Ray", unit: "per_container", rates: { FCL: 3500 }, applies_when: { kind: "examination", value: "X-ray" } });
+    const r4 = makeRow({ id: "r4", particular: "Untagged", unit: "per_shipment", rates: { FCL: 9999 } }); // skipped
+    const rows = [r1, r2, r3, r4];
+    const matrix = makeMatrix({
+      rows,
+      categories: [{ id: "c1", category_name: "Other Charges", kind: "optional", rows }],
+    });
+    // Booking has X-ray but no permits — only X-Ray row survives.
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { containers: 3, shipments: 1 },
+      facts: { examinations: ["X-ray"] },
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0].particular).toBe("X-Ray");
+    expect(result[0].quantity).toBe(3);  // per_container
+    expect(result[0].subtotal).toBe(10500);
+  });
+
+  it("regression: standard category alongside optional still emits every row", () => {
+    const standardRows = [
+      makeRow({ id: "s1", particular: "Brokerage Fee", unit: "per_bl", rates: { FCL: 5300 } }),
+      makeRow({ id: "s2", particular: "Stamps", unit: "per_bl", rates: { FCL: 1000 } }),
+    ];
+    const optionalRows = [
+      makeRow({ id: "o1", particular: "BAI", unit: "per_shipment", rates: { FCL: 3500 }, applies_when: { kind: "permit", value: "BAI" } }),
+    ];
+    const matrix = makeMatrix({
+      rows: [...standardRows, ...optionalRows],
+      categories: [
+        { id: "c1", category_name: "Brokerage", kind: "standard", rows: standardRows },
+        { id: "c2", category_name: "Other Charges", kind: "optional", rows: optionalRows },
+      ],
+    });
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { bls: 1, shipments: 1 },
+      facts: { permits: ["BAI"] },
+    });
+    expect(result).toHaveLength(3);
+    expect(result.map((r) => r.particular).sort()).toEqual(["BAI", "Brokerage Fee", "Stamps"]);
+  });
+
+  it("optional dispatcher honours case-insensitive fact matching", () => {
+    const rows = [
+      makeRow({
+        id: "r1",
+        unit: "per_shipment",
+        rates: { FCL: 3500 },
+        applies_when: { kind: "permit", value: "BAI" },
+      }),
+    ];
+    const matrix = makeMatrix({
+      rows,
+      categories: [{ id: "c1", category_name: "Other Charges", kind: "optional", rows }],
+    });
+    const result = generateContractBilling(matrix, "FCL", {
+      quantities: { shipments: 1 },
+      facts: { permits: ["bai"] },  // lowercase
+    });
     expect(result).toHaveLength(1);
   });
 });

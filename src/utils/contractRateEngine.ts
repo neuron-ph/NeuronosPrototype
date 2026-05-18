@@ -650,24 +650,66 @@ type CategoryDispatcher = (
  * when no category metadata is involved; this dispatcher just scopes the rows
  * to the category and lets the existing kernel do the math.
  */
+/**
+ * Resolve the current state of a category's rows from `matrix.rows` (the
+ * authoritative flat array) by id. `category.rows` is treated as a stale id
+ * snapshot — the editor mutates matrix.rows directly without updating the
+ * category grouping, so trusting category.rows blindly would lose edits made
+ * via the flat table view (e.g. applies_when set via the TRIGGER popover).
+ */
+function resolveCategoryRows(category: ContractRateCategory, matrix: ContractRateMatrix): ContractRateRow[] {
+  const wantedIds = new Set(category.rows.map((r) => r.id));
+  // Preserve category's row ordering when possible by intersecting with matrix.rows
+  // (the engine doesn't strictly care about order, but stable ordering helps debugging).
+  return matrix.rows.filter((r) => wantedIds.has(r.id));
+}
+
 const dispatchStandard: CategoryDispatcher = (category, matrix, modeColumn, ctx) => {
   // Reuse the legacy kernel by synthesising a per-category matrix slice. This
   // preserves every existing behaviour (mode-column fuzzy match, selection_group
   // gating, applies_when row-level filter from Phase B) without duplicating logic.
+  const currentRows = resolveCategoryRows(category, matrix);
   const slice: ContractRateMatrix = {
     ...matrix,
-    rows: category.rows,
-    categories: [category],
+    rows: currentRows,
+    categories: [{ ...category, rows: currentRows }],
+  };
+  return instantiateRates(slice, modeColumn, ctx.quantities, ctx.selections, ctx.facts);
+};
+
+/**
+ * 'optional' — rows are opt-in. Each must declare `applies_when` so the engine
+ * knows what booking fact gates it. Rows without `applies_when` inside an
+ * optional category are misconfigured and silently skipped (the editor
+ * surfaces a warning badge so Pricing can fix them; we conservatively
+ * undercharge rather than wrongly bill).
+ *
+ * Implementation: pre-filter to rows that have `applies_when` set, then let
+ * the kernel's existing applies_when filter (Phase B) evaluate them against
+ * `ctx.facts`. Reusing the kernel keeps fact-matching semantics consistent
+ * with row-level configuration anywhere else in the codebase.
+ */
+const dispatchOptional: CategoryDispatcher = (category, matrix, modeColumn, ctx) => {
+  const currentRows = resolveCategoryRows(category, matrix);
+  const gatedRows = currentRows.filter((row) =>
+    row.applies_when && row.applies_when.kind !== 'always'
+  );
+  if (gatedRows.length === 0) return [];
+  const slice: ContractRateMatrix = {
+    ...matrix,
+    rows: gatedRows,
+    categories: [{ ...category, rows: gatedRows }],
   };
   return instantiateRates(slice, modeColumn, ctx.quantities, ctx.selections, ctx.facts);
 };
 
 const DISPATCHERS: Record<RateCategoryKind, CategoryDispatcher> = {
-  // Phase 1: only 'standard' is real. 'optional' and 'delivery' fall through
-  // to standard so contracts tagged ahead of time keep producing the legacy bill
-  // (no behaviour change, no surprises). Phase 2 + 3 swap in the real strategies.
+  // Phase 1 shipped 'standard'. Phase 2 ships 'optional'. 'delivery' still
+  // delegates to standard until Phase 3 — contracts tagged 'delivery' ahead
+  // of time keep producing the legacy bill (no surprises before Phase 3
+  // brings the real container/address matcher).
   standard: dispatchStandard,
-  optional: dispatchStandard,
+  optional: dispatchOptional,
   delivery: dispatchStandard,
 };
 

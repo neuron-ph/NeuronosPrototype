@@ -19,7 +19,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Plus, Trash2, ChevronDown, ChevronRight, GripVertical, Info } from "lucide-react";
-import type { ContractRateMatrix, ContractRateRow, RateRowTrigger, ServiceType } from "../../../types/pricing";
+import type { ContractRateMatrix, ContractRateRow, RateCategoryKind, RateRowTrigger, ServiceType } from "../../../types/pricing";
 import { useEnumOptions } from "../../../hooks/useEnumOptions";
 
 // ============================================
@@ -303,6 +303,29 @@ export function ContractRateMatrixEditor({
   const displayLabel = serviceLabel || matrix.service_type;
   const columns = matrix.columns;
   const rows = matrix.rows;
+  const categories = matrix.categories;
+
+  // Build a row.id → category.kind map so each RowGroup can conditionally
+  // render the TRIGGER button (optional only) and warning badges (untagged
+  // rows inside optional categories). Memoised on the shape that drives it.
+  const rowKindMap = useMemo(() => {
+    const map = new Map<string, RateCategoryKind>();
+    if (categories) {
+      for (const cat of categories) {
+        const kind = cat.kind ?? 'standard';
+        for (const r of cat.rows) map.set(r.id, kind);
+      }
+    }
+    return map;
+  }, [categories]);
+
+  const updateCategoryKind = useCallback((categoryId: string, nextKind: RateCategoryKind) => {
+    if (!categories) return;
+    const nextCategories = categories.map((c) =>
+      c.id === categoryId ? { ...c, kind: nextKind } : c
+    );
+    onChange({ ...matrix, categories: nextCategories });
+  }, [matrix, onChange, categories]);
 
   // ---- Row CRUD ----
 
@@ -541,6 +564,75 @@ export function ContractRateMatrixEditor({
         )}
       </div>
 
+      {/* Category dispatch settings — only renders when categories exist. Lets
+          Pricing tell the engine how each category should be evaluated:
+            Standard → every row applies (legacy behaviour)
+            Optional → rows only apply when booking declares the matching fact
+                       via applies_when (per-row TRIGGER popover below)
+            Delivery → matches container type + delivery address (Phase 3)
+          See /docs/blueprints/CATEGORY_DISPATCH_BLUEPRINT.md */}
+      {isExpanded && categories && categories.length > 0 && !viewMode && (
+        <div
+          style={{
+            padding: "10px 16px",
+            borderBottom: "1px solid var(--neuron-ui-border)",
+            backgroundColor: "var(--theme-bg-surface-subtle)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "8px",
+          }}
+        >
+          <div style={{ fontSize: "10px", fontWeight: 700, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+            Category dispatch
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            {categories.map((cat) => {
+              const kind: RateCategoryKind = cat.kind ?? 'standard';
+              return (
+                <div key={cat.id} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <div style={{ flex: 1, fontSize: "12px", fontWeight: 600, color: "var(--neuron-ink-default)" }}>
+                    {cat.category_name || "—"}
+                  </div>
+                  <div style={{ display: "flex", gap: "4px" }}>
+                    {(['standard', 'optional', 'delivery'] as const).map((k) => {
+                      const selected = kind === k;
+                      const colour = k === 'optional' ? '#92400E' : k === 'delivery' ? '#1E40AF' : 'var(--neuron-ink-default)';
+                      const bg = selected
+                        ? (k === 'optional' ? '#FEF3C7' : k === 'delivery' ? '#DBEAFE' : '#E5E7EB')
+                        : 'transparent';
+                      const border = selected
+                        ? (k === 'optional' ? '1px solid #FCD34D' : k === 'delivery' ? '1px solid #93C5FD' : '1px solid #D1D5DB')
+                        : '1px solid var(--neuron-ui-border)';
+                      return (
+                        <button
+                          key={k}
+                          onClick={() => updateCategoryKind(cat.id, k)}
+                          style={{
+                            padding: "3px 10px",
+                            fontSize: "10px",
+                            fontWeight: 700,
+                            letterSpacing: "0.3px",
+                            textTransform: "uppercase",
+                            background: bg,
+                            color: selected ? colour : 'var(--neuron-ink-muted)',
+                            border,
+                            borderRadius: "4px",
+                            cursor: "pointer",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {k}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       {isExpanded && (
         <div style={{ overflowX: "auto" }}>
@@ -676,6 +768,7 @@ export function ContractRateMatrixEditor({
                   getUnitLabel={getUnitLabel}
                   examOptions={examOptions}
                   permitOptions={permitOptions}
+                  parentKind={rowKindMap.get(row.id) ?? 'standard'}
                 />
               ))}
             </tbody>
@@ -724,6 +817,7 @@ function RowGroup({
   getUnitLabel,
   examOptions,
   permitOptions,
+  parentKind,
 }: {
   row: ContractRateRow;
   columns: string[];
@@ -736,6 +830,8 @@ function RowGroup({
   getUnitLabel: (unit: string) => string;
   examOptions: string[];
   permitOptions: string[];
+  /** Dispatch kind of the enclosing category. Defaults to 'standard' when unknown. */
+  parentKind: RateCategoryKind;
 }) {
   const [isHovered, setIsHovered] = useState(false);
   const [triggerPopoverOpen, setTriggerPopoverOpen] = useState(false);
@@ -1025,7 +1121,12 @@ function RowGroup({
                 </button>
               )}
               {/* Trigger (applies_when) toggle — sets which booking fact gates this row.
-                  Highlight glow when a suggestion is available but no trigger is set. */}
+                  Only renders inside 'optional' categories where the dispatcher
+                  honours applies_when. For 'standard' categories every row applies
+                  regardless, so a trigger would be misleading; for 'delivery'
+                  categories the dispatcher uses a different matching algorithm
+                  (container type + address) and applies_when is ignored. */}
+              {parentKind === 'optional' && (
               <div style={{ position: 'relative', flexShrink: 0 }}>
                 <button
                   ref={triggerButtonRef}
@@ -1135,6 +1236,30 @@ function RowGroup({
                   </div>
                 )}
               </div>
+              )}
+              {/* Misconfig warning: row sits inside an Optional category but has
+                  no applies_when set. The dispatcher silently skips it (no bill
+                  emitted), which over time silently undercharges. Surface it
+                  here so Pricing can fix during the contract sweep. */}
+              {parentKind === 'optional' && !hasTrigger && (
+                <span
+                  title="This row is in an Optional category but has no trigger set. The engine will skip it. Click TRIGGER to set what booking fact gates it."
+                  style={{
+                    padding: '3px 6px',
+                    background: '#FEE2E2',
+                    border: '1px solid #FCA5A5',
+                    borderRadius: '3px',
+                    color: '#991B1B',
+                    fontSize: '9px',
+                    fontWeight: 700,
+                    letterSpacing: '0.3px',
+                    whiteSpace: 'nowrap',
+                    marginLeft: '2px',
+                  }}
+                >
+                  NO TRIGGER
+                </span>
+              )}
             </div>
           )}
         </td>
