@@ -301,6 +301,7 @@ export const profileRegistry: Record<string, ProfileRegistryEntry> = {
   truck_type: enumProfile('Truck Type', 'Truck Types', 'Truck size for trucking quotations and bookings.', 'profile_truck_types'),
   selectivity_color: enumProfile('Selectivity Color', 'Selectivity Colors', 'Brokerage selectivity color (Yellow, Orange, Red).', 'profile_selectivity_colors'),
   examination: enumProfile('Examination', 'Examinations', 'Brokerage examination type (X-ray, Spotcheck, DEA).', 'profile_examinations'),
+  permits: enumProfile('Permit', 'Permits', 'Brokerage permits and clearances used on bookings and contract rate matching.', 'profile_permits'),
   container_type: enumProfile('Container Type', 'Container Types', 'Container size for FCL (20ft, 40ft, 45ft).', 'profile_container_types'),
   package_type: enumProfile('Package Type', 'Package Types', 'Forwarding package type (Pallet, Carton, …).', 'profile_package_types'),
   preferential_treatment: enumProfile('Preferential Treatment', 'Preferential Treatments', 'Trade agreement form (Form E, Form D, …).', 'profile_preferential_treatments'),

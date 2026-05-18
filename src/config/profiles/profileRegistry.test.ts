@@ -27,6 +27,7 @@ const EXPECTED_ADMIN_TYPES = [
   'truck_type',
   'selectivity_color',
   'examination',
+  'permits',
   'container_type',
   'package_type',
   'preferential_treatment',
