@@ -66,8 +66,6 @@ const SECTION_LAYOUT_HELP: Record<RateCategoryKind, string> = {
   delivery: "Matched per container using container type and destination.",
 };
 
-const NO_BOOKING_SELECTION = "__none__";
-
 // ============================================
 // ID GENERATOR
 // ============================================
@@ -544,7 +542,7 @@ export function ContractRateCardV2({
                     <div style={{ display: "grid", gridTemplateColumns: buildGridTemplate(columns, viewMode, false, sectionLayout), gap: "0", padding: "10px 16px", backgroundColor: "var(--theme-bg-surface)", borderBottom: "2px solid var(--neuron-ui-border)", minWidth: "fit-content", alignItems: "center" }}>
                       <div style={gridHeaderCell}>{sectionLayout === "delivery" ? "Container Type" : "Particular"}</div>
                       {sectionLayout === "optional" && (
-                        <div style={gridHeaderCell}>Charge When Booking Has</div>
+                        <div style={gridHeaderCell}>Booking Match</div>
                       )}
                       {columns.map((col, colIdx) => (
                         <div key={col} style={{ ...gridHeaderCell, textAlign: "right", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "6px" }}>
@@ -630,7 +628,7 @@ function buildGridTemplate(
   const parts: string[] = [];
   parts.push("minmax(160px, 2.5fr)"); // Particular / Truck Config
   if (!isTrucking && sectionLayout === "optional") {
-    parts.push("minmax(180px, 1.7fr)"); // Charge When Booking Has
+    parts.push("minmax(180px, 1.7fr)"); // Booking Match
   }
   columns.forEach(() => parts.push("minmax(100px, 1.2fr)")); // Rate columns
   if (isTrucking) {
@@ -728,24 +726,16 @@ function RateLineItem({
 
   const hasSelection = !!row.applies_when && row.applies_when.kind !== 'always';
   const selectionLabel = (() => {
-    if (!hasSelection) return 'Select booking item';
+    if (!hasSelection) return 'Choose permit or exam';
     const t = row.applies_when!;
     if (t.kind === 'examination') return `Exam: ${t.value}`;
     return `Permit: ${t.value}`;
   })();
-  const bookingSelectionOptions = useMemo(
-    () => [
-      { value: NO_BOOKING_SELECTION, label: "Select booking item" },
-      ...permitOptions.map((value) => ({ value: `permit:${value}`, label: `Permit: ${value}` })),
-      ...examOptions.map((value) => ({ value: `examination:${value}`, label: `Exam: ${value}` })),
-    ],
-    [permitOptions, examOptions],
-  );
   const bookingSelectionValue = hasSelection
     ? `${row.applies_when!.kind}:${row.applies_when!.value ?? ""}`
-    : NO_BOOKING_SELECTION;
+    : "";
   const applySelection = (nextValue: string) => {
-    if (!nextValue || nextValue === NO_BOOKING_SELECTION) {
+    if (!nextValue) {
       const { applies_when: _drop, ...rest } = row;
       onUpdate({ ...rest, applies_when: undefined } as Partial<ContractRateRow>);
       return;
@@ -844,22 +834,40 @@ function RateLineItem({
                 {selectionLabel}
               </div>
             ) : (
-              <CustomDropdown
+              <select
                 value={bookingSelectionValue}
-                options={bookingSelectionOptions}
-                onChange={applySelection}
-                size="sm"
-                fullWidth
-                buttonStyle={{
+                onChange={(e) => applySelection(e.target.value)}
+                aria-label="Booking match"
+                style={{
+                  width: "100%",
                   padding: "6px 8px",
                   fontSize: "12px",
                   borderRadius: "6px",
-                  border: hasSelection ? "1px solid var(--neuron-ui-border)" : "1px solid #FCA5A5",
+                  border: "1px solid var(--neuron-ui-border)",
                   backgroundColor: "var(--theme-bg-surface)",
-                  color: hasSelection ? "var(--neuron-ink-primary)" : "#991B1B",
-                  fontWeight: 600,
+                  color: hasSelection ? "var(--neuron-ink-primary)" : "var(--theme-text-muted)",
+                  fontWeight: 500,
+                  outline: "none",
+                  fontFamily: "inherit",
+                  cursor: "pointer",
                 }}
-              />
+              >
+                <option value="">Choose permit or exam</option>
+                {permitOptions.length > 0 && (
+                  <optgroup label="Permits">
+                    {permitOptions.map((value) => (
+                      <option key={`permit:${value}`} value={`permit:${value}`}>{value}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {examOptions.length > 0 && (
+                  <optgroup label="Examinations">
+                    {examOptions.map((value) => (
+                      <option key={`examination:${value}`} value={`examination:${value}`}>{value}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
             )}
           </div>
         )}
