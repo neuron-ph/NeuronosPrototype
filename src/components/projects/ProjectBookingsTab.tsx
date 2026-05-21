@@ -112,6 +112,18 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
     staleTime: 30_000,
   });
 
+  // Service types that already have a booking under this project — one per
+  // service type is the hard rule (enforced by DB constraint in migration 110).
+  const bookedServiceTypes = new Set<string>(
+    verifiedBookings
+      .map((b: any) => b.serviceType || b.service_type)
+      .filter(Boolean)
+  );
+  const singleSvc = servicesMetadata[0];
+  const singleSvcAlreadyBooked = singleSvc ? bookedServiceTypes.has(singleSvc.service_type) : false;
+  const allServicesBooked = servicesMetadata.length > 0
+    && servicesMetadata.every((svc: any) => bookedServiceTypes.has(svc.service_type));
+
   // Auto-open booking if selectedBookingId is provided
   useEffect(() => {
     if (selectedBookingId && !selectedBooking && verifiedBookings.length > 0) {
@@ -172,59 +184,71 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
             <div style={{ position: "relative", flexShrink: 0 }}>
               {servicesMetadata.length === 1 ? (
                 <button
-                  onClick={() => setCreateBookingService(servicesMetadata[0])}
+                  onClick={() => !singleSvcAlreadyBooked && setCreateBookingService(singleSvc)}
+                  disabled={singleSvcAlreadyBooked}
+                  title={singleSvcAlreadyBooked ? `A ${singleSvc.service_type} booking already exists for this project` : undefined}
                   style={{
                     padding: "10px 20px",
-                    backgroundColor: "var(--theme-action-primary-bg)",
-                    border: "1px solid var(--theme-action-primary-bg)",
+                    backgroundColor: singleSvcAlreadyBooked ? "var(--theme-bg-surface-subtle)" : "var(--theme-action-primary-bg)",
+                    border: `1px solid ${singleSvcAlreadyBooked ? "var(--theme-border-default)" : "var(--theme-action-primary-bg)"}`,
                     borderRadius: "6px",
-                    cursor: "pointer",
+                    cursor: singleSvcAlreadyBooked ? "not-allowed" : "pointer",
                     transition: "all 0.2s ease",
                     display: "inline-flex",
                     alignItems: "center",
                     gap: "8px",
                     fontSize: "13px",
                     fontWeight: 600,
-                    color: "white",
+                    color: singleSvcAlreadyBooked ? "var(--theme-text-muted)" : "white",
+                    opacity: singleSvcAlreadyBooked ? 0.6 : 1,
                   }}
                   onMouseEnter={(e) => {
+                    if (singleSvcAlreadyBooked) return;
                     e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg-dark, #0D5B57)";
                   }}
                   onMouseLeave={(e) => {
+                    if (singleSvcAlreadyBooked) return;
                     e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
                   }}
                 >
                   <Plus size={16} />
-                  Create {servicesMetadata[0].service_type} Booking
+                  {singleSvcAlreadyBooked
+                    ? `${singleSvc.service_type} booking already created`
+                    : `Create ${singleSvc.service_type} Booking`}
                 </button>
               ) : (
                 <>
                   <button
-                    onClick={() => setShowServiceDropdown(!showServiceDropdown)}
+                    onClick={() => !allServicesBooked && setShowServiceDropdown(!showServiceDropdown)}
+                    disabled={allServicesBooked}
+                    title={allServicesBooked ? "All services for this project already have bookings" : undefined}
                     style={{
                       padding: "10px 20px",
-                      backgroundColor: "var(--theme-action-primary-bg)",
-                      border: "1px solid var(--theme-action-primary-bg)",
+                      backgroundColor: allServicesBooked ? "var(--theme-bg-surface-subtle)" : "var(--theme-action-primary-bg)",
+                      border: `1px solid ${allServicesBooked ? "var(--theme-border-default)" : "var(--theme-action-primary-bg)"}`,
                       borderRadius: "6px",
-                      cursor: "pointer",
+                      cursor: allServicesBooked ? "not-allowed" : "pointer",
                       transition: "all 0.2s ease",
                       display: "inline-flex",
                       alignItems: "center",
                       gap: "8px",
                       fontSize: "13px",
                       fontWeight: 600,
-                      color: "white",
+                      color: allServicesBooked ? "var(--theme-text-muted)" : "white",
+                      opacity: allServicesBooked ? 0.6 : 1,
                     }}
                     onMouseEnter={(e) => {
+                      if (allServicesBooked) return;
                       e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg-dark, #0D5B57)";
                     }}
                     onMouseLeave={(e) => {
+                      if (allServicesBooked) return;
                       e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
                     }}
                   >
                     <Plus size={16} />
-                    Create Booking
-                    <ChevronDown size={14} />
+                    {allServicesBooked ? "All services booked" : "Create Booking"}
+                    {!allServicesBooked && <ChevronDown size={14} />}
                   </button>
                   {showServiceDropdown && (
                     <>
@@ -239,27 +263,42 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
                         boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 20,
                         minWidth: "200px", overflow: "hidden",
                       }}>
-                        {servicesMetadata.map((svc: any) => (
-                          <button
-                            key={svc.service_type}
-                            onClick={() => {
-                              setCreateBookingService(svc);
-                              setShowServiceDropdown(false);
-                            }}
-                            style={{
-                              display: "flex", alignItems: "center", gap: "8px",
-                              width: "100%", padding: "10px 16px", fontSize: "13px",
-                              color: "var(--theme-text-primary)", backgroundColor: "var(--theme-bg-surface)",
-                              border: "none", borderBottom: "1px solid var(--theme-border-subtle)",
-                              cursor: "pointer", textAlign: "left",
-                            }}
-                            onMouseEnter={e => e.currentTarget.style.backgroundColor = "var(--theme-bg-page)"}
-                            onMouseLeave={e => e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)"}
-                          >
-                            {getServiceIcon(svc.service_type, { size: 15, color: "var(--theme-action-primary-bg)" })}
-                            {svc.service_type}
-                          </button>
-                        ))}
+                        {servicesMetadata.map((svc: any) => {
+                          const alreadyBooked = bookedServiceTypes.has(svc.service_type);
+                          return (
+                            <button
+                              key={svc.service_type}
+                              disabled={alreadyBooked}
+                              title={alreadyBooked ? `A ${svc.service_type} booking already exists for this project` : undefined}
+                              onClick={() => {
+                                if (alreadyBooked) return;
+                                setCreateBookingService(svc);
+                                setShowServiceDropdown(false);
+                              }}
+                              style={{
+                                display: "flex", alignItems: "center", gap: "8px", justifyContent: "space-between",
+                                width: "100%", padding: "10px 16px", fontSize: "13px",
+                                color: alreadyBooked ? "var(--theme-text-muted)" : "var(--theme-text-primary)",
+                                backgroundColor: "var(--theme-bg-surface)",
+                                border: "none", borderBottom: "1px solid var(--theme-border-subtle)",
+                                cursor: alreadyBooked ? "not-allowed" : "pointer", textAlign: "left",
+                                opacity: alreadyBooked ? 0.55 : 1,
+                              }}
+                              onMouseEnter={e => { if (!alreadyBooked) e.currentTarget.style.backgroundColor = "var(--theme-bg-page)"; }}
+                              onMouseLeave={e => { if (!alreadyBooked) e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)"; }}
+                            >
+                              <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                {getServiceIcon(svc.service_type, { size: 15, color: alreadyBooked ? "var(--theme-text-muted)" : "var(--theme-action-primary-bg)" })}
+                                {svc.service_type}
+                              </span>
+                              {alreadyBooked && (
+                                <span style={{ fontSize: "11px", color: "var(--theme-text-muted)", fontStyle: "italic" }}>
+                                  Already booked
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
                       </div>
                     </>
                   )}
