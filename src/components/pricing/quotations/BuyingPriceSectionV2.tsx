@@ -102,24 +102,21 @@ export function BuyingPriceSectionV2({
 
     categories.forEach(category => {
       category.line_items.forEach(item => {
-        const vendorId = item.vendor_id || "no-vendor";
-        
-        // Look up actual vendor name from vendors array
-        // FIX: Use vendor_id instead of id for lookup
-        let vendorName = "No Vendor";
+        const hasVendor = !!item.vendor_id;
+        const vendorId = hasVendor ? item.vendor_id! : "direct";
+
+        let vendorName = hasVendor ? `Vendor ${item.vendor_id}` : "Direct Entries";
         let vendorService = "";
-        
-        if (item.vendor_id && vendors) {
+
+        if (hasVendor && vendors) {
           const vendor = vendors.find(v => v.vendor_id === item.vendor_id);
           if (vendor) {
             vendorName = vendor.name;
             vendorService = vendor.service_tag || "";
-          } else {
-            vendorName = `Vendor ${item.vendor_id}`; // Fallback if vendor not found
           }
         }
-        
-        const service = getServiceDisplayName(item.service || vendorService);
+
+        const service = hasVendor ? getServiceDisplayName(item.service || vendorService) : "";
 
         flatItems.push({
           categoryId: category.id,
@@ -152,6 +149,19 @@ export function BuyingPriceSectionV2({
         ...item,
         _categoryId: categoryId
       });
+    });
+
+    // Step 2b: Ensure every category — including empty ones — is visible.
+    // Categories with no items at all live under the synthetic "Direct" vendor
+    // so users can see them and add items without first importing a vendor.
+    const DIRECT_VENDOR_KEY = "direct:::Direct Entries:::";
+    categories.forEach(category => {
+      const hasAnyItem = flatItems.some(f => f.categoryId === category.id);
+      if (hasAnyItem) return;
+      if (!vendorMap.has(DIRECT_VENDOR_KEY)) vendorMap.set(DIRECT_VENDOR_KEY, new Map());
+      const categoryMap = vendorMap.get(DIRECT_VENDOR_KEY)!;
+      const categoryKey = `${category.id}:::${category.category_name || category.name || "Unnamed Category"}`;
+      if (!categoryMap.has(categoryKey)) categoryMap.set(categoryKey, []);
     });
 
     // Step 3: Convert to VendorGroup structure with CategoryGroups
@@ -262,8 +272,8 @@ export function BuyingPriceSectionV2({
         line_items: updatedItems,
         subtotal
       };
-    }).filter(cat => cat.line_items.length > 0); // Remove empty categories
-    
+    });
+
     onChange(updatedCategories);
   };
 
@@ -907,6 +917,68 @@ export function BuyingPriceSectionV2({
                                   ))}
                                 </div>
                               </div>
+                              {!viewMode && (
+                                <div style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  marginTop: "10px"
+                                }}>
+                                  <button
+                                    onClick={() => onAddItemToCategory(categoryGroup.category_id)}
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "6px",
+                                      padding: "7px 12px",
+                                      fontSize: "12px",
+                                      fontWeight: 600,
+                                      color: "var(--neuron-brand-green)",
+                                      backgroundColor: "var(--theme-bg-surface)",
+                                      border: "1px dashed var(--neuron-brand-green)",
+                                      borderRadius: "6px",
+                                      cursor: "pointer",
+                                      transition: "all 0.15s ease"
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)";
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
+                                    }}
+                                  >
+                                    <Plus size={14} />
+                                    Add Item
+                                  </button>
+                                  <button
+                                    onClick={() => onDeleteCategory(categoryGroup.category_id)}
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "6px",
+                                      padding: "7px 12px",
+                                      fontSize: "12px",
+                                      fontWeight: 500,
+                                      color: "var(--theme-status-danger-fg)",
+                                      backgroundColor: "var(--theme-bg-surface)",
+                                      border: "1px solid var(--theme-status-danger-border)",
+                                      borderRadius: "6px",
+                                      cursor: "pointer",
+                                      transition: "all 0.15s ease"
+                                    }}
+                                    title="Delete this category"
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.backgroundColor = "var(--theme-status-danger-bg)";
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
+                                    }}
+                                  >
+                                    <Trash2 size={13} />
+                                    Delete category
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
