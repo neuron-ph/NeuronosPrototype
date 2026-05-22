@@ -70,6 +70,8 @@ export interface PrintableTableRow {
   cells: Record<string, PrintableValue>;
   groupId?: string;
   emphasis?: "normal" | "subtotal" | "total";
+  /** Optional subtext rendered as a small line under the row (e.g. line-item remarks). */
+  subtext?: string;
 }
 
 export interface PrintableTableGroup {

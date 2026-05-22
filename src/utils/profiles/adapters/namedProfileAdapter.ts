@@ -8,7 +8,6 @@ export function createNamedProfileAdapter(
     ProfileRegistryEntry['source'],
     | 'profile_carriers'
     | 'profile_forwarders'
-    | 'profile_shipping_lines'
     | 'profile_trucking_companies'
     | 'profile_consolidators'
     | 'profile_insurers'

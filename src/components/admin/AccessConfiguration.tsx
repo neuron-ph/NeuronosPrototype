@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "sonner@2.0.3";
-import { ArrowLeft, Save, AlertTriangle, RotateCcw, BookMarked, ChevronDown, BookOpen, Check } from "lucide-react";
+import { ArrowLeft, Save, AlertTriangle, RotateCcw, BookMarked, ChevronDown, BookOpen, Check, Pencil, Trash2, X } from "lucide-react";
 import { useUser } from "../../hooks/useUser";
 import { PermissionGrantEditor } from "./accessProfiles/PermissionGrantEditor";
 import type { ModuleGrants, AccessProfileSummary, VisibilityScope } from "./accessProfiles/accessProfileTypes";
@@ -188,6 +188,39 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
   const [savedAppliedProfileName, setSavedAppliedProfileName] = useState<string | null>(null);
   const [savedScope, setSavedScope] = useState<VisibilityScope>("own");
   const [savedDepartments, setSavedDepartments] = useState<string[]>([]);
+  const [deletingProfile, setDeletingProfile] = useState<AccessProfileSummary | null>(null);
+  const [deletingProfileBusy, setDeletingProfileBusy] = useState(false);
+  const [renamingProfileId, setRenamingProfileId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameBusy, setRenameBusy] = useState(false);
+
+  const commitRename = async (profile: AccessProfileSummary) => {
+    const trimmed = normalizeProfileName(renameValue);
+    if (!trimmed) { toast.error("Name is required"); return; }
+    if (trimmed === profile.name) { setRenamingProfileId(null); return; }
+    setRenameBusy(true);
+    const { error } = await supabase
+      .from("access_profiles")
+      .update({ name: trimmed, updated_by: currentAdmin?.id ?? null, updated_at: new Date().toISOString() })
+      .eq("id", profile.id);
+    setRenameBusy(false);
+    if (error) {
+      if ((error as any).code === "23505") toast.error("A profile with this name already exists");
+      else toast.error("Failed to rename profile");
+      return;
+    }
+    try {
+      await (supabase as any).from("permission_audit_log").insert({
+        changed_by: currentAdmin?.name || currentAdmin?.email || "unknown",
+        changes: { action: "access_profile_renamed", profile_id: profile.id, from: profile.name, to: trimmed },
+      });
+    } catch { console.warn("[AccessConfiguration] audit log failed") }
+    if (appliedProfileId === profile.id) setAppliedProfileName(trimmed);
+    queryClient.invalidateQueries({ queryKey: ["access_profiles"] });
+    queryClient.invalidateQueries({ queryKey: ["permission_overrides", "access-summary"] });
+    toast.success("Profile renamed");
+    setRenamingProfileId(null);
+  };
 
   // Query active profiles for Apply Profile dropdown
   const { data: profiles = [], isLoading: profilesLoading } = useQuery<AccessProfileSummary[]>({
@@ -602,20 +635,84 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
                     <div style={{ padding: "16px", fontSize: 12, color: "var(--neuron-ink-muted)", textAlign: "center" }}>No profiles yet</div>
                   ) : (
                     <div style={{ maxHeight: 260, overflowY: "auto" }}>
-                      {profiles.map(p => (
-                        <button
-                          key={p.id}
-                          onClick={() => handleApplyProfile(p)}
-                          style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "flex-start", padding: "10px 20px", background: "none", border: "none", cursor: "pointer", textAlign: "left", borderTop: "1px solid var(--neuron-ui-border)", transition: "background-color 0.1s" }}
-                          onMouseEnter={e => e.currentTarget.style.backgroundColor = "var(--neuron-bg-surface-subtle)"}
-                          onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
-                        >
-                          <span style={{ fontSize: 13, fontWeight: 500, color: "var(--neuron-ink-primary)" }}>{p.name}</span>
-                          {p.target_department && (
-                            <span style={{ fontSize: 11, color: "var(--neuron-ink-muted)", marginTop: 1 }}>{p.target_department}</span>
-                          )}
-                        </button>
-                      ))}
+                      {profiles.map(p => {
+                        const renaming = renamingProfileId === p.id;
+                        return (
+                          <div
+                            key={p.id}
+                            style={{ display: "flex", alignItems: "center", borderTop: "1px solid var(--neuron-ui-border)", transition: "background-color 0.1s" }}
+                            onMouseEnter={e => { if (!renaming) e.currentTarget.style.backgroundColor = "var(--neuron-bg-surface-subtle)"; }}
+                            onMouseLeave={e => { if (!renaming) e.currentTarget.style.backgroundColor = "transparent"; }}
+                          >
+                            {renaming ? (
+                              <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6, padding: "8px 12px 8px 20px" }}>
+                                <input
+                                  type="text"
+                                  value={renameValue}
+                                  onChange={(e) => setRenameValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") { e.preventDefault(); commitRename(p); }
+                                    else if (e.key === "Escape") { e.preventDefault(); setRenamingProfileId(null); }
+                                  }}
+                                  autoFocus
+                                  disabled={renameBusy}
+                                  style={{ flex: 1, minWidth: 0, padding: "6px 10px", borderRadius: 7, fontSize: 13, fontWeight: 500, border: "1px solid var(--neuron-action-primary)", background: "var(--neuron-bg-elevated)", color: "var(--neuron-ink-primary)", outline: "none" }}
+                                />
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); commitRename(p); }}
+                                  disabled={renameBusy}
+                                  aria-label="Save name"
+                                  title="Save"
+                                  style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 6, border: "none", background: "var(--neuron-action-primary)", color: "var(--neuron-action-primary-text)", cursor: renameBusy ? "not-allowed" : "pointer", opacity: renameBusy ? 0.6 : 1 }}
+                                >
+                                  <Check size={13} />
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setRenamingProfileId(null); }}
+                                  disabled={renameBusy}
+                                  aria-label="Cancel rename"
+                                  title="Cancel"
+                                  style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, marginRight: 12, borderRadius: 6, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-muted)", cursor: "pointer" }}
+                                >
+                                  <X size={13} />
+                                </button>
+                              </div>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => handleApplyProfile(p)}
+                                  style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "flex-start", padding: "10px 20px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}
+                                >
+                                  <span style={{ fontSize: 13, fontWeight: 500, color: "var(--neuron-ink-primary)" }}>{p.name}</span>
+                                  {p.target_department && (
+                                    <span style={{ fontSize: 11, color: "var(--neuron-ink-muted)", marginTop: 1 }}>{p.target_department}</span>
+                                  )}
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setRenameValue(p.name); setRenamingProfileId(p.id); }}
+                                  aria-label={`Rename ${p.name}`}
+                                  title="Rename profile"
+                                  style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, marginRight: 4, borderRadius: 6, border: "none", background: "transparent", color: "var(--neuron-ink-muted)", cursor: "pointer" }}
+                                  onMouseEnter={e => { e.currentTarget.style.backgroundColor = "var(--neuron-bg-elevated)"; e.currentTarget.style.color = "var(--neuron-action-primary)"; }}
+                                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "var(--neuron-ink-muted)"; }}
+                                >
+                                  <Pencil size={13} />
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setDeletingProfile(p); }}
+                                  aria-label={`Delete ${p.name}`}
+                                  title="Delete profile"
+                                  style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, marginRight: 12, borderRadius: 6, border: "none", background: "transparent", color: "var(--neuron-ink-muted)", cursor: "pointer" }}
+                                  onMouseEnter={e => { e.currentTarget.style.backgroundColor = "var(--neuron-bg-elevated)"; e.currentTarget.style.color = "var(--neuron-semantic-error, #dc2626)"; }}
+                                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "var(--neuron-ink-muted)"; }}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -784,6 +881,44 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
         confirmLabel="Leave without saving"
         onConfirm={onBack}
         variant="warning"
+      />
+
+      <NeuronModal
+        isOpen={!!deletingProfile}
+        onClose={() => { if (!deletingProfileBusy) setDeletingProfile(null); }}
+        title="Delete this profile?"
+        description={deletingProfile
+          ? `Delete "${deletingProfile.name}"? Users currently linked to it will keep their existing access rules, but the profile reference will be cleared.`
+          : ""}
+        confirmLabel={deletingProfileBusy ? "Deleting…" : "Delete profile"}
+        confirmIcon={<Trash2 size={15} />}
+        onConfirm={async () => {
+          if (!deletingProfile) return;
+          setDeletingProfileBusy(true);
+          const target = deletingProfile;
+          const { error } = await supabase.from("access_profiles").delete().eq("id", target.id);
+          if (error) {
+            setDeletingProfileBusy(false);
+            toast.error("Failed to delete profile");
+            return;
+          }
+          try {
+            await (supabase as any).from("permission_audit_log").insert({
+              changed_by: currentAdmin?.name || currentAdmin?.email || "unknown",
+              changes: { action: "access_profile_deleted", profile_id: target.id, profile_name: target.name },
+            });
+          } catch { console.warn("[AccessConfiguration] audit log failed") }
+          if (appliedProfileId === target.id) {
+            setAppliedProfileId(null);
+            setAppliedProfileName(null);
+          }
+          queryClient.invalidateQueries({ queryKey: ["access_profiles"] });
+          queryClient.invalidateQueries({ queryKey: ["permission_overrides", "access-summary"] });
+          toast.success(`Profile "${target.name}" deleted`);
+          setDeletingProfileBusy(false);
+          setDeletingProfile(null);
+        }}
+        variant="danger"
       />
 
     </div>

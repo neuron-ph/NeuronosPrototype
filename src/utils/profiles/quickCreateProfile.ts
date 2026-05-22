@@ -73,7 +73,6 @@ export async function quickCreateProfileRecord(
 
       case 'profile_carriers':
       case 'profile_forwarders':
-      case 'profile_shipping_lines':
       case 'profile_trucking_companies':
       case 'profile_consolidators':
       case 'profile_insurers': {

@@ -8,7 +8,6 @@ const EXPECTED_ADMIN_TYPES = [
   'carrier',
   'forwarder',
   'consolidator',
-  'shipping_line',
   'trucking_company',
   'insurer',
   'driver',
@@ -75,7 +74,6 @@ describe('profileRegistry admin metadata', () => {
     const decoupled: Array<[string, string]> = [
       ['carrier', 'profile_carriers'],
       ['forwarder', 'profile_forwarders'],
-      ['shipping_line', 'profile_shipping_lines'],
       ['trucking_company', 'profile_trucking_companies'],
       ['consolidator', 'profile_consolidators'],
       ['insurer', 'profile_insurers'],

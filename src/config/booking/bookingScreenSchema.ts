@@ -32,17 +32,6 @@ const SHARED_GENERAL_INFORMATION: SectionDef = {
       storage: 'top-level',
     },
     {
-      // Present for Brokerage and Forwarding; Trucking/Marine/Others use 'service' in their own General Specific section.
-      key: 'services',
-      label: 'Service/s',
-      control: 'multi-select',
-      optionKey: 'operation_services',
-      required: 'no',
-      storage: 'details',
-      gridSpan: 1,
-      showWhen: [{ field: 'service_type', op: 'in', value: ['Brokerage', 'Forwarding'] }],
-    },
-    {
       key: 'booking_name',
       label: 'Booking Name',
       control: 'free-text',
@@ -168,19 +157,12 @@ const SHARED_GENERAL_INFORMATION: SectionDef = {
 // ---------------------------------------------------------------------------
 // Reusable field fragments shared across multiple services
 // ---------------------------------------------------------------------------
-
-const PRIMARY_TRADE_PARTY: FieldDef = {
-  key: 'primary_trade_party',
-  label: 'Consignee / Shipper Name',
-  control: 'profile-lookup',
-  profileType: 'consignee_or_shipper',
-  required: 'yes',
-  storage: 'details',
-  dynamicLabels: [
-    { when: [{ field: 'movement_type', op: 'eq', value: 'Import' }], label: 'Consignee Name' },
-    { when: [{ field: 'movement_type', op: 'eq', value: 'Export' }], label: 'Shipper Name' },
-  ],
-};
+//
+// PRIMARY_TRADE_PARTY was removed: it duplicated the shared GI `consignee`
+// field (line ~116) under a different label ("Consignee Name" on Import,
+// "Shipper Name" on Export). The Shipper side is already captured by the
+// service-specific `shipper` field in BROKERAGE_BOOKING_DETAILS /
+// FORWARDING_BOOKING_DETAILS, so removing this fragment loses no information.
 
 const MBL_MAWB: FieldDef = {
   key: 'mbl_mawb',
@@ -256,7 +238,6 @@ const BROKERAGE_GENERAL_SPECIFIC: SectionDef = {
       storage: 'top-level',
       optionsKind: 'mode',
     },
-    PRIMARY_TRADE_PARTY,
     {
       key: 'cargo_type',
       label: 'Cargo Type',
@@ -760,7 +741,6 @@ const FORWARDING_GENERAL_SPECIFIC: SectionDef = {
       storage: 'top-level',
       optionsKind: 'mode',
     },
-    PRIMARY_TRADE_PARTY,
     {
       key: 'incoterms',
       label: 'Incoterms',
@@ -1448,10 +1428,13 @@ const TRUCKING_FCL_DETAILS: SectionDef = {
       storage: 'details',
     },
     {
+      // Shipping Line and Carrier are the same vendor in practice — both back
+      // onto profile_carriers. Field label stays "Shipping Line" for trucking
+      // familiarity; profileType: 'carrier' unifies the dropdown source.
       key: 'shipping_line',
       label: 'Shipping Line',
       control: 'profile-lookup',
-      profileType: 'shipping_line',
+      profileType: 'carrier',
       required: 'yes',
       storage: 'details',
     },

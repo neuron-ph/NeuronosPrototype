@@ -11,7 +11,6 @@ type ManualEntry = { profile_type: string; manual_value: string; booking_count: 
 const VENDOR_PROFILE_TYPES = new Set([
   'agent',
   'consolidator',
-  'shipping_line',
   'trucking_company',
   'insurer',
 ]);
@@ -19,7 +18,7 @@ const VENDOR_PROFILE_TYPES = new Set([
 const RULES = [
   { label: 'Strict select-only', desc: 'customer, user, country - no manual entry allowed', color: 'var(--theme-status-danger-fg)' },
   { label: 'Strict + privileged quick-create', desc: 'port - Executive/manager can create inline', color: 'var(--theme-status-warning-fg)' },
-  { label: 'Vendor-backed', desc: 'agent, consolidator, shipping_line, trucking_company, insurer - backed by vendor records', color: 'var(--theme-status-success-fg)' },
+  { label: 'Vendor-backed', desc: 'agent, consolidator, trucking_company, insurer - backed by vendor records', color: 'var(--theme-status-success-fg)' },
   { label: 'Profiling-managed', desc: 'carrier, forwarder, consignee, shipper, warehouse, driver, helper, vehicle', color: 'var(--theme-action-primary-bg)' },
 ];
 

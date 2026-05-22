@@ -82,10 +82,11 @@ export function BrokerageServiceForm({
 
   const isExport = movement === "EXPORT";
 
+  // Project quotations: Standard is not selectable (contract mode locks to Standard separately).
   // Non-Regular is export-restricted at the business level (existing product rule, preserved).
   const brokerageTypes = isExport
-    ? ["Standard", "All-Inclusive"]
-    : ["Standard", "All-Inclusive", "Non-Regular"];
+    ? ["All-Inclusive"]
+    : ["All-Inclusive", "Non-Regular"];
 
   // Build schema context for visibility evaluation.
   const effectiveBrokerageType = lockToStandardType ? "Standard" : data.brokerageType;
