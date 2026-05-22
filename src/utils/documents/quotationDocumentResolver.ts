@@ -339,6 +339,23 @@ const FORWARDING_KEYS: ServiceDetailKey[] = [
   { key: "vgm", label: "VGM" },
 ];
 
+// Hide GWT/CWT fields that don't apply to the chosen mode (AIR vs sea/LCL/FCL).
+// Mode comes from the service's own `mode` field — "AIR" | "LCL" | "FCL" | "SEA".
+function filterKeysByMode(keys: ServiceDetailKey[], mode: unknown): ServiceDetailKey[] {
+  const m = typeof mode === "string" ? mode.toUpperCase() : "";
+  if (!m) return keys;
+  const isAir = m === "AIR";
+  return keys.filter((k) => {
+    if (k.key === "air_gwt" || k.key === "air_cwt") return isAir;
+    if (k.key === "lcl_gwt" || k.key === "lcl_dims") return !isAir;
+    if (k.key === "fcl_20ft" || k.key === "fcl_40ft" || k.key === "fcl_45ft" || k.key === "fcl_qty" || k.key === "containers") {
+      // FCL-only sizing fields drop out for non-FCL modes
+      return m === "FCL" || m === "SEA";
+    }
+    return true;
+  });
+}
+
 const TRUCKING_KEYS: ServiceDetailKey[] = [
   { key: "pull_out", label: "Pull-Out Location" },
   { key: "delivery_address", label: "Delivery Address", width: "wide" },
@@ -417,12 +434,13 @@ function buildServiceSections(quote: QuotationNew): PrintableSection[] {
     const type = svc?.service_type;
     const details = svc?.service_details;
     if (!type) return;
+    const mode = pick(details, "mode");
     switch (type) {
       case "Brokerage":
-        sections.push(buildServiceSection(`svc-brokerage-${idx}`, "Brokerage Details", details, BROKERAGE_KEYS));
+        sections.push(buildServiceSection(`svc-brokerage-${idx}`, "Brokerage Details", details, filterKeysByMode(BROKERAGE_KEYS, mode)));
         break;
       case "Forwarding":
-        sections.push(buildServiceSection(`svc-forwarding-${idx}`, "Forwarding Details", details, FORWARDING_KEYS));
+        sections.push(buildServiceSection(`svc-forwarding-${idx}`, "Forwarding Details", details, filterKeysByMode(FORWARDING_KEYS, mode)));
         break;
       case "Trucking": {
         const sec = buildServiceSection(`svc-trucking-${idx}`, "Trucking Details", details, TRUCKING_KEYS);
@@ -540,10 +558,30 @@ function buildQuotationDetailsSection(
 
 function buildShipmentSection(quote: QuotationNew, project?: Project): PrintableSection {
   const src: any = project ? { ...quote, ...project, ...quote } : quote; // quote wins for explicit fields
+  // Derive freight type + category dynamically from the first service's mode —
+  // the form's mode (FCL/LCL/AIR) is the truth; the persisted `shipment_freight`
+  // and `category` columns are currently hardcoded by the builder.
+  const primaryMode: string | undefined = (() => {
+    const meta = Array.isArray(quote.services_metadata) ? quote.services_metadata : [];
+    for (const svc of meta) {
+      const m = (svc?.service_details as any)?.mode;
+      if (typeof m === "string" && m.trim()) return m.toUpperCase();
+    }
+    return undefined;
+  })();
+  const derivedFreight =
+    primaryMode === "FCL" || primaryMode === "LCL" || primaryMode === "AIR"
+      ? primaryMode
+      : src.shipment_freight;
+  const derivedCategory = (() => {
+    if (primaryMode === "AIR") return "AIR FREIGHT";
+    if (primaryMode === "FCL" || primaryMode === "LCL" || primaryMode === "SEA") return "SEA FREIGHT";
+    return src.category;
+  })();
   const fields: PrintableField[] = [
     { id: "movement", label: "Movement", value: src.movement },
-    { id: "category", label: "Category", value: src.category },
-    { id: "shipment_freight", label: "Freight Type", value: src.shipment_freight },
+    { id: "category", label: "Category", value: derivedCategory },
+    { id: "shipment_freight", label: "Freight Type", value: derivedFreight },
     {
       id: "services",
       label: "Services",
@@ -582,14 +620,15 @@ function buildChargeTable(
   currency: string,
   options: { showTax: boolean; omitEmpty: boolean },
 ): PrintableTable {
+  // Remarks are rendered as a subtext line beneath each row (see `subtext` below),
+  // not as a dedicated column — this keeps the table tight and lets long remarks breathe.
   const columns: PrintableTableColumn[] = [
-    { id: "description", label: "Description", widthHint: "32%" },
-    { id: "price", label: "Price", align: "right", format: "money", widthHint: "12%" },
+    { id: "description", label: "Description", widthHint: "44%" },
+    { id: "price", label: "Price", align: "right", format: "money", widthHint: "14%" },
     { id: "currency", label: "Cur", align: "center", widthHint: "6%", hideWhenEmpty: true },
     { id: "quantity", label: "Qty", align: "center", widthHint: "6%", hideWhenEmpty: true },
     { id: "forex", label: "Forex", align: "center", widthHint: "6%", hideWhenEmpty: true },
     { id: "taxed", label: "Taxed", align: "center", widthHint: "6%", hideWhenEmpty: true },
-    { id: "remarks", label: "Remarks", widthHint: "14%", hideWhenEmpty: true },
     { id: "amount", label: "Amount", align: "right", format: "money", widthHint: "18%" },
   ];
 
@@ -605,6 +644,9 @@ function buildChargeTable(
       const itemRate = Number(item.forex_rate) || 1;
       const amt = effectiveItemAmount(item);
       subtotal += amt;
+      // Prefer the user-typed remark; only fall back to the unit code when no
+      // remark exists, since unit codes ("per_container") are less informative.
+      const subtext = (item.remarks && String(item.remarks).trim()) || (item.unit && String(item.unit).trim()) || "";
       rows.push({
         id: item.id || `${groupId}-item-${itemIdx}`,
         groupId,
@@ -616,9 +658,9 @@ function buildChargeTable(
           // Only show forex when not 1
           forex: itemRate && itemRate !== 1 ? itemRate : "",
           taxed: options.showTax && item.is_taxed ? "✓" : "",
-          remarks: item.remarks || item.unit || "",
           amount: amt,
         },
+        subtext: subtext || undefined,
       });
     });
     // Subtotal row
@@ -972,7 +1014,9 @@ export function resolveQuotationPrintableDocument(
     settings.paymentTerms ||
     quotation.payment_terms ||
     legacy?.pdf_payment_terms ||
-    legacyDetails?.pdf_payment_terms,
+    legacyDetails?.pdf_payment_terms ||
+    // Form stores it as `credit_terms` ("Net 30", "Net 45"); PDF column is `payment_terms`.
+    (quotation as any).credit_terms,
   );
   if (isPrintableValue(paymentTerms)) {
     notes.push({

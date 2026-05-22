@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation, usePa
 import { Layout } from "./components/Layout";
 import { UserProvider, useUser } from "./hooks/useUser";
 import { PermissionProvider } from "./context/PermissionProvider";
+import { AutoCapsProvider } from "./context/AutoCapsProvider";
 import { RouteGuard } from "./components/RouteGuard";
 import type { ActionId, ModuleId } from "./components/admin/permissionsConfig";
 import { toast } from "sonner@2.0.3";
@@ -1265,6 +1266,7 @@ export default function App() {
   return (
     <UserProvider>
       <PermissionProvider>
+        <AutoCapsProvider>
         <BrowserRouter>
           <Sentry.ErrorBoundary fallback={({ error }) => (
             <ErrorPage errorType="500" message={error instanceof Error ? error.message : String(error)} />
@@ -1273,6 +1275,7 @@ export default function App() {
             <AppContent />
           </Sentry.ErrorBoundary>
         </BrowserRouter>
+        </AutoCapsProvider>
       </PermissionProvider>
     </UserProvider>
   );

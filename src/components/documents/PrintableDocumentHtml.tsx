@@ -166,6 +166,23 @@ function TableBlock({ table }: { table: PrintableTable }) {
                   })}
                 </tr>,
               );
+              if (row.subtext && row.emphasis !== "subtotal") {
+                out.push(
+                  <tr key={`${row.id}-subtext`} className="p-rate-row-subtext">
+                    <td
+                      colSpan={table.columns.length}
+                      style={{
+                        paddingTop: 0,
+                        paddingLeft: 12,
+                        fontSize: "9px",
+                        color: "#667085",
+                      }}
+                    >
+                      {row.subtext}
+                    </td>
+                  </tr>,
+                );
+              }
             });
             if (group?.subtotal) {
               const subAmount = group.subtotal.cells["amount"];

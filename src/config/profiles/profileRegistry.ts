@@ -157,13 +157,6 @@ export const profileRegistry: Record<string, ProfileRegistryEntry> = {
     quickCreateAllowed: true,
     admin: namedProfileAdmin('Forwarder', 'Forwarders', 'Standalone forwarder list used in shipment fields. Decoupled from Vendors/Network Partners.'),
   },
-  shipping_line: {
-    source: 'profile_shipping_lines',
-    searchFields: ['name'],
-    strictness: 'combo',
-    quickCreateAllowed: true,
-    admin: namedProfileAdmin('Shipping Line', 'Shipping Lines', 'Shipping lines used in trucking and FCL bookings.'),
-  },
   trucking_company: {
     source: 'profile_trucking_companies',
     searchFields: ['name'],

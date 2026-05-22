@@ -141,9 +141,19 @@ export function useEnumOptions(kind: EnumKind, scope: EnumOptionsScope = {}): st
   const { data } = useQuery({
     queryKey: queryKeys.enumOptions.kind(kind),
     queryFn: async () => {
+      // applicable_service_types only exists on profile_movements; service_type
+      // only on profile_service_statuses. Selecting them against any other
+      // table errors out, which made `data` stay undefined and the hook fall
+      // back to the seed list — masking newly-added profiling entries.
+      const columns =
+        kind === 'movement'
+          ? 'value, sort_order, is_active, applicable_service_types'
+          : kind === 'service_status'
+            ? 'value, sort_order, is_active, service_type'
+            : 'value, sort_order, is_active';
       const { data, error } = await supabase
         .from(table)
-        .select('value, sort_order, is_active, applicable_service_types, service_type')
+        .select(columns)
         .eq('is_active', true)
         .order('sort_order', { ascending: true });
       if (error) throw error;

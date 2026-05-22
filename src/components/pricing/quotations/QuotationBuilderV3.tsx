@@ -725,6 +725,37 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
   const [buyingPrice, setBuyingPrice] = useState<BuyingPriceCategory[]>(initialData?.buying_price || []);
   const [sellingPrice, setSellingPrice] = useState<SellingPriceCategory[]>(initialData?.selling_price || []);
 
+  // Hydrate vendor display names from saved line items. Without this, reopening a
+  // quotation shows "Vendor <id>" because the in-memory `vendors` list isn't
+  // persisted on the quotation record — only vendor_id lives on each line item.
+  useEffect(() => {
+    const idsInItems = new Set<string>();
+    buyingPrice.forEach(cat => cat.line_items.forEach(li => {
+      if (li.vendor_id) idsInItems.add(li.vendor_id);
+    }));
+    const known = new Set(vendors.map(v => v.vendor_id).filter(Boolean) as string[]);
+    const missing = [...idsInItems].filter(id => !known.has(id));
+    if (missing.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("service_providers")
+        .select("id, company_name, provider_type")
+        .in("id", missing);
+      if (cancelled || error || !data) return;
+      const additions: Vendor[] = data.map(row => ({
+        id: `vendor-${row.id}`,
+        type: "International Partners" as VendorType,
+        name: row.company_name || row.id,
+        vendor_id: row.id,
+      }));
+      if (additions.length > 0) setVendors(prev => [...prev, ...additions]);
+    })();
+
+    return () => { cancelled = true; };
+  }, [buyingPrice, vendors]);
+
   // ✨ GENERALIZED: Which selected services are covered by the detected contract?
   const contractCoveredServices = (() => {
     if (!detectedContract) return [] as string[];

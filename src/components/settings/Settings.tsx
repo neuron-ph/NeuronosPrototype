@@ -4,6 +4,7 @@ import { Eye, EyeOff, Loader2, LogOut, Minus, Monitor, Moon, Pencil, Plus, Sun, 
 import { toast } from "sonner@2.0.3";
 import { supabase } from "../../utils/supabase/client";
 import { useUser } from "../../hooks/useUser";
+import { useAutoCaps } from "../../context/AutoCapsProvider";
 import { getThemeModePreference, setThemeModePreference } from "../../theme/themeMode";
 import { ThemeModePreference } from "../../theme/workspaceTheme";
 
@@ -513,6 +514,11 @@ export function Settings() {
   // Appearance
   const [themeModePreference, setThemeModePreferenceState] = useState<ThemeModePreference>(() => getThemeModePreference());
 
+  // Workspace — org-wide auto-uppercase
+  const { enabled: autoCapsEnabled, setEnabled: setAutoCapsEnabled } = useAutoCaps();
+  const [autoCapsSaving, setAutoCapsSaving] = useState(false);
+  const canEditWorkspace = user?.role === "executive" || user?.department === "Executive";
+
   // Logout
   const [loggingOut, setLoggingOut] = useState(false);
   const [confirmingLogout, setConfirmingLogout] = useState(false);
@@ -906,6 +912,44 @@ export function Settings() {
                 </div>
               </div>
             )}
+          </Section>
+
+          {/* ── Workspace (org-wide) ─────────────────────────────────────── */}
+          <Section title="Workspace">
+            <SettingsRow
+              first
+              label="Auto-uppercase text inputs"
+              description={
+                canEditWorkspace
+                  ? "Applies organization-wide. Comments, notes, and remarks are unaffected."
+                  : "Organization-wide setting. Only executives can change it."
+              }
+            >
+              <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", cursor: canEditWorkspace ? "pointer" : "not-allowed" }}>
+                <input
+                  type="checkbox"
+                  data-no-caps="true"
+                  checked={autoCapsEnabled}
+                  disabled={!canEditWorkspace || autoCapsSaving}
+                  onChange={async (e) => {
+                    const next = e.target.checked;
+                    setAutoCapsSaving(true);
+                    try {
+                      await setAutoCapsEnabled(next);
+                      toast.success(next ? "Auto-uppercase turned on" : "Auto-uppercase turned off");
+                    } catch (err: any) {
+                      toast.error(err?.message || "Failed to update setting");
+                    } finally {
+                      setAutoCapsSaving(false);
+                    }
+                  }}
+                  style={{ width: "16px", height: "16px", accentColor: "var(--neuron-ui-active-border)", cursor: "inherit" }}
+                />
+                <span style={{ fontSize: "13px", color: "var(--theme-text-secondary)" }}>
+                  {autoCapsEnabled ? "On" : "Off"}
+                </span>
+              </label>
+            </SettingsRow>
           </Section>
 
           {/* ── Appearance ───────────────────────────────────────────────── */}

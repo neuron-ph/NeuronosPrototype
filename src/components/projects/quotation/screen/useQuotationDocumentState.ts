@@ -40,6 +40,20 @@ export interface QuotationPrintOptions {
   contact_footer?: ContactFooter;
 }
 
+// Normalize an arbitrary date value (ISO timestamp, YYYY-MM-DD, etc.) into the
+// YYYY-MM-DD shape that <input type="date"> requires. Returns "" if unparseable.
+function toIsoDate(value: unknown): string {
+  if (typeof value !== "string" || !value) return "";
+  const trimmed = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  const d = new Date(trimmed);
+  if (Number.isNaN(d.getTime())) return "";
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 function joinAddress(cs: Pick<CompanySettings, "address_line1" | "address_line2" | "city" | "country">): string {
   return [
     cs.address_line1,
@@ -85,8 +99,9 @@ export function useQuotationDocumentState(
       name: quote?.addressed_to_name || legacy?.pdf_addressed_to_name || legacyDetails?.pdf_addressed_to_name || quote?.contact_person_name || "",
       title: quote?.addressed_to_title || legacy?.pdf_addressed_to_title || legacyDetails?.pdf_addressed_to_title || "",
     },
-    validity_override: quote?.valid_until || quote?.expiry_date || "",
-    payment_terms: quote?.payment_terms || legacy?.pdf_payment_terms || legacyDetails?.pdf_payment_terms || "",
+    validity_override: toIsoDate(quote?.valid_until || quote?.expiry_date),
+    // Form stores payment terms as `credit_terms` ("Net 30", "Net 45"). PDF column is `payment_terms`.
+    payment_terms: quote?.payment_terms || legacy?.pdf_payment_terms || legacyDetails?.pdf_payment_terms || quote?.credit_terms || "",
     display: {
       show_bank_details: legacy?.pdf_show_bank_details ?? legacyDetails?.pdf_show_bank_details ?? true,
       show_notes: legacy?.pdf_show_notes ?? legacyDetails?.pdf_show_notes ?? true,
