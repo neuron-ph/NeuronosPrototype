@@ -22,3 +22,9 @@ vite-qa*.log
 .vercel/output/
 
 .vercel
+
+# Netlify build output / functions cache
+.netlify/
+
+# Marketing showcase — separate sub-workspace, not part of the main app
+marketing-showcase/

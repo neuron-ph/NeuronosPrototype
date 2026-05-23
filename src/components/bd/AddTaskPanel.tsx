@@ -1,6 +1,6 @@
-import { CheckSquare, Phone, Mail, Users, Send, MessageSquare, Linkedin, X, MessageCircle, Flag, UserCircle, Upload } from "lucide-react";
+import { CheckSquare, Phone, Mail, Users, Send, MessageSquare, Linkedin, X, MessageCircle, Flag, UserCircle, Upload, FileText, Trash2 } from "lucide-react";
 import { CustomDropdown } from "./CustomDropdown";
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { Task, TaskType, TaskPriority } from "../../types/bd";
 import { useCustomers } from "../../hooks/useCustomers";
 import { useContacts } from "../../hooks/useContacts";
@@ -11,25 +11,14 @@ import { CustomDatePicker } from "../common/CustomDatePicker";
 interface AddTaskPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (taskData: Partial<Task>) => void;
+  onSave: (taskData: Partial<Task>, files: File[]) => void | Promise<void>;
+  inline?: boolean;
+  lockedCustomerId?: string | null;
+  lockedContactId?: string | null;
 }
 
 
-export function AddTaskPanel({ isOpen, onClose, onSave }: AddTaskPanelProps) {
-  const [taskData, setTaskData] = useState<Partial<Task>>({
-    type: "Call",
-    priority: "Medium",
-    status: "Pending",
-    title: "",
-    due_date: "",
-    remarks: "",
-    contact_id: null,
-    customer_id: null,
-    owner_id: ""
-  });
-
-  const [attachments, setAttachments] = useState<File[]>([]);
-
+export function AddTaskPanel({ isOpen, onClose, onSave, inline, lockedCustomerId, lockedContactId }: AddTaskPanelProps) {
   const { user, effectiveRole, effectiveDepartment } = useUser();
   const canAssignToOthers = effectiveRole === 'manager' || effectiveDepartment === 'Executive';
 
@@ -37,18 +26,43 @@ export function AddTaskPanel({ isOpen, onClose, onSave }: AddTaskPanelProps) {
   const { contacts } = useContacts({ enabled: isOpen });
   const { users: bdUsers } = useUsers({ department: 'Business Development', enabled: isOpen && canAssignToOthers });
 
+  const lockedContact = lockedContactId ? contacts.find(c => c.id === lockedContactId) : null;
+  const initialCustomerId = lockedCustomerId ?? lockedContact?.customer_id ?? null;
+  const initialContactId = lockedContactId ?? null;
+
+  const hideCustomer = !!(lockedCustomerId || lockedContactId);
+  const hideContact = !!lockedContactId;
+
+  const [taskData, setTaskData] = useState<Partial<Task>>({
+    type: "Call",
+    priority: "Medium",
+    status: "Pending",
+    title: "",
+    due_date: "",
+    remarks: "",
+    contact_id: initialContactId,
+    customer_id: initialCustomerId,
+    owner_id: ""
+  });
+
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (taskData.title && taskData.due_date) {
-      onSave({
-        ...taskData,
-        id: `task-${Date.now()}`,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        cancel_reason: null
-      });
+      await onSave(
+        {
+          ...taskData,
+          id: `task-${Date.now()}`,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          cancel_reason: null
+        },
+        attachments,
+      );
       handleClose();
     }
   };
@@ -61,56 +75,57 @@ export function AddTaskPanel({ isOpen, onClose, onSave }: AddTaskPanelProps) {
       title: "",
       due_date: "",
       remarks: "",
-      contact_id: null,
-      customer_id: null,
+      contact_id: initialContactId,
+      customer_id: initialCustomerId,
       owner_id: ""
     });
     setAttachments([]);
     onClose();
   };
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setAttachments(prev => [...prev, ...Array.from(e.target.files!)]);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer.files) {
+      setAttachments(prev => [...prev, ...Array.from(e.dataTransfer.files)]);
+    }
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
   // Group contacts by customer for better UX
-  const contactsByCustomer = contacts.reduce((acc, contact) => {
+  const contactsByCustomer = useMemo<Record<string, typeof contacts>>(() => contacts.reduce((acc, contact) => {
     const customerId = contact.customer_id;
     if (!acc[customerId]) {
       acc[customerId] = [];
     }
     acc[customerId].push(contact);
     return acc;
-  }, {} as Record<string, typeof contacts>);
+  }, {} as Record<string, typeof contacts>), [contacts]);
 
-  return (
+  const formBody = (
     <>
-      {/* Backdrop */}
+      {/* Header */}
       <div
-        className="fixed inset-0 bg-black z-40"
-        onClick={handleClose}
-        style={{ 
-          backdropFilter: "blur(2px)",
-          backgroundColor: "rgba(18, 51, 43, 0.15)"
-        }}
-      />
-
-      {/* Slide-out Panel */}
-      <div
-        className="fixed right-0 top-0 h-full w-[600px] bg-[var(--theme-bg-surface)] shadow-2xl z-50 flex flex-col animate-slide-in"
-        style={{
-          borderLeft: "1px solid var(--neuron-ui-border)",
-        }}
+        className="flex items-center justify-between px-8 py-6 border-b"
+        style={{ borderColor: "var(--neuron-ui-divider)" }}
       >
-        {/* Header */}
-        <div
-          className="flex items-center justify-between px-8 py-6 border-b"
-          style={{ borderColor: "var(--neuron-ui-divider)" }}
-        >
-          <div>
-            <h2 className="text-[24px] font-semibold" style={{ color: "var(--theme-text-primary)" }}>
-              Create New Task
-            </h2>
-            <p className="text-[13px] mt-1" style={{ color: "var(--theme-text-muted)" }}>
-              Add a follow-up task for your business development activities
-            </p>
-          </div>
+        <div>
+          <h2 className="text-[24px] font-semibold" style={{ color: "var(--theme-text-primary)" }}>
+            Create New Task
+          </h2>
+          <p className="text-[13px] mt-1" style={{ color: "var(--theme-text-muted)" }}>
+            Add a follow-up task for your business development activities
+          </p>
+        </div>
+        {!inline && (
           <button
             onClick={handleClose}
             className="p-2 rounded-lg transition-colors"
@@ -124,83 +139,85 @@ export function AddTaskPanel({ isOpen, onClose, onSave }: AddTaskPanelProps) {
           >
             <X size={20} />
           </button>
-        </div>
+        )}
+      </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-auto px-8 py-6">
-          <div className="space-y-6">
-            {/* Task Title */}
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
-                Task Title *
-              </label>
-              <input
-                type="text"
-                value={taskData.title || ""}
-                onChange={(e) => setTaskData({ ...taskData, title: e.target.value })}
-                placeholder="Enter task title..."
-                required
-                className="w-full px-3 py-2.5 rounded-lg text-[13px] focus:outline-none focus:ring-2"
-                style={{
-                  border: "1px solid var(--neuron-ui-border)",
-                  backgroundColor: "var(--theme-bg-surface)",
-                  color: "var(--theme-text-primary)"
-                }}
-              />
-            </div>
+      {/* Form */}
+      <form onSubmit={handleSubmit} className="flex-1 overflow-auto px-8 py-6">
+        <div className="space-y-6">
+          {/* Task Title */}
+          <div>
+            <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
+              Task Title *
+            </label>
+            <input
+              type="text"
+              value={taskData.title || ""}
+              onChange={(e) => setTaskData({ ...taskData, title: e.target.value })}
+              placeholder="Enter task title..."
+              required
+              className="w-full px-3 py-2.5 rounded-lg text-[13px] focus:outline-none focus:ring-2"
+              style={{
+                border: "1px solid var(--neuron-ui-border)",
+                backgroundColor: "var(--theme-bg-surface)",
+                color: "var(--theme-text-primary)"
+              }}
+            />
+          </div>
 
-            {/* Type */}
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
-                Type *
-              </label>
-              <CustomDropdown
-                options={[
-                  { value: "To-do", label: "To-do", icon: <CheckSquare size={16} /> },
-                  { value: "Call", label: "Call", icon: <Phone size={16} /> },
-                  { value: "Email", label: "Email", icon: <Mail size={16} /> },
-                  { value: "Meeting", label: "Meeting", icon: <Users size={16} /> },
-                  { value: "SMS", label: "SMS", icon: <Send size={16} /> },
-                  { value: "Viber", label: "Viber", icon: <MessageCircle size={16} /> },
-                  { value: "WhatsApp", label: "WhatsApp", icon: <MessageSquare size={16} /> },
-                  { value: "WeChat", label: "WeChat", icon: <MessageSquare size={16} /> },
-                  { value: "LinkedIn", label: "LinkedIn", icon: <Linkedin size={16} /> },
-                  { value: "Marketing Email", label: "Marketing Email", icon: <MessageSquare size={16} /> }
-                ]}
-                value={taskData.type || "Call"}
-                onChange={(value) => setTaskData({ ...taskData, type: value as TaskType })}
-              />
-            </div>
+          {/* Type */}
+          <div>
+            <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
+              Type *
+            </label>
+            <CustomDropdown
+              options={[
+                { value: "To-do", label: "To-do", icon: <CheckSquare size={16} /> },
+                { value: "Call", label: "Call", icon: <Phone size={16} /> },
+                { value: "Email", label: "Email", icon: <Mail size={16} /> },
+                { value: "Meeting", label: "Meeting", icon: <Users size={16} /> },
+                { value: "SMS", label: "SMS", icon: <Send size={16} /> },
+                { value: "Viber", label: "Viber", icon: <MessageCircle size={16} /> },
+                { value: "WhatsApp", label: "WhatsApp", icon: <MessageSquare size={16} /> },
+                { value: "WeChat", label: "WeChat", icon: <MessageSquare size={16} /> },
+                { value: "LinkedIn", label: "LinkedIn", icon: <Linkedin size={16} /> },
+                { value: "Marketing Email", label: "Marketing Email", icon: <MessageSquare size={16} /> }
+              ]}
+              value={taskData.type || "Call"}
+              onChange={(value) => setTaskData({ ...taskData, type: value as TaskType })}
+            />
+          </div>
 
-            {/* Due Date */}
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
-                Due Date *
-              </label>
-              <CustomDatePicker
-                value={taskData.due_date || ""}
-                onChange={(value) => setTaskData({ ...taskData, due_date: value })}
-                placeholder="Select due date"
-              />
-            </div>
+          {/* Due Date */}
+          <div>
+            <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
+              Due Date *
+            </label>
+            <CustomDatePicker
+              value={taskData.due_date || ""}
+              onChange={(value) => setTaskData({ ...taskData, due_date: value })}
+              placeholder="Select due date"
+            />
+          </div>
 
-            {/* Priority */}
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
-                Priority *
-              </label>
-              <CustomDropdown
-                options={[
-                  { value: "Low", label: "Low", icon: <Flag size={16} style={{ color: "var(--theme-status-success-fg)" }} /> },
-                  { value: "Medium", label: "Medium", icon: <Flag size={16} style={{ color: "var(--theme-status-warning-fg)" }} /> },
-                  { value: "High", label: "High", icon: <Flag size={16} style={{ color: "var(--theme-status-danger-fg)" }} /> }
-                ]}
-                value={taskData.priority || "Medium"}
-                onChange={(value) => setTaskData({ ...taskData, priority: value as TaskPriority })}
-              />
-            </div>
+          {/* Priority */}
+          <div>
+            <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
+              Priority *
+            </label>
+            <CustomDropdown
+              options={[
+                { value: "Low", label: "Low", icon: <Flag size={16} style={{ color: "var(--theme-status-success-fg)" }} /> },
+                { value: "Medium", label: "Medium", icon: <Flag size={16} style={{ color: "var(--theme-status-warning-fg)" }} /> },
+                { value: "High", label: "High", icon: <Flag size={16} style={{ color: "var(--theme-status-danger-fg)" }} /> }
+              ]}
+              value={taskData.priority || "Medium"}
+              onChange={(value) => setTaskData({ ...taskData, priority: value as TaskPriority })}
+            />
+          </div>
 
-            {/* Customer Selection */}
+          {/* Customer Selection */}
+          {!hideCustomer && (
             <div>
               <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
                 Related Customer (Optional)
@@ -217,8 +234,10 @@ export function AddTaskPanel({ isOpen, onClose, onSave }: AddTaskPanelProps) {
                 ]}
               />
             </div>
+          )}
 
-            {/* Contact Selection - Only show contacts from selected customer */}
+          {/* Contact Selection - Only show contacts from selected customer */}
+          {!hideContact && (
             <div>
               <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
                 Related Contact (Optional)
@@ -245,55 +264,86 @@ export function AddTaskPanel({ isOpen, onClose, onSave }: AddTaskPanelProps) {
                 </p>
               )}
             </div>
+          )}
 
-            {/* Assigned To — managers/executives only */}
-            {canAssignToOthers && (
-              <div>
-                <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
-                  Assign To (Optional)
-                </label>
-                <CustomDropdown
-                  value={taskData.assigned_to || ""}
-                  onChange={(value) => setTaskData({ ...taskData, assigned_to: value || undefined })}
-                  options={[
-                    { value: "", label: "Assign to someone..." },
-                    ...bdUsers.map(u => ({
-                      value: u.id,
-                      label: `${u.name} - ${u.role}`,
-                      icon: <UserCircle size={16} />
-                    }))
-                  ]}
-                />
-              </div>
-            )}
-
-            {/* Remarks */}
+          {/* Assigned To — managers/executives only */}
+          {canAssignToOthers && (
             <div>
               <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
-                Remarks (Optional)
+                Assign To (Optional)
               </label>
-              <textarea
-                value={taskData.remarks || ""}
-                onChange={(e) => setTaskData({ ...taskData, remarks: e.target.value })}
-                placeholder="Add any additional notes..."
-                className="w-full px-3 py-2.5 rounded-lg text-[13px] resize-none focus:outline-none focus:ring-2"
-                rows={4}
-                style={{
-                  border: "1px solid var(--neuron-ui-border)",
-                  backgroundColor: "var(--theme-bg-surface)",
-                  color: "var(--theme-text-primary)"
-                }}
+              <CustomDropdown
+                value={taskData.assigned_to || ""}
+                onChange={(value) => setTaskData({ ...taskData, assigned_to: value || undefined })}
+                options={[
+                  { value: "", label: "Assign to someone..." },
+                  ...bdUsers.map(u => ({
+                    value: u.id,
+                    label: `${u.name} - ${u.role}`,
+                    icon: <UserCircle size={16} />
+                  }))
+                ]}
               />
             </div>
+          )}
 
-            {/* Attachments */}
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
+          {/* Remarks */}
+          <div>
+            <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
+              Remarks (Optional)
+            </label>
+            <textarea
+              value={taskData.remarks || ""}
+              onChange={(e) => setTaskData({ ...taskData, remarks: e.target.value })}
+              placeholder="Add any additional notes..."
+              className="w-full px-3 py-2.5 rounded-lg text-[13px] resize-none focus:outline-none focus:ring-2"
+              rows={4}
+              style={{
+                border: "1px solid var(--neuron-ui-border)",
+                backgroundColor: "var(--theme-bg-surface)",
+                color: "var(--theme-text-primary)"
+              }}
+            />
+          </div>
+
+          {/* Attachments */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-[11px] font-medium uppercase tracking-wide" style={{ color: "var(--theme-text-muted)" }}>
                 Attachments (Optional)
               </label>
-              <div 
+              {attachments.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[12px] font-medium transition-colors"
+                  style={{
+                    border: "1px solid var(--neuron-ui-border)",
+                    backgroundColor: "var(--theme-bg-surface)",
+                    color: "var(--theme-action-primary-bg)",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)"; }}
+                >
+                  <Upload size={12} />
+                  Add file
+                </button>
+              )}
+            </div>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileSelect}
+              className="hidden"
+              multiple
+            />
+            {attachments.length === 0 ? (
+              <div
                 className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors"
                 style={{ borderColor: "var(--neuron-ui-border)", backgroundColor: "var(--theme-bg-surface)" }}
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={handleDrop}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
                   e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)";
@@ -311,47 +361,109 @@ export function AddTaskPanel({ isOpen, onClose, onSave }: AddTaskPanelProps) {
                   Supported: PDF, DOC, XLS, images
                 </p>
               </div>
-            </div>
+            ) : (
+              <div className="space-y-2">
+                {attachments.map((file, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between p-2 rounded-lg border border-[var(--theme-border-default)] bg-[var(--theme-bg-surface-subtle)]"
+                  >
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <FileText size={14} className="text-[var(--theme-text-muted)] flex-shrink-0" />
+                      <span className="text-[12px] text-[var(--theme-text-secondary)] truncate">{file.name}</span>
+                      <span className="text-[11px] text-[var(--theme-text-muted)] flex-shrink-0">
+                        ({(file.size / 1024).toFixed(0)} KB)
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(index)}
+                      className="text-[var(--theme-text-muted)] hover:text-[var(--theme-status-danger-fg)] transition-colors p-1"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        </form>
-
-        {/* Footer */}
-        <div
-          className="px-8 py-4 border-t flex gap-3"
-          style={{ borderColor: "var(--neuron-ui-divider)" }}
-        >
-          <button
-            type="button"
-            onClick={handleClose}
-            className="flex-1 px-4 py-2.5 rounded-lg text-[13px] font-medium transition-colors"
-            style={{
-              border: "1px solid var(--neuron-ui-border)",
-              color: "var(--neuron-ink-secondary)",
-              backgroundColor: "var(--theme-bg-surface)"
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            className="flex-1 px-4 py-2.5 rounded-lg text-[13px] font-medium text-white transition-colors"
-            style={{ backgroundColor: "var(--theme-action-primary-bg)" }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = "var(--theme-action-primary-border)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
-            }}
-          >
-            Create Task
-          </button>
         </div>
+      </form>
+
+      {/* Footer */}
+      <div
+        className="px-8 py-4 border-t flex gap-3"
+        style={{ borderColor: "var(--neuron-ui-divider)" }}
+      >
+        <button
+          type="button"
+          onClick={handleClose}
+          className="flex-1 px-4 py-2.5 rounded-lg text-[13px] font-medium transition-colors"
+          style={{
+            border: "1px solid var(--neuron-ui-border)",
+            color: "var(--neuron-ink-secondary)",
+            backgroundColor: "var(--theme-bg-surface)"
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleSubmit}
+          className="flex-1 px-4 py-2.5 rounded-lg text-[13px] font-medium text-white transition-colors"
+          style={{ backgroundColor: "var(--theme-action-primary-bg)" }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = "var(--theme-action-primary-border)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
+          }}
+        >
+          Create Task
+        </button>
+      </div>
+    </>
+  );
+
+  if (inline) {
+    return (
+      <div
+        className="w-full rounded-xl flex flex-col"
+        style={{
+          border: "1px solid var(--neuron-ui-border)",
+          backgroundColor: "var(--theme-bg-surface)",
+        }}
+      >
+        {formBody}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-black z-40"
+        onClick={handleClose}
+        style={{
+          backdropFilter: "blur(2px)",
+          backgroundColor: "rgba(18, 51, 43, 0.15)"
+        }}
+      />
+
+      {/* Slide-out Panel */}
+      <div
+        className="fixed right-0 top-0 h-full w-[600px] bg-[var(--theme-bg-surface)] shadow-2xl z-50 flex flex-col animate-slide-in"
+        style={{
+          borderLeft: "1px solid var(--neuron-ui-border)",
+        }}
+      >
+        {formBody}
       </div>
     </>
   );

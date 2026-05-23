@@ -39,6 +39,44 @@ function extractServiceDetails(contract: QuotationNew, serviceType: string) {
   return serviceData?.service_details || null;
 }
 
+/**
+ * Allowed POL/POD lists declared on a contract's general details. Bookings
+ * created from this contract are constrained to these values when present.
+ * Falls back to the single pol_aol/pod_aod from the service details so legacy
+ * contracts (created before the multi-port picker existed) still constrain to
+ * at least their one historical port.
+ */
+function extractAllowedPortOptions(
+  contract: QuotationNew,
+  serviceDetails: Record<string, unknown> | null,
+) {
+  // POD precedence: per-service `pods` array (the multi-select on the Brokerage
+  // scope) → contract-level port_of_entry → single legacy pod_aod fallback.
+  // The service-level picker is the canonical input today; the others are only
+  // fallbacks for legacy / backfilled contracts.
+  const podsService = Array.isArray((serviceDetails as any)?.pods)
+    ? ((serviceDetails as any).pods as unknown[]).filter((v): v is string => typeof v === 'string' && !!v)
+    : [];
+  const polDeclared = contract.contract_general_details?.port_of_loading ?? [];
+  const podDeclared = contract.contract_general_details?.port_of_entry ?? [];
+
+  const polFallback = serviceDetails && typeof serviceDetails.pol_aol === 'string' && serviceDetails.pol_aol
+    ? [serviceDetails.pol_aol as string]
+    : [];
+  const podFallback = serviceDetails && typeof serviceDetails.pod_aod === 'string' && serviceDetails.pod_aod
+    ? [serviceDetails.pod_aod as string]
+    : [];
+
+  const podMerged = podsService.length > 0
+    ? podsService
+    : (podDeclared.length > 0 ? podDeclared : podFallback);
+
+  return {
+    pol_options: polDeclared.length > 0 ? polDeclared : polFallback,
+    pod_options: podMerged,
+  };
+}
+
 // ==================== Brokerage Autofill ====================
 
 export function autofillBrokerageFromContract(contract: QuotationNew) {
@@ -58,6 +96,7 @@ export function autofillBrokerageFromContract(contract: QuotationNew) {
     ...mapped,
     // If the array-form pod is more specific, prefer it over the mapped singleton
     pod: podFromArray || (mapped.pod as string) || '',
+    ...extractAllowedPortOptions(contract, serviceDetails),
   };
 }
 
@@ -74,6 +113,7 @@ export function autofillTruckingFromContract(contract: QuotationNew) {
     quotationReferenceNumber: contract.quote_number,
     contract_id: contract.id,
     ...mapped,
+    ...extractAllowedPortOptions(contract, serviceDetails),
   };
 }
 
@@ -90,6 +130,7 @@ export function autofillOthersFromContract(contract: QuotationNew) {
     quotationReferenceNumber: contract.quote_number,
     contract_id: contract.id,
     ...mapped,
+    ...extractAllowedPortOptions(contract, serviceDetails),
   };
 }
 
@@ -124,6 +165,7 @@ export function autofillForwardingFromContract(contract: QuotationNew) {
     qty45ft: String((serviceDetails as any).fcl_45ft || (serviceDetails as any).fcl45ft || ""),
     volumeGrossWeight: String((serviceDetails as any).lcl_gwt || (serviceDetails as any).gross_weight || ""),
     volumeDimensions: String((serviceDetails as any).lcl_dims || (serviceDetails as any).measurement || ""),
+    ...extractAllowedPortOptions(contract, serviceDetails),
   };
 }
 
@@ -141,6 +183,7 @@ export function autofillMarineInsuranceFromContract(contract: QuotationNew) {
     contract_id: contract.id,
     ...mapped,
     invoiceCurrency: (serviceDetails as any).invoice_currency || contract.currency || "PHP",
+    ...extractAllowedPortOptions(contract, serviceDetails),
   };
 }
 

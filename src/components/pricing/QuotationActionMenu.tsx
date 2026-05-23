@@ -11,6 +11,8 @@ interface QuotationActionMenuProps {
   onDelete: () => void;
   onConvertToProject?: () => void;
   onCreateTicket?: () => void;
+  canDuplicate?: boolean;
+  canDelete?: boolean;
 }
 
 export function QuotationActionMenu({ 
@@ -19,12 +21,21 @@ export function QuotationActionMenu({
   onDuplicate, 
   onDelete,
   onConvertToProject,
-  onCreateTicket
+  onCreateTicket,
+  canDuplicate = true,
+  canDelete = true,
 }: QuotationActionMenuProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const normalizedStatus = getNormalizedQuotationStatus(quotation);
+  const hasDeleteAction = canDelete && (
+    normalizedStatus === "Draft"
+    || normalizedStatus === "Disapproved"
+    || normalizedStatus === "Cancelled"
+  );
+  const hasConvertAction = !!onConvertToProject && normalizedStatus === "Accepted by Client";
+  const hasMenuActions = canDuplicate || hasConvertAction || !!onCreateTicket || hasDeleteAction;
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -46,6 +57,8 @@ export function QuotationActionMenu({
     setShowDeleteModal(false);
     setShowMenu(false);
   };
+
+  if (!hasMenuActions) return null;
 
   return (
     <div style={{ position: "relative" }} ref={menuRef}>
@@ -96,38 +109,40 @@ export function QuotationActionMenu({
           overflow: "hidden"
         }}>
           {/* Duplicate */}
-          <button
-            onClick={() => {
-              onDuplicate();
-              setShowMenu(false);
-            }}
-            style={{
-              width: "100%",
-              display: "flex",
-              alignItems: "center",
-              gap: "12px",
-              padding: "12px 16px",
-              backgroundColor: "transparent",
-              border: "none",
-              cursor: "pointer",
-              fontSize: "14px",
-              color: "var(--theme-text-primary)",
-              textAlign: "left",
-              transition: "background-color 0.15s ease"
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = "transparent";
-            }}
-          >
-            <Copy size={16} style={{ color: "var(--theme-text-muted)" }} />
-            <span>Duplicate</span>
-          </button>
+          {canDuplicate && (
+            <button
+              onClick={() => {
+                onDuplicate();
+                setShowMenu(false);
+              }}
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                gap: "12px",
+                padding: "12px 16px",
+                backgroundColor: "transparent",
+                border: "none",
+                cursor: "pointer",
+                fontSize: "14px",
+                color: "var(--theme-text-primary)",
+                textAlign: "left",
+                transition: "background-color 0.15s ease"
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "transparent";
+              }}
+            >
+              <Copy size={16} style={{ color: "var(--theme-text-muted)" }} />
+              <span>Duplicate</span>
+            </button>
+          )}
 
           {/* Convert to Project - Only visible for "Accepted by Client" */}
-          {onConvertToProject && normalizedStatus === "Accepted by Client" && (
+          {hasConvertAction && (
             <button
               onClick={() => {
                 onConvertToProject();
@@ -197,7 +212,7 @@ export function QuotationActionMenu({
           )}
 
           {/* Delete — only available for Draft, Disapproved, or Cancelled quotations */}
-          {(normalizedStatus === "Draft" || normalizedStatus === "Disapproved" || normalizedStatus === "Cancelled") && (
+          {hasDeleteAction && (
           <button
             onClick={() => {
               setShowMenu(false);

@@ -47,16 +47,34 @@ export async function fetchActiveContractsForCustomer(
       return [];
     }
 
-    return (data || []).map((q: any) => ({
-      id: q.id,
-      quote_number: q.quote_number,
-      quotation_name: q.quotation_name,
-      customer_name: q.customer_name,
-      contract_status: q.contract_status,
-      contract_validity_start: q.contract_validity_start,
-      contract_validity_end: q.contract_validity_end,
-      services: Array.isArray(q.services) ? q.services : [],
-    })) as ContractSummary[];
+    return (data || []).map((q: any) => {
+      const cgd = q?.details?.contract_general_details ?? {};
+      // POD priority: per-service Brokerage `pods` array (the multi-select the user
+      // fills on the Brokerage scope section) → contract-level `port_of_entry`
+      // (the separate ContractGeneralDetailsSection field). The service-level
+      // picker wins because that's the canonical input today; port_of_entry is
+      // only the fallback so legacy / backfilled contracts still have a list.
+      const cgdPod: string[] = Array.isArray(cgd.port_of_entry) ? cgd.port_of_entry.filter(Boolean) : [];
+      const cgdPol: string[] = Array.isArray(cgd.port_of_loading) ? cgd.port_of_loading.filter(Boolean) : [];
+      const brokerageMeta = Array.isArray(q?.services_metadata)
+        ? q.services_metadata.find((s: any) => String(s?.service_type).toLowerCase() === 'brokerage')
+        : null;
+      const servicePods: string[] = Array.isArray(brokerageMeta?.service_details?.pods)
+        ? brokerageMeta.service_details.pods.filter(Boolean)
+        : [];
+      return {
+        id: q.id,
+        quote_number: q.quote_number,
+        quotation_name: q.quotation_name,
+        customer_name: q.customer_name,
+        contract_status: q.contract_status,
+        contract_validity_start: q.contract_validity_start,
+        contract_validity_end: q.contract_validity_end,
+        services: Array.isArray(q.services) ? q.services : [],
+        pol_options: cgdPol,
+        pod_options: servicePods.length > 0 ? servicePods : cgdPod,
+      };
+    }) as ContractSummary[];
   } catch (err) {
     console.error("[contractLookup] Error fetching active contracts:", err);
     return [];

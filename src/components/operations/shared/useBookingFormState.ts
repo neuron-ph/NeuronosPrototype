@@ -11,15 +11,35 @@ import { getSelectedCustomer } from '../../../utils/bookings/selectedCustomer';
 
 export type FormState = Record<string, unknown>;
 
+// Keys that should never enter formState — they're constraints/hints carried
+// alongside the booking but not part of the booking row itself.
+const NON_PERSISTED_PREFILL_KEYS = new Set(['pol_options', 'pod_options']);
+
+function splitPrefill(prefill: FormState): { persisted: FormState; constraints: FormState } {
+  const persisted: FormState = {};
+  const constraints: FormState = {};
+  for (const [key, value] of Object.entries(prefill)) {
+    if (NON_PERSISTED_PREFILL_KEYS.has(key)) {
+      constraints[key] = value;
+    } else {
+      persisted[key] = value;
+    }
+  }
+  return { persisted, constraints };
+}
+
 export function useBookingFormState(serviceType: string, seed?: FormState) {
+  const { persisted: seedPersisted, constraints: seedConstraints } = splitPrefill(seed ?? {});
   const [formState, setFormState] = useState<FormState>({
     service_type: serviceType,
     status: 'Draft',
     movement_type: '',
     mode: '',
     incoterms: '',
-    ...seed,
+    ...seedPersisted,
   });
+  // Held outside formState so it never ends up persisted to the booking row.
+  const [constraints, setConstraints] = useState<FormState>(seedConstraints);
 
   const setField = useCallback((key: string, value: unknown) => {
     setFormState(prev => ({ ...prev, [key]: value }));
@@ -86,10 +106,14 @@ export function useBookingFormState(serviceType: string, seed?: FormState) {
 
   // Pre-fill from a flat prefill object (e.g. from project autofill — normalizes legacy keys + field aliases)
   const initFromPrefill = useCallback((prefill: FormState) => {
+    const { persisted, constraints: prefillConstraints } = splitPrefill(prefill);
     const normalized = normalizeTopLevelFields(
-      normalizeDetails(prefill as Record<string, unknown>, serviceType),
+      normalizeDetails(persisted as Record<string, unknown>, serviceType),
     );
     setFormState(prev => ({ ...prev, ...normalized }));
+    if (Object.keys(prefillConstraints).length > 0) {
+      setConstraints(prev => ({ ...prev, ...prefillConstraints }));
+    }
   }, [serviceType]);
 
   // The customer field on bookings is a profile-lookup, so its value is a
@@ -97,6 +121,9 @@ export function useBookingFormState(serviceType: string, seed?: FormState) {
   // display name once, then expose them on the context so per-customer
   // lookups (like the consignee picker) can scope correctly.
   const selectedCustomer = getSelectedCustomer(formState);
+
+  const polOptions = Array.isArray(constraints.pol_options) ? (constraints.pol_options as string[]) : undefined;
+  const podOptions = Array.isArray(constraints.pod_options) ? (constraints.pod_options as string[]) : undefined;
 
   const context: BookingFormContext = {
     service_type: String(formState.service_type ?? serviceType),
@@ -107,7 +134,16 @@ export function useBookingFormState(serviceType: string, seed?: FormState) {
     type_of_package: String(formState.type_of_package ?? ''),
     customer_id: selectedCustomer.customerId,
     customer_name: selectedCustomer.customerName || null,
+    pol_options: polOptions,
+    pod_options: podOptions,
   };
 
-  return { formState, setField, setFields, initFromRecord, initFromPrefill, context };
+  // Imperative setter for non-persisted constraints (e.g. contract-detected
+  // POL/POD allowed lists on ad-hoc bookings). Pass `null`/empty arrays to
+  // clear a specific constraint.
+  const setConstraint = useCallback((key: 'pol_options' | 'pod_options', value: string[] | null) => {
+    setConstraints(prev => ({ ...prev, [key]: value && value.length > 0 ? value : undefined }));
+  }, []);
+
+  return { formState, setField, setFields, initFromRecord, initFromPrefill, context, setConstraint };
 }

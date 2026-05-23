@@ -7,6 +7,7 @@ import {
   isFieldVisible,
 } from "../../../utils/quotation/quotationVisibility";
 import { ProfileLookupCombobox } from "../../shared/profiles/ProfileLookupCombobox";
+import { ProfileMultiLookupCombobox } from "../../shared/profiles/ProfileMultiLookupCombobox";
 import { withLegacyOption } from "../../../utils/forms/legacyOption";
 import type { ProfileSelectionValue } from "../../../types/profiles";
 
@@ -250,16 +251,32 @@ export function BrokerageServiceForm({
               </div>
             )}
 
-            {/* AOD/POD — all packages — port profile lookup */}
+            {/* AOD/POD — all packages — port profile lookup.
+                Contract mode: multi-select. The chosen ports become the allowed
+                list any booking under this contract can pick from. */}
             <div>
-              <label style={labelStyle}>{isExport ? "AOL/POL" : "Port of Discharge (POD)"}</label>
-              <ProfileLookupCombobox
-                profileType="port"
-                value={data.pod ?? null}
-                onChange={(v) => updateField("pod", v)}
-                disabled={viewMode}
-                placeholder={isExport ? "Search AOL/POL…" : "Search POD…"}
-              />
+              <label style={labelStyle}>
+                {isExport
+                  ? (contractMode ? "AOL/POL/s" : "AOL/POL")
+                  : (contractMode ? "Port of Discharge/s (POD)" : "Port of Discharge (POD)")}
+              </label>
+              {contractMode ? (
+                <ProfileMultiLookupCombobox
+                  profileType="port"
+                  value={data.pods ?? []}
+                  onChange={(vals) => updateField("pods", vals.map(v => v.label).filter(Boolean))}
+                  disabled={viewMode}
+                  placeholder={isExport ? "Add AOL/POL…" : "Add POD…"}
+                />
+              ) : (
+                <ProfileLookupCombobox
+                  profileType="port"
+                  value={data.pod ?? null}
+                  onChange={(v) => updateField("pod", v)}
+                  disabled={viewMode}
+                  placeholder={isExport ? "Search AOL/POL…" : "Search POD…"}
+                />
+              )}
             </div>
 
             {/* Mode — all packages */}

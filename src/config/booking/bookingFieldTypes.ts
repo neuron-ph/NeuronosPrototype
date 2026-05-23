@@ -44,6 +44,11 @@ export type BookingFormContext = {
   // Customer scope — used by per-customer profile lookups (e.g. consignees)
   customer_id?: string | null;
   customer_name?: string | null;
+  // Contract scope — when a booking is created from a contract, the contract's
+  // allowed POL/POD lists are surfaced here so the POL/POD profile-lookup
+  // dropdowns can constrain their options. Empty/unset means no constraint.
+  pol_options?: string[];
+  pod_options?: string[];
 };
 
 // A single visibility predicate. Multiple conditions in showWhen are AND'd together.

@@ -4,10 +4,9 @@ import { supabase } from "../utils/supabase/client";
 /**
  * Org-wide auto-uppercase for user-entered text. Default ON.
  *
- * Scope: every <input> across the app, except types where uppercasing breaks
- * meaning (email, password, url, number, date, etc.) or fields/regions that
- * opt out via `data-no-caps`. Textareas are treated as prose and left alone,
- * so comments, remarks, notes, and descriptions are unaffected.
+ * Scope: every <input> and <textarea> across the app, except input types where
+ * uppercasing breaks meaning (email, password, url, number, date, etc.) and
+ * comment fields, which opt out via `data-no-caps`.
  *
  * Implementation: a single document-level listener intercepts the native
  * `input` event, rewrites the value to uppercase using the React-compatible
@@ -31,18 +30,25 @@ const SKIP_INPUT_TYPES = new Set([
   "search", "color", "range", "checkbox", "radio", "file", "hidden",
 ]);
 
-function shouldTransform(el: EventTarget | null): el is HTMLInputElement {
-  if (!(el instanceof HTMLInputElement)) return false;
-  if (el.readOnly || el.disabled) return false;
-  const type = (el.type || "text").toLowerCase();
-  if (SKIP_INPUT_TYPES.has(type)) return false;
-  if (el.getAttribute("data-no-caps") === "true") return false;
-  if (el.closest('[data-no-caps="true"]')) return false;
-  // Skip authentication forms (login/signup) — autocomplete attribute is a reliable signal.
-  const autocomplete = (el.autocomplete || "").toLowerCase();
-  if (autocomplete.includes("password") || autocomplete.includes("email") || autocomplete === "username") {
-    return false;
+type CapsTarget = HTMLInputElement | HTMLTextAreaElement;
+
+function shouldTransform(el: EventTarget | null): el is CapsTarget {
+  const isInput = el instanceof HTMLInputElement;
+  const isTextarea = el instanceof HTMLTextAreaElement;
+  if (!isInput && !isTextarea) return false;
+  const node = el as CapsTarget;
+  if (node.readOnly || node.disabled) return false;
+  if (isInput) {
+    const type = ((node as HTMLInputElement).type || "text").toLowerCase();
+    if (SKIP_INPUT_TYPES.has(type)) return false;
+    // Skip authentication forms (login/signup) — autocomplete attribute is a reliable signal.
+    const autocomplete = ((node as HTMLInputElement).autocomplete || "").toLowerCase();
+    if (autocomplete.includes("password") || autocomplete.includes("email") || autocomplete === "username") {
+      return false;
+    }
   }
+  if (node.getAttribute("data-no-caps") === "true") return false;
+  if (node.closest('[data-no-caps="true"]')) return false;
   return true;
 }
 
@@ -73,10 +79,10 @@ export function AutoCapsProvider({ children }: { children: ReactNode }) {
       if (!shouldTransform(el)) return;
       const upper = el.value.toUpperCase();
       if (upper === el.value) return;
-      const setter = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype,
-        "value",
-      )?.set;
+      const proto = el instanceof HTMLTextAreaElement
+        ? window.HTMLTextAreaElement.prototype
+        : window.HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
       if (!setter) return;
       const start = el.selectionStart;
       const end = el.selectionEnd;

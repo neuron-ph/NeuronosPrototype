@@ -84,13 +84,51 @@ export function ContractsModule({ currentUser, onCreateTicket, initialContract, 
   });
   const refreshContracts = () => { refetch(); };
 
-  // Apply scope filter client-side (cache doesn't support per-user keys)
+  // Customer ownership map — drives the customer-scope arm of the contract
+  // visibility rule (a contract is visible when its customer is in scope, even
+  // if the contract was created by someone outside the viewer's department).
+  const customerIdsThisQuery = useMemo(
+    () => Array.from(new Set(contracts.map(c => c.customer_id).filter(Boolean) as string[])),
+    [contracts],
+  );
+  const { data: customerOwnerById = {} } = useQuery<Record<string, string | null>>({
+    queryKey: ['customers', 'owner-map', customerIdsThisQuery.sort().join(',')],
+    enabled: customerIdsThisQuery.length > 0,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('id, owner_id')
+        .in('id', customerIdsThisQuery);
+      if (error) throw error;
+      const map: Record<string, string | null> = {};
+      for (const row of (data ?? []) as Array<{ id: string; owner_id: string | null }>) {
+        map[row.id] = row.owner_id;
+      }
+      return map;
+    },
+  });
+
+  // Apply scope filter client-side (cache doesn't support per-user keys).
+  // A contract is visible when EITHER:
+  //   - its creator is in scope (created_by), or
+  //   - its customer's owner is in scope (customer.owner_id)
+  // The customer-arm matters when contracts are created by someone outside the
+  // viewer's department (e.g. a Pricing manager or an Executive) for a customer
+  // that belongs to the viewer's department.
   const scopedContracts = useMemo(() => {
     if (!contracts || !scopeLoaded) return [];
     if (scope.type === 'all') return contracts;
-    if (scope.type === 'userIds') return contracts.filter(c => scope.ids.includes(c.prepared_by || ''));
-    return contracts.filter(c => c.prepared_by === scope.userId);
-  }, [contracts, scope, scopeLoaded]);
+    const allowedIds = scope.type === 'userIds' ? new Set(scope.ids) : new Set([scope.userId]);
+    return contracts.filter(c => {
+      const createdBy = (c as any).created_by as string | null | undefined;
+      const customerOwner = c.customer_id ? customerOwnerById[c.customer_id] : null;
+      return (
+        (createdBy && allowedIds.has(createdBy)) ||
+        (customerOwner && allowedIds.has(customerOwner))
+      );
+    });
+  }, [contracts, scope, scopeLoaded, customerOwnerById]);
 
   // Deep-link: auto-select contract from ?contract= query param
   useEffect(() => {

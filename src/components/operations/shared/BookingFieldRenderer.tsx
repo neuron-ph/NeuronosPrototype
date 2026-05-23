@@ -542,17 +542,27 @@ export function BookingFieldRenderer({ field, value, onChange, ctx, error, disab
           />
         );
       }
-      return (
-        <ProfileLookupCombobox
-          profileType={field.profileType ?? 'unknown'}
-          value={value as ProfileSelectionValue | string | null}
-          onChange={sel => set(sel)}
-          disabled={disabled}
-          placeholder={label}
-          error={!!error}
-          portalZIndex={portalZIndex}
-        />
-      );
+      {
+        // Contract-scoped port constraint: if the booking was created from a
+        // contract, surface the contract's allowed POL/POD lists so the user
+        // can only pick from those values. Empty/undefined list = no constraint.
+        const allowedPortOptions =
+          field.profileType === 'port' && field.key === 'pol_aol' ? ctx.pol_options :
+          field.profileType === 'port' && field.key === 'pod_aod' ? ctx.pod_options :
+          undefined;
+        return (
+          <ProfileLookupCombobox
+            profileType={field.profileType ?? 'unknown'}
+            value={value as ProfileSelectionValue | string | null}
+            onChange={sel => set(sel)}
+            disabled={disabled}
+            placeholder={label}
+            error={!!error}
+            portalZIndex={portalZIndex}
+            allowedOptions={allowedPortOptions}
+          />
+        );
+      }
 
     case 'multi-profile-lookup': {
       return (

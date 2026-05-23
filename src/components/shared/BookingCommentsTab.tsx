@@ -410,6 +410,7 @@ export function BookingCommentsTab({ bookingId }: BookingCommentsTabProps) {
         <form onSubmit={handleSubmitComment} className="relative">
           <textarea
             ref={textareaRef}
+            data-no-caps="true"
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
             placeholder="Add a comment..."

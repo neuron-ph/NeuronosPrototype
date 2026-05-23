@@ -343,6 +343,7 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
   );
   const [contractGeneralDetails, setContractGeneralDetails] = useState({
     port_of_entry: initialData?.contract_general_details?.port_of_entry || [] as string[],
+    port_of_loading: initialData?.contract_general_details?.port_of_loading || [] as string[],
     transportation: initialData?.contract_general_details?.transportation || [] as string[],
     type_of_entry: initialData?.contract_general_details?.type_of_entry || "",
     releasing: initialData?.contract_general_details?.releasing || "",
@@ -469,6 +470,7 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
       if (initialData.contract_general_details) {
         setContractGeneralDetails({
           port_of_entry: initialData.contract_general_details.port_of_entry || [],
+          port_of_loading: initialData.contract_general_details.port_of_loading || [],
           transportation: initialData.contract_general_details.transportation || [],
           type_of_entry: initialData.contract_general_details.type_of_entry || "",
           releasing: initialData.contract_general_details.releasing || "",
@@ -2537,7 +2539,7 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
               onChange={handleBrokerageChange}
               viewMode={viewMode}
               movement={movement}
-              contractMode={false}
+              contractMode={isContractMode}
               lockToStandardType={isContractMode}
               headerToolbar={renderContractToolbar("Brokerage")}
             />

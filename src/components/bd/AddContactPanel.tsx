@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
-import { UserPlus, X, User, Building2, Target } from "lucide-react";
+import { Link2, Search, UserPlus, X, User, Building2, Target } from "lucide-react";
 import type { LifecycleStage, LeadStatus } from "../../types/bd";
 import { CustomSelect } from "./CustomSelect";
 import { useUsers } from "../../hooks/useUsers";
 import { useCustomers } from "../../hooks/useCustomers";
+import { useContacts } from "../../hooks/useContacts";
 
 interface AddContactPanelProps {
   isOpen: boolean;
@@ -11,11 +12,26 @@ interface AddContactPanelProps {
   onSave: (contactData: any) => Promise<void>;
   prefilledCustomerId?: string; // Pre-fill and lock customer when adding from Customer Detail page
   prefilledCustomerName?: string; // Display name of pre-filled customer
+  allowLinkExisting?: boolean;
+  onLinkExisting?: (contactId: string) => Promise<void>;
 }
 
 
-export function AddContactPanel({ isOpen, onClose, onSave, prefilledCustomerId, prefilledCustomerName }: AddContactPanelProps) {
+export function AddContactPanel({
+  isOpen,
+  onClose,
+  onSave,
+  prefilledCustomerId,
+  prefilledCustomerName,
+  allowLinkExisting = false,
+  onLinkExisting,
+}: AddContactPanelProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [mode, setMode] = useState<"existing" | "new">(
+    allowLinkExisting && prefilledCustomerId ? "existing" : "new"
+  );
+  const [contactSearch, setContactSearch] = useState("");
+  const [selectedExistingContactId, setSelectedExistingContactId] = useState("");
   const [formData, setFormData] = useState({
     first_name: "",
     last_name: "",
@@ -32,6 +48,9 @@ export function AddContactPanel({ isOpen, onClose, onSave, prefilledCustomerId, 
   // Direct Supabase query for BD users
   const { users: bdUsers } = useUsers({ department: 'Business Development', enabled: isOpen });
   const { customers } = useCustomers({ enabled: isOpen });
+  const { contacts: allContacts, isLoading: isLoadingContacts } = useContacts({
+    enabled: isOpen && allowLinkExisting,
+  });
 
   // Pre-fill customer_id when opening from Customer Detail page
   useEffect(() => {
@@ -39,6 +58,13 @@ export function AddContactPanel({ isOpen, onClose, onSave, prefilledCustomerId, 
       setFormData(prev => ({ ...prev, customer_id: prefilledCustomerId }));
     }
   }, [isOpen, prefilledCustomerId]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setMode(allowLinkExisting && prefilledCustomerId ? "existing" : "new");
+    setContactSearch("");
+    setSelectedExistingContactId("");
+  }, [allowLinkExisting, isOpen, prefilledCustomerId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,6 +86,16 @@ export function AddContactPanel({ isOpen, onClose, onSave, prefilledCustomerId, 
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  const handleLinkExisting = async () => {
+    if (!selectedExistingContactId || !onLinkExisting) return;
+    setIsSubmitting(true);
+    try {
+      await onLinkExisting(selectedExistingContactId);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   const isFormValid =
@@ -68,6 +104,32 @@ export function AddContactPanel({ isOpen, onClose, onSave, prefilledCustomerId, 
     formData.email.trim() !== "" &&
     formData.phone.trim() !== "" &&
     formData.owner_id !== "";
+
+  const normalizedContactSearch = contactSearch.trim().toLowerCase();
+  const existingContactOptions = allContacts
+    .filter((contact: any) => !contact.customer_id)
+    .filter((contact: any) => {
+      if (!normalizedContactSearch) return true;
+      const haystack = [
+        contact.name,
+        contact.first_name,
+        contact.last_name,
+        contact.title,
+        contact.email,
+        contact.phone,
+      ].filter(Boolean).join(" ").toLowerCase();
+      return haystack.includes(normalizedContactSearch);
+    });
+
+  const getContactName = (contact: any) => {
+    return contact.name || [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Unnamed contact";
+  };
+
+  const getCustomerName = (customerId?: string | null) => {
+    if (!customerId) return "No company linked";
+    const linkedCustomer = customers.find((customer: any) => customer.id === customerId);
+    return linkedCustomer?.name || linkedCustomer?.company_name || "Linked to another company";
+  };
 
   return (
     <>
@@ -106,7 +168,7 @@ export function AddContactPanel({ isOpen, onClose, onSave, prefilledCustomerId, 
                 <UserPlus size={20} style={{ color: "var(--theme-action-primary-bg)" }} />
               </div>
               <h2 style={{ fontSize: "24px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
-                Add New Contact
+                Add Contact
               </h2>
             </div>
             <button
@@ -127,12 +189,141 @@ export function AddContactPanel({ isOpen, onClose, onSave, prefilledCustomerId, 
             </button>
           </div>
           <p style={{ fontSize: "14px", color: "var(--theme-text-muted)" }}>
-            Create a new contact record for your business development pipeline
+            {allowLinkExisting
+              ? "Link an existing contact or create a new contact record"
+              : "Create a new contact record for your business development pipeline"}
           </p>
         </div>
 
         {/* Form Content */}
         <div className="flex-1 overflow-auto px-12 py-8">
+          {allowLinkExisting && (
+            <div
+              className="mb-6 grid grid-cols-2 rounded-lg p-1"
+              style={{
+                border: "1px solid var(--neuron-ui-border)",
+                backgroundColor: "var(--theme-bg-page)",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setMode("existing")}
+                className="px-3 py-2 rounded-md text-[13px] font-medium transition-colors"
+                style={{
+                  backgroundColor: mode === "existing" ? "var(--theme-bg-surface)" : "transparent",
+                  color: mode === "existing" ? "var(--theme-text-primary)" : "var(--theme-text-muted)",
+                  boxShadow: mode === "existing" ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+                }}
+              >
+                Link Existing
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("new")}
+                className="px-3 py-2 rounded-md text-[13px] font-medium transition-colors"
+                style={{
+                  backgroundColor: mode === "new" ? "var(--theme-bg-surface)" : "transparent",
+                  color: mode === "new" ? "var(--theme-text-primary)" : "var(--theme-text-muted)",
+                  boxShadow: mode === "new" ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+                }}
+              >
+                Create New
+              </button>
+            </div>
+          )}
+
+          {mode === "existing" && allowLinkExisting ? (
+            <div>
+              <div className="mb-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <Link2 size={16} style={{ color: "var(--theme-action-primary-bg)" }} />
+                  <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    Existing Contacts
+                  </h3>
+                </div>
+                <div
+                  className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg"
+                  style={{
+                    border: "1px solid var(--neuron-ui-border)",
+                    backgroundColor: "var(--theme-bg-surface)",
+                  }}
+                >
+                  <Search size={16} style={{ color: "var(--theme-text-muted)" }} />
+                  <input
+                    type="text"
+                    value={contactSearch}
+                    onChange={(event) => setContactSearch(event.target.value)}
+                    placeholder="Search by name, title, email, or phone"
+                    className="w-full bg-transparent outline-none text-[13px]"
+                    style={{ color: "var(--neuron-ink-primary)" }}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {isLoadingContacts ? (
+                  <div className="py-10 text-center text-[13px]" style={{ color: "var(--theme-text-muted)" }}>
+                    Loading contacts...
+                  </div>
+                ) : existingContactOptions.length === 0 ? (
+                  <div
+                    className="py-10 text-center rounded-lg text-[13px]"
+                    style={{
+                      border: "1px solid var(--neuron-ui-border)",
+                      backgroundColor: "var(--theme-bg-page)",
+                      color: "var(--theme-text-muted)",
+                    }}
+                  >
+                    No existing contacts found
+                  </div>
+                ) : (
+                  existingContactOptions.map((contact: any) => {
+                    const isSelected = selectedExistingContactId === contact.id;
+                    return (
+                      <button
+                        key={contact.id}
+                        type="button"
+                        onClick={() => setSelectedExistingContactId(contact.id)}
+                        className="w-full text-left p-4 rounded-lg transition-colors"
+                        style={{
+                          border: isSelected ? "1px solid var(--theme-action-primary-bg)" : "1px solid var(--neuron-ui-border)",
+                          backgroundColor: isSelected ? "var(--theme-bg-surface-tint)" : "var(--theme-bg-surface)",
+                        }}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div
+                            className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+                            style={{
+                              backgroundColor: "var(--theme-bg-page)",
+                              border: "1px solid var(--neuron-ui-divider)",
+                            }}
+                          >
+                            <User size={16} style={{ color: "var(--theme-text-muted)" }} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[13px] font-medium truncate" style={{ color: "var(--theme-text-primary)" }}>
+                              {getContactName(contact)}
+                            </div>
+                            {contact.title && (
+                              <div className="text-[12px] mt-1 truncate" style={{ color: "var(--theme-text-muted)" }}>
+                                {contact.title}
+                              </div>
+                            )}
+                            <div className="text-[12px] mt-2 truncate" style={{ color: "var(--neuron-ink-secondary)" }}>
+                              {[contact.email, contact.phone].filter(Boolean).join(" | ")}
+                            </div>
+                            <div className="text-[11px] mt-2" style={{ color: contact.customer_id ? "var(--theme-status-warning-fg)" : "var(--theme-text-muted)" }}>
+                              {getCustomerName(contact.customer_id)}
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          ) : (
           <form onSubmit={handleSubmit} id="add-contact-form">
             {/* Contact Information Section */}
             <div className="mb-8">
@@ -425,6 +616,7 @@ export function AddContactPanel({ isOpen, onClose, onSave, prefilledCustomerId, 
               </div>
             </div>
           </form>
+          )}
         </div>
 
         {/* Footer Actions */}
@@ -455,34 +647,55 @@ export function AddContactPanel({ isOpen, onClose, onSave, prefilledCustomerId, 
           >
             Cancel
           </button>
-          <button
-            type="submit"
-            form="add-contact-form"
-            disabled={!isFormValid || isSubmitting}
-            className="px-6 py-2.5 rounded-lg transition-all flex items-center gap-2"
-            style={{
-              backgroundColor: isFormValid && !isSubmitting ? "var(--theme-action-primary-bg)" : "var(--neuron-ui-muted)",
-              color: "#FFFFFF",
-              fontSize: "14px",
-              fontWeight: 600,
-              border: "none",
-              cursor: isFormValid && !isSubmitting ? "pointer" : "not-allowed",
-              opacity: isFormValid && !isSubmitting ? 1 : 0.6
-            }}
-            onMouseEnter={(e) => {
-              if (isFormValid && !isSubmitting) {
-                e.currentTarget.style.backgroundColor = "var(--theme-action-primary-border)";
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (isFormValid && !isSubmitting) {
-                e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
-              }
-            }}
-          >
-            <UserPlus size={16} />
-            {isSubmitting ? "Saving..." : "Create Contact"}
-          </button>
+          {mode === "existing" && allowLinkExisting ? (
+            <button
+              type="button"
+              onClick={handleLinkExisting}
+              disabled={!selectedExistingContactId || isSubmitting}
+              className="px-6 py-2.5 rounded-lg transition-all flex items-center gap-2"
+              style={{
+                backgroundColor: selectedExistingContactId && !isSubmitting ? "var(--theme-action-primary-bg)" : "var(--neuron-ui-muted)",
+                color: "#FFFFFF",
+                fontSize: "14px",
+                fontWeight: 600,
+                border: "none",
+                cursor: selectedExistingContactId && !isSubmitting ? "pointer" : "not-allowed",
+                opacity: selectedExistingContactId && !isSubmitting ? 1 : 0.6
+              }}
+            >
+              <Link2 size={16} />
+              {isSubmitting ? "Linking..." : "Link Contact"}
+            </button>
+          ) : (
+            <button
+              type="submit"
+              form="add-contact-form"
+              disabled={!isFormValid || isSubmitting}
+              className="px-6 py-2.5 rounded-lg transition-all flex items-center gap-2"
+              style={{
+                backgroundColor: isFormValid && !isSubmitting ? "var(--theme-action-primary-bg)" : "var(--neuron-ui-muted)",
+                color: "#FFFFFF",
+                fontSize: "14px",
+                fontWeight: 600,
+                border: "none",
+                cursor: isFormValid && !isSubmitting ? "pointer" : "not-allowed",
+                opacity: isFormValid && !isSubmitting ? 1 : 0.6
+              }}
+              onMouseEnter={(e) => {
+                if (isFormValid && !isSubmitting) {
+                  e.currentTarget.style.backgroundColor = "var(--theme-action-primary-border)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (isFormValid && !isSubmitting) {
+                  e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
+                }
+              }}
+            >
+              <UserPlus size={16} />
+              {isSubmitting ? "Saving..." : "Create Contact"}
+            </button>
+          )}
         </div>
       </div>
 
