@@ -1,4 +1,4 @@
-import { ArrowLeft, Building2, MapPin, Briefcase, Edit, Users, Plus, Mail, Phone, User, CheckCircle, Clock, AlertCircle, Calendar, Paperclip, Upload, MessageSquare, Send, FileText, MessageCircle, Linkedin, StickyNote, Image as ImageIcon, File, Download } from "lucide-react";
+﻿import { ArrowLeft, Building2, MapPin, Briefcase, Edit, Users, Mail, Phone, User, CheckCircle, Clock, AlertCircle, Calendar, MessageSquare, FileText } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -8,6 +8,8 @@ import type { QuotationNew, Project, QuotationType } from "../../types/pricing";
 import { CustomDropdown } from "./CustomDropdown";
 import { TaskDetailInline } from "./TaskDetailInline";
 import { ActivityDetailInline } from "./ActivityDetailInline";
+import { AddActivityPanel } from "./AddActivityPanel";
+import { AddTaskPanel } from "./AddTaskPanel";
 import { ActivityTimelineTable } from "./ActivityTimelineTable";
 import { AddContactPanel } from "./AddContactPanel";
 import { CustomerProjectsTab } from "./CustomerProjectsTab";
@@ -20,6 +22,7 @@ import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
 import { useUser } from "../../hooks/useUser";
 import { logActivity } from "../../utils/activityLog";
+import { uploadCrmAttachments } from "../../utils/crmAttachments";
 import { recordNotificationEvent, fetchDeptManagerIds } from "../../utils/notifications";
 import { useMarkEntityReadOnMount } from "../../hooks/useNotifications";
 import { usePermission } from "../../context/PermissionProvider";
@@ -75,19 +78,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
   const [editedCustomer, setEditedCustomer] = useState(customer);
   const [isSavingCustomer, setIsSavingCustomer] = useState(false);
   const [isLoggingActivity, setIsLoggingActivity] = useState(false);
-  const [newActivity, setNewActivity] = useState<Partial<Activity>>({
-    type: "Call",
-    customer_id: customer.id
-  });
-  const [activityAttachments, setActivityAttachments] = useState<File[]>([]);
-
   const [isCreatingTask, setIsCreatingTask] = useState(false);
-  const [newTask, setNewTask] = useState<Partial<Task>>({
-    type: "Call",
-    priority: "Medium",
-    status: "Pending",
-    customer_id: customer.id
-  });
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isEditingTask, setIsEditingTask] = useState(false);
@@ -116,7 +107,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
   // Fetch contacts for this customer.
   // NOTE: this previously shared `queryKeys.customers.consignees(...)` with the
   // useConsignees hook, causing the two queries (contacts table vs consignees
-  // table) to clobber each other's cache — which made the CONSIGNEES section
+  // table) to clobber each other's cache â€” which made the CONSIGNEES section
   // render contact rows and made adding a consignee "delete" the others.
   const { data: contacts = [], isLoading: isLoadingContacts } = useQuery({
     queryKey: queryKeys.customers.contacts(customer.id),
@@ -152,37 +143,6 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
     enabled: !!customer.id,
     staleTime: 30_000,
   });
-
-  // Create new task
-  const handleCreateTask = async () => {
-    if (!newTask.title || !newTask.due_date) {
-      toast.error('Please fill in all required fields');
-      return;
-    }
-
-    try {
-      const taskToCreate = {
-        ...newTask,
-        customer_id: customer.id,
-        owner_id: customer.owner_id || user?.id,
-        status: 'Pending'
-      };
-
-      const { error } = await supabase.from('tasks').insert({
-        ...taskToCreate,
-        id: `task-${Date.now()}`,
-        created_at: new Date().toISOString(),
-      });
-      if (error) throw error;
-      queryClient.invalidateQueries({ queryKey: ["tasks", "customer", customer.id] });
-      toast.success('Task created successfully');
-      setIsCreatingTask(false);
-      setNewTask({ type: "Call", priority: "Medium", status: "Pending", customer_id: customer.id });
-    } catch (error) {
-      console.error('Error creating task:', error);
-      toast.error('Unable to create task. Please try again.');
-    }
-  };
 
   // Fetch projects for this customer
   const { data: projects = [], isLoading: isLoadingProjects } = useQuery({
@@ -244,7 +204,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
 
   const getOwnerName = (ownerId: string) => {
     const owner = users.find(u => u.id === ownerId);
-    return owner?.name || "—";
+    return owner?.name || "â€”";
   };
 
   const formatDate = (dateString: string) => {
@@ -582,7 +542,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                     </div>
                   )}
 
-                  {/* Consignees — inline section */}
+                  {/* Consignees â€” inline section */}
                   {variant === "bd" && (
                     <ConsigneeInlineSection customerId={customer.id} isEditing={false} />
                   )}
@@ -729,7 +689,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                     />
                   </div>
 
-                  {/* Consignees — inline section (edit mode) */}
+                  {/* Consignees â€” inline section (edit mode) */}
                   {variant === "bd" && (
                     <ConsigneeInlineSection customerId={customer.id} isEditing={true} />
                   )}
@@ -863,7 +823,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                   )}
                 </button>
               )}
-              {/* ✨ PHASE 5: Contracts tab */}
+              {/* âœ¨ PHASE 5: Contracts tab */}
               {canViewContractsTab && (
                 <button
                   onClick={() => setActiveTab("contracts")}
@@ -1065,214 +1025,35 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
 
               {/* Activities Tab */}
               {activeTab === "activities" && canViewActivitiesTab && (
-                <div>
+                <div className="h-full">
                   {isLoggingActivity ? (
-                    /* Log Activity Form */
-                    <div>
-                      <div className="mb-6">
-                        <button
-                          onClick={() => {
-                            setIsLoggingActivity(false);
-                            setNewActivity({
-                              type: "Call",
-                              customer_id: customer.id
-                            });
-                            setActivityAttachments([]);
-                          }}
-                          className="flex items-center gap-2 text-[13px] transition-colors mb-4"
-                          style={{ color: "var(--theme-action-primary-bg)" }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.color = "var(--theme-action-primary-border)";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.color = "var(--theme-action-primary-bg)";
-                          }}
-                        >
-                          <ArrowLeft size={16} />
-                          Back to Activities
-                        </button>
-
-                        <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--theme-text-primary)", marginBottom: "24px" }}>
-                          Log Activity
-                        </h3>
-
-                        <div 
-                          className="p-6 rounded-xl"
-                          style={{ 
-                            border: "1px solid var(--neuron-ui-border)",
-                            backgroundColor: "var(--neuron-pill-inactive-bg)"
-                          }}
-                        >
-                          <div className="space-y-6">
-                            {/* Activity Name */}
-                            <div>
-                              <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
-                                Activity Name *
-                              </label>
-                              <input
-                                type="text"
-                                value={newActivity.title || ""}
-                                onChange={(e) => setNewActivity({ ...newActivity, title: e.target.value })}
-                                placeholder="Enter activity name..."
-                                className="w-full px-3 py-2.5 rounded-lg text-[13px]"
-                                style={{
-                                  border: "1px solid var(--neuron-ui-border)",
-                                  backgroundColor: "var(--theme-bg-surface)",
-                                  color: "var(--theme-text-primary)"
-                                }}
-                              />
-                            </div>
-
-                            {/* Activity Description */}
-                            <div>
-                              <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
-                                Activity Description *
-                              </label>
-                              <textarea
-                                value={newActivity.description || ""}
-                                onChange={(e) => setNewActivity({ ...newActivity, description: e.target.value })}
-                                placeholder="What did you do? (e.g., Called client to discuss Q1 forecast)"
-                                className="w-full px-3 py-2.5 rounded-lg text-[13px] resize-none"
-                                rows={4}
-                                style={{
-                                  border: "1px solid var(--neuron-ui-border)",
-                                  backgroundColor: "var(--theme-bg-surface)",
-                                  color: "var(--theme-text-primary)"
-                                }}
-                              />
-                            </div>
-
-                            {/* Type */}
-                            <div>
-                              <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
-                                Type *
-                              </label>
-                              <CustomDropdown
-                                options={[
-                                  { value: "Call", label: "Call", icon: <Phone size={16} /> },
-                                  { value: "Email", label: "Email", icon: <Mail size={16} /> },
-                                  { value: "Meeting", label: "Meeting", icon: <Users size={16} /> },
-                                  { value: "SMS", label: "SMS", icon: <Send size={16} /> },
-                                  { value: "Viber", label: "Viber", icon: <MessageCircle size={16} /> },
-                                  { value: "WhatsApp", label: "WhatsApp", icon: <MessageSquare size={16} /> },
-                                  { value: "WeChat", label: "WeChat", icon: <MessageSquare size={16} /> },
-                                  { value: "LinkedIn", label: "LinkedIn", icon: <Linkedin size={16} /> },
-                                  { value: "Note", label: "Note", icon: <StickyNote size={16} /> },
-                                  { value: "Marketing Email", label: "Marketing Email", icon: <MessageSquare size={16} /> }
-                                ]}
-                                value={newActivity.type || "Call"}
-                                onChange={(value) => setNewActivity({ ...newActivity, type: value as any })}
-                              />
-                            </div>
-
-                            {/* Date/Time */}
-                            <div>
-                              <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
-                                Activity Date & Time *
-                              </label>
-                              <input
-                                type="datetime-local"
-                                value={newActivity.date ? new Date(newActivity.date).toISOString().slice(0, 16) : ""}
-                                onChange={(e) => setNewActivity({ ...newActivity, date: new Date(e.target.value).toISOString() })}
-                                className="w-full px-3 py-2.5 rounded-lg text-[13px]"
-                                style={{
-                                  border: "1px solid var(--neuron-ui-border)",
-                                  backgroundColor: "var(--theme-bg-surface)",
-                                  color: "var(--theme-text-primary)"
-                                }}
-                              />
-                            </div>
-
-                            {/* Contact Selection */}
-                            <div>
-                              <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
-                                Related Contact (Optional)
-                              </label>
-                              <select
-                                value={newActivity.contact_id || ""}
-                                onChange={(e) => setNewActivity({ ...newActivity, contact_id: e.target.value })}
-                                className="w-full px-3 py-2.5 rounded-lg text-[13px]"
-                                style={{
-                                  border: "1px solid var(--neuron-ui-border)",
-                                  backgroundColor: "var(--theme-bg-surface)",
-                                  color: "var(--theme-text-primary)"
-                                }}
-                              >
-                                <option value="">Select a contact...</option>
-                                {customerContacts.map(contact => (
-                                  <option key={contact.id} value={contact.id}>
-                                    {contact.name || `${contact.first_name || ''} ${contact.last_name || ''}`}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-
-                            {/* Attachments */}
-                            <div>
-                              <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
-                                Attachments (Optional)
-                              </label>
-                              <div 
-                                className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors"
-                                style={{ borderColor: "var(--neuron-ui-border)", backgroundColor: "var(--theme-bg-surface)" }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
-                                  e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)";
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
-                                  e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
-                                }}
-                              >
-                                <Upload size={24} className="mx-auto mb-2" style={{ color: "var(--theme-text-muted)" }} />
-                                <p className="text-[13px]" style={{ color: "var(--theme-text-muted)" }}>
-                                  Click to upload or drag and drop files
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* Submit Buttons */}
-                            <div className="flex gap-3 pt-4">
-                              <button
-                                className="flex-1 px-4 py-2.5 rounded-lg text-[13px] font-medium text-white transition-colors"
-                                style={{ backgroundColor: "var(--theme-action-primary-bg)" }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.backgroundColor = "var(--theme-action-primary-border)";
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
-                                }}
-                              >
-                                Log Activity
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setIsLoggingActivity(false);
-                                  setNewActivity({
-                                    type: "Call",
-                                    customer_id: customer.id
-                                  });
-                                }}
-                                className="flex-1 px-4 py-2.5 rounded-lg text-[13px] font-medium transition-colors"
-                                style={{
-                                  border: "1px solid var(--neuron-ui-border)",
-                                  color: "var(--neuron-ink-secondary)",
-                                  backgroundColor: "var(--theme-bg-surface)"
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
-                                }}
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <AddActivityPanel
+                      inline
+                      isOpen
+                      lockedCustomerId={customer.id}
+                      onClose={() => setIsLoggingActivity(false)}
+                      onSave={async (data, files) => {
+                        const newId = data.id || `act-${Date.now()}`;
+                        try {
+                          const uploadedAttachments = await uploadCrmAttachments(files, "crm_activities", newId);
+                          const { error } = await supabase.from('crm_activities').insert({
+                            ...data,
+                            id: newId,
+                            customer_id: customer.id,
+                            user_id: user?.id ?? null,
+                            attachments: uploadedAttachments,
+                            created_at: data.created_at || new Date().toISOString(),
+                          });
+                          if (error) { toast.error("Failed to log activity: " + error.message); return; }
+                          toast.success("Activity logged");
+                          setIsLoggingActivity(false);
+                          queryClient.invalidateQueries({ queryKey: ["crm_activities", "customer", customer.id] });
+                        } catch (err: any) {
+                          console.error("Error saving activity:", err);
+                          toast.error("Failed to log activity");
+                        }
+                      }}
+                    />
                   ) : !selectedActivity ? (
                     <>
                       <div className="flex items-center justify-between mb-6">
@@ -1368,9 +1149,9 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                     activity={selectedActivity}
                     onBack={() => setSelectedActivity(null)}
                     onUpdate={async () => {
-                      // Refresh activities list
+                      // Refresh activities list â€” keep the detail panel open so users
+                      // stay on the activity they were editing (e.g. after an attachment upload).
                       queryClient.invalidateQueries({ queryKey: ["crm_activities", "customer", customer.id] });
-                      setSelectedActivity(null);
                     }}
                     onDelete={async () => {
                       // Refresh activities list and go back
@@ -1484,7 +1265,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                                       </span>
                                       {taskContact && (
                                         <span className="text-[11px]" style={{ color: "var(--neuron-ink-muted)" }}>
-                                          • with {taskContact.first_name} {taskContact.last_name}
+                                          â€¢ with {taskContact.first_name} {taskContact.last_name}
                                         </span>
                                       )}
                                     </div>
@@ -1497,173 +1278,34 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                       )}
                     </>
                   ) : isCreatingTask ? (
-                    // Create Task Form
-                    <div>
-                      <div className="mb-6">
-                        <button
-                          onClick={() => setIsCreatingTask(false)}
-                          className="flex items-center gap-2 text-[13px] transition-colors mb-4"
-                          style={{ color: "var(--theme-action-primary-bg)" }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.color = "var(--theme-action-primary-border)";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.color = "var(--theme-action-primary-bg)";
-                          }}
-                        >
-                          <ArrowLeft size={16} />
-                          Back to Tasks
-                        </button>
-                        <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
-                          Create New Task
-                        </h3>
-                      </div>
-                      
-                      <div 
-                        className="p-6 rounded-xl"
-                        style={{ 
-                          border: "1px solid var(--neuron-ui-border)",
-                          backgroundColor: "var(--neuron-pill-inactive-bg)"
-                        }}
-                      >
-                        <div className="space-y-6">
-                          {/* Task Title */}
-                          <div>
-                            <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
-                              Task Title *
-                            </label>
-                            <input
-                              type="text"
-                              value={newTask.title || ""}
-                              onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-                              placeholder="Enter task title..."
-                              className="w-full px-3 py-2.5 rounded-lg text-[13px]"
-                              style={{
-                                border: "1px solid var(--neuron-ui-border)",
-                                backgroundColor: "var(--theme-bg-surface)",
-                                color: "var(--theme-text-primary)"
-                              }}
-                            />
-                          </div>
-
-                          {/* Due Date & Priority */}
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
-                                Due Date *
-                              </label>
-                              <input
-                                type="datetime-local"
-                                value={newTask.due_date ? new Date(newTask.due_date).toISOString().slice(0, 16) : ""}
-                                onChange={(e) => setNewTask({ ...newTask, due_date: new Date(e.target.value).toISOString() })}
-                                className="w-full px-3 py-2.5 rounded-lg text-[13px]"
-                                style={{
-                                  border: "1px solid var(--neuron-ui-border)",
-                                  backgroundColor: "var(--theme-bg-surface)",
-                                  color: "var(--theme-text-primary)"
-                                }}
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
-                                Priority *
-                              </label>
-                              <select
-                                value={newTask.priority || "Medium"}
-                                onChange={(e) => setNewTask({ ...newTask, priority: e.target.value as any })}
-                                className="w-full px-3 py-2.5 rounded-lg text-[13px]"
-                                style={{
-                                  border: "1px solid var(--neuron-ui-border)",
-                                  backgroundColor: "var(--theme-bg-surface)",
-                                  color: "var(--theme-text-primary)"
-                                }}
-                              >
-                                <option value="Low">Low</option>
-                                <option value="Medium">Medium</option>
-                                <option value="High">High</option>
-                              </select>
-                            </div>
-                          </div>
-
-                          {/* Related Contact */}
-                          <div>
-                            <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
-                              Related Contact (Optional)
-                            </label>
-                            <select
-                              value={newTask.contact_id || ""}
-                              onChange={(e) => setNewTask({ ...newTask, contact_id: e.target.value })}
-                              className="w-full px-3 py-2.5 rounded-lg text-[13px]"
-                              style={{
-                                border: "1px solid var(--neuron-ui-border)",
-                                backgroundColor: "var(--theme-bg-surface)",
-                                color: "var(--theme-text-primary)"
-                              }}
-                            >
-                              <option value="">Select a contact...</option>
-                              {customerContacts.map(contact => (
-                                <option key={contact.id} value={contact.id}>
-                                  {contact.name || `${contact.first_name || ''} ${contact.last_name || ''}`}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          {/* Description */}
-                          <div>
-                            <label className="block text-[11px] font-medium uppercase tracking-wide mb-2" style={{ color: "var(--theme-text-muted)" }}>
-                              Description
-                            </label>
-                            <textarea
-                              value={newTask.description || ""}
-                              onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
-                              placeholder="Add details about this task..."
-                              className="w-full px-3 py-2.5 rounded-lg text-[13px] resize-none"
-                              rows={4}
-                              style={{
-                                border: "1px solid var(--neuron-ui-border)",
-                                backgroundColor: "var(--theme-bg-surface)",
-                                color: "var(--theme-text-primary)"
-                              }}
-                            />
-                          </div>
-
-                          {/* Submit Buttons */}
-                          <div className="flex gap-3 pt-4">
-                            <button
-                              onClick={handleCreateTask}
-                              className="flex-1 px-4 py-2.5 rounded-lg text-[13px] font-medium text-white transition-colors"
-                              style={{ backgroundColor: "var(--theme-action-primary-bg)" }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.backgroundColor = "var(--theme-action-primary-border)";
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
-                              }}
-                            >
-                              Create Task
-                            </button>
-                            <button
-                              onClick={() => setIsCreatingTask(false)}
-                              className="flex-1 px-4 py-2.5 rounded-lg text-[13px] font-medium transition-colors"
-                              style={{
-                                border: "1px solid var(--neuron-ui-border)",
-                                color: "var(--neuron-ink-secondary)",
-                                backgroundColor: "var(--theme-bg-surface)"
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
-                              }}
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <AddTaskPanel
+                      inline
+                      isOpen
+                      lockedCustomerId={customer.id}
+                      onClose={() => setIsCreatingTask(false)}
+                      onSave={async (data, files) => {
+                        const newId = data.id || `task-${Date.now()}`;
+                        try {
+                          const uploadedAttachments = await uploadCrmAttachments(files, "tasks", newId);
+                          const { error } = await supabase.from('tasks').insert({
+                            ...data,
+                            id: newId,
+                            customer_id: customer.id,
+                            owner_id: customer.owner_id || user?.id,
+                            status: 'Pending',
+                            attachments: uploadedAttachments,
+                            created_at: data.created_at || new Date().toISOString(),
+                          });
+                          if (error) { toast.error("Failed to create task: " + error.message); return; }
+                          toast.success("Task created");
+                          setIsCreatingTask(false);
+                          queryClient.invalidateQueries({ queryKey: ["tasks", "customer", customer.id] });
+                        } catch (err: any) {
+                          console.error("Error creating task:", err);
+                          toast.error("Failed to create task");
+                        }
+                      }}
+                    />
                   ) : selectedTask ? (
                     // Task Detail View
                     <TaskDetailInline
@@ -1703,7 +1345,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
               </div>
             )}
 
-            {/* ✨ PHASE 5: Contracts Tab */}
+            {/* âœ¨ PHASE 5: Contracts Tab */}
             {activeTab === "contracts" && canViewContractsTab && (
               <div style={{ paddingBottom: "32px" }}>
                 {isLoadingContracts ? (
@@ -1736,10 +1378,10 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                       const sc = statusColors[contract.contract_status] || statusColors.Draft;
                       const validStart = contract.contract_validity_start
                         ? new Date(contract.contract_validity_start).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" })
-                        : "—";
+                        : "â€”";
                       const validEnd = contract.contract_validity_end
                         ? new Date(contract.contract_validity_end).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" })
-                        : "—";
+                        : "â€”";
                       return (
                         <div
                           key={contract.id}
@@ -1796,14 +1438,14 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                               </div>
                               <div style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "12px", color: "var(--theme-text-muted)" }}>
                                 <span style={{ fontFamily: "monospace" }}>{contract.quote_number}</span>
-                                <span>•</span>
+                                <span>â€¢</span>
                                 <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                                   <Calendar size={11} />
-                                  {validStart} — {validEnd}
+                                  {validStart} â€” {validEnd}
                                 </span>
                                 {contract.rate_matrices_count > 0 && (
                                   <>
-                                    <span>•</span>
+                                    <span>â€¢</span>
                                     <span>{contract.rate_matrices_count} rate {contract.rate_matrices_count === 1 ? "matrix" : "matrices"}</span>
                                   </>
                                 )}
@@ -1868,6 +1510,52 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
         onClose={() => setIsAddContactPanelOpen(false)}
         prefilledCustomerId={customer.id}
         prefilledCustomerName={customer.company_name || customer.name}
+        allowLinkExisting
+        onLinkExisting={async (contactId) => {
+          try {
+            const { data: contact, error: fetchError } = await supabase
+              .from('contacts')
+              .select('id, name, first_name, last_name, owner_id')
+              .eq('id', contactId)
+              .single();
+            if (fetchError) throw fetchError;
+
+            const { error } = await supabase
+              .from('contacts')
+              .update({
+                customer_id: customer.id,
+                lifecycle_stage: 'Customer',
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', contactId);
+            if (error) throw error;
+
+            const contactName = contact?.name || [contact?.first_name, contact?.last_name].filter(Boolean).join(' ') || contactId;
+            const customerName = customer.company_name || customer.name || customer.id;
+            const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+            logActivity("contact", contactId, contactName, "updated", _actor);
+
+            const bdManagers = await fetchDeptManagerIds('Business Development');
+            void recordNotificationEvent({
+              actorUserId: user?.id ?? null,
+              module: 'bd',
+              subSection: 'contacts',
+              entityType: 'user',
+              entityId: contactId,
+              kind: 'updated',
+              summary: { label: `Contact ${contactName} linked to ${customerName}` },
+              recipientIds: [contact?.owner_id, ...bdManagers],
+            });
+
+            queryClient.invalidateQueries({ queryKey: queryKeys.customers.contacts(customer.id) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all() });
+            toast.success('Contact linked successfully');
+            setIsAddContactPanelOpen(false);
+          } catch (error: any) {
+            console.error('Error linking contact:', error);
+            toast.error(`Unable to link contact: ${error.message ?? 'Please try again.'}`);
+          }
+        }}
         onSave={async (contactData) => {
           try {
             const firstName = contactData.first_name || '';
@@ -1893,7 +1581,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
               toast.error(`Unable to create contact: ${error.message}`);
             }
           } catch (error) {
-            console.error('❌ Error creating contact:', error);
+            console.error('âŒ Error creating contact:', error);
             toast.error('Unable to create contact. Please try again.');
           }
         }}

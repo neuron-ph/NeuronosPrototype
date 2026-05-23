@@ -390,8 +390,8 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
     return isNaN(parsed.getTime()) ? null : parsed.toISOString();
   };
 
-  const handleSaveInquiry = async (data: QuotationNew) => {
-    if (isSavingRef.current) return;
+  const handleSaveInquiry = async (data: QuotationNew): Promise<boolean> => {
+    if (isSavingRef.current) return false;
     isSavingRef.current = true;
 
     try {
@@ -519,9 +519,11 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
         queryClient.invalidateQueries({ queryKey: queryKeys.quotations.list() });
         setSubView("list");
       }
+      return true;
     } catch (error: any) {
       console.error('Error saving inquiry:', error);
       toast.error('Error saving inquiry: ' + (error?.message ?? JSON.stringify(error)));
+      return false;
     } finally {
       isSavingRef.current = false;
     }
@@ -722,60 +724,16 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
               />
             )}
             {subView === "builder" && selectedCustomer && (
-              <QuotationBuilder 
+              <QuotationBuilder
                 customerData={selectedCustomer}
-                onSave={async (data: QuotationNew) => {
-                  try {
-                    const newId = `QUO-${Date.now()}`;
-                    const newData = {
-                      ...data,
-                      id: newId,
-                      created_at: new Date().toISOString(),
-                      updated_at: new Date().toISOString(),
-                    };
-                    
-                    const { error } = await supabase.from('quotations').insert(newData);
-
-                    if (!error) {
-                      const _actorInq = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
-                      logCreation("quotation", newId, data.quotation_number ?? newId, _actorInq);
-
-                      // Ticket 1: notify Pricing dept when inquiry is ready for pricing
-                      if (data.status === 'Pending Pricing') {
-                        const hasTicket = await getOpenWorkflowTicket("quotation", newId);
-                        if (!hasTicket) {
-                          createWorkflowTicket({
-                            subject: `New Inquiry: ${data.customer_name || 'Unknown'}`,
-                            body: `${user?.name} submitted an inquiry for ${data.customer_name || 'Unknown'}.\n\nServices: ${(data.services || []).join(', ') || 'N/A'}`,
-                            type: "request",
-                            priority: "normal",
-                            recipientDept: "Pricing",
-                            linkedRecordType: "quotation",
-                            linkedRecordId: newId,
-                            createdBy: user?.id ?? "",
-                            createdByName: user?.name ?? "",
-                            createdByDept: user?.department ?? "",
-                            autoCreated: true,
-                          }).catch(console.error);
-                        }
-                      }
-
-                      toast.success("Inquiry created successfully!");
-                      setCustomerDetailKey(prev => prev + 1);
-                      setSubView("detail");
-                    } else {
-                      console.error('Error creating inquiry:', error.message);
-                      toast.error("Failed to create inquiry");
-                    }
-                  } catch (error) {
-                    console.error('Error saving inquiry:', error);
-                    toast.error("Failed to create inquiry");
+                onSave={async (data) => {
+                  const ok = await handleSaveInquiry(data);
+                  if (ok) {
+                    setCustomerDetailKey(prev => prev + 1);
+                    setSubView("detail");
                   }
                 }}
-                onClose={() => {
-                  // Go back to customer detail view
-                  setSubView("detail");
-                }}
+                onClose={() => setSubView("detail")}
                 builderMode="inquiry"
                 initialQuotationType={pendingQuotationType}
                 initialData={buildCreateInquiryDraft(selectedCustomer)}
@@ -812,8 +770,9 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
                   activity={selectedActivity}
                   onBack={handleBackFromActivity}
                   onUpdate={() => {
-                    // Refresh activities list if needed
-                    handleBackFromActivity();
+                    // Keep the detail panel open — ActivityDetailInline already updates its
+                    // local state (e.g. attachments) after a save. Closing here would bounce
+                    // the user back to the activities list mid-edit.
                   }}
                   onDelete={() => {
                     handleBackFromActivity();

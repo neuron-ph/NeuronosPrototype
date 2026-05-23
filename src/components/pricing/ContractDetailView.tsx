@@ -302,17 +302,34 @@ export function ContractDetailView({
 
   const handleSaveContractQuotation = async (updates: any) => {
     try {
-      const dateColumns = ['quotation_date', 'expiry_date', 'validity_date', 'contract_validity_start', 'contract_validity_end'];
-      const detailsKeys = new Set([
-        'quotation_name', 'movement', 'category', 'services', 'services_metadata',
-        'charge_categories', 'financial_summary', 'buying_price', 'selling_price',
-        'commodity', 'special_instructions',
+      // Allow-list of real top-level columns on `quotations`. Any key the builder
+      // emits that isn't here lands inside the `details` JSONB. This is the
+      // inverse of the previous deny-list — safer, since QuotationBuilderV3
+      // freely composes contract-only fields (rate_matrices, scope_of_services,
+      // contract_general_details, etc.) that have no matching column.
+      const TOP_LEVEL_COLUMNS = new Set([
+        'addressed_to_name', 'addressed_to_title',
+        'approved_by', 'approved_by_title',
+        'assigned_to', 'auto_renew',
+        'consignee_id', 'contact_id', 'contact_name', 'contact_person_id',
+        'contract_end_date', 'contract_notes', 'contract_start_date', 'contract_status',
+        'converted_at',
+        'created_at', 'created_by', 'created_by_name',
+        'currency', 'custom_notes',
+        'customer_id', 'customer_name',
+        'details',
+        'expiry_date',
+        'id', 'internal_notes', 'notes',
+        'parent_contract_id', 'payment_terms',
+        'prepared_by', 'prepared_by_title',
+        'pricing', 'project_id',
+        'quotation_date', 'quotation_name', 'quotation_number', 'quotation_type',
+        'quote_number',
+        'renewal_terms', 'services', 'services_metadata', 'status',
+        'submitted_at', 'tags', 'total_buying', 'total_selling',
+        'updated_at', 'validity_date', 'vendors',
       ]);
-      const pdfSettingKeys = new Set([
-        'prepared_by', 'prepared_by_title', 'approved_by', 'approved_by_title',
-        'addressed_to_name', 'addressed_to_title', 'payment_terms', 'custom_notes',
-        'valid_until',
-      ]);
+      const dateColumns = ['quotation_date', 'expiry_date', 'validity_date'];
       const top: Record<string, unknown> = {};
       const details: Record<string, unknown> = { ...(quotation as any).details };
       Object.entries(updates).forEach(([key, value]) => {
@@ -332,14 +349,19 @@ export function ContractDetailView({
           top.expiry_date = value || null;
           return;
         }
-        if (pdfSettingKeys.has(key)) {
-          top[key] = value || null;
+        // Map contract validity aliases the builder emits to their real columns.
+        if (key === 'contract_validity_start') {
+          top.contract_start_date = value || null;
           return;
         }
-        if (detailsKeys.has(key)) {
-          details[key] = value;
-        } else {
+        if (key === 'contract_validity_end') {
+          top.contract_end_date = value || null;
+          return;
+        }
+        if (TOP_LEVEL_COLUMNS.has(key)) {
           top[key] = value;
+        } else {
+          details[key] = value;
         }
       });
       top.details = details;

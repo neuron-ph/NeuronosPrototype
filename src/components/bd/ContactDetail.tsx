@@ -1,15 +1,19 @@
-import { ArrowLeft, Mail, Phone, Building2, User, Edit, Trash2, Paperclip, Download, FileText, Image as ImageIcon, File, Upload, CheckCircle2, AlertCircle, MessageSquare, Send, Plus, Users, MessageCircle, Linkedin, StickyNote, Flag, CheckSquare, UserCheck } from "lucide-react";
-import { useState } from "react";
+﻿import { ArrowLeft, Mail, Phone, Building2, User, Edit, Trash2, Paperclip, Download, FileText, Image as ImageIcon, File, Upload, CheckCircle2, AlertCircle, MessageSquare, Send, Plus, Users, MessageCircle, Linkedin, Flag, CheckSquare, UserCheck } from "lucide-react";
+import { useRef, useState } from "react";
 import { usePermission } from "../../context/PermissionProvider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../../lib/queryKeys";
-import type { Contact, LifecycleStage, LeadStatus, Task, Activity, Customer, ActivityType, TaskType } from "../../types/bd";
+import type { Contact, LifecycleStage, LeadStatus, Task, Activity, Customer } from "../../types/bd";
 import type { QuotationNew, QuotationType } from "../../types/pricing";
 import { CustomDropdown } from "./CustomDropdown";
+import { CustomDatePicker } from "../common/CustomDatePicker";
 import { ActivityTimelineTable } from "./ActivityTimelineTable";
+import { AddActivityPanel } from "./AddActivityPanel";
+import { AddTaskPanel } from "./AddTaskPanel";
 import { supabase } from "../../utils/supabase/client";
 import { useUser } from "../../hooks/useUser";
 import { logActivity, logCreation } from "../../utils/activityLog";
+import { formatAttachmentSize, getAttachmentKind, uploadCrmAttachments } from "../../utils/crmAttachments";
 import { useMarkEntityReadOnMount } from "../../hooks/useNotifications";
 import { toast } from "sonner@2.0.3";
 import { CreateQuotationMenu } from "../pricing/CreateQuotationMenu";
@@ -24,6 +28,9 @@ interface Attachment {
   name: string;
   type: "pdf" | "image" | "document" | "spreadsheet";
   size: string;
+  file?: File;
+  mimeType?: string;
+  sizeBytes?: number;
   uploadedAt: string;
   source: "Task" | "Activity" | "Inquiry";
   sourceId: string;
@@ -70,27 +77,62 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
   const [editedTask, setEditedTask] = useState<Task | null>(null);
   const [taskAttachments, setTaskAttachments] = useState<Attachment[]>([]);
   const [isCreatingTask, setIsCreatingTask] = useState(false);
-  const [newTask, setNewTask] = useState<Partial<Task>>({
-    type: "Call",
-    priority: "Medium",
-    status: "Pending",
-    contact_id: contact.id
-  });
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [isLoggingActivity, setIsLoggingActivity] = useState(false);
-  const [newActivity, setNewActivity] = useState<Partial<Activity>>({
-    type: "Call",
-    contact_id: contact.id
-  });
-  const [activityAttachments, setActivityAttachments] = useState<Attachment[]>([]);
   const [isConverting, setIsConverting] = useState(false);
+  const existingTaskAttachmentInputRef = useRef<HTMLInputElement | null>(null);
 
+  const toDisplayAttachments = (
+    attachments: Array<{ name: string; size: number; type: string; url?: string }> | undefined,
+    source: "Task" | "Activity",
+  ): Attachment[] =>
+    (attachments || []).map((attachment, index) => ({
+      id: `${source.toLowerCase()}-saved-${index}-${attachment.name}`,
+      name: attachment.name,
+      type: getAttachmentKind(attachment.type, attachment.name),
+      size: formatAttachmentSize(attachment.size),
+      mimeType: attachment.type,
+      sizeBytes: attachment.size,
+      uploadedAt: new Date().toISOString(),
+      source,
+      sourceId: "",
+      sourceName: attachment.name,
+    }));
+
+  const uploadExistingTaskAttachments = async (files: FileList | null) => {
+    if (!files || files.length === 0 || !selectedTask) return;
+
+    try {
+      const uploaded = await uploadCrmAttachments(Array.from(files), "tasks", selectedTask.id);
+      const existing = selectedTask.attachments || [];
+      const nextAttachments = [...existing, ...uploaded];
+      const { error } = await supabase
+        .from("tasks")
+        .update({ attachments: nextAttachments })
+        .eq("id", selectedTask.id);
+      if (error) throw error;
+
+      const updatedTask = { ...selectedTask, attachments: nextAttachments };
+      setSelectedTask(updatedTask);
+      setEditedTask((prev) => prev ? { ...prev, attachments: nextAttachments } : prev);
+      setTaskAttachments(toDisplayAttachments(nextAttachments, "Task"));
+      queryClient.invalidateQueries({ queryKey: ["tasks", "contact", contact.id] });
+      toast.success(`Uploaded ${uploaded.length} file(s)`);
+    } catch (error: any) {
+      console.error("Error uploading task attachments:", error);
+      toast.error(error?.message || "Failed to upload attachments");
+    }
+  };
 
   const { user, effectiveRole, effectiveDepartment } = useUser();
   const canAssignOwner = effectiveDepartment === "Executive" || effectiveRole === "manager" || effectiveRole === "executive";
 
-  // Backend uses 'customer_id', frontend alias is 'company_id' — support both
-  const effectiveCustomerId = contact.customer_id || contact.company_id;
+  // Optimistic override so the UI flips to "Converted" immediately after the
+  // convert call returns, without waiting for the parent to refetch and pass
+  // down a fresh contact prop.
+  const [convertedCustomerId, setConvertedCustomerId] = useState<string | null>(null);
+  // Backend uses 'customer_id', frontend alias is 'company_id' â€” support both
+  const effectiveCustomerId = convertedCustomerId || contact.customer_id || contact.company_id;
   const queryClient = useQueryClient();
 
   // Fetch customer (company) data
@@ -270,7 +312,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
       if (!updateError && updatedData) {
         const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
 
-        // Detect which fields changed and summarise old → new
+        // Detect which fields changed and summarise old â†’ new
         const fieldLabels: Record<string, string> = {
           name: "Name", title: "Title", email: "Email", phone: "Phone",
           lifecycle_stage: "Stage", lead_status: "Lead Status", owner_id: "Account Owner", notes: "Notes",
@@ -319,6 +361,24 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
     if (isConverting) return;
     setIsConverting(true);
     try {
+      // Re-check the current contact row to avoid creating a duplicate if a prior
+      // conversion already linked this contact (stale local prop, or a second click
+      // racing the first). The contact.customer_id local check below covers the
+      // optimistic case; this DB read covers the race.
+      const { data: fresh, error: freshErr } = await supabase
+        .from("contacts")
+        .select("customer_id")
+        .eq("id", contact.id)
+        .single();
+      if (freshErr) throw freshErr;
+      if (fresh?.customer_id) {
+        setConvertedCustomerId(fresh.customer_id);
+        toast.info("This contact is already linked to a customer.");
+        queryClient.invalidateQueries({ queryKey: queryKeys.customers.all() });
+        queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all() });
+        return;
+      }
+
       const fullName = [contact.first_name, contact.last_name].filter(Boolean).join(" ") || contact.name || "Unnamed Contact";
       const customerId = `customer-${Date.now()}`;
       const { error: createError } = await supabase.from("customers").insert({
@@ -328,6 +388,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
         phone: contact.phone ?? contact.mobile_number ?? null,
         status: "Active",
         client_type: "Local",
+        owner_id: user?.id ?? contact.owner_id ?? null,
         created_by: user?.id ?? null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -340,8 +401,9 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
         .eq("id", contact.id);
       if (linkError) throw linkError;
 
-      queryClient.invalidateQueries({ queryKey: queryKeys.customers.detail(customerId) });
-      queryClient.invalidateQueries({ queryKey: ["bd_contacts"] });
+      setConvertedCustomerId(customerId);
+      queryClient.invalidateQueries({ queryKey: queryKeys.customers.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all() });
       toast.success(`${fullName} is now a Customer Account.`);
     } catch (err: any) {
       toast.error("Failed to convert: " + (err.message ?? "Unknown error"));
@@ -458,7 +520,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                         <Edit size={14} />
                         Update Details
                       </button>
-                      {!effectiveCustomerId && (
+                      {!effectiveCustomerId ? (
                         <button
                           onClick={handleConvertToCustomer}
                           disabled={isConverting}
@@ -480,6 +542,19 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                           <UserCheck size={14} />
                           {isConverting ? "Converting..." : "Convert to Customer"}
                         </button>
+                      ) : (
+                        <span
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm text-[12px] font-medium"
+                          style={{
+                            border: "1px solid var(--theme-status-success-border)",
+                            backgroundColor: "var(--theme-status-success-bg)",
+                            color: "var(--theme-status-success-fg)",
+                          }}
+                          title="This contact is linked to a customer account"
+                        >
+                          <CheckCircle2 size={12} />
+                          Converted
+                        </span>
                       )}
                     </>
                   ) : (
@@ -559,7 +634,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                     />
                   ) : (
                     <div className="text-[14px]" style={{ color: "var(--theme-text-primary)" }}>
-                      {(contact.name || '').split(' ')[0] || '—'}
+                      {(contact.name || '').split(' ')[0] || 'â€”'}
                     </div>
                   )}
                 </div>
@@ -592,7 +667,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                     />
                   ) : (
                     <div className="text-[14px]" style={{ color: "var(--theme-text-primary)" }}>
-                      {(contact.name || '').split(' ').slice(1).join(' ') || '—'}
+                      {(contact.name || '').split(' ').slice(1).join(' ') || 'â€”'}
                     </div>
                   )}
                 </div>
@@ -737,7 +812,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                         )}
                       </>
                     ) : (
-                      <div className="text-[13px] italic" style={{ color: "var(--theme-text-muted)" }}>No company — standalone contact</div>
+                      <div className="text-[13px] italic" style={{ color: "var(--theme-text-muted)" }}>No company â€” standalone contact</div>
                     )}
                   </div>
                 </div>
@@ -819,7 +894,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                     />
                   ) : (
                     <span className="text-[14px]" style={{ color: contact.owner_id ? "var(--theme-text-primary)" : "var(--theme-text-muted)" }}>
-                      {contact.owner_id ? (users.find(u => u.id === contact.owner_id)?.name ?? "—") : "Unassigned"}
+                      {contact.owner_id ? (users.find(u => u.id === contact.owner_id)?.name ?? "â€”") : "Unassigned"}
                     </span>
                   )}
                 </div>
@@ -1005,319 +1080,36 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
             {/* Tab Content */}
             <div className="flex-1 overflow-auto">
               {activeTab === "activities" && canViewActivitiesTab && (
-                <div>
+                <div className="h-full">
                   {isLoggingActivity ? (
-                    /* Log Activity Form */
-                    <div>
-                      <div className="mb-6">
-                        <button
-                          onClick={() => {
-                            setIsLoggingActivity(false);
-                            setNewActivity({
-                              type: "Call",
-                              contact_id: contact.id
-                            });
-                            setActivityAttachments([]);
-                          }}
-                          className="flex items-center gap-2 text-[13px] transition-colors mb-4"
-                          style={{ color: "var(--theme-action-primary-bg)" }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.color = "var(--theme-action-primary-border)";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.color = "var(--theme-action-primary-bg)";
-                          }}
-                        >
-                          <ArrowLeft size={16} />
-                          Back to Activities
-                        </button>
-
-                        <div className="flex items-center justify-between mb-6">
-                          <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
-                            Log Activity
-                          </h3>
-                        </div>
-
-                        <div 
-                          className="p-6 rounded-xl"
-                          style={{ 
-                            border: "1px solid var(--neuron-ui-border)",
-                            backgroundColor: "var(--neuron-pill-inactive-bg)"
-                          }}
-                        >
-                          <div className="space-y-6">
-                            {/* Activity Name */}
-                            <div>
-                              <div className="mb-2">
-                                <span className="text-[11px] uppercase tracking-wide font-medium" style={{ color: "var(--theme-text-muted)" }}>
-                                  Activity Name *
-                                </span>
-                              </div>
-                              <input
-                                type="text"
-                                value={newActivity.title || ""}
-                                onChange={(e) => setNewActivity({ ...newActivity, title: e.target.value })}
-                                placeholder="Enter activity name..."
-                                className="w-full px-3 py-2.5 rounded-lg text-[13px]"
-                                style={{
-                                  border: "1px solid var(--neuron-ui-border)",
-                                  backgroundColor: "var(--theme-bg-surface)",
-                                  color: "var(--theme-text-primary)"
-                                }}
-                              />
-                            </div>
-
-                            {/* Activity Description */}
-                            <div>
-                              <div className="mb-2">
-                                <span className="text-[11px] uppercase tracking-wide font-medium" style={{ color: "var(--theme-text-muted)" }}>
-                                  Activity Description *
-                                </span>
-                              </div>
-                              <textarea
-                                value={newActivity.description || ""}
-                                onChange={(e) => setNewActivity({ ...newActivity, description: e.target.value })}
-                                placeholder="What did you do? (e.g., Called client to discuss Q1 forecast)"
-                                className="w-full px-3 py-2.5 rounded-lg text-[13px] resize-none"
-                                style={{
-                                  border: "1px solid var(--neuron-ui-border)",
-                                  backgroundColor: "var(--theme-bg-surface)",
-                                  color: "var(--theme-text-primary)",
-                                  minHeight: "100px"
-                                }}
-                              />
-                            </div>
-
-                            {/* Type */}
-                            <div>
-                              <div className="mb-2">
-                                <span className="text-[11px] uppercase tracking-wide font-medium" style={{ color: "var(--theme-text-muted)" }}>
-                                  Type *
-                                </span>
-                              </div>
-                              <CustomDropdown
-                                options={[
-                                  { value: "Call", label: "Call", icon: <Phone size={16} /> },
-                                  { value: "Email", label: "Email", icon: <Mail size={16} /> },
-                                  { value: "Meeting", label: "Meeting", icon: <Users size={16} /> },
-                                  { value: "SMS", label: "SMS", icon: <Send size={16} /> },
-                                  { value: "Viber", label: "Viber", icon: <MessageCircle size={16} /> },
-                                  { value: "WhatsApp", label: "WhatsApp", icon: <MessageSquare size={16} /> },
-                                  { value: "WeChat", label: "WeChat", icon: <MessageSquare size={16} /> },
-                                  { value: "LinkedIn", label: "LinkedIn", icon: <Linkedin size={16} /> },
-                                  { value: "Note", label: "Note", icon: <StickyNote size={16} /> },
-                                  { value: "Marketing Email", label: "Marketing Email", icon: <MessageSquare size={16} /> }
-                                ]}
-                                value={newActivity.type || "Call"}
-                                onChange={(value) => setNewActivity({ ...newActivity, type: value as ActivityType })}
-                              />
-                            </div>
-
-                            {/* Date/Time */}
-                            <div>
-                              <div className="mb-2">
-                                <span className="text-[11px] uppercase tracking-wide font-medium" style={{ color: "var(--theme-text-muted)" }}>
-                                  Activity Date & Time *
-                                </span>
-                              </div>
-                              <input
-                                type="datetime-local"
-                                value={newActivity.date ? new Date(newActivity.date).toISOString().slice(0, 16) : ""}
-                                onChange={(e) => setNewActivity({ ...newActivity, date: new Date(e.target.value).toISOString() })}
-                                className="w-full px-3 py-2.5 rounded-lg text-[13px]"
-                                style={{
-                                  border: "1px solid var(--neuron-ui-border)",
-                                  backgroundColor: "var(--theme-bg-surface)",
-                                  color: "var(--theme-text-primary)"
-                                }}
-                              />
-                            </div>
-
-                            {/* Contact/Customer */}
-                            <div>
-                              <div className="mb-2">
-                                <span className="text-[11px] uppercase tracking-wide font-medium" style={{ color: "var(--theme-text-muted)" }}>
-                                  Contact/Customer *
-                                </span>
-                              </div>
-                              <div className="text-[14px]" style={{ color: "var(--theme-text-primary)" }}>
-                                {contact.first_name} {contact.last_name}
-                              </div>
-                              {company && (
-                                <div className="text-[12px] mt-1" style={{ color: "var(--theme-text-muted)" }}>
-                                  {company.name}
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Attachments Section */}
-                            <div className="pt-6" style={{ borderTop: "1px solid var(--neuron-ui-divider)" }}>
-                              <div className="flex items-center justify-between mb-3">
-                                <span className="text-[11px] uppercase tracking-wide font-medium" style={{ color: "var(--theme-text-muted)" }}>
-                                  Attachments (Proof)
-                                </span>
-                                <button
-                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
-                                  style={{
-                                    border: "1px solid var(--neuron-ui-border)",
-                                    backgroundColor: "var(--theme-bg-surface)",
-                                    color: "var(--theme-action-primary-bg)"
-                                  }}
-                                  onMouseEnter={(e) => {
-                                    e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
-                                  }}
-                                >
-                                  <Upload size={14} />
-                                  Upload File
-                                </button>
-                              </div>
-
-                              {activityAttachments.length === 0 ? (
-                                <div 
-                                  className="text-center py-8 rounded-lg"
-                                  style={{ 
-                                    border: "1px dashed var(--neuron-ui-border)",
-                                    backgroundColor: "var(--theme-bg-surface)"
-                                  }}
-                                >
-                                  <Paperclip size={24} style={{ color: "var(--theme-border-default)", margin: "0 auto 8px" }} />
-                                  <p className="text-[13px]" style={{ color: "var(--theme-text-muted)" }}>
-                                    No attachments yet - upload proof of this completed activity
-                                  </p>
-                                </div>
-                              ) : (
-                                <div className="space-y-2">
-                                  {activityAttachments.map((attachment) => (
-                                    <div 
-                                      key={attachment.id}
-                                      className="flex items-center justify-between p-3 rounded-lg"
-                                      style={{
-                                        border: "1px solid var(--neuron-ui-border)",
-                                        backgroundColor: "var(--theme-bg-surface)"
-                                      }}
-                                    >
-                                      <div className="flex items-center gap-3">
-                                        <div className="flex-shrink-0">
-                                          {attachment.type === "pdf" && <FileText size={18} style={{ color: "var(--theme-action-primary-bg)" }} />}
-                                          {attachment.type === "image" && <ImageIcon size={18} style={{ color: "var(--theme-action-primary-bg)" }} />}
-                                          {attachment.type === "document" && <File size={18} style={{ color: "var(--theme-action-primary-bg)" }} />}
-                                          {attachment.type === "spreadsheet" && <File size={18} style={{ color: "var(--theme-action-primary-bg)" }} />}
-                                        </div>
-                                        <div>
-                                          <div className="text-[13px] font-medium" style={{ color: "var(--theme-text-primary)" }}>
-                                            {attachment.name}
-                                          </div>
-                                          <div className="text-[11px]" style={{ color: "var(--theme-text-muted)" }}>
-                                            {attachment.size}
-                                          </div>
-                                        </div>
-                                      </div>
-                                      <button
-                                        onClick={() => {
-                                          setActivityAttachments(activityAttachments.filter(a => a.id !== attachment.id));
-                                        }}
-                                        className="px-2 py-1 rounded text-[11px] font-medium transition-colors"
-                                        style={{
-                                          color: "var(--theme-status-danger-fg)"
-                                        }}
-                                      >
-                                        <Trash2 size={14} />
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Action Buttons */}
-                            <div className="flex items-center gap-2 pt-6" style={{ borderTop: "1px solid var(--neuron-ui-divider)" }}>
-                              <button
-                                onClick={async () => {
-                                  // Validate required fields
-                                  if (!newActivity.title || !newActivity.description || !newActivity.type || !newActivity.date) {
-                                    // alert("Please fill in all required fields (Activity Name, Description, Type, Date & Time)");
-                                    // using toast instead
-                                    return;
-                                  }
-                                  
-                                  try {
-                                    const activityToSave = {
-                                      ...newActivity,
-                                      contact_id: contact.id,
-                                      customer_id: contact.customer_id || contact.company_id || undefined, // Attach customer ID if available
-                                      user_id: contact.owner_id || 'user-1' // Fallback to current user or owner
-                                    };
-
-                                    const { error: actErr } = await supabase.from('crm_activities').insert({
-                                      ...activityToSave,
-                                      id: `act-${Date.now()}`,
-                                      created_at: new Date().toISOString(),
-                                    });
-
-                                    if (!actErr) {
-                                      // In real app, this would save to backend
-                                      // toast.success("Activity logged successfully");
-                                      setIsLoggingActivity(false);
-                                      setNewActivity({
-                                        type: "Call",
-                                        contact_id: contact.id
-                                      });
-                                      setActivityAttachments([]);
-                                      // Refresh activities list
-                                      queryClient.invalidateQueries({ queryKey: ["crm_activities", "contact", contact.id] });
-                                    } else {
-                                      console.error("Error saving activity:", actErr);
-                                    }
-                                  } catch (error) {
-                                    console.error("Error saving activity:", error);
-                                  }
-                                }}
-                                className="px-4 py-2.5 rounded-lg text-[13px] font-medium transition-colors"
-                                style={{
-                                  backgroundColor: "var(--theme-action-primary-bg)",
-                                  color: "#FFFFFF"
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.backgroundColor = "var(--theme-action-primary-border)";
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
-                                }}
-                              >
-                                Save Activity
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setIsLoggingActivity(false);
-                                  setNewActivity({
-                                    type: "Call",
-                                    contact_id: contact.id
-                                  });
-                                  setActivityAttachments([]);
-                                }}
-                                className="px-4 py-2.5 rounded-lg text-[13px] font-medium transition-colors"
-                                style={{
-                                  border: "1px solid var(--neuron-ui-border)",
-                                  backgroundColor: "var(--theme-bg-surface)",
-                                  color: "var(--theme-text-primary)"
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
-                                }}
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <AddActivityPanel
+                      inline
+                      isOpen
+                      lockedContactId={contact.id}
+                      onClose={() => setIsLoggingActivity(false)}
+                      onSave={async (data, files) => {
+                        const newId = data.id || `act-${Date.now()}`;
+                        try {
+                          const uploadedAttachments = await uploadCrmAttachments(files, "crm_activities", newId);
+                          const { error } = await supabase.from('crm_activities').insert({
+                            ...data,
+                            id: newId,
+                            contact_id: contact.id,
+                            customer_id: contact.customer_id || contact.company_id || null,
+                            user_id: user?.id ?? contact.owner_id ?? null,
+                            attachments: uploadedAttachments,
+                            created_at: data.created_at || new Date().toISOString(),
+                          });
+                          if (error) { toast.error("Failed to log activity: " + error.message); return; }
+                          toast.success("Activity logged successfully");
+                          setIsLoggingActivity(false);
+                          queryClient.invalidateQueries({ queryKey: ["crm_activities", "contact", contact.id] });
+                        } catch (err: any) {
+                          console.error("Error saving activity:", err);
+                          toast.error("Failed to log activity");
+                        }
+                      }}
+                    />
                   ) : !selectedActivity ? (
                     <>
                       <div className="flex items-center justify-between mb-6">
@@ -1328,12 +1120,6 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                           onClick={() => {
                             setIsLoggingActivity(true);
                             setSelectedActivity(null);
-                            setNewActivity({
-                              type: "Call",
-                              contact_id: contact.id,
-                              date: new Date().toISOString()
-                            });
-                            setActivityAttachments([]);
                           }}
                           className="px-4 py-2.5 rounded-lg text-[13px] font-medium transition-colors"
                           style={{
@@ -1506,12 +1292,6 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                           onClick={() => {
                             setIsCreatingTask(true);
                             setSelectedTask(null);
-                            setNewTask({
-                              type: "Call",
-                              priority: "Medium",
-                              status: "Pending",
-                              contact_id: contact.id
-                            });
                             setTaskAttachments([]);
                           }}
                           className="px-4 py-2.5 rounded-lg text-[13px] font-medium transition-colors"
@@ -1542,6 +1322,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                               onClick={() => {
                                 setSelectedTask(task);
                                 setEditedTask(task);
+                                setTaskAttachments(toDisplayAttachments(task.attachments, "Task"));
                                 setIsEditingTask(false);
                               }}
                               className="p-4 rounded-lg flex items-center justify-between cursor-pointer transition-colors"
@@ -1583,360 +1364,35 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                       )}
                     </>
                   ) : isCreatingTask ? (
-                    <>
-                      {/* Create Task Form */}
-                      <div className="mb-6">
-                        <button
-                          onClick={() => {
-                            setIsCreatingTask(false);
-                            setNewTask({
-                              type: "Call",
-                              priority: "Medium",
-                              status: "Pending",
-                              contact_id: contact.id
-                            });
-                            setTaskAttachments([]);
-                          }}
-                          className="flex items-center gap-2 text-[13px] transition-colors mb-4"
-                          style={{ color: "var(--theme-action-primary-bg)" }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.color = "var(--theme-action-primary-border)";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.color = "var(--theme-action-primary-bg)";
-                          }}
-                        >
-                          <ArrowLeft size={16} />
-                          Back to Tasks
-                        </button>
-
-                        <div className="flex items-center justify-between mb-6">
-                          <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
-                            Create New Task
-                          </h3>
-                        </div>
-
-                        <div 
-                          className="p-6 rounded-xl"
-                          style={{ 
-                            border: "1px solid var(--neuron-ui-border)",
-                            backgroundColor: "var(--neuron-pill-inactive-bg)"
-                          }}
-                        >
-                          <div className="space-y-6">
-                            {/* Task Name/Title */}
-                            <div>
-                              <div className="mb-2">
-                                <span className="text-[11px] uppercase tracking-wide font-medium" style={{ color: "var(--theme-text-muted)" }}>
-                                  Task Name *
-                                </span>
-                              </div>
-                              <input
-                                type="text"
-                                value={newTask.title || ""}
-                                onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-                                placeholder="Enter task name..."
-                                className="w-full px-3 py-2.5 rounded-lg text-[13px]"
-                                style={{
-                                  border: "1px solid var(--neuron-ui-border)",
-                                  backgroundColor: "var(--theme-bg-surface)",
-                                  color: "var(--theme-text-primary)"
-                                }}
-                              />
-                            </div>
-
-                            {/* Description */}
-                            <div>
-                              <div className="mb-2">
-                                <span className="text-[11px] uppercase tracking-wide font-medium" style={{ color: "var(--theme-text-muted)" }}>
-                                  Description *
-                                </span>
-                              </div>
-                              <textarea
-                                value={newTask.description || ""}
-                                onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
-                                placeholder="Enter task description..."
-                                className="w-full px-3 py-2.5 rounded-lg text-[13px] resize-none"
-                                style={{
-                                  border: "1px solid var(--neuron-ui-border)",
-                                  backgroundColor: "var(--theme-bg-surface)",
-                                  color: "var(--theme-text-primary)",
-                                  minHeight: "100px"
-                                }}
-                              />
-                            </div>
-
-                            {/* Type */}
-                            <div>
-                              <div className="mb-2">
-                                <span className="text-[11px] uppercase tracking-wide font-medium" style={{ color: "var(--theme-text-muted)" }}>
-                                  Type *
-                                </span>
-                              </div>
-                              <CustomDropdown
-                                options={[
-                                  { value: "Call", label: "Call", icon: <Phone size={16} /> },
-                                  { value: "Email", label: "Email", icon: <Mail size={16} /> },
-                                  { value: "Meeting", label: "Meeting", icon: <Users size={16} /> },
-                                  { value: "SMS", label: "SMS", icon: <Send size={16} /> },
-                                  { value: "Viber", label: "Viber", icon: <MessageCircle size={16} /> },
-                                  { value: "WhatsApp", label: "WhatsApp", icon: <MessageSquare size={16} /> },
-                                  { value: "WeChat", label: "WeChat", icon: <MessageSquare size={16} /> },
-                                  { value: "LinkedIn", label: "LinkedIn", icon: <Linkedin size={16} /> },
-                                  { value: "To-do", label: "To-do", icon: <CheckSquare size={16} /> },
-                                  { value: "Marketing Email", label: "Marketing Email", icon: <MessageSquare size={16} /> }
-                                ]}
-                                value={newTask.type || "Call"}
-                                onChange={(value) => setNewTask({ ...newTask, type: value as TaskType })}
-                              />
-                            </div>
-
-                            {/* Due Date */}
-                            <div>
-                              <div className="mb-2">
-                                <span className="text-[11px] uppercase tracking-wide font-medium" style={{ color: "var(--theme-text-muted)" }}>
-                                  Due Date *
-                                </span>
-                              </div>
-                              <input
-                                type="date"
-                                value={newTask.due_date || ""}
-                                onChange={(e) => setNewTask({ ...newTask, due_date: e.target.value })}
-                                className="w-full px-3 py-2.5 rounded-lg text-[13px]"
-                                style={{
-                                  border: "1px solid var(--neuron-ui-border)",
-                                  backgroundColor: "var(--theme-bg-surface)",
-                                  color: "var(--theme-text-primary)"
-                                }}
-                              />
-                            </div>
-
-                            {/* Remarks */}
-                            <div>
-                              <div className="mb-2">
-                                <span className="text-[11px] uppercase tracking-wide font-medium" style={{ color: "var(--theme-text-muted)" }}>
-                                  Remarks
-                                </span>
-                              </div>
-                              <textarea
-                                value={newTask.remarks || ""}
-                                onChange={(e) => setNewTask({ ...newTask, remarks: e.target.value })}
-                                placeholder="Add any additional notes..."
-                                className="w-full px-3 py-2.5 rounded-lg text-[13px] resize-none"
-                                style={{
-                                  border: "1px solid var(--neuron-ui-border)",
-                                  backgroundColor: "var(--theme-bg-surface)",
-                                  color: "var(--theme-text-primary)",
-                                  minHeight: "80px"
-                                }}
-                              />
-                            </div>
-
-                            {/* Priority */}
-                            <div>
-                              <div className="mb-2">
-                                <span className="text-[11px] uppercase tracking-wide font-medium" style={{ color: "var(--theme-text-muted)" }}>
-                                  Priority *
-                                </span>
-                              </div>
-                              <CustomDropdown
-                                options={[
-                                  { value: "High", label: "High", icon: <Flag size={16} style={{ color: "var(--theme-status-danger-fg)" }} /> },
-                                  { value: "Medium", label: "Medium", icon: <Flag size={16} style={{ color: "var(--theme-status-warning-fg)" }} /> },
-                                  { value: "Low", label: "Low", icon: <Flag size={16} style={{ color: "var(--theme-status-success-fg)" }} /> }
-                                ]}
-                                value={newTask.priority || "Medium"}
-                                onChange={(value) => setNewTask({ ...newTask, priority: value as "High" | "Medium" | "Low" })}
-                              />
-                            </div>
-
-                            {/* Contact/Customer */}
-                            <div>
-                              <div className="mb-2">
-                                <span className="text-[11px] uppercase tracking-wide font-medium" style={{ color: "var(--theme-text-muted)" }}>
-                                  Contact/Customer *
-                                </span>
-                              </div>
-                              <div className="text-[14px]" style={{ color: "var(--theme-text-primary)" }}>
-                                {contact.first_name} {contact.last_name}
-                              </div>
-                              {company && (
-                                <div className="text-[12px] mt-1" style={{ color: "var(--theme-text-muted)" }}>
-                                  {company.name}
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Attachments Section */}
-                            <div className="pt-6" style={{ borderTop: "1px solid var(--neuron-ui-divider)" }}>
-                              <div className="flex items-center justify-between mb-3">
-                                <span className="text-[11px] uppercase tracking-wide font-medium" style={{ color: "var(--theme-text-muted)" }}>
-                                  Attachments
-                                </span>
-                                <button
-                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
-                                  style={{
-                                    border: "1px solid var(--neuron-ui-border)",
-                                    backgroundColor: "var(--theme-bg-surface)",
-                                    color: "var(--theme-action-primary-bg)"
-                                  }}
-                                  onMouseEnter={(e) => {
-                                    e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
-                                  }}
-                                >
-                                  <Upload size={14} />
-                                  Upload File
-                                </button>
-                              </div>
-
-                              {taskAttachments.length === 0 ? (
-                                <div 
-                                  className="text-center py-8 rounded-lg"
-                                  style={{ 
-                                    border: "1px dashed var(--neuron-ui-border)",
-                                    backgroundColor: "var(--theme-bg-surface)"
-                                  }}
-                                >
-                                  <Paperclip size={24} style={{ color: "var(--theme-border-default)", margin: "0 auto 8px" }} />
-                                  <p className="text-[13px]" style={{ color: "var(--theme-text-muted)" }}>
-                                    No attachments yet - upload files to attach to this task
-                                  </p>
-                                </div>
-                              ) : (
-                                <div className="space-y-2">
-                                  {taskAttachments.map((attachment) => (
-                                    <div 
-                                      key={attachment.id}
-                                      className="flex items-center justify-between p-3 rounded-lg"
-                                      style={{
-                                        border: "1px solid var(--neuron-ui-border)",
-                                        backgroundColor: "var(--theme-bg-surface)"
-                                      }}
-                                    >
-                                      <div className="flex items-center gap-3">
-                                        <div className="flex-shrink-0">
-                                          {attachment.type === "pdf" && <FileText size={18} style={{ color: "var(--theme-action-primary-bg)" }} />}
-                                          {attachment.type === "image" && <ImageIcon size={18} style={{ color: "var(--theme-action-primary-bg)" }} />}
-                                          {attachment.type === "document" && <File size={18} style={{ color: "var(--theme-action-primary-bg)" }} />}
-                                          {attachment.type === "spreadsheet" && <File size={18} style={{ color: "var(--theme-action-primary-bg)" }} />}
-                                        </div>
-                                        <div>
-                                          <div className="text-[13px] font-medium" style={{ color: "var(--theme-text-primary)" }}>
-                                            {attachment.name}
-                                          </div>
-                                          <div className="text-[11px]" style={{ color: "var(--theme-text-muted)" }}>
-                                            {attachment.size}
-                                          </div>
-                                        </div>
-                                      </div>
-                                      <button
-                                        onClick={() => {
-                                          setTaskAttachments(taskAttachments.filter(a => a.id !== attachment.id));
-                                        }}
-                                        className="px-2 py-1 rounded text-[11px] font-medium transition-colors"
-                                        style={{
-                                          color: "var(--theme-status-danger-fg)"
-                                        }}
-                                      >
-                                        <Trash2 size={14} />
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Action Buttons */}
-                            <div className="flex items-center gap-2 pt-6" style={{ borderTop: "1px solid var(--neuron-ui-divider)" }}>
-                              <button
-                                onClick={async () => {
-                                  // Validate required fields
-                                  if (!newTask.title || !newTask.description || !newTask.type || !newTask.due_date || !newTask.priority) {
-                                    // toast.error("Please fill in all required fields (Task Name, Description, Type, Due Date, Priority)");
-                                    return;
-                                  }
-                                  
-                                  try {
-                                    const taskToSave = {
-                                      ...newTask,
-                                      contact_id: contact.id,
-                                      customer_id: contact.customer_id || contact.company_id || undefined,
-                                      owner_id: contact.owner_id || 'user-1',
-                                      status: newTask.status || "Pending"
-                                    };
-
-                                    const { error: taskErr } = await supabase.from('tasks').insert({
-                                      ...taskToSave,
-                                      id: `task-${Date.now()}`,
-                                      created_at: new Date().toISOString(),
-                                    });
-
-                                    if (!taskErr) {
-                                      setIsCreatingTask(false);
-                                      setNewTask({
-                                        type: "Call",
-                                        priority: "Medium",
-                                        status: "Pending",
-                                        contact_id: contact.id
-                                      });
-                                      setTaskAttachments([]);
-                                      // Refresh tasks list
-                                      queryClient.invalidateQueries({ queryKey: ["tasks", "contact", contact.id] });
-                                    } else {
-                                      console.error("Error saving task:", taskErr);
-                                    }
-                                  } catch (error) {
-                                    console.error("Error creating task:", error);
-                                  }
-                                }}
-                                className="px-4 py-2.5 rounded-lg text-[13px] font-medium transition-colors"
-                                style={{
-                                  backgroundColor: "var(--theme-action-primary-bg)",
-                                  color: "#FFFFFF"
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.backgroundColor = "var(--theme-action-primary-border)";
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
-                                }}
-                              >
-                                Create Task
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setIsCreatingTask(false);
-                                  setNewTask({
-                                    type: "Call",
-                                    priority: "Medium",
-                                    status: "Pending",
-                                    contact_id: contact.id
-                                  });
-                                  setTaskAttachments([]);
-                                }}
-                                className="px-4 py-2.5 rounded-lg text-[13px] font-medium transition-colors"
-                                style={{
-                                  border: "1px solid var(--neuron-ui-border)",
-                                  backgroundColor: "var(--theme-bg-surface)",
-                                  color: "var(--theme-text-primary)"
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
-                                }}
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </>
+                    <AddTaskPanel
+                      inline
+                      isOpen
+                      lockedContactId={contact.id}
+                      onClose={() => setIsCreatingTask(false)}
+                      onSave={async (data, files) => {
+                        const newId = data.id || `task-${Date.now()}`;
+                        try {
+                          const uploadedAttachments = await uploadCrmAttachments(files, "tasks", newId);
+                          const { error } = await supabase.from('tasks').insert({
+                            ...data,
+                            id: newId,
+                            contact_id: contact.id,
+                            customer_id: contact.customer_id || contact.company_id || null,
+                            owner_id: user?.id || contact.owner_id || null,
+                            attachments: uploadedAttachments,
+                            status: data.status || "Pending",
+                            created_at: data.created_at || new Date().toISOString(),
+                          });
+                          if (error) { toast.error(`Unable to create task: ${error.message}`); return; }
+                          toast.success("Task created successfully");
+                          setIsCreatingTask(false);
+                          queryClient.invalidateQueries({ queryKey: ["tasks", "contact", contact.id] });
+                        } catch (err: any) {
+                          console.error("Error creating task:", err);
+                          toast.error("Unable to create task. Please try again.");
+                        }
+                      }}
+                    />
                   ) : (
                     <>
                       {/* Task Detail View */}
@@ -2076,22 +1532,10 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                               </span>
                             </div>
                             {isEditingTask && editedTask ? (
-                              <input
-                                type="date"
+                              <CustomDatePicker
                                 value={editedTask.due_date || ""}
-                                onChange={(e) => setEditedTask({ ...editedTask, due_date: e.target.value })}
-                                className="w-full px-3 py-2 text-[14px] rounded-lg transition-colors"
-                                style={{
-                                  border: "1px solid var(--neuron-ui-border)",
-                                  color: "var(--theme-text-primary)",
-                                  outline: "none"
-                                }}
-                                onFocus={(e) => {
-                                  e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
-                                }}
-                                onBlur={(e) => {
-                                  e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
-                                }}
+                                onChange={(value) => setEditedTask({ ...editedTask, due_date: value })}
+                                minWidth="100%"
                               />
                             ) : (
                               <div className="text-[14px]" style={{ color: "var(--theme-text-primary)" }}>
@@ -2194,23 +1638,38 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                                 Attachments
                               </span>
                               {isEditingTask && (
-                                <button
-                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
-                                  style={{
-                                    border: "1px solid var(--neuron-ui-border)",
-                                    backgroundColor: "var(--theme-bg-surface)",
-                                    color: "var(--theme-action-primary-bg)"
-                                  }}
-                                  onMouseEnter={(e) => {
-                                    e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
-                                  }}
-                                >
-                                  <Upload size={14} />
-                                  Upload File
-                                </button>
+                                <>
+                                  <input
+                                    ref={existingTaskAttachmentInputRef}
+                                    type="file"
+                                    multiple
+                                    className="hidden"
+                                    onChange={(e) => {
+                                      uploadExistingTaskAttachments(e.target.files);
+                                      e.currentTarget.value = "";
+                                    }}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => existingTaskAttachmentInputRef.current?.click()}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
+                                    style={{
+                                      border: "1px solid var(--neuron-ui-border)",
+                                      backgroundColor: "var(--theme-bg-surface)",
+                                      color: "var(--theme-action-primary-bg)",
+                                      cursor: "pointer"
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.backgroundColor = "var(--neuron-state-hover)";
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
+                                    }}
+                                  >
+                                    <Upload size={14} />
+                                    Upload File
+                                  </button>
+                                </>
                               )}
                             </div>
 
@@ -2468,7 +1927,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
 
                             {/* Route */}
                             <div className="text-[12px]" style={{ color: "var(--theme-text-secondary)" }}>
-                              {inquiry.pol_aol} → {inquiry.pod_aod}
+                              {inquiry.pol_aol} â†’ {inquiry.pod_aod}
                             </div>
 
                             {/* Created Date */}

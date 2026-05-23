@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CheckCircle, CheckSquare, CircleCheckBig, Flag, User, Building2, Phone, Mail, Users, Send, MessageCircle, MessageSquare, Linkedin, Upload, Paperclip, Trash2 } from "lucide-react";
 import { CustomDropdown } from "./CustomDropdown";
 import { supabase } from '../../utils/supabase/client';
@@ -8,7 +9,9 @@ import { logActivity, logDeletion, logStatusChange } from "../../utils/activityL
 import { recordNotificationEvent } from "../../utils/notifications";
 import { useMarkEntityReadOnMount } from "../../hooks/useNotifications";
 import { toast } from "../ui/toast-utils";
-import type { Task, TaskPriority, TaskStatus, TaskType } from "../../types/bd";
+import { queryKeys } from "../../lib/queryKeys";
+import type { Activity, ActivityType, Task, TaskPriority, TaskStatus, TaskType } from "../../types/bd";
+import { type CrmAttachment, uploadCrmAttachments } from "../../utils/crmAttachments";
 
 interface TaskDetailInlineProps {
   task: Task;
@@ -26,13 +29,34 @@ interface Comment {
   timestamp: string;
 }
 
+const completedActivityTypeByTaskType: Record<TaskType, ActivityType> = {
+  "To-do": "Note",
+  Call: "Call Logged",
+  Email: "Email Logged",
+  "Marketing Email": "Marketing Email Logged",
+  Meeting: "Meeting Logged",
+  SMS: "SMS Logged",
+  Viber: "Viber Logged",
+  WeChat: "WeChat Logged",
+  WhatsApp: "WhatsApp Logged",
+  LinkedIn: "LinkedIn Logged",
+};
+
+function prependActivity(existing: Activity[] | undefined, activity: Activity) {
+  const current = existing ?? [];
+  return [activity, ...current.filter((item) => item.id !== activity.id)];
+}
+
 export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, contacts }: TaskDetailInlineProps) {
+  const queryClient = useQueryClient();
   useMarkEntityReadOnMount("task", task.id);
   const [editedTask, setEditedTask] = useState(task);
   const [newComment, setNewComment] = useState("");
   const [comments, setComments] = useState<Comment[]>([]);
-  const [attachments, setAttachments] = useState<string[]>([]);
+  const [attachments, setAttachments] = useState<CrmAttachment[]>(task.attachments || []);
   const [isEditing, setIsEditing] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [showTopScrollFade, setShowTopScrollFade] = useState(false);
@@ -66,6 +90,32 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
   const { users } = useUsers();
 
   const isCompleted = editedTask.status === 'Completed';
+
+  useEffect(() => {
+    setAttachments(task.attachments || []);
+  }, [task.attachments]);
+
+  const handleAttachmentUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    try {
+      const uploaded = await uploadCrmAttachments(Array.from(files), "tasks", task.id);
+      const nextAttachments = [...attachments, ...uploaded];
+      const { error } = await supabase
+        .from("tasks")
+        .update({ attachments: nextAttachments })
+        .eq("id", task.id);
+      if (error) throw error;
+
+      setAttachments(nextAttachments);
+      setEditedTask((prev) => ({ ...prev, attachments: nextAttachments }));
+      toast.success(`Uploaded ${uploaded.length} file(s)`);
+      onUpdate?.();
+    } catch (error: any) {
+      console.error("Error uploading task attachments:", error);
+      toast.error(error?.message || "Failed to upload attachments");
+    }
+  };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -195,42 +245,98 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
   };
 
   const handleMarkAsComplete = async () => {
+    if (isCompleting || editedTask.status === "Completed") return;
+
+    const previousTask = editedTask;
+    const now = new Date().toISOString();
+    const updatedTask = { ...editedTask, status: 'Completed' as TaskStatus, updated_at: now };
+    const activityData: Activity = {
+      id: `act-${Date.now()}`,
+      type: completedActivityTypeByTaskType[task.type] ?? "Note",
+      description: task.title,
+      date: now,
+      contact_id: task.contact_id,
+      customer_id: task.customer_id,
+      task_id: task.id,
+      user_id: task.owner_id,
+      created_at: now,
+      updated_at: now,
+      attachments: task.attachments,
+    };
+
+    const applyOptimisticActivity = () => {
+      queryClient.setQueryData<Activity[]>(queryKeys.crmActivities.list(), (existing) => prependActivity(existing, activityData));
+
+      if (activityData.customer_id) {
+        queryClient.setQueryData<Activity[]>(
+          queryKeys.crmActivities.forCustomer(activityData.customer_id),
+          (existing) => prependActivity(existing, activityData)
+        );
+        queryClient.setQueryData<Activity[]>(
+          ["crm_activities", "customer", activityData.customer_id],
+          (existing) => prependActivity(existing, activityData)
+        );
+      }
+
+      if (activityData.contact_id) {
+        queryClient.setQueryData<Activity[]>(
+          queryKeys.crmActivities.forContact(activityData.contact_id),
+          (existing) => prependActivity(existing, activityData)
+        );
+        queryClient.setQueryData<Activity[]>(
+          ["crm_activities", "contact", activityData.contact_id],
+          (existing) => prependActivity(existing, activityData)
+        );
+      }
+    };
+
+    const removeOptimisticActivity = () => {
+      const remove = (existing: Activity[] | undefined) => (existing ?? []).filter((item) => item.id !== activityData.id);
+      queryClient.setQueryData<Activity[]>(queryKeys.crmActivities.list(), remove);
+
+      if (activityData.customer_id) {
+        queryClient.setQueryData<Activity[]>(queryKeys.crmActivities.forCustomer(activityData.customer_id), remove);
+        queryClient.setQueryData<Activity[]>(["crm_activities", "customer", activityData.customer_id], remove);
+      }
+
+      if (activityData.contact_id) {
+        queryClient.setQueryData<Activity[]>(queryKeys.crmActivities.forContact(activityData.contact_id), remove);
+        queryClient.setQueryData<Activity[]>(["crm_activities", "contact", activityData.contact_id], remove);
+      }
+    };
+
     try {
-      // Update task status to Completed
-      const updatedTask = { ...editedTask, status: 'Completed' as TaskStatus };
-      
+      setIsCompleting(true);
+      setEditedTask(updatedTask);
+      queryClient.setQueriesData<Task[]>({ queryKey: queryKeys.tasks.all() }, (existing) =>
+        existing?.map((item) => (item.id === task.id ? updatedTask : item)) ?? existing
+      );
+      applyOptimisticActivity();
+
       const { error: updateErr } = await supabase.from('tasks').update(updatedTask).eq('id', task.id);
       if (updateErr) throw updateErr;
       const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
       logStatusChange("task", task.id, task.title ?? task.id, editedTask.status ?? "", "Completed", _actor);
 
-      // Create activity record for completed task
-      const activityData = {
-        type: task.type,
-        description: task.title,
-        date: new Date().toISOString(),
-        contact_id: task.contact_id,
-        customer_id: task.customer_id,
-        task_id: task.id,
-        user_id: task.owner_id,
-      };
-
-      const { error: activityErr } = await supabase.from('crm_activities').insert({
-        ...activityData,
-        id: `act-${Date.now()}`,
-        created_at: new Date().toISOString(),
-      });
+      const { error: activityErr } = await supabase.from('crm_activities').insert(activityData);
       if (activityErr) throw activityErr;
 
-      // Update local state
-      setEditedTask(updatedTask);
-      
       toast.success('Task marked as complete and converted to activity!');
-      
-      if (onUpdate) onUpdate(); // Refresh parent list
+      queryClient.invalidateQueries({ queryKey: queryKeys.crmActivities.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all() });
+      if (onUpdate) onUpdate();
     } catch (error) {
+      setEditedTask(previousTask);
+      queryClient.setQueriesData<Task[]>({ queryKey: queryKeys.tasks.all() }, (existing) =>
+        existing?.map((item) => (item.id === task.id ? previousTask : item)) ?? existing
+      );
+      removeOptimisticActivity();
+      queryClient.invalidateQueries({ queryKey: queryKeys.crmActivities.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all() });
       console.error('Error marking task as complete:', error);
       toast.error('Unable to mark task as complete. Please try again.');
+    } finally {
+      setIsCompleting(false);
     }
   };
 
@@ -266,20 +372,21 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
           {editedTask.status !== 'Completed' ? (
             <button
               onClick={handleMarkAsComplete}
+              disabled={isCompleting}
               className="px-4 py-2 rounded-lg text-[13px] font-medium text-white transition-colors flex items-center gap-2"
               style={{ 
-                backgroundColor: "var(--theme-action-primary-bg)",
-                cursor: "pointer"
+                backgroundColor: isCompleting ? "var(--neuron-ui-border)" : "var(--theme-action-primary-bg)",
+                cursor: isCompleting ? "not-allowed" : "pointer"
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "var(--theme-action-primary-border)";
+                if (!isCompleting) e.currentTarget.style.backgroundColor = "var(--theme-action-primary-border)";
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
+                if (!isCompleting) e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
               }}
             >
               <CheckCircle size={16} />
-              Mark as Complete
+              {isCompleting ? "Completing..." : "Mark as Complete"}
             </button>
           ) : (
             <span
@@ -548,7 +655,18 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
             }}
           >
             <div className="flex items-center justify-between mb-4">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  handleAttachmentUpload(e.target.files);
+                  e.currentTarget.value = "";
+                }}
+              />
               <button
+                onClick={() => fileInputRef.current?.click()}
                 className="px-4 py-2 rounded-lg text-[13px] font-medium transition-colors flex items-center gap-2"
                 style={{
                   border: "1px solid var(--neuron-ui-border)",
@@ -586,7 +704,7 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
                   >
                     <Paperclip size={16} style={{ color: "var(--theme-text-muted)" }} />
                     <span className="text-[13px] flex-1" style={{ color: "var(--theme-text-primary)" }}>
-                      {file}
+                      {file.name}
                     </span>
                   </div>
                 ))}

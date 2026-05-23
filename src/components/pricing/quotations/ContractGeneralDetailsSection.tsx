@@ -45,6 +45,7 @@ const RELEASING_OPTIONS = [
 
 interface ContractGeneralDetailsData {
   port_of_entry: string[];
+  port_of_loading: string[];
   transportation: string[];
   type_of_entry: string;
   releasing: string;
@@ -89,9 +90,30 @@ export function ContractGeneralDetailsSection({
       </h2>
 
       <div style={{ display: "grid", gap: "20px" }}>
-        {/* Row 1: Port of Entry/s + Transportation (side by side) */}
+        {/* Row 1: Port of Loading/s + Port of Entry/s (POL + POD allowed lists for bookings) */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-          {/* Port of Entry/s - Hybrid dropdown + tag input */}
+          {/* Port of Loading/s - POL allowed list */}
+          <div>
+            <label style={{
+              display: "block",
+              fontSize: "13px",
+              fontWeight: 500,
+              color: viewMode ? "var(--neuron-ink-secondary)" : "var(--neuron-ink-base)",
+              marginBottom: "8px",
+            }}>
+              Port of Loading/s
+            </label>
+            <DropdownTagInput
+              value={data.port_of_loading}
+              onChange={(values) => updateField("port_of_loading", values)}
+              options={PORT_OPTIONS}
+              placeholder="Select or search ports..."
+              viewMode={viewMode}
+              allowCustom
+            />
+          </div>
+
+          {/* Port of Entry/s - POD allowed list */}
           <div>
             <label style={{
               display: "block",
@@ -111,7 +133,10 @@ export function ContractGeneralDetailsSection({
               allowCustom
             />
           </div>
+        </div>
 
+        {/* Row 2: Transportation alone */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
           {/* Transportation - Hybrid dropdown + tag input */}
           <div>
             <label style={{
@@ -133,7 +158,7 @@ export function ContractGeneralDetailsSection({
           </div>
         </div>
 
-        {/* Row 2: Type of Entry + Releasing (side by side) */}
+        {/* Row 3: Type of Entry + Releasing (side by side) */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
           {/* Type of Entry - Single select buttons */}
           <div>

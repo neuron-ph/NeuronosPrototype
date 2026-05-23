@@ -63,7 +63,7 @@ export function CreateBrokerageBookingPanel({
   const [submitErrors, setSubmitErrors] = useState<Record<string, string>>({});
   const hasHydratedDraft = useRef(false);
 
-  const { formState, setField, initFromPrefill, initFromRecord, context } = useBookingFormState("Brokerage", {
+  const { formState, setField, initFromPrefill, initFromRecord, context, setConstraint } = useBookingFormState("Brokerage", {
     status: "Draft",
     movement_type: "Import",
   });
@@ -306,6 +306,11 @@ export function CreateBrokerageBookingPanel({
           onContractInfo={(contract) => {
             // Autofill the read-only Project / Contract Number with the contract's quote number.
             setField("project_number", contract?.quote_number ?? "");
+            // Propagate the contract's allowed POL/POD lists as form constraints so
+            // the booking's port pickers narrow to those values. Clears when the
+            // detected contract changes or vanishes.
+            setConstraint("pol_options", contract?.pol_options ?? null);
+            setConstraint("pod_options", contract?.pod_options ?? null);
           }}
           onContractsList={setContractsList}
           selectedContractId={detectedContractId}

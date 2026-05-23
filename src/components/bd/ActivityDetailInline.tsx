@@ -3,6 +3,7 @@ import { ArrowLeft, User, Building2, Calendar, MessageSquare, Upload, Paperclip,
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { Activity, Contact, Customer } from "../../types/bd";
 import { toast } from "../ui/toast-utils";
+import { uploadCrmAttachments } from "../../utils/crmAttachments";
 
 interface ActivityDetailInlineProps {
   activity: Activity;
@@ -40,6 +41,7 @@ export function ActivityDetailInline({
   const [newComment, setNewComment] = useState("");
   const [comments, setComments] = useState<Comment[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>(activity.attachments || []);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [showTopScrollFade, setShowTopScrollFade] = useState(false);
@@ -125,9 +127,29 @@ export function ActivityDetailInline({
   };
 
   const handleUpload = () => {
-    // Placeholder for upload functionality
-    // In a real app, this would trigger a file input and upload to storage
-    toast.info("Upload functionality coming soon");
+    fileInputRef.current?.click();
+  };
+
+  const handleFileUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    try {
+      const uploaded = await uploadCrmAttachments(Array.from(files), "crm_activities", activity.id);
+      const nextAttachments = [...attachments, ...uploaded];
+      const { error } = await supabase
+        .from("crm_activities")
+        .update({ attachments: nextAttachments })
+        .eq("id", activity.id);
+
+      if (error) throw error;
+
+      setAttachments(nextAttachments);
+      toast.success(`Uploaded ${uploaded.length} file(s)`);
+      onUpdate?.();
+    } catch (error: any) {
+      console.error("Error uploading activity attachments:", error);
+      toast.error(error?.message || "Failed to upload attachments");
+    }
   };
 
   return (
@@ -328,6 +350,16 @@ export function ActivityDetailInline({
             }}
           >
             <div className="flex items-center justify-between mb-4">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  handleFileUpload(e.target.files);
+                  e.currentTarget.value = "";
+                }}
+              />
               <button
                 onClick={handleUpload}
                 className="px-4 py-2 rounded-lg text-[13px] font-medium transition-colors flex items-center gap-2"

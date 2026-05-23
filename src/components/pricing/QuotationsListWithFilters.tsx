@@ -15,6 +15,8 @@ import {
   QUOTATION_NEGOTIATION_STATUSES,
 } from "../../utils/quotationStatus";
 import { useUnreadEntityIds } from "../../hooks/useNotifications";
+import { usePermission } from "../../context/PermissionProvider";
+import { canUseQuotationLens } from "../../utils/quotationAccess";
 
 // Default column widths
 const DEFAULT_COLUMN_WIDTHS = {
@@ -277,6 +279,9 @@ function QuotationTableRow({ item, index, totalItems, onItemClick, gridTemplateC
 }
 
 export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quotations, isLoading, userDepartment, onRefresh, currentUserId, userRole }: QuotationsListWithFiltersProps) {
+  const { can } = usePermission();
+  const canCreateQuotation = canUseQuotationLens(can, userDepartment, "create");
+
   // Fetch Pricing user names to display assignee chips in the Inquiries tab
   const { data: pricingUserMap = {} } = useQuery({
     queryKey: ["users", "pricing-name-map"],
@@ -540,11 +545,13 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
             </p>
           </div>
           
-          <CreateQuotationMenu
-            onSelect={onCreateQuotation}
-            buttonText={buttonText}
-            entityWord={entityWord}
-          />
+          {canCreateQuotation && (
+            <CreateQuotationMenu
+              onSelect={onCreateQuotation}
+              buttonText={buttonText}
+              entityWord={entityWord}
+            />
+          )}
         </div>
 
         {/* Search Bar - Full Width */}

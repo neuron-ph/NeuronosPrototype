@@ -251,7 +251,8 @@ export interface QuotationNew {
   
   // ✨ CONTRACT: General Details (contract-level fields shown before service scope)
   contract_general_details?: {
-    port_of_entry?: string[];           // Multi-select ports (e.g., ["MICP", "NAIA"])
+    port_of_entry?: string[];           // POD allowed list — multi-select ports (e.g., ["MICP", "NAIA"]). Constrains the POD/AOD field on bookings created from this contract.
+    port_of_loading?: string[];         // POL allowed list — constrains the POL/AOL field on bookings created from this contract.
     transportation?: string[];          // Multi-select: ["Air Freight", "Sea Freight"]
     type_of_entry?: string;             // Single: "Consumption" | "Warehousing" | "PEZA"
     releasing?: string;                 // Single: "Straight" | "Transfer" | "Partial"
@@ -669,4 +670,6 @@ export interface ContractSummary {
   contract_validity_end?: string;
   services: string[];
   rate_matrices?: ContractRateMatrix[];   // Included when full=true
+  pol_options?: string[];                  // POL allowed list — constrains booking POL field
+  pod_options?: string[];                  // POD allowed list — constrains booking POD field
 }

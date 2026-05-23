@@ -17,6 +17,14 @@ interface ProfileLookupComboboxProps {
   error?: boolean;
   onQuickCreate?: (name: string, profileType: string) => Promise<ProfileSelectionValue | null>;
   portalZIndex?: number;
+  /**
+   * When non-empty, the dropdown's option list is restricted to these labels
+   * (matched against the profile adapter's search results). The user cannot
+   * select any value outside this list, and quick-create / combo manual entry
+   * are disabled. Use to enforce a parent-entity scope, e.g. a contract's
+   * allowed POD list constraining the booking's POD field.
+   */
+  allowedOptions?: string[];
 }
 
 // ==================== HELPERS ====================
@@ -58,6 +66,7 @@ export function ProfileLookupCombobox({
   error = false,
   onQuickCreate,
   portalZIndex = 9999,
+  allowedOptions,
 }: ProfileLookupComboboxProps) {
   const { can } = usePermission();
   const selection = toSelection(value, profileType);
@@ -75,9 +84,13 @@ export function ProfileLookupCombobox({
   const skipNextDebouncedSearchRef = useRef(false);
   const searchRequestIdRef = useRef(0);
 
+  const hasAllowedOptions = !!allowedOptions && allowedOptions.length > 0;
   const registryEntry = profileRegistry[profileType];
-  const isCombo = registryEntry?.strictness === 'combo';
-  const canQuickCreate = !!onQuickCreate
+  // Suppress combo (free-text) and quick-create paths when the option set is
+  // locked — letting the user save an out-of-scope value would defeat the lock.
+  const isCombo = !hasAllowedOptions && registryEntry?.strictness === 'combo';
+  const canQuickCreate = !hasAllowedOptions
+    && !!onQuickCreate
     && (registryEntry?.quickCreateAllowed ?? false)
     && can('exec_profiling', 'create');
 
@@ -114,6 +127,22 @@ export function ProfileLookupCombobox({
 
   // ---- search ----
   const doSearch = useCallback(async (q: string) => {
+    // Locked option set: skip the adapter entirely and surface only the allowed
+    // labels (filtered by the typed query). We synthesize ProfileLookupRecord
+    // shapes so handleSelect / render logic keeps working unchanged.
+    if (hasAllowedOptions) {
+      const needle = q.trim().toLowerCase();
+      const matches = (allowedOptions ?? [])
+        .filter(label => !needle || label.toLowerCase().includes(needle))
+        .map<ProfileLookupRecord>(label => ({
+          id: label,
+          label,
+          status: 'active',
+        } as ProfileLookupRecord));
+      setResults(matches);
+      setLoading(false);
+      return;
+    }
     if (!adapterInfo) {
       setResults([]);
       return;
@@ -138,7 +167,7 @@ export function ProfileLookupCombobox({
         setLoading(false);
       }
     }
-  }, [adapterInfo]);
+  }, [adapterInfo, hasAllowedOptions, allowedOptions]);
 
   // ---- open dropdown ----
   const openDropdown = useCallback(() => {
@@ -208,7 +237,13 @@ export function ProfileLookupCombobox({
   }
 
   function handleSelect(record: ProfileLookupRecord) {
-    onChange({ id: record.id, label: record.label, profileType, source: 'linked' });
+    // Locked option set: the record is synthetic (id = label) so we save as
+    // manual instead of linked — no real profile row is associated.
+    if (hasAllowedOptions) {
+      onChange({ id: null, label: record.label, profileType, source: 'manual' });
+    } else {
+      onChange({ id: record.id, label: record.label, profileType, source: 'linked' });
+    }
     setOpen(false);
     setQuery('');
   }

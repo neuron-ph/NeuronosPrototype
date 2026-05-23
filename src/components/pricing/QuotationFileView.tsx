@@ -22,6 +22,7 @@ import { recordNotificationEvent, fetchDeptManagerIds } from "../../utils/notifi
 import { useMarkEntityReadOnMount } from "../../hooks/useNotifications";
 import { logActivity, logCreation, logStatusChange } from "../../utils/activityLog";
 import { buildProjectInsertFromQuotation, normalizeProjectRow } from "../../utils/projectHydration";
+import { canUseQuotationLens, canViewQuotationComments, canViewQuotationFile } from "../../utils/quotationAccess";
 import {
   getNormalizedContractStatus,
   getNormalizedQuotationStatus,
@@ -53,11 +54,18 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
   useMarkEntityReadOnMount("quotation", quotation.id);
   useMarkEntityReadOnMount("inquiry", quotation.id);
   useMarkEntityReadOnMount("contract", quotation.id);
-  const canViewDetailsTab = can("pricing_quotations_details_tab", "view");
-  const canViewCommentsTab = can("pricing_quotations_comments_tab", "view");
+  const canViewDetailsTab = canViewQuotationFile(can, userDepartment);
+  const canViewCommentsTab = canViewQuotationComments(can, userDepartment);
   const [activeTab, setActiveTab] = useState<TabType>(
     canViewDetailsTab ? "details" : canViewCommentsTab ? "comments" : "details"
   );
+  useEffect(() => {
+    if (activeTab === "details" && !canViewDetailsTab && canViewCommentsTab) {
+      setActiveTab("comments");
+    } else if (activeTab === "comments" && !canViewCommentsTab && canViewDetailsTab) {
+      setActiveTab("details");
+    }
+  }, [activeTab, canViewDetailsTab, canViewCommentsTab]);
   const [isPDFStudioOpen, setIsPDFStudioOpen] = useState(false);
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
@@ -90,6 +98,10 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
 
   const canAssign = can("pricing_quotations", "approve");
   const canEditPricing = can("pricing_quotations", "edit");
+  const canEditQuotation = canUseQuotationLens(can, userDepartment, "edit");
+  const canCreateQuotation = canUseQuotationLens(can, userDepartment, "create");
+  const canDeleteQuotation = canUseQuotationLens(can, userDepartment, "delete");
+  const canExportQuotation = canUseQuotationLens(can, userDepartment, "export");
   const canCreateProject = can("bd_projects", "create") || can("pricing_projects", "create");
   const canActivateContract = can("pricing_contracts", "edit");
   const canCreateBookings = can("ops_bookings", "create");
@@ -1091,7 +1103,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
             );
           })()}
           {/* Edit Button (Ghost Style) — hidden when locked, or when "Add Pricing" is shown (same action, better label) */}
-          {!isLocked && !(canEditPricing && normalizedStatus === "Pending Pricing") && (
+          {!isLocked && canEditQuotation && !(canEditPricing && normalizedStatus === "Pending Pricing") && (
             <button
               onClick={onEdit}
               style={{
@@ -1229,36 +1241,39 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
           )}
           
           {/* Export PDF — primary; opens the full-screen PDF Studio overlay */}
-          <button
-            onClick={() => setIsPDFStudioOpen(true)}
-            title="Open PDF Studio"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              height: "36px",
-              padding: "0 14px",
-              backgroundColor: "var(--theme-action-primary-bg)",
-              border: "1px solid var(--theme-action-primary-bg)",
-              borderRadius: "6px",
-              fontSize: "13px",
-              fontWeight: 600,
-              color: "#fff",
-              cursor: "pointer",
-              transition: "opacity 0.15s ease",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.9"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
-          >
-            <FileDown size={14} />
-            Export PDF
-          </button>
+          {canExportQuotation && (
+            <button
+              onClick={() => setIsPDFStudioOpen(true)}
+              title="Open PDF Studio"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                height: "36px",
+                padding: "0 14px",
+                backgroundColor: "var(--theme-action-primary-bg)",
+                border: "1px solid var(--theme-action-primary-bg)",
+                borderRadius: "6px",
+                fontSize: "13px",
+                fontWeight: 600,
+                color: "#fff",
+                cursor: "pointer",
+                transition: "opacity 0.15s ease",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.9"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+            >
+              <FileDown size={14} />
+              Export PDF
+            </button>
+          )}
 
           {/* Divider — separates primary action from icon-only utility cluster */}
-          <div style={{ width: 1, height: 24, background: "var(--neuron-ui-border)", margin: "0 4px" }} />
+          {canExportQuotation && <div style={{ width: 1, height: 24, background: "var(--neuron-ui-border)", margin: "0 4px" }} />}
 
           {/* Icon-only utility cluster: Quick Download + Action Menu */}
           <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+            {canExportQuotation && (
             <button
               onClick={handleQuickDownload}
               disabled={isQuickDownloading}
@@ -1291,6 +1306,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
                 <Download size={14} />
               )}
             </button>
+            )}
 
             <QuotationActionMenu
               quotation={quotation}
@@ -1298,6 +1314,8 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
               onDuplicate={handleDuplicate}
               onDelete={handleDelete}
               onCreateTicket={onCreateTicket ? handleCreateTicket : undefined}
+              canDuplicate={canCreateQuotation}
+              canDelete={canDeleteQuotation}
             />
           </div>
         </div>

@@ -119,6 +119,7 @@ export interface Task {
   customer_id: string | null;
   owner_id: string;
   assigned_to?: string;
+  attachments?: Array<{ name: string; size: number; type: string; url?: string }>;
   created_at: string;
   updated_at: string;
 }
