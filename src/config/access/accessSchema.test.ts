@@ -139,6 +139,13 @@ describe("access schema integrity", () => {
     expect(ACCESS_TAB_BY_MODULE_ID["inbox_entity_inquiry_tab"]).toBeDefined();
   });
 
+  it("visible shared product modules contain their reused detail tab surfaces", () => {
+    expect(ACCESS_NODE_BY_MODULE_ID["bd_projects"]?.containsModuleIds).toContain("ops_projects_info_tab");
+    expect(ACCESS_NODE_BY_MODULE_ID["bd_projects"]?.containsModuleIds).toContain("ops_projects_billings_tab");
+    expect(ACCESS_NODE_BY_MODULE_ID["pricing_projects"]?.containsModuleIds).toContain("ops_projects_info_tab");
+    expect(ACCESS_NODE_BY_MODULE_ID["bd_contracts"]?.containsModuleIds).toContain("pricing_contracts_financial_overview_tab");
+  });
+
   it("getVisibleAccessMatrixDepartments excludes hidden modules but keeps every department", () => {
     const visible = getVisibleAccessMatrixDepartments();
     expect(visible.length).toBe(ACCESS_SCHEMA.length);

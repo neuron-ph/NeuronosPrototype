@@ -4,7 +4,9 @@ import {
   PERM_MODULES, PERM_ACTIONS,
   type ModuleId, type ActionId,
 } from "../permissionsConfig";
+import { getVisibleAccessMatrixDepartments } from "../../../config/access/accessSchema";
 import type { ModuleGrants } from "./accessProfileTypes";
+import { resolveCascadedGrants } from "./accessGrantUtils";
 import { BLOCK_HIGHER_RANK_VISIBILITY_GRANT } from "../../../lib/rbacGrantKeys";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -56,7 +58,13 @@ function zoneDividerStyle(action: ActionId): React.CSSProperties {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-type Segment = { parent: typeof PERM_MODULES[0]; children: typeof PERM_MODULES };
+type PermModule = typeof PERM_MODULES[0];
+type Segment = { parent: PermModule; children: PermModule[] };
+
+const moduleById = new Map<string, PermModule>(PERM_MODULES.map((mod) => [mod.id, mod]));
+const visibleMatrixModuleIds = new Set(
+  getVisibleAccessMatrixDepartments().flatMap(({ modules }) => modules.map((mod) => mod.moduleId)),
+);
 
 function buildSegments(modules: typeof PERM_MODULES): Segment[] {
   const result: Segment[] = [];
@@ -71,6 +79,27 @@ function buildSegments(modules: typeof PERM_MODULES): Segment[] {
   }
   if (current) result.push(current);
   return result;
+}
+
+function buildVisibleSegments(modules: PermModule[]): Segment[] {
+  return modules.map((parent) => {
+    const children: PermModule[] = [];
+    const childIds = new Set<string>();
+    const addChild = (child: PermModule | undefined) => {
+      if (!child || childIds.has(child.id)) return;
+      children.push({ ...child, parentId: parent.id });
+      childIds.add(child.id);
+    };
+
+    for (const child of PERM_MODULES) {
+      if (child.parentId === parent.id) addChild(child);
+    }
+    for (const containedId of parent.containsModuleIds ?? []) {
+      addChild(moduleById.get(containedId));
+    }
+
+    return { parent, children };
+  });
 }
 
 // ─── PermToggle ───────────────────────────────────────────────────────────────
@@ -247,6 +276,7 @@ function ModuleRow({
   showInheritedBaseline,
   grants,
   onToggle,
+  cascadeParentId,
   highlighted,
   highlightedCellKeys,
 }: {
@@ -254,7 +284,8 @@ function ModuleRow({
   baselineGrants: ModuleGrants;
   showInheritedBaseline: boolean;
   grants: ModuleGrants;
-  onToggle: (moduleId: ModuleId, action: ActionId, next: boolean) => void;
+  onToggle: (moduleId: ModuleId, action: ActionId, next: boolean, cascadeParentId?: ModuleId) => void;
+  cascadeParentId?: ModuleId;
   highlighted?: boolean;
   highlightedCellKeys: Set<string>;
 }) {
@@ -313,7 +344,7 @@ function ModuleRow({
             <PermToggle
               granted={granted}
               inherited={inherited}
-              onChange={(next) => onToggle(mod.id as ModuleId, action, next)}
+              onChange={(next) => onToggle(mod.id as ModuleId, action, next, cascadeParentId)}
               needsConfirm={action === "approve" && !granted}
             />
           </div>
@@ -327,14 +358,15 @@ function ModuleRow({
 
 function GroupAccordion({
   group, modules, baselineGrants, showInheritedBaseline,
-  grants, onToggle, onChange, defaultOpen, searchQuery, matchedIds, highlightedCellKeys, activeActionFilter,
+  grants, storedGrants, onToggle, onChange, defaultOpen, searchQuery, matchedIds, highlightedCellKeys, activeActionFilter,
 }: {
   group: string;
   modules: typeof PERM_MODULES;
   baselineGrants: ModuleGrants;
   showInheritedBaseline: boolean;
   grants: ModuleGrants;
-  onToggle: (moduleId: ModuleId, action: ActionId, next: boolean) => void;
+  storedGrants: ModuleGrants;
+  onToggle: (moduleId: ModuleId, action: ActionId, next: boolean, cascadeParentId?: ModuleId) => void;
   onChange: (newGrants: ModuleGrants, meta: { manual: boolean }) => void;
   defaultOpen: boolean;
   searchQuery: string;
@@ -345,7 +377,7 @@ function GroupAccordion({
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [expandedParents, setExpandedParents] = useState<Set<string>>(new Set());
 
-  const segments = useMemo(() => buildSegments(modules), [modules]);
+  const segments = useMemo(() => buildVisibleSegments(modules), [modules]);
   const searching = searchQuery.trim().length > 0;
 
   const filteredSegments = useMemo(() => {
@@ -357,11 +389,14 @@ function GroupAccordion({
 
   const hasHighlightedCells = useMemo(() => {
     if (highlightedCellKeys.size === 0) return false;
-    return modules.some(mod => {
-      const applicable = mod.applicableActions ?? PERM_ACTIONS;
-      return applicable.some(a => highlightedCellKeys.has(`${mod.id}:${a}`));
+    return segments.some(seg => {
+      const segmentModules = [seg.parent, ...seg.children];
+      return segmentModules.some(mod => {
+        const applicable = mod.applicableActions ?? PERM_ACTIONS;
+        return applicable.some(a => highlightedCellKeys.has(`${mod.id}:${a}`));
+      });
     });
-  }, [modules, highlightedCellKeys]);
+  }, [segments, highlightedCellKeys]);
 
   const effectiveOpen = searching
     ? filteredSegments.length > 0
@@ -388,16 +423,31 @@ function GroupAccordion({
     setExpandedParents(allTabsExpanded ? new Set() : new Set(segmentsWithChildren.map(s => s.parent.id)));
   };
 
+  const actionModules = useMemo(() => {
+    const seen = new Set<string>();
+    const result: PermModule[] = [];
+    const add = (mod: PermModule) => {
+      if (seen.has(mod.id)) return;
+      result.push(mod);
+      seen.add(mod.id);
+    };
+    for (const segment of segments) {
+      add(segment.parent);
+      for (const child of segment.children) add(child);
+    }
+    return result;
+  }, [segments]);
+
   const overrideCount = useMemo(() => {
-    return modules.reduce((count, mod) => {
+    return actionModules.reduce((count, mod) => {
       const applicable = mod.applicableActions ?? PERM_ACTIONS;
-      return count + applicable.filter(action => `${mod.id}:${action}` in grants).length;
+      return count + applicable.filter(action => `${mod.id}:${action}` in storedGrants).length;
     }, 0);
-  }, [modules, grants]);
+  }, [actionModules, storedGrants]);
 
   const handleBulkGrant = (action: ActionId | "all", next: boolean) => {
-    const newGrants = { ...grants };
-    for (const mod of modules) {
+    const newGrants = { ...storedGrants };
+    for (const mod of actionModules) {
       const applicable = new Set(mod.applicableActions ?? PERM_ACTIONS);
       const actions: ActionId[] = action === "all" ? [...PERM_ACTIONS] : [action as ActionId];
       for (const a of actions) {
@@ -632,6 +682,7 @@ function GroupAccordion({
                             showInheritedBaseline={showInheritedBaseline}
                             grants={grants}
                             onToggle={onToggle}
+                            cascadeParentId={seg.parent.id as ModuleId}
                             highlighted={searching && matchedIds.has(child.id)}
                             highlightedCellKeys={highlightedCellKeys}
                           />
@@ -662,11 +713,24 @@ export function PermissionGrantEditor({
   const [searchQuery, setSearchQuery] = useState("");
   const [activeActionFilter, setActiveActionFilter] = useState<ActionId | null>(null);
   const blockHigherRankVisibility = grants[BLOCK_HIGHER_RANK_VISIBILITY_GRANT] === true;
+  const resolvedGrants = useMemo(() => resolveCascadedGrants(grants, PERM_MODULES), [grants]);
+  const resolvedBaselineGrants = useMemo(
+    () => resolveCascadedGrants(baselineGrants, PERM_MODULES),
+    [baselineGrants],
+  );
+  const parentByModuleId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const mod of PERM_MODULES) {
+      if (mod.parentId) map.set(mod.id, mod.parentId);
+    }
+    return map;
+  }, []);
 
   const grouped = useMemo(() => {
-    const map = new Map<string, typeof PERM_MODULES>();
+    const map = new Map<string, PermModule[]>();
     for (const group of GROUP_ORDER) map.set(group, []);
     for (const mod of PERM_MODULES) {
+      if (mod.parentId || !visibleMatrixModuleIds.has(mod.id)) continue;
       const arr = map.get(mod.group);
       if (arr) arr.push(mod);
       else map.set(mod.group, [mod]);
@@ -688,27 +752,38 @@ export function PermissionGrantEditor({
   const highlightedCellKeys = useMemo(() => {
     if (!activeActionFilter) return new Set<string>();
     const keys = new Set<string>();
-    for (const key of Object.keys(grants)) {
+    for (const key of Object.keys(resolvedGrants)) {
       if (key.endsWith(`:${activeActionFilter}`)) keys.add(key);
     }
     return keys;
-  }, [activeActionFilter, grants]);
+  }, [activeActionFilter, resolvedGrants]);
 
-  const handleToggle = (moduleId: ModuleId, action: ActionId, next: boolean) => {
+  const handleToggle = (moduleId: ModuleId, action: ActionId, next: boolean, cascadeParentId?: ModuleId) => {
     if (disabled) return;
     const key = `${moduleId}:${action}`;
     const newGrants = { ...grants };
+    const parentId = cascadeParentId ?? parentByModuleId.get(moduleId);
+    const parentKey = parentId ? `${parentId}:${action}` : null;
+    const parentGrantsAction = parentKey ? resolvedGrants[parentKey] === true : false;
 
     if (showInheritedBaseline) {
-      const inherited = baselineGrants[key] ?? false;
-      if (next === inherited) {
+      const inherited = resolvedBaselineGrants[key] ?? false;
+      if (parentGrantsAction && next === true) {
+        delete newGrants[key];
+      } else if (parentGrantsAction && next === false) {
+        newGrants[key] = false;
+      } else if (next === inherited) {
         delete newGrants[key];
       } else {
         newGrants[key] = next;
       }
     } else {
-      // Profile mode persists both explicit allows and explicit denies.
-      newGrants[key] = next;
+      if (parentGrantsAction && next === true) {
+        delete newGrants[key];
+      } else {
+        // Profile mode persists both explicit allows and explicit denies.
+        newGrants[key] = next;
+      }
     }
 
     onChange(newGrants, { manual: true });
@@ -881,9 +956,10 @@ export function PermissionGrantEditor({
             key={group}
             group={group}
             modules={modules}
-            baselineGrants={baselineGrants}
+            baselineGrants={resolvedBaselineGrants}
             showInheritedBaseline={showInheritedBaseline}
-            grants={grants}
+            grants={resolvedGrants}
+            storedGrants={grants}
             onToggle={handleToggle}
             onChange={onChange}
             defaultOpen={gi === 0}

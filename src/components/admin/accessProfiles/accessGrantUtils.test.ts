@@ -9,6 +9,7 @@ import {
   mergeGrantLayers,
   normalizeProfileName,
   normalizeLegacyVisibilityScope,
+  resolveCascadedGrants,
   resolveProfileVisibilityScope,
   roleDefaultVisibilityScope,
 } from "./accessGrantUtils";
@@ -51,6 +52,79 @@ describe("accessGrantUtils", () => {
       "bd_projects:edit": false,
       "bd_projects:approve": true,
     });
+  });
+
+  it("cascades parent grants to child tabs by default", () => {
+    const resolved = resolveCascadedGrants(
+      { "ops_projects:view": true, "ops_projects:create": true },
+      [
+        { id: "ops_projects" },
+        { id: "ops_projects_info_tab", parentId: "ops_projects" },
+        { id: "ops_projects_accounting_tab", parentId: "ops_projects" },
+      ],
+    );
+
+    expect(resolved).toEqual({
+      "ops_projects:view": true,
+      "ops_projects:create": true,
+      "ops_projects_info_tab:view": true,
+      "ops_projects_info_tab:create": true,
+      "ops_projects_accounting_tab:view": true,
+      "ops_projects_accounting_tab:create": true,
+    });
+  });
+
+  it("keeps explicit child overrides when parent grants cascade", () => {
+    const resolved = resolveCascadedGrants(
+      {
+        "ops_projects:view": true,
+        "ops_projects_info_tab:view": false,
+      },
+      [
+        { id: "ops_projects" },
+        { id: "ops_projects_info_tab", parentId: "ops_projects" },
+        { id: "ops_projects_accounting_tab", parentId: "ops_projects" },
+      ],
+    );
+
+    expect(resolved["ops_projects_info_tab:view"]).toBe(false);
+    expect(resolved["ops_projects_accounting_tab:view"]).toBe(true);
+  });
+
+  it("cascades product-contained tabs even when they use another technical module family", () => {
+    const resolved = resolveCascadedGrants(
+      { "bd_projects:view": true },
+      [
+        {
+          id: "bd_projects",
+          containsModuleIds: ["ops_projects_info_tab", "ops_projects_billings_tab"],
+        },
+        { id: "ops_projects" },
+        { id: "ops_projects_info_tab", parentId: "ops_projects" },
+        { id: "ops_projects_billings_tab", parentId: "ops_projects" },
+      ],
+    );
+
+    expect(resolved["ops_projects_info_tab:view"]).toBe(true);
+    expect(resolved["ops_projects_billings_tab:view"]).toBe(true);
+  });
+
+  it("lets explicit contained-tab denies override product containment", () => {
+    const resolved = resolveCascadedGrants(
+      {
+        "bd_projects:view": true,
+        "ops_projects_billings_tab:view": false,
+      },
+      [
+        {
+          id: "bd_projects",
+          containsModuleIds: ["ops_projects_info_tab", "ops_projects_billings_tab"],
+        },
+      ],
+    );
+
+    expect(resolved["ops_projects_info_tab:view"]).toBe(true);
+    expect(resolved["ops_projects_billings_tab:view"]).toBe(false);
   });
 
   it("derives minimal overrides relative to the baseline profile", () => {

@@ -119,6 +119,8 @@ export interface PermModule {
   dept: string;
   /** Structural parent module — set for tab nodes. Undefined for top-level rows. */
   parentId?: ModuleId;
+  /** Product-level children owned by this parent even when technically reused elsewhere. */
+  containsModuleIds?: ModuleId[];
 }
 
 // ─── PERM_MODULES — derived from canonical schema ────────────────────────────
@@ -137,6 +139,7 @@ export const PERM_MODULES: PermModule[] = (() => {
         label: mod.label,
         group: dept.label,
         dept: dept.label,
+        containsModuleIds: mod.containsModuleIds,
       });
       for (const t of mod.tabs) {
         out.push({
