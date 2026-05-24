@@ -1,5 +1,14 @@
 import type { AccessProfileSummary, ModuleGrants, VisibilityScope } from "./accessProfileTypes";
 
+type CascadeModule = {
+  id: string;
+  parentId?: string;
+  containsModuleIds?: string[];
+};
+
+const hasOwnGrant = (grants: ModuleGrants, key: string): boolean =>
+  Object.prototype.hasOwnProperty.call(grants, key);
+
 export const countEnabledGrants = (grants: ModuleGrants | null | undefined): number =>
   Object.values(grants ?? {}).filter(Boolean).length;
 
@@ -22,6 +31,57 @@ export const mergeGrantLayers = (
   ...(baseline ?? {}),
   ...(overrides ?? {}),
 });
+
+export const resolveCascadedGrants = (
+  grants: ModuleGrants | null | undefined,
+  modules: CascadeModule[],
+): ModuleGrants => {
+  const explicitGrants = grants ?? {};
+  const resolved = cloneGrants(explicitGrants);
+  const childrenByParent = new Map<string, CascadeModule[]>();
+
+  for (const mod of modules) {
+    if (!mod.parentId) continue;
+    const children = childrenByParent.get(mod.parentId) ?? [];
+    children.push(mod);
+    childrenByParent.set(mod.parentId, children);
+  }
+
+  for (const mod of modules) {
+    if (!mod.containsModuleIds?.length) continue;
+    const children = childrenByParent.get(mod.id) ?? [];
+    const knownChildIds = new Set(children.map((child) => child.id));
+    for (const containedId of mod.containsModuleIds) {
+      if (knownChildIds.has(containedId)) continue;
+      children.push({ id: containedId });
+      knownChildIds.add(containedId);
+    }
+    childrenByParent.set(mod.id, children);
+  }
+
+  for (const parent of modules) {
+    if (parent.parentId) continue;
+    const children = childrenByParent.get(parent.id);
+    if (!children?.length) continue;
+
+    for (const parentKey of Object.keys(explicitGrants)) {
+      const separatorIndex = parentKey.lastIndexOf(":");
+      if (separatorIndex <= 0) continue;
+      const parentId = parentKey.slice(0, separatorIndex);
+      if (parentId !== parent.id) continue;
+
+      const action = parentKey.slice(separatorIndex + 1);
+      const parentValue = explicitGrants[parentKey];
+      for (const child of children) {
+        const childKey = `${child.id}:${action}`;
+        if (hasOwnGrant(explicitGrants, childKey)) continue;
+        resolved[childKey] = parentValue;
+      }
+    }
+  }
+
+  return resolved;
+};
 
 export const deriveGrantOverrides = (
   resolved: ModuleGrants | null | undefined,

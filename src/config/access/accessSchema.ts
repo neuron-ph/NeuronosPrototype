@@ -70,6 +70,11 @@ export interface AccessModuleNode {
    * correspond to a real sidebar module (i.e. have a `pageId`).
    */
   visibleInAccessMatrix?: boolean;
+  /**
+   * Product-level child permission ids owned by this module even when the
+   * technical tab ids live under an internal/reused module family.
+   */
+  containsModuleIds?: ModuleId[];
   tabs: AccessTabNode[];
 }
 
@@ -85,6 +90,45 @@ export interface AccessDepartmentNode {
 
 const tab = (moduleId: ModuleId, label: string): AccessTabNode =>
   ({ kind: "tab", id: moduleId, moduleId, label });
+
+const OPS_PROJECT_SURFACE_TABS: ModuleId[] = [
+  "ops_projects_all_tab",
+  "ops_projects_active_tab",
+  "ops_projects_completed_tab",
+  "ops_projects_info_tab",
+  "ops_projects_quotation_tab",
+  "ops_projects_bookings_tab",
+  "ops_projects_expenses_tab",
+  "ops_projects_billings_tab",
+  "ops_projects_invoices_tab",
+  "ops_projects_collections_tab",
+  "ops_projects_attachments_tab",
+  "ops_projects_comments_tab",
+];
+
+const PRICING_CONTRACT_SURFACE_TABS: ModuleId[] = [
+  "pricing_contracts_all_tab",
+  "pricing_contracts_active_tab",
+  "pricing_contracts_expiring_tab",
+  "pricing_contracts_financial_overview_tab",
+  "pricing_contracts_quotation_tab",
+  "pricing_contracts_rate_card_tab",
+  "pricing_contracts_bookings_tab",
+  "pricing_contracts_billings_tab",
+  "pricing_contracts_invoices_tab",
+  "pricing_contracts_collections_tab",
+  "pricing_contracts_expenses_tab",
+  "pricing_contracts_attachments_tab",
+  "pricing_contracts_comments_tab",
+  "pricing_contracts_activity_tab",
+];
+
+const OPS_BOOKING_DETAIL_TABS: ModuleId[] = [
+  "ops_bookings_info_tab",
+  "ops_bookings_billings_tab",
+  "ops_bookings_expenses_tab",
+  "ops_bookings_comments_tab",
+];
 
 // ─── Schema ──────────────────────────────────────────────────────────────────
 
@@ -123,8 +167,18 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
         ],
       },
       { kind: "module", id: "bd_inquiries", moduleId: "bd_inquiries", label: "Inquiries", pageId: "bd-inquiries", tabs: [] },
-      { kind: "module", id: "bd_projects",  moduleId: "bd_projects",  label: "Projects",  pageId: "bd-projects",  tabs: [] },
-      { kind: "module", id: "bd_contracts", moduleId: "bd_contracts", label: "Contracts", pageId: "bd-contracts",  tabs: [] },
+      {
+        kind: "module", id: "bd_projects", moduleId: "bd_projects",
+        label: "Projects", pageId: "bd-projects",
+        containsModuleIds: OPS_PROJECT_SURFACE_TABS,
+        tabs: [],
+      },
+      {
+        kind: "module", id: "bd_contracts", moduleId: "bd_contracts",
+        label: "Contracts", pageId: "bd-contracts",
+        containsModuleIds: PRICING_CONTRACT_SURFACE_TABS,
+        tabs: [],
+      },
       { kind: "module", id: "bd_tasks",      moduleId: "bd_tasks",      label: "Tasks",      pageId: "bd-tasks", tabs: [] },
       { kind: "module", id: "bd_activities", moduleId: "bd_activities", label: "Activities", pageId: "bd-activities", tabs: [] },
       {
@@ -178,7 +232,12 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
           tab("pricing_quotations_comments_tab", "Comments"),
         ],
       },
-      { kind: "module", id: "pricing_projects", moduleId: "pricing_projects", label: "Projects", pageId: "pricing-projects", tabs: [] },
+      {
+        kind: "module", id: "pricing_projects", moduleId: "pricing_projects",
+        label: "Projects", pageId: "pricing-projects",
+        containsModuleIds: OPS_PROJECT_SURFACE_TABS,
+        tabs: [],
+      },
       {
         kind: "module", id: "pricing_contracts", moduleId: "pricing_contracts",
         label: "Contracts", pageId: "pricing-contracts",
@@ -219,6 +278,7 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
       {
         kind: "module", id: "ops_forwarding", moduleId: "ops_forwarding",
         label: "Forwarding", pageId: "ops-forwarding",
+        containsModuleIds: OPS_BOOKING_DETAIL_TABS,
         tabs: [
           tab("ops_forwarding_all_tab",         "All"),
           tab("ops_forwarding_my_tab",          "My"),
@@ -230,6 +290,7 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
       {
         kind: "module", id: "ops_brokerage", moduleId: "ops_brokerage",
         label: "Brokerage", pageId: "ops-brokerage",
+        containsModuleIds: OPS_BOOKING_DETAIL_TABS,
         tabs: [
           tab("ops_brokerage_all_tab",         "All"),
           tab("ops_brokerage_my_tab",          "My"),
@@ -241,6 +302,7 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
       {
         kind: "module", id: "ops_trucking", moduleId: "ops_trucking",
         label: "Trucking", pageId: "ops-trucking",
+        containsModuleIds: OPS_BOOKING_DETAIL_TABS,
         tabs: [
           tab("ops_trucking_all_tab",         "All"),
           tab("ops_trucking_my_tab",          "My"),
@@ -252,6 +314,7 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
       {
         kind: "module", id: "ops_marine_insurance", moduleId: "ops_marine_insurance",
         label: "Marine Insurance", pageId: "ops-marine-insurance",
+        containsModuleIds: OPS_BOOKING_DETAIL_TABS,
         tabs: [
           tab("ops_marine_insurance_all_tab",         "All"),
           tab("ops_marine_insurance_my_tab",          "My"),
@@ -263,6 +326,7 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
       {
         kind: "module", id: "ops_others", moduleId: "ops_others",
         label: "Others", pageId: "ops-others",
+        containsModuleIds: OPS_BOOKING_DETAIL_TABS,
         tabs: [
           tab("ops_others_all_tab",         "All"),
           tab("ops_others_my_tab",          "My"),

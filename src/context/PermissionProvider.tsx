@@ -3,10 +3,12 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../utils/supabase/client';
 import { useUser } from '../hooks/useUser';
 import type { ModuleId, ActionId } from '../components/admin/permissionsConfig';
+import { PERM_MODULES } from '../components/admin/permissionsConfig';
 import type { AccessProfileSummary, ModuleGrants } from '../components/admin/accessProfiles/accessProfileTypes';
 import {
   chooseRoleDefaultProfile,
   mergeGrantLayers,
+  resolveCascadedGrants,
 } from '../components/admin/accessProfiles/accessGrantUtils';
 
 type PermissionOverrideRow = {
@@ -73,7 +75,10 @@ export function PermissionProvider({ children }: { children: ReactNode }) {
       const baselineProfile = override?.profile
         ?? chooseRoleDefaultProfile(profiles, effectiveRole ?? 'staff', effectiveDepartment);
       const explicitGrants = (override?.module_grants ?? {}) as ModuleGrants;
-      const moduleGrants = mergeGrantLayers(baselineProfile?.module_grants, explicitGrants);
+      const moduleGrants = resolveCascadedGrants(
+        mergeGrantLayers(baselineProfile?.module_grants, explicitGrants),
+        PERM_MODULES,
+      );
 
       return { moduleGrants, explicitGrants };
     },
