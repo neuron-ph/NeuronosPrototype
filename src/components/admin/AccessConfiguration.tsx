@@ -16,6 +16,7 @@ import {
   normalizeProfileName,
   resolveProfileVisibilityScope,
 } from "./accessProfiles/accessGrantUtils";
+import { deriveHiddenModuleGrants } from "../../config/access/accessSchema";
 import { NeuronModal } from "../ui/NeuronModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -357,13 +358,14 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
       .maybeSingle();
 
     const nextAppliedProfileId = appliedProfileId;
+    const finalGrants = deriveHiddenModuleGrants(overrides);
 
     let error: any;
     if (existing) {
       ({ error } = await supabase
         .from("permission_overrides")
         .update({
-          module_grants: overrides,
+          module_grants: finalGrants,
           applied_profile_id: nextAppliedProfileId,
           scope: resolvedScope,
           departments: resolvedScope === "selected_departments" ? resolvedDepartments : null,
@@ -376,7 +378,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
           user_id: user.id,
           scope: resolvedScope,
           departments: resolvedScope === "selected_departments" ? resolvedDepartments : null,
-          module_grants: overrides,
+          module_grants: finalGrants,
           applied_profile_id: nextAppliedProfileId,
         }));
     }

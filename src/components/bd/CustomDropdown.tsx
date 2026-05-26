@@ -6,6 +6,10 @@ interface DropdownOption {
   value: string;
   label: string;
   icon?: React.ReactNode;
+  color?: string;
+  backgroundColor?: string;
+  selectedColor?: string;
+  selectedBackgroundColor?: string;
 }
 
 type DropdownSize = "sm" | "md" | "lg";
@@ -252,6 +256,12 @@ export function CustomDropdown({
                 const isSelected = multiSelect
                   ? multiValue.includes(option.value)
                   : value === option.value;
+                const optionColor = isSelected
+                  ? option.selectedColor ?? option.color ?? "var(--theme-action-primary-bg)"
+                  : option.color ?? "var(--theme-text-primary)";
+                const optionBackgroundColor = isSelected
+                  ? option.selectedBackgroundColor ?? option.backgroundColor ?? "var(--theme-state-selected)"
+                  : "var(--theme-bg-surface)";
                 return (
                   <button
                     key={option.value}
@@ -266,8 +276,8 @@ export function CustomDropdown({
                     }}
                     className={`w-full ${currentSize.padding} text-left ${currentSize.fontSize} transition-colors flex items-center ${currentSize.gap}`}
                     style={{
-                      backgroundColor: isSelected ? "var(--theme-state-selected)" : "var(--theme-bg-surface)",
-                      color: isSelected ? "var(--theme-action-primary-bg)" : "var(--theme-text-primary)",
+                      backgroundColor: optionBackgroundColor,
+                      color: optionColor,
                       borderBottom: "1px solid var(--theme-border-subtle)"
                     }}
                     onMouseEnter={(e) => {
@@ -276,7 +286,7 @@ export function CustomDropdown({
                       }
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = isSelected ? "var(--theme-state-selected)" : "var(--theme-bg-surface)";
+                      e.currentTarget.style.backgroundColor = optionBackgroundColor;
                     }}
                   >
                     {multiSelect && (
@@ -377,6 +387,12 @@ export function CustomDropdown({
                 const isSelected = multiSelect
                   ? multiValue.includes(option.value)
                   : value === option.value;
+                const optionColor = isSelected
+                  ? option.selectedColor ?? option.color ?? "var(--theme-action-primary-bg)"
+                  : option.color ?? "var(--theme-text-primary)";
+                const optionBackgroundColor = isSelected
+                  ? option.selectedBackgroundColor ?? option.backgroundColor ?? "var(--theme-state-selected)"
+                  : "var(--theme-bg-surface)";
                 return (
                   <button
                     key={option.value}
@@ -391,8 +407,8 @@ export function CustomDropdown({
                     }}
                     className="w-full px-3.5 py-2.5 text-left text-sm transition-colors flex items-center gap-2"
                     style={{
-                      backgroundColor: isSelected ? "var(--theme-state-selected)" : "var(--theme-bg-surface)",
-                      color: isSelected ? "var(--theme-action-primary-bg)" : "var(--theme-text-primary)",
+                      backgroundColor: optionBackgroundColor,
+                      color: optionColor,
                       borderBottom: index < options.length - 1 ? "1px solid var(--theme-border-subtle)" : "none"
                     }}
                     onMouseEnter={(e) => {
@@ -401,7 +417,7 @@ export function CustomDropdown({
                       }
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = isSelected ? "var(--theme-state-selected)" : "var(--theme-bg-surface)";
+                      e.currentTarget.style.backgroundColor = optionBackgroundColor;
                     }}
                   >
                     {multiSelect && (

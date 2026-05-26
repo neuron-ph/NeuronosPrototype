@@ -3,6 +3,7 @@ import type { AppliedRate } from "./pricing";
 // ==================== STATUS TYPES ====================
 
 export type ExecutionStatus =
+  | "Created"
   // Generic statuses (legacy)
   | "Draft"
   | "Pending"

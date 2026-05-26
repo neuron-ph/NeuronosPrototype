@@ -1,5 +1,5 @@
 import { ExecutionStatus } from "../types/operations";
-import { CheckCircle2, Truck, XCircle, AlertCircle, FileText } from "lucide-react";
+import { CheckCircle2, Clock, DollarSign, FileText, RotateCw, Ship, Truck, XCircle, AlertCircle } from "lucide-react";
 
 interface StatusStyle {
   bg: string;
@@ -11,6 +11,7 @@ interface StatusStyle {
 
 export function getBookingStatusStyles(status: ExecutionStatus): StatusStyle {
   switch (status) {
+    case "Created":
     case "Draft":
       return {
         bg: "var(--neuron-pill-inactive-bg)",
@@ -20,6 +21,7 @@ export function getBookingStatusStyles(status: ExecutionStatus): StatusStyle {
       };
 
     case "Confirmed":
+    case "Waiting for Arrival":
       return {
         bg: "var(--neuron-semantic-info-bg)",
         text: "var(--neuron-semantic-info)",
@@ -28,6 +30,8 @@ export function getBookingStatusStyles(status: ExecutionStatus): StatusStyle {
       };
 
     case "In Progress":
+    case "Ongoing":
+    case "In Transit":
       return {
         bg: "var(--neuron-dept-ops-bg)",
         text: "var(--neuron-dept-ops-text)",
@@ -35,12 +39,61 @@ export function getBookingStatusStyles(status: ExecutionStatus): StatusStyle {
         borderColor: "var(--neuron-dept-ops-bg)"
       };
 
+    case "Pending":
+      return {
+        bg: "var(--theme-status-warning-bg)",
+        text: "var(--theme-status-warning-fg)",
+        icon: Clock,
+        borderColor: "var(--theme-status-warning-border)"
+      };
+
     case "Delivered":
     case "Completed":
+    case "Audited":
       return {
         bg: "var(--theme-status-success-bg)",
         text: "var(--theme-status-success-fg)",
         icon: CheckCircle2,
+        borderColor: "var(--theme-status-success-bg)"
+      };
+
+    case "Empty Return":
+      return {
+        bg: "var(--neuron-semantic-info-bg)",
+        text: "var(--neuron-semantic-info)",
+        icon: RotateCw,
+        borderColor: "var(--neuron-semantic-info-bg)"
+      };
+
+    case "Liquidated":
+      return {
+        bg: "var(--theme-status-success-bg)",
+        text: "var(--theme-status-success-fg)",
+        icon: CheckCircle2,
+        borderColor: "var(--theme-status-success-bg)"
+      };
+
+    case "Issued":
+      return {
+        bg: "var(--neuron-status-accent-bg)",
+        text: "var(--neuron-status-accent-fg)",
+        icon: Ship,
+        borderColor: "var(--neuron-status-accent-bg)"
+      };
+
+    case "Billed":
+      return {
+        bg: "var(--neuron-status-accent-bg)",
+        text: "var(--neuron-status-accent-fg)",
+        icon: FileText,
+        borderColor: "var(--neuron-status-accent-bg)"
+      };
+
+    case "Paid":
+      return {
+        bg: "var(--theme-status-success-bg)",
+        text: "var(--theme-status-success-fg)",
+        icon: DollarSign,
         borderColor: "var(--theme-status-success-bg)"
       };
 

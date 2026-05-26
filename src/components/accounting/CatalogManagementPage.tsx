@@ -26,7 +26,12 @@ import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
 import { ChargeExpenseMatrix } from "./ChargeExpenseMatrix";
 import { CustomDropdown } from "../bd/CustomDropdown";
-import { CatalogItem, CatalogCategory, CATALOG_ITEM_SELECT_FIELDS } from "../shared/pricing/CatalogItemCombobox";
+import {
+  CatalogItem,
+  CatalogCategory,
+  CATALOG_ITEM_SELECT_FIELDS,
+  findCatalogItemDuplicate,
+} from "../shared/pricing/CatalogItemCombobox";
 
 // ==================== TYPES ====================
 
@@ -304,9 +309,18 @@ function ItemsTab() {
 
   const handleSave = async (id: string) => {
     const { catalog_categories: _cc, category_name: _cn, ...updates } = editForm as any;
+    const nextName = String(updates.name ?? "").trim();
+    const nextCategoryId = updates.category_id ?? null;
+    if (!nextName) { toast.error("Name is required"); return; }
+    const duplicate = findCatalogItemDuplicate(items, nextName, nextCategoryId, id);
+    if (duplicate) {
+      toast.error(`"${duplicate.name}" already exists in this category`);
+      return;
+    }
+
     const { error } = await supabase.from("catalog_items").update({
-      name: updates.name,
-      category_id: updates.category_id ?? null,
+      name: nextName,
+      category_id: nextCategoryId,
     }).eq("id", id);
     if (!error) {
       toast.success("Item updated");
@@ -335,14 +349,22 @@ function ItemsTab() {
   };
 
   const handleAdd = async () => {
-    if (!addForm.name?.trim()) { toast.error("Name is required"); return; }
+    const name = addForm.name.trim();
+    const categoryId = addForm.category_id || null;
+    if (!name) { toast.error("Name is required"); return; }
+    const duplicate = findCatalogItemDuplicate(items, name, categoryId);
+    if (duplicate) {
+      toast.error(`"${duplicate.name}" already exists in this category`);
+      return;
+    }
+
     const { error } = await supabase.from("catalog_items").insert({
       id: `ci-${Date.now()}`,
-      name: addForm.name.trim(),
-      category_id: addForm.category_id || null,
+      name,
+      category_id: categoryId,
     });
     if (!error) {
-      toast.success(`Created "${addForm.name}"`);
+      toast.success(`Created "${name}"`);
       setShowAddForm(false);
       setAddForm({ name: "", category_id: null });
       invalidateCatalog();

@@ -41,12 +41,32 @@ interface CatalogItemComboboxProps {
 
 // ==================== FUZZY MATCH ====================
 
+export function normalizeCatalogItemName(name: string): string {
+  return name.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+export function findCatalogItemDuplicate(
+  items: CatalogItem[],
+  name: string,
+  categoryId: string | null,
+  excludeItemId?: string,
+): CatalogItem | null {
+  const normalizedName = normalizeCatalogItemName(name);
+  if (!normalizedName) return null;
+
+  return items.find((item) =>
+    item.id !== excludeItemId &&
+    normalizeCatalogItemName(item.name) === normalizedName &&
+    (item.category_id ?? null) === categoryId
+  ) ?? null;
+}
+
 /** Simple similarity check: case-insensitive, catches near-duplicates */
 function findSimilarItems(name: string, items: CatalogItem[]): CatalogItem[] {
-  const lower = name.toLowerCase().trim();
+  const lower = normalizeCatalogItemName(name);
   if (!lower) return [];
   return items.filter((item) => {
-    const itemLower = item.name.toLowerCase();
+    const itemLower = normalizeCatalogItemName(item.name);
     if (itemLower === lower) return true; // exact match (shouldn't happen — exactMatch blocks create button)
     // Check if one contains the other (e.g., "THC" vs "THC Charges")
     if (itemLower.includes(lower) || lower.includes(itemLower)) return true;
@@ -266,11 +286,9 @@ export function CatalogItemCombobox({
     return filtered.sort((a, b) => a.name.localeCompare(b.name));
   }, [items, searchText, categoryId]);
 
-  // Check if typed text exactly matches an existing item
-  const exactMatch = items.some((item) => {
-    const sameName = item.name.toLowerCase() === searchText.toLowerCase().trim();
-    return sameName && (!categoryId || item.category_id === categoryId);
-  });
+  // Check if typed text exactly matches an existing item in the target category.
+  const targetCategoryId = categoryId ?? null;
+  const exactMatch = !!findCatalogItemDuplicate(items, searchText, targetCategoryId);
 
   // Handle selecting an existing item
   const handleSelect = (item: CatalogItem) => {
@@ -284,11 +302,15 @@ export function CatalogItemCombobox({
     const name = searchText.trim();
     if (!name || isCreating) return;
 
-    // Fuzzy duplicate detection — only check items in the same category (or globally if no category)
+    const duplicate = findCatalogItemDuplicate(cachedItems || items, name, targetCategoryId);
+    if (duplicate) {
+      toast.error(`"${duplicate.name}" already exists in this category`);
+      return;
+    }
+
+    // Fuzzy duplicate detection — only check items in the same target category.
     const allItems = cachedItems || items;
-    const scopedItems = categoryId
-      ? allItems.filter((i) => i.category_id === categoryId)
-      : allItems;
+    const scopedItems = allItems.filter((i) => (i.category_id ?? null) === targetCategoryId);
     const similar = findSimilarItems(name, scopedItems);
     if (similar.length > 0) {
       const names = similar.slice(0, 3).map((s) => `"${s.name}"`).join(", ");
@@ -306,7 +328,7 @@ export function CatalogItemCombobox({
       const result = await Promise.race([
         supabase
           .from('catalog_items')
-          .insert({ id: `ci-${Date.now()}`, name, ...(categoryId ? { category_id: categoryId } : {}) })
+          .insert({ id: `ci-${Date.now()}`, name, category_id: targetCategoryId })
           .select(CATALOG_ITEM_SELECT_FIELDS)
           .single(),
         new Promise<{ data: null; error: { message: string } }>((resolve) =>

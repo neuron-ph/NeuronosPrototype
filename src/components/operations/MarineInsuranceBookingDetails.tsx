@@ -217,7 +217,7 @@ export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, curre
               currentUser={currentUser}
             />
           )}
-          <StatusSelector status={editedBooking.status} onUpdateStatus={handleStatusUpdate} />
+          <StatusSelector status={editedBooking.status} serviceType="Marine Insurance" onUpdateStatus={handleStatusUpdate} />
         </div>
       </div>
 
