@@ -216,7 +216,7 @@ export function OthersBookingDetails({ booking, onBack, onUpdate, currentUser, i
               currentUser={currentUser}
             />
           )}
-          <StatusSelector status={editedBooking.status} onUpdateStatus={handleStatusUpdate} />
+          <StatusSelector status={editedBooking.status} serviceType="Others" onUpdateStatus={handleStatusUpdate} />
         </div>
       </div>
 

@@ -44,7 +44,7 @@ export interface DataScopeResult {
 }
 
 export function useDataScope(_resource?: string): DataScopeResult {
-  const { user, effectiveDepartment, effectiveRole } = useUser();
+  const { user, effectiveRole } = useUser();
 
   const { data: scope = { type: 'own', userId: '' }, isLoading } = useQuery<DataScope>({
     queryKey: queryKeys.dataScope.user(user?.id ?? '', _resource),
@@ -86,21 +86,8 @@ export function useDataScope(_resource?: string): DataScopeResult {
         ?? permissionOverride?.profile?.visibility_departments
         ?? [];
 
-      if (resolvedScope === 'all') {
+      if (resolvedScope === 'all' || resolvedScope === 'department') {
         return { type: 'all' };
-      }
-
-      if (resolvedScope === 'department') {
-        const { data: departmentUsers, error: departmentUsersError } = await supabase
-          .from('users')
-          .select('id, role')
-          .eq('department', effectiveDepartment)
-          .eq('is_active', true);
-        if (departmentUsersError) {
-          console.warn('[DataScope] department users fetch failed:', departmentUsersError.message);
-          return { type: 'own', userId: user.id };
-        }
-        return { type: 'userIds', ids: visibleIds(departmentUsers as ScopedUser[] | null) };
       }
 
       if (resolvedScope === 'selected_departments') {

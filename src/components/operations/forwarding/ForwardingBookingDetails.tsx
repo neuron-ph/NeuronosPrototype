@@ -279,6 +279,7 @@ export function ForwardingBookingDetails({
           {/* Status Selector - Moved to Header */}
           <StatusSelector
             status={editedBooking.status}
+            serviceType="Forwarding"
             onUpdateStatus={handleStatusUpdate}
           />
         </div>

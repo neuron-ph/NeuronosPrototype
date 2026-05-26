@@ -2,7 +2,7 @@ import type { ExecutionStatus } from "../types/operations";
 
 import { supabase } from "./supabase/client";
 
-export const CANCELLABLE_STATUSES: ExecutionStatus[] = ["Draft", "Pending", "Confirmed", "In Progress", "On Hold"];
+export const CANCELLABLE_STATUSES: ExecutionStatus[] = ["Created", "Draft", "Pending", "Confirmed", "In Progress", "On Hold"];
 export const DELETABLE_STATUS: ExecutionStatus = "Draft";
 
 const hasBookingArrayMatch = (value: unknown, bookingId: string): boolean => (

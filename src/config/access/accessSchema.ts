@@ -672,6 +672,51 @@ export function getAccessModuleByModuleId(
   return ACCESS_NODE_BY_MODULE_ID[moduleId];
 }
 
+// ─── Hidden-module grant derivation ─────────────────────────────────────────
+//
+// Hidden modules (visibleInAccessMatrix: false) like ops_bookings are never
+// shown in the permission editor, so admins can't toggle their grants
+// directly.  Their grants must be derived from the visible service modules
+// that "contain" their child tabs via containsModuleIds.
+//
+// Rule: hidden_module:action = OR(source1:action, source2:action, ...)
+
+interface HiddenModuleMapping {
+  hiddenModuleId: ModuleId;
+  sourceModuleIds: ModuleId[];
+}
+
+const HIDDEN_MODULE_MAPPINGS: HiddenModuleMapping[] = (() => {
+  const mappings: HiddenModuleMapping[] = [];
+  for (const dept of ACCESS_SCHEMA) {
+    const hidden = dept.modules.filter(m => m.visibleInAccessMatrix === false);
+    const visible = dept.modules.filter(m => m.visibleInAccessMatrix !== false);
+    for (const h of hidden) {
+      const tabIds = new Set(h.tabs.map(t => t.moduleId));
+      const sources = visible
+        .filter(v => (v.containsModuleIds ?? []).some(id => tabIds.has(id)))
+        .map(v => v.moduleId);
+      if (sources.length > 0) mappings.push({ hiddenModuleId: h.moduleId, sourceModuleIds: sources });
+    }
+  }
+  return mappings;
+})();
+
+const DERIVABLE_ACTIONS = ["view", "create", "edit", "approve", "delete", "export"];
+
+export function deriveHiddenModuleGrants(
+  grants: Record<string, boolean>,
+): Record<string, boolean> {
+  const result = { ...grants };
+  for (const { hiddenModuleId, sourceModuleIds } of HIDDEN_MODULE_MAPPINGS) {
+    for (const action of DERIVABLE_ACTIONS) {
+      const key = `${hiddenModuleId}:${action}`;
+      result[key] = sourceModuleIds.some(src => grants[`${src}:${action}`] === true);
+    }
+  }
+  return result;
+}
+
 // ─── Dept-scoped moduleId families ───────────────────────────────────────────
 //
 // Some detail/list components are reused across departments (e.g. Pricing

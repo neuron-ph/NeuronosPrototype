@@ -22,6 +22,7 @@ import {
 } from "./accessGrantUtils";
 import type { ConfigUser } from "../AccessConfiguration";
 import { SidePanel } from "../../common/SidePanel";
+import { deriveHiddenModuleGrants } from "../../../config/access/accessSchema";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -720,6 +721,7 @@ export function ProfileEditor({
     setSaving(true);
 
     const now = new Date().toISOString();
+    const finalGrants = deriveHiddenModuleGrants(grants);
     let error: any;
 
     if (isNew) {
@@ -728,7 +730,7 @@ export function ProfileEditor({
         description: description.trim() || null,
         target_department: targetDepartment || null,
         target_role: targetRole || null,
-        module_grants: grants,
+        module_grants: finalGrants,
         visibility_scope: visibilityScope,
         visibility_departments: visibilityScope === "selected_departments" ? visibilityDepartments : null,
         created_by: currentUser?.id ?? null,
@@ -740,7 +742,7 @@ export function ProfileEditor({
         description: description.trim() || null,
         target_department: targetDepartment || null,
         target_role: targetRole || null,
-        module_grants: grants,
+        module_grants: finalGrants,
         visibility_scope: visibilityScope,
         visibility_departments: visibilityScope === "selected_departments" ? visibilityDepartments : null,
         updated_by: currentUser?.id ?? null,

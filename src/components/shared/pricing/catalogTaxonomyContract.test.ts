@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { CATALOG_ITEM_SELECT_FIELDS, filterCatalogItemsByCategory, type CatalogItem } from "./CatalogItemCombobox";
+import {
+  CATALOG_ITEM_SELECT_FIELDS,
+  filterCatalogItemsByCategory,
+  findCatalogItemDuplicate,
+  normalizeCatalogItemName,
+  type CatalogItem,
+} from "./CatalogItemCombobox";
 import { buildCatalogSelectionPatch } from "./UniversalPricingRow";
 
 describe("catalog taxonomy contract", () => {
@@ -41,5 +47,19 @@ describe("catalog taxonomy contract", () => {
       { id: "ci-brokerage", name: "Processing Fee", category_id: "cat-brokerage" },
     ]);
     expect(filterCatalogItemsByCategory(items)).toEqual(items);
+  });
+
+  it("detects redundant item names only inside the same catalog category", () => {
+    const items: CatalogItem[] = [
+      { id: "ci-origin-thc", name: "THC", category_id: "cat-origin" },
+      { id: "ci-destination-thc", name: "THC", category_id: "cat-destination" },
+      { id: "ci-uncategorized", name: "Warehouse Fee", category_id: null },
+    ];
+
+    expect(normalizeCatalogItemName("  Warehouse   Fee  ")).toBe("warehouse fee");
+    expect(findCatalogItemDuplicate(items, " thc ", "cat-origin")?.id).toBe("ci-origin-thc");
+    expect(findCatalogItemDuplicate(items, "THC", "cat-brokerage")).toBeNull();
+    expect(findCatalogItemDuplicate(items, "warehouse fee", null)?.id).toBe("ci-uncategorized");
+    expect(findCatalogItemDuplicate(items, "warehouse fee", null, "ci-uncategorized")).toBeNull();
   });
 });

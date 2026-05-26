@@ -55,6 +55,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
   const canViewCommentsTab    = can(ids.comments,    "view");
   const canViewTeamsTab       = can(ids.teams,       "view");
   const canEditTeamsTab       = can(ids.teams,       "edit");
+  const canDeleteContact      = can(ids.root,        "delete");
 
   const [activeTab, setActiveTab] = useState<"activities" | "tasks" | "inquiries" | "attachments" | "comments" | "teams">(() => {
     if (variant === "pricing") {
@@ -80,6 +81,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [isLoggingActivity, setIsLoggingActivity] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const existingTaskAttachmentInputRef = useRef<HTMLInputElement | null>(null);
 
   const toDisplayAttachments = (
@@ -318,13 +320,13 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
           lifecycle_stage: "Stage", lead_status: "Lead Status", owner_id: "Account Owner", notes: "Notes",
         };
         const changedFields = Object.keys(fieldLabels).filter(f => {
-          const oldVal = (contact as Record<string, unknown>)[f];
+          const oldVal = (contact as unknown as Record<string, unknown>)[f];
           const newVal = (updatedData as Record<string, unknown>)[f];
           return oldVal !== newVal && (oldVal || newVal);
         });
         const details = changedFields.length === 1
           ? {
-              oldValue: String((contact as Record<string, unknown>)[changedFields[0]] ?? ""),
+              oldValue: String((contact as unknown as Record<string, unknown>)[changedFields[0]] ?? ""),
               newValue: String((updatedData as Record<string, unknown>)[changedFields[0]] ?? ""),
               description: `Updated ${fieldLabels[changedFields[0]]}`,
             }
@@ -355,6 +357,42 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
   const handleCancel = () => {
     setEditedContact(contact);
     setIsEditing(false);
+  };
+
+  const handleDeleteContact = async () => {
+    if (isDeleting) return;
+
+    const contactName = contact.name || [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "this contact";
+    const confirmed = window.confirm(`Delete ${contactName}? This cannot be undone.`);
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+    try {
+      const { data, error } = await supabase
+        .from("contacts")
+        .delete()
+        .eq("id", contact.id)
+        .select("id")
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) {
+        toast.error("Contact was not deleted. You may not have permission to delete it.");
+        return;
+      }
+
+      queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all() });
+      if (effectiveCustomerId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.customers.contacts(effectiveCustomerId) });
+      }
+      toast.success("Contact deleted successfully");
+      onBack();
+    } catch (error: any) {
+      console.error("Error deleting contact:", error);
+      toast.error(error?.message || "Unable to delete contact. Please try again.");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleConvertToCustomer = async () => {
@@ -890,7 +928,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                         { value: "", label: "Unassigned" },
                         ...users.filter(u => u.department === "Business Development" || u.department === "Pricing").map(u => ({ value: u.id, label: u.name }))
                       ]}
-                      onChange={(value) => setEditedContact({ ...editedContact, owner_id: value || null })}
+                      onChange={(value) => setEditedContact({ ...editedContact, owner_id: value || undefined })}
                     />
                   ) : (
                     <span className="text-[14px]" style={{ color: contact.owner_id ? "var(--theme-text-primary)" : "var(--theme-text-muted)" }}>
@@ -941,24 +979,31 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
               </div>
 
               {/* Delete Button at Bottom */}
-              {!isEditing && (
+              {!isEditing && canDeleteContact && (
                 <div className="mt-6 pt-6" style={{ borderTop: "1px solid var(--neuron-ui-divider)" }}>
                   <button
+                    type="button"
+                    onClick={handleDeleteContact}
+                    disabled={isDeleting}
                     className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg transition-colors text-[13px]"
                     style={{
                       border: "1px solid var(--theme-status-danger-border)",
                       backgroundColor: "var(--theme-bg-surface)",
-                      color: "var(--theme-status-danger-fg)"
+                      color: "var(--theme-status-danger-fg)",
+                      cursor: isDeleting ? "not-allowed" : "pointer",
+                      opacity: isDeleting ? 0.65 : 1
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = "var(--theme-status-danger-bg)";
+                      if (!isDeleting) {
+                        e.currentTarget.style.backgroundColor = "var(--theme-status-danger-bg)";
+                      }
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
                     }}
                   >
                     <Trash2 size={14} />
-                    Delete Contact
+                    {isDeleting ? "Deleting..." : "Delete Contact"}
                   </button>
                 </div>
               )}

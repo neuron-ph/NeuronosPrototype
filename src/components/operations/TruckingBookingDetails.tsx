@@ -217,7 +217,7 @@ export function TruckingBookingDetails({ booking, onBack, onUpdate, currentUser,
               currentUser={currentUser}
             />
           )}
-          <StatusSelector status={editedBooking.status} onUpdateStatus={handleStatusUpdate} />
+          <StatusSelector status={editedBooking.status} serviceType="Trucking" onUpdateStatus={handleStatusUpdate} />
         </div>
       </div>
 
