@@ -722,6 +722,9 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
   const [currency, setCurrency] = useState(initialData?.currency || "PHP"); // ✨ PHP-First Default
   const [taxRate, setTaxRate] = useState(initialData?.financial_summary?.tax_rate || 0.12);
   const [otherCharges, setOtherCharges] = useState(initialData?.financial_summary?.other_charges || 0);
+  const savedUsdReferenceRate = Number(initialData?.financial_summary?.usd_reference_rate);
+  const hasSavedUsdReferenceRate = Number.isFinite(savedUsdReferenceRate) && savedUsdReferenceRate > 0;
+  const [usdReferenceRate, setUsdReferenceRate] = useState(hasSavedUsdReferenceRate ? savedUsdReferenceRate : 58);
   
   // ✨ NEW: Dual-Section Pricing (Buying vs Selling)
   const [buyingPrice, setBuyingPrice] = useState<BuyingPriceCategory[]>(initialData?.buying_price || []);
@@ -1608,11 +1611,14 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
 
   // Calculate financial summary
   // ✨ UPDATED: Now uses selling price instead of charge categories
-  const financialSummary = calculateFinancialSummary(
-    sellingPrice.length > 0 ? sellingPrice : chargeCategories, 
-    taxRate, 
-    otherCharges
-  );
+  const financialSummary = {
+    ...calculateFinancialSummary(
+      sellingPrice.length > 0 ? sellingPrice : chargeCategories,
+      taxRate,
+      otherCharges
+    ),
+    usd_reference_rate: usdReferenceRate,
+  };
   
   /**
    * Converts Buying Price categories to Selling Price categories with zero markup.
@@ -2759,6 +2765,10 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
               setTaxRate={setTaxRate}
               otherCharges={otherCharges}
               setOtherCharges={setOtherCharges}
+              usdReferenceRate={usdReferenceRate}
+              setUsdReferenceRate={setUsdReferenceRate}
+              autoLoadUsdReferenceRate={!hasSavedUsdReferenceRate}
+              readOnly={viewMode || isLocked}
             />
           )}
           

@@ -1,6 +1,6 @@
 import { Calculator } from "lucide-react";
 import type { FinancialSummary } from "../../../types/pricing";
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 import { formatMoney } from "../../../utils/accountingCurrency";
 import { resolveExchangeRate } from "../../../utils/exchangeRates";
 
@@ -11,6 +11,10 @@ interface FinancialSummaryPanelProps {
   setTaxRate: (rate: number) => void;
   otherCharges: number;
   setOtherCharges: (amount: number) => void;
+  usdReferenceRate: number;
+  setUsdReferenceRate: (rate: number) => void;
+  autoLoadUsdReferenceRate?: boolean;
+  readOnly?: boolean;
 }
 
 export function FinancialSummaryPanel({
@@ -19,26 +23,34 @@ export function FinancialSummaryPanel({
   taxRate,
   setTaxRate,
   otherCharges,
-  setOtherCharges
+  setOtherCharges,
+  usdReferenceRate,
+  setUsdReferenceRate,
+  autoLoadUsdReferenceRate = false,
+  readOnly = false
 }: FinancialSummaryPanelProps) {
 
-  // Local state for USD reference rate. Auto-fetches today's USD→PHP rate
-  // from the FX table so the user isn't typing 58 by hand.
-  const [usdRefRate, setUsdRefRate] = useState<number>(58.00);
+  // Auto-load today's USD/PHP rate only until the user edits the field.
+  const hasManualUsdReferenceRate = useRef(false);
   useEffect(() => {
+    if (readOnly || !autoLoadUsdReferenceRate || hasManualUsdReferenceRate.current) return;
     let cancelled = false;
     resolveExchangeRate({ fromCurrency: "USD", toCurrency: "PHP", rateDate: new Date() })
-      .then((row) => { if (!cancelled && row?.rate > 0) setUsdRefRate(row.rate); })
+      .then((row) => {
+        if (!cancelled && !hasManualUsdReferenceRate.current && row?.rate > 0) {
+          setUsdReferenceRate(row.rate);
+        }
+      })
       .catch(() => undefined);
     return () => { cancelled = true; };
-  }, []);
+  }, [autoLoadUsdReferenceRate, readOnly, setUsdReferenceRate]);
 
   const formatAmount = (amount: number) => formatMoney(amount, "PHP");
   const formatUSD = (amount: number) => formatMoney(amount, "USD");
 
   const calculateApproxUSD = () => {
-    if (usdRefRate <= 0) return 0;
-    return financialSummary.grand_total / usdRefRate;
+    if (usdReferenceRate <= 0) return 0;
+    return financialSummary.grand_total / usdReferenceRate;
   };
 
   const isForeignSource = currency && currency !== "PHP";
@@ -163,7 +175,10 @@ export function FinancialSummaryPanel({
               <input
                 type="number"
                 value={Number((taxRate * 100).toFixed(2))}
-                onChange={(e) => setTaxRate(Number(e.target.value) / 100)}
+                onChange={(e) => {
+                  if (!readOnly) setTaxRate(Number(e.target.value) / 100);
+                }}
+                disabled={readOnly}
                 step="0.01"
                 min="0"
                 max="100"
@@ -214,7 +229,10 @@ export function FinancialSummaryPanel({
             <input
               type="number"
               value={otherCharges || ""}
-              onChange={(e) => setOtherCharges(Number(e.target.value) || 0)}
+              onChange={(e) => {
+                if (!readOnly) setOtherCharges(Number(e.target.value) || 0);
+              }}
+              disabled={readOnly}
               placeholder="0.00"
               step="0.01"
               min="0"
@@ -284,8 +302,13 @@ export function FinancialSummaryPanel({
                 <span style={{ fontSize: "11px", color: "var(--theme-text-muted)", fontWeight: 500 }}>@ Rate:</span>
                 <input 
                   type="number"
-                  value={usdRefRate}
-                  onChange={(e) => setUsdRefRate(Number(e.target.value) || 1)}
+                  value={usdReferenceRate}
+                  onChange={(e) => {
+                    if (readOnly) return;
+                    hasManualUsdReferenceRate.current = true;
+                    setUsdReferenceRate(Number(e.target.value) || 1);
+                  }}
+                  disabled={readOnly}
                   style={{
                     width: "50px",
                     padding: "2px 4px",

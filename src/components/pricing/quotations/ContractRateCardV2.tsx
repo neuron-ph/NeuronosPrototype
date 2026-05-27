@@ -15,7 +15,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import { Plus, Trash2, X, LayoutGrid, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, Trash2, X, LayoutGrid, ChevronDown, ChevronRight, Layers, ShieldCheck, Truck } from "lucide-react";
 import { PhilippinePeso } from "../../icons/PhilippinePeso";
 import { CatalogItemCombobox } from "../../shared/pricing/CatalogItemCombobox";
 import { CategoryDropdown } from "./CategoryDropdown";
@@ -54,17 +54,51 @@ const DEFAULT_COLUMNS: Record<string, string[]> = {
   Others: ["Standard"],
 };
 
-const SECTION_LAYOUT_OPTIONS: { value: RateCategoryKind; label: string }[] = [
-  { value: "standard", label: "Standard Rates" },
-  { value: "optional", label: "Other Charges" },
-  { value: "delivery", label: "Delivery Charges" },
-];
-
 const SECTION_LAYOUT_HELP: Record<RateCategoryKind, string> = {
   standard: "Included whenever this contract is used.",
   optional: "Included only when the booking has the selected permit or examination.",
   delivery: "Matched per container using container type and destination.",
 };
+
+interface RateKindCard {
+  value: RateCategoryKind;
+  label: string;
+  description: string;
+  accentVar: string;
+  bgVar: string;
+  borderVar: string;
+  icon: React.ReactNode;
+}
+
+const RATE_KIND_CARDS: RateKindCard[] = [
+  {
+    value: "standard",
+    label: "Standard",
+    description: "Applied to every booking that uses this contract.",
+    accentVar: "var(--theme-action-primary-bg)",
+    bgVar: "var(--theme-bg-surface-tint)",
+    borderVar: "var(--theme-action-primary-border)",
+    icon: <Layers size={15} />,
+  },
+  {
+    value: "optional",
+    label: "Conditional",
+    description: "Only when the booking has a matching permit or examination.",
+    accentVar: "var(--theme-status-warning-fg)",
+    bgVar: "var(--theme-status-warning-bg)",
+    borderVar: "var(--theme-status-warning-border)",
+    icon: <ShieldCheck size={15} />,
+  },
+  {
+    value: "delivery",
+    label: "Per-Container",
+    description: "Matched to each container by type and destination.",
+    accentVar: "var(--neuron-status-accent-fg)",
+    bgVar: "var(--neuron-status-accent-bg)",
+    borderVar: "var(--neuron-status-accent-border)",
+    icon: <Truck size={15} />,
+  },
+];
 
 // ============================================
 // ID GENERATOR
@@ -221,8 +255,16 @@ export function ContractRateCardV2({
 
   // ---- Section layout ----
   // User-facing rate-section layout maps directly to the existing engine kind.
-  const handleUpdateCategoryKind = (catId: string, nextKind: RateCategoryKind) => {
-    emitCategories(activeCategories.map((c) => c.id === catId ? { ...c, kind: nextKind } : c));
+  // Passing `undefined` resets the category to the gate state so the user re-picks.
+  const handleUpdateCategoryKind = (catId: string, nextKind: RateCategoryKind | undefined) => {
+    emitCategories(activeCategories.map((c) => {
+      if (c.id !== catId) return c;
+      if (nextKind === undefined) {
+        const { kind: _, ...rest } = c;
+        return rest as ContractRateCategory;
+      }
+      return { ...c, kind: nextKind };
+    }));
   };
 
   // ---- Row CRUD (per category) ----
@@ -447,69 +489,47 @@ export function ContractRateCardV2({
           {activeCategories.map((cat) => {
             const isExpanded = expandedCategories.has(cat.id);
             const usedInCat = cat.rows.map((r) => r.catalog_item_id).filter(Boolean) as string[];
+            const needsGate = cat.kind == null && cat.rows.length === 0;
+            const hasKind = !needsGate;
             const sectionLayout = (cat.kind ?? "standard") as RateCategoryKind;
+            const kindMeta = RATE_KIND_CARDS.find((k) => k.value === sectionLayout);
             return (
               <div key={cat.id} style={{ border: "1px solid var(--neuron-ui-border)", borderRadius: "10px", marginBottom: "12px", overflow: "visible", backgroundColor: "var(--theme-bg-surface)" }}>
 
                 {/* Category header */}
                 <div
-                  onClick={() => toggleCategory(cat.id)}
-                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", backgroundColor: "var(--theme-bg-surface-subtle)", borderRadius: isExpanded ? "10px 10px 0 0" : "10px", borderBottom: isExpanded ? "1px solid var(--neuron-ui-border)" : "none", cursor: "pointer", userSelect: "none" }}
+                  onClick={() => hasKind && toggleCategory(cat.id)}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", backgroundColor: "var(--theme-bg-surface-subtle)", borderRadius: (isExpanded && hasKind) || !hasKind ? "10px 10px 0 0" : "10px", borderBottom: isExpanded || !hasKind ? "1px solid var(--neuron-ui-border)" : "none", cursor: hasKind ? "pointer" : "default", userSelect: "none" }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                    {isExpanded ? <ChevronDown size={13} style={{ color: "var(--theme-text-muted)", flexShrink: 0 }} /> : <ChevronRight size={13} style={{ color: "var(--theme-text-muted)", flexShrink: 0 }} />}
+                    {hasKind && (isExpanded ? <ChevronDown size={13} style={{ color: "var(--theme-text-muted)", flexShrink: 0 }} /> : <ChevronRight size={13} style={{ color: "var(--theme-text-muted)", flexShrink: 0 }} />)}
                     <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)" }}>{cat.category_name}</span>
-                    <span style={{ fontSize: "11px", color: "var(--theme-text-muted)", backgroundColor: "var(--theme-bg-surface)", padding: "1px 7px", borderRadius: "3px", border: "1px solid var(--neuron-ui-border)" }}>
-                      {cat.rows.length} {cat.rows.length === 1 ? "item" : "items"}
-                    </span>
-                    {!viewMode && (
-                      <div
-                        style={{ display: "flex", alignItems: "center", gap: "6px", marginLeft: "4px" }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <span
-                          style={{
-                            fontSize: "11px",
-                            fontWeight: 600,
-                            color: "var(--theme-text-muted)",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          Rate section type
-                        </span>
-                        <div style={{ width: "180px" }}>
-                        <CustomDropdown
-                          value={sectionLayout}
-                          onChange={(value) => handleUpdateCategoryKind(cat.id, value as RateCategoryKind)}
-                          options={SECTION_LAYOUT_OPTIONS}
-                          size="sm"
-                          fullWidth
-                          buttonStyle={{
-                            padding: "4px 8px",
-                            fontSize: "11px",
-                            borderRadius: "5px",
-                            border: "1px solid var(--neuron-ui-border)",
-                            backgroundColor: "var(--theme-bg-surface)",
-                            fontWeight: 600,
-                          }}
-                        />
-                        </div>
-                      </div>
-                    )}
-                    {viewMode && (
-                      <span
-                        title={SECTION_LAYOUT_HELP[sectionLayout]}
-                        style={{
-                          fontSize: "11px",
-                          color: "var(--theme-text-muted)",
-                          fontWeight: 500,
-                        }}
-                      >
-                        {SECTION_LAYOUT_OPTIONS.find((o) => o.value === sectionLayout)?.label}
+                    {hasKind && (
+                      <span style={{ fontSize: "11px", color: "var(--theme-text-muted)", backgroundColor: "var(--theme-bg-surface)", padding: "1px 7px", borderRadius: "3px", border: "1px solid var(--neuron-ui-border)" }}>
+                        {cat.rows.length} {cat.rows.length === 1 ? "item" : "items"}
                       </span>
                     )}
+                    {hasKind && kindMeta && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!viewMode && cat.rows.length === 0) handleUpdateCategoryKind(cat.id, undefined);
+                        }}
+                        title={viewMode ? SECTION_LAYOUT_HELP[sectionLayout] : cat.rows.length === 0 ? "Click to change billing mode" : SECTION_LAYOUT_HELP[sectionLayout]}
+                        style={{
+                          display: "inline-flex", alignItems: "center", gap: "4px",
+                          padding: "3px 8px", fontSize: "11px", fontWeight: 600, lineHeight: 1,
+                          color: kindMeta.accentVar, backgroundColor: kindMeta.bgVar,
+                          border: `1px solid ${kindMeta.borderVar}`, borderRadius: "4px",
+                          cursor: !viewMode && cat.rows.length === 0 ? "pointer" : "default",
+                          transition: "color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease",
+                        }}
+                      >
+                        {kindMeta.icon} {kindMeta.label}
+                      </button>
+                    )}
                   </div>
-                  {!viewMode && (
+                  {hasKind && !viewMode && (
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }} onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => handleAddRow(cat.id)}
@@ -530,10 +550,58 @@ export function ContractRateCardV2({
                       </button>
                     </div>
                   )}
+                  {!hasKind && !viewMode && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteCategory(cat.id); }}
+                      style={{ display: "flex", alignItems: "center", padding: "4px", background: "none", border: "none", cursor: "pointer", color: "var(--theme-text-muted)", opacity: 0.5, transition: "opacity 0.15s ease" }}
+                      onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.color = "var(--neuron-semantic-danger)"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.5"; e.currentTarget.style.color = "var(--theme-text-muted)"; }}
+                      title="Remove category"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
                 </div>
 
-                {/* Category body — grid + rows */}
-                {isExpanded && (
+                {/* ── GATE: Billing mode selector (blocks category until chosen) ── */}
+                {!hasKind && !viewMode && (
+                  <div style={{ padding: "20px 16px", backgroundColor: "var(--theme-bg-surface)" }}>
+                    <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--theme-text-primary)", margin: "0 0 2px 0" }}>
+                      Select billing mode
+                    </p>
+                    <p style={{ fontSize: "12px", color: "var(--theme-text-muted)", margin: "0 0 14px 0" }}>
+                      This determines how charges are applied when importing to bookings.
+                    </p>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+                      {RATE_KIND_CARDS.map((card) => (
+                        <button
+                          key={card.value}
+                          onClick={() => handleUpdateCategoryKind(cat.id, card.value)}
+                          style={{
+                            display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "6px",
+                            padding: "14px", borderRadius: "8px", cursor: "pointer",
+                            border: `1px solid var(--neuron-ui-border)`,
+                            backgroundColor: "var(--theme-bg-surface)",
+                            transition: "border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease",
+                            textAlign: "left",
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.borderColor = card.borderVar; e.currentTarget.style.backgroundColor = card.bgVar; e.currentTarget.style.boxShadow = "var(--elevation-1)"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--neuron-ui-border)"; e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)"; e.currentTarget.style.boxShadow = "none"; }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: "5px", color: card.accentVar, fontSize: "13px", fontWeight: 600 }}>
+                            {card.icon} {card.label}
+                          </div>
+                          <span style={{ fontSize: "11px", color: "var(--theme-text-muted)", lineHeight: 1.45 }}>
+                            {card.description}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Category body — grid + rows (only when kind is set) */}
+                {hasKind && isExpanded && (
                   <div style={{ overflowX: "visible" as any }}>
                     <div style={{ padding: "9px 16px", fontSize: "12px", color: "var(--theme-text-muted)", borderBottom: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--theme-bg-surface)" }}>
                       {SECTION_LAYOUT_HELP[sectionLayout]}
