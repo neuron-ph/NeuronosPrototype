@@ -768,12 +768,23 @@ export function PermissionGrantEditor({
 
     if (showInheritedBaseline) {
       const inherited = resolvedBaselineGrants[key] ?? false;
+      const cascadedOverride = resolvedGrants[key];
+      const hasCascadeConflict = cascadedOverride !== undefined && cascadedOverride !== next;
+
       if (parentGrantsAction && next === true) {
-        delete newGrants[key];
+        if (hasCascadeConflict) {
+          newGrants[key] = next;
+        } else {
+          delete newGrants[key];
+        }
       } else if (parentGrantsAction && next === false) {
         newGrants[key] = false;
       } else if (next === inherited) {
-        delete newGrants[key];
+        if (hasCascadeConflict) {
+          newGrants[key] = next;
+        } else {
+          delete newGrants[key];
+        }
       } else {
         newGrants[key] = next;
       }
