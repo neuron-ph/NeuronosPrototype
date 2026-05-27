@@ -210,6 +210,7 @@ export interface FinancialSummary {
   tax_amount: number;            // subtotal_taxed × tax_rate
   other_charges: number;         // Any additional charges
   grand_total: number;           // sum of all + tax
+  usd_reference_rate?: number;   // Manual PHP/USD reference rate for approximate USD total
 }
 
 /**

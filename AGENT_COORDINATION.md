@@ -30,6 +30,28 @@
 
 ---
 
+## Open Tickets
+
+### Optional category rows missing `applies_when` — needs Marcus's input (2026-05-28)
+The following rows in OTHER CHARGES / REIMBURSABLE CHARGES categories are set to `kind: 'optional'` but have **no `applies_when` trigger**, so they are silently skipped by the billing engine. Marcus needs to decide which permit/examination each maps to (or whether they need a new enum value).
+
+| Row particular | Occurrences (prod) | Best guess | Question |
+|---|---|---|---|
+| `ATRIG PROCESSING FEE` | 4 | `permit: FDA`? | Is ATRIG always tied to FDA, or its own permit? |
+| `OMB PROCESSING` | 1 | ? | Not in current permit list — add new enum? |
+| `PCCI CLEARANCE` | 1 | ? | Not in current permit list — add new enum? |
+| `GMS CLEARANCE FEE` | 1 | ? | Not in current permit list — add new enum? |
+| `CNIU / CAIDTF` | 2 | ? | Customs-related but no enum match |
+
+Also silently skipped (intentionally, not exam/permit-gated — may need to move to a `standard` category or be reclassified):
+- `SUCCEEDING CONTAINERS` (9 occurrences) — rate tier, not conditional
+- `OTHER RECEIPTED CHARGES (IF ANY)` (12 occurrences) — catch-all reimbursable
+- `TABS BOOKING FEE` (1 occurrence) — always applies
+
+**Context**: `dispatchOptional` skips rows without `applies_when`. These rows bill nothing until resolved.
+
+---
+
 ## Queue (unclaimed)
 - [x] Wire `RequestBillingButton` + `LinkedTicketBadge` into `TruckingBookingDetails`, `BrokerageBookingDetails`, `MarineInsuranceBookingDetails`, `OthersBookingDetails` - done by Claude `2026-03-23`
 - [x] `011_workflow_columns.sql` - written + applied via Supabase MCP `2026-03-24`. Adds missing ticket columns, expands enums, renames participant columns to `participant_user_id`/`participant_dept`, updates RPCs. Schema is now in sync.
