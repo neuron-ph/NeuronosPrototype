@@ -11,6 +11,7 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router";
 import { usePermission } from "../../context/PermissionProvider";
+import { useUrlSelection } from "../../hooks/useUrlSelection";
 import { Container, Ship, Truck, FileText, Package } from "lucide-react";
 import { ForwardingBookings } from "../operations/forwarding/ForwardingBookings";
 import { ForwardingBookingDetails } from "../operations/forwarding/ForwardingBookingDetails";
@@ -48,6 +49,7 @@ export function AccountingBookingsShell() {
 
   const [activeTab, setActiveTab] = useState<ServiceTab>(firstAllowedTab);
   const [searchParams, setSearchParams] = useSearchParams();
+  const [urlBookingId, setUrlBookingId] = useUrlSelection("booking");
   const [pendingBookingId, setPendingBookingId] = useState<string | null>(null);
   const [pendingTab, setPendingTab] = useState<string | null>(null);
   const [pendingHighlightId, setPendingHighlightId] = useState<string | null>(null);
@@ -87,16 +89,19 @@ export function AccountingBookingsShell() {
   useEffect(() => {
     setFwdSubView("list");
     setSelectedFwdBooking(null);
+    setUrlBookingId(null);
   }, [activeTab]);
 
   const handleSelectFwdBooking = (booking: ForwardingBooking) => {
     setSelectedFwdBooking(booking);
     setFwdSubView("detail");
+    setUrlBookingId(booking.id ?? booking.bookingId);
   };
 
   const handleBackToList = () => {
     setFwdSubView("list");
     setSelectedFwdBooking(null);
+    setUrlBookingId(null);
   };
 
   const renderContent = () => {
@@ -114,7 +119,7 @@ export function AccountingBookingsShell() {
             />
           );
         }
-        return <ForwardingBookings onSelectBooking={handleSelectFwdBooking} pendingBookingId={pendingBookingId} />;
+        return <ForwardingBookings onSelectBooking={handleSelectFwdBooking} pendingBookingId={urlBookingId ?? pendingBookingId} />;
       case "brokerage":
         if (!canBrokerage) return null;
         return <BrokerageBookings pendingBookingId={pendingBookingId} initialTab={pendingTab} highlightId={pendingHighlightId} />;

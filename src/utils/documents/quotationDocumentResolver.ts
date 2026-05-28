@@ -38,6 +38,7 @@ import {
 import type { QuotationPrintOptions } from "../../components/projects/quotation/screen/useQuotationDocumentState";
 import { joinNonEmpty } from "./printableDocumentFormat";
 
+
 const DEFAULT_CONTACT_FOOTER: PrintableContactFooter = {
   callNumbers: DEFAULT_COMPANY_SETTINGS.phone_numbers,
   emails: DEFAULT_COMPANY_SETTINGS.email ? [DEFAULT_COMPANY_SETTINGS.email] : [],
@@ -252,15 +253,63 @@ function formatServiceDetailValue(value: unknown): unknown {
   return value;
 }
 
+// Keys eligible for cross-section dedup. Maps each service-detail key to a
+// canonical concept name so the same data shown by the shipment section OR
+// an earlier service section is not repeated.
+const DEDUP_KEYS: Record<string, string> = {
+  pod_aod: "pod",
+  mode: "mode",
+  commodity: "commodity",
+  pol_aol: "pol",
+  incoterms: "incoterm",
+  carrier_airline: "carrier",
+  collection_address: "collection_address",
+  cargo_type: "cargo_type",
+  containers: "containers",
+};
+
+// Maps shipment-section field IDs to the same canonical concept names.
+const SHIPMENT_ID_TO_CONCEPT: Record<string, string> = {
+  pod_aod: "pod",
+  shipment_freight: "mode",
+  commodity: "commodity",
+  pol_aol: "pol",
+  incoterm: "incoterm",
+  carrier: "carrier",
+  collection_address: "collection_address",
+};
+
+function normalizeForComparison(v: unknown): string | undefined {
+  if (v == null) return undefined;
+  const s = String(v).trim().toLowerCase();
+  return s.length > 0 ? s : undefined;
+}
+
 function buildServiceSection(
   id: string,
   title: string,
   details: any,
   keys: ServiceDetailKey[],
+  seenValues?: Map<string, string>,
 ): PrintableSection {
   const fields: PrintableField[] = [];
   for (const k of keys) {
     const value = formatServiceDetailValue(pick(details, k.key));
+    // Skip if an earlier section already shows this exact value
+    if (seenValues) {
+      const concept = DEDUP_KEYS[k.key];
+      if (concept) {
+        const thisVal = normalizeForComparison(
+          Array.isArray(value) ? value.join(", ") : value,
+        );
+        if (thisVal) {
+          const prev = seenValues.get(concept);
+          if (prev === thisVal) continue;
+          // Record this value so later service sections can skip it too
+          seenValues.set(concept, thisVal);
+        }
+      }
+    }
     if (Array.isArray(value)) {
       fields.push({
         id: `${id}.${k.key}`,
@@ -426,7 +475,7 @@ function serviceDetailValue(details: any, key: string): unknown {
   return formatServiceDetailValue(pick(details, key));
 }
 
-function buildServiceSections(quote: QuotationNew): PrintableSection[] {
+function buildServiceSections(quote: QuotationNew, seenValues?: Map<string, string>): PrintableSection[] {
   const meta = quote.services_metadata;
   if (!Array.isArray(meta) || meta.length === 0) return [];
   const sections: PrintableSection[] = [];
@@ -437,22 +486,22 @@ function buildServiceSections(quote: QuotationNew): PrintableSection[] {
     const mode = pick(details, "mode");
     switch (type) {
       case "Brokerage":
-        sections.push(buildServiceSection(`svc-brokerage-${idx}`, "Brokerage Details", details, filterKeysByMode(BROKERAGE_KEYS, mode)));
+        sections.push(buildServiceSection(`svc-brokerage-${idx}`, "Brokerage Details", details, filterKeysByMode(BROKERAGE_KEYS, mode), seenValues));
         break;
       case "Forwarding":
-        sections.push(buildServiceSection(`svc-forwarding-${idx}`, "Forwarding Details", details, filterKeysByMode(FORWARDING_KEYS, mode)));
+        sections.push(buildServiceSection(`svc-forwarding-${idx}`, "Forwarding Details", details, filterKeysByMode(FORWARDING_KEYS, mode), seenValues));
         break;
       case "Trucking": {
-        const sec = buildServiceSection(`svc-trucking-${idx}`, "Trucking Details", details, TRUCKING_KEYS);
+        const sec = buildServiceSection(`svc-trucking-${idx}`, "Trucking Details", details, TRUCKING_KEYS, seenValues);
         sections.push(sec);
         // Trucking line items (if present) appear as their own table elsewhere
         break;
       }
       case "Marine Insurance":
-        sections.push(buildServiceSection(`svc-marine-${idx}`, "Marine Insurance Details", details, MARINE_KEYS));
+        sections.push(buildServiceSection(`svc-marine-${idx}`, "Marine Insurance Details", details, MARINE_KEYS, seenValues));
         break;
       case "Others":
-        sections.push(buildServiceSection(`svc-others-${idx}`, "Other Service Details", details, OTHERS_KEYS));
+        sections.push(buildServiceSection(`svc-others-${idx}`, "Other Service Details", details, OTHERS_KEYS, seenValues));
         break;
       default:
         break;
@@ -582,11 +631,6 @@ function buildShipmentSection(quote: QuotationNew, project?: Project): Printable
     { id: "movement", label: "Movement", value: src.movement },
     { id: "category", label: "Category", value: derivedCategory },
     { id: "shipment_freight", label: "Freight Type", value: derivedFreight },
-    {
-      id: "services",
-      label: "Services",
-      value: Array.isArray(src.services) && src.services.length > 0 ? src.services.join(", ") : undefined,
-    },
     { id: "incoterm", label: "Incoterm", value: src.incoterm },
     { id: "carrier", label: "Carrier", value: src.carrier },
     { id: "transit", label: "Transit & Routing", value: fmtTransitRouting(quote) },
@@ -642,8 +686,9 @@ function buildChargeTable(
       const itemCurrency = normalizeCurrency(item.currency, FUNCTIONAL_CURRENCY);
       const displayPrice = item.final_price ?? item.price ?? 0;
       const itemRate = Number(item.forex_rate) || 1;
-      const amt = effectiveItemAmount(item);
-      subtotal += amt;
+      const convertedAmt = effectiveItemAmount(item);
+      const originalAmt = Number(displayPrice) * Number(item.quantity || 1);
+      subtotal += convertedAmt;
       // Prefer the user-typed remark; only fall back to the unit code when no
       // remark exists, since unit codes ("per_container") are less informative.
       const subtext = (item.remarks && String(item.remarks).trim()) || (item.unit && String(item.unit).trim()) || "";
@@ -658,7 +703,8 @@ function buildChargeTable(
           // Only show forex when not 1
           forex: itemRate && itemRate !== 1 ? itemRate : "",
           taxed: options.showTax && item.is_taxed ? "✓" : "",
-          amount: amt,
+          amount: originalAmt,
+          _convertedAmount: itemCurrency !== FUNCTIONAL_CURRENCY && itemRate !== 1 ? convertedAmt : "",
         },
         subtext: subtext || undefined,
       });
@@ -671,6 +717,7 @@ function buildChargeTable(
       cells: {
         description: "Subtotal",
         amount: cat.subtotal && cat.subtotal !== 0 ? cat.subtotal : subtotal,
+        currency,
       },
     };
     groups.push({
@@ -747,19 +794,18 @@ function buildContractRateMatrixTables(matrices?: ContractRateMatrix[]): Printab
     const modeColumns = (Array.isArray(matrix.columns) ? matrix.columns : [])
       .filter((column) => typeof column === "string" && column.trim().length > 0);
 
+    const rateWidthPct = modeColumns.length > 2 ? "13%" : "16%";
     const columns: PrintableTableColumn[] = [
-      { id: "particular", label: "Particular", widthHint: "34%" },
+      { id: "particular", label: "Particular", widthHint: "40%" },
       ...modeColumns.map((column) => ({
         id: `rate:${column}`,
-        label: column,
+        label: `${column} (${matrixCurrency})`,
         align: "right" as const,
         format: "money" as const,
         hideWhenEmpty: true,
-        widthHint: modeColumns.length > 2 ? "11%" : "13%",
+        widthHint: rateWidthPct,
       })),
-      { id: "unit", label: "Unit", widthHint: "10%", hideWhenEmpty: true },
-      { id: "succeeding", label: "Succeeding", widthHint: "13%", hideWhenEmpty: true },
-      { id: "remarks", label: "Remarks", widthHint: "17%", hideWhenEmpty: true },
+      { id: "unit", label: "Unit", widthHint: "18%", hideWhenEmpty: true },
     ];
 
     const rows: PrintableTableRow[] = [];
@@ -776,30 +822,38 @@ function buildContractRateMatrixTables(matrices?: ContractRateMatrix[]): Printab
         const cells: Record<string, any> = {
           particular: row.group_label || row.particular,
           unit: row.group_label ? undefined : formatUnit(row.unit),
-          succeeding: row.group_label ? undefined : formatSucceedingRule(row),
-          remarks: row.group_label ? undefined : row.remarks,
         };
 
         modeColumns.forEach((column) => {
           cells[`rate:${column}`] = row.group_label ? undefined : formatContractRate(row, column);
         });
 
+        const subtextParts: string[] = [];
+        if (!row.group_label) {
+          if (row.is_at_cost) subtextParts.push("At Cost");
+          const succeedingText = formatSucceedingRule(row);
+          if (succeedingText) subtextParts.push(succeedingText);
+          if (row.remarks) subtextParts.push(row.remarks);
+        }
+
         rows.push({
           id: row.id || `${groupId}-row-${rowIdx}`,
           groupId,
           emphasis: row.group_label ? "subtotal" : "normal",
           cells,
+          subtext: subtextParts.length > 0 ? subtextParts.join("  ·  ") : undefined,
         });
       });
     });
 
     return {
       id: `contract-rate-${matrix.id || matrixIdx}`,
-      title: `${matrix.service_type} Charges${matrixCurrency ? ` (${matrixCurrency})` : ""}`,
+      title: `${matrix.service_type} Charges`,
       columns,
       rows,
       groups,
       hideWhenEmpty: true,
+      variant: "matrix",
     };
   });
 }
@@ -906,14 +960,6 @@ export function resolveQuotationPrintableDocument(
       { id: "customer", label: "Customer", value: quotation.customer_name, width: "wide" },
       { id: "attention", label: "Attention", value: addressedName },
       { id: "position", label: "Position", value: addressedTitle },
-      {
-        id: "company",
-        label: "Company",
-        value:
-          quotation.customer_company ||
-          quotation.customer_organization ||
-          (quotation.customer_company !== quotation.customer_name ? quotation.customer_name : undefined),
-      },
       { id: "department", label: "Department", value: quotation.customer_department },
     ],
   };
@@ -926,7 +972,24 @@ export function resolveQuotationPrintableDocument(
       quoteReference,
       projectNumber: project?.project_number,
     }));
-    sections.push(buildShipmentSection(quotation, project));
+    const shipmentSection = buildShipmentSection(quotation, project);
+    sections.push(shipmentSection);
+
+    // Seed seen-values from shipment fields so service sections skip duplicates.
+    // The map is also mutated by buildServiceSection as it processes each service,
+    // so later services (e.g. Forwarding) also skip values already shown by
+    // earlier services (e.g. Brokerage).
+    const seenValues = new Map<string, string>();
+    for (const f of shipmentSection.fields) {
+      const concept = SHIPMENT_ID_TO_CONCEPT[f.id];
+      if (!concept) continue;
+      const v = normalizeForComparison(
+        Array.isArray(f.value) ? f.value.join(", ") : f.value,
+      );
+      if (v) seenValues.set(concept, v);
+    }
+
+    sections.push(...buildServiceSections(quotation, seenValues));
   } else {
     const serviceNames = Array.isArray(quotation.services) && quotation.services.length > 0
       ? quotation.services
@@ -938,21 +1001,6 @@ export function resolveQuotationPrintableDocument(
       validUntil: documentValidUntil,
       quoteReference,
     }));
-
-    const scopeItems = cleanRichTextList(quotation.scope_of_services);
-    if (scopeItems) {
-      sections.push({
-        id: "scope",
-        title: "Scope of Services",
-        layout: "stack",
-        fields: [
-          { id: "scope_list", label: "", value: scopeItems, format: "multiline" },
-        ],
-      });
-    }
-  }
-  if (!isContract) {
-    sections.push(...buildServiceSections(quotation));
   }
 
   // Charge table
@@ -992,9 +1040,25 @@ export function resolveQuotationPrintableDocument(
     "",
   );
 
+  const postTableSections: PrintableSection[] = [];
+  if (isContract) {
+    const scopeItems = cleanRichTextList(quotation.scope_of_services);
+    if (scopeItems) {
+      postTableSections.push({
+        id: "scope",
+        title: "Scope of Services",
+        layout: "stack",
+        fields: [
+          { id: "scope_list", label: "", value: scopeItems, format: "multiline" },
+        ],
+      });
+    }
+  }
+
   const notes: PrintableSection[] = [];
+  const termsTarget = isContract ? postTableSections : notes;
   if (isPrintableValue(notesText)) {
-    notes.push({
+    termsTarget.push({
       id: "terms",
       title: "Terms and Conditions",
       layout: "stack",
@@ -1003,7 +1067,7 @@ export function resolveQuotationPrintableDocument(
   }
   const contractTerms = cleanRichTextList(quotation.terms_and_conditions);
   if (isContract && contractTerms) {
-    notes.push({
+    termsTarget.push({
       id: "contract_terms",
       title: "Terms and Conditions",
       layout: "stack",
@@ -1015,11 +1079,10 @@ export function resolveQuotationPrintableDocument(
     quotation.payment_terms ||
     legacy?.pdf_payment_terms ||
     legacyDetails?.pdf_payment_terms ||
-    // Form stores it as `credit_terms` ("Net 30", "Net 45"); PDF column is `payment_terms`.
     (quotation as any).credit_terms,
   );
   if (isPrintableValue(paymentTerms)) {
-    notes.push({
+    termsTarget.push({
       id: "payment_terms",
       title: "Payment Terms",
       layout: "stack",
@@ -1122,6 +1185,7 @@ export function resolveQuotationPrintableDocument(
     partySections: [preparedFor],
     sections,
     tables: isContract ? contractRateTables : [chargeTable],
+    postTableSections,
     totals,
     notes,
     bank,

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../utils/supabase/client";
 import type { EVoucher } from "../types/evoucher";
 import { queryKeys } from "../lib/queryKeys";
+import { useRealtimeSync } from "./useRealtimeSync";
 
 type EVoucherView = "pending" | "my-evouchers" | "all"
   | "acct-pending-disburse" | "acct-waiting-on-rep" | "acct-pending-verification" | "acct-archive"
@@ -78,6 +79,8 @@ export function useEVouchers(view: EVoucherView, userId?: string, department?: s
     queryFn,
     staleTime: 30_000,
   });
+
+  useRealtimeSync({ table: "evouchers", queryKey: queryKeys.evouchers.all() });
 
   const refresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: queryKeys.evouchers.all() });

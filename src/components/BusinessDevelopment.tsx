@@ -1,9 +1,10 @@
 import { supabase } from '../utils/supabase/client';
-import { logActivity, logCreation } from '../utils/activityLog';
+import { logActivity, logCreation, logDeletion } from '../utils/activityLog';
 import { createWorkflowTicket, getOpenWorkflowTicket } from '../utils/workflowTickets';
 import { recordNotificationEvent, fetchDeptManagerIds } from '../utils/notifications';
 import { trackRecent } from '../lib/recents';
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useUrlSelection } from "../hooks/useUrlSelection";
 import { ContactsListWithFilters } from "./crm/ContactsListWithFilters";
 import { CustomersListWithFilters } from "./crm/CustomersListWithFilters";
 import { CustomerDetail } from "./bd/CustomerDetail";
@@ -29,6 +30,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../lib/queryKeys";
 import { fetchProjectsWithQuotation, fetchProjectWithQuotation } from "../utils/projectHydration";
 import { buildCreateInquiryDraft, shouldPreserveInquiryBuilder } from "../utils/createInquiryFlow";
+import { useRealtimeSyncMulti } from "../hooks/useRealtimeSync";
 
 type BDView = "contacts" | "customers" | "inquiries" | "projects" | "tasks" | "activities" | "budget-requests" | "reports";
 type SubView = "list" | "detail" | "builder";
@@ -55,6 +57,7 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [selectedQuotation, setSelectedQuotation] = useState<QuotationNew | null>(null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [urlDetailId, setUrlDetailId] = useUrlSelection("detail");
   const [customerDetailKey, setCustomerDetailKey] = useState(0);
   const [pendingQuotationType, setPendingQuotationType] = useState<QuotationType>("project");
   const preserveNextInquiryBuilderResetRef = useRef(false);
@@ -110,6 +113,14 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
   const fetchQuotations = () => queryClient.invalidateQueries({ queryKey: queryKeys.quotations.list() });
   const fetchProjects = () => queryClient.invalidateQueries({ queryKey: queryKeys.projects.list() });
 
+  useRealtimeSyncMulti({
+    tables: [
+      { table: "quotations", queryKey: queryKeys.quotations.all() },
+      { table: "projects", queryKey: queryKeys.projects.all() },
+      { table: "customers", queryKey: queryKeys.customers.all() },
+    ],
+  });
+
   // Reset to list view when switching between main views
   useEffect(() => {
     if (preserveNextInquiryBuilderResetRef.current && shouldPreserveInquiryBuilder(view, subView)) {
@@ -124,7 +135,53 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
     setSelectedActivity(null);
     setSelectedQuotation(null);
     setSelectedProject(null);
+    setUrlDetailId(null);
   }, [view]);
+
+  // Restore detail view from URL on mount/refresh
+  useEffect(() => {
+    if (!urlDetailId) return;
+    const restoreDetail = async () => {
+      try {
+        if (view === "customers") {
+          const { data } = await supabase.from("customers").select("*").eq("id", urlDetailId).maybeSingle();
+          if (data) { setSelectedCustomer(data as Customer); setSubView("detail"); }
+        } else if (view === "tasks") {
+          const { data } = await supabase.from("tasks").select("*").eq("id", urlDetailId).maybeSingle();
+          if (data) { setSelectedTask(data as Task); setSubView("detail"); }
+        } else if (view === "activities") {
+          const { data } = await supabase.from("activities").select("*").eq("id", urlDetailId).maybeSingle();
+          if (data) { setSelectedActivity(data as Activity); setSubView("detail"); }
+        } else if (view === "inquiries") {
+          const { data } = await supabase.from("quotations").select("*").eq("id", urlDetailId).maybeSingle();
+          if (data) {
+            const merged = { ...(data.details ?? {}), ...(data.pricing ?? {}), ...data } as QuotationNew;
+            merged.quote_number = (data as any).quotation_number;
+            merged.contact_person_name = (data as any).contact_person_name || (data as any).contact_name || undefined;
+            if (!merged.created_date) merged.created_date = (data as any).quotation_date || data.created_at;
+            setSelectedQuotation(merged); setSubView("detail");
+          } else { setUrlDetailId(null); }
+        } else if (view === "contacts") {
+          const { data } = await supabase.from("contacts").select("*").eq("id", urlDetailId).maybeSingle();
+          if (data) {
+            const c: Contact = {
+              id: data.id, name: data.name || `${data.first_name || ""} ${data.last_name || ""}`.trim(),
+              first_name: data.first_name || "", last_name: data.last_name || "",
+              email: data.email, phone: data.phone || "", mobile_number: data.phone || "",
+              company_id: data.customer_id || data.id, lifecycle_stage: "Lead", lead_status: "Connected",
+              job_title: data.title || "", title: data.title || null, customer_id: data.customer_id || null,
+              owner_id: "", notes: data.notes || null, created_by: null,
+              created_at: data.created_date || data.created_at, updated_at: data.updated_at,
+            };
+            setSelectedContact(c); setSubView("detail");
+          } else { setUrlDetailId(null); }
+        }
+      } catch (e) {
+        console.warn("[BD] Failed to restore detail from URL", e);
+      }
+    };
+    restoreDetail();
+  }, [urlDetailId, view]);
 
   // Handle inquiryId prop - when set, show the detail view for that inquiry
   useEffect(() => {
@@ -294,6 +351,7 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
   const handleViewContact = (contact: Contact) => {
     setSelectedContact(contact);
     setSubView("detail");
+    setUrlDetailId(contact.id);
     if (user?.id) trackRecent({
       label: contact.name || [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Contact",
       sub: `BD · Contact`,
@@ -306,15 +364,17 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
   const handleBackFromContact = () => {
     setSelectedContact(null);
     setSubView("list");
+    setUrlDetailId(null);
   };
 
   const handleViewCustomer = (customer: Customer) => {
     setSelectedCustomer(customer);
     setSubView("detail");
+    setUrlDetailId(customer.id);
     if (user?.id) trackRecent({
       label: customer.name || customer.company_name || "Customer",
       sub: `BD · Customer`,
-      path: `/bd/customers`,
+      path: `/bd/customers?detail=${customer.id}`,
       type: "customer",
       time: new Date().toISOString(),
     }, user.id);
@@ -323,31 +383,37 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
   const handleBackFromCustomer = () => {
     setSelectedCustomer(null);
     setSubView("list");
+    setUrlDetailId(null);
   };
 
   const handleViewTask = (task: Task) => {
     setSelectedTask(task);
     setSubView("detail");
+    setUrlDetailId(task.id);
   };
 
   const handleBackFromTask = () => {
     setSelectedTask(null);
     setSubView("list");
+    setUrlDetailId(null);
   };
 
   const handleViewActivity = (activity: Activity) => {
     setSelectedActivity(activity);
     setSubView("detail");
+    setUrlDetailId(activity.id);
   };
 
   const handleBackFromActivity = () => {
     setSelectedActivity(null);
     setSubView("list");
+    setUrlDetailId(null);
   };
 
   const handleViewInquiry = (quotation: QuotationNew) => {
     setSelectedQuotation(quotation);
     setSubView("detail");
+    setUrlDetailId(quotation.id);
     if (user?.id) trackRecent({
       label: quotation.quote_number || "Inquiry",
       sub: `BD · ${quotation.customer_name || ""}`,
@@ -365,6 +431,7 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
   const handleBackFromInquiry = () => {
     setSelectedQuotation(null);
     setSubView("list");
+    setUrlDetailId(null);
   };
 
   const handleEditInquiry = () => {
@@ -612,7 +679,8 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
         .eq('id', selectedQuotation.id);
       
       if (!error) {
-        console.log("Quotation deleted successfully");
+        const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+        logDeletion("quotation", selectedQuotation.id, selectedQuotation.quotation_name || selectedQuotation.quote_number || selectedQuotation.id, actor);
         toast.success("Quotation deleted successfully");
         await fetchQuotations();
         setSubView("list");

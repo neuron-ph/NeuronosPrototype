@@ -49,6 +49,8 @@ export type BookingFormContext = {
   // dropdowns can constrain their options. Empty/unset means no constraint.
   pol_options?: string[];
   pod_options?: string[];
+  delivery_container_types?: string[];
+  delivery_destinations?: string[];
 };
 
 // A single visibility predicate. Multiple conditions in showWhen are AND'd together.

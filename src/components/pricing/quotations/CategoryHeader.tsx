@@ -6,7 +6,7 @@
  */
 
 import { useState, useRef, useEffect } from "react";
-import { ChevronRight, Plus, MoreVertical, Edit2, Copy, Trash2, Check, X, Package } from "lucide-react";
+import { ChevronRight, Plus, MoreVertical, Edit2, Copy, Trash2, Check, X, Package, BookmarkPlus, FolderDown } from "lucide-react";
 import type { BuyingPriceCategory, SellingPriceCategory } from "../../../types/pricing";
 
 interface CategoryHeaderProps {
@@ -17,6 +17,8 @@ interface CategoryHeaderProps {
   onRename: (newName: string) => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  onSaveAsTemplate?: () => void;
+  onLoadTemplate?: () => void;
   viewMode?: boolean;
 }
 
@@ -28,6 +30,8 @@ export function CategoryHeader({
   onRename,
   onDuplicate,
   onDelete,
+  onSaveAsTemplate,
+  onLoadTemplate,
   viewMode = false
 }: CategoryHeaderProps) {
   const [isEditing, setIsEditing] = useState(false);
@@ -372,6 +376,58 @@ export function CategoryHeader({
                       <Copy size={14} />
                       Duplicate
                     </button>
+
+                    {onLoadTemplate && (
+                      <button
+                        onClick={() => { setShowActionsMenu(false); onLoadTemplate(); }}
+                        style={{
+                          width: "100%",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          padding: "10px 12px",
+                          fontSize: "13px",
+                          color: "var(--theme-text-primary)",
+                          backgroundColor: "transparent",
+                          border: "none",
+                          borderBottom: "1px solid var(--theme-border-subtle)",
+                          cursor: "pointer",
+                          textAlign: "left",
+                          transition: "background-color 0.15s ease"
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
+                      >
+                        <FolderDown size={14} />
+                        Load Template
+                      </button>
+                    )}
+
+                    {onSaveAsTemplate && category.line_items.length > 0 && (
+                      <button
+                        onClick={() => { setShowActionsMenu(false); onSaveAsTemplate(); }}
+                        style={{
+                          width: "100%",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          padding: "10px 12px",
+                          fontSize: "13px",
+                          color: "var(--theme-text-primary)",
+                          backgroundColor: "transparent",
+                          border: "none",
+                          borderBottom: "1px solid var(--theme-border-subtle)",
+                          cursor: "pointer",
+                          textAlign: "left",
+                          transition: "background-color 0.15s ease"
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
+                      >
+                        <BookmarkPlus size={14} />
+                        Save as Template
+                      </button>
+                    )}
 
                     <button
                       onClick={handleDeleteClick}

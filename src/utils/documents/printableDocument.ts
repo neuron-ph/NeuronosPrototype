@@ -90,6 +90,8 @@ export interface PrintableTable {
   hideWhenEmpty?: boolean;
   // Optional empty-state message; only printed when hideWhenEmpty === false.
   emptyMessage?: string;
+  /** "matrix" renders as a bordered rate-card grid with dark header band. */
+  variant?: "default" | "matrix";
 }
 
 export interface PrintableTotalRow {
@@ -167,6 +169,7 @@ export interface PrintableDocument {
   partySections: PrintableSection[];
   sections: PrintableSection[];
   tables: PrintableTable[];
+  postTableSections: PrintableSection[];
   totals?: PrintableTotals;
   notes: PrintableSection[];
   bank?: PrintableBankBlock;
@@ -174,8 +177,9 @@ export interface PrintableDocument {
   contactFooter?: PrintableContactFooter;
   footerFields: PrintableField[];
   options: PrintableDocumentOptions;
-  // Free-form page-footer reference text (e.g., "Q-2025-001 · 2025-03-15").
   pageFooterText?: string;
+  brandedHeaderImage?: string;
+  brandedFooterImage?: string;
 }
 
 export const DEFAULT_PRINTABLE_OPTIONS: PrintableDocumentOptions = {

@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
-import { Plus, Search, Briefcase, UserCheck, FileEdit, Clock, CheckCircle, Trash2, FileCheck } from "lucide-react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { Plus, Search, Briefcase, UserCheck, FileEdit, Clock, CheckCircle, Trash2, FileCheck, XCircle } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { assessBookingFinancialState, canHardDeleteBooking, getBookingCancellationMessage } from "../../utils/bookingCancellation";
 import { CreateBrokerageBookingPanel } from "./CreateBrokerageBookingPanel";
@@ -13,12 +13,13 @@ import { useBookingAssignmentVisibility } from "../../hooks/useBookingAssignment
 import { filterBookingsByScope } from "../../utils/assignments/applyAssignmentVisibility";
 import { SkeletonTable } from "../shared/NeuronSkeleton";
 import { usePermission } from "../../context/PermissionProvider";
-import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
 import { logDeletion } from "../../utils/activityLog";
 import { normalizeDetails } from "../../utils/bookings/bookingDetailsCompat";
 import type { ExecutionStatus } from "../../types/operations";
 import { NeuronModal } from "../ui/NeuronModal";
 import { useUnreadEntityIds } from "../../hooks/useNotifications";
+import { useUrlSelection } from "../../hooks/useUrlSelection";
+import { useRealtimeSync } from "../../hooks/useRealtimeSync";
 
 interface BrokerageBooking {
   bookingId: string;
@@ -52,22 +53,26 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
   const canViewDraftTab      = can("ops_brokerage_draft_tab", "view");
   const canViewInProgressTab = can("ops_brokerage_in_progress_tab", "view");
   const canViewCompletedTab  = can("ops_brokerage_completed_tab", "view");
+  const canViewCancelledTab  = can("ops_brokerage_cancelled_tab", "view");
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [movementFilter, setMovementFilter] = useState<string>("all");
-  const [activeTab, setActiveTab] = useState<"all" | "my" | "draft" | "in-progress" | "completed">(() => {
+  const [activeTab, setActiveTab] = useState<"all" | "my" | "draft" | "in-progress" | "completed" | "cancelled">(() => {
     if (canViewAllTab)        return "all";
     if (canViewMyTab)         return "my";
     if (canViewDraftTab)      return "draft";
     if (canViewInProgressTab) return "in-progress";
-    return "completed";
+    if (canViewCompletedTab)  return "completed";
+    return "cancelled";
   });
   const [timePeriodFilter, setTimePeriodFilter] = useState<string>("all");
   const [ownerFilter, setOwnerFilter] = useState<string>("all");
   const [handlerFilter, setHandlerFilter] = useState<string>("all");
   const [entryTypeFilter, setEntryTypeFilter] = useState<string>("all");
+  const [urlBookingId, setUrlBookingId] = useUrlSelection("booking");
+  const suppressUrlSelectionRef = useRef(false);
   const [selectedBooking, setSelectedBooking] = useState<BrokerageBooking | null>(null);
   const [resumeDraft, setResumeDraft] = useState<Record<string, unknown> | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; label: string } | null>(null);
@@ -112,6 +117,8 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
   });
   const fetchBookings = () => { refetch(); };
 
+  useRealtimeSync({ table: "bookings", queryKey: queryKeys.bookings.list("brokerage") });
+
   const bookings = useMemo(() => {
     if (!scopeLoaded || !assignmentIndexLoaded) return [];
     return filterBookingsByScope(rawBookings, scope, assignmentIndex);
@@ -127,14 +134,49 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
     }
   }, [bookings]);
 
-  // Deep-link: auto-select booking from pendingBookingId
+  // Deep-link: auto-select booking from URL param or pendingBookingId
+  const effectiveBookingId = urlBookingId ?? pendingBookingId;
   useEffect(() => {
-    if (!pendingBookingId || bookings.length === 0 || isLoading) return;
-    const match = bookings.find(b => b.bookingId === pendingBookingId);
+    if (suppressUrlSelectionRef.current) {
+      if (!effectiveBookingId) suppressUrlSelectionRef.current = false;
+      return;
+    }
+    if (!effectiveBookingId || selectedBooking || isLoading) return;
+    const match = bookings.find(b => b.bookingId === effectiveBookingId);
     if (match) {
       setSelectedBooking(match);
+      setUrlBookingId(match.bookingId);
+    } else if (bookings.length > 0) {
+      // Booking not in current list — fetch directly from DB
+      supabase
+        .from("bookings")
+        .select("*")
+        .eq("id", effectiveBookingId)
+        .single()
+        .then(({ data }) => {
+          if (!data) return;
+          const d = normalizeDetails(data.details || {}, "Brokerage");
+          setSelectedBooking({
+            ...d,
+            ...data,
+            bookingId: data.id,
+            booking_number: data.booking_number,
+            customerName: data.customer_name,
+            projectNumber: data.project_id,
+            accountOwner: data.manager_name,
+            accountHandler: data.handler_name,
+            status: data.status,
+            createdAt: data.created_at,
+            updatedAt: data.updated_at || data.created_at,
+            movement: d.movement_type,
+            mblMawb: d.mbl_mawb || d.mblMawb,
+            entryNumber: d.entry_number,
+            entryType: d.entry_type,
+          } as BrokerageBooking);
+          setUrlBookingId(data.id);
+        });
     }
-  }, [pendingBookingId, bookings, isLoading]);
+  }, [effectiveBookingId, bookings, isLoading, selectedBooking]);
 
   const handleBookingCreated = () => {
     setShowCreateModal(false);
@@ -192,6 +234,8 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
       filtered = bookings.filter(b => b.status === "In Progress");
     } else if (activeTab === "completed") {
       filtered = bookings.filter(b => b.status === "Completed");
+    } else if (activeTab === "cancelled") {
+      filtered = bookings.filter(b => b.status === "Cancelled");
     }
 
     return filtered;
@@ -254,12 +298,15 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
   const draftCount = bookings.filter(b => b.status === "Draft").length;
   const inProgressCount = bookings.filter(b => b.status === "In Progress").length;
   const completedCount = bookings.filter(b => b.status === "Completed").length;
+  const cancelledCount = bookings.filter(b => b.status === "Cancelled").length;
 
   if (selectedBooking) {
     return (
       <BrokerageBookingDetails
         booking={selectedBooking as any}
         onBack={() => {
+          suppressUrlSelectionRef.current = true;
+          setUrlBookingId(null);
           setSelectedBooking(null);
         }}
         onUpdate={fetchBookings}
@@ -300,10 +347,6 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
             
             {/* Action Button */}
             <div className="flex items-center gap-3">
-              <NeuronRefreshButton 
-                onRefresh={fetchBookings}
-                label="Refresh bookings"
-              />
               <button
                 onClick={() => setShowCreateModal(true)}
                 style={{
@@ -551,6 +594,16 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
                 onClick={() => setActiveTab("completed")}
               />
             )}
+            {canViewCancelledTab && (
+              <TabButton
+                icon={<XCircle size={18} />}
+                label="Cancelled"
+                count={cancelledCount}
+                isActive={activeTab === "cancelled"}
+                color="var(--theme-status-danger-fg)"
+                onClick={() => setActiveTab("cancelled")}
+              />
+            )}
           </div>
         </div>
 
@@ -625,7 +678,9 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
                         if (booking.status === "Draft") {
                           setResumeDraft({ ...(booking as any), id: booking.bookingId });
                         } else {
+                          suppressUrlSelectionRef.current = false;
                           setSelectedBooking(booking);
+                          setUrlBookingId(booking.bookingId);
                         }
                       }}
                     >

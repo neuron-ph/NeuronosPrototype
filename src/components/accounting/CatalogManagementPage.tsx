@@ -25,6 +25,7 @@ import { queryKeys } from "../../lib/queryKeys";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
 import { ChargeExpenseMatrix } from "./ChargeExpenseMatrix";
+import { CategoryTemplatesTab } from "../pricing/templates/CategoryTemplatesTab";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import {
   CatalogItem,
@@ -35,11 +36,11 @@ import {
 
 // ==================== TYPES ====================
 
-type PrimaryTab = "items" | "matrix";
+type PrimaryTab = "items" | "matrix" | "templates";
 type SideFilter = "all" | "billing" | "expense";
 
 interface CatalogCategoryWithSide extends CatalogCategory {
-  side?: "revenue" | "expense" | "both";
+  side?: "revenue" | "expense";
 }
 
 interface CatalogItemWithCategoryName extends CatalogItem {
@@ -85,6 +86,10 @@ export function CatalogManagementPage() {
                 Rate Matrix
               </TabButton>
             )}
+            <div style={{ width: 1, height: 20, backgroundColor: "var(--theme-border-default)", margin: "0 8px" }} />
+            <TabButton active={activeTab === "templates"} onClick={() => setActiveTab("templates")} icon={<FolderOpen size={14} />}>
+              Templates
+            </TabButton>
           </div>
 
           {/* ── Tab Content ── */}
@@ -94,6 +99,7 @@ export function CatalogManagementPage() {
               <ChargeExpenseMatrix />
             </div>
           )}
+          {activeTab === "templates" && <CategoryTemplatesTab />}
         </div>
       </div>
     </div>
@@ -153,6 +159,7 @@ function ItemsTab() {
   const [addForm, setAddForm] = useState<{ name: string; category_id: string | null }>({ name: "", category_id: null });
   const [showAddCategoryForm, setShowAddCategoryForm] = useState(false);
   const [addCategoryName, setAddCategoryName] = useState("");
+  const [addCategorySide, setAddCategorySide] = useState<"revenue" | "expense">(sideFilter === "expense" ? "expense" : "revenue");
 
   // ── Scroll fade state ──
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -251,7 +258,7 @@ function ItemsTab() {
     if (sideFilter === "all") return categoriesWithCount;
     const targetSide = sideFilter === "billing" ? "revenue" : "expense";
     return categoriesWithCount.filter((c: CatalogCategoryWithSide) =>
-      c.side === targetSide || c.side === "both" || !c.side
+      c.side === targetSide
     );
   }, [categoriesWithCount, sideFilter]);
 
@@ -259,8 +266,10 @@ function ItemsTab() {
   const filtered = useMemo(() => {
     const visibleCatIds = new Set(visibleCategories.map((c: any) => c.id));
     return items.filter(item => {
-      // Side filter: only show items in visible categories
-      if (sideFilter !== "all" && item.category_id && !visibleCatIds.has(item.category_id)) return false;
+      // Side filter: only show items whose category matches the selected side
+      if (sideFilter !== "all") {
+        if (!item.category_id || !visibleCatIds.has(item.category_id)) return false;
+      }
       // Category filter
       if (filterCategory !== "all" && item.category_id !== filterCategory) return false;
       // Search
@@ -337,12 +346,14 @@ function ItemsTab() {
     const { error } = await supabase.from("catalog_categories").insert({
       id: `cat-${Date.now()}`,
       name: addCategoryName.trim(),
+      side: addCategorySide,
       sort_order: maxOrder + 1,
       is_default: false,
     });
     if (!error) {
       toast.success(`Category "${addCategoryName}" created`);
       setAddCategoryName("");
+      setAddCategorySide(sideFilter === "expense" ? "expense" : "revenue");
       setShowAddCategoryForm(false);
       invalidateCatalog();
     } else toast.error(error.message || "Error creating category");
@@ -422,8 +433,8 @@ function ItemsTab() {
   // ── Sub-tab counts ──
   const tabCounts = useMemo(() => {
     const allCatIds = new Set(categoriesWithCount.map((c: any) => c.id));
-    const revCatIds = new Set(categoriesWithCount.filter((c: CatalogCategoryWithSide) => c.side === "revenue" || c.side === "both" || !c.side).map((c: any) => c.id));
-    const expCatIds = new Set(categoriesWithCount.filter((c: CatalogCategoryWithSide) => c.side === "expense" || c.side === "both").map((c: any) => c.id));
+    const revCatIds = new Set(categoriesWithCount.filter((c: CatalogCategoryWithSide) => c.side === "revenue").map((c: any) => c.id));
+    const expCatIds = new Set(categoriesWithCount.filter((c: CatalogCategoryWithSide) => c.side === "expense").map((c: any) => c.id));
     return {
       all: items.length,
       billing: items.filter(i => i.category_id && revCatIds.has(i.category_id)).length,
@@ -500,6 +511,7 @@ function ItemsTab() {
           onFilterChange={setFilterCategory}
           categories={categoriesWithCount as CatalogCategory[]}
           onMutate={invalidateCatalog}
+          currentSideFilter={sideFilter}
         />
 
         {/* Expand/Collapse all */}
@@ -547,6 +559,24 @@ function ItemsTab() {
                 placeholder="e.g. Destination Charges"
                 style={inputStyle}
               />
+            </div>
+            <div style={{ flex: "0 0 auto" }}>
+              <label style={labelStyle}>Side</label>
+              <div style={{ display: "flex", borderRadius: "var(--neuron-radius-s)", overflow: "hidden", border: "1px solid var(--theme-border-default)" }}>
+                {(["revenue", "expense"] as const).map(s => (
+                  <button
+                    key={s}
+                    onClick={() => setAddCategorySide(s)}
+                    style={{
+                      padding: "6px 14px", fontSize: "12px", fontWeight: 500, border: "none", cursor: "pointer",
+                      backgroundColor: addCategorySide === s ? (s === "revenue" ? "var(--theme-action-primary-bg)" : "var(--theme-status-warning-fg)") : "var(--theme-bg-surface)",
+                      color: addCategorySide === s ? "#fff" : "var(--theme-text-muted)",
+                    }}
+                  >
+                    {s === "revenue" ? "Revenue" : "Expense"}
+                  </button>
+                ))}
+              </div>
             </div>
             <div style={{ display: "flex", gap: "6px" }}>
               <button onClick={() => { setShowAddCategoryForm(false); setAddCategoryName(""); }} style={cancelBtnStyle}>Cancel</button>
@@ -1156,12 +1186,13 @@ function CategoryGroupMenu({
 // ==================== CATEGORY FILTER POPOVER ====================
 
 function CategoryFilterPopover({
-  filterValue, onFilterChange, categories, onMutate,
+  filterValue, onFilterChange, categories, onMutate, currentSideFilter,
 }: {
   filterValue: string;
   onFilterChange: (v: string) => void;
   categories: CatalogCategory[];
   onMutate: () => void;
+  currentSideFilter: SideFilter;
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
@@ -1172,6 +1203,7 @@ function CategoryFilterPopover({
   const [renameValue, setRenameValue] = useState("");
   const [addingNew, setAddingNew] = useState(false);
   const [newName, setNewName] = useState("");
+  const [newSide, setNewSide] = useState<"revenue" | "expense">(currentSideFilter === "expense" ? "expense" : "revenue");
 
   const selectedLabel = filterValue === "all"
     ? "All Categories"
@@ -1230,12 +1262,14 @@ function CategoryFilterPopover({
     const { error } = await supabase.from("catalog_categories").insert({
       id: `cat-${Date.now()}`,
       name: newName.trim(),
+      side: newSide,
       sort_order: maxOrder + 1,
       is_default: false,
     });
     if (!error) {
       toast.success(`Category "${newName}" created`);
       setNewName("");
+      setNewSide(currentSideFilter === "expense" ? "expense" : "revenue");
       setAddingNew(false);
       onMutate();
     } else toast.error(error.message || "Error creating category");
@@ -1346,17 +1380,34 @@ function CategoryFilterPopover({
 
           <div style={{ borderTop: "1px solid var(--theme-border-subtle)", padding: "8px 12px" }}>
             {addingNew ? (
-              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                 <input
                   autoFocus
                   value={newName}
                   onChange={e => setNewName(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter") handleAddNew(); if (e.key === "Escape") { setAddingNew(false); setNewName(""); } }}
                   placeholder="Category name..."
-                  style={{ flex: 1, fontSize: "12px", padding: "4px 8px", border: "1px solid var(--theme-action-primary-bg)", borderRadius: "5px", outline: "none", backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-primary)" }}
+                  style={{ width: "100%", fontSize: "12px", padding: "4px 8px", border: "1px solid var(--theme-action-primary-bg)", borderRadius: "5px", outline: "none", backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-primary)" }}
                 />
-                <button onClick={handleAddNew} style={{ ...iconBtnStyle, color: "var(--theme-action-primary-bg)" }} title="Create"><Check size={13} /></button>
-                <button onClick={() => { setAddingNew(false); setNewName(""); }} style={{ ...iconBtnStyle, color: "var(--theme-text-muted)" }} title="Cancel"><X size={13} /></button>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <div style={{ display: "flex", borderRadius: "4px", overflow: "hidden", border: "1px solid var(--theme-border-default)", flex: 1 }}>
+                    {(["revenue", "expense"] as const).map(s => (
+                      <button
+                        key={s}
+                        onClick={() => setNewSide(s)}
+                        style={{
+                          flex: 1, padding: "3px 0", fontSize: "11px", fontWeight: 500, border: "none", cursor: "pointer",
+                          backgroundColor: newSide === s ? (s === "revenue" ? "var(--theme-action-primary-bg)" : "var(--theme-status-warning-fg)") : "var(--theme-bg-surface)",
+                          color: newSide === s ? "#fff" : "var(--theme-text-muted)",
+                        }}
+                      >
+                        {s === "revenue" ? "Revenue" : "Expense"}
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={handleAddNew} style={{ ...iconBtnStyle, color: "var(--theme-action-primary-bg)" }} title="Create"><Check size={13} /></button>
+                  <button onClick={() => { setAddingNew(false); setNewName(""); }} style={{ ...iconBtnStyle, color: "var(--theme-text-muted)" }} title="Cancel"><X size={13} /></button>
+                </div>
               </div>
             ) : (
               <button

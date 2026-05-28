@@ -978,10 +978,15 @@ const FORWARDING_FCL_DETAILS: SectionDef = {
   fields: [
     {
       key: 'container_numbers',
-      label: 'Container Number/s',
-      control: 'multi-value',
+      label: 'Containers',
+      control: 'repeater',
       required: 'yes',
       storage: 'details',
+      repeaterColumns: [
+        { key: 'container_number', label: 'Container Number', control: 'free-text' },
+        { key: 'container_type', label: 'Type', control: 'dropdown', optionsKind: 'container_type' },
+        { key: 'delivery_address', label: 'Delivery Address', control: 'free-text' },
+      ],
     },
     {
       // Spec: Container Deposit Y for FCL (no movement gate).

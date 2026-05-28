@@ -30,22 +30,31 @@ const s = StyleSheet.create({
     paddingHorizontal: 36,
     backgroundColor: "#FFFFFF",
   },
+  pageBranded: {
+    fontFamily: "Helvetica",
+    fontSize: 8.5,
+    color: "#111827",
+    paddingTop: 96,
+    paddingBottom: 110,
+    paddingHorizontal: 36,
+    backgroundColor: "#FFFFFF",
+  },
 
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
     marginBottom: 10,
     paddingBottom: 10,
     borderBottomWidth: 2.5,
-    borderBottomColor: "#12332B",
+    borderBottomColor: "#172A4D",
     borderBottomStyle: "solid",
   },
   brandCol: { flexDirection: "column", gap: 4, width: "47%" },
-  logo: { height: 32, objectFit: "contain", objectPosition: "left" },
+  logo: { height: 48, objectFit: "contain", objectPosition: "left" },
   addressText: { fontSize: 7.5, color: "#6B7280", lineHeight: 1.3 },
   titleCol: { flexDirection: "column", alignItems: "flex-end", width: "53%" },
-  docTitle: { fontSize: 21, fontFamily: "Helvetica-Bold", color: "#12332B", letterSpacing: 1.2, marginBottom: 4, textAlign: "right" },
+  docTitle: { fontSize: 21, fontFamily: "Helvetica-Bold", color: "#172A4D", letterSpacing: 1.2, marginBottom: 4, textAlign: "right" },
   subtitle: { fontSize: 8, color: "#475467", marginBottom: 6, textAlign: "right" },
   refGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "flex-end", maxWidth: 280 },
   refItem: { flexDirection: "column", alignItems: "flex-end", width: 54, marginBottom: 3 },
@@ -55,60 +64,56 @@ const s = StyleSheet.create({
   partyHeader: {
     fontSize: 8,
     fontFamily: "Helvetica-Bold",
-    color: "#0F766E",
+    color: "#172A4D",
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   partyGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    marginBottom: 8,
-    paddingBottom: 8,
+    marginBottom: 6,
+    paddingBottom: 6,
     borderBottomWidth: 1,
     borderBottomColor: "#E5E7EB",
     borderBottomStyle: "dashed",
   },
-  partyCell: { width: "48%", marginBottom: 4 },
-  partyCellWide: { width: "100%", marginBottom: 4 },
-  partyRow: { flexDirection: "row", marginBottom: 2, alignItems: "baseline" },
-  partyLabel: { width: 80, fontSize: 7, color: "#6B7280", fontFamily: "Helvetica-Bold", textTransform: "uppercase" },
+  partyCell: { width: "48%", marginBottom: 3 },
+  partyCellWide: { width: "100%", marginBottom: 3 },
+  partyRow: { flexDirection: "row", marginBottom: 1, alignItems: "baseline" },
+  partyLabel: { width: 72, fontSize: 7, color: "#6B7280", fontFamily: "Helvetica-Bold", textTransform: "uppercase" },
   partyVal: { fontSize: 8.5, fontFamily: "Helvetica-Bold", color: "#111827", flex: 1 },
 
   sectionHeader: {
-    fontSize: 8.5,
+    fontSize: 8,
     fontFamily: "Helvetica-Bold",
-    color: "#12332B",
+    color: "#172A4D",
     textTransform: "uppercase",
-    letterSpacing: 0.5,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E9F0",
-    borderBottomStyle: "solid",
-    paddingBottom: 3,
-    marginBottom: 6,
-    marginTop: 9,
+    letterSpacing: 0.4,
+    marginBottom: 4,
+    marginTop: 6,
   },
-  gridWrap: { flexDirection: "row", flexWrap: "wrap", marginBottom: 8 },
-  cell: { width: "25%", marginBottom: 4, paddingRight: 6 },
-  cellWide: { width: "50%", marginBottom: 4, paddingRight: 6 },
-  cellFull: { width: "100%", marginBottom: 4 },
-  cellLabel: { fontSize: 6.5, color: "#6B7280", textTransform: "uppercase", fontFamily: "Helvetica-Bold", letterSpacing: 0.5 },
-  cellValue: { fontSize: 8.5, fontFamily: "Helvetica-Bold", color: "#111827", marginTop: 1, lineHeight: 1.3 },
+  gridWrap: { flexDirection: "row", flexWrap: "wrap", marginBottom: 5 },
+  cell: { width: "50%", marginBottom: 2, paddingRight: 8, flexDirection: "row", alignItems: "baseline" },
+  cellWide: { width: "50%", marginBottom: 2, paddingRight: 8, flexDirection: "row", alignItems: "baseline" },
+  cellFull: { width: "100%", marginBottom: 2, flexDirection: "row", alignItems: "baseline" },
+  cellLabel: { fontSize: 7, color: "#6B7280", textTransform: "uppercase", fontFamily: "Helvetica-Bold" },
+  cellValue: { fontSize: 8, fontFamily: "Helvetica-Bold", color: "#111827", marginLeft: 4, flex: 1 },
 
-  table: { marginBottom: 9 },
+  table: { marginBottom: 6 },
   tableTitle: {
     fontSize: 9,
     fontFamily: "Helvetica-Bold",
-    color: "#12332B",
+    color: "#172A4D",
     textTransform: "uppercase",
     letterSpacing: 0.5,
     borderBottomWidth: 1,
     borderBottomColor: "#E5E9F0",
     borderBottomStyle: "solid",
-    paddingBottom: 3,
-    marginBottom: 6,
-    marginTop: 9,
+    paddingBottom: 2,
+    marginBottom: 5,
+    marginTop: 6,
   },
   tableHeader: {
     flexDirection: "row",
@@ -125,10 +130,10 @@ const s = StyleSheet.create({
   catHeader: {
     fontSize: 8,
     fontFamily: "Helvetica-Bold",
-    color: "#12332B",
+    color: "#172A4D",
     textTransform: "uppercase",
-    paddingTop: 6,
-    paddingBottom: 3,
+    paddingTop: 4,
+    paddingBottom: 2,
     paddingHorizontal: 4,
   },
   tableRow: { flexDirection: "row", paddingVertical: 2, paddingHorizontal: 4 },
@@ -169,19 +174,19 @@ const s = StyleSheet.create({
     marginTop: 4,
     paddingTop: 5,
   },
-  grandTotalLabel: { fontSize: 10, fontFamily: "Helvetica-Bold", color: "#12332B" },
-  grandTotalValue: { fontSize: 10, fontFamily: "Helvetica-Bold", color: "#12332B" },
+  grandTotalLabel: { fontSize: 10, fontFamily: "Helvetica-Bold", color: "#172A4D" },
+  grandTotalValue: { fontSize: 10, fontFamily: "Helvetica-Bold", color: "#172A4D" },
 
-  bankBox: { marginTop: 12, paddingTop: 4 },
+  bankBox: { marginTop: 8, paddingTop: 3 },
   bankGrid: { flexDirection: "row", gap: 16, flexWrap: "wrap" },
   bankItem: { flexDirection: "column", gap: 1 },
   bankLabel: { fontSize: 7, color: "#6B7280" },
   bankValue: { fontSize: 8, color: "#111827", fontFamily: "Helvetica-Bold" },
 
-  sigGrid: { flexDirection: "row", justifyContent: "space-between", gap: 24, marginTop: 28, minHeight: 72 },
+  sigGrid: { flexDirection: "row", justifyContent: "space-between", gap: 20, marginTop: 18, minHeight: 56 },
   sigBox: { flexDirection: "column", flex: 1 },
-  sigAction: { fontSize: 7, color: "#6B7280", fontStyle: "italic", marginBottom: 28 },
-  sigLine: { borderBottomWidth: 1, borderBottomColor: "#111827", borderBottomStyle: "solid", marginBottom: 6 },
+  sigAction: { fontSize: 7, color: "#6B7280", fontStyle: "italic", marginBottom: 18 },
+  sigLine: { borderBottomWidth: 1, borderBottomColor: "#111827", borderBottomStyle: "solid", marginBottom: 5 },
   sigName: { fontSize: 9, fontFamily: "Helvetica-Bold", color: "#111827", textTransform: "uppercase" },
   sigTitle: { fontSize: 7, color: "#4B5563" },
 
@@ -192,14 +197,57 @@ const s = StyleSheet.create({
     bottom: 36,
     paddingTop: 8,
     borderTopWidth: 2,
-    borderTopColor: "#12332B",
+    borderTopColor: "#172A4D",
     borderTopStyle: "solid",
     flexDirection: "row",
     justifyContent: "space-between",
     gap: 18,
   },
+  refBar: { flexDirection: "row", justifyContent: "flex-end", gap: 16, marginBottom: 4 },
+  refBarItem: { flexDirection: "row", alignItems: "baseline" },
+  refBarLabel: { fontSize: 6.5, color: "#6B7280", fontFamily: "Helvetica-Bold", textTransform: "uppercase" },
+  refBarValue: { fontSize: 7.5, color: "#111827", fontFamily: "Helvetica-Bold" },
+  continuationHeader: {
+    position: "absolute",
+    top: 92,
+    left: 36,
+    right: 36,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingBottom: 4,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#E5E9F0",
+    borderBottomStyle: "solid",
+  },
+  continuationTitle: { fontSize: 7, color: "#6B7280", fontFamily: "Helvetica-Bold", textTransform: "uppercase" },
+  continuationPage: { fontSize: 6.5, color: "#9CA3AF" },
+
+  brandedHeader: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 88,
+    overflow: "hidden",
+  },
+  brandedHeaderImg: {
+    width: "100%",
+  },
+  brandedFooter: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 82,
+    overflow: "hidden",
+  },
+  brandedFooterImg: {
+    width: "100%",
+    marginTop: -760,
+  },
   contactCol: { flexDirection: "column" },
-  contactLabel: { fontSize: 8, fontFamily: "Helvetica-Bold", color: "#12332B", marginBottom: 3 },
+  contactLabel: { fontSize: 8, fontFamily: "Helvetica-Bold", color: "#172A4D", marginBottom: 3 },
   contactText: { fontSize: 7.5, color: "#111827", lineHeight: 1.4 },
 
   pageFooter: {
@@ -213,6 +261,29 @@ const s = StyleSheet.create({
   pageFooterText: { fontSize: 6.5, color: "#9CA3AF" },
 
   stackText: { fontSize: 7.5, color: "#4B5563", lineHeight: 1.4 },
+
+  postTableBlock: {
+    marginTop: 8,
+    marginBottom: 4,
+    paddingTop: 8,
+    borderTopWidth: 2,
+    borderTopColor: "#111827",
+    borderTopStyle: "solid",
+  },
+  postTableTitle: {
+    fontSize: 8.5,
+    fontFamily: "Helvetica-Bold",
+    color: "#172A4D",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    marginBottom: 5,
+  },
+  postTableText: {
+    fontSize: 7.5,
+    color: "#4B5563",
+    lineHeight: 1.4,
+    marginBottom: 1,
+  },
 });
 
 function widthStyle(width?: PrintableField["width"]) {
@@ -288,7 +359,7 @@ function GridSection({ section }: { section: PrintableSection }) {
           if (!formatted) return null;
           return (
             <View style={widthStyle(f.width)} key={f.id}>
-              <Text style={s.cellLabel}>{f.label}</Text>
+              <Text style={s.cellLabel}>{f.label}: </Text>
               <Text style={s.cellValue}>{formatted}</Text>
             </View>
           );
@@ -318,6 +389,27 @@ function StackSection({ section }: { section: PrintableSection }) {
         );
       })}
     </>
+  );
+}
+
+function PostTableSectionBlock({ section }: { section: PrintableSection }) {
+  if (section.fields.length === 0) return null;
+  return (
+    <View style={s.postTableBlock} minPresenceAhead={80}>
+      {section.title ? <Text style={s.postTableTitle}>{section.title.toUpperCase()}</Text> : null}
+      {section.fields.map((f) => {
+        if (Array.isArray(f.value)) {
+          return (f.value as string[]).map((v, i) => (
+            <Text key={`${f.id}-${i}`} style={s.postTableText}>{v}</Text>
+          ));
+        }
+        const formatted = formatPrintableValue(f.value, f.format);
+        if (!formatted) return null;
+        return (
+          <Text key={f.id} style={s.postTableText}>{formatted}</Text>
+        );
+      })}
+    </View>
   );
 }
 
@@ -376,10 +468,29 @@ function TableBlock({ table }: { table: PrintableTable }) {
               style={[s.tableRow, row.emphasis === "subtotal" ? s.tableRowEmphasis : null]}
               wrap={false}
             >
-              {table.columns.map((c) => {
+              {table.columns.map((c, ci) => {
                 const raw = row.cells[c.id];
-                const formatted = formatPrintableValue(raw, c.format);
-                return (
+                const cellCurrency = c.format === "money" ? String(row.cells["currency"] || "") || undefined : undefined;
+                const formatted = formatPrintableValue(raw, c.format, cellCurrency);
+                const showSubtext = ci === 0 && row.subtext && row.emphasis !== "subtotal";
+                const showConvertedHint = c.id === "amount" && row.cells["_convertedAmount"];
+                return showSubtext || showConvertedHint ? (
+                  <View key={c.id} style={colStyle(c)}>
+                    <Text style={[s.tdText, row.emphasis === "subtotal" ? s.tdTextEmphasis : null]}>
+                      {formatted}
+                    </Text>
+                    {showConvertedHint ? (
+                      <Text style={{ fontSize: 6.5, color: "#667085", marginTop: 1, textAlign: "right" }}>
+                        {"≈ " + formatPrintableValue(row.cells["_convertedAmount"], "money", "PHP")}
+                      </Text>
+                    ) : null}
+                    {showSubtext ? (
+                      <Text style={{ fontSize: 7, color: "#667085", fontStyle: "italic", marginTop: 1 }}>
+                        {row.subtext}
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : (
                   <Text
                     key={c.id}
                     style={[s.tdText, row.emphasis === "subtotal" ? s.tdTextEmphasis : null, colStyle(c)]}
@@ -396,7 +507,7 @@ function TableBlock({ table }: { table: PrintableTable }) {
                 {String(group.subtotal.cells["description"] || "Subtotal").toUpperCase()}
               </Text>
               <Text style={[{ width: "18%" }, s.subtotalVal, s.tdText]}>
-                {formatPrintableValue(group.subtotal.cells["amount"], "money")}
+                {formatPrintableValue(group.subtotal.cells["amount"], "money", String(group.subtotal.cells["currency"] || "") || undefined)}
               </Text>
             </View>
           ) : null}
@@ -453,15 +564,52 @@ interface PrintableDocumentPdfProps {
 
 export function PrintableDocumentPdf({ document: doc }: PrintableDocumentPdfProps) {
   const pageFooter = doc.pageFooterText;
+  const refLabel = doc.headerFields.map((f) => {
+    const formatted = formatPrintableValue(f.value, f.format, f.currency);
+    return formatted ? `${f.label}: ${formatted}` : "";
+  }).filter(Boolean).join("  ·  ");
+
   return (
     <Document title={doc.title} author="Neuron OS">
-      <Page size="A4" style={s.page}>
-        <HeaderBlock
-          company={doc.company}
-          title={doc.title}
-          subtitle={doc.subtitle}
-          headerFields={doc.headerFields}
-        />
+      <Page size="A4" style={doc.brandedHeaderImage ? s.pageBranded : s.page}>
+        {doc.brandedHeaderImage ? (
+          <>
+            {/* Branded header — repeats on every page as letterhead */}
+            <View style={s.brandedHeader} fixed>
+              <Image src={doc.brandedHeaderImage} style={s.brandedHeaderImg} />
+            </View>
+            {/* Continuation ref bar — visible on pages 2+ below the header */}
+            <View style={s.continuationHeader} fixed>
+              <Text style={s.continuationTitle} render={({ pageNumber }) =>
+                pageNumber > 1 ? `${doc.title}${refLabel ? `  —  ${refLabel}` : ""}` : ""
+              } />
+              <Text style={s.continuationPage} render={({ pageNumber, totalPages }) =>
+                pageNumber > 1 ? `Page ${pageNumber} of ${totalPages}` : ""
+              } />
+            </View>
+            {doc.headerFields.length > 0 ? (
+              <View style={s.refBar}>
+                {doc.headerFields.map((f) => {
+                  const formatted = formatPrintableValue(f.value, f.format, f.currency);
+                  if (!formatted) return null;
+                  return (
+                    <View key={f.id} style={s.refBarItem}>
+                      <Text style={s.refBarLabel}>{f.label}: </Text>
+                      <Text style={s.refBarValue}>{formatted}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            ) : null}
+          </>
+        ) : (
+          <HeaderBlock
+            company={doc.company}
+            title={doc.title}
+            subtitle={doc.subtitle}
+            headerFields={doc.headerFields}
+          />
+        )}
 
         {doc.partySections.map((sec) => (
           <SectionBlock key={sec.id} section={sec} />
@@ -475,8 +623,12 @@ export function PrintableDocumentPdf({ document: doc }: PrintableDocumentPdfProp
           <TableBlock key={t.id} table={t} />
         ))}
 
+        {doc.postTableSections?.map((sec) => (
+          <PostTableSectionBlock key={sec.id} section={sec} />
+        ))}
+
         {(doc.notes.length > 0 || doc.bank || doc.totals) && (
-          <View style={s.footerGrid}>
+          <View style={s.footerGrid} wrap={false}>
             <View style={s.termsCol}>
               {doc.notes.map((n) => (
                 <View key={n.id} style={{ marginBottom: 8 }}>
@@ -535,7 +687,11 @@ export function PrintableDocumentPdf({ document: doc }: PrintableDocumentPdfProp
 
         <Signatories list={doc.signatories} />
 
-        {doc.options.showContactFooter && doc.contactFooter ? (
+        {doc.options.showContactFooter && doc.brandedFooterImage ? (
+          <View style={s.brandedFooter} fixed>
+            <Image src={doc.brandedFooterImage} style={s.brandedFooterImg} />
+          </View>
+        ) : doc.options.showContactFooter && doc.contactFooter ? (
           <View style={s.contactFooter} fixed>
             {doc.contactFooter.callNumbers.length > 0 ? (
               <View style={s.contactCol}>

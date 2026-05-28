@@ -7,6 +7,8 @@ import { useEVouchers } from "../../hooks/useEVouchers";
 import { useUser } from "../../hooks/useUser";
 import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
 import { usePermission } from "../../context/PermissionProvider";
+import { useUrlSelection } from "../../hooks/useUrlSelection";
+import { supabase } from "../../utils/supabase/client";
 
 type AccountingTab = "acct-pending-disburse" | "acct-waiting-on-rep" | "acct-pending-verification" | "acct-archive";
 
@@ -36,6 +38,7 @@ export function EVouchersContent() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedEvoucher, setSelectedEvoucher] = useState<any>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [urlDetailId, setUrlDetailId] = useUrlSelection("detail");
 
   const { user: currentUser } = useUser();
 
@@ -44,6 +47,20 @@ export function EVouchersContent() {
   useEffect(() => {
     if (refreshTrigger > 0) refresh();
   }, [refreshTrigger, refresh]);
+
+  // Restore detail view from URL on mount
+  useEffect(() => {
+    if (!urlDetailId || selectedEvoucher) return;
+    (async () => {
+      const { data } = await supabase
+        .from("evouchers")
+        .select("*")
+        .eq("id", urlDetailId)
+        .single();
+      if (data) setSelectedEvoucher(data);
+      else setUrlDetailId(null);
+    })();
+  }, [urlDetailId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Map accounting tab to a view name the table component understands
   const tableView = activeTab === "acct-archive" ? "all" : "pending";
@@ -132,7 +149,7 @@ export function EVouchersContent() {
           <UnifiedEVouchersTable
             evouchers={evouchers}
             view={tableView}
-            onViewDetail={setSelectedEvoucher}
+            onViewDetail={(ev) => { setSelectedEvoucher(ev); setUrlDetailId(ev.id); }}
             onRefresh={refresh}
             isLoading={isLoading}
             showDaysOutstanding={activeTab === "acct-waiting-on-rep"}
@@ -157,10 +174,11 @@ export function EVouchersContent() {
       {selectedEvoucher && (
         <EVoucherDetailView
           evoucher={selectedEvoucher}
-          onClose={() => setSelectedEvoucher(null)}
+          onClose={() => { setSelectedEvoucher(null); setUrlDetailId(null); }}
           currentUser={currentUser}
           onStatusChange={() => {
             setSelectedEvoucher(null);
+            setUrlDetailId(null);
             setRefreshTrigger((prev) => prev + 1);
           }}
         />

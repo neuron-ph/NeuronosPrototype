@@ -7,7 +7,7 @@
  * @see /docs/blueprints/CONTRACTS_MODULE_BLUEPRINT.md
  */
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
@@ -15,10 +15,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../../lib/queryKeys";
 import type { QuotationNew } from "../../types/pricing";
 import { useDataScope } from "../../hooks/useDataScope";
+import { useUrlSelection } from "../../hooks/useUrlSelection";
 import { ContractsList } from "./ContractsList";
 import { ContractDetailView } from "../pricing/ContractDetailView";
+import { QuotationBuilderV3 } from "../pricing/quotations/QuotationBuilderV3";
+import { useRealtimeSync } from "../../hooks/useRealtimeSync";
 
-export type ContractsView = "list" | "detail";
+export type ContractsView = "list" | "detail" | "edit";
 
 interface ContractsModuleProps {
   currentUser?: { 
@@ -37,8 +40,10 @@ export function ContractsModule({ currentUser, onCreateTicket, initialContract, 
   const [selectedContract, setSelectedContract] = useState<QuotationNew | null>(initialContract || null);
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [urlContractId, setUrlContractId] = useUrlSelection("contract");
   const [initialTab, setInitialTab] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
+  const restoredRef = useRef(false);
 
   // Update view if initialContract changes
   useEffect(() => {
@@ -83,6 +88,8 @@ export function ContractsModule({ currentUser, onCreateTicket, initialContract, 
     // Inherits 5-minute staleTime from global QueryClient config
   });
   const refreshContracts = () => { refetch(); };
+
+  useRealtimeSync({ table: "quotations", queryKey: queryKeys.contracts.all() });
 
   // Customer ownership map — drives the customer-scope arm of the contract
   // visibility rule (a contract is visible when its customer is in scope, even
@@ -130,29 +137,79 @@ export function ContractsModule({ currentUser, onCreateTicket, initialContract, 
     });
   }, [contracts, scope, scopeLoaded, customerOwnerById]);
 
-  // Deep-link: auto-select contract from ?contract= query param
+  // Restore-on-mount: if ?contract=<id> is in the URL, resolve the contract
+  // from the cached list or fetch it directly from the DB.
   useEffect(() => {
-    const contractId = searchParams.get("contract");
+    if (!urlContractId || restoredRef.current) return;
+    if (isLoading) return; // wait for list query to settle
+
+    // Read optional deep-link params (e.g. from inbox navigation)
     const targetTab = searchParams.get("tab");
     const targetHighlight = searchParams.get("highlight");
-    if (!contractId || contracts.length === 0 || isLoading) return;
 
+    // Try to find in the already-fetched list first
     const match = contracts.find(
-      (c) => c.quote_number === contractId || c.id === contractId
+      (c) => c.quote_number === urlContractId || c.id === urlContractId
     );
+
     if (match) {
+      restoredRef.current = true;
       setSelectedContract(match);
       setInitialTab(targetTab || null);
       setHighlightId(targetHighlight || null);
       setView("detail");
-      // Clean the query param so back-navigation doesn't re-trigger
-      setSearchParams({}, { replace: true });
+      // Clean ancillary params (tab/highlight) but keep ?contract= for persistence
+      if (targetTab || targetHighlight) {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("tab");
+          next.delete("highlight");
+          return next;
+        }, { replace: true });
+      }
+      return;
     }
-  }, [searchParams, contracts, isLoading, setSearchParams]);
+
+    // Contract not in cached list (might be filtered out by scope or not yet
+    // in the active-status filter). Fetch directly from DB.
+    restoredRef.current = true;
+    (async () => {
+      const { data, error } = await supabase
+        .from("quotations")
+        .select("*")
+        .eq("id", urlContractId)
+        .eq("quotation_type", "contract")
+        .single();
+      if (error || !data) {
+        console.warn("ContractsModule: URL contract not found, clearing param", urlContractId);
+        setUrlContractId(null);
+        return;
+      }
+      const row: any = data;
+      const m: any = { ...(row?.details ?? {}), ...(row?.pricing ?? {}), ...row };
+      if (!m.contract_validity_start && m.contract_start_date) m.contract_validity_start = m.contract_start_date;
+      if (!m.contract_validity_end && m.contract_end_date) m.contract_validity_end = m.contract_end_date;
+      setSelectedContract(m);
+      setInitialTab(targetTab || null);
+      setHighlightId(targetHighlight || null);
+      setView("detail");
+      // Clean ancillary params
+      if (targetTab || targetHighlight) {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("tab");
+          next.delete("highlight");
+          return next;
+        }, { replace: true });
+      }
+    })();
+  }, [urlContractId, contracts, isLoading, searchParams, setSearchParams, setUrlContractId]);
 
   const handleSelectContract = (contract: QuotationNew) => {
     setSelectedContract(contract);
     setView("detail");
+    setUrlContractId(contract.id);
+    restoredRef.current = true; // prevent restore effect from re-triggering
   };
 
   const handleBackToList = () => {
@@ -160,6 +217,8 @@ export function ContractsModule({ currentUser, onCreateTicket, initialContract, 
     setSelectedContract(null);
     setInitialTab(null);
     setHighlightId(null);
+    setUrlContractId(null);
+    restoredRef.current = false; // allow future URL restore
   };
 
   const handleContractUpdated = async (updatedContract?: QuotationNew) => {
@@ -193,9 +252,85 @@ export function ContractsModule({ currentUser, onCreateTicket, initialContract, 
   };
 
   const handleEditContract = () => {
-    // Placeholder — parent can wire this to open QuotationBuilderV3 in contract mode
     if (selectedContract) {
-      console.log("Edit contract requested:", selectedContract.quote_number);
+      setView("edit");
+    }
+  };
+
+  const handleSaveEditedContract = async (data: QuotationNew) => {
+    try {
+      const d = data as any;
+      const TOP_LEVEL_COLUMNS = new Set([
+        'addressed_to_name', 'addressed_to_title',
+        'approved_by', 'approved_by_title',
+        'assigned_to', 'auto_renew',
+        'consignee_id', 'contact_id', 'contact_name', 'contact_person_id',
+        'contract_end_date', 'contract_notes', 'contract_start_date', 'contract_status',
+        'converted_at',
+        'created_at', 'created_by', 'created_by_name',
+        'currency', 'custom_notes',
+        'customer_id', 'customer_name',
+        'details',
+        'expiry_date',
+        'id', 'internal_notes', 'notes',
+        'parent_contract_id', 'payment_terms',
+        'prepared_by', 'prepared_by_title',
+        'pricing', 'project_id',
+        'quotation_date', 'quotation_name', 'quotation_number', 'quotation_type',
+        'quote_number',
+        'renewal_terms', 'services', 'services_metadata', 'status',
+        'submitted_at', 'tags', 'total_buying', 'total_selling',
+        'updated_at', 'validity_date', 'vendors',
+      ]);
+      const dateColumns = ['quotation_date', 'expiry_date', 'validity_date'];
+      const top: Record<string, unknown> = {};
+      const details: Record<string, unknown> = { ...(selectedContract as any).details };
+      Object.entries(d).forEach(([key, value]) => {
+        if (key === 'id' || key === 'project_id' || key === 'project_number') return;
+        if (dateColumns.includes(key) && (!value || value === '')) return;
+        if (key === 'contract_validity_start') { top.contract_start_date = value || null; return; }
+        if (key === 'contract_validity_end') { top.contract_end_date = value || null; return; }
+        if (key === 'valid_until') { top.expiry_date = value || null; return; }
+        if (TOP_LEVEL_COLUMNS.has(key)) {
+          top[key] = value;
+        } else {
+          details[key] = value;
+        }
+      });
+      top.details = details;
+      top.updated_at = new Date().toISOString();
+      const { error } = await supabase.from('quotations').update(top).eq('id', selectedContract!.id);
+      if (error) throw error;
+
+      // Detect rate card changes and create a new version
+      const { rateMatricesChanged, createRateVersion } = await import("../../utils/contractVersioning");
+      const oldRateMatrices = (selectedContract as any).rate_matrices ?? (selectedContract as any).details?.rate_matrices;
+      const newRateMatrices = d.rate_matrices ?? details.rate_matrices;
+      if (rateMatricesChanged(oldRateMatrices, newRateMatrices) && newRateMatrices) {
+        const userId = currentUser?.id ?? null;
+        const userName = currentUser?.name ?? null;
+        const version = await createRateVersion(
+          selectedContract!.id,
+          newRateMatrices as any,
+          userId ?? null,
+          userName,
+          "Rate card updated"
+        );
+        if (version) {
+          toast.success(`Contract updated — rate card v${version.version_number} created`);
+        } else {
+          toast.success("Contract updated successfully");
+        }
+      } else {
+        toast.success("Contract updated successfully");
+      }
+
+      // Refresh and go back to detail view
+      await handleContractUpdated();
+      setView("detail");
+    } catch (err: any) {
+      console.error("Error saving edited contract:", err);
+      toast.error(err?.message || "Failed to save contract");
     }
   };
 
@@ -244,6 +379,17 @@ export function ContractsModule({ currentUser, onCreateTicket, initialContract, 
           initialTab={initialTab}
           highlightId={highlightId}
           contractDept={department === "Accounting" ? "accounting" : "pricing"}
+        />
+      )}
+
+      {view === "edit" && selectedContract && (
+        <QuotationBuilderV3
+          onClose={() => setView("detail")}
+          onSave={handleSaveEditedContract}
+          initialData={selectedContract}
+          mode="edit"
+          builderMode="quotation"
+          initialQuotationType="contract"
         />
       )}
     </div>

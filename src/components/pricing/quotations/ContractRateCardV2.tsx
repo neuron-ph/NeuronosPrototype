@@ -453,6 +453,7 @@ export function ContractRateCardV2({
                 </button>
                 {showAddCategory && (
                   <CategoryDropdown
+                    side="revenue"
                     onAdd={(name, catalogCategoryId) => { handleAddCategory(name, catalogCategoryId); setShowAddCategory(false); }}
                     onClose={() => setShowAddCategory(false)}
                   />

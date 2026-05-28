@@ -11,6 +11,7 @@ import { CreateProjectModal } from "../bd/CreateProjectModal";
 import { CreateBookingsFromProjectModal } from "./CreateBookingsFromProjectModal";
 import { toast } from "../ui/toast-utils";
 import { CommentsTab } from "../shared/CommentsTab";
+import { EntityAttachmentsTab } from "../shared/EntityAttachmentsTab";
 import { PDFStudioOverlay } from "../projects/quotation/screen/PDFStudioOverlay";
 import { QuotationFormView } from "../projects/quotation/QuotationFormView";
 import { downloadQuotationPDF } from "./QuotationPDFRenderer";
@@ -46,7 +47,7 @@ interface QuotationFileViewProps {
   currentUser?: { id: string; name: string; email: string; department: string; role?: string } | null;
 }
 
-type TabType = "details" | "comments";
+type TabType = "details" | "comments" | "attachments";
 
 export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, onAcceptQuotation, onDelete, onUpdate, onSaveQuotation, onDuplicate, onCreateTicket, onConvertToProject, onConvertToContract, currentUser }: QuotationFileViewProps) {
   const { can } = usePermission();
@@ -1001,6 +1002,29 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
               Comments
             </button>
           )}
+          <button
+            role="tab"
+            aria-selected={activeTab === "attachments"}
+            aria-controls="tab-panel-attachments"
+            id="tab-attachments"
+            onClick={() => setActiveTab("attachments")}
+            style={{
+              padding: "0 4px",
+              fontSize: "14px",
+              fontWeight: 500,
+              color: activeTab === "attachments" ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-muted)",
+              background: "none",
+              borderTop: "none",
+              borderLeft: "none",
+              borderRight: "none",
+              borderBottom: activeTab === "attachments" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
+              cursor: "pointer",
+              transition: "all 0.2s",
+              height: "100%"
+            }}
+          >
+            Attachments
+          </button>
         </div>
 
         {/* Action Controls - Right Side */}
@@ -1363,6 +1387,14 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
               currentUserId={currentUserId}
               currentUserName={currentUserName}
               currentUserDepartment={currentUserDepartment}
+            />
+          </div>
+        ) : activeTab === "attachments" ? (
+          <div style={{ flex: 1 }}>
+            <EntityAttachmentsTab
+              entityId={quotation.id}
+              entityType="quotations"
+              currentUser={currentUser}
             />
           </div>
         ) : null}

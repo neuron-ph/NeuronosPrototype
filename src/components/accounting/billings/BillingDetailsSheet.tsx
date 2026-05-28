@@ -1,6 +1,8 @@
 import { X, Calendar, CreditCard, Building, User, FileText, CheckCircle2, Clock, AlertCircle, Loader2, BookOpen } from "lucide-react";
 import { useEffect, useState } from "react";
-import logoImage from "figma:asset/28c84ed117b026fbf800de0882eb478561f37f4f.png";
+import defaultLogoImage from "figma:asset/28c84ed117b026fbf800de0882eb478561f37f4f.png";
+import { getDocumentDesign, getBrandedLogo } from "../../../utils/documentDesign";
+const logoImage = getDocumentDesign() === "branded" ? getBrandedLogo() : defaultLogoImage;
 import { supabase } from "../../../utils/supabase/client";
 import type { Billing } from "../../../types/accounting";
 import { SidePanel } from "../../common/SidePanel";

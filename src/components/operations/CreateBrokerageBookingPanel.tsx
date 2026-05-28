@@ -23,6 +23,8 @@ import {
 import { ContractDetectionBanner } from "./shared/ContractDetectionBanner";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import type { ContractSummary } from "../../types/pricing";
+import { fetchFullContract } from "../../utils/contractLookup";
+import { extractDeliveryChargeOptions } from "../../utils/contractQuantityExtractor";
 import { logCreation } from "../../utils/activityLog";
 import { fireBookingAssignmentTickets } from "../../utils/workflowTickets";
 import { generateBookingNumber, peekNextBookingNumber } from "../../utils/bookingNumberUtils";
@@ -104,7 +106,10 @@ export function CreateBrokerageBookingPanel({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const isStandardBrokerage = String(formState.brokerage_type ?? "") === "Standard";
+    if (!detectedContractId) {
+      toast.error("A contract is required to create a booking. Save as draft if no contract is available.");
+      return;
+    }
 
     const errors = validateBookingForm(formState, "Brokerage", context, {
       requiredFieldKeys: getMinimalCreateRequiredFields("Brokerage"),
@@ -112,10 +117,6 @@ export function CreateBrokerageBookingPanel({
     if (hasErrors(errors)) {
       setSubmitErrors(errors);
       toast.error("Please fill in all required fields");
-      return;
-    }
-    if (isStandardBrokerage && !detectedContractId) {
-      toast.error("Standard brokerage requires an active Brokerage contract");
       return;
     }
     setSubmitErrors({});
@@ -232,11 +233,10 @@ export function CreateBrokerageBookingPanel({
   const isEditingDraft = editingId !== null;
   const customerName = selectedCustomer.customerName;
   const bookingName = String(formState.booking_name ?? "");
-  const isStandardBrokerage = String(formState.brokerage_type ?? "") === "Standard";
   const isFormValid =
     customerName.trim() !== "" &&
     bookingName.trim() !== "" &&
-    (!isStandardBrokerage || detectedContractId !== null);
+    detectedContractId !== null;
 
   return (
     <BookingCreationPanel
@@ -267,33 +267,33 @@ export function CreateBrokerageBookingPanel({
         ctx={context}
         errors={submitErrors}
         requiredFieldKeys={getMinimalCreateRequiredFields("Brokerage")}
-        fieldOverrides={
-          isStandardBrokerage && contractsList.length > 1
-            ? {
-                project_number: (
-                  <CustomDropdown
-                    label=""
-                    value={detectedContractId ?? ""}
-                    onChange={(id) => {
-                      const picked = contractsList.find((c) => c.id === id);
-                      if (!picked) return;
-                      setDetectedContractId(picked.id);
-                      setField("project_number", picked.quote_number ?? "");
-                    }}
-                    options={contractsList.map((c) => ({
-                      value: c.id,
-                      label: c.quotation_name
-                        ? `${c.quote_number} — ${c.quotation_name}`
-                        : c.quote_number ?? "(unnamed contract)",
-                    }))}
-                    placeholder="Select contract..."
-                    fullWidth
-                    portalZIndex={1125}
-                  />
-                ),
-              }
-            : undefined
-        }
+        fieldOverrides={{
+          project_number: contractsList.length > 0 ? (
+            <CustomDropdown
+              label=""
+              value={detectedContractId ?? ""}
+              onChange={(id) => {
+                const picked = contractsList.find((c) => c.id === id);
+                if (!picked) return;
+                setDetectedContractId(picked.id);
+                setField("project_number", picked.quote_number ?? "");
+              }}
+              options={contractsList.map((c) => ({
+                value: c.id,
+                label: c.quotation_name
+                  ? `${c.quote_number} — ${c.quotation_name}`
+                  : c.quote_number ?? "(unnamed contract)",
+              }))}
+              placeholder="Select contract..."
+              fullWidth
+              portalZIndex={1125}
+            />
+          ) : customerName ? (
+            <div style={{ padding: "10px 12px", borderRadius: "6px", fontSize: "13px", color: "var(--theme-text-muted)", backgroundColor: "var(--theme-bg-surface-subtle)", border: "1px solid var(--theme-border-default)", minHeight: "40px" }}>
+              No active contracts found for this client
+            </div>
+          ) : undefined,
+        }}
       />
 
       {/* Contract detection banner — only Standard brokerage links to a customer contract.
@@ -304,20 +304,31 @@ export function CreateBrokerageBookingPanel({
           serviceType="Brokerage"
           onContractDetected={setDetectedContractId}
           onContractInfo={(contract) => {
-            // Autofill the read-only Project / Contract Number with the contract's quote number.
             setField("project_number", contract?.quote_number ?? "");
-            // Propagate the contract's allowed POL/POD lists as form constraints so
-            // the booking's port pickers narrow to those values. Clears when the
-            // detected contract changes or vanishes.
             setConstraint("pol_options", contract?.pol_options ?? null);
             setConstraint("pod_options", contract?.pod_options ?? null);
+            if (contract?.id) {
+              fetchFullContract(contract.id).then(full => {
+                if (full?.rate_matrices) {
+                  const { containerTypes, deliveryDestinations } = extractDeliveryChargeOptions(full.rate_matrices);
+                  setConstraint("delivery_container_types", containerTypes.length > 0 ? containerTypes : null);
+                  setConstraint("delivery_destinations", deliveryDestinations.length > 0 ? deliveryDestinations : null);
+                } else {
+                  setConstraint("delivery_container_types", null);
+                  setConstraint("delivery_destinations", null);
+                }
+              });
+            } else {
+              setConstraint("delivery_container_types", null);
+              setConstraint("delivery_destinations", null);
+            }
           }}
           onContractsList={setContractsList}
           selectedContractId={detectedContractId}
-          enabled={String(formState.brokerage_type ?? "") === "Standard"}
-          requireContract={String(formState.brokerage_type ?? "") === "Standard"}
+          enabled
+          requireContract
           requireContractLabel="Brokerage"
-          strictServiceMatch={String(formState.brokerage_type ?? "") === "Standard"}
+          strictServiceMatch
         />
       )}
 

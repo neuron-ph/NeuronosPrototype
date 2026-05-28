@@ -1,8 +1,10 @@
 import { Plus, DollarSign, Trash2 } from "lucide-react";
 import React, { useState, useRef } from "react";
-import type { SellingPriceCategory } from "../../../types/pricing";
+import type { SellingPriceCategory, SellingPriceLineItem } from "../../../types/pricing";
 import { CategoryHeader } from "./CategoryHeader";
 import { CategoryPresetDropdown } from "./CategoryPresetDropdown";
+import { SaveAsTemplateInline } from "./SaveAsTemplateModal";
+import { LoadTemplateDropdown } from "./LoadTemplateDropdown";
 import { PhilippinePeso } from "../../icons/PhilippinePeso";
 import { PricingTableHeader } from "../../shared/pricing/PricingTableHeader";
 import { UniversalPricingRow, PricingItemData } from "../../shared/pricing/UniversalPricingRow";
@@ -28,8 +30,8 @@ interface SellingPriceSectionProps {
   viewMode?: boolean;
 }
 
-export function SellingPriceSection({ 
-  categories, 
+export function SellingPriceSection({
+  categories,
   onChange,
   currency,
   expandedCategories,
@@ -41,11 +43,31 @@ export function SellingPriceSection({
   onDeleteCategory,
   viewMode = false
 }: SellingPriceSectionProps) {
-  
+
   const [showPresetDropdown, setShowPresetDropdown] = useState(false);
+  const [saveTemplateCategoryId, setSaveTemplateCategoryId] = useState<string | null>(null);
+  const [loadTemplateCategoryId, setLoadTemplateCategoryId] = useState<string | null>(null);
   const addCategoryButtonRef = useRef<HTMLButtonElement>(null);
   const [pendingDelete, setPendingDelete] = useState<{ categoryId: string; itemId: string } | null>(null);
   const [pendingCategoryDelete, setPendingCategoryDelete] = useState<string | null>(null);
+
+  const loadTemplateCategory = loadTemplateCategoryId
+    ? categories.find((c) => c.id === loadTemplateCategoryId)
+    : null;
+
+  const handleLoadTemplateItems = (categoryId: string, items: SellingPriceLineItem[]) => {
+    (onChange as any)((prev: SellingPriceCategory[]) =>
+      prev.map((cat) => {
+        if (cat.id !== categoryId) return cat;
+        const newItems = [...cat.line_items, ...items];
+        return {
+          ...cat,
+          line_items: newItems,
+          subtotal: newItems.reduce((sum, item) => sum + item.amount, 0),
+        };
+      })
+    );
+  };
   
   // Calculate total from all categories (unused variable but kept for logic if needed later)
   // const total = categories.reduce((sum, cat) => sum + cat.subtotal, 0);
@@ -308,8 +330,18 @@ export function SellingPriceSection({
                   onRename={(newName) => onRenameCategory(category.id, newName)}
                   onDuplicate={() => onDuplicateCategory(category.id)}
                   onDelete={() => setPendingCategoryDelete(category.id)}
+                  onSaveAsTemplate={() => setSaveTemplateCategoryId(category.id)}
+                  onLoadTemplate={() => setLoadTemplateCategoryId(category.id)}
                   viewMode={viewMode}
                 />
+
+                {/* Save as Template inline prompt */}
+                {saveTemplateCategoryId === category.id && (
+                  <SaveAsTemplateInline
+                    category={category}
+                    onClose={() => setSaveTemplateCategoryId(null)}
+                  />
+                )}
 
                 {/* Line Items Table */}
                 {isCategoryExpanded && (
@@ -419,12 +451,25 @@ export function SellingPriceSection({
       <CategoryPresetDropdown
         isOpen={showPresetDropdown}
         onClose={() => setShowPresetDropdown(false)}
-        buttonRef={addCategoryButtonRef as React.RefObject<HTMLButtonElement>} // ✨ ADDED THIS
+        buttonRef={addCategoryButtonRef as React.RefObject<HTMLButtonElement>}
         onSelect={(categoryName) => {
           onAddCategory(categoryName);
           setShowPresetDropdown(false);
         }}
       />
+
+      {/* Load Template Dropdown (per-category) */}
+      {loadTemplateCategory && (
+        <LoadTemplateDropdown
+          isOpen={true}
+          onClose={() => setLoadTemplateCategoryId(null)}
+          categoryName={loadTemplateCategory.category_name}
+          onLoad={(items) => {
+            handleLoadTemplateItems(loadTemplateCategory.id, items);
+            setLoadTemplateCategoryId(null);
+          }}
+        />
+      )}
     </div>
   );
 }

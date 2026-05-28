@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../utils/supabase/client";
 import { queryKeys } from "../lib/queryKeys";
 import type { DataScope } from "./useDataScope";
+import { useRealtimeSync } from "./useRealtimeSync";
 
 interface UseCustomersOptions {
   scope?: DataScope;
@@ -24,6 +25,8 @@ export function useCustomers({ scope, enabled = true }: UseCustomersOptions = {}
     enabled,
     staleTime: 30_000,
   });
+
+  useRealtimeSync({ table: "customers", queryKey: queryKeys.customers.all(), enabled });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.customers.all() });
   return { customers, isLoading, invalidate };

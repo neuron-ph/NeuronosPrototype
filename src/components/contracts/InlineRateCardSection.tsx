@@ -53,6 +53,8 @@ interface InlineRateCardSectionProps {
     quantity?: number | null;
     amount?: number | null;
   }>;
+  /** Pinned rate version number (undefined if using live contract rates) */
+  rateVersionNumber?: number;
 }
 
 export function InlineRateCardSection({
@@ -72,6 +74,7 @@ export function InlineRateCardSection({
   appliedItemCount = 0,
   appliedTotal = 0,
   appliedRateCardItems = [],
+  rateVersionNumber,
 }: InlineRateCardSectionProps) {
   const [quantities, setQuantities] = useState<BookingQuantities>({ ...initialQuantities });
   const [isSaving, setIsSaving] = useState(false);
@@ -363,6 +366,11 @@ export function InlineRateCardSection({
             {!alreadyApplied && (
               <span className="text-[11px] px-1.5 py-0.5 rounded bg-[var(--theme-bg-surface)] border border-[var(--theme-border-default)] text-[var(--theme-text-muted)] font-medium">
                 {totalItems} {totalItems === 1 ? "item" : "items"}
+              </span>
+            )}
+            {rateVersionNumber != null && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[rgba(15,118,110,0.08)] text-[var(--theme-action-primary-bg)] font-medium">
+                v{rateVersionNumber}
               </span>
             )}
             <span className="text-[11px] text-[var(--theme-text-muted)]">·</span>

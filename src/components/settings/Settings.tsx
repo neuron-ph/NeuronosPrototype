@@ -7,6 +7,7 @@ import { useUser } from "../../hooks/useUser";
 import { useAutoCaps } from "../../context/AutoCapsProvider";
 import { getThemeModePreference, setThemeModePreference } from "../../theme/themeMode";
 import { ThemeModePreference } from "../../theme/workspaceTheme";
+import { getDocumentDesign, setDocumentDesign, isDocumentDesignToggleable, type DocumentDesign } from "../../utils/documentDesign";
 
 // ---------------------------------------------------------------------------
 // Primitives
@@ -500,7 +501,7 @@ export function Settings() {
   const [savingProfile, setSavingProfile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Team name
+  // Team memberships
 
   // Password
   const [showPasswordForm, setShowPasswordForm] = useState(false);
@@ -519,17 +520,26 @@ export function Settings() {
   const [autoCapsSaving, setAutoCapsSaving] = useState(false);
   const canEditWorkspace = user?.role === "executive" || user?.department === "Executive";
 
+  // Document design (dev-only toggle)
+  const [docDesign, setDocDesign] = useState<DocumentDesign>(() => getDocumentDesign());
+
   // Logout
   const [loggingOut, setLoggingOut] = useState(false);
   const [confirmingLogout, setConfirmingLogout] = useState(false);
 
-  const { data: teamName = null } = useQuery({
-    queryKey: ["teams", user?.team_id ?? ""],
+  const { data: teamNames = [] } = useQuery({
+    queryKey: ["team_memberships", "settings", user?.id ?? ""],
     queryFn: async () => {
-      const { data } = await supabase.from("teams").select("name").eq("id", user!.team_id!).single();
-      return data?.name || null;
+      const { data } = await supabase
+        .from("team_memberships")
+        .select("teams(name)")
+        .eq("user_id", user!.id)
+        .eq("is_active", true);
+      return ((data ?? []) as unknown as Array<{ teams: { name: string } | null }>)
+        .map((row) => row.teams?.name)
+        .filter((name): name is string => Boolean(name));
     },
-    enabled: !!user?.team_id,
+    enabled: !!user?.id,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -829,7 +839,7 @@ export function Settings() {
               { label: "Email", value: user?.email || "—" },
               { label: "Department", value: user?.department || "—" },
               { label: "Role", value: roleLabel || "—" },
-              { label: "Team", value: teamName || "—" },
+              { label: "Teams", value: teamNames.length > 0 ? teamNames.join(", ") : "—" },
             ].map(({ label, value }, index) => (
               <SettingsRow key={label} first={index === 0} label={label}>
                 <ReadOnlyValue value={value} />
@@ -965,6 +975,46 @@ export function Settings() {
               />
             </SettingsRow>
           </Section>
+
+          {/* ── Developer (dev-only) ───────────────────────────────────── */}
+          {isDocumentDesignToggleable() && (
+            <Section title="Developer">
+              <SettingsRow
+                first
+                label="Document design"
+                description="Switch between branded (Falcons) and classic document layout."
+              >
+                <select
+                  value={docDesign}
+                  onChange={(e) => {
+                    const next = e.target.value as DocumentDesign;
+                    setDocumentDesign(next);
+                    setDocDesign(next);
+                    toast.success(`Document design set to ${next === "branded" ? "Branded (Falcons)" : "Classic"} — reload documents to see changes`);
+                  }}
+                  style={{
+                    height: "32px",
+                    padding: "0 28px 0 10px",
+                    border: "1px solid var(--theme-border-default)",
+                    borderRadius: "8px",
+                    backgroundColor: "var(--theme-bg-surface)",
+                    color: "var(--theme-text-primary)",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    outline: "none",
+                    appearance: "none",
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23667085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
+                    backgroundRepeat: "no-repeat",
+                    backgroundPosition: "right 8px center",
+                  }}
+                >
+                  <option value="branded">Branded (Falcons)</option>
+                  <option value="classic">Classic</option>
+                </select>
+              </SettingsRow>
+            </Section>
+          )}
 
           {/* ── Sign out ─────────────────────────────────────────────────── */}
           <div>

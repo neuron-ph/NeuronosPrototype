@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
-import { useSearchParams } from "react-router";
 import { toast } from "../ui/toast-utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../../lib/queryKeys";
 import type { Project } from "../../types/pricing";
 import { ProjectsList } from "./ProjectsList";
 import { ProjectDetail } from "./ProjectDetail";
-import { fetchProjectsWithQuotation, fetchProjectWithQuotation } from "../../utils/projectHydration";
+import { fetchProjectsWithQuotation, fetchProjectWithQuotation, fetchProjectByNumberWithQuotation } from "../../utils/projectHydration";
+import { useUrlSelection } from "../../hooks/useUrlSelection";
+import { useRealtimeSync } from "../../hooks/useRealtimeSync";
 
 export type ProjectsView = "list" | "detail";
 
@@ -23,12 +24,12 @@ interface ProjectsModuleProps {
 }
 
 export function ProjectsModule({ currentUser, onCreateTicket, initialProject, departmentOverride }: ProjectsModuleProps) {
+  const [urlProjectId, setUrlProjectId] = useUrlSelection("project");
   const [view, setView] = useState<ProjectsView>(initialProject ? "detail" : "list");
   const [selectedProject, setSelectedProject] = useState<Project | null>(initialProject || null);
   const [initialTab, setInitialTab] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const queryClient = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
 
   // Update view if initialProject changes
   useEffect(() => {
@@ -46,6 +47,8 @@ export function ProjectsModule({ currentUser, onCreateTicket, initialProject, de
   });
   const refreshProjects = () => { refetch(); };
 
+  useRealtimeSync({ table: "projects", queryKey: queryKeys.projects.all() });
+
   useEffect(() => {
     if (!selectedProject || projects.length === 0) return;
 
@@ -55,34 +58,67 @@ export function ProjectsModule({ currentUser, onCreateTicket, initialProject, de
     }
   }, [projects, selectedProject?.id]);
 
-  // Deep-link: auto-select project from ?project=PROJECT_NUMBER query param
+  // Deep-link: restore project from ?project= URL param (supports project_number or id)
   useEffect(() => {
-    const projectNumber = searchParams.get("project");
-    const targetTab = searchParams.get("tab");
-    const targetHighlight = searchParams.get("highlight");
-    if (!projectNumber || projects.length === 0 || isLoading) return;
+    if (!urlProjectId || isLoading || selectedProject) return;
 
-    const match = projects.find(
-      (p) => p.project_number === projectNumber || p.id === projectNumber
-    );
-    if (match) {
-      setSelectedProject(match);
-      setInitialTab(targetTab || null);
-      setHighlightId(targetHighlight || null);
-      setView("detail");
-      // Clean the query param so back-navigation doesn't re-trigger
-      setSearchParams({}, { replace: true });
+    // Try matching from already-loaded list first
+    if (projects.length > 0) {
+      const match = projects.find(
+        (p) => p.project_number === urlProjectId || p.id === urlProjectId
+      );
+      if (match) {
+        setSelectedProject(match);
+        // Normalize URL to use project id for consistency
+        if (urlProjectId !== match.id) setUrlProjectId(match.id);
+        setView("detail");
+        return;
+      }
     }
-  }, [searchParams, projects, isLoading, setSearchParams]);
+
+    // Projects loaded but no match — try direct DB fetch (handles page refresh
+    // before list is populated or when project is outside current scope)
+    if (projects.length === 0) return; // wait for list to load
+    (async () => {
+      try {
+        // urlProjectId may be a UUID (id) or a project_number — try both
+        const isUuid = /^[0-9a-f]{8}-/.test(urlProjectId);
+        const data = isUuid
+          ? await fetchProjectWithQuotation(urlProjectId)
+          : await fetchProjectByNumberWithQuotation(urlProjectId);
+        if (data) {
+          setSelectedProject(data);
+          if (urlProjectId !== data.id) setUrlProjectId(data.id);
+          setView("detail");
+        } else {
+          setUrlProjectId(null);
+        }
+      } catch {
+        setUrlProjectId(null);
+      }
+    })();
+  }, [urlProjectId, projects, isLoading, selectedProject, setUrlProjectId]);
+
+  // Read tab/highlight params once on mount for deep-link navigation
+  useEffect(() => {
+    if (!urlProjectId) return;
+    const params = new URLSearchParams(window.location.search);
+    const targetTab = params.get("tab");
+    const targetHighlight = params.get("highlight");
+    if (targetTab) setInitialTab(targetTab);
+    if (targetHighlight) setHighlightId(targetHighlight);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSelectProject = (project: Project) => {
     setSelectedProject(project);
+    setUrlProjectId(project.id);
     setView("detail");
   };
 
   const handleBackToList = () => {
     setView("list");
     setSelectedProject(null);
+    setUrlProjectId(null);
     setInitialTab(null);
     setHighlightId(null);
   };

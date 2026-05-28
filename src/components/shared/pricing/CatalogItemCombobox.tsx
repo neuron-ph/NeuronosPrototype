@@ -32,7 +32,7 @@ interface CatalogItemComboboxProps {
   value: string;                        // current description text
   catalogItemId?: string;               // current linked catalog item ID
   serviceType?: string;                 // kept for future smart-sort when we link catalog → service
-  side?: "revenue" | "expense" | "both"; // filter items by category side
+  side?: "revenue" | "expense";          // filter items by category side
   categoryId?: string;                  // when set, shows only items in this catalog category + assigns on quick-create
   onChange: (description: string, catalogItemId?: string) => void;
   disabled?: boolean;
@@ -147,7 +147,7 @@ async function doFetchCatalogItems(): Promise<CatalogItem[]> {
     if (!catsRes.error && catsRes.data) {
       cachedCategorySides = {};
       for (const cat of catsRes.data) {
-        cachedCategorySides[cat.id] = cat.side || "both";
+        cachedCategorySides[cat.id] = cat.side;
       }
     }
     return cachedItems || [];
@@ -159,11 +159,10 @@ async function doFetchCatalogItems(): Promise<CatalogItem[]> {
 
 /** Filter items by category side */
 function filterBySide(items: CatalogItem[], side?: string): CatalogItem[] {
-  if (!side || side === "both") return items;
+  if (!side) return items;
   return items.filter((item) => {
-    if (!item.category_id) return true; // uncategorized items show everywhere
-    const catSide = cachedCategorySides[item.category_id];
-    return catSide === side || catSide === "both";
+    if (!item.category_id) return false;
+    return cachedCategorySides[item.category_id] === side;
   });
 }
 

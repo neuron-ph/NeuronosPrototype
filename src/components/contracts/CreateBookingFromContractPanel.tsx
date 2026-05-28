@@ -34,6 +34,8 @@ import {
   autofillMarineInsuranceFromContract,
   linkBookingToContract,
 } from "../../utils/contractAutofill";
+import { getCurrentVersion } from "../../utils/contractVersioning";
+import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
 
 interface CreateBookingFromContractPanelProps {
@@ -115,6 +117,15 @@ export function CreateBookingFromContractPanel({
       console.log(
         `Linking booking ${bookingData.bookingId} to contract ${contract.quote_number}...`
       );
+
+      // Pin the booking to the current rate version
+      const currentVersion = await getCurrentVersion(contract.id);
+      if (currentVersion) {
+        await supabase
+          .from("bookings")
+          .update({ rate_version_id: currentVersion.id })
+          .eq("id", bookingData.bookingId);
+      }
 
       const linkResult = await linkBookingToContract(
         contract.id,

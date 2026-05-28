@@ -126,6 +126,8 @@ const PRICING_CONTRACT_SURFACE_TABS: ModuleId[] = [
 const OPS_BOOKING_DETAIL_TABS: ModuleId[] = [
   "ops_bookings_info_tab",
   "ops_bookings_billings_tab",
+  "ops_bookings_invoices_tab",
+  "ops_bookings_collections_tab",
   "ops_bookings_expenses_tab",
   "ops_bookings_comments_tab",
 ];
@@ -285,6 +287,7 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
           tab("ops_forwarding_draft_tab",       "Draft"),
           tab("ops_forwarding_in_progress_tab", "In Progress"),
           tab("ops_forwarding_completed_tab",   "Completed"),
+          tab("ops_forwarding_cancelled_tab",   "Cancelled"),
         ],
       },
       {
@@ -297,6 +300,7 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
           tab("ops_brokerage_draft_tab",       "Draft"),
           tab("ops_brokerage_in_progress_tab", "In Progress"),
           tab("ops_brokerage_completed_tab",   "Completed"),
+          tab("ops_brokerage_cancelled_tab",   "Cancelled"),
         ],
       },
       {
@@ -309,6 +313,7 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
           tab("ops_trucking_draft_tab",       "Draft"),
           tab("ops_trucking_in_progress_tab", "In Progress"),
           tab("ops_trucking_completed_tab",   "Completed"),
+          tab("ops_trucking_cancelled_tab",   "Cancelled"),
         ],
       },
       {
@@ -321,6 +326,7 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
           tab("ops_marine_insurance_draft_tab",       "Draft"),
           tab("ops_marine_insurance_in_progress_tab", "In Progress"),
           tab("ops_marine_insurance_completed_tab",   "Completed"),
+          tab("ops_marine_insurance_cancelled_tab",   "Cancelled"),
         ],
       },
       {
@@ -333,6 +339,7 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
           tab("ops_others_draft_tab",       "Draft"),
           tab("ops_others_in_progress_tab", "In Progress"),
           tab("ops_others_completed_tab",   "Completed"),
+          tab("ops_others_cancelled_tab",   "Cancelled"),
         ],
       },
       {
@@ -345,10 +352,12 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
         label: "Booking Detail",
         visibleInAccessMatrix: false,
         tabs: [
-          tab("ops_bookings_info_tab",     "Info"),
-          tab("ops_bookings_billings_tab", "Billing"),
-          tab("ops_bookings_expenses_tab", "Expenses"),
-          tab("ops_bookings_comments_tab", "Comments"),
+          tab("ops_bookings_info_tab",        "Info"),
+          tab("ops_bookings_billings_tab",    "Billing"),
+          tab("ops_bookings_invoices_tab",    "Invoices"),
+          tab("ops_bookings_collections_tab", "Collections"),
+          tab("ops_bookings_expenses_tab",    "Expenses"),
+          tab("ops_bookings_comments_tab",    "Comments"),
         ],
       },
       {
@@ -474,6 +483,8 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
           tab("accounting_bookings_trucking_tab",         "Trucking"),
           tab("accounting_bookings_marine_insurance_tab", "Marine Insurance"),
           tab("accounting_bookings_others_tab",           "Others"),
+          tab("accounting_bookings_invoices_tab",         "Invoices"),
+          tab("accounting_bookings_collections_tab",      "Collections"),
         ],
       },
       {

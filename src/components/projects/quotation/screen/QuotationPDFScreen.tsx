@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, Printer, Save, ZoomIn, ZoomOut, Maximize, User, Settings, UserCheck, Building2, Phone, Check, Eye } from "lucide-react";
+import { ArrowLeft, Printer, Save, ZoomIn, ZoomOut, Maximize, User, Settings, UserCheck, Building2, Check, Eye } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import type { Project, QuotationNew } from "../../../../types/pricing";
 import { QuotationDocument } from "../QuotationDocument";
 import { useQuotationDocumentState, type QuotationPrintOptions } from "./useQuotationDocumentState";
-import { ContactFooterControl } from "./controls/ContactFooterControl";
+
 import { useCompanySettings, useUpdateCompanySettings } from "../../../../hooks/useCompanySettings";
 
 interface QuotationPDFScreenProps {
@@ -22,6 +22,9 @@ interface QuotationPDFScreenProps {
 // A4 Dimensions in pixels at 96 DPI
 const A4_WIDTH_PX = 794; // 210mm
 const A4_HEIGHT_PX = 1123; // 297mm
+const PAGE_MARGIN_TOP_PX = 23; // 6mm @page margin
+const PAGE_MARGIN_BOTTOM_PX = 23; // 6mm @page margin
+const CONTENT_HEIGHT_PER_PAGE = A4_HEIGHT_PX - PAGE_MARGIN_TOP_PX - PAGE_MARGIN_BOTTOM_PX;
 const CONSOLE_WIDTH = 520;
 const JUMP_RAIL_WIDTH = 44;
 const QUOTATION_PRINT_BODY_CLASS = "neuron-printing-quotation-pdf";
@@ -62,9 +65,9 @@ const QUOTATION_PRINT_CSS = `
   }
 `;
 
-type SectionId = "display" | "settings" | "addressed" | "signatories" | "bank" | "footer";
+type SectionId = "display" | "settings" | "addressed" | "signatories" | "bank";
 
-const SECTION_ORDER: SectionId[] = ["display", "settings", "addressed", "signatories", "bank", "footer"];
+const SECTION_ORDER: SectionId[] = ["display", "settings", "addressed", "signatories", "bank"];
 
 const SECTION_META: Record<SectionId, { label: string; icon: React.ReactNode }> = {
   display:     { label: "Display",        icon: <Eye size={16} /> },
@@ -72,7 +75,6 @@ const SECTION_META: Record<SectionId, { label: string; icon: React.ReactNode }> 
   addressed:   { label: "Addressed To",   icon: <UserCheck size={16} /> },
   signatories: { label: "Signatories",    icon: <User size={16} /> },
   bank:        { label: "Bank Details",   icon: <Building2 size={16} /> },
-  footer:      { label: "Contact Footer", icon: <Phone size={16} /> },
 };
 
 const DISPLAY_TOGGLES: Array<{ key: keyof QuotationPrintOptions["display"]; label: string; hint: string }> = [
@@ -106,10 +108,6 @@ export function QuotationPDFScreen({ project, quotation: quotationProp, onClose,
     setPaymentTerms,
     toggleDisplay,
     updateBankDetails,
-    updateContactFooter,
-    updateCallNumber,
-    addCallNumber,
-    removeCallNumber,
   } = useQuotationDocumentState(resolvedQuotation as any, currentUser, companySettings);
 
   const handleSaveBankAsDefault = async () => {
@@ -126,24 +124,6 @@ export function QuotationPDFScreen({ project, quotation: quotationProp, onClose,
     }
   };
 
-  const handleSaveContactAsDefault = async () => {
-    if (!options.contact_footer) return;
-    const lines = options.contact_footer.office_address.split("\n").map((l) => l.trim()).filter(Boolean);
-    try {
-      await updateCompanySettings.mutateAsync({
-        phone_numbers: options.contact_footer.call_numbers.map((p) => p.trim()).filter(Boolean),
-        email: options.contact_footer.email || null,
-        address_line1: lines[0] || null,
-        address_line2: lines[1] || null,
-        city: lines[2]?.split(",")[0]?.trim() || null,
-        country: lines[2]?.split(",").slice(1).join(",").trim() || null,
-      });
-      toast.success("Contact footer saved as company default.");
-    } catch (e: any) {
-      toast.error(e?.message || "Failed to save contact footer.");
-    }
-  };
-
   const [isSaving, setIsSaving] = useState(false);
   const [scale, setScale] = useState(0.75);
   const [autoScale, setAutoScale] = useState(false);
@@ -155,14 +135,14 @@ export function QuotationPDFScreen({ project, quotation: quotationProp, onClose,
   const measureRef = useRef<HTMLDivElement>(null);
   const consoleScrollRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<SectionId, HTMLDivElement | null>>({
-    display: null, settings: null, addressed: null, signatories: null, bank: null, footer: null,
+    display: null, settings: null, addressed: null, signatories: null, bank: null,
   });
 
   // Measure actual document height to determine page count
   useEffect(() => {
     if (!measureRef.current) return;
     const h = measureRef.current.scrollHeight;
-    setPageCount(Math.max(1, Math.ceil(h / A4_HEIGHT_PX)));
+    setPageCount(Math.max(1, Math.ceil(h / CONTENT_HEIGHT_PER_PAGE)));
   }, [options, resolvedQuotation]);
 
   useEffect(() => {
@@ -296,7 +276,6 @@ export function QuotationPDFScreen({ project, quotation: quotationProp, onClose,
   // Visible jump-rail icons (Bank / Footer hidden if those overrides don't exist).
   const visibleSections = SECTION_ORDER.filter((id) => {
     if (id === "bank") return !!options.bank_details;
-    if (id === "footer") return !!options.contact_footer;
     return true;
   });
 
@@ -351,6 +330,7 @@ export function QuotationPDFScreen({ project, quotation: quotationProp, onClose,
                     overflow: 'hidden',
                     flexShrink: 0,
                     boxShadow: '0 10px 30px -5px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.02)',
+                    background: 'white',
                   }}
                 >
                   <div
@@ -360,7 +340,7 @@ export function QuotationPDFScreen({ project, quotation: quotationProp, onClose,
                       minHeight: '297mm',
                       transform: `scale(${scale})`,
                       position: 'absolute',
-                      top: -(pageIndex * A4_HEIGHT_PX * scale),
+                      top: (PAGE_MARGIN_TOP_PX - pageIndex * CONTENT_HEIGHT_PER_PAGE) * scale,
                       left: 0,
                     }}
                   >
@@ -652,25 +632,6 @@ export function QuotationPDFScreen({ project, quotation: quotationProp, onClose,
                   </ConsoleSection>
                 )}
 
-                {/* === Contact Footer === */}
-                {options.contact_footer && (
-                  <ConsoleSection
-                    id="footer"
-                    meta={SECTION_META.footer}
-                    description="Phone, email, and office address printed in the footer bar."
-                    sectionRef={(el) => { sectionRefs.current.footer = el; }}
-                  >
-                    <ContactFooterControl
-                      contactFooter={options.contact_footer}
-                      onUpdateField={updateContactFooter}
-                      onUpdateCallNumber={updateCallNumber}
-                      onAddCallNumber={addCallNumber}
-                      onRemoveCallNumber={removeCallNumber}
-                      onSaveAsDefault={handleSaveContactAsDefault}
-                      isSavingDefault={updateCompanySettings.isPending}
-                    />
-                  </ConsoleSection>
-                )}
 
               </div>
             </div>

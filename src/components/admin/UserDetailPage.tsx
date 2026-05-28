@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from "motion/react";
 import { supabase } from "../../utils/supabase/client";
 import { queryKeys } from "../../lib/queryKeys";
 import { useUser } from "../../hooks/useUser";
-import { useTeams } from "../../hooks/useTeams";
 import { toast } from "sonner@2.0.3";
 import {
   ArrowLeft, Loader2, KeyRound, Trash2,
@@ -186,7 +185,6 @@ export function UserDetailPage() {
   const [editing, setEditing]             = useState(false);
   const [editDept, setEditDept]           = useState("");
   const [editRole, setEditRole]           = useState("");
-  const [editTeamId, setEditTeamId]       = useState("");
   const [editServiceType, setEditServiceType] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [resetOpen, setResetOpen]         = useState(false);
@@ -194,8 +192,6 @@ export function UserDetailPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [dangerOpen, setDangerOpen]       = useState(false);
-
-  const { teams } = useTeams();
 
   const { data: accessSummary } = useQuery({
     queryKey: ["permission_overrides", "access-summary", userId],
@@ -218,7 +214,7 @@ export function UserDetailPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("users")
-        .select("id, email, name, department, role, team_id, service_type, is_active, status, avatar_url, created_at, phone, last_seen_at, ev_approval_authority, position, teams!users_team_id_fkey(name)")
+        .select("id, email, name, department, role, service_type, is_active, status, avatar_url, created_at, phone, last_seen_at, ev_approval_authority, position")
         .eq("id", userId!)
         .maybeSingle();
       if (error) throw error;
@@ -246,11 +242,25 @@ export function UserDetailPage() {
     enabled: !!userId,
   });
 
+  const { data: teamNames = [] } = useQuery({
+    queryKey: ["team_memberships", "user-detail", userId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("team_memberships")
+        .select("teams(name)")
+        .eq("user_id", userId!)
+        .eq("is_active", true);
+      return ((data ?? []) as unknown as Array<{ teams: { name: string } | null }>)
+        .map((row) => row.teams?.name)
+        .filter((name): name is string => Boolean(name));
+    },
+    enabled: !!userId,
+  });
+
   const handleStartEdit = () => {
     if (!user) return;
     setEditDept(user.department);
     setEditRole(user.role);
-    setEditTeamId(user.team_id || "");
     setEditServiceType((user as any).service_type || "");
     setEditing(true);
   };
@@ -388,7 +398,7 @@ export function UserDetailPage() {
   }
 
   const status: UserStatus = (((user as any).status as string)?.toLowerCase() as UserStatus) || (user.is_active ? "active" : "inactive");
-  const teamName: string | null  = (user as any).teams?.name ?? null;
+  const teamName = teamNames.join(", ");
   const phone: string | null     = (user as any).phone ?? null;
   const lastSeenAt               = (user as any).last_seen_at ?? null;
   const evAuthority: boolean     = (user as any).ev_approval_authority ?? false;
@@ -546,11 +556,6 @@ export function UserDetailPage() {
                 </div>
                 {editDept === "Operations" && <>
                   <div>
-                    <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--neuron-ink-primary)", marginBottom: 6 }}>Team</label>
-                    <CustomDropdown label="" value={editTeamId} onChange={setEditTeamId}
-                      options={[{ value: "", label: "No team" }, ...teams.map(t => ({ value: t.id, label: t.name }))]} />
-                  </div>
-                  <div>
                     <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--neuron-ink-primary)", marginBottom: 6 }}>Service Type</label>
                     <CustomDropdown label="" value={editServiceType} onChange={setEditServiceType}
                       options={[
@@ -622,7 +627,7 @@ export function UserDetailPage() {
             {/* TEAM — conditional */}
             {teamName && (
               <div style={{ padding: "18px 20px", borderTop: "1px solid var(--neuron-ui-border)" }}>
-                <span style={sectionLabel}>Team</span>
+                <span style={sectionLabel}>Teams</span>
                 <span style={{ fontSize: 13, fontWeight: 500, color: "var(--neuron-ink-primary)" }}>{teamName}</span>
               </div>
             )}

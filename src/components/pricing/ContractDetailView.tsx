@@ -23,6 +23,7 @@ import type { FinancialContainer } from "../../types/financials";
 import { ContractRateCardV2 } from "./quotations/ContractRateCardV2";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
+import { createRateVersion, getCurrentVersion, getVersionHistory, rateMatricesChanged, type ContractRateVersion } from "../../utils/contractVersioning";
 import { logCreation, logStatusChange } from "../../utils/activityLog";
 import { recordNotificationEvent, fetchDeptManagerIds } from "../../utils/notifications";
 import { useMarkEntityReadOnMount } from "../../hooks/useNotifications";
@@ -63,7 +64,7 @@ interface ContractDetailViewProps {
   contractDept?: ContractDept;
 }
 
-type ContractTab = "financial_overview" | "quotation" | "rate-card" | "bookings" | "billings" | "invoices" | "collections" | "expenses" | "attachments" | "comments" | "activity";
+type ContractTab = "financial_overview" | "quotation" | "rate-card" | "bookings" | "billings" | "invoices" | "collections" | "expenses" | "attachments" | "comments" | "activity" | "versions";
 
 type TabCategory = "dashboard" | "operations" | "accounting" | "collaboration";
 
@@ -154,6 +155,35 @@ export function ContractDetailView({
       return data && data.length > 0 ? data : [];
     },
     enabled: activeTab === "activity" && !!quotation.id,
+    staleTime: 30_000,
+  });
+
+  // Version history
+  const { data: versionHistory = [], isFetching: isLoadingVersions, refetch: refetchVersions } = useQuery<ContractRateVersion[]>({
+    queryKey: ["contract_rate_versions", quotation.id],
+    queryFn: () => getVersionHistory(quotation.id),
+    enabled: (activeTab === "versions" || activeTab === "rate-card") && !!quotation.id,
+    staleTime: 30_000,
+  });
+
+  // Booking counts per version (for badges)
+  const { data: versionBookingCounts = {} } = useQuery<Record<string, number>>({
+    queryKey: ["contract_rate_versions", "booking_counts", quotation.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("bookings")
+        .select("rate_version_id")
+        .eq("contract_id", quotation.id)
+        .not("rate_version_id", "is", null);
+      if (!data) return {};
+      const counts: Record<string, number> = {};
+      for (const row of data) {
+        const vid = (row as any).rate_version_id;
+        if (vid) counts[vid] = (counts[vid] ?? 0) + 1;
+      }
+      return counts;
+    },
+    enabled: activeTab === "versions" && !!quotation.id,
     staleTime: 30_000,
   });
 
@@ -258,6 +288,22 @@ export function ContractDetailView({
           },
           recipientIds: [(quotation as any).created_by, ...acctManagers, ...opsManagers],
         });
+
+        // Create initial rate version (v1) so bookings can be pinned
+        const currentRateMatrices = (quotation as any).rate_matrices
+          ?? (quotation as any).details?.rate_matrices;
+        if (currentRateMatrices && Array.isArray(currentRateMatrices) && currentRateMatrices.length > 0) {
+          const existingVersion = await getCurrentVersion(quotation.id);
+          if (!existingVersion) {
+            await createRateVersion(
+              quotation.id,
+              currentRateMatrices,
+              (currentUser as any)?.id ?? null,
+              currentUser?.name ?? null,
+              "Initial version — contract activated"
+            );
+          }
+        }
 
         toast.success("Contract activated successfully! Operations can now link bookings.");
         if (onUpdate) {
@@ -368,7 +414,29 @@ export function ContractDetailView({
       top.updated_at = new Date().toISOString();
       const { error } = await supabase.from('quotations').update(top).eq('id', quotation.id);
       if (error) throw error;
-      toast.success("Contract updated successfully");
+
+      // Detect rate card changes and create a new version if needed
+      const oldRateMatrices = (quotation as any).rate_matrices ?? (quotation as any).details?.rate_matrices;
+      const newRateMatrices = updates.rate_matrices ?? details.rate_matrices;
+      if (rateMatricesChanged(oldRateMatrices, newRateMatrices) && newRateMatrices) {
+        const userId = currentUser ? (currentUser as any).id ?? null : null;
+        const userName = currentUser?.name ?? null;
+        const version = await createRateVersion(
+          quotation.id,
+          newRateMatrices,
+          userId,
+          userName,
+          "Rate card updated"
+        );
+        if (version) {
+          toast.success(`Contract updated — rate card v${version.version_number} created`);
+        } else {
+          toast.success("Contract updated (rate version save failed — rates still updated)");
+        }
+      } else {
+        toast.success("Contract updated successfully");
+      }
+
       if (onUpdate) onUpdate({ ...quotation, ...updates } as QuotationNew);
     } catch (err: any) {
       console.error("Error saving contract quotation:", err);
@@ -457,8 +525,27 @@ export function ContractDetailView({
   // TAB CONTENT RENDERERS
   // ============================================
 
+  const currentVersionNumber = versionHistory.length > 0
+    ? versionHistory.find(v => !v.effective_until)?.version_number ?? versionHistory[0]?.version_number
+    : undefined;
+
   const renderRateCardTab = () => (
     <div style={{ padding: "24px 0" }}>
+      {currentVersionNumber != null && (
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
+          <span style={{
+            fontSize: "12px", fontWeight: 500,
+            padding: "3px 10px", borderRadius: "9999px",
+            backgroundColor: "var(--theme-status-success-bg)",
+            color: "var(--theme-status-success-fg)",
+          }}>
+            v{currentVersionNumber}
+          </span>
+          <span style={{ fontSize: "12px", color: "var(--neuron-ink-muted)" }}>
+            {versionHistory.length} version{versionHistory.length !== 1 ? "s" : ""} total
+          </span>
+        </div>
+      )}
       {rateMatrices.length === 0 ? (
         <div style={{
           padding: "48px 24px",
@@ -747,6 +834,7 @@ export function ContractDetailView({
       { id: "attachments", label: "Attachments", icon: Paperclip },
       { id: "comments", label: "Comments", icon: MessageSquare },
       { id: "activity", label: "Activity", icon: Clock },
+      { id: "versions", label: "Version History", icon: Layers },
     ],
   } as const;
 
@@ -1118,6 +1206,104 @@ export function ContractDetailView({
         )}
         {activeTab === "activity" && canViewActivityTab && (
           <div style={{ padding: "0 48px" }}>{renderActivityTab()}</div>
+        )}
+        {activeTab === "versions" && (
+          <div style={{ padding: "24px 48px" }}>
+            <div style={{ maxWidth: "900px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
+                <div>
+                  <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--neuron-ink-primary)", margin: 0 }}>
+                    Rate Card Versions
+                  </h3>
+                  <p style={{ fontSize: "13px", color: "var(--neuron-ink-muted)", margin: "4px 0 0" }}>
+                    Each version is a snapshot of the rate card. Bookings are pinned to the version that was current when they were created.
+                  </p>
+                </div>
+              </div>
+
+              {isLoadingVersions ? (
+                <div style={{ padding: "32px 0", textAlign: "center", color: "var(--neuron-ink-muted)", fontSize: "13px" }}>
+                  Loading version history...
+                </div>
+              ) : versionHistory.length === 0 ? (
+                <div style={{
+                  padding: "32px", textAlign: "center",
+                  border: "1px dashed var(--theme-border-default)", borderRadius: "8px",
+                  color: "var(--neuron-ink-muted)", fontSize: "13px",
+                }}>
+                  No versions recorded yet. Versions are created automatically when rates are updated.
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  {versionHistory.map((version) => {
+                    const isCurrent = !version.effective_until;
+                    const bookingCount = versionBookingCounts[version.id] ?? 0;
+                    return (
+                      <div
+                        key={version.id}
+                        style={{
+                          border: `1px solid ${isCurrent ? "var(--theme-action-primary-bg)" : "var(--theme-border-default)"}`,
+                          borderRadius: "8px",
+                          padding: "16px 20px",
+                          backgroundColor: isCurrent ? "rgba(15,118,110,0.03)" : "var(--theme-bg-surface)",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <span style={{
+                              fontSize: "13px", fontWeight: 600, color: "var(--neuron-ink-primary)",
+                            }}>
+                              v{version.version_number}
+                            </span>
+                            {isCurrent && (
+                              <span style={{
+                                fontSize: "11px", fontWeight: 500,
+                                padding: "2px 8px", borderRadius: "9999px",
+                                backgroundColor: "var(--theme-status-success-bg)",
+                                color: "var(--theme-status-success-fg)",
+                              }}>
+                                Current
+                              </span>
+                            )}
+                            {bookingCount > 0 && (
+                              <span style={{
+                                fontSize: "11px", fontWeight: 500,
+                                padding: "2px 8px", borderRadius: "9999px",
+                                backgroundColor: "var(--neuron-semantic-info-bg, rgba(59,130,246,0.1))",
+                                color: "var(--neuron-semantic-info, #3b82f6)",
+                              }}>
+                                {bookingCount} booking{bookingCount !== 1 ? "s" : ""}
+                              </span>
+                            )}
+                          </div>
+                          <span style={{ fontSize: "12px", color: "var(--neuron-ink-muted)" }}>
+                            {formatShortDate(version.effective_from)}
+                          </span>
+                        </div>
+                        <div style={{ marginTop: "6px", display: "flex", alignItems: "center", gap: "16px" }}>
+                          {version.change_summary && (
+                            <span style={{ fontSize: "12px", color: "var(--neuron-ink-secondary)" }}>
+                              {version.change_summary}
+                            </span>
+                          )}
+                          {version.created_by_name && (
+                            <span style={{ fontSize: "12px", color: "var(--neuron-ink-muted)" }}>
+                              by {version.created_by_name}
+                            </span>
+                          )}
+                        </div>
+                        {!isCurrent && version.effective_until && (
+                          <div style={{ marginTop: "4px", fontSize: "11px", color: "var(--neuron-ink-muted)" }}>
+                            Superseded on {formatShortDate(version.effective_until)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
         )}
       </div>
 

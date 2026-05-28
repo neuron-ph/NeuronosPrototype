@@ -38,7 +38,8 @@ export function BookingRateCardButton({
   onRefresh,
 }: BookingRateCardButtonProps) {
   const contractId = booking.contract_id || booking.contractId;
-  const rateCard = useBookingRateCard(contractId);
+  const rateVersionId = booking.rate_version_id || booking.rateVersionId;
+  const rateCard = useBookingRateCard(contractId, rateVersionId);
 
   // Don't render if not a contract booking or no rate matrices
   if (!rateCard.isContractBooking || rateCard.isLoading) return null;
@@ -102,6 +103,7 @@ export function BookingRateCardButton({
       appliedItemCount={appliedRateCardItems.length}
       appliedTotal={appliedTotal}
       appliedRateCardItems={appliedRateCardItems}
+      rateVersionNumber={rateCard.rateVersionNumber}
     />
   );
 }

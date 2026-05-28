@@ -54,61 +54,6 @@ function normalizeRoleInputs(
   return single ? [single] : [];
 }
 
-async function syncLegacyUserTeamProjection(userIds: string[]): Promise<void> {
-  if (userIds.length === 0) return;
-
-  const uniqueUserIds = Array.from(new Set(userIds));
-  const { data, error } = await supabase
-    .from("team_memberships")
-    .select(`
-      user_id,
-      team_id,
-      updated_at,
-      team_role_eligibilities(role_key, role_label, sort_order)
-    `)
-    .eq("is_active", true)
-    .in("user_id", uniqueUserIds);
-
-  if (error) throw error;
-
-  const membershipByUser = new Map<
-    string,
-    { teamId: string | null; teamRole: string | null; updatedAt: string }
-  >();
-
-  for (const row of (data ?? []) as Array<{
-    user_id: string;
-    team_id: string;
-    updated_at: string;
-    team_role_eligibilities?: TeamRoleEligibilityRow[] | null;
-  }>) {
-    const sortedRoles = [...(row.team_role_eligibilities ?? [])].sort(
-      (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0),
-    );
-    const projected = {
-      teamId: row.team_id,
-      teamRole: sortedRoles[0]?.role_label ?? null,
-      updatedAt: row.updated_at,
-    };
-    const existing = membershipByUser.get(row.user_id);
-    if (!existing || existing.updatedAt < projected.updatedAt) {
-      membershipByUser.set(row.user_id, projected);
-    }
-  }
-
-  for (const userId of uniqueUserIds) {
-    const projection = membershipByUser.get(userId);
-    const { error: userError } = await supabase
-      .from("users")
-      .update({
-        team_id: projection?.teamId ?? null,
-        team_role: projection?.teamRole ?? null,
-      })
-      .eq("id", userId);
-    if (userError) throw userError;
-  }
-}
-
 export async function replaceTeamMemberships(params: {
   teamId: string;
   memberRoles: TeamMemberRoleMap;
@@ -120,28 +65,15 @@ export async function replaceTeamMemberships(params: {
 
   const targetUserIds = targetEntries.map(([userId]) => userId);
 
-  const [{ data: currentRows, error: currentError }, { data: teamRows, error: teamError }] =
-    await Promise.all([
-      supabase
-        .from("team_memberships")
-        .select("id, team_id, user_id, is_active")
-        .eq("team_id", params.teamId),
-      targetUserIds.length > 0
-        ? supabase
-            .from("team_memberships")
-            .select("id, team_id, user_id, is_active")
-            .eq("is_active", true)
-            .in("user_id", targetUserIds)
-        : Promise.resolve({ data: [], error: null }),
-    ]);
+  const { data: currentRows, error: currentError } = await supabase
+    .from("team_memberships")
+    .select("id, team_id, user_id, is_active")
+    .eq("team_id", params.teamId);
 
   if (currentError) throw currentError;
-  if (teamError) throw teamError;
 
   const currentMemberships = (currentRows ?? []) as TeamMembershipRow[];
-  const targetMemberships = (teamRows ?? []) as TeamMembershipRow[];
   const currentByUser = new Map(currentMemberships.map((row) => [row.user_id, row]));
-  const activeByUser = new Map(targetMemberships.map((row) => [row.user_id, row]));
 
   // Deactivate members being removed
   const removals = currentMemberships
@@ -157,16 +89,6 @@ export async function replaceTeamMemberships(params: {
   }
 
   for (const [userId, roles] of targetEntries) {
-    // Move user off another active team if needed
-    const existingActive = activeByUser.get(userId);
-    if (existingActive && existingActive.team_id !== params.teamId) {
-      const { error: deactivateOtherError } = await supabase
-        .from("team_memberships")
-        .update({ is_active: false })
-        .eq("id", existingActive.id);
-      if (deactivateOtherError) throw deactivateOtherError;
-    }
-
     // Upsert membership row
     let membershipId = currentByUser.get(userId)?.id ?? null;
     if (membershipId) {
@@ -204,12 +126,6 @@ export async function replaceTeamMemberships(params: {
       if (insertRoleError) throw insertRoleError;
     }
   }
-
-  const affectedUsers = [
-    ...currentMemberships.map((row) => row.user_id),
-    ...targetUserIds,
-  ];
-  await syncLegacyUserTeamProjection(affectedUsers);
 }
 
 export async function clearTeamMemberships(teamId: string): Promise<void> {
@@ -224,15 +140,12 @@ export async function clearTeamMemberships(teamId: string): Promise<void> {
   const rows = data ?? [];
   if (rows.length > 0) {
     const membershipIds = rows.map((row) => row.id);
-    const userIds = rows.map((row) => row.user_id);
 
     const { error: deactivateError } = await supabase
       .from("team_memberships")
       .update({ is_active: false })
       .in("id", membershipIds);
     if (deactivateError) throw deactivateError;
-
-    await syncLegacyUserTeamProjection(userIds);
   }
 }
 
@@ -244,6 +157,7 @@ export interface TeamMembershipRosterEntry {
   userDepartment: string;
   userRole: string;
   avatarUrl?: string | null;
+  teamName: string | null;
   roleKey: string | null;
   roleLabel: string | null;
   roles: Array<{ roleKey: string; roleLabel: string }>; // all eligibilities, sorted
@@ -256,6 +170,7 @@ export async function listActiveTeamMemberships(): Promise<TeamMembershipRosterE
       team_id,
       user_id,
       users!inner(id, name, email, department, role, avatar_url),
+      teams(name),
       team_role_eligibilities(role_key, role_label, sort_order)
     `)
     .eq("is_active", true);
@@ -266,6 +181,7 @@ export async function listActiveTeamMemberships(): Promise<TeamMembershipRosterE
     team_id: string;
     user_id: string;
     users: { id: string; name: string; email: string; department: string; role: string; avatar_url?: string | null };
+    teams?: { name: string } | null;
     team_role_eligibilities?: TeamRoleEligibilityRow[] | null;
   }>).map((row) => {
     const sortedRoles = [...(row.team_role_eligibilities ?? [])].sort(
@@ -280,6 +196,7 @@ export async function listActiveTeamMemberships(): Promise<TeamMembershipRosterE
       userDepartment: row.users.department,
       userRole:       row.users.role,
       avatarUrl:      row.users.avatar_url ?? null,
+      teamName:       row.teams?.name ?? null,
       roleKey:        primaryRole?.role_key ?? null,
       roleLabel:      primaryRole?.role_label ?? null,
       roles:          sortedRoles.map((r) => ({ roleKey: r.role_key, roleLabel: r.role_label })),

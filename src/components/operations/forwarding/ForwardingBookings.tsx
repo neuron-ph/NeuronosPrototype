@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Plus, Search, Package, Briefcase, UserCheck, FileEdit, Clock, CheckCircle, Trash2 } from "lucide-react";
+import { Plus, Search, Package, Briefcase, UserCheck, FileEdit, Clock, CheckCircle, Trash2, XCircle } from "lucide-react";
 import { CreateForwardingBookingPanel } from "./CreateForwardingBookingPanel";
 import type { ForwardingBooking, ExecutionStatus } from "../../../types/operations";
 import { supabase } from "../../../utils/supabase/client";
@@ -12,12 +12,12 @@ import { queryKeys } from "../../../lib/queryKeys";
 import { useDataScope } from "../../../hooks/useDataScope";
 import { useBookingAssignmentVisibility } from "../../../hooks/useBookingAssignmentVisibility";
 import { filterBookingsByScope } from "../../../utils/assignments/applyAssignmentVisibility";
-import { NeuronRefreshButton } from "../../shared/NeuronRefreshButton";
 import { usePermission } from "../../../context/PermissionProvider";
 import { logDeletion } from "../../../utils/activityLog";
 import { NeuronModal } from "../../ui/NeuronModal";
 import { useUnreadEntityIds } from "../../../hooks/useNotifications";
 import { normalizeDetails } from "../../../utils/bookings/bookingDetailsCompat";
+import { useRealtimeSync } from "../../../hooks/useRealtimeSync";
 
 interface ForwardingBookingsProps {
   onSelectBooking: (booking: ForwardingBooking) => void;
@@ -78,17 +78,19 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
   const canViewDraftTab      = can("ops_forwarding_draft_tab", "view");
   const canViewInProgressTab = can("ops_forwarding_in_progress_tab", "view");
   const canViewCompletedTab  = can("ops_forwarding_completed_tab", "view");
+  const canViewCancelledTab  = can("ops_forwarding_cancelled_tab", "view");
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<ExecutionStatus | "all">("all");
   const [movementFilter, setMovementFilter] = useState<string>("all");
-  const [activeTab, setActiveTab] = useState<"all" | "my" | "draft" | "in-progress" | "completed">(() => {
+  const [activeTab, setActiveTab] = useState<"all" | "my" | "draft" | "in-progress" | "completed" | "cancelled">(() => {
     if (canViewAllTab)        return "all";
     if (canViewMyTab)         return "my";
     if (canViewDraftTab)      return "draft";
     if (canViewInProgressTab) return "in-progress";
-    return "completed";
+    if (canViewCompletedTab)  return "completed";
+    return "cancelled";
   });
   const [timePeriodFilter, setTimePeriodFilter] = useState<string>("all");
   const [ownerFilter, setOwnerFilter] = useState<string>("all");
@@ -117,6 +119,8 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
     // Inherits 5-minute staleTime from global QueryClient config
   });
   const fetchBookings = () => { refetch(); };
+
+  useRealtimeSync({ table: "bookings", queryKey: queryKeys.bookings.list("forwarding") });
 
   const bookings = useMemo(() => {
     if (!scopeLoaded || !assignmentIndexLoaded) return [];
@@ -193,6 +197,8 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
       filtered = bookings.filter(b => b.status === "In Progress");
     } else if (activeTab === "completed") {
       filtered = bookings.filter(b => b.status === "Completed");
+    } else if (activeTab === "cancelled") {
+      filtered = bookings.filter(b => b.status === "Cancelled");
     }
 
     return filtered;
@@ -253,6 +259,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
   const draftCount = bookings.filter(b => b.status === "Draft").length;
   const inProgressCount = bookings.filter(b => b.status === "In Progress").length;
   const completedCount = bookings.filter(b => b.status === "Completed").length;
+  const cancelledCount = bookings.filter(b => b.status === "Cancelled").length;
 
   return (
     <>
@@ -285,29 +292,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
             
             {/* Action Button */}
             <div className="flex items-center gap-3">
-              <NeuronRefreshButton 
-                onRefresh={fetchBookings}
-                label="Refresh bookings"
-              />
-              <button
-                onClick={() => setShowCreateModal(true)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  padding: "10px 20px",
-                  fontSize: "14px",
-                  fontWeight: 600,
-                  border: "none",
-                  borderRadius: "8px",
-                  background: "var(--theme-action-primary-bg)",
-                  color: "var(--theme-action-primary-text)",
-                  cursor: "pointer",
-                }}
-              >
-                <Plus className="w-4 h-4" />
-                New Booking
-              </button>
+              {/* Forwarding bookings are created via Projects/Contracts, not directly */}
             </div>
           </div>
 
@@ -536,6 +521,16 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
                 onClick={() => setActiveTab("completed")}
               />
             )}
+            {canViewCancelledTab && (
+              <TabButton
+                icon={<XCircle size={18} />}
+                label="Cancelled"
+                count={cancelledCount}
+                isActive={activeTab === "cancelled"}
+                color="var(--theme-status-danger-fg)"
+                onClick={() => setActiveTab("cancelled")}
+              />
+            )}
           </div>
         </div>
 
@@ -757,6 +752,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
         </div>
       </div>
 
+      {/* Forwarding direct creation disabled — bookings come via Projects/Contracts
       {showCreateModal && (
         <CreateForwardingBookingPanel
           isOpen={showCreateModal}
@@ -778,6 +774,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
           draftData={resumeDraft}
         />
       )}
+      */}
       <NeuronModal
         isOpen={!!pendingDelete}
         onClose={() => setPendingDelete(null)}

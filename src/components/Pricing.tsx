@@ -1,9 +1,10 @@
 import { supabase } from '../utils/supabase/client';
 import { toast } from "sonner@2.0.3";
 import { createWorkflowTicket } from '../utils/workflowTickets';
-import { logActivity, logCreation } from '../utils/activityLog';
+import { logActivity, logCreation, logDeletion } from '../utils/activityLog';
 import { trackRecent } from '../lib/recents';
 import { useState, useEffect } from "react";
+import { useUrlSelection } from "../hooks/useUrlSelection";
 import { useUser } from "../hooks/useUser";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../lib/queryKeys";
@@ -24,6 +25,7 @@ import type { NetworkPartner } from "../data/networkPartners";
 import { ContactsModuleWithBackend } from "./crm/ContactsModuleWithBackend";
 // projectId/publicAnonKey removed — using supabase.from() (Phase 3)
 import { useNetworkPartners } from "../hooks/useNetworkPartners";
+import { useRealtimeSync } from "../hooks/useRealtimeSync";
 
 export type PricingView = "contacts" | "customers" | "quotations" | "vendors" | "reports";
 type SubView = "list" | "detail" | "create";
@@ -45,9 +47,10 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [selectedVendor, setSelectedVendor] = useState<NetworkPartner | null>(null);
   const [pendingQuotationType, setPendingQuotationType] = useState<QuotationType>("project");
+  const [urlDetailId, setUrlDetailId] = useUrlSelection("detail");
 
   const queryClient = useQueryClient();
-  const { effectiveRole } = useUser();
+  const { user, effectiveRole } = useUser();
   const activeUserRole = currentUser?.role || effectiveRole;
 
   // Hook for Network Partners (Lifting State Up)
@@ -91,12 +94,16 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
     queryClient.invalidateQueries({ queryKey: queryKeys.quotations.list() });
   };
 
+  useRealtimeSync({ table: "quotations", queryKey: queryKeys.quotations.all() });
+
   // Reset to list view when switching between main views
   useEffect(() => {
     setSubView("list");
     setSelectedQuotation(null);
     setSelectedContact(null);
     setSelectedCustomer(null);
+    setSelectedVendor(null);
+    setUrlDetailId(null);
   }, [view]);
 
   // Handle inquiryId prop - when set, show the detail view for that inquiry
@@ -110,13 +117,56 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
     }
   }, [inquiryId, view, quotations]);
 
+  // Restore detail view from URL on mount/refresh
+  useEffect(() => {
+    if (!urlDetailId) return;
+    const restoreDetail = async () => {
+      try {
+        if (view === "contacts") {
+          const { data } = await supabase.from("contacts").select("*").eq("id", urlDetailId).maybeSingle();
+          if (data) {
+            const c: Contact = {
+              id: data.id, name: data.name || `${data.first_name || ""} ${data.last_name || ""}`.trim(),
+              first_name: data.first_name || "", last_name: data.last_name || "",
+              email: data.email, phone: data.phone || "", mobile_number: data.phone || "",
+              company_id: data.customer_id || data.id, lifecycle_stage: "Lead", lead_status: "Connected",
+              job_title: data.title || "", title: data.title || null, customer_id: data.customer_id || null,
+              owner_id: "", notes: data.notes || null, created_by: null,
+              created_at: data.created_date || data.created_at, updated_at: data.updated_at,
+            };
+            setSelectedContact(c); setSubView("detail");
+          }
+        } else if (view === "customers") {
+          const { data } = await supabase.from("customers").select("*").eq("id", urlDetailId).maybeSingle();
+          if (data) { setSelectedCustomer(data as Customer); setSubView("detail"); }
+        } else if (view === "vendors") {
+          const vendor = partners.find(v => v.id === urlDetailId);
+          if (vendor) { setSelectedVendor(vendor); setSubView("detail"); }
+        } else if (view === "quotations") {
+          const { data } = await supabase.from("quotations").select("*").eq("id", urlDetailId).maybeSingle();
+          if (data) {
+            const merged = { ...(data.details ?? {}), ...(data.pricing ?? {}), ...data } as QuotationNew;
+            if (!merged.quote_number && (data as any).quotation_number) merged.quote_number = (data as any).quotation_number;
+            if (!merged.contact_person_name) merged.contact_person_name = (data as any).contact_person_name || (data as any).contact_name || undefined;
+            if (!merged.created_date) merged.created_date = (data as any).quotation_date || data.created_at;
+            setSelectedQuotation(merged); setSubView("detail");
+          } else { setUrlDetailId(null); }
+        }
+      } catch (e) {
+        console.warn("[Pricing] Failed to restore detail from URL", e);
+      }
+    };
+    restoreDetail();
+  }, [urlDetailId, view, partners]);
+
   const handleViewContact = (contact: Contact) => {
     setSelectedContact(contact);
     setSubView("detail");
+    setUrlDetailId(contact.id);
     if (currentUser?.id) trackRecent({
       label: contact.name || [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Contact",
       sub: `Pricing · Contact`,
-      path: `/pricing/contacts`,
+      path: `/pricing/contacts?detail=${contact.id}`,
       type: "quotation",
       time: new Date().toISOString(),
     }, currentUser.id);
@@ -125,15 +175,17 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
   const handleBackFromContact = () => {
     setSelectedContact(null);
     setSubView("list");
+    setUrlDetailId(null);
   };
 
   const handleViewCustomer = (customer: Customer) => {
     setSelectedCustomer(customer);
     setSubView("detail");
+    setUrlDetailId(customer.id);
     if (currentUser?.id) trackRecent({
       label: customer.name || customer.company_name || "Customer",
       sub: `Pricing · Customer`,
-      path: `/pricing/customers`,
+      path: `/pricing/customers?detail=${customer.id}`,
       type: "quotation",
       time: new Date().toISOString(),
     }, currentUser.id);
@@ -142,11 +194,13 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
   const handleBackFromCustomer = () => {
     setSelectedCustomer(null);
     setSubView("list");
+    setUrlDetailId(null);
   };
 
   const handleViewQuotation = (quotation: QuotationNew) => {
     setSelectedQuotation(quotation);
     setSubView("detail");
+    setUrlDetailId(quotation.id);
     if (currentUser?.id) trackRecent({
       label: quotation.quote_number || "Quotation",
       sub: `Pricing · ${quotation.customer_name || ""}`,
@@ -159,6 +213,7 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
   const handleBackFromQuotation = () => {
     setSelectedQuotation(null);
     setSubView("list");
+    setUrlDetailId(null);
   };
 
   const handleEditQuotation = () => {
@@ -175,6 +230,7 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
   const handleBackFromCreate = () => {
     setSelectedQuotation(null);
     setSubView("list");
+    setUrlDetailId(null);
   };
 
   const handleSaveQuotation = async (data: QuotationNew) => {
@@ -393,7 +449,8 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
         .eq('id', selectedQuotation.id);
       
       if (!error) {
-        console.log("Quotation deleted successfully");
+        const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+        logDeletion("quotation", selectedQuotation.id, selectedQuotation.quotation_name || selectedQuotation.quote_number || selectedQuotation.id, actor);
         await fetchQuotations();
         setSubView("list");
         setSelectedQuotation(null);
@@ -446,17 +503,18 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
   };
 
   const handleViewVendor = (vendorId: string) => {
-    // Search in dynamic partners list
     const vendor = partners.find(v => v.id === vendorId);
     if (vendor) {
       setSelectedVendor(vendor);
       setSubView("detail");
+      setUrlDetailId(vendor.id);
     }
   };
 
   const handleBackFromVendor = () => {
     setSelectedVendor(null);
     setSubView("list");
+    setUrlDetailId(null);
   };
 
   return (

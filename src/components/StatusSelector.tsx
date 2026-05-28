@@ -37,6 +37,28 @@ const BOOKING_STATUS_TRANSITIONS: Record<ExecutionStatus, ExecutionStatus[]> = {
   Paid: ["Audited", "Closed"],
 };
 
+const REVERSIBLE_BOOKING_STATUSES = new Set<ExecutionStatus>(["Completed", "Cancelled"]);
+const DEFAULT_REVERSIBLE_STATUS_OPTIONS: Partial<Record<ExecutionStatus, ExecutionStatus[]>> = {
+  Completed: ["Ongoing", "Delivered", "Billed", "Closed"],
+  Cancelled: ["Draft", "Ongoing", "Delivered", "Completed", "Billed", "Paid"],
+};
+
+export function getAvailableBookingStatuses(status: ExecutionStatus, serviceType?: string): ExecutionStatus[] {
+  const serviceStatuses = serviceType ? getStatusOptions(serviceType) : [];
+  const reversibleStatuses = serviceStatuses.length > 0
+    ? serviceStatuses
+    : DEFAULT_REVERSIBLE_STATUS_OPTIONS[status] ?? [];
+  const nextStatuses = (
+    REVERSIBLE_BOOKING_STATUSES.has(status) && reversibleStatuses.length > 0
+      ? reversibleStatuses
+      : status === "Created" && serviceStatuses.length > 0
+        ? serviceStatuses
+        : BOOKING_STATUS_TRANSITIONS[status] ?? []
+  ).filter((s): s is ExecutionStatus => s !== status);
+
+  return Array.from(new Set(nextStatuses));
+}
+
 export function StatusSelector({
   status,
   onUpdateStatus,
@@ -48,12 +70,7 @@ export function StatusSelector({
   const style = getBookingStatusStyles(status);
   const Icon = style.icon;
 
-  const serviceStatuses = serviceType ? getStatusOptions(serviceType) : [];
-  const availableStatuses: ExecutionStatus[] = (
-    status === "Created" && serviceStatuses.length > 0
-      ? serviceStatuses
-      : BOOKING_STATUS_TRANSITIONS[status] ?? []
-  ).filter((s): s is ExecutionStatus => s !== status);
+  const availableStatuses = getAvailableBookingStatuses(status, serviceType);
 
   const optionStatuses = [status, ...availableStatuses];
   const options = optionStatuses.map((optionStatus) => {

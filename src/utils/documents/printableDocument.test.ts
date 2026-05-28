@@ -181,6 +181,7 @@ describe("normalizePrintableDocument", () => {
         rows: [{ id: "r1", cells: { desc: "Freight" } }],
       },
     ],
+    postTableSections: [],
     notes: [
       {
         id: "n",

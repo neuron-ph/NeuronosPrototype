@@ -13,7 +13,7 @@ export type FormState = Record<string, unknown>;
 
 // Keys that should never enter formState — they're constraints/hints carried
 // alongside the booking but not part of the booking row itself.
-const NON_PERSISTED_PREFILL_KEYS = new Set(['pol_options', 'pod_options']);
+const NON_PERSISTED_PREFILL_KEYS = new Set(['pol_options', 'pod_options', 'delivery_container_types', 'delivery_destinations']);
 
 function splitPrefill(prefill: FormState): { persisted: FormState; constraints: FormState } {
   const persisted: FormState = {};
@@ -124,6 +124,8 @@ export function useBookingFormState(serviceType: string, seed?: FormState) {
 
   const polOptions = Array.isArray(constraints.pol_options) ? (constraints.pol_options as string[]) : undefined;
   const podOptions = Array.isArray(constraints.pod_options) ? (constraints.pod_options as string[]) : undefined;
+  const deliveryContainerTypes = Array.isArray(constraints.delivery_container_types) ? (constraints.delivery_container_types as string[]) : undefined;
+  const deliveryDestinations = Array.isArray(constraints.delivery_destinations) ? (constraints.delivery_destinations as string[]) : undefined;
 
   const context: BookingFormContext = {
     service_type: String(formState.service_type ?? serviceType),
@@ -136,12 +138,11 @@ export function useBookingFormState(serviceType: string, seed?: FormState) {
     customer_name: selectedCustomer.customerName || null,
     pol_options: polOptions,
     pod_options: podOptions,
+    delivery_container_types: deliveryContainerTypes,
+    delivery_destinations: deliveryDestinations,
   };
 
-  // Imperative setter for non-persisted constraints (e.g. contract-detected
-  // POL/POD allowed lists on ad-hoc bookings). Pass `null`/empty arrays to
-  // clear a specific constraint.
-  const setConstraint = useCallback((key: 'pol_options' | 'pod_options', value: string[] | null) => {
+  const setConstraint = useCallback((key: 'pol_options' | 'pod_options' | 'delivery_container_types' | 'delivery_destinations', value: string[] | null) => {
     setConstraints(prev => ({ ...prev, [key]: value && value.length > 0 ? value : undefined }));
   }, []);
 
