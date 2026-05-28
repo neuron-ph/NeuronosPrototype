@@ -390,12 +390,36 @@ function UsersTab({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("users")
-        .select("id, email, name, department, role, team_role, team_id, is_active, status, avatar_url, teams!users_team_id_fkey(name)")
+        .select("id, email, name, department, role, is_active, status, avatar_url")
         .order("name", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as unknown as (UserRow & { status?: UserStatus; teams?: { name: string } | null })[];
+      return (data ?? []) as unknown as (UserRow & { status?: UserStatus })[];
     },
   });
+
+  const { data: activeMemberships = [] } = useQuery({
+    queryKey: ["team_memberships", "active-roster", "users-tab"],
+    queryFn: listActiveTeamMemberships,
+    staleTime: 30 * 1000,
+  });
+
+  const membershipSummaryByUserId = useMemo(() => {
+    const summaries = new Map<
+      string,
+      Array<{ teamName: string; roles: Array<{ roleKey: string; roleLabel: string }> }>
+    >();
+
+    for (const membership of activeMemberships) {
+      const existing = summaries.get(membership.userId) ?? [];
+      existing.push({
+        teamName: membership.teamName ?? "Unnamed team",
+        roles: membership.roles,
+      });
+      summaries.set(membership.userId, existing);
+    }
+
+    return summaries;
+  }, [activeMemberships]);
 
   // Update parent with user count
   useEffect(() => {
@@ -432,7 +456,7 @@ function UsersTab({
     });
   }, [users, filters, accessSummaryByUserId]);
 
-  const columns = useMemo<ColumnDef<UserRow & { status?: UserStatus; teams?: { name: string } | null }>[]>(() => [
+  const columns = useMemo<ColumnDef<UserRow & { status?: UserStatus }>[]>(() => [
     {
       header: "Name",
       width: "240px",
@@ -444,9 +468,31 @@ function UsersTab({
       cell: (u) => <DeptBadge dept={u.department} />,
     },
     {
-      header: "Team",
-      width: "140px",
-      cell: (u) => <span style={{ fontSize: 13, color: "var(--neuron-ink-muted)" }}>{u.teams?.name || "—"}</span>,
+      header: "Teams",
+      width: "180px",
+      cell: (u) => {
+        const memberships = membershipSummaryByUserId.get(u.id!) ?? [];
+        if (memberships.length === 0) {
+          return <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>—</span>;
+        }
+        return (
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {memberships.slice(0, 2).map((membership) => (
+              <span
+                key={membership.teamName}
+                style={{ fontSize: 12, fontWeight: 500, padding: "2px 8px", borderRadius: 999, backgroundColor: "var(--neuron-bg-surface-subtle)", color: "var(--theme-text-secondary)", maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+              >
+                {membership.teamName}
+              </span>
+            ))}
+            {memberships.length > 2 && (
+              <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>
+                +{memberships.length - 2}
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       header: "Role",
@@ -461,16 +507,35 @@ function UsersTab({
       },
     },
     {
-      header: "Team Role",
-      width: "130px",
+      header: "Team Roles",
+      width: "170px",
       cell: (u) => {
-        const tr = (u as UserRow & { team_role?: string | null }).team_role;
-        if (!tr) return <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>—</span>;
-        const tc = TEAM_ROLE_COLORS[tr] ?? { bg: "var(--neuron-bg-surface-subtle)", text: "var(--theme-text-secondary)" };
+        const memberships = membershipSummaryByUserId.get(u.id!) ?? [];
+        const roleLabels = Array.from(
+          new Set(memberships.flatMap((membership) => membership.roles.map((role) => role.roleLabel))),
+        );
+        if (roleLabels.length === 0) {
+          return <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>—</span>;
+        }
         return (
-          <span style={{ fontSize: 12, fontWeight: 500, padding: "2px 8px", borderRadius: 999, backgroundColor: tc.bg, color: tc.text }}>
-            {tr}
-          </span>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {roleLabels.slice(0, 2).map((roleLabel) => {
+              const tc = TEAM_ROLE_COLORS[roleLabel] ?? { bg: "var(--neuron-bg-surface-subtle)", text: "var(--theme-text-secondary)" };
+              return (
+                <span
+                  key={roleLabel}
+                  style={{ fontSize: 12, fontWeight: 500, padding: "2px 8px", borderRadius: 999, backgroundColor: tc.bg, color: tc.text, maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                >
+                  {roleLabel}
+                </span>
+              );
+            })}
+            {roleLabels.length > 2 && (
+              <span style={{ fontSize: 12, color: "var(--neuron-ink-muted)" }}>
+                +{roleLabels.length - 2}
+              </span>
+            )}
+          </div>
         );
       },
     },
@@ -526,7 +591,7 @@ function UsersTab({
         );
       },
     },
-  ], [accessSummaryByUserId]);
+  ], [accessSummaryByUserId, membershipSummaryByUserId, onConfigureAccess]);
 
   if (isError) {
     return (
@@ -1612,6 +1677,22 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
     [membershipRows, teams],
   );
 
+  const usersWithMemberships = useMemo(() => {
+    const teamNamesByUserId = new Map<string, string[]>();
+    for (const membership of membershipRows) {
+      const teamName = membership.teamName;
+      if (!teamName) continue;
+      const existing = teamNamesByUserId.get(membership.userId) ?? [];
+      existing.push(teamName);
+      teamNamesByUserId.set(membership.userId, existing);
+    }
+
+    return allUsers.map((user) => ({
+      ...user,
+      currentTeamNames: teamNamesByUserId.get(user.id) ?? [],
+    }));
+  }, [allUsers, membershipRows]);
+
   // Update parent with teams count
   useEffect(() => {
     onCountUpdate(teams.length);
@@ -1622,7 +1703,10 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
     return acc;
   }, {}), [teamsWithMembers]);
 
-  const deptUsersFor = useCallback((dept: Department) => allUsers.filter(u => u.department === dept), [allUsers]);
+  const deptUsersFor = useCallback(
+    (dept: Department) => usersWithMemberships.filter(u => u.department === dept),
+    [usersWithMemberships],
+  );
 
   const refreshTeamsData = useCallback(async () => {
     await Promise.all([
@@ -1684,7 +1768,7 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
             <div key={dept} style={{ border: "1px solid var(--neuron-ui-border)", borderRadius: 12, overflow: "hidden", background: "var(--neuron-bg-elevated)" }}>
               <OperationsTeamsSection
                 teams={deptTeams}
-                users={allUsers}
+                users={usersWithMemberships}
                 currentUser={currentUser}
                 onRefresh={refreshTeamsData}
               />
@@ -1697,7 +1781,7 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
             dept={dept as Department}
             deptTeams={deptTeams}
             colors={colors}
-            allUsers={allUsers}
+            allUsers={usersWithMemberships}
             currentUser={currentUser}
             expanded={expanded}
             setExpanded={setExpanded}

@@ -36,16 +36,21 @@ export const isInvoiceReversedOriginal = (invoice: any): boolean => (
 export const isInvoiceFinanciallyActive = (invoice: any): boolean => {
   if (!invoice) return false;
   if (isInvoiceReversalDocument(invoice)) return false;
-  if (getInvoiceStatus(invoice) === REVERSED_INVOICE_STATUS) return false;
+  const status = getInvoiceStatus(invoice);
+  if (status === REVERSED_INVOICE_STATUS) return false;
+  if (status === "void") return false;
+  if (status === "draft") return false;
 
   return (
-    ACTIVE_INVOICE_STATUSES.has(getInvoiceStatus(invoice)) ||
+    ACTIVE_INVOICE_STATUSES.has(status) ||
     ACTIVE_INVOICE_PAYMENT_STATUSES.has(getInvoicePaymentStatus(invoice))
   );
 };
 
 export const isInvoiceVisibleDocument = (invoice: any): boolean => (
   isInvoiceFinanciallyActive(invoice) ||
+  getInvoiceStatus(invoice) === "draft" ||
+  getInvoiceStatus(invoice) === "void" ||
   isInvoiceReversalDraft(invoice) ||
   isInvoiceReversalPosted(invoice) ||
   isInvoiceReversedOriginal(invoice)

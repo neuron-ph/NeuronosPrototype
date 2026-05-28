@@ -607,6 +607,7 @@ export interface AppliedRate {
   quantity: number;
   subtotal: number;
   rule_applied?: string;               // Human-readable breakdown
+  condition_label?: string;            // Why this charge was included (e.g., "Booking has X-ray examination")
   catalog_item_id?: string;            // Carried from ContractRateRow for billing generation
   category?: string;                   // Carried from ContractRateCategory.category_name for grouped rendering
 }

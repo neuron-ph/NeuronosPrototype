@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Check, ChevronDown, X } from "lucide-react";
 import { normalizeRoleKey } from "../../utils/assignments/normalizeRoleKey";
 import type { TeamMemberRoleInput } from "../../utils/teamMemberships";
@@ -16,6 +17,7 @@ import {
 export interface TeamPoolAssignableUser {
   id: string;
   name: string;
+  currentTeamNames?: string[];
 }
 
 export interface TeamPoolExistingMember {
@@ -240,6 +242,27 @@ function TeamMemberRosterEditor({
   onRoleToggle: (userId: string, roleLabel: string, checked: boolean) => void;
 }) {
   const canAssignRoles = roleOptions.length > 0;
+  const [pendingAddId, setPendingAddId] = useState<string | null>(null);
+  const pendingUser = pendingAddId
+    ? availableToAdd.find((user) => user.id === pendingAddId) ?? null
+    : null;
+  const pendingTeamNames = pendingUser?.currentTeamNames?.filter(Boolean) ?? [];
+
+  const handleAddSelection = (userId: string) => {
+    const user = availableToAdd.find((entry) => entry.id === userId);
+    const teamNames = user?.currentTeamNames?.filter(Boolean) ?? [];
+    if (teamNames.length > 0) {
+      setPendingAddId(userId);
+      return;
+    }
+    onAddMember(userId);
+  };
+
+  const handleConfirmPendingAdd = () => {
+    if (!pendingAddId) return;
+    onAddMember(pendingAddId);
+    setPendingAddId(null);
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -364,7 +387,7 @@ function TeamMemberRosterEditor({
               background: "rgba(255,255,255,0.012)",
             }}
           >
-            <Select value="" onValueChange={onAddMember} disabled={!canAssignRoles}>
+            <Select value="" onValueChange={handleAddSelection} disabled={!canAssignRoles}>
               <SelectTrigger
                 style={{
                   height: 34,
@@ -385,6 +408,65 @@ function TeamMemberRosterEditor({
                 ))}
               </SelectContent>
             </Select>
+            {pendingUser && (
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: 12,
+                  borderRadius: 10,
+                  border: "1px solid rgba(245, 158, 11, 0.24)",
+                  background: "rgba(245, 158, 11, 0.08)",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  justifyContent: "space-between",
+                  gap: 12,
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: "var(--neuron-ink-primary)" }}>
+                    {pendingUser.name} is already in {pendingTeamNames.join(", ")}.
+                  </p>
+                  <p style={{ margin: "3px 0 0", fontSize: 12, color: "var(--neuron-ink-muted)" }}>
+                    Confirm adding them to this team too.
+                  </p>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    onClick={() => setPendingAddId(null)}
+                    style={{
+                      height: 28,
+                      padding: "0 10px",
+                      borderRadius: 7,
+                      border: "1px solid rgba(148, 163, 184, 0.18)",
+                      background: "transparent",
+                      color: "var(--neuron-ink-muted)",
+                      fontSize: 12,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmPendingAdd}
+                    style={{
+                      height: 28,
+                      padding: "0 10px",
+                      borderRadius: 7,
+                      border: "1px solid rgba(245, 158, 11, 0.32)",
+                      background: "rgba(245, 158, 11, 0.16)",
+                      color: "var(--theme-status-warning-fg)",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Confirm
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

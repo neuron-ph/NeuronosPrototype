@@ -14,7 +14,7 @@
  *   - FinancialDashboard (Dashboard tab — 6-zone company-wide view)
  */
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { usePermission } from "../../context/PermissionProvider";
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "../../lib/queryKeys";
@@ -37,6 +37,7 @@ import {
   Layers,
 } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
+import { useUrlSelection } from "../../hooks/useUrlSelection";
 import { useDataScope } from "../../hooks/useDataScope";
 import type { DataScope } from "../../hooks/useDataScope";
 import { calculateFinancialTotals } from "../../utils/financialCalculations";
@@ -55,6 +56,7 @@ import type { DateScope, KPICard, GroupedItems, GroupOption, StatusOption } from
 import { GroupingToolbar } from "./aggregate/GroupingToolbar";
 import { GroupedDataTable } from "./aggregate/GroupedDataTable";
 import type { AggColumnDef } from "./aggregate/GroupedDataTable";
+import { useRealtimeSyncMulti } from "../../hooks/useRealtimeSync";
 
 // Phase 3: AgingStrip
 import { AgingStrip } from "./aggregate/AgingStrip";
@@ -179,9 +181,19 @@ export function FinancialsModule() {
   const navigate = useNavigate();
   const { scope: dataScope, isLoaded: isScopeLoaded } = useDataScope('financials');
 
+  // URL-based detail persistence (survives refresh)
+  const [urlDetailId, setUrlDetailId] = useUrlSelection("detail");
+
   // Detail sheet state (C9 + C10)
   const [selectedBillingId, setSelectedBillingId] = useState<string | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
+
+  // Restore detail sheet from URL on mount
+  useEffect(() => {
+    if (urlDetailId && !selectedBillingId && !selectedCollectionId) {
+      setSelectedBillingId(urlDetailId);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Create actions (C12) — navigate to project-scoped creation flows
   const handleCreateInvoice = useCallback(() => {
@@ -329,6 +341,14 @@ export function FinancialsModule() {
       return { billingItems, invoices, collections, expenses };
     },
     staleTime: 30_000,
+  });
+
+  useRealtimeSyncMulti({
+    tables: [
+      { table: "billing_line_items", queryKey: queryKeys.financials.reportsData() },
+      { table: "collections", queryKey: queryKeys.financials.reportsData() },
+      { table: "evouchers", queryKey: queryKeys.financials.reportsData() },
+    ],
   });
 
   const billingItems = financialsData?.billingItems ?? [];
@@ -1566,7 +1586,7 @@ export function FinancialsModule() {
               groups={billingsGroups}
               columns={BILLINGS_COLUMNS}
               isLoading={isLoading}
-              onRowClick={(item) => setSelectedBillingId((item as any).invoice_id || item.id)}
+              onRowClick={(item) => { const id = (item as any).invoice_id || item.id; setSelectedBillingId(id); setUrlDetailId(id); }}
               exportFileName="billings"
             />
           </AggregateFinancialShell>
@@ -1651,7 +1671,7 @@ export function FinancialsModule() {
               groups={collectionsGroups}
               columns={COLLECTIONS_COLUMNS}
               isLoading={isLoading}
-              onRowClick={(item: any) => setSelectedCollectionId(item.id)}
+              onRowClick={(item: any) => { setSelectedCollectionId(item.id); setUrlDetailId(item.id); }}
               exportFileName="collections"
             />
           </AggregateFinancialShell>
@@ -1696,12 +1716,12 @@ export function FinancialsModule() {
       {/* Detail sheets (C9 + C10) */}
       <BillingDetailsSheet
         isOpen={!!selectedBillingId}
-        onClose={() => setSelectedBillingId(null)}
+        onClose={() => { setSelectedBillingId(null); setUrlDetailId(null); }}
         billingId={selectedBillingId || ""}
       />
       <CollectionDetailsSheet
         isOpen={!!selectedCollectionId}
-        onClose={() => setSelectedCollectionId(null)}
+        onClose={() => { setSelectedCollectionId(null); setUrlDetailId(null); }}
         collectionId={selectedCollectionId || ""}
       />
     </div>

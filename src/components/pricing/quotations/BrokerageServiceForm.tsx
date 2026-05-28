@@ -1,5 +1,4 @@
 import { FormSelect } from "./FormSelect";
-import { FormCheckbox } from "./FormCheckbox";
 import { ContainerEntriesManager } from "./ContainerEntriesManager";
 import { useState, type ReactNode } from "react";
 import {
@@ -197,29 +196,6 @@ export function BrokerageServiceForm({
             </div>
           </div>
         )}
-        {/* ── Contract mode: static badge ─────────────────────────────────── */}
-        {contractMode && (
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-            {["Standard", "Multi-Modal"].map(badge => (
-              <span key={badge} style={{
-                display: "inline-flex",
-                alignItems: "center",
-                padding: "4px 10px",
-                fontSize: "12px",
-                fontWeight: 500,
-                color: "var(--neuron-brand-green)",
-                backgroundColor: "var(--theme-bg-surface-tint)",
-                border: "1px solid var(--neuron-ui-border)",
-                borderRadius: "14px",
-              }}>
-                {badge}
-              </span>
-            ))}
-            <span style={{ fontSize: "11px", color: "var(--neuron-ink-muted)", fontStyle: "italic" }}>
-              Brokerage contracts are always Standard type with Multi-Modal rate columns
-            </span>
-          </div>
-        )}
 
         {/* ── Shared fields (shown for all packages once one is selected) ─── */}
         {hasPackage && (
@@ -228,25 +204,42 @@ export function BrokerageServiceForm({
             {isFieldVisible("type_of_entry", "Brokerage", ctx) && (
               <div>
                 <label style={labelStyle}>Customs Entry Procedure Code</label>
-                <div style={{ display: "flex", gap: "16px" }}>
-                  <FormCheckbox
-                    checked={data.consumption || false}
-                    onChange={(checked) => updateField("consumption", checked)}
-                    label="Consumption"
-                    disabled={viewMode}
-                  />
-                  <FormCheckbox
-                    checked={data.warehousing || false}
-                    onChange={(checked) => updateField("warehousing", checked)}
-                    label="Warehousing"
-                    disabled={viewMode}
-                  />
-                  <FormCheckbox
-                    checked={data.peza || false}
-                    onChange={(checked) => updateField("peza", checked)}
-                    label="PEZA"
-                    disabled={viewMode}
-                  />
+                <div style={{ display: "flex", gap: "8px" }}>
+                  {(["Consumption", "Warehousing", "PEZA"] as const).map(option => {
+                    const key = option.toLowerCase() as "consumption" | "warehousing" | "peza";
+                    const isSelected = data[key] === true;
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => {
+                          if (viewMode) return;
+                          updateField("consumption", key === "consumption");
+                          updateField("warehousing", key === "warehousing");
+                          updateField("peza", key === "peza");
+                        }}
+                        disabled={viewMode}
+                        style={{
+                          padding: "6px 14px",
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          color: isSelected ? "white" : "var(--neuron-ink-base)",
+                          backgroundColor: isSelected
+                            ? "var(--theme-action-primary-bg)"
+                            : "var(--theme-bg-surface)",
+                          border: `1px solid ${isSelected
+                            ? "var(--theme-action-primary-bg)"
+                            : "var(--neuron-ui-border)"}`,
+                          borderRadius: "6px",
+                          cursor: viewMode ? "default" : "pointer",
+                          transition: "all 0.15s ease",
+                          opacity: viewMode && !isSelected ? 0.6 : 1,
+                        }}
+                      >
+                        {option}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}

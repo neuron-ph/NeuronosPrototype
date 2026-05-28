@@ -60,7 +60,7 @@ export function CustomDropdown({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number; minWidth: number; openUpward: boolean } | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; minWidth: number; maxWidth: number; openUpward: boolean } | null>(null);
 
   const computeMenuPos = () => {
     if (!buttonRef.current) return null;
@@ -71,14 +71,17 @@ export function CustomDropdown({
 
     const maxMenuHeight = 240;
     const gap = 4;
+    const viewportPad = 8;
     const spaceBelow = window.innerHeight - rect.bottom - gap;
     // Only flip upward when there's critically little space below (<80px),
     // not whenever the space is less than the full max height.
     const openUpward = spaceBelow < 80 && rect.top > maxMenuHeight;
+    const maxWidth = window.innerWidth - rect.left - viewportPad;
     return {
       top: openUpward ? rect.top - gap - maxMenuHeight : rect.bottom + gap,
       left: rect.left,
       minWidth: rect.width,
+      maxWidth: Math.max(rect.width, maxWidth),
       openUpward,
     };
   };
@@ -89,6 +92,19 @@ export function CustomDropdown({
       setMenuPos(computeMenuPos());
     }
   }, [isOpen]);
+
+  // When opening upward, re-measure the actual menu height and adjust top
+  // so the menu sits flush against the trigger instead of using maxMenuHeight.
+  useEffect(() => {
+    if (!isOpen || !menuPos?.openUpward || !menuRef.current || !buttonRef.current) return;
+    const actualHeight = menuRef.current.offsetHeight;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const gap = 4;
+    const correctTop = rect.top - gap - actualHeight;
+    if (Math.abs(menuPos.top - correctTop) > 1) {
+      setMenuPos(prev => prev ? { ...prev, top: correctTop } : prev);
+    }
+  }, [isOpen, menuPos?.openUpward]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Close dropdown when clicking outside (check both trigger and portal menu)
   useEffect(() => {
@@ -249,6 +265,7 @@ export function CustomDropdown({
                 top: menuPos.top,
                 left: menuPos.left,
                 minWidth: menuPos.minWidth,
+                maxWidth: menuPos.maxWidth,
                 width: "max-content"
               }}
             >
@@ -302,7 +319,7 @@ export function CustomDropdown({
                       </span>
                     )}
                     {option.icon && <span style={{ display: "flex", alignItems: "center" }}>{option.icon}</span>}
-                    {option.label}
+                    <span style={{ minWidth: 0, wordBreak: "break-word" }}>{option.label}</span>
                   </button>
                 );
               })}
@@ -380,6 +397,7 @@ export function CustomDropdown({
                 top: menuPos.top,
                 left: menuPos.left,
                 minWidth: menuPos.minWidth,
+                maxWidth: menuPos.maxWidth,
                 width: "max-content"
               }}
             >
@@ -433,7 +451,7 @@ export function CustomDropdown({
                       </span>
                     )}
                     {option.icon && <span style={{ display: "flex", alignItems: "center" }}>{option.icon}</span>}
-                    {option.label}
+                    <span style={{ minWidth: 0, wordBreak: "break-word" }}>{option.label}</span>
                   </button>
                 );
               })}

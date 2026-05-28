@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
-import { Plus, Search, Shield, Briefcase, UserCheck, FileEdit, Clock, CheckCircle, Trash2 } from "lucide-react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { Plus, Search, Shield, Briefcase, UserCheck, FileEdit, Clock, CheckCircle, Trash2, XCircle } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { assessBookingFinancialState, canHardDeleteBooking, getBookingCancellationMessage } from "../../utils/bookingCancellation";
 import { CreateMarineInsuranceBookingPanel } from "./CreateMarineInsuranceBookingPanel";
@@ -13,12 +13,13 @@ import { useBookingAssignmentVisibility } from "../../hooks/useBookingAssignment
 import { filterBookingsByScope } from "../../utils/assignments/applyAssignmentVisibility";
 import { SkeletonTable } from "../shared/NeuronSkeleton";
 import { usePermission } from "../../context/PermissionProvider";
-import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
 import { logDeletion } from "../../utils/activityLog";
 import { normalizeDetails } from "../../utils/bookings/bookingDetailsCompat";
 import type { ExecutionStatus } from "../../types/operations";
 import { NeuronModal } from "../ui/NeuronModal";
 import { useUnreadEntityIds } from "../../hooks/useNotifications";
+import { useUrlSelection } from "../../hooks/useUrlSelection";
+import { useRealtimeSync } from "../../hooks/useRealtimeSync";
 
 interface MarineInsuranceBooking {
   bookingId: string;
@@ -50,23 +51,28 @@ export function MarineInsuranceBookings({ currentUser, pendingBookingId, initial
   const canViewDraftTab      = can("ops_marine_insurance_draft_tab", "view");
   const canViewInProgressTab = can("ops_marine_insurance_in_progress_tab", "view");
   const canViewCompletedTab  = can("ops_marine_insurance_completed_tab", "view");
+  const canViewCancelledTab  = can("ops_marine_insurance_cancelled_tab", "view");
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [movementFilter, setMovementFilter] = useState<string>("all");
-  const [activeTab, setActiveTab] = useState<"all" | "my" | "draft" | "in-progress" | "completed">(() => {
+  const [activeTab, setActiveTab] = useState<"all" | "my" | "draft" | "in-progress" | "completed" | "cancelled">(() => {
     if (canViewAllTab)        return "all";
     if (canViewMyTab)         return "my";
     if (canViewDraftTab)      return "draft";
     if (canViewInProgressTab) return "in-progress";
-    return "completed";
+    if (canViewCompletedTab)  return "completed";
+    return "cancelled";
   });
   const [timePeriodFilter, setTimePeriodFilter] = useState<string>("all");
   const [ownerFilter, setOwnerFilter] = useState<string>("all");
   const [handlerFilter, setHandlerFilter] = useState<string>("all");
   const [coverageTypeFilter, setCoverageTypeFilter] = useState<string>("all");
   const [selectedBooking, setSelectedBooking] = useState<MarineInsuranceBooking | null>(null);
+  const [urlBookingId, setUrlBookingId] = useUrlSelection("booking");
+  const urlRestoredRef = useRef(false);
+  const suppressUrlSelectionRef = useRef(false);
   const [resumeDraft, setResumeDraft] = useState<Record<string, unknown> | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; label: string } | null>(null);
 
@@ -112,19 +118,74 @@ export function MarineInsuranceBookings({ currentUser, pendingBookingId, initial
   });
   const fetchBookings = () => { refetch(); };
 
+  useRealtimeSync({ table: "bookings", queryKey: queryKeys.bookings.list("marine") });
+
   const bookings = useMemo(() => {
     if (!scopeLoaded || !assignmentIndexLoaded) return [];
     return filterBookingsByScope(rawBookings, scope, assignmentIndex);
   }, [rawBookings, scope, scopeLoaded, assignmentIndex, assignmentIndexLoaded]);
 
-  // Deep-link: auto-select booking from pendingBookingId
+  // Deep-link: auto-select booking from pendingBookingId or URL param
+  const effectiveBookingId = urlBookingId ?? pendingBookingId;
+
   useEffect(() => {
-    if (!pendingBookingId || bookings.length === 0 || isLoading) return;
-    const match = bookings.find(b => b.bookingId === pendingBookingId);
+    if (suppressUrlSelectionRef.current) {
+      if (!effectiveBookingId) suppressUrlSelectionRef.current = false;
+      return;
+    }
+    if (!effectiveBookingId || bookings.length === 0 || isLoading) return;
+    // Try to find in already-loaded bookings first
+    const match = bookings.find(b => b.bookingId === effectiveBookingId);
     if (match) {
       setSelectedBooking(match);
+      if (!urlBookingId) setUrlBookingId(match.bookingId);
+      return;
     }
-  }, [pendingBookingId, bookings, isLoading]);
+  }, [effectiveBookingId, bookings, isLoading]);
+
+  // Restore from URL on mount: if booking isn't in the filtered list, fetch directly
+  useEffect(() => {
+    if (suppressUrlSelectionRef.current) {
+      if (!urlBookingId) suppressUrlSelectionRef.current = false;
+      return;
+    }
+    if (!urlBookingId || selectedBooking || urlRestoredRef.current || isLoading) return;
+    // Already tried matching via the list above; if not found, fetch from DB
+    if (bookings.length > 0 && !bookings.find(b => b.bookingId === urlBookingId)) {
+      urlRestoredRef.current = true;
+      (async () => {
+        const { data, error } = await supabase
+          .from("bookings")
+          .select("*")
+          .eq("id", urlBookingId)
+          .single();
+        if (error || !data) {
+          setUrlBookingId(null);
+          return;
+        }
+        const d = normalizeDetails(data.details || {}, "Marine Insurance");
+        setSelectedBooking({
+          ...d,
+          ...data,
+          bookingId: data.id,
+          booking_number: data.booking_number,
+          customerName: data.customer_name,
+          projectNumber: data.project_id,
+          accountOwner: data.manager_name,
+          accountHandler: data.handler_name,
+          status: data.status,
+          createdAt: data.created_at,
+          updatedAt: data.updated_at || data.created_at,
+          coverageType: d.coverage_type,
+          insuredValue: d.amount_insured != null
+            ? String(d.amount_insured)
+            : d.insured_value != null ? String(d.insured_value) : undefined,
+          vessel: d.vessel,
+          voyage: d.voyage,
+        } as MarineInsuranceBooking);
+      })();
+    }
+  }, [urlBookingId, selectedBooking, bookings, isLoading]);
 
   const handleBookingCreated = () => {
     setShowCreateModal(false);
@@ -182,6 +243,8 @@ export function MarineInsuranceBookings({ currentUser, pendingBookingId, initial
       filtered = bookings.filter(b => b.status === "In Progress");
     } else if (activeTab === "completed") {
       filtered = bookings.filter(b => b.status === "Completed");
+    } else if (activeTab === "cancelled") {
+      filtered = bookings.filter(b => b.status === "Cancelled");
     }
 
     return filtered;
@@ -243,12 +306,15 @@ export function MarineInsuranceBookings({ currentUser, pendingBookingId, initial
   const draftCount = bookings.filter(b => b.status === "Draft").length;
   const inProgressCount = bookings.filter(b => b.status === "In Progress").length;
   const completedCount = bookings.filter(b => b.status === "Completed").length;
+  const cancelledCount = bookings.filter(b => b.status === "Cancelled").length;
 
   if (selectedBooking) {
     return (
       <MarineInsuranceBookingDetails
         booking={selectedBooking as any}
         onBack={() => {
+          suppressUrlSelectionRef.current = true;
+          setUrlBookingId(null);
           setSelectedBooking(null);
         }}
         onUpdate={fetchBookings}
@@ -289,10 +355,6 @@ export function MarineInsuranceBookings({ currentUser, pendingBookingId, initial
             
             {/* Action Button */}
             <div className="flex items-center gap-3">
-              <NeuronRefreshButton 
-                onRefresh={fetchBookings}
-                label="Refresh bookings"
-              />
               <button
                 onClick={() => setShowCreateModal(true)}
                 style={{
@@ -540,6 +602,16 @@ export function MarineInsuranceBookings({ currentUser, pendingBookingId, initial
                 onClick={() => setActiveTab("completed")}
               />
             )}
+            {canViewCancelledTab && (
+              <TabButton
+                icon={<XCircle size={18} />}
+                label="Cancelled"
+                count={cancelledCount}
+                isActive={activeTab === "cancelled"}
+                color="var(--theme-status-danger-fg)"
+                onClick={() => setActiveTab("cancelled")}
+              />
+            )}
           </div>
         </div>
 
@@ -608,7 +680,9 @@ export function MarineInsuranceBookings({ currentUser, pendingBookingId, initial
                         if (booking.status === "Draft") {
                           setResumeDraft({ ...(booking as any), id: booking.bookingId });
                         } else {
+                          suppressUrlSelectionRef.current = false;
                           setSelectedBooking(booking);
+                          setUrlBookingId(booking.bookingId);
                         }
                       }}
                     >

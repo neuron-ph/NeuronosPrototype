@@ -120,6 +120,9 @@ export function UnifiedInvoicesTab({
   };
 
   const getInvoiceDisplayStatus = (invoice: any) => {
+    const rawStatus = (invoice?.status || "").toLowerCase();
+    if (rawStatus === "draft") return "draft";
+    if (rawStatus === "void") return "void";
     const lifecycleStatus = getInvoiceLifecycleStatus(invoice);
     if (lifecycleStatus) return lifecycleStatus;
     return calculateInvoiceBalance(invoice, collections).status;
@@ -280,23 +283,29 @@ export function UnifiedInvoicesTab({
         let styles = "";
         let label = "";
 
-        if (status === 'reversal_draft') {
+        if (status === 'draft') {
+          styles = "bg-[var(--theme-status-warning-bg)] text-[var(--theme-status-warning-fg)] border-[var(--theme-status-warning-border)]";
+          label = "Draft";
+        } else if (status === 'void') {
+          styles = "bg-[var(--theme-bg-surface-subtle)] text-[var(--theme-text-muted)] border-[var(--theme-border-default)]";
+          label = "Void";
+        } else if (status === 'reversal_draft') {
           styles = "bg-[var(--theme-status-warning-bg)] text-[var(--theme-status-warning-fg)] border-[var(--theme-status-warning-border)]";
           label = "Reversal Draft";
         } else if (status === 'reversed') {
           styles = "bg-[var(--theme-bg-surface-subtle)] text-[var(--theme-text-secondary)] border-[var(--theme-border-default)]";
           label = "Reversed";
         } else if (status === 'paid') {
-          styles = "bg-[var(--theme-status-success-bg)] text-[var(--theme-status-success-fg)] border-[var(--theme-status-success-border)]"; // Green
+          styles = "bg-[var(--theme-status-success-bg)] text-[var(--theme-status-success-fg)] border-[var(--theme-status-success-border)]";
           label = "Paid";
         } else if (status === 'overdue') {
-          styles = "bg-[var(--theme-status-danger-bg)] text-[var(--theme-status-danger-fg)] border-[var(--theme-status-danger-border)]"; // Red
+          styles = "bg-[var(--theme-status-danger-bg)] text-[var(--theme-status-danger-fg)] border-[var(--theme-status-danger-border)]";
           label = "Overdue";
         } else if (status === 'partial') {
-           styles = "bg-[var(--theme-status-warning-bg)] text-[var(--theme-status-warning-fg)] border-[var(--theme-status-warning-border)]"; // Orange
+           styles = "bg-[var(--theme-status-warning-bg)] text-[var(--theme-status-warning-fg)] border-[var(--theme-status-warning-border)]";
            label = "Partial";
         } else {
-          styles = "bg-[var(--neuron-semantic-info-bg)] text-[var(--neuron-semantic-info)] border-[var(--neuron-semantic-info-border)]"; // Blue
+          styles = "bg-[var(--neuron-semantic-info-bg)] text-[var(--neuron-semantic-info)] border-[var(--neuron-semantic-info-border)]";
           label = "Open";
         }
 
@@ -393,10 +402,12 @@ export function UnifiedInvoicesTab({
             onChange={setFilterStatus}
             options={[
               { value: "", label: "All Status" },
+              { value: "draft", label: "Draft" },
               { value: "open", label: "Open" },
               { value: "partial", label: "Partial" },
               { value: "paid", label: "Paid" },
               { value: "overdue", label: "Overdue" },
+              { value: "void", label: "Void" },
               { value: "reversal_draft", label: "Reversal Draft" },
               { value: "reversed", label: "Reversed" }
             ]}

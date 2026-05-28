@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../../utils/supabase/client";
 import { useUser } from "../../../hooks/useUser";
+import { useUrlSelection } from "../../../hooks/useUrlSelection";
 import { toast } from "sonner@2.0.3";
 import { NewJournalEntryScreen } from "./NewJournalEntryScreen";
 import { JournalEntryDetailPanel } from "./JournalEntryDetailPanel";
@@ -275,6 +276,7 @@ export function GeneralJournal() {
 
   // ── UI state ──
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
+  const [urlDetailId, setUrlDetailId] = useUrlSelection("detail");
   const [viewMode, setViewMode] = useState<"list" | "new-entry">("list");
   const [voidTarget, setVoidTarget] = useState<JournalEntry | null>(null);
   const [isVoiding, setIsVoiding] = useState(false);
@@ -284,6 +286,39 @@ export function GeneralJournal() {
     supabase.from("accounts").select("id, code, name").eq("is_active", true).order("code")
       .then(({ data }) => setAccounts((data ?? []) as COAAccount[]));
   }, []);
+
+  // ── Restore selected entry from URL on mount ──
+  useEffect(() => {
+    if (!urlDetailId || selectedEntry) return;
+    // Try to find in already-loaded entries first
+    const found = entries.find((e) => e.id === urlDetailId);
+    if (found) {
+      setSelectedEntry(found);
+      return;
+    }
+    // Otherwise fetch from supabase
+    if (!loadingEntries && entries.length >= 0) {
+      supabase
+        .from("journal_entries")
+        .select("*, users!created_by(name)")
+        .eq("id", urlDetailId)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data) {
+            const mapped = {
+              ...data,
+              created_by_name: (data.users as { name?: string } | null)?.name ?? null,
+              users: undefined,
+            } as unknown as JournalEntry;
+            setSelectedEntry(mapped);
+          } else {
+            // Entry not found — clear stale URL param
+            setUrlDetailId(null);
+          }
+        });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlDetailId, loadingEntries]);
 
   // ── Fetch summary (full filtered set, no pagination) ──
   const fetchSummary = useCallback(async (f: Filters) => {
@@ -394,7 +429,7 @@ export function GeneralJournal() {
       if (voidErr) throw voidErr;
       toast.success("Entry reversed — offsetting entry recorded");
       setVoidTarget(null);
-      if (selectedEntry?.id === voidTarget.id) setSelectedEntry(null);
+      if (selectedEntry?.id === voidTarget.id) { setSelectedEntry(null); setUrlDetailId(null); }
       handleEntryCreated();
     } catch {
       toast.error("Failed to reverse entry");
@@ -668,7 +703,7 @@ export function GeneralJournal() {
                         return (
                           <tr
                             key={entry.id}
-                            onClick={() => setSelectedEntry(isSelected ? null : entry)}
+                            onClick={() => { const next = isSelected ? null : entry; setSelectedEntry(next); setUrlDetailId(next?.id ?? null); }}
                             style={{
                               borderBottom: "1px solid var(--theme-border-subtle)",
                               backgroundColor: isSelected ? "var(--theme-state-selected)" : "var(--theme-bg-surface)",
@@ -762,10 +797,11 @@ export function GeneralJournal() {
         {selectedEntry && (
           <JournalEntryDetailPanel
             entry={selectedEntry}
-            onClose={() => setSelectedEntry(null)}
+            onClose={() => { setSelectedEntry(null); setUrlDetailId(null); }}
             onVoid={(e) => setVoidTarget(e)}
             onPosted={() => {
               setSelectedEntry(null);
+              setUrlDetailId(null);
               handleEntryCreated();
             }}
             canAct={canCreateJournal}

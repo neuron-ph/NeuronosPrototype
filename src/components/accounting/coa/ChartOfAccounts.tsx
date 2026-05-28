@@ -3,9 +3,11 @@ import { usePermission } from "../../../context/PermissionProvider";
 import { Plus, Search, Filter, Download, ChevronDown, ChevronRight, Folder, FileText, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { getAccounts, seedInitialAccounts } from "../../../utils/accounting-api";
+import { supabase } from "../../../utils/supabase/client";
 import { Account } from "../../../types/accounting-core";
 import { AccountSidePanel } from "./AccountSidePanel";
 import { DataTable, ColumnDef } from "../../common/DataTable";
+import { useUrlSelection } from "../../../hooks/useUrlSelection";
 
 import { AccountLedger } from "./AccountLedger";
 
@@ -35,12 +37,15 @@ export function ChartOfAccounts() {
     canIncomeStatementTab ? "IncomeStatement" :
     "All";
 
+  // URL persistence for detail panel
+  const [urlDetailId, setUrlDetailId] = useUrlSelection("detail");
+
   // State
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"All" | "BalanceSheet" | "IncomeStatement">(defaultCOATab);
-  
+
   // Ledger View State
   const [viewMode, setViewMode] = useState<"list" | "ledger">("list");
   const [activeLedgerAccount, setActiveLedgerAccount] = useState<Account | null>(null);
@@ -85,6 +90,31 @@ export function ChartOfAccounts() {
   useEffect(() => {
     loadAccounts();
   }, []);
+
+  // Restore detail panel from URL on mount / when accounts load
+  useEffect(() => {
+    if (!urlDetailId || isPanelOpen) return;
+    const found = accounts.find((a) => a.id === urlDetailId);
+    if (found) {
+      setSelectedAccount(found);
+      setIsPanelOpen(true);
+    } else if (!loading && accounts.length > 0) {
+      // Account not in current list — try fetching directly
+      supabase
+        .from("accounts")
+        .select("*")
+        .eq("id", urlDetailId)
+        .single()
+        .then(({ data }) => {
+          if (data) {
+            setSelectedAccount(data as Account);
+            setIsPanelOpen(true);
+          } else {
+            setUrlDetailId(null);
+          }
+        });
+    }
+  }, [urlDetailId, accounts, loading]);
 
   // Filtering
   const filteredAccounts = useMemo(() => {
@@ -172,6 +202,7 @@ export function ChartOfAccounts() {
   const handleEditAccount = (account: Account) => {
     setSelectedAccount(account);
     setIsPanelOpen(true);
+    setUrlDetailId(account.id);
   };
 
   // Helper: Currency Formatter
@@ -512,7 +543,7 @@ export function ChartOfAccounts() {
       {/* Side Panel */}
       <AccountSidePanel
         isOpen={isPanelOpen}
-        onClose={() => setIsPanelOpen(false)}
+        onClose={() => { setIsPanelOpen(false); setUrlDetailId(null); }}
         onSave={loadAccounts}
         account={selectedAccount}
       />

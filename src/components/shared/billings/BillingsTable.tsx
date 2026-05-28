@@ -97,6 +97,24 @@ const billingStatusStyles: Record<string, { bg: string; text: string; border: st
   "Voided": { bg: "var(--theme-status-danger-bg)", text: "var(--theme-status-danger-fg)", border: "var(--theme-status-danger-border)" },
 };
 
+function BreakdownSubRow({ item }: { item: BillingTableItem }) {
+  const rule = item.originalData?.rule_applied;
+  const condition = item.originalData?.condition_label;
+  if (!rule) return null;
+  return (
+    <div style={{ padding: "2px 16px 6px 44px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+      <span style={{ fontSize: "11px", color: "var(--theme-action-primary-bg)", backgroundColor: "var(--theme-bg-surface-tint)", padding: "1px 8px", borderRadius: "4px", display: "inline-block" }}>
+        {rule}
+      </span>
+      {condition && (
+        <span style={{ fontSize: "10px", color: "var(--theme-text-muted)", fontStyle: "italic" }}>
+          {condition}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function BillingsTable({
   data,
   isLoading = false,
@@ -528,6 +546,7 @@ export function BillingsTable({
                                     }}
                                     customActions={buildRowActions(item)}
                                   />
+                                  <BreakdownSubRow item={item} />
                                   </div>
                                 );
                               })}
@@ -861,6 +880,7 @@ export function BillingsTable({
                                     }}
                                     customActions={buildRowActions(item)}
                                   />
+                                  <BreakdownSubRow item={item} />
                                 </div>
                               );
                             })}
@@ -967,8 +987,8 @@ export function BillingsTable({
                                     // Protect billed/paid items from editing
                                     const isBilled = ["billed", "paid", "invoiced", "voided", "cancelled", "void"].includes((item.status || "").toLowerCase());
                                     return (
+                                    <div key={item.id}>
                                     <UniversalPricingRow
-                                    key={item.id}
                                     data={mapToPricingData(item)}
                                     mode={viewMode || isBilled ? "view" : "edit"}
                                     serviceType={item.serviceType}
@@ -986,6 +1006,8 @@ export function BillingsTable({
                                     }}
                                     customActions={buildRowActions(item)}
                                     />
+                                    <BreakdownSubRow item={item} />
+                                    </div>
                                     );
                                 })}
                                 </div>

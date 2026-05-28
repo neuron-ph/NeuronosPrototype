@@ -1,10 +1,12 @@
 import { supabase } from "../../../utils/supabase/client";
 import { toast } from "../../ui/toast-utils";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, MoreVertical, Clock, ChevronRight, User } from "lucide-react";
 import type { ForwardingBooking, ExecutionStatus } from "../../../types/operations";
 import { UnifiedBillingsTab } from "../../shared/billings/UnifiedBillingsTab";
+import { UnifiedInvoicesTab } from "../../shared/invoices/UnifiedInvoicesTab";
+import { UnifiedCollectionsTab } from "../../shared/collections/UnifiedCollectionsTab";
 import { ExpensesTab } from "../shared/ExpensesTab";
 import { BookingCommentsTab } from "../../shared/BookingCommentsTab";
 import { useProjectFinancials } from "../../../hooks/useProjectFinancials";
@@ -31,7 +33,7 @@ interface ForwardingBookingDetailsProps {
   highlightId?: string | null;
 }
 
-type DetailTab = "booking-info" | "billings" | "expenses" | "comments";
+type DetailTab = "booking-info" | "billings" | "invoices" | "collections" | "expenses" | "comments";
 
 
 // Activity Timeline Data Structure
@@ -75,8 +77,10 @@ export function ForwardingBookingDetails({
 }: ForwardingBookingDetailsProps) {
   const { can } = usePermission();
   const canViewBillings = can("ops_bookings_billings_tab", "view");
+  const canViewInvoices = can("ops_bookings_invoices_tab", "view") || can("accounting_bookings_invoices_tab", "view");
+  const canViewCollections = can("ops_bookings_collections_tab", "view") || can("accounting_bookings_collections_tab", "view");
   const [activeTab, setActiveTab] = useState<DetailTab>(
-    initialTab === "billings" && !canViewBillings
+    (initialTab === "billings" && !canViewBillings) || (initialTab === "invoices" && !canViewInvoices) || (initialTab === "collections" && !canViewCollections)
       ? "booking-info"
       : (initialTab as DetailTab) || "booking-info"
   );
@@ -104,6 +108,7 @@ export function ForwardingBookingDetails({
 
   // Local state to track edited booking values
   const [editedBooking, setEditedBooking] = useState<ForwardingBooking>(booking);
+  useEffect(() => { setEditedBooking(booking); }, [booking]);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showCancelDeletePanel, setShowCancelDeletePanel] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
@@ -204,6 +209,23 @@ export function ForwardingBookingDetails({
   const financials = useProjectFinancials(booking.projectNumber || "", [{ bookingId: booking.bookingId }]);
   const bookingBillingItems = financials.billingItems.filter(item => item.booking_id === booking.bookingId);
   const [pendingBillableCount, setPendingBillableCount] = useState(0);
+
+  const bookingContainer = useMemo(() => ({
+    id: booking.bookingId,
+    project_number: booking.projectNumber || "",
+    customer_id: (booking as any).customer_id || "",
+    customer_name: booking.customerName || "",
+    linkedBookings: [{ bookingId: booking.bookingId }],
+  }), [booking.bookingId, booking.projectNumber, booking.customerName, (booking as any).customer_id]);
+
+  const bookingFinancials = useMemo(() => ({
+    ...financials,
+    billingItems: bookingBillingItems,
+    invoices: financials.invoices.filter((inv: any) =>
+      inv.booking_id === booking.bookingId ||
+      (Array.isArray(inv.booking_ids) && inv.booking_ids.includes(booking.bookingId))
+    ),
+  }), [financials, bookingBillingItems, booking.bookingId]);
 
   return (
     <div style={{ 
@@ -349,6 +371,60 @@ export function ForwardingBookingDetails({
               }}
             >
               Billings
+            </button>
+          )}
+          {canViewInvoices && (
+            <button
+              onClick={() => setActiveTab("invoices")}
+              style={{
+                padding: "0 4px",
+                fontSize: "14px",
+                fontWeight: 500,
+                color: activeTab === "invoices" ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-muted)",
+                background: "none",
+                borderTop: "none",
+                borderLeft: "none",
+                borderRight: "none",
+                borderBottom: activeTab === "invoices" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
+                cursor: "pointer",
+                transition: "all 0.2s",
+                height: "100%"
+              }}
+              onMouseEnter={(e) => {
+                if (activeTab !== "invoices") e.currentTarget.style.color = "var(--neuron-ink-secondary)";
+              }}
+              onMouseLeave={(e) => {
+                if (activeTab !== "invoices") e.currentTarget.style.color = "var(--neuron-ink-muted)";
+              }}
+            >
+              Invoices
+            </button>
+          )}
+          {canViewCollections && (
+            <button
+              onClick={() => setActiveTab("collections")}
+              style={{
+                padding: "0 4px",
+                fontSize: "14px",
+                fontWeight: 500,
+                color: activeTab === "collections" ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-muted)",
+                background: "none",
+                borderTop: "none",
+                borderLeft: "none",
+                borderRight: "none",
+                borderBottom: activeTab === "collections" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
+                cursor: "pointer",
+                transition: "all 0.2s",
+                height: "100%"
+              }}
+              onMouseEnter={(e) => {
+                if (activeTab !== "collections") e.currentTarget.style.color = "var(--neuron-ink-secondary)";
+              }}
+              onMouseLeave={(e) => {
+                if (activeTab !== "collections") e.currentTarget.style.color = "var(--neuron-ink-muted)";
+              }}
+            >
+              Collections
             </button>
           )}
           <button
@@ -524,6 +600,28 @@ export function ForwardingBookingDetails({
                 onRefresh={financials.refresh}
                 isLoading={financials.isLoading}
                 pendingBillableCount={pendingBillableCount}
+              />
+            </div>
+          )}
+          {activeTab === "invoices" && canViewInvoices && (
+            <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]">
+              <UnifiedInvoicesTab
+                financials={bookingFinancials}
+                project={bookingContainer}
+                currentUser={currentUser ? { ...currentUser, id: user?.id || "" } : null}
+                onRefresh={financials.refresh}
+                highlightId={activeTab === "invoices" ? highlightId : undefined}
+              />
+            </div>
+          )}
+          {activeTab === "collections" && canViewCollections && (
+            <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]">
+              <UnifiedCollectionsTab
+                financials={bookingFinancials}
+                project={bookingContainer}
+                currentUser={currentUser ? { ...currentUser, id: user?.id || "" } : null}
+                onRefresh={financials.refresh}
+                highlightId={activeTab === "collections" ? highlightId : undefined}
               />
             </div>
           )}

@@ -4,6 +4,7 @@ import type { Invoice } from "../../../types/accounting";
 import { resolveInvoicePrintableDocument } from "../../../utils/documents/invoiceDocumentResolver";
 import { PrintableDocumentHtml } from "../../documents/PrintableDocumentHtml";
 import { useCompanySettings } from "../../../hooks/useCompanySettings";
+import { applyBrandedDesign } from "../../../utils/documentDesign";
 import logoImage from "figma:asset/28c84ed117b026fbf800de0882eb478561f37f4f.png";
 
 export interface InvoiceBankDetails {
@@ -47,13 +48,13 @@ interface InvoiceDocumentProps {
 export const InvoiceDocument = React.forwardRef<HTMLDivElement, InvoiceDocumentProps>(
   ({ project, invoice, mode = "print", options }, ref) => {
     const { settings: companySettings } = useCompanySettings();
-    const doc = resolveInvoicePrintableDocument({
+    const doc = applyBrandedDesign(resolveInvoicePrintableDocument({
       invoice,
       project,
       options,
       companySettings,
       fallbackLogo: logoImage as unknown as string,
-    });
+    }));
     return <PrintableDocumentHtml ref={ref} document={doc} mode={mode} />;
   },
 );

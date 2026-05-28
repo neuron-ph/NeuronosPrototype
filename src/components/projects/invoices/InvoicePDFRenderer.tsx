@@ -6,6 +6,7 @@ import type { InvoicePrintOptions } from "./InvoiceDocument";
 import type { CompanySettings } from "../../../hooks/useCompanySettings";
 import { resolveInvoicePrintableDocument } from "../../../utils/documents/invoiceDocumentResolver";
 import { PrintableDocumentPdf } from "../../documents/PrintableDocumentPdf";
+import { applyBrandedDesign } from "../../../utils/documentDesign";
 import logoImage from "figma:asset/28c84ed117b026fbf800de0882eb478561f37f4f.png";
 
 interface InvoicePDFDocumentProps {
@@ -15,12 +16,12 @@ interface InvoicePDFDocumentProps {
 }
 
 export function InvoicePDFDocument({ invoice, options, companySettings }: InvoicePDFDocumentProps) {
-  const doc = resolveInvoicePrintableDocument({
+  const doc = applyBrandedDesign(resolveInvoicePrintableDocument({
     invoice,
     options,
     companySettings,
     fallbackLogo: logoImage as unknown as string,
-  });
+  }));
   return <PrintableDocumentPdf document={doc} />;
 }
 

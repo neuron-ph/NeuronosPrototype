@@ -4,6 +4,7 @@ import type { QuotationPrintOptions } from "./screen/useQuotationDocumentState";
 import { resolveQuotationPrintableDocument } from "../../../utils/documents/quotationDocumentResolver";
 import { PrintableDocumentHtml } from "../../documents/PrintableDocumentHtml";
 import { useCompanySettings } from "../../../hooks/useCompanySettings";
+import { applyBrandedDesign } from "../../../utils/documentDesign";
 import logoImage from "figma:asset/28c84ed117b026fbf800de0882eb478561f37f4f.png";
 
 interface QuotationDocumentProps {
@@ -24,14 +25,14 @@ export const QuotationDocument = React.forwardRef<HTMLDivElement, QuotationDocum
     const resolvedQuotation: QuotationNew =
       quotationProp ?? ((project as any).quotation as QuotationNew) ?? ((project as any) as QuotationNew);
 
-    const doc = resolveQuotationPrintableDocument({
+    const doc = applyBrandedDesign(resolveQuotationPrintableDocument({
       quotation: resolvedQuotation,
       project,
       options,
       companySettings,
       currentUser,
       fallbackLogo: logoImage as unknown as string,
-    });
+    }));
 
     return <PrintableDocumentHtml ref={ref} document={doc} mode={mode} />;
   },

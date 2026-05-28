@@ -570,6 +570,8 @@ export function UnifiedBillingsTab({
                 )
               : (item.catalog_snapshot || null),
             created_at: item.created_at || new Date().toISOString(),
+            rule_applied: item.rule_applied || null,
+            condition_label: item.condition_label || null,
             });
           };
 

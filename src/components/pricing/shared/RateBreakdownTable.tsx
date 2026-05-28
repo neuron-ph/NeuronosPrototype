@@ -136,15 +136,22 @@ export function RateBreakdownTable({
                   </tr>,
                 ];
 
-                if (rate.rule_applied && rate.quantity > 1) {
+                if (rate.rule_applied) {
                   rows.push(
                     <tr
                       key={`rule-${rate.particular}-${idx}`}
                       className="border-b border-[var(--theme-border-default)]"
                     >
                       <td colSpan={4} className="px-4 pt-1 pb-1">
-                        <div className="text-[11px] text-[var(--theme-action-primary-bg)] bg-[var(--theme-bg-surface-tint)] inline-block px-2 py-0.5 rounded">
-                          {rate.rule_applied}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[11px] text-[var(--theme-action-primary-bg)] bg-[var(--theme-bg-surface-tint)] inline-block px-2 py-0.5 rounded">
+                            {rate.rule_applied}
+                          </span>
+                          {rate.condition_label && (
+                            <span className="text-[10px] text-[var(--theme-text-muted)] italic">
+                              {rate.condition_label}
+                            </span>
+                          )}
                         </div>
                       </td>
                     </tr>

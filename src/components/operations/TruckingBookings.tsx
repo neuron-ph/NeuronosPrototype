@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
-import { Plus, Search, Truck, Briefcase, UserCheck, FileEdit, Clock, CheckCircle, Trash2 } from "lucide-react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { Plus, Search, Truck, Briefcase, UserCheck, FileEdit, Clock, CheckCircle, Trash2, XCircle } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { assessBookingFinancialState, canHardDeleteBooking, getBookingCancellationMessage } from "../../utils/bookingCancellation";
 import { CreateTruckingBookingPanel } from "./CreateTruckingBookingPanel";
@@ -13,12 +13,13 @@ import { useBookingAssignmentVisibility } from "../../hooks/useBookingAssignment
 import { filterBookingsByScope } from "../../utils/assignments/applyAssignmentVisibility";
 import { SkeletonTable } from "../shared/NeuronSkeleton";
 import { usePermission } from "../../context/PermissionProvider";
-import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
 import { logDeletion } from "../../utils/activityLog";
 import { normalizeDetails } from "../../utils/bookings/bookingDetailsCompat";
 import type { ExecutionStatus } from "../../types/operations";
 import { NeuronModal } from "../ui/NeuronModal";
 import { useUnreadEntityIds } from "../../hooks/useNotifications";
+import { useUrlSelection } from "../../hooks/useUrlSelection";
+import { useRealtimeSync } from "../../hooks/useRealtimeSync";
 
 interface TruckingBooking {
   bookingId: string;
@@ -49,23 +50,27 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
   const canViewDraftTab      = can("ops_trucking_draft_tab", "view");
   const canViewInProgressTab = can("ops_trucking_in_progress_tab", "view");
   const canViewCompletedTab  = can("ops_trucking_completed_tab", "view");
+  const canViewCancelledTab  = can("ops_trucking_cancelled_tab", "view");
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [movementFilter, setMovementFilter] = useState<string>("all");
-  const [activeTab, setActiveTab] = useState<"all" | "my" | "draft" | "in-progress" | "completed">(() => {
+  const [activeTab, setActiveTab] = useState<"all" | "my" | "draft" | "in-progress" | "completed" | "cancelled">(() => {
     if (canViewAllTab)        return "all";
     if (canViewMyTab)         return "my";
     if (canViewDraftTab)      return "draft";
     if (canViewInProgressTab) return "in-progress";
-    return "completed";
+    if (canViewCompletedTab)  return "completed";
+    return "cancelled";
   });
   const [timePeriodFilter, setTimePeriodFilter] = useState<string>("all");
   const [ownerFilter, setOwnerFilter] = useState<string>("all");
   const [handlerFilter, setHandlerFilter] = useState<string>("all");
   const [truckTypeFilter, setTruckTypeFilter] = useState<string>("all");
   const [selectedBooking, setSelectedBooking] = useState<TruckingBooking | null>(null);
+  const [urlBookingId, setUrlBookingId] = useUrlSelection("booking");
+  const suppressUrlSelectionRef = useRef(false);
   const [resumeDraft, setResumeDraft] = useState<Record<string, unknown> | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; label: string } | null>(null);
 
@@ -108,19 +113,73 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
   });
   const fetchBookings = () => { refetch(); };
 
+  useRealtimeSync({ table: "bookings", queryKey: queryKeys.bookings.list("trucking") });
+
   const bookings = useMemo(() => {
     if (!scopeLoaded || !assignmentIndexLoaded) return [];
     return filterBookingsByScope(rawBookings, scope, assignmentIndex);
   }, [rawBookings, scope, scopeLoaded, assignmentIndex, assignmentIndexLoaded]);
 
-  // Deep-link: auto-select booking from pendingBookingId
+  // Deep-link: auto-select booking from URL param or pendingBookingId
+  const deepLinkId = urlBookingId ?? pendingBookingId;
   useEffect(() => {
-    if (!pendingBookingId || bookings.length === 0 || isLoading) return;
-    const match = bookings.find(b => b.bookingId === pendingBookingId);
+    if (suppressUrlSelectionRef.current) {
+      if (!deepLinkId) suppressUrlSelectionRef.current = false;
+      return;
+    }
+    if (!deepLinkId || bookings.length === 0 || isLoading || selectedBooking) return;
+    const match = bookings.find(b => b.bookingId === deepLinkId);
     if (match) {
       setSelectedBooking(match);
+      setUrlBookingId(match.bookingId);
     }
-  }, [pendingBookingId, bookings, isLoading]);
+  }, [deepLinkId, bookings, isLoading, selectedBooking, setUrlBookingId]);
+
+  // Restore from URL on mount when booking isn't in the current list (e.g. page refresh)
+  useEffect(() => {
+    if (suppressUrlSelectionRef.current) {
+      if (!urlBookingId) suppressUrlSelectionRef.current = false;
+      return;
+    }
+    if (!urlBookingId || selectedBooking || isLoading) return;
+    // If bookings loaded but no match, fetch directly from DB
+    if (bookings.length > 0 && !bookings.find(b => b.bookingId === urlBookingId)) {
+      // Booking not in scoped list — clear stale URL param
+      setUrlBookingId(null);
+      return;
+    }
+    if (bookings.length === 0 && !isLoading && scopeLoaded && assignmentIndexLoaded) {
+      // All data loaded, still no bookings — fetch directly
+      (async () => {
+        const { data, error } = await supabase
+          .from('bookings')
+          .select('*')
+          .eq('id', urlBookingId)
+          .eq('service_type', 'Trucking')
+          .single();
+        if (error || !data) {
+          setUrlBookingId(null);
+          return;
+        }
+        const d = normalizeDetails(data.details || {}, "Trucking");
+        setSelectedBooking({
+          ...d,
+          ...data,
+          bookingId: data.id,
+          customerName: data.customer_name,
+          projectNumber: data.project_id,
+          accountOwner: data.manager_name,
+          accountHandler: data.handler_name,
+          status: data.status,
+          createdAt: data.created_at,
+          updatedAt: data.updated_at || data.created_at,
+          truckType: d.truck_type,
+          deliveryAddress: d.delivery_address,
+          preferredDeliveryDate: d.preferred_delivery_date,
+        } as TruckingBooking);
+      })();
+    }
+  }, [urlBookingId, selectedBooking, bookings, isLoading, scopeLoaded, assignmentIndexLoaded, setUrlBookingId]);
 
   const handleBookingCreated = () => {
     setShowCreateModal(false);
@@ -178,6 +237,8 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
       filtered = bookings.filter(b => b.status === "In Progress");
     } else if (activeTab === "completed") {
       filtered = bookings.filter(b => b.status === "Completed");
+    } else if (activeTab === "cancelled") {
+      filtered = bookings.filter(b => b.status === "Cancelled");
     }
 
     return filtered;
@@ -239,12 +300,15 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
   const draftCount = bookings.filter(b => b.status === "Draft").length;
   const inProgressCount = bookings.filter(b => b.status === "In Progress").length;
   const completedCount = bookings.filter(b => b.status === "Completed").length;
+  const cancelledCount = bookings.filter(b => b.status === "Cancelled").length;
 
   if (selectedBooking) {
     return (
       <TruckingBookingDetails
         booking={selectedBooking as any}
         onBack={() => {
+          suppressUrlSelectionRef.current = true;
+          setUrlBookingId(null);
           setSelectedBooking(null);
         }}
         onUpdate={fetchBookings}
@@ -285,10 +349,6 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
             
             {/* Action Button */}
             <div className="flex items-center gap-3">
-              <NeuronRefreshButton 
-                onRefresh={fetchBookings}
-                label="Refresh bookings"
-              />
               <button
                 onClick={() => setShowCreateModal(true)}
                 style={{
@@ -536,6 +596,16 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
                 onClick={() => setActiveTab("completed")}
               />
             )}
+            {canViewCancelledTab && (
+              <TabButton
+                icon={<XCircle size={18} />}
+                label="Cancelled"
+                count={cancelledCount}
+                isActive={activeTab === "cancelled"}
+                color="var(--theme-status-danger-fg)"
+                onClick={() => setActiveTab("cancelled")}
+              />
+            )}
           </div>
         </div>
 
@@ -607,7 +677,9 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
                         if (booking.status === "Draft") {
                           setResumeDraft({ ...(booking as any), id: booking.bookingId });
                         } else {
+                          suppressUrlSelectionRef.current = false;
                           setSelectedBooking(booking);
+                          setUrlBookingId(booking.bookingId);
                         }
                       }}
                     >

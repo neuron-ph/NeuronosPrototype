@@ -1,7 +1,9 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { ArrowLeft, MoreVertical, Clock, ChevronRight, Package } from "lucide-react";
 import type { BrokerageBooking, ExecutionStatus } from "../../types/operations";
 import { UnifiedBillingsTab } from "../shared/billings/UnifiedBillingsTab";
+import { UnifiedInvoicesTab } from "../shared/invoices/UnifiedInvoicesTab";
+import { UnifiedCollectionsTab } from "../shared/collections/UnifiedCollectionsTab";
 import { BookingRateCardButton } from "../contracts/BookingRateCardButton";
 import { ExpensesTab } from "./shared/ExpensesTab";
 import { useProjectFinancials } from "../../hooks/useProjectFinancials";
@@ -31,7 +33,7 @@ interface BrokerageBookingDetailsProps {
   highlightId?: string | null;
 }
 
-type DetailTab = "booking-info" | "billings" | "expenses" | "comments";
+type DetailTab = "booking-info" | "billings" | "invoices" | "collections" | "expenses" | "comments";
 
 interface ActivityLogEntry {
   id: string;
@@ -106,8 +108,10 @@ function ActivityTimeline({ activities }: { activities: ActivityLogEntry[] }) {
 export function BrokerageBookingDetails({ booking, onBack, onUpdate, currentUser, initialTab, highlightId }: BrokerageBookingDetailsProps) {
   const { can } = usePermission();
   const canViewBillings = can("ops_bookings_billings_tab", "view");
+  const canViewInvoices = can("ops_bookings_invoices_tab", "view") || can("accounting_bookings_invoices_tab", "view");
+  const canViewCollections = can("ops_bookings_collections_tab", "view") || can("accounting_bookings_collections_tab", "view");
   const [activeTab, setActiveTab] = useState<DetailTab>(
-    initialTab === "billings" && !canViewBillings
+    (initialTab === "billings" && !canViewBillings) || (initialTab === "invoices" && !canViewInvoices) || (initialTab === "collections" && !canViewCollections)
       ? "booking-info"
       : (initialTab as DetailTab) || "booking-info"
   );
@@ -116,6 +120,7 @@ export function BrokerageBookingDetails({ booking, onBack, onUpdate, currentUser
   const { user } = useUser();
   useMarkEntityReadOnMount("booking", booking.id || booking.bookingId);
   const [editedBooking, setEditedBooking] = useState<BrokerageBooking>(booking);
+  useEffect(() => { setEditedBooking(booking); }, [booking]);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showCancelDeletePanel, setShowCancelDeletePanel] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
@@ -202,6 +207,23 @@ export function BrokerageBookingDetails({ booking, onBack, onUpdate, currentUser
   const bookingBillingItems = financials.billingItems.filter(item => item.booking_id === booking.bookingId);
   const [pendingBillableCount, setPendingBillableCount] = useState(0);
 
+  const bookingContainer = useMemo(() => ({
+    id: booking.bookingId,
+    project_number: booking.projectNumber || "",
+    customer_id: (booking as any).customer_id || "",
+    customer_name: booking.customerName || "",
+    linkedBookings: [{ bookingId: booking.bookingId }],
+  }), [booking.bookingId, booking.projectNumber, booking.customerName, (booking as any).customer_id]);
+
+  const bookingFinancials = useMemo(() => ({
+    ...financials,
+    billingItems: bookingBillingItems,
+    invoices: financials.invoices.filter((inv: any) =>
+      inv.booking_id === booking.bookingId ||
+      (Array.isArray(inv.booking_ids) && inv.booking_ids.includes(booking.bookingId))
+    ),
+  }), [financials, bookingBillingItems, booking.bookingId]);
+
   const tabStyle = (tab: DetailTab) => ({
     padding: "0 4px", fontSize: "14px", fontWeight: 500,
     color: activeTab === tab ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-muted)",
@@ -247,6 +269,8 @@ export function BrokerageBookingDetails({ booking, onBack, onUpdate, currentUser
         <div style={{ display: "flex", gap: "24px", height: "100%" }}>
           <button onClick={() => setActiveTab("booking-info")} style={tabStyle("booking-info")}>Booking Information</button>
           {canViewBillings && <button onClick={() => setActiveTab("billings")} style={tabStyle("billings")}>Billings</button>}
+          {canViewInvoices && <button onClick={() => setActiveTab("invoices")} style={tabStyle("invoices")}>Invoices</button>}
+          {canViewCollections && <button onClick={() => setActiveTab("collections")} style={tabStyle("collections")}>Collections</button>}
           <button onClick={() => setActiveTab("expenses")} style={tabStyle("expenses")}>Expenses</button>
           <button onClick={() => setActiveTab("comments")} style={tabStyle("comments")}>Comments</button>
         </div>
@@ -311,6 +335,8 @@ export function BrokerageBookingDetails({ booking, onBack, onUpdate, currentUser
             />
           )}
           {activeTab === "billings" && canViewBillings && <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]"><UnifiedBillingsTab items={bookingBillingItems} projectId={booking.projectNumber || ""} bookingId={booking.bookingId} onRefresh={financials.refresh} isLoading={financials.isLoading} pendingBillableCount={pendingBillableCount} extraActions={<BookingRateCardButton booking={editedBooking} serviceType="Brokerage" existingBillingItems={bookingBillingItems} onRefresh={financials.refresh} />} /></div>}
+          {activeTab === "invoices" && canViewInvoices && <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]"><UnifiedInvoicesTab financials={bookingFinancials} project={bookingContainer} currentUser={currentUser ? { ...currentUser, id: user?.id || "" } : null} onRefresh={financials.refresh} highlightId={activeTab === "invoices" ? highlightId : undefined} /></div>}
+          {activeTab === "collections" && canViewCollections && <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]"><UnifiedCollectionsTab financials={bookingFinancials} project={bookingContainer} currentUser={currentUser ? { ...currentUser, id: user?.id || "" } : null} onRefresh={financials.refresh} highlightId={activeTab === "collections" ? highlightId : undefined} /></div>}
           {activeTab === "expenses" && <ExpensesTab bookingId={booking.bookingId} bookingNumber={(booking as any).booking_number || booking.bookingId} bookingType="brokerage" currentUser={currentUser} highlightId={activeTab === "expenses" ? highlightId : undefined} existingBillingItems={bookingBillingItems} onPendingCountChange={setPendingBillableCount} />}
           {activeTab === "comments" && <BookingCommentsTab bookingId={booking.bookingId} />}
         </div>

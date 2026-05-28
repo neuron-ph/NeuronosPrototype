@@ -26,8 +26,8 @@ interface PrintableDocumentHtmlProps {
 }
 
 function widthClass(width?: PrintableField["width"]): string {
-  if (width === "full") return "p-col-span-4";
-  if (width === "wide") return "p-col-span-2";
+  if (width === "full") return "p-kv-full";
+  if (width === "wide") return "p-kv-wide";
   return "";
 }
 
@@ -35,9 +35,9 @@ function FieldCell({ field }: { field: PrintableField }) {
   const formatted = formatPrintableValue(field.value, field.format, field.currency);
   if (!formatted) return null;
   return (
-    <div className={`p-shipment-cell ${widthClass(field.width)}`}>
-      <span className="p-shipment-label">{field.label.toUpperCase()}</span>
-      <span className="p-shipment-value">{formatted}</span>
+    <div className={`p-kv-cell ${widthClass(field.width)}`}>
+      <span className="p-kv-label">{field.label}:</span>
+      <span className="p-kv-value">{formatted}</span>
     </div>
   );
 }
@@ -88,11 +88,11 @@ function SectionBlock({ section }: { section: PrintableSection }) {
       </div>
     );
   }
-  // default = grid
+  // default = grid → inline key-value pairs in 2-column flow
   return (
     <div className="p-section">
       {section.title ? <div className="p-section-header">{section.title.toUpperCase()}</div> : null}
-      <div className="p-shipment-grid">
+      <div className="p-kv-grid">
         {section.fields.map((f) => (
           <FieldCell key={f.id} field={f} />
         ))}
@@ -155,34 +155,29 @@ function TableBlock({ table }: { table: PrintableTable }) {
             rows.forEach((row) => {
               out.push(
                 <tr key={row.id} className={`p-rate-row ${row.emphasis === "subtotal" ? "p-rate-row-emphasis" : ""}`}>
-                  {table.columns.map((c) => {
+                  {table.columns.map((c, ci) => {
                     const raw = row.cells[c.id];
-                    const formatted = formatPrintableValue(raw, c.format);
+                    const cellCurrency = c.format === "money" ? String(row.cells["currency"] || "") || undefined : undefined;
+                    const formatted = formatPrintableValue(raw, c.format, cellCurrency);
+                    const showSubtext = ci === 0 && row.subtext && row.emphasis !== "subtotal";
                     return (
                       <td key={c.id} style={{ textAlign: c.align || "left" }}>
                         {formatted}
+                        {c.id === "amount" && row.cells["_convertedAmount"] ? (
+                          <div style={{ fontSize: "9px", color: "#667085", marginTop: 1 }}>
+                            ≈ {formatPrintableValue(row.cells["_convertedAmount"], "money", "PHP")}
+                          </div>
+                        ) : null}
+                        {showSubtext ? (
+                          <div style={{ fontSize: "9px", color: "#667085", fontStyle: "italic", marginTop: 1 }}>
+                            {row.subtext}
+                          </div>
+                        ) : null}
                       </td>
                     );
                   })}
                 </tr>,
               );
-              if (row.subtext && row.emphasis !== "subtotal") {
-                out.push(
-                  <tr key={`${row.id}-subtext`} className="p-rate-row-subtext">
-                    <td
-                      colSpan={table.columns.length}
-                      style={{
-                        paddingTop: 0,
-                        paddingLeft: 12,
-                        fontSize: "9px",
-                        color: "#667085",
-                      }}
-                    >
-                      {row.subtext}
-                    </td>
-                  </tr>,
-                );
-              }
             });
             if (group?.subtotal) {
               const subAmount = group.subtotal.cells["amount"];
@@ -196,7 +191,7 @@ function TableBlock({ table }: { table: PrintableTable }) {
                     {String(subLabel).toUpperCase()}
                   </td>
                   <td className="p-subtotal-val">
-                    {formatPrintableValue(subAmount, "money")}
+                    {formatPrintableValue(subAmount, "money", String(group.subtotal.cells["currency"] || "") || undefined)}
                   </td>
                 </tr>,
               );
@@ -307,7 +302,7 @@ function SignatoriesBlock({ signatories }: { signatories: PrintableSignatory[] }
 
 export const PrintableDocumentHtml = React.forwardRef<HTMLDivElement, PrintableDocumentHtmlProps>(
   ({ document: doc, mode = "print" }, ref) => {
-    const { company, title, subtitle, headerFields, partySections, sections, tables, notes, bank, signatories, contactFooter } = doc;
+    const { company, title, subtitle, headerFields, partySections, sections, tables, postTableSections, notes, bank, signatories, contactFooter } = doc;
 
     return (
       <div ref={ref} className={`p-page ${mode === "print" ? "p-mode-print" : "p-mode-preview"}`}>
@@ -315,7 +310,7 @@ export const PrintableDocumentHtml = React.forwardRef<HTMLDivElement, PrintableD
           .p-page {
               width: 210mm;
               min-height: 297mm;
-              padding: 12mm 12mm 34mm;
+              padding: 12mm;
               background: white;
               box-sizing: border-box;
               font-family: 'Inter', Arial, Helvetica, sans-serif !important;
@@ -329,68 +324,71 @@ export const PrintableDocumentHtml = React.forwardRef<HTMLDivElement, PrintableD
           .p-header-top {
               display: flex !important;
               justify-content: space-between !important;
-              align-items: flex-start !important;
+              align-items: center !important;
               margin-bottom: 10px !important;
-              border-bottom: 3px solid #12332B !important;
+              border-bottom: 3px solid #172A4D !important;
               padding-bottom: 10px !important;
           }
           .p-brand-col { display: flex !important; flex-direction: column !important; gap: 0 !important; width: 47% !important; }
-          .p-logo-img { height: 38px !important; object-fit: contain !important; object-position: left !important; }
+          .p-logo-img { height: 56px !important; object-fit: contain !important; object-position: left !important; }
           .p-address-block { display: none !important; }
           .p-title-col { width: 53% !important; display: flex !important; flex-direction: column !important; align-items: flex-end !important; }
-          .p-doc-title { font-size: 22pt !important; font-weight: 900 !important; color: #12332B !important; letter-spacing: 0.05em !important; margin-bottom: 4px !important; line-height: 1 !important; text-align: right !important; max-width: 100% !important; }
+          .p-doc-title { font-size: 22pt !important; font-weight: 900 !important; color: #172A4D !important; letter-spacing: 0.05em !important; margin-bottom: 4px !important; line-height: 1 !important; text-align: right !important; max-width: 100% !important; }
           .p-doc-subtitle { font-size: 8pt !important; color: #475467 !important; margin-bottom: 8px !important; text-align: right !important; }
           .p-ref-grid { display: grid !important; grid-template-columns: repeat(3, minmax(52px, auto)) !important; gap: 4px 14px !important; justify-content: end !important; max-width: 360px !important; }
           .p-ref-item { min-width: 52px !important; text-align: right !important; display: flex !important; flex-direction: column !important; align-items: flex-end !important; }
           .p-ref-label { font-size: 6pt !important; color: #6B7280 !important; text-transform: uppercase !important; font-weight: 700 !important; display: block !important; margin-bottom: 2px !important; line-height: 1.1 !important; }
           .p-ref-value { font-size: 8pt !important; color: #111827 !important; font-weight: 700 !important; line-height: 1.15 !important; }
-          .p-section { margin-top: 9px !important; }
-          .p-customer-header { font-size: 8pt !important; font-weight: 800 !important; color: #0F766E !important; text-transform: uppercase !important; letter-spacing: 0.05em !important; margin-bottom: 6px !important; }
-          .p-customer-grid { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 5px 22px !important; margin-bottom: 8px !important; padding-bottom: 8px !important; border-bottom: 1px dashed #E5E7EB !important; }
+          .p-section { margin-top: 6px !important; }
+          .p-customer-header { font-size: 8pt !important; font-weight: 800 !important; color: #172A4D !important; text-transform: uppercase !important; letter-spacing: 0.05em !important; margin-bottom: 4px !important; }
+          .p-customer-grid { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 4px 16px !important; margin-bottom: 6px !important; padding-bottom: 6px !important; border-bottom: 1px dashed #E5E7EB !important; }
           .p-cust-row { display: flex !important; align-items: baseline !important; }
-          .p-cust-label { width: 100px !important; flex-shrink: 0 !important; font-size: 7pt !important; color: #6B7280 !important; font-weight: 600 !important; text-transform: uppercase !important; }
+          .p-cust-label { width: 90px !important; flex-shrink: 0 !important; font-size: 7pt !important; color: #6B7280 !important; font-weight: 600 !important; text-transform: uppercase !important; }
           .p-cust-val { font-size: 9pt !important; font-weight: 600 !important; color: #111827 !important; }
-          .p-section-header { font-size: 8.5pt !important; font-weight: 800 !important; color: #12332B !important; text-transform: uppercase !important; letter-spacing: 0.05em !important; border-bottom: 1px solid #E5E9F0 !important; padding-bottom: 4px !important; margin-bottom: 6px !important; }
-          .p-shipment-grid { display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 6px 20px !important; margin-bottom: 8px !important; }
-          .p-shipment-cell { display: flex !important; flex-direction: column !important; gap: 1px !important; }
-          .p-col-span-2 { grid-column: span 2 !important; }
-          .p-col-span-4 { grid-column: span 4 !important; }
-          .p-shipment-label { font-size: 6.5pt !important; color: #6B7280 !important; text-transform: uppercase !important; font-weight: 700 !important; letter-spacing: 0.05em !important; }
-          .p-shipment-value { font-size: 8.5pt !important; font-weight: 700 !important; color: #111827 !important; line-height: 1.3 !important; }
-          .p-table-container { margin: 9px 0 !important; break-inside: auto !important; }
-          .p-table-title { font-size: 9pt !important; font-weight: 800 !important; color: #12332B !important; text-transform: uppercase !important; letter-spacing: 0.05em !important; border-bottom: 1px solid #E5E9F0 !important; padding-bottom: 4px !important; margin-bottom: 6px !important; margin-top: 10px !important; }
+          .p-section-header { font-size: 8pt !important; font-weight: 800 !important; color: #172A4D !important; text-transform: uppercase !important; letter-spacing: 0.04em !important; margin-bottom: 4px !important; padding-bottom: 0 !important; border-bottom: none !important; }
+          .p-kv-grid { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 2px 18px !important; margin-bottom: 5px !important; }
+          .p-kv-cell { display: flex !important; align-items: baseline !important; gap: 6px !important; padding: 1px 0 !important; }
+          .p-kv-wide { grid-column: span 1 !important; }
+          .p-kv-full { grid-column: span 2 !important; }
+          .p-kv-label { font-size: 7pt !important; color: #6B7280 !important; font-weight: 600 !important; text-transform: uppercase !important; white-space: nowrap !important; flex-shrink: 0 !important; }
+          .p-kv-value { font-size: 8pt !important; font-weight: 600 !important; color: #111827 !important; line-height: 1.3 !important; }
+          .p-table-container { margin: 6px 0 !important; break-inside: auto !important; }
+          .p-table-title { font-size: 9pt !important; font-weight: 800 !important; color: #172A4D !important; text-transform: uppercase !important; letter-spacing: 0.05em !important; border-bottom: 1px solid #E5E9F0 !important; padding-bottom: 3px !important; margin-bottom: 5px !important; margin-top: 8px !important; }
           .p-rate-table { width: 100% !important; border-collapse: collapse !important; }
           .p-rate-table thead { display: table-header-group !important; }
           .p-rate-table tr { page-break-inside: avoid !important; break-inside: avoid !important; }
           .p-rate-th { font-size: 7pt !important; font-weight: 700 !important; color: #111827 !important; text-transform: uppercase !important; letter-spacing: 0.05em !important; border-bottom: 2px solid #111827 !important; border-top: 2px solid #111827 !important; padding: 4px 4px !important; }
-          .p-cat-header { font-size: 8pt !important; font-weight: 800 !important; color: #12332B !important; text-transform: uppercase !important; padding: 8px 4px 4px 4px !important; break-after: avoid !important; page-break-after: avoid !important; }
+          .p-cat-header { font-size: 8pt !important; font-weight: 800 !important; color: #172A4D !important; text-transform: uppercase !important; padding: 5px 4px 3px 4px !important; break-after: avoid !important; page-break-after: avoid !important; }
           .p-rate-row td { padding: 2px 4px !important; font-size: 8pt !important; color: #374151 !important; vertical-align: top !important; }
           .p-rate-row-emphasis td { font-weight: 800 !important; color: #111827 !important; text-transform: uppercase !important; padding-top: 5px !important; }
           .p-subtotal-row td { padding-top: 4px !important; padding-bottom: 8px !important; }
           .p-subtotal-label { font-size: 7pt !important; font-weight: 700 !important; text-transform: uppercase !important; text-align: right !important; padding-right: 12px !important; }
           .p-subtotal-val { border-top: 1px solid #111827 !important; padding-top: 2px !important; font-weight: 700 !important; text-align: right !important; }
           .p-empty-row { padding: 24px !important; text-align: center !important; color: #9CA3AF !important; font-style: italic !important; }
-          .p-footer-grid { display: flex !important; justify-content: space-between !important; align-items: flex-start !important; margin-top: 8px !important; padding-top: 8px !important; border-top: 2px solid #111827 !important; break-inside: avoid !important; page-break-inside: avoid !important; }
+          .p-footer-grid { display: flex !important; justify-content: space-between !important; align-items: flex-start !important; margin-top: 6px !important; padding-top: 6px !important; border-top: 2px solid #111827 !important; break-inside: avoid !important; page-break-inside: avoid !important; }
           .p-terms-col { width: 60% !important; padding-right: 24px !important; }
           .p-totals-col { width: 35% !important; }
           .p-total-row { display: flex !important; justify-content: space-between !important; margin-bottom: 2px !important; font-size: 8.5pt !important; }
           .p-total-label { color: #4B5563 !important; }
           .p-total-val { font-weight: 600 !important; color: #111827 !important; }
-          .p-grand-total { border-top: 2px solid #111827 !important; margin-top: 6px !important; padding-top: 6px !important; font-size: 10pt !important; font-weight: 900 !important; color: #12332B !important; display: flex !important; justify-content: space-between !important; }
+          .p-grand-total { border-top: 2px solid #111827 !important; margin-top: 6px !important; padding-top: 6px !important; font-size: 10pt !important; font-weight: 900 !important; color: #172A4D !important; display: flex !important; justify-content: space-between !important; }
           .p-terms-header { font-size: 7pt !important; font-weight: 800 !important; text-transform: uppercase !important; margin-bottom: 4px !important; color: #111827 !important; }
           .p-stack-text { font-size: 7.5pt !important; color: #4B5563 !important; line-height: 1.4 !important; }
           .p-bullet-list { font-size: 7.5pt !important; color: #4B5563 !important; line-height: 1.4 !important; padding-left: 16px !important; margin: 0 !important; }
+          .p-post-table-block { margin-top: 10px !important; margin-bottom: 4px !important; padding-top: 8px !important; border-top: 2px solid #111827 !important; }
+          .p-post-table-title { font-size: 8.5pt !important; font-weight: 800 !important; text-transform: uppercase !important; letter-spacing: 0.4px !important; margin-bottom: 6px !important; color: #172A4D !important; }
+          .p-post-table-text { font-size: 7.5pt !important; color: #4B5563 !important; line-height: 1.5 !important; margin-bottom: 2px !important; }
           .p-bank-grid { display: flex !important; gap: 16px !important; margin-top: 4px !important; }
           .p-bank-item { display: flex !important; flex-direction: column !important; }
           .p-bank-label { font-size: 7pt !important; color: #6B7280 !important; }
           .p-bank-value { font-size: 8pt !important; color: #111827 !important; font-weight: 600 !important; }
-          .p-signatories-grid { display: grid !important; grid-template-columns: 1fr 1fr 1fr !important; gap: 48px !important; margin-top: 32px !important; page-break-inside: avoid !important; break-inside: avoid !important; }
+          .p-signatories-grid { display: grid !important; grid-template-columns: 1fr 1fr 1fr !important; gap: 32px !important; margin-top: 20px !important; page-break-inside: avoid !important; break-inside: avoid !important; }
           .p-sig-box { display: flex !important; flex-direction: column !important; }
-          .p-sig-action { font-size: 7pt !important; color: #6B7280 !important; margin-bottom: 32px !important; font-style: italic !important; }
-          .p-sig-line { border-bottom: 1px solid #111827 !important; margin-bottom: 8px !important; }
+          .p-sig-action { font-size: 7pt !important; color: #6B7280 !important; margin-bottom: 20px !important; font-style: italic !important; }
+          .p-sig-line { border-bottom: 1px solid #111827 !important; margin-bottom: 6px !important; }
           .p-sig-name { font-size: 9pt !important; font-weight: 700 !important; color: #111827 !important; text-transform: uppercase !important; min-height: 12pt !important; }
           .p-sig-title { font-size: 7pt !important; color: #4B5563 !important; }
-          .p-contact-footer { margin-top: auto !important; padding-top: 10px !important; border-top: 2px solid #12332B !important; display: flex !important; justify-content: space-between !important; page-break-inside: avoid !important; gap: 18px !important; }
+          .p-contact-footer { margin-top: auto !important; padding-top: 10px !important; border-top: 2px solid #172A4D !important; display: flex !important; justify-content: space-between !important; page-break-inside: avoid !important; gap: 18px !important; }
           .p-mode-preview .p-contact-footer {
             position: absolute !important;
             left: 12mm !important;
@@ -399,25 +397,63 @@ export const PrintableDocumentHtml = React.forwardRef<HTMLDivElement, PrintableD
             background: white !important;
           }
           .p-contact-col { display: flex !important; flex-direction: column !important; }
-          .p-contact-label { font-size: 8pt !important; font-weight: 800 !important; color: #12332B !important; margin-bottom: 4px !important; }
+          .p-contact-label { font-size: 8pt !important; font-weight: 800 !important; color: #172A4D !important; margin-bottom: 4px !important; }
           .p-contact-text { font-size: 7.5pt !important; color: #111827 !important; line-height: 1.4 !important; }
+          .p-ref-bar { display: flex !important; gap: 18px !important; justify-content: flex-end !important; margin-bottom: 4px !important; font-size: 7.5pt !important; color: #6B7280 !important; }
+          .p-ref-bar-item { white-space: nowrap !important; }
+          .p-ref-bar-label { font-weight: 700 !important; text-transform: uppercase !important; font-size: 6.5pt !important; letter-spacing: 0.03em !important; }
+          .p-ref-bar-item { color: #111827 !important; font-weight: 600 !important; }
+          .p-section-header { break-after: avoid !important; page-break-after: avoid !important; }
+          .p-customer-header { break-after: avoid !important; page-break-after: avoid !important; }
+          .p-section { break-inside: avoid !important; page-break-inside: avoid !important; }
+          .p-footer-grid { break-inside: avoid !important; page-break-inside: avoid !important; }
+          .p-branded-header { width: calc(100% + 24mm) !important; margin: -12mm -12mm 10px !important; overflow: hidden !important; height: 115px !important; }
+          .p-branded-header img { width: 100% !important; display: block !important; object-fit: cover !important; object-position: top center !important; height: 100% !important; }
+          .p-branded-footer { overflow: hidden !important; height: 108px !important; margin-top: 10px !important; width: calc(100% + 24mm) !important; margin-left: -12mm !important; margin-right: -12mm !important; margin-bottom: -12mm !important; }
+          .p-branded-footer img { width: 100% !important; display: block !important; object-fit: cover !important; object-position: bottom center !important; height: 100% !important; }
+          @page {
+            margin: 6mm 0;
+          }
           @media print {
             .p-page {
               min-height: auto !important;
-              padding-bottom: 34mm !important;
+              padding-bottom: 12mm !important;
+            }
+            .p-branded-footer {
+              margin-bottom: 0 !important;
             }
             .p-contact-footer {
-              position: fixed !important;
-              left: 12mm !important;
-              right: 12mm !important;
-              bottom: 12mm !important;
-              background: white !important;
+              position: relative !important;
+              left: auto !important;
+              right: auto !important;
+              bottom: auto !important;
             }
           }
         `}</style>
 
         {/* Header */}
-        <CompanyBlock company={company} title={title} subtitle={subtitle} headerFields={headerFields} />
+        {doc.brandedHeaderImage ? (
+          <>
+            <div className="p-branded-header">
+              <img src={doc.brandedHeaderImage} alt="Header" />
+            </div>
+            {headerFields.length > 0 ? (
+              <div className="p-ref-bar">
+                {headerFields.map((f) => {
+                  const formatted = formatPrintableValue(f.value, f.format, f.currency);
+                  if (!formatted) return null;
+                  return (
+                    <span key={f.id} className="p-ref-bar-item">
+                      <span className="p-ref-bar-label">{f.label}:</span> {formatted}
+                    </span>
+                  );
+                })}
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <CompanyBlock company={company} title={title} subtitle={subtitle} headerFields={headerFields} />
+        )}
 
         {/* Party sections */}
         {partySections.map((s) => (
@@ -432,6 +468,27 @@ export const PrintableDocumentHtml = React.forwardRef<HTMLDivElement, PrintableD
         {/* Tables */}
         {tables.map((t) => (
           <TableBlock key={t.id} table={t} />
+        ))}
+
+        {/* Post-table sections (e.g. Scope of Services, Terms) */}
+        {postTableSections?.map((sec) => (
+          <div key={sec.id} className="p-post-table-block">
+            {sec.title ? <div className="p-post-table-title">{sec.title.toUpperCase()}</div> : null}
+            {sec.fields.map((f) => {
+              if (Array.isArray(f.value)) {
+                return (f.value as string[]).map((v, i) => (
+                  <div key={`${f.id}-${i}`} className="p-post-table-text">{v}</div>
+                ));
+              }
+              const formatted = formatPrintableValue(f.value, f.format);
+              if (!formatted) return null;
+              return (
+                <div key={f.id} className="p-post-table-text" style={{ whiteSpace: "pre-line" }}>
+                  {formatted}
+                </div>
+              );
+            })}
+          </div>
         ))}
 
         {/* Footer: notes + bank | totals */}
@@ -501,7 +558,11 @@ export const PrintableDocumentHtml = React.forwardRef<HTMLDivElement, PrintableD
         <SignatoriesBlock signatories={signatories} />
 
         {/* Contact footer */}
-        {contactFooter && doc.options.showContactFooter ? (
+        {doc.brandedFooterImage && doc.options.showContactFooter ? (
+          <div className="p-branded-footer">
+            <img src={doc.brandedFooterImage} alt="Footer" />
+          </div>
+        ) : contactFooter && doc.options.showContactFooter ? (
           <div className="p-contact-footer">
             {contactFooter.callNumbers.length > 0 ? (
               <div className="p-contact-col">

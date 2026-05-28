@@ -213,6 +213,7 @@ export function generateRateCardBillingItems(
     applied_rate: rate.rate,
     applied_quantity: rate.quantity,
     rule_applied: rate.rule_applied,
+    condition_label: rate.condition_label,
     mode_column: modeColumn,
 
     // Catalog identity — carried from the contract row via the rate engine

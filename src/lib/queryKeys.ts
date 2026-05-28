@@ -64,6 +64,7 @@ export const queryKeys = {
     categories: () => ["catalog", "categories"] as const,
     usageCounts: () => ["catalog", "usageCounts"] as const,
     matrix: () => ["catalog", "matrix"] as const,
+    templates: () => ["catalog", "templates"] as const,
   },
   vendors: {
     all: () => ["vendors"] as const,

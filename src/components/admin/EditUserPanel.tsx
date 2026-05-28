@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useTeams } from "../../hooks/useTeams";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { supabase } from "../../utils/supabase/client";
@@ -10,7 +9,6 @@ import { CustomDropdown } from "../bd/CustomDropdown";
 import {
   DEPARTMENTS,
   ROLES,
-  TEAM_ROLES,
   SERVICE_TYPE_OPTIONS,
   FieldLabel,
   INPUT_BASE,
@@ -31,11 +29,7 @@ export function EditUserPanel({ isOpen, user, onClose, onSaved }: Props) {
   const [department, setDepartment] = useState(user.department);
   const [role, setRole] = useState(user.role);
   const [position, setPosition] = useState(user.position || "");
-  const [teamId, setTeamId] = useState(user.team_id || "");
   const [serviceType, setServiceType] = useState(user.service_type || "");
-  const [teamRole, setTeamRole] = useState<import("./userFormShared").TeamRole | "">(
-    user.team_role || ""
-  );
   const [evApprovalAuthority, setEvApprovalAuthority] = useState(
     user.ev_approval_authority ?? false
   );
@@ -44,15 +38,10 @@ export function EditUserPanel({ isOpen, user, onClose, onSaved }: Props) {
   const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
   const [deactivating, setDeactivating] = useState(false);
 
-  // Only fetch teams when Operations is selected
-  const { teams } = useTeams(department === "Operations");
-
   // Reset Operations-specific fields when department changes away from Operations
   useEffect(() => {
     if (department !== "Operations") {
-      setTeamId("");
       setServiceType("");
-      setTeamRole("");
     }
   }, [department]);
 
@@ -287,8 +276,7 @@ export function EditUserPanel({ isOpen, user, onClose, onSaved }: Props) {
           />
         </div>
 
-        {/* Operations-only: grouped into a card so Team, Team Title, and Service Type
-            read as one cohesive assignment rather than three unrelated fields. */}
+        {/* Operations-only profile fields. Team memberships are managed in Users > Teams. */}
         {department === "Operations" && (
           <div className="mb-5 rounded-xl border border-[var(--neuron-ui-border)] overflow-hidden">
             {/* Card header */}
@@ -297,10 +285,10 @@ export function EditUserPanel({ isOpen, user, onClose, onSaved }: Props) {
               style={{ backgroundColor: "var(--neuron-bg-subtle)" }}
             >
               <p className="text-[13px] font-medium text-[var(--neuron-ink-primary)]">
-                Team Assignment
+                Operations Profile
               </p>
               <p className="text-[12px] text-[var(--neuron-ink-muted)]">
-                Operations team, position, and service lane
+                Service lane for Operations workflows
               </p>
             </div>
 
@@ -309,36 +297,6 @@ export function EditUserPanel({ isOpen, user, onClose, onSaved }: Props) {
               className="p-4 flex flex-col gap-4"
               style={{ backgroundColor: "var(--neuron-bg-elevated)" }}
             >
-              <div>
-                <FieldLabel>Team</FieldLabel>
-                <CustomDropdown
-                  label=""
-                  value={teamId}
-                  onChange={setTeamId}
-                  fullWidth
-                  triggerAriaLabel="Team"
-                  options={[
-                    { value: "", label: "No team" },
-                    ...teams.map((t) => ({ value: t.id, label: t.name })),
-                  ]}
-                />
-              </div>
-
-              <div>
-                <FieldLabel>Team Title</FieldLabel>
-                <p className="text-[12px] text-[var(--neuron-ink-muted)] mb-2">
-                  Display label only — doesn't affect permissions
-                </p>
-                <CustomDropdown
-                  label=""
-                  value={teamRole}
-                  onChange={(v) => setTeamRole(v as import("./userFormShared").TeamRole | "")}
-                  fullWidth
-                  triggerAriaLabel="Team Title"
-                  options={TEAM_ROLES}
-                />
-              </div>
-
               <div>
                 <FieldLabel>Service Type</FieldLabel>
                 <CustomDropdown

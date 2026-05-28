@@ -8,6 +8,7 @@ import type { QuotationPrintOptions } from "../projects/quotation/screen/useQuot
 import type { CompanySettings } from "../../hooks/useCompanySettings";
 import { resolveQuotationPrintableDocument } from "../../utils/documents/quotationDocumentResolver";
 import { PrintableDocumentPdf } from "../documents/PrintableDocumentPdf";
+import { applyBrandedDesign } from "../../utils/documentDesign";
 import logoImage from "figma:asset/28c84ed117b026fbf800de0882eb478561f37f4f.png";
 
 interface QuotationPDFDocumentProps {
@@ -17,12 +18,12 @@ interface QuotationPDFDocumentProps {
 }
 
 export function QuotationPDFDocument({ quotation, options, companySettings }: QuotationPDFDocumentProps) {
-  const doc = resolveQuotationPrintableDocument({
+  const doc = applyBrandedDesign(resolveQuotationPrintableDocument({
     quotation,
     options,
     companySettings,
     fallbackLogo: logoImage as unknown as string,
-  });
+  }));
   return <PrintableDocumentPdf document={doc} />;
 }
 

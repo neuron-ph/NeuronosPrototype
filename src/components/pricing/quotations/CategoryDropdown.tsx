@@ -6,7 +6,7 @@ import { supabase } from "../../../utils/supabase/client";
 interface CategoryDropdownProps {
   onAdd: (name: string, catalogCategoryId?: string) => void;
   onClose: () => void;
-  side?: "revenue" | "expense" | "both";
+  side?: "revenue" | "expense";
 }
 
 interface CategoryOption {
@@ -27,7 +27,7 @@ export function CategoryDropdown({ onAdd, onClose, side = "revenue" }: CategoryD
     supabase
       .from("catalog_categories")
       .select("id, name")
-      .in("side", side === "both" ? ["revenue", "expense", "both"] : [side, "both"])
+      .eq("side", side)
       .order("sort_order")
       .then(({ data }) => {
         if (data) setPredefinedCategories(data);

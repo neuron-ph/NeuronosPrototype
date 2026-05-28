@@ -10,6 +10,8 @@ import { getServiceSchema } from "../../../config/booking/bookingScreenSchema";
 import { BookingAssignmentSection } from "../assignments/BookingAssignmentSection";
 import { groupBookingSections } from "../../../utils/bookings/groupBookingSections";
 import { BookingSectionGroupCard } from "./BookingSectionGroupCard";
+import { fetchFullContract } from "../../../utils/contractLookup";
+import { extractDeliveryChargeOptions } from "../../../utils/contractQuantityExtractor";
 
 interface BookingInfoTabProps {
   booking: Record<string, unknown>;
@@ -30,11 +32,23 @@ export function BookingInfoTab({
   const [isSaving, setIsSaving] = useState(false);
   const errors = {};
 
-  const { formState, setField, initFromRecord, context } = useBookingFormState(serviceType);
+  const { formState, setField, initFromRecord, context, setConstraint } = useBookingFormState(serviceType);
 
   useEffect(() => {
     initFromRecord(booking);
   }, [booking]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const contractId = booking.contract_id as string | undefined;
+    if (!contractId) return;
+    fetchFullContract(contractId).then(full => {
+      if (full?.rate_matrices) {
+        const { containerTypes, deliveryDestinations } = extractDeliveryChargeOptions(full.rate_matrices);
+        setConstraint("delivery_container_types", containerTypes.length > 0 ? containerTypes : null);
+        setConstraint("delivery_destinations", deliveryDestinations.length > 0 ? deliveryDestinations : null);
+      }
+    });
+  }, [booking.contract_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleCancel() {
     initFromRecord(booking);

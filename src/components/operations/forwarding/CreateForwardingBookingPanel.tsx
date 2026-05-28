@@ -23,6 +23,8 @@ import { ContractDetectionBanner } from "../shared/ContractDetectionBanner";
 import { ProjectAutofillSection } from "../shared/ProjectAutofillSection";
 import { autofillForwardingFromProject, linkBookingToProject } from "../../../utils/projectAutofill";
 import type { Project } from "../../../types/pricing";
+import { fetchFullContract } from "../../../utils/contractLookup";
+import { extractDeliveryChargeOptions } from "../../../utils/contractQuantityExtractor";
 import { logCreation } from "../../../utils/activityLog";
 import { fireBookingAssignmentTickets } from "../../../utils/workflowTickets";
 import { generateBookingNumber, peekNextBookingNumber } from "../../../utils/bookingNumberUtils";
@@ -63,7 +65,7 @@ export function CreateForwardingBookingPanel({
   const [submitErrors, setSubmitErrors] = useState<Record<string, string>>({});
   const hasHydratedDraft = useRef(false);
 
-  const { formState, setField, initFromPrefill, initFromRecord, context } = useBookingFormState("Forwarding", {
+  const { formState, setField, initFromPrefill, initFromRecord, context, setConstraint } = useBookingFormState("Forwarding", {
     status: "Draft",
     movement_type: "Import",
     mode: "FCL",
@@ -110,6 +112,11 @@ export function CreateForwardingBookingPanel({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!detectedContractId) {
+      toast.error("A contract is required to create a booking. Save as draft if no contract is available.");
+      return;
+    }
 
     const errors = validateBookingForm(formState, "Forwarding", context, {
       requiredFieldKeys: getMinimalCreateRequiredFields("Forwarding"),
@@ -248,7 +255,7 @@ export function CreateForwardingBookingPanel({
   const isEditingDraft = editingId !== null;
   const customerName = selectedCustomer.customerName;
   const bookingName = String(formState.booking_name ?? "");
-  const isFormValid = customerName.trim() !== "" && bookingName.trim() !== "";
+  const isFormValid = customerName.trim() !== "" && bookingName.trim() !== "" && detectedContractId !== null;
 
   return (
     <BookingCreationPanel
@@ -296,6 +303,25 @@ export function CreateForwardingBookingPanel({
           customerName={customerName}
           serviceType="Forwarding"
           onContractDetected={setDetectedContractId}
+          onContractInfo={(contract) => {
+            if (contract?.id) {
+              fetchFullContract(contract.id).then(full => {
+                if (full?.rate_matrices) {
+                  const { containerTypes, deliveryDestinations } = extractDeliveryChargeOptions(full.rate_matrices);
+                  setConstraint("delivery_container_types", containerTypes.length > 0 ? containerTypes : null);
+                  setConstraint("delivery_destinations", deliveryDestinations.length > 0 ? deliveryDestinations : null);
+                } else {
+                  setConstraint("delivery_container_types", null);
+                  setConstraint("delivery_destinations", null);
+                }
+              });
+            } else {
+              setConstraint("delivery_container_types", null);
+              setConstraint("delivery_destinations", null);
+            }
+          }}
+          requireContract
+          requireContractLabel="Forwarding"
         />
       )}
 

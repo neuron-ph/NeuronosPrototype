@@ -20,6 +20,8 @@ import {
   persistAssignmentsForNewBooking,
 } from "../../utils/assignments/applyAssignmentToBookingPayload";
 import { ContractDetectionBanner } from "./shared/ContractDetectionBanner";
+import { CustomDropdown } from "../bd/CustomDropdown";
+import type { ContractSummary } from "../../types/pricing";
 import { logCreation } from "../../utils/activityLog";
 import { fireBookingAssignmentTickets } from "../../utils/workflowTickets";
 import { generateBookingNumber, peekNextBookingNumber } from "../../utils/bookingNumberUtils";
@@ -58,6 +60,7 @@ export function CreateOthersBookingPanel({
   const [editingId, setEditingId] = useState<string | null>(draftBookingId ?? null);
   const [assignmentPayload, setAssignmentPayload] = useState<ServiceRoleAssignmentPayload | null>(null);
   const [detectedContractId, setDetectedContractId] = useState<string | null>(null);
+  const [contractsList, setContractsList] = useState<ContractSummary[]>([]);
   const [submitErrors, setSubmitErrors] = useState<Record<string, string>>({});
   const hasHydratedDraft = useRef(false);
 
@@ -99,6 +102,11 @@ export function CreateOthersBookingPanel({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!detectedContractId) {
+      toast.error("A contract is required to create a booking. Save as draft if no contract is available.");
+      return;
+    }
 
     const errors = validateBookingForm(formState, "Others", context, {
       requiredFieldKeys: getMinimalCreateRequiredFields("Others"),
@@ -219,7 +227,7 @@ export function CreateOthersBookingPanel({
   const isEditingDraft = editingId !== null;
   const customerName = selectedCustomer.customerName;
   const bookingName = String(formState.booking_name ?? "");
-  const isFormValid = customerName.trim() !== "" && bookingName.trim() !== "";
+  const isFormValid = customerName.trim() !== "" && bookingName.trim() !== "" && detectedContractId !== null;
 
   return (
     <BookingCreationPanel
@@ -250,6 +258,33 @@ export function CreateOthersBookingPanel({
         ctx={context}
         errors={submitErrors}
         requiredFieldKeys={getMinimalCreateRequiredFields("Others")}
+        fieldOverrides={{
+          project_number: contractsList.length > 0 ? (
+            <CustomDropdown
+              label=""
+              value={detectedContractId ?? ""}
+              onChange={(id) => {
+                const picked = contractsList.find((c) => c.id === id);
+                if (!picked) return;
+                setDetectedContractId(picked.id);
+                setField("project_number", picked.quote_number ?? "");
+              }}
+              options={contractsList.map((c) => ({
+                value: c.id,
+                label: c.quotation_name
+                  ? `${c.quote_number} — ${c.quotation_name}`
+                  : c.quote_number ?? "(unnamed contract)",
+              }))}
+              placeholder="Select contract..."
+              fullWidth
+              portalZIndex={1125}
+            />
+          ) : customerName ? (
+            <div style={{ padding: "10px 12px", borderRadius: "6px", fontSize: "13px", color: "var(--theme-text-muted)", backgroundColor: "var(--theme-bg-surface-subtle)", border: "1px solid var(--theme-border-default)", minHeight: "40px" }}>
+              No active contracts found for this client
+            </div>
+          ) : undefined,
+        }}
       />
 
       {customerName && (
@@ -257,6 +292,10 @@ export function CreateOthersBookingPanel({
           customerName={customerName}
           serviceType="Others"
           onContractDetected={setDetectedContractId}
+          onContractsList={setContractsList}
+          selectedContractId={detectedContractId}
+          requireContract
+          requireContractLabel="Others"
         />
       )}
 

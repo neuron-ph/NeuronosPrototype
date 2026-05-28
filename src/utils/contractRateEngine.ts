@@ -90,7 +90,33 @@ function getQuantityForUnit(unit: string, quantities: BookingQuantities): number
 
 /** Format a currency amount for display */
 function formatPeso(amount: number): string {
-  return `P${amount.toLocaleString("en-PH")}`;
+  return `₱${amount.toLocaleString("en-PH")}`;
+}
+
+/** Plural-aware unit label for customer-facing breakdowns */
+function unitToDisplayLabel(unit: string, qty: number): string {
+  switch (unit) {
+    case "per_container": return qty === 1 ? "container" : "containers";
+    case "per_shipment":  return qty === 1 ? "shipment" : "shipments";
+    case "per_bl":        return qty === 1 ? "B/L" : "B/Ls";
+    case "per_set":       return qty === 1 ? "set" : "sets";
+    case "per_entry":     return qty === 1 ? "entry" : "entries";
+    case "flat":          return "";
+    default:              return qty === 1 ? "unit" : "units";
+  }
+}
+
+/** Singular unit label for rate denominator (e.g., "₱3,500/container") */
+function unitSingularLabel(unit: string): string {
+  switch (unit) {
+    case "per_container": return "container";
+    case "per_shipment":  return "shipment";
+    case "per_bl":        return "B/L";
+    case "per_set":       return "set";
+    case "per_entry":     return "entry";
+    case "flat":          return "";
+    default:              return "unit";
+  }
 }
 
 // ============================================
@@ -103,27 +129,36 @@ function formatPeso(amount: number): string {
 function calculateRowRate(
   row: ContractRateRow,
   rate: number,
-  quantity: number
+  quantity: number,
+  unit: string = "per_container"
 ): { subtotal: number; rule_applied: string } {
-  if (quantity <= 0 || rate <= 0) {
+  if (quantity <= 0) {
     return { subtotal: 0, rule_applied: "N/A" };
+  }
+  if (rate <= 0) {
+    return { subtotal: 0, rule_applied: "At cost" };
   }
 
   const rule = row.succeeding_rule;
+  const uLabel = unitToDisplayLabel(unit, quantity);
+  const uSingular = unitSingularLabel(unit);
+  const perUnit = uSingular ? `/${uSingular}` : "";
 
   if (rule && rule.after_qty > 0 && quantity > rule.after_qty) {
-    // Succeeding rule applies
     const baseQty = rule.after_qty;
     const succeedingQty = quantity - baseQty;
     const succeedingRate = rule.rate;
     const subtotal = baseQty * rate + succeedingQty * succeedingRate;
-    const rule_applied = `${baseQty} x ${formatPeso(rate)} + ${succeedingQty} x ${formatPeso(succeedingRate)}`;
+    const rule_applied = unit === "flat"
+      ? `First ${baseQty} × ${formatPeso(rate)} + Next ${succeedingQty} × ${formatPeso(succeedingRate)}`
+      : `First ${baseQty} ${uLabel} × ${formatPeso(rate)}${perUnit} + Next ${succeedingQty} × ${formatPeso(succeedingRate)}${perUnit}`;
     return { subtotal, rule_applied };
   }
 
-  // Simple multiplication — no succeeding rule
   const subtotal = quantity * rate;
-  const rule_applied = `${quantity} x ${formatPeso(rate)}`;
+  const rule_applied = unit === "flat"
+    ? `${formatPeso(rate)} flat fee`
+    : `${quantity} ${uLabel} × ${formatPeso(rate)}${perUnit}`;
   return { subtotal, rule_applied };
 }
 
@@ -203,19 +238,32 @@ export function instantiateRates(
     }
 
     const rate = row.rates[modeColumn];
-    if (rate === undefined || rate === null || rate === 0) continue;
+    if (rate === undefined || rate === null) continue;
+
+    // Conditional rows that matched a booking fact (applies_when passed above)
+    // emit even at rate 0 — "at cost" items need a billing line so the user
+    // can fill in the actual amount. Standard rows suppress 0-rate silently.
+    const isConditionalMatch = row.applies_when && row.applies_when.kind !== 'always';
+    if (rate === 0 && !isConditionalMatch) continue;
 
     const quantity = getQuantityForUnit(row.unit, quantities);
     if (quantity <= 0) continue;
 
-    const { subtotal, rule_applied } = calculateRowRate(row, rate, quantity);
+    const { subtotal, rule_applied } = calculateRowRate(row, rate, quantity, row.unit);
+
+    let condition_label: string | undefined;
+    if (isConditionalMatch && row.applies_when!.value) {
+      const kindLabel = row.applies_when!.kind === 'examination' ? 'examination' : 'permit';
+      condition_label = `Booking has ${row.applies_when!.value} ${kindLabel}`;
+    }
 
     appliedRates.push({
       particular: row.particular,
       rate,
       quantity,
       subtotal,
-      rule_applied,
+      rule_applied: rate === 0 ? 'At cost' : rule_applied,
+      condition_label,
       catalog_item_id: row.catalog_item_id,
       category: rowCategoryMap.get(row.id) ?? fallbackCategory,
     });

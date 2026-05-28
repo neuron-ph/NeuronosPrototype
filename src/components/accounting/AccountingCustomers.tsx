@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Search, Plus, Building2, MoreHorizontal, Users as UsersIcon, Trash2, AlertTriangle } from "lucide-react";
 import { toast } from "../ui/toast-utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -9,6 +9,10 @@ import { CustomDropdown } from "../bd/CustomDropdown";
 import { AddCustomerPanel } from "../bd/AddCustomerPanel";
 import { CustomerLedgerDetail } from "./CustomerLedgerDetail";
 import { useCustomerProfileOptions } from "../../hooks/useCustomerProfileOptions";
+import { useUrlSelection } from "../../hooks/useUrlSelection";
+import { useUser } from "../../hooks/useUser";
+import { logDeletion } from "../../utils/activityLog";
+import { useRealtimeSync } from "../../hooks/useRealtimeSync";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -42,6 +46,7 @@ const formatDate = (dateString: string | null) => {
 // ────────────────────────────────────────────────────────────────────────────
 
 export function AccountingCustomers() {
+  const { user } = useUser();
   const queryClient = useQueryClient();
   const [view, setView] = useState<"list" | "detail">("list");
   const [searchQuery, setSearchQuery] = useState("");
@@ -53,6 +58,25 @@ export function AccountingCustomers() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [urlDetailId, setUrlDetailId] = useUrlSelection("detail");
+
+  // ── Restore detail view from URL ────────────────────────────────────
+  useEffect(() => {
+    if (!urlDetailId || selectedCustomer) return;
+    (async () => {
+      const { data, error } = await supabase
+        .from("customers")
+        .select("*")
+        .eq("id", urlDetailId)
+        .single();
+      if (error || !data) {
+        setUrlDetailId(null);
+        return;
+      }
+      setSelectedCustomer(data);
+      setView("detail");
+    })();
+  }, [urlDetailId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Main table data: server-filtered ──────────────────────────────────
   const { data: customers = [], isLoading } = useQuery({
@@ -72,6 +96,8 @@ export function AccountingCustomers() {
     },
     staleTime: 30_000,
   });
+  useRealtimeSync({ table: "customers", queryKey: queryKeys.customers.all() });
+
   const { industries } = useCustomerProfileOptions({
     industryValuesFromRecords: customers.map(customer => customer.industry),
   });
@@ -127,12 +153,14 @@ export function AccountingCustomers() {
     users.find(u => u.id === ownerId)?.name ?? "—";
 
   // ── Mutations ──────────────────────────────────────────────────────────
-  const handleDeleteCustomer = async (customerId: string) => {
+  const handleDeleteCustomer = async (customerId: string, customerName: string) => {
     const { error } = await supabase.from("customers").delete().eq("id", customerId);
     if (error) {
       toast.error(`Failed to delete: ${error.message}`);
       return;
     }
+    const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
+    logDeletion("customer", customerId, customerName, actor);
     queryClient.invalidateQueries({ queryKey: queryKeys.customers.all() });
     queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all() });
     setOpenDropdownId(null);
@@ -158,7 +186,7 @@ export function AccountingCustomers() {
       <CustomerLedgerDetail
         customer={selectedCustomer}
         contactCount={getContactCount(selectedCustomer.id)}
-        onClose={() => { setSelectedCustomer(null); setView("list"); }}
+        onClose={() => { setSelectedCustomer(null); setView("list"); setUrlDetailId(null); }}
       />
     );
   }
@@ -301,8 +329,8 @@ export function AccountingCustomers() {
                     role="row"
                     tabIndex={0}
                     className={`grid grid-cols-[40px_minmax(200px,1fr)_minmax(120px,140px)_110px_80px_130px_40px] gap-3 px-6 py-4 items-center hover:bg-[var(--theme-bg-surface-subtle)] transition-colors cursor-pointer group focus:outline-none focus:bg-[var(--theme-bg-surface-subtle)] ${isLast ? "rounded-b-2xl" : ""}`}
-                    onClick={() => { setSelectedCustomer(customer); setView("detail"); }}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedCustomer(customer); setView("detail"); }}}
+                    onClick={() => { setSelectedCustomer(customer); setView("detail"); setUrlDetailId(customer.id); }}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedCustomer(customer); setView("detail"); setUrlDetailId(customer.id); }}}
                   >
                     {/* Monogram */}
                     <div
@@ -391,7 +419,7 @@ export function AccountingCustomers() {
                                 <button
                                   className="flex-1 h-7 rounded-md text-[12px] font-semibold text-white cursor-pointer border-none transition-opacity hover:opacity-90"
                                   style={{ backgroundColor: "var(--theme-status-danger-fg)" }}
-                                  onClick={() => handleDeleteCustomer(customer.id)}
+                                  onClick={() => handleDeleteCustomer(customer.id, name)}
                                 >
                                   Delete
                                 </button>

@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
-import { Loader2, ZoomIn, ZoomOut, Maximize, ChevronDown, Layout, Check, FileText, Calendar, Box, Truck, CreditCard, Download, Printer, RefreshCw } from "lucide-react";
+import { Loader2, ZoomIn, ZoomOut, Maximize, ChevronDown, Layout, Check, FileText, Calendar, Box, Truck, CreditCard, Download, Printer, RefreshCw, AlertTriangle, Trash2, ShieldCheck, Ban } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useUser } from "../../../hooks/useUser";
 import { usePermission } from "../../../context/PermissionProvider";
@@ -642,15 +642,13 @@ export function InvoiceBuilder({
         subtotal: draftInvoice.subtotal,
         total_amount: roundMoney(draftInvoice.total_amount),
         tax_amount: draftInvoice.tax_amount,
-        status: 'posted',
+        status: 'draft',
         metadata: {
             signatories,
             displayOptions,
             billed_to_type: billedToType,
             billed_to_consignee_id: billedToConsigneeId || null,
             customer_address: customerAddress,
-            // exchange_rate / original_currency duplicated in metadata for back-compat
-            // with older read paths; the columns above are authoritative.
             exchange_rate: lockedRate,
             original_currency: invoiceCurrency,
             revenue_account_id: revenueAccountId || null,
@@ -675,76 +673,241 @@ export function InvoiceBuilder({
 
       if (invoiceError) throw new Error(invoiceError.message);
 
-      // Create draft journal entry for Accounting to review and post.
-      // Total debit/credit are PHP base; the GL posting sheet finalises lines
-      // and locks the rate that's already stamped onto the invoice row.
-      const jeId = `JE-INV-${Date.now()}`;
-      await supabase.from("journal_entries").insert({
-        id: jeId,
-        // entry_number filled by DB trigger (set_journal_entry_number)
-        entry_date: new Date().toISOString(),
-        invoice_id: invoiceData.id,
-        description: `Invoice ${invoiceData.invoice_number} — ${invoiceRow.customer_name}`,
-        reference: invoiceData.invoice_number,
-        project_number: invoiceRow.project_number || null,
-        customer_name: invoiceRow.customer_name || null,
-        lines: [],
-        total_debit: baseAmount,
-        total_credit: baseAmount,
-        transaction_currency: invoiceCurrency,
-        exchange_rate: lockedRate,
-        base_currency: FUNCTIONAL_CURRENCY,
-        source_amount: roundMoney(invoiceRow.total_amount),
-        base_amount: baseAmount,
-        exchange_rate_date: rateDate,
-        status: "draft",
-        created_by: user?.id ?? null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-
       const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
       logCreation("invoice", invoiceData.id, invoiceData.invoice_number ?? invoiceData.id, actor);
 
-      // Mark selected billing items as invoiced
+      // Mark selected billing items as invoiced (claimed by this draft)
       const { error: updateError } = await supabase
         .from('billing_line_items')
         .update({ status: 'invoiced', invoice_id: invoiceData.id, invoice_number: invoiceData.invoice_number })
         .in('id', finalBillingItemIds);
       if (updateError) console.warn('[InvoiceBuilder] Failed to mark items as invoiced:', updateError.message);
-      else logActivity("invoice", invoiceData.id, invoiceData.invoice_number ?? invoiceData.id, "updated", actor, { description: "Marked as invoiced" });
 
-      // Red-dot ping: notify accounting managers (AR review) + project owner
-      const { data: arManagers } = await supabase
-        .from('users')
-        .select('id')
-        .eq('department', 'Accounting')
-        .in('role', ['manager', 'executive']);
-      const projectOwnerId = (project as any).created_by as string | undefined;
-      void recordNotificationEvent({
-        actorUserId: user?.id ?? null,
-        module: 'accounting',
-        subSection: 'invoices',
-        entityType: 'invoice',
-        entityId: invoiceData.id,
-        kind: 'issued',
-        summary: {
-          label: `Invoice ${invoiceData.invoice_number} issued`,
-          reference: invoiceData.invoice_number,
-          customer_name: invoiceRow.customer_name,
-          amount: invoiceRow.total_amount,
-          currency: invoiceCurrency,
-        },
-        recipientIds: [projectOwnerId, ...(arManagers || []).map((u: any) => u.id)],
-      });
-
-      toast.success(`Invoice ${invoiceData.invoice_number} created`);
+      toast.success(`Invoice ${invoiceData.invoice_number} saved as draft`);
       if (onSuccess) onSuccess();
     } catch (error) {
       console.error("Error creating invoice:", error);
       toast.error("Failed to create invoice");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // -- Invoice Lifecycle Actions (View Mode) --
+  const [isFinalizing, setIsFinalizing] = useState(false);
+  const [isVoiding, setIsVoiding] = useState(false);
+  const [isDeletingDraft, setIsDeletingDraft] = useState(false);
+  const [confirmVoid, setConfirmVoid] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const invoiceStatus = (viewInvoice?.status || "").toLowerCase();
+  const isDraft = invoiceStatus === "draft";
+  const isPosted = invoiceStatus === "posted" || invoiceStatus === "open" || invoiceStatus === "sent";
+  const isVoid = invoiceStatus === "void";
+  const hasJournalEntry = !!(viewInvoice as any)?.journal_entry_id;
+
+  const handleFinalize = async () => {
+    if (!viewInvoice || !user) return;
+    setIsFinalizing(true);
+    try {
+      const inv = viewInvoice as any;
+      const invoiceCurrency = normalizeCurrency(inv.original_currency || inv.currency || "PHP", FUNCTIONAL_CURRENCY);
+      const lockedRate = inv.exchange_rate || 1;
+      const baseAmount = toBaseAmount({
+        amount: inv.total_amount,
+        currency: invoiceCurrency,
+        exchangeRate: lockedRate,
+      });
+      const rateDate = (inv.invoice_date || new Date().toISOString()).slice(0, 10);
+
+      const jeId = `JE-INV-${Date.now()}`;
+      await supabase.from("journal_entries").insert({
+        id: jeId,
+        entry_date: new Date().toISOString(),
+        invoice_id: inv.id,
+        description: `Invoice ${inv.invoice_number} — ${inv.customer_name}`,
+        reference: inv.invoice_number,
+        project_number: inv.project_number || null,
+        customer_name: inv.customer_name || null,
+        lines: [],
+        total_debit: baseAmount,
+        total_credit: baseAmount,
+        transaction_currency: invoiceCurrency,
+        exchange_rate: lockedRate,
+        base_currency: FUNCTIONAL_CURRENCY,
+        source_amount: roundMoney(inv.total_amount),
+        base_amount: baseAmount,
+        exchange_rate_date: rateDate,
+        status: "draft",
+        created_by: user.id,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+      const { error } = await supabase
+        .from("invoices")
+        .update({ status: "posted", updated_at: new Date().toISOString() })
+        .eq("id", inv.id);
+      if (error) throw error;
+
+      const actor = { id: user.id, name: user.name, department: user.department ?? "" };
+      logActivity("invoice", inv.id, inv.invoice_number ?? inv.id, "finalized", actor);
+
+      const { data: arManagers } = await supabase
+        .from("users")
+        .select("id")
+        .eq("department", "Accounting")
+        .in("role", ["manager", "executive"]);
+      const projectOwnerId = (project as any).created_by as string | undefined;
+      void recordNotificationEvent({
+        actorUserId: user.id,
+        module: "accounting",
+        subSection: "invoices",
+        entityType: "invoice",
+        entityId: inv.id,
+        kind: "issued",
+        summary: {
+          label: `Invoice ${inv.invoice_number} finalized`,
+          reference: inv.invoice_number,
+          customer_name: inv.customer_name,
+          amount: inv.total_amount,
+          currency: invoiceCurrency,
+        },
+        recipientIds: [projectOwnerId, ...(arManagers || []).map((u: any) => u.id)],
+      });
+
+      setViewInvoice({ ...viewInvoice, status: "posted" } as Invoice);
+      toast.success(`Invoice ${inv.invoice_number} finalized`);
+      if (onRefreshData) await onRefreshData();
+      if (onBack) onBack();
+    } catch (err) {
+      console.error("Finalize error:", err);
+      toast.error("Failed to finalize invoice");
+    } finally {
+      setIsFinalizing(false);
+    }
+  };
+
+  const handleDeleteDraft = async () => {
+    if (!viewInvoice || !user) return;
+    setIsDeletingDraft(true);
+    try {
+      const inv = viewInvoice as any;
+      const billingItemIds = Array.isArray(inv.billing_item_ids) ? inv.billing_item_ids : [];
+
+      if (billingItemIds.length > 0) {
+        await supabase
+          .from("billing_line_items")
+          .update({ status: "unbilled", invoice_id: null, invoice_number: null })
+          .in("id", billingItemIds);
+      }
+
+      const { error } = await supabase.from("invoices").delete().eq("id", inv.id);
+      if (error) throw error;
+
+      const actor = { id: user.id, name: user.name, department: user.department ?? "" };
+      logActivity("invoice", inv.id, inv.invoice_number ?? inv.id, "deleted", actor);
+
+      toast.success(`Draft ${inv.invoice_number} deleted`);
+      setConfirmDelete(false);
+      if (onRefreshData) await onRefreshData();
+      if (onBack) onBack();
+    } catch (err) {
+      console.error("Delete draft error:", err);
+      toast.error("Failed to delete draft");
+    } finally {
+      setIsDeletingDraft(false);
+    }
+  };
+
+  const handleVoidInvoice = async () => {
+    if (!viewInvoice || !user) return;
+    setIsVoiding(true);
+    try {
+      const inv = viewInvoice as any;
+
+      const { data: linkedCollections } = await supabase
+        .from("collections")
+        .select("id")
+        .eq("invoice_id", inv.id)
+        .limit(1);
+
+      if (linkedCollections && linkedCollections.length > 0) {
+        toast.error("Cannot void — collections exist on this invoice. Reverse or remove collections first.");
+        setIsVoiding(false);
+        return;
+      }
+
+      if (hasJournalEntry) {
+        const invoiceCurrency = normalizeCurrency(inv.original_currency || inv.currency || "PHP", FUNCTIONAL_CURRENCY);
+        const lockedRate = inv.exchange_rate || 1;
+        const baseAmount = toBaseAmount({
+          amount: inv.total_amount,
+          currency: invoiceCurrency,
+          exchangeRate: lockedRate,
+        });
+        const rateDate = new Date().toISOString().slice(0, 10);
+
+        const reversingJeId = `JE-VOID-${Date.now()}`;
+        await supabase.from("journal_entries").insert({
+          id: reversingJeId,
+          entry_date: new Date().toISOString(),
+          invoice_id: inv.id,
+          description: `VOID — Reversal of Invoice ${inv.invoice_number}`,
+          reference: `VOID-${inv.invoice_number}`,
+          project_number: inv.project_number || null,
+          customer_name: inv.customer_name || null,
+          lines: [],
+          total_debit: baseAmount,
+          total_credit: baseAmount,
+          transaction_currency: invoiceCurrency,
+          exchange_rate: lockedRate,
+          base_currency: FUNCTIONAL_CURRENCY,
+          source_amount: roundMoney(inv.total_amount),
+          base_amount: baseAmount,
+          exchange_rate_date: rateDate,
+          status: "posted",
+          created_by: user.id,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+      }
+
+      const billingItemIds = Array.isArray(inv.billing_item_ids) ? inv.billing_item_ids : [];
+      if (billingItemIds.length > 0) {
+        await supabase
+          .from("billing_line_items")
+          .update({ status: "unbilled", invoice_id: null, invoice_number: null })
+          .in("id", billingItemIds);
+      }
+
+      const { error } = await supabase
+        .from("invoices")
+        .update({
+          status: "void",
+          payment_status: "void",
+          remaining_balance: 0,
+          amount_due: 0,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", inv.id);
+      if (error) throw error;
+
+      const actor = { id: user.id, name: user.name, department: user.department ?? "" };
+      logActivity("invoice", inv.id, inv.invoice_number ?? inv.id, "voided", actor, {
+        description: hasJournalEntry ? "Voided with reversing journal entry" : "Voided (no GL entry to reverse)",
+      });
+
+      setViewInvoice({ ...viewInvoice, status: "void" } as Invoice);
+      toast.success(`Invoice ${inv.invoice_number} voided`);
+      setConfirmVoid(false);
+      if (onRefreshData) await onRefreshData();
+      if (onBack) onBack();
+    } catch (err) {
+      console.error("Void error:", err);
+      toast.error("Failed to void invoice");
+    } finally {
+      setIsVoiding(false);
     }
   };
 
@@ -956,6 +1119,16 @@ export function InvoiceBuilder({
                 </div>
               </div>
               <div className="flex items-center gap-2 mt-2.5">
+                {isDraft && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[var(--theme-status-warning-bg)] text-[var(--theme-status-warning-fg)] border border-[var(--theme-status-warning-border)]">
+                    Draft
+                  </span>
+                )}
+                {isVoid && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[var(--theme-bg-surface-subtle)] text-[var(--theme-text-muted)] border border-[var(--theme-border-default)]">
+                    Void
+                  </span>
+                )}
                 <span className="text-[11px] text-[var(--theme-text-muted)]">Issued {formatDate(viewInvoice.invoice_date || (viewInvoice as any).created_at || '')}</span>
                 <span className="w-1 h-1 rounded-full bg-[var(--theme-text-muted)] opacity-30 shrink-0" />
                 <span className="text-[11px] text-[var(--theme-text-muted)]">Due {formatDate(viewInvoice.due_date || '')}</span>
@@ -1390,26 +1563,117 @@ export function InvoiceBuilder({
                   ) : (
                     <Check size={16} />
                   )}
-                  {isSubmitting ? "Creating..." : "Create & Finalize"}
+                  {isSubmitting ? "Saving..." : "Save as Draft"}
                 </button>
               </>
             ) : (
               <div className="flex flex-col gap-2.5">
-                <button
-                  onClick={handleDownloadPDF}
-                  disabled={isGeneratingPDF}
-                  className="flex items-center justify-center gap-2 w-full px-4 py-3 text-[13px] font-bold text-white bg-[var(--theme-action-primary-bg)] rounded-lg hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {isGeneratingPDF ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-                  {isGeneratingPDF ? "Generating..." : "Download PDF"}
-                </button>
-                <button
-                  onClick={handlePrint}
-                  className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-[13px] font-medium text-[var(--theme-text-secondary)] border border-[var(--theme-border-default)] rounded-lg hover:bg-[var(--theme-bg-surface-subtle)] transition-all"
-                >
-                  <Printer size={15} />
-                  Print
-                </button>
+                {/* Draft actions */}
+                {isDraft && (
+                  <>
+                    <button
+                      onClick={handleFinalize}
+                      disabled={isFinalizing}
+                      className="flex items-center justify-center gap-2 w-full px-4 py-3 text-[13px] font-bold text-white bg-[var(--theme-action-primary-bg)] rounded-lg hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {isFinalizing ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
+                      {isFinalizing ? "Finalizing..." : "Finalize Invoice"}
+                    </button>
+                    {!confirmDelete ? (
+                      <button
+                        onClick={() => setConfirmDelete(true)}
+                        className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-[13px] font-medium text-[var(--theme-status-danger-fg)] border border-[var(--theme-status-danger-border)] rounded-lg hover:bg-[var(--theme-status-danger-bg)] transition-all"
+                      >
+                        <Trash2 size={15} />
+                        Delete Draft
+                      </button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleDeleteDraft}
+                          disabled={isDeletingDraft}
+                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-bold text-white bg-[var(--theme-status-danger-fg)] rounded-lg hover:opacity-90 transition-all disabled:opacity-60"
+                        >
+                          {isDeletingDraft ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                          Confirm Delete
+                        </button>
+                        <button
+                          onClick={() => setConfirmDelete(false)}
+                          className="px-4 py-2.5 text-[13px] font-medium text-[var(--theme-text-secondary)] border border-[var(--theme-border-default)] rounded-lg hover:bg-[var(--theme-bg-surface-subtle)] transition-all"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Void action for posted invoices */}
+                {isPosted && !isVoid && (
+                  <>
+                    {!confirmVoid ? (
+                      <button
+                        onClick={() => setConfirmVoid(true)}
+                        className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-[13px] font-medium text-[var(--theme-status-danger-fg)] border border-[var(--theme-status-danger-border)] rounded-lg hover:bg-[var(--theme-status-danger-bg)] transition-all"
+                      >
+                        <Ban size={15} />
+                        Void Invoice
+                      </button>
+                    ) : (
+                      <div className="p-3 border border-[var(--theme-status-danger-border)] rounded-lg bg-[var(--theme-status-danger-bg)]">
+                        <div className="flex items-start gap-2 mb-3">
+                          <AlertTriangle size={14} className="text-[var(--theme-status-danger-fg)] shrink-0 mt-0.5" />
+                          <p className="text-[12px] text-[var(--theme-status-danger-fg)] leading-relaxed">
+                            This will void the invoice{hasJournalEntry ? " and create a reversing journal entry" : ""}. Billing items will be released back to unbilled.
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleVoidInvoice}
+                            disabled={isVoiding}
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-bold text-white bg-[var(--theme-status-danger-fg)] rounded-lg hover:opacity-90 transition-all disabled:opacity-60"
+                          >
+                            {isVoiding ? <Loader2 size={14} className="animate-spin" /> : <Ban size={14} />}
+                            Confirm Void
+                          </button>
+                          <button
+                            onClick={() => setConfirmVoid(false)}
+                            className="px-4 py-2.5 text-[13px] font-medium text-[var(--theme-text-secondary)] border border-[var(--theme-border-default)] rounded-lg hover:bg-[var(--theme-bg-surface-subtle)] transition-all bg-[var(--theme-bg-surface)]"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Void badge */}
+                {isVoid && (
+                  <div className="flex items-center justify-center gap-2 w-full px-4 py-3 text-[13px] font-bold text-[var(--theme-text-muted)] bg-[var(--theme-bg-surface-subtle)] border border-[var(--theme-border-default)] rounded-lg">
+                    <Ban size={15} />
+                    Invoice Voided
+                  </div>
+                )}
+
+                {/* PDF / Print always available */}
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={handleDownloadPDF}
+                    disabled={isGeneratingPDF}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-medium text-[var(--theme-text-secondary)] border border-[var(--theme-border-default)] rounded-lg hover:bg-[var(--theme-bg-surface-subtle)] transition-all disabled:opacity-60"
+                  >
+                    {isGeneratingPDF ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+                    {isGeneratingPDF ? "Generating..." : "PDF"}
+                  </button>
+                  <button
+                    onClick={handlePrint}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-medium text-[var(--theme-text-secondary)] border border-[var(--theme-border-default)] rounded-lg hover:bg-[var(--theme-bg-surface-subtle)] transition-all"
+                  >
+                    <Printer size={15} />
+                    Print
+                  </button>
+                </div>
               </div>
             )}
           </div>

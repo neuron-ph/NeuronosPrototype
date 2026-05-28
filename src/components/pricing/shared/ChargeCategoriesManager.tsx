@@ -266,6 +266,7 @@ export function ChargeCategoriesManager({
                 {/* Inline Category Dropdown */}
                 {showAddCategory && (
                   <CategoryDropdown
+                    side="revenue"
                     onAdd={handleAddCategory}
                     onClose={() => setShowAddCategory(false)}
                   />

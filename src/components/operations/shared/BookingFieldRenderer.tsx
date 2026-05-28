@@ -184,12 +184,14 @@ function GenericRepeater({
   onChange,
   disabled,
   serviceType,
+  ctx,
 }: {
   columns: RepeaterColumn[];
   value: Record<string, unknown>[];
   onChange: (rows: Record<string, unknown>[]) => void;
   disabled?: boolean;
   serviceType: string;
+  ctx?: BookingFormContext;
 }) {
   const enumBundle = useAllEnumOptions();
   const movementForService = useEnumOptions('movement', { serviceType });
@@ -237,10 +239,20 @@ function GenericRepeater({
         <div key={idx} style={{ display: 'grid', gridTemplateColumns: `repeat(${effectiveCols.length}, 1fr) 32px`, gap: '6px', marginBottom: '6px', alignItems: 'center' }}>
           {effectiveCols.map(col => {
             const cellVal = String(row[col.key] ?? '');
-            const colOptions = col.optionsKind
-              ? (col.optionsKind === 'movement' ? movementForService : enumBundle[col.optionsKind])
-              : col.options;
-            if ((col.control === 'dropdown') && colOptions?.length) {
+            // Contract-derived options override generic enum/static options
+            let colOptions: string[] | undefined;
+            let effectiveControl = col.control;
+            if (col.key === 'container_type' && ctx?.delivery_container_types?.length) {
+              colOptions = ctx.delivery_container_types;
+            } else if (col.key === 'delivery_address' && ctx?.delivery_destinations?.length) {
+              colOptions = ctx.delivery_destinations;
+              effectiveControl = 'dropdown';
+            } else {
+              colOptions = col.optionsKind
+                ? (col.optionsKind === 'movement' ? movementForService : enumBundle[col.optionsKind])
+                : col.options;
+            }
+            if ((effectiveControl === 'dropdown') && colOptions?.length) {
               return (
                 <CustomDropdown
                   key={col.key}
@@ -520,6 +532,7 @@ export function BookingFieldRenderer({ field, value, onChange, ctx, error, disab
           onChange={set}
           disabled={disabled}
           serviceType={ctx.service_type}
+          ctx={ctx}
         />
       );
 

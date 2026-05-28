@@ -387,6 +387,7 @@ export function resolveInvoicePrintableDocument(args: ResolveInvoiceArgs): Print
     partySections,
     sections,
     tables: [table],
+    postTableSections: [],
     totals,
     notes,
     bank,

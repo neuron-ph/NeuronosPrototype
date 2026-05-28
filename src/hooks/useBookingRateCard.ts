@@ -28,15 +28,47 @@ export interface BookingRateCardData {
   customerName: string;
   /** Currency from the contract */
   currency: string;
+  /** Version number of the pinned rate snapshot (undefined if using live contract rates) */
+  rateVersionNumber?: number;
 }
 
 /**
  * @param contractId — The booking's `contract_id` field (undefined/empty if not a contract booking)
+ * @param rateVersionId — Optional pinned rate version ID. When provided, rates come from
+ *   the `contract_rate_versions` table instead of the live contract.
  */
-export function useBookingRateCard(contractId?: string): BookingRateCardData {
+export function useBookingRateCard(contractId?: string, rateVersionId?: string): BookingRateCardData {
   const { data, isLoading } = useQuery({
-    queryKey: queryKeys.contracts.rateCard(contractId ?? ""),
+    queryKey: queryKeys.contracts.rateCard(rateVersionId || contractId || ""),
     queryFn: async () => {
+      // If a pinned version exists, fetch rates from the version table
+      if (rateVersionId) {
+        const [versionRes, contractRes] = await Promise.all([
+          supabase
+            .from("contract_rate_versions")
+            .select("rate_matrices, version_number")
+            .eq("id", rateVersionId)
+            .maybeSingle(),
+          supabase
+            .from("quotations")
+            .select("quote_number, customer_name, currency")
+            .eq("id", contractId!)
+            .maybeSingle(),
+        ]);
+
+        if (versionRes.error) throw versionRes.error;
+        if (!versionRes.data) return null;
+
+        return {
+          rateMatrices: (versionRes.data.rate_matrices ?? []) as ContractRateMatrix[],
+          contractNumber: contractRes.data?.quote_number ?? "",
+          customerName: contractRes.data?.customer_name ?? "",
+          currency: contractRes.data?.currency ?? "PHP",
+          rateVersionNumber: versionRes.data.version_number as number,
+        };
+      }
+
+      // Fallback: fetch from live contract (legacy bookings without version pinning)
       const { data: row, error } = await supabase
         .from("quotations")
         .select("*")
@@ -53,6 +85,7 @@ export function useBookingRateCard(contractId?: string): BookingRateCardData {
         contractNumber: merged.quote_number ?? "",
         customerName: merged.customer_name ?? "",
         currency: merged.currency ?? "PHP",
+        rateVersionNumber: undefined as number | undefined,
       };
     },
     enabled: !!contractId,
@@ -67,5 +100,6 @@ export function useBookingRateCard(contractId?: string): BookingRateCardData {
     contractNumber: data?.contractNumber ?? "",
     customerName: data?.customerName ?? "",
     currency: data?.currency ?? "PHP",
+    rateVersionNumber: data?.rateVersionNumber,
   };
 }

@@ -799,6 +799,34 @@ const TRUCK_TYPE_TO_CHARGE_ID: Record<string, string> = {
 };
 
 /**
+ * Extract container types and delivery destinations from delivery-charge
+ * categories across ALL service matrices.  Used to populate dropdowns in the
+ * booking container repeater when a contract is linked.
+ */
+export function extractDeliveryChargeOptions(
+  rateMatrices: ContractRateMatrix[],
+): { containerTypes: string[]; deliveryDestinations: string[] } {
+  const types = new Set<string>();
+  const destinations = new Set<string>();
+
+  for (const matrix of rateMatrices) {
+    for (const category of matrix.categories ?? []) {
+      if (category.kind !== "delivery") continue;
+      for (const row of category.rows) {
+        if (row.particular) types.add(row.particular);
+        const dest = row.group_label || row.remarks;
+        if (dest) destinations.add(dest);
+      }
+    }
+  }
+
+  return {
+    containerTypes: Array.from(types),
+    deliveryDestinations: Array.from(destinations),
+  };
+}
+
+/**
  * Extract known destination groups from a trucking contract's rate matrices.
  *
  * Single source of truth: collects unique `selection_group || remarks` values

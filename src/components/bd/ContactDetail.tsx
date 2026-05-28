@@ -1,4 +1,4 @@
-﻿import { ArrowLeft, Mail, Phone, Building2, User, Edit, Trash2, Paperclip, Download, FileText, Image as ImageIcon, File, Upload, CheckCircle2, AlertCircle, MessageSquare, Send, Plus, Users, MessageCircle, Linkedin, Flag, CheckSquare, UserCheck } from "lucide-react";
+import { ArrowLeft, Mail, Phone, Building2, User, Edit, Trash2, Paperclip, Download, FileText, Image as ImageIcon, File, Upload, CheckCircle2, AlertCircle, MessageSquare, Send, Plus, Users, MessageCircle, Linkedin, Flag, CheckSquare, UserCheck } from "lucide-react";
 import { useRef, useState } from "react";
 import { usePermission } from "../../context/PermissionProvider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -15,6 +15,7 @@ import { useUser } from "../../hooks/useUser";
 import { logActivity, logCreation } from "../../utils/activityLog";
 import { formatAttachmentSize, getAttachmentKind, uploadCrmAttachments } from "../../utils/crmAttachments";
 import { useMarkEntityReadOnMount } from "../../hooks/useNotifications";
+import { useCustomers } from "../../hooks/useCustomers";
 import { toast } from "sonner@2.0.3";
 import { CreateQuotationMenu } from "../pricing/CreateQuotationMenu";
 import { ContactTeamsTab } from "./ContactTeamsTab";
@@ -133,7 +134,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
   // convert call returns, without waiting for the parent to refetch and pass
   // down a fresh contact prop.
   const [convertedCustomerId, setConvertedCustomerId] = useState<string | null>(null);
-  // Backend uses 'customer_id', frontend alias is 'company_id' â€” support both
+  // Backend uses 'customer_id', frontend alias is 'company_id' — support both
   const effectiveCustomerId = convertedCustomerId || contact.customer_id || contact.company_id;
   const queryClient = useQueryClient();
 
@@ -194,6 +195,8 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
     },
     staleTime: 5 * 60 * 1000,
   });
+
+  const { customers: allCustomers } = useCustomers();
 
   // Helper function to determine if proof is required for a task type
   const isProofRequired = (taskType: string): boolean => {
@@ -314,10 +317,10 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
       if (!updateError && updatedData) {
         const _actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
 
-        // Detect which fields changed and summarise old â†’ new
+        // Detect which fields changed and summarise old → new
         const fieldLabels: Record<string, string> = {
           name: "Name", title: "Title", email: "Email", phone: "Phone",
-          lifecycle_stage: "Stage", lead_status: "Lead Status", owner_id: "Account Owner", notes: "Notes",
+          customer_id: "Company", lifecycle_stage: "Stage", lead_status: "Lead Status", owner_id: "Account Owner", notes: "Notes",
         };
         const changedFields = Object.keys(fieldLabels).filter(f => {
           const oldVal = (contact as unknown as Record<string, unknown>)[f];
@@ -336,6 +339,9 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
 
         logActivity("contact", contact.id, updatedData.name ?? contact.name ?? contact.id, "updated", _actor, details);
         queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all() });
+        if (updatedData.customer_id) {
+          queryClient.invalidateQueries({ queryKey: queryKeys.customers.detail(updatedData.customer_id) });
+        }
         Object.assign(contact, updatedData, {
           job_title: updatedData.title,
           mobile_number: updatedData.phone,
@@ -672,7 +678,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                     />
                   ) : (
                     <div className="text-[14px]" style={{ color: "var(--theme-text-primary)" }}>
-                      {(contact.name || '').split(' ')[0] || 'â€”'}
+                      {(contact.name || '').split(' ')[0] || '—'}
                     </div>
                   )}
                 </div>
@@ -705,7 +711,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                     />
                   ) : (
                     <div className="text-[14px]" style={{ color: "var(--theme-text-primary)" }}>
-                      {(contact.name || '').split(' ').slice(1).join(' ') || 'â€”'}
+                      {(contact.name || '').split(' ').slice(1).join(' ') || '—'}
                     </div>
                   )}
                 </div>
@@ -841,18 +847,30 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                       Company
                     </span>
                   </div>
-                  <div>
-                    {company ? (
-                      <>
-                        <div className="text-[14px]" style={{ color: "var(--theme-text-primary)" }}>{company.name}</div>
-                        {company.industry && (
-                          <div className="text-[12px]" style={{ color: "var(--theme-text-muted)" }}>{company.industry}</div>
-                        )}
-                      </>
-                    ) : (
-                      <div className="text-[13px] italic" style={{ color: "var(--theme-text-muted)" }}>No company â€” standalone contact</div>
-                    )}
-                  </div>
+                  {isEditing ? (
+                    <CustomDropdown
+                      value={editedContact.customer_id ?? editedContact.company_id ?? ""}
+                      onChange={(value) => setEditedContact({ ...editedContact, customer_id: value || null })}
+                      options={[
+                        { value: "", label: "No company (standalone contact)" },
+                        ...allCustomers.map(c => ({ value: c.id, label: c.name }))
+                      ]}
+                      placeholder="Select company"
+                    />
+                  ) : (
+                    <div>
+                      {company ? (
+                        <>
+                          <div className="text-[14px]" style={{ color: "var(--theme-text-primary)" }}>{company.name}</div>
+                          {company.industry && (
+                            <div className="text-[12px]" style={{ color: "var(--theme-text-muted)" }}>{company.industry}</div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="text-[13px] italic" style={{ color: "var(--theme-text-muted)" }}>No company — standalone contact</div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Lifecycle Stage */}
@@ -932,7 +950,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                     />
                   ) : (
                     <span className="text-[14px]" style={{ color: contact.owner_id ? "var(--theme-text-primary)" : "var(--theme-text-muted)" }}>
-                      {contact.owner_id ? (users.find(u => u.id === contact.owner_id)?.name ?? "â€”") : "Unassigned"}
+                      {contact.owner_id ? (users.find(u => u.id === contact.owner_id)?.name ?? "—") : "Unassigned"}
                     </span>
                   )}
                 </div>
@@ -1972,7 +1990,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
 
                             {/* Route */}
                             <div className="text-[12px]" style={{ color: "var(--theme-text-secondary)" }}>
-                              {inquiry.pol_aol} â†’ {inquiry.pod_aod}
+                              {inquiry.pol_aol} → {inquiry.pod_aod}
                             </div>
 
                             {/* Created Date */}

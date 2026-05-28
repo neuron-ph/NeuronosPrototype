@@ -178,6 +178,12 @@ export function normalizePrintableDocument(
     })
     .filter((t): t is PrintableTable => t !== null);
 
+  const postTableSections = opts.omitEmptySections
+    ? (doc.postTableSections || [])
+        .map(normalizeSection)
+        .filter((s): s is PrintableSection => s !== null)
+    : (doc.postTableSections || []);
+
   const notes = opts.showNotes
     ? doc.notes
         .map(normalizeSection)
@@ -212,6 +218,7 @@ export function normalizePrintableDocument(
     partySections,
     sections,
     tables,
+    postTableSections,
     notes,
     signatories,
     footerFields,
