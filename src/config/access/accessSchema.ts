@@ -287,7 +287,7 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
           tab("ops_forwarding_draft_tab",       "Draft"),
           tab("ops_forwarding_in_progress_tab", "In Progress"),
           tab("ops_forwarding_completed_tab",   "Completed"),
-          tab("ops_forwarding_cancelled_tab",   "Cancelled"),
+          tab("ops_forwarding_cancelled_tab",   "Archived"),
         ],
       },
       {
@@ -300,7 +300,7 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
           tab("ops_brokerage_draft_tab",       "Draft"),
           tab("ops_brokerage_in_progress_tab", "In Progress"),
           tab("ops_brokerage_completed_tab",   "Completed"),
-          tab("ops_brokerage_cancelled_tab",   "Cancelled"),
+          tab("ops_brokerage_cancelled_tab",   "Archived"),
         ],
       },
       {
@@ -313,7 +313,7 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
           tab("ops_trucking_draft_tab",       "Draft"),
           tab("ops_trucking_in_progress_tab", "In Progress"),
           tab("ops_trucking_completed_tab",   "Completed"),
-          tab("ops_trucking_cancelled_tab",   "Cancelled"),
+          tab("ops_trucking_cancelled_tab",   "Archived"),
         ],
       },
       {
@@ -326,7 +326,7 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
           tab("ops_marine_insurance_draft_tab",       "Draft"),
           tab("ops_marine_insurance_in_progress_tab", "In Progress"),
           tab("ops_marine_insurance_completed_tab",   "Completed"),
-          tab("ops_marine_insurance_cancelled_tab",   "Cancelled"),
+          tab("ops_marine_insurance_cancelled_tab",   "Archived"),
         ],
       },
       {
@@ -339,7 +339,7 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
           tab("ops_others_draft_tab",       "Draft"),
           tab("ops_others_in_progress_tab", "In Progress"),
           tab("ops_others_completed_tab",   "Completed"),
-          tab("ops_others_cancelled_tab",   "Cancelled"),
+          tab("ops_others_cancelled_tab",   "Archived"),
         ],
       },
       {

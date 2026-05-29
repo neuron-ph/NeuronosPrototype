@@ -422,11 +422,11 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
   // ✨ CONTRACT: Auto-set brokerage defaults when switching to contract mode
   useEffect(() => {
     if (isContractMode) {
-      // Brokerage in contracts is always Standard type, Multi-Modal mode
+      // Brokerage in contracts is always Standard type and defaults to FCL mode.
       setBrokerageData(prev => ({
         ...prev,
         brokerageType: "Standard",
-        mode: "Multi-modal",
+        mode: prev.mode === "Multi-modal" || !prev.mode ? "FCL" : prev.mode,
       }));
       
       // Strip non-contract services from selection

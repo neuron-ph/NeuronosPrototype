@@ -202,8 +202,47 @@ export function ContactsModuleWithBackend({ onViewQuotation, contactId }: Contac
         onSave={async (newQuotation) => {
           try {
             const newQId = `quot-${Date.now()}`;
+            // Map QuotationNew → quotations columns. Fields not in the schema
+            // (movement, buying_price, etc.) are packed into the `pricing` JSONB
+            // column; a raw spread would fail with "Could not find the column".
+            const q = newQuotation as any;
+            const dbPayload = {
+              quotation_number: q.quotation_number ?? q.quote_number ?? null,
+              quote_number: q.quote_number ?? null,
+              quotation_type: q.quotation_type || 'spot',
+              customer_id: q.customer_id || null,
+              customer_name: q.customer_name || null,
+              quotation_name: q.quotation_name || null,
+              contact_id: q.contact_person_id || q.contact_id || null,
+              contact_person_id: q.contact_person_id || q.contact_id || null,
+              contact_name: q.contact_person_name || q.contact_name || null,
+              services: q.services || [],
+              services_metadata: q.services_metadata || [],
+              status: q.status || 'Draft',
+              created_by: q.created_by || user?.id || null,
+              created_by_name: user?.name || null,
+              pricing: {
+                movement: q.movement,
+                category: q.category,
+                shipment_freight: q.shipment_freight,
+                incoterm: q.incoterm,
+                carrier: q.carrier,
+                transit_days: q.transit_days,
+                commodity: q.commodity,
+                pol_aol: q.pol_aol,
+                pod_aod: q.pod_aod,
+                charge_categories: q.charge_categories || [],
+                financial_summary: q.financial_summary || {},
+                buying_price: q.buying_price || [],
+                selling_price: q.selling_price || [],
+                currency: q.currency,
+                credit_terms: q.credit_terms,
+                validity_period: q.validity_period,
+              },
+              details: q.details && Object.keys(q.details).length > 0 ? q.details : undefined,
+            };
             const { error } = await supabase.from('quotations').insert({
-              ...newQuotation,
+              ...dbPayload,
               id: newQId,
               created_at: new Date().toISOString(),
             });

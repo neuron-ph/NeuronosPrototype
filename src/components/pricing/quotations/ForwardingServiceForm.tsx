@@ -311,8 +311,7 @@ export function ForwardingServiceForm({ data, onChange, builderMode = "quotation
             options={[
               { value: "FCL", label: "FCL" },
               { value: "LCL", label: "LCL" },
-              { value: "AIR", label: "AIR" },
-              { value: "Multi-modal", label: "Multi-modal" }
+              { value: "AIR", label: "AIR" }
             ]}
             placeholder="Select mode..."
             disabled={viewMode}

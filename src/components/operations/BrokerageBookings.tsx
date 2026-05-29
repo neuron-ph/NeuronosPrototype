@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Plus, Search, Briefcase, UserCheck, FileEdit, Clock, CheckCircle, Trash2, FileCheck, XCircle } from "lucide-react";
+import { Plus, Search, Briefcase, UserCheck, FileEdit, Clock, CheckCircle, Trash2, FileCheck, Archive } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { assessBookingFinancialState, canHardDeleteBooking, getBookingCancellationMessage } from "../../utils/bookingCancellation";
 import { CreateBrokerageBookingPanel } from "./CreateBrokerageBookingPanel";
@@ -235,7 +235,7 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
     } else if (activeTab === "completed") {
       filtered = bookings.filter(b => b.status === "Completed");
     } else if (activeTab === "cancelled") {
-      filtered = bookings.filter(b => b.status === "Cancelled");
+      filtered = bookings.filter(b => ["Cancelled", "Closed", "Paid"].includes(b.status));
     }
 
     return filtered;
@@ -298,7 +298,7 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
   const draftCount = bookings.filter(b => b.status === "Draft").length;
   const inProgressCount = bookings.filter(b => b.status === "In Progress").length;
   const completedCount = bookings.filter(b => b.status === "Completed").length;
-  const cancelledCount = bookings.filter(b => b.status === "Cancelled").length;
+  const cancelledCount = bookings.filter(b => ["Cancelled", "Closed", "Paid"].includes(b.status)).length;
 
   if (selectedBooking) {
     return (
@@ -596,11 +596,11 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
             )}
             {canViewCancelledTab && (
               <TabButton
-                icon={<XCircle size={18} />}
-                label="Cancelled"
+                icon={<Archive size={18} />}
+                label="Archived"
                 count={cancelledCount}
                 isActive={activeTab === "cancelled"}
-                color="var(--theme-status-danger-fg)"
+                color="var(--theme-text-muted)"
                 onClick={() => setActiveTab("cancelled")}
               />
             )}

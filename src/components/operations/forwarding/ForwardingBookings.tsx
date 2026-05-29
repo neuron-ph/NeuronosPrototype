@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Plus, Search, Package, Briefcase, UserCheck, FileEdit, Clock, CheckCircle, Trash2, XCircle } from "lucide-react";
+import { Plus, Search, Package, Briefcase, UserCheck, FileEdit, Clock, CheckCircle, Trash2, Archive } from "lucide-react";
 import { CreateForwardingBookingPanel } from "./CreateForwardingBookingPanel";
 import type { ForwardingBooking, ExecutionStatus } from "../../../types/operations";
 import { supabase } from "../../../utils/supabase/client";
@@ -198,7 +198,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
     } else if (activeTab === "completed") {
       filtered = bookings.filter(b => b.status === "Completed");
     } else if (activeTab === "cancelled") {
-      filtered = bookings.filter(b => b.status === "Cancelled");
+      filtered = bookings.filter(b => ["Cancelled", "Closed", "Paid"].includes(b.status));
     }
 
     return filtered;
@@ -259,7 +259,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
   const draftCount = bookings.filter(b => b.status === "Draft").length;
   const inProgressCount = bookings.filter(b => b.status === "In Progress").length;
   const completedCount = bookings.filter(b => b.status === "Completed").length;
-  const cancelledCount = bookings.filter(b => b.status === "Cancelled").length;
+  const cancelledCount = bookings.filter(b => ["Cancelled", "Closed", "Paid"].includes(b.status)).length;
 
   return (
     <>
@@ -292,7 +292,25 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
             
             {/* Action Button */}
             <div className="flex items-center gap-3">
-              {/* Forwarding bookings are created via Projects/Contracts, not directly */}
+              <button
+                onClick={() => setShowCreateModal(true)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  padding: "10px 20px",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  border: "none",
+                  borderRadius: "8px",
+                  background: "var(--theme-action-primary-bg)",
+                  color: "var(--theme-action-primary-text)",
+                  cursor: "pointer",
+                }}
+              >
+                <Plus size={16} />
+                New Booking
+              </button>
             </div>
           </div>
 
@@ -523,11 +541,11 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
             )}
             {canViewCancelledTab && (
               <TabButton
-                icon={<XCircle size={18} />}
-                label="Cancelled"
+                icon={<Archive size={18} />}
+                label="Archived"
                 count={cancelledCount}
                 isActive={activeTab === "cancelled"}
-                color="var(--theme-status-danger-fg)"
+                color="var(--theme-text-muted)"
                 onClick={() => setActiveTab("cancelled")}
               />
             )}
@@ -752,7 +770,6 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
         </div>
       </div>
 
-      {/* Forwarding direct creation disabled — bookings come via Projects/Contracts
       {showCreateModal && (
         <CreateForwardingBookingPanel
           isOpen={showCreateModal}
@@ -774,7 +791,6 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
           draftData={resumeDraft}
         />
       )}
-      */}
       <NeuronModal
         isOpen={!!pendingDelete}
         onClose={() => setPendingDelete(null)}

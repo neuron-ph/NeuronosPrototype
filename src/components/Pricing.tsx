@@ -560,36 +560,9 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
                   setSelectedQuotation(null);
                 }}
                 onSave={async (data) => {
-                  try {
-                    const contractDateFields = {
-                      contract_start_date: (data as any).contract_validity_start || (data as any).contract_start_date,
-                      contract_end_date: (data as any).contract_validity_end || (data as any).contract_end_date,
-                    };
-                    const isUpdate = !!data.id && !data.id.startsWith('quot-');
-
-                    const _actorInline = { id: currentUser?.id ?? "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" };
-                    if (isUpdate) {
-                      const { error } = await supabase
-                        .from('quotations')
-                        .update({ ...data, ...contractDateFields, updated_at: new Date().toISOString() })
-                        .eq('id', data.id);
-                      if (error) throw error;
-                      logActivity("contract", data.id, (data as any).quote_number ?? data.id, "updated", _actorInline);
-                    } else {
-                      const newId = `QUO-${Date.now()}`;
-                      const { error } = await supabase
-                        .from('quotations')
-                        .insert({ ...data, ...contractDateFields, id: newId, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
-                      if (error) throw error;
-                    }
-
-                    console.log('Inquiry saved successfully');
-                    setSubView("detail");
-                    setSelectedQuotation(null);
-                  } catch (error) {
-                    console.error('Error saving inquiry:', error);
-                    toast.error('Error saving inquiry: ' + (error as any)?.message ?? String(error));
-                  }
+                  await handleSaveQuotation(data);
+                  setSubView("detail");
+                  setSelectedQuotation(null);
                 }}
                 initialData={selectedQuotation || undefined}
                 builderMode="quotation"

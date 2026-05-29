@@ -93,6 +93,117 @@ function effectiveItemAmount(item: any): number {
   return Number(unitPrice) * Number(item.quantity || 1) * Number(item.forex_rate || 1);
 }
 
+function originalItemAmount(item: any): number {
+  const unitPrice = item.final_price ?? item.price ?? 0;
+  const original = Number(unitPrice) * Number(item.quantity || 1);
+  if (original !== 0) return original;
+  const amount = Number(item.amount);
+  if (!Number.isFinite(amount) || amount === 0) return original;
+  const rate = Number(item.forex_rate) || 1;
+  return amount / rate;
+}
+
+interface PricingCurrencySummary {
+  currency: string;
+  isMixed: boolean;
+  subtotal_non_taxed: number;
+  subtotal_taxed: number;
+  tax_rate: number;
+  tax_amount: number;
+  other_charges: number;
+  grand_total: number;
+}
+
+function summarizePricingCurrency(
+  categories: QuotationChargeCategory[],
+  fallbackCurrency: string,
+  existing?: FinancialSummary,
+): PricingCurrencySummary {
+  const nonZeroCurrencies = new Set<string>();
+  let originalTaxable = 0;
+  let originalNonTaxable = 0;
+  let baseTaxable = 0;
+  let baseNonTaxable = 0;
+
+  categories.forEach((cat) => {
+    cat.line_items?.forEach((item: any) => {
+      const originalAmt = originalItemAmount(item);
+      const baseAmt = effectiveItemAmount(item);
+      const itemCurrency = normalizeCurrency(item.currency, FUNCTIONAL_CURRENCY);
+
+      if (Math.abs(originalAmt) > 0) {
+        nonZeroCurrencies.add(itemCurrency);
+      }
+
+      if (item.is_taxed) {
+        originalTaxable += originalAmt;
+        baseTaxable += baseAmt;
+      } else {
+        originalNonTaxable += originalAmt;
+        baseNonTaxable += baseAmt;
+      }
+    });
+  });
+
+  const taxRate = existing?.tax_rate ?? 0.12;
+  const otherCharges = existing?.other_charges ?? 0;
+  const soleCurrency = nonZeroCurrencies.size === 1
+    ? [...nonZeroCurrencies][0]
+    : undefined;
+  const currency = soleCurrency
+    || (nonZeroCurrencies.size > 1
+      ? FUNCTIONAL_CURRENCY
+      : normalizeCurrency(fallbackCurrency, FUNCTIONAL_CURRENCY));
+  const useOriginalAmounts = Boolean(soleCurrency);
+  const subtotal_taxed = useOriginalAmounts ? originalTaxable : baseTaxable;
+  const subtotal_non_taxed = useOriginalAmounts ? originalNonTaxable : baseNonTaxable;
+  const tax_amount = subtotal_taxed * taxRate;
+
+  return {
+    currency,
+    isMixed: nonZeroCurrencies.size > 1,
+    subtotal_non_taxed,
+    subtotal_taxed,
+    tax_rate: taxRate,
+    tax_amount,
+    other_charges: otherCharges,
+    grand_total: subtotal_non_taxed + subtotal_taxed + tax_amount + otherCharges,
+  };
+}
+
+function summarizeCategoryCurrency(
+  category: QuotationChargeCategory,
+  fallbackCurrency: string,
+): { currency: string; subtotal: number } {
+  const nonZeroCurrencies = new Set<string>();
+  let originalSubtotal = 0;
+  let baseSubtotal = 0;
+
+  category.line_items?.forEach((item: any) => {
+    const itemCurrency = normalizeCurrency(item.currency, FUNCTIONAL_CURRENCY);
+    const originalAmt = originalItemAmount(item);
+    const baseAmt = effectiveItemAmount(item);
+
+    if (Math.abs(originalAmt) > 0) {
+      nonZeroCurrencies.add(itemCurrency);
+    }
+    originalSubtotal += originalAmt;
+    baseSubtotal += baseAmt;
+  });
+
+  if (nonZeroCurrencies.size === 1) {
+    return {
+      currency: [...nonZeroCurrencies][0],
+      subtotal: originalSubtotal,
+    };
+  }
+
+  return {
+    currency: normalizeCurrency(fallbackCurrency, FUNCTIONAL_CURRENCY),
+    subtotal: category.subtotal && category.subtotal !== 0 ? category.subtotal : baseSubtotal,
+  };
+}
+
 function calcSummary(
   categories: QuotationChargeCategory[],
   existing?: FinancialSummary,
@@ -709,6 +820,7 @@ function buildChargeTable(
         subtext: subtext || undefined,
       });
     });
+    const categoryCurrency = summarizeCategoryCurrency(cat, currency);
     // Subtotal row
     const subtotalRow: PrintableTableRow = {
       id: `${groupId}-subtotal`,
@@ -716,8 +828,8 @@ function buildChargeTable(
       emphasis: "subtotal",
       cells: {
         description: "Subtotal",
-        amount: cat.subtotal && cat.subtotal !== 0 ? cat.subtotal : subtotal,
-        currency,
+        amount: categoryCurrency.subtotal || subtotal,
+        currency: categoryCurrency.currency,
       },
     };
     groups.push({
@@ -1016,12 +1128,17 @@ export function resolveQuotationPrintableDocument(
       : []);
 
   const currency = quotation.currency || project?.currency || FUNCTIONAL_CURRENCY;
-  const summary = calcSummary(
+  const baseSummary = calcSummary(
     categories,
     (project as any)?.financial_summary || quotation.financial_summary,
   );
+  const printSummary = summarizePricingCurrency(
+    categories,
+    currency,
+    (project as any)?.financial_summary || quotation.financial_summary,
+  );
 
-  const chargeTable = buildChargeTable(categories, currency, {
+  const chargeTable = buildChargeTable(categories, printSummary.currency, {
     showTax: settings.display.showTaxSummary,
     omitEmpty: DEFAULT_PRINTABLE_OPTIONS.omitEmptyTables,
   });
@@ -1166,9 +1283,9 @@ export function resolveQuotationPrintableDocument(
   };
 
   const hasChargeRows = categories.some((cat) => Array.isArray(cat.line_items) && cat.line_items.length > 0);
-  const hasNonZeroTotal = Number(summary.grand_total || 0) > 0;
+  const hasNonZeroTotal = Number(printSummary.grand_total || baseSummary.grand_total || 0) > 0;
   const totals = !isContract && (hasChargeRows || hasNonZeroTotal)
-    ? buildTotals(summary, currency, settings.display.showTaxSummary)
+    ? buildTotals(printSummary, printSummary.currency, settings.display.showTaxSummary)
     : undefined;
 
   const pageFooterText = joinNonEmpty([
