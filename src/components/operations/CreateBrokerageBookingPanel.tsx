@@ -287,6 +287,7 @@ export function CreateBrokerageBookingPanel({
               placeholder="Select contract..."
               fullWidth
               portalZIndex={1125}
+              dropdownMaxWidth={640}
             />
           ) : customerName ? (
             <div style={{ padding: "10px 12px", borderRadius: "6px", fontSize: "13px", color: "var(--theme-text-muted)", backgroundColor: "var(--theme-bg-surface-subtle)", border: "1px solid var(--theme-border-default)", minHeight: "40px" }}>

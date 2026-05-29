@@ -80,6 +80,16 @@ export function BrokerageServiceForm({
     onChange({ ...data, [field]: value });
   };
 
+  const updateTypeOfEntry = (typeOfEntry: "Consumption" | "Warehousing" | "PEZA") => {
+    onChange({
+      ...data,
+      typeOfEntry,
+      consumption: typeOfEntry === "Consumption",
+      warehousing: typeOfEntry === "Warehousing",
+      peza: typeOfEntry === "PEZA",
+    });
+  };
+
   const isExport = movement === "EXPORT";
 
   // Project quotations: Standard is not selectable (contract mode locks to Standard separately).
@@ -207,16 +217,14 @@ export function BrokerageServiceForm({
                 <div style={{ display: "flex", gap: "8px" }}>
                   {(["Consumption", "Warehousing", "PEZA"] as const).map(option => {
                     const key = option.toLowerCase() as "consumption" | "warehousing" | "peza";
-                    const isSelected = data[key] === true;
+                    const isSelected = data.typeOfEntry === option || data[key] === true;
                     return (
                       <button
                         key={option}
                         type="button"
                         onClick={() => {
                           if (viewMode) return;
-                          updateField("consumption", key === "consumption");
-                          updateField("warehousing", key === "warehousing");
-                          updateField("peza", key === "peza");
+                          updateTypeOfEntry(option);
                         }}
                         disabled={viewMode}
                         style={{
@@ -282,7 +290,6 @@ export function BrokerageServiceForm({
                   { value: "FCL", label: "FCL" },
                   { value: "LCL", label: "LCL" },
                   { value: "AIR", label: "AIR" },
-                  { value: "Multi-modal", label: "Multi-modal" },
                 ]}
                 placeholder="Select Mode..."
                 disabled={viewMode}

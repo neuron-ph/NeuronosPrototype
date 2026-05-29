@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Package, Users } from "lucide-react";
 import { supabase } from "../../../utils/supabase/client";
 import { toast } from "../../ui/toast-utils";
@@ -20,9 +20,9 @@ import {
   persistAssignmentsForNewBooking,
 } from "../../../utils/assignments/applyAssignmentToBookingPayload";
 import { ContractDetectionBanner } from "../shared/ContractDetectionBanner";
-import { ProjectAutofillSection } from "../shared/ProjectAutofillSection";
 import { autofillForwardingFromProject, linkBookingToProject } from "../../../utils/projectAutofill";
 import type { Project } from "../../../types/pricing";
+import { fetchProjectsWithQuotation } from "../../../utils/projectHydration";
 import { fetchFullContract } from "../../../utils/contractLookup";
 import { extractDeliveryChargeOptions } from "../../../utils/contractQuantityExtractor";
 import { logCreation } from "../../../utils/activityLog";
@@ -31,6 +31,7 @@ import { generateBookingNumber, peekNextBookingNumber } from "../../../utils/boo
 import { getSelectedCustomer } from "../../../utils/bookings/selectedCustomer";
 import { useCustomerAccountOwnerAutofill } from "../shared/useCustomerAccountOwnerAutofill";
 import { saveBookingDraft } from "../shared/saveBookingDraft";
+import { CustomDropdown } from "../../bd/CustomDropdown";
 
 interface CreateForwardingBookingPanelProps {
   isOpen: boolean;
@@ -62,6 +63,8 @@ export function CreateForwardingBookingPanel({
   const [assignmentPayload, setAssignmentPayload] = useState<ServiceRoleAssignmentPayload | null>(null);
   const [detectedContractId, setDetectedContractId] = useState<string | null>(null);
   const [fetchedProject, setFetchedProject] = useState<Project | null>(null);
+  const [projectsList, setProjectsList] = useState<Project[]>([]);
+  const [loadingProjects, setLoadingProjects] = useState(false);
   const [submitErrors, setSubmitErrors] = useState<Record<string, string>>({});
   const hasHydratedDraft = useRef(false);
 
@@ -72,6 +75,54 @@ export function CreateForwardingBookingPanel({
   });
   const selectedCustomer = getSelectedCustomer(formState, customerId ?? null);
   useCustomerAccountOwnerAutofill(selectedCustomer.customerId, setField);
+  const customerName = selectedCustomer.customerName;
+
+  useEffect(() => {
+    if (!isOpen || !customerName || customerName.trim().length < 3) {
+      setProjectsList([]);
+      setFetchedProject(null);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingProjects(true);
+    fetchProjectsWithQuotation()
+      .then((projects) => {
+        if (cancelled) return;
+        const normalizedName = customerName.trim().toLowerCase();
+        const normalizedCustomerId = selectedCustomer.customerId?.trim();
+        const customerProjects = projects.filter((project) => {
+          const matchesCustomerId =
+            normalizedCustomerId &&
+            String((project as any).customer_id ?? "").trim() === normalizedCustomerId;
+          const matchesCustomerName = String(project.customer_name ?? "").trim().toLowerCase() === normalizedName;
+          return project.status !== "Completed" && (matchesCustomerId || matchesCustomerName);
+        });
+        setProjectsList(customerProjects);
+      })
+      .catch((err) => {
+        console.error("CreateForwardingBookingPanel projects:", err);
+        setProjectsList([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingProjects(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, customerName, selectedCustomer.customerId]);
+
+  const projectOptions = useMemo(
+    () =>
+      projectsList.map((project) => ({
+        value: project.id,
+        label: project.quotation_name
+          ? `${project.project_number} - ${project.quotation_name}`
+          : project.project_number ?? "(unnamed project)",
+      })),
+    [projectsList],
+  );
 
   useEffect(() => {
     if (!isOpen) {
@@ -108,6 +159,13 @@ export function CreateForwardingBookingPanel({
     setFetchedProject(project);
     const autofillData = autofillForwardingFromProject(project);
     initFromPrefill(autofillData as Record<string, unknown>);
+  }
+
+  function handleProjectSelect(projectId: string) {
+    const picked = projectsList.find((project) => project.id === projectId);
+    if (!picked) return;
+    handleProjectAutofill(picked);
+    setField("project_number", picked.project_number ?? "");
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -253,7 +311,6 @@ export function CreateForwardingBookingPanel({
   if (!isOpen) return null;
 
   const isEditingDraft = editingId !== null;
-  const customerName = selectedCustomer.customerName;
   const bookingName = String(formState.booking_name ?? "");
   const isFormValid = customerName.trim() !== "" && bookingName.trim() !== "" && detectedContractId !== null;
 
@@ -279,16 +336,6 @@ export function CreateForwardingBookingPanel({
       onSaveDraft={handleSaveDraft}
       isSavingDraft={savingDraft}
     >
-      {/* Project autofill — operations source only */}
-      {source === "operations" && (
-        <ProjectAutofillSection
-          projectNumber={String(formState.project_number ?? "")}
-          onProjectNumberChange={(value) => setField("project_number", value)}
-          onAutofill={handleProjectAutofill}
-          serviceType="Forwarding"
-        />
-      )}
-
       <BookingDynamicForm
         serviceType="Forwarding"
         formState={formState}
@@ -296,6 +343,27 @@ export function CreateForwardingBookingPanel({
         ctx={context}
         errors={submitErrors}
         requiredFieldKeys={getMinimalCreateRequiredFields("Forwarding")}
+        fieldOverrides={{
+          project_number:
+            source === "operations" && customerName ? (
+              projectsList.length > 0 ? (
+                <CustomDropdown
+                  label=""
+                  value={fetchedProject?.id ?? ""}
+                  onChange={handleProjectSelect}
+                  options={projectOptions}
+                  placeholder={loadingProjects ? "Loading projects..." : "Select project..."}
+                  fullWidth
+                  portalZIndex={1125}
+                  dropdownMaxWidth={640}
+                />
+              ) : (
+                <div style={{ padding: "10px 12px", borderRadius: "6px", fontSize: "13px", color: "var(--theme-text-muted)", backgroundColor: "var(--theme-bg-surface-subtle)", border: "1px solid var(--theme-border-default)", minHeight: "40px" }}>
+                  {loadingProjects ? "Loading projects..." : "No active projects found for this client"}
+                </div>
+              )
+            ) : undefined,
+        }}
       />
 
       {customerName && (

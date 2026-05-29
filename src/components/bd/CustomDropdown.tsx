@@ -35,6 +35,7 @@ interface CustomDropdownProps {
   multiValue?: string[];
   onMultiChange?: (values: string[]) => void;
   portalZIndex?: number;
+  dropdownMaxWidth?: number;
 }
 
 export function CustomDropdown({
@@ -55,6 +56,7 @@ export function CustomDropdown({
   multiValue = [],
   onMultiChange,
   portalZIndex = 9999,
+  dropdownMaxWidth,
 }: CustomDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -76,12 +78,15 @@ export function CustomDropdown({
     // Only flip upward when there's critically little space below (<80px),
     // not whenever the space is less than the full max height.
     const openUpward = spaceBelow < 80 && rect.top > maxMenuHeight;
-    const maxWidth = window.innerWidth - rect.left - viewportPad;
+    const availableWidth = window.innerWidth - rect.left - viewportPad;
+    const cappedWidth = dropdownMaxWidth
+      ? Math.min(availableWidth, dropdownMaxWidth)
+      : availableWidth;
     return {
       top: openUpward ? rect.top - gap - maxMenuHeight : rect.bottom + gap,
       left: rect.left,
       minWidth: rect.width,
-      maxWidth: Math.max(rect.width, maxWidth),
+      maxWidth: Math.max(rect.width, cappedWidth),
       openUpward,
     };
   };

@@ -1,9 +1,10 @@
 import { Plus, X, Building2, Download, User, MapPin, ChevronDown, Loader } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Vendor, VendorType, ServiceType, QuotationChargeCategory } from "../../../types/pricing";
 import type { VendorLineItem } from "../../../data/networkPartners"; // ⚠️ DEPRECATED - kept for backward compatibility
 import { NETWORK_PARTNERS, COUNTRIES } from "../../../data/networkPartners";
 import { FormSelect } from "./FormSelect";
+import { SearchableFormSelect } from "./SearchableFormSelect";
 import { supabase } from "../../../utils/supabase/client";
 import { ChargeCategoriesManager } from "../shared/ChargeCategoriesManager";
 import { toast } from "sonner";
@@ -16,6 +17,7 @@ import {
   saveVendorChargeCategories,
 } from "../../../utils/pricing/vendorRateCards";
 import { NeuronModal } from "../../ui/NeuronModal";
+import { useNetworkPartners } from "../../../hooks/useNetworkPartners";
 
 /**
  * 🎯 VENDORS SECTION - INLINE RATE MANAGEMENT
@@ -54,17 +56,16 @@ import { NeuronModal } from "../../ui/NeuronModal";
  * LAST UPDATED: 2026-01-25
  */
 
-// Convert NETWORK_PARTNERS to vendor options
-const VENDOR_MASTERLIST = NETWORK_PARTNERS.map(partner => ({
-  value: partner.id,
-  label: partner.company_name,
-  country: partner.country,
-  // Default to "international" if partner_type is missing (for backwards compatibility)
-  partner_type: partner.partner_type || "international",
-  // Support both old and new formats
-  charge_categories: partner.charge_categories,
-  line_items: partner.line_items || []
-}));
+type VendorSelectOption = {
+  value: string;
+  label: string;
+  country: string;
+  partner_type: "international" | "co-loader" | "all-in";
+  charge_categories?: QuotationChargeCategory[];
+  line_items: VendorLineItem[];
+  services_offered?: string[];
+  territory?: string;
+};
 
 function isChargeCategoryData(data: QuotationChargeCategory[] | VendorLineItem[]): data is QuotationChargeCategory[] {
   return data.length > 0 && "line_items" in data[0];
@@ -79,6 +80,7 @@ interface VendorsSectionProps {
 }
 
 export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode = false }: VendorsSectionProps) {
+  const { partners } = useNetworkPartners();
   const [showAddVendor, setShowAddVendor] = useState(false);
   const [newVendorType, setNewVendorType] = useState<string>("International Partners");
   const [newVendorCountry, setNewVendorCountry] = useState("");
@@ -103,6 +105,32 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
   // ✨ PHASE 5: Save & Import Workflow
   const [savingVendorId, setSavingVendorId] = useState<string | null>(null);
   const [pendingCollapseVendorId, setPendingCollapseVendorId] = useState<string | null>(null);
+
+  const vendorMasterlist = useMemo<VendorSelectOption[]>(() => {
+    const sourcePartners = partners.length > 0 ? partners : NETWORK_PARTNERS;
+
+    return sourcePartners
+      .map((partner) => ({
+        value: partner.id,
+        label: partner.company_name,
+        country: partner.country,
+        partner_type: partner.partner_type || "international",
+        charge_categories: partner.charge_categories,
+        line_items: partner.line_items || [],
+        services_offered: partner.services,
+        territory: partner.territory,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [partners]);
+
+  const countryOptions = useMemo(() => {
+    const countries = vendorMasterlist
+      .map((vendor) => vendor.country)
+      .filter((country): country is string => Boolean(country));
+    const sourceCountries = countries.length > 0 ? countries : COUNTRIES;
+
+    return Array.from(new Set(sourceCountries)).sort();
+  }, [vendorMasterlist]);
   
   // ✨ PHASE 1: Toggle vendor expansion
   const toggleVendorExpansion = (vendorId: string) => {
@@ -200,7 +228,7 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
 
   // Filter vendors based on type and country
   const getFilteredVendors = () => {
-    let filtered = VENDOR_MASTERLIST;
+    let filtered = vendorMasterlist;
     
     // Map UI vendor types to data partner types
     if (newVendorType === "International Partners") {
@@ -224,7 +252,7 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
   const handleAddVendor = () => {
     if (newVendorName.trim()) {
       // Find the vendor label from the masterlist
-      const selectedVendor = VENDOR_MASTERLIST.find(v => v.value === newVendorName);
+      const selectedVendor = vendorMasterlist.find(v => v.value === newVendorName);
       const vendorDisplayName = selectedVendor ? selectedVendor.label : newVendorName;
       
       const newVendor: Vendor = {
@@ -233,6 +261,8 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
         name: vendorDisplayName,
         service_tag: (newVendorServiceTag || undefined) as any,
         vendor_id: selectedVendor ? selectedVendor.value : undefined,
+        territory: selectedVendor?.territory,
+        services_offered: selectedVendor?.services_offered,
         // Support both old and new formats
         charge_categories: selectedVendor ? selectedVendor.charge_categories : undefined,
         line_items: selectedVendor ? selectedVendor.line_items : []
@@ -481,7 +511,7 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
                   <FormSelect
                     value={newVendorCountry}
                     onChange={handleCountryChange}
-                    options={COUNTRIES.map(country => ({ value: country, label: country }))}
+                    options={countryOptions.map(country => ({ value: country, label: country }))}
                     placeholder="Select country..."
                   />
                 </div>
@@ -500,11 +530,13 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
                 }}>
                   Vendor Name
                 </label>
-                <FormSelect
+                <SearchableFormSelect
                   value={newVendorName}
                   onChange={(value) => setNewVendorName(value)}
                   options={filteredVendors}
                   placeholder="Select vendor..."
+                  searchPlaceholder="Search vendor..."
+                  emptyMessage="No vendors found"
                 />
               </div>
               

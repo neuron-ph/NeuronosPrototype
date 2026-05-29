@@ -23,6 +23,7 @@ const DEFAULT_COLUMN_WIDTHS = {
   icon: 40,
   name: 220,
   customer: 220,
+  accountOwner: 150,
   services: 120,
   total: 100,
   date: 95,
@@ -35,6 +36,7 @@ const MIN_COLUMN_WIDTHS = {
   icon: 40,
   name: 150,
   customer: 140,
+  accountOwner: 100,
   services: 90,
   total: 80,
   date: 80,
@@ -62,10 +64,11 @@ interface QuotationTableRowProps {
   showStatus?: boolean;
   showAssignee?: boolean;
   assigneeName?: string;
+  accountOwnerName?: string;
   unread?: boolean;
 }
 
-function QuotationTableRow({ item, index, totalItems, onItemClick, gridTemplateColumns, showStatus, showAssignee, assigneeName, unread }: QuotationTableRowProps) {
+function QuotationTableRow({ item, index, totalItems, onItemClick, gridTemplateColumns, showStatus, showAssignee, assigneeName, accountOwnerName, unread }: QuotationTableRowProps) {
   const [showTooltip, setShowTooltip] = useState(false);
   const [showNameTooltip, setShowNameTooltip] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
@@ -187,6 +190,19 @@ function QuotationTableRow({ item, index, totalItems, onItemClick, gridTemplateC
       <div style={{ display: "flex", alignItems: "center" }}>
         <span style={{ fontSize: "13px", color: "var(--theme-text-muted)" }}>
           {item.customer_name || "—"}
+        </span>
+      </div>
+
+      {/* Account Owner */}
+      <div style={{ display: "flex", alignItems: "center", overflow: "hidden" }}>
+        <span style={{
+          fontSize: "13px",
+          color: "var(--theme-text-muted)",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}>
+          {accountOwnerName || "—"}
         </span>
       </div>
 
@@ -316,7 +332,7 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
     const saved = localStorage.getItem('quotations-column-widths');
     if (saved) {
       try {
-        setColumnWidths(JSON.parse(saved));
+        setColumnWidths({ ...DEFAULT_COLUMN_WIDTHS, ...JSON.parse(saved) });
       } catch (e) {
         console.error('Failed to parse saved column widths');
       }
@@ -374,10 +390,10 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
   const showStatus = userDepartment === "Business Development";
   const showAssigneeCol = userDepartment === "Pricing" && workflowTab === "Inquiries";
   const gridTemplateColumns = showStatus
-    ? `${columnWidths.icon}px ${columnWidths.name}px ${columnWidths.customer}px ${columnWidths.services}px ${columnWidths.total}px ${columnWidths.date}px ${columnWidths.status}px`
+    ? `${columnWidths.icon}px ${columnWidths.name}px ${columnWidths.customer}px ${columnWidths.accountOwner}px ${columnWidths.services}px ${columnWidths.total}px ${columnWidths.date}px ${columnWidths.status}px`
     : showAssigneeCol
-      ? `${columnWidths.icon}px ${columnWidths.name}px ${columnWidths.customer}px ${columnWidths.services}px ${columnWidths.total}px ${columnWidths.date}px ${columnWidths.assignee}px`
-      : `${columnWidths.icon}px ${columnWidths.name}px ${columnWidths.customer}px ${columnWidths.services}px ${columnWidths.total}px ${columnWidths.date}px`;
+      ? `${columnWidths.icon}px ${columnWidths.name}px ${columnWidths.customer}px ${columnWidths.accountOwner}px ${columnWidths.services}px ${columnWidths.total}px ${columnWidths.date}px ${columnWidths.assignee}px`
+      : `${columnWidths.icon}px ${columnWidths.name}px ${columnWidths.customer}px ${columnWidths.accountOwner}px ${columnWidths.services}px ${columnWidths.total}px ${columnWidths.date}px`;
 
   // Get unique customers and services for filters
   const uniqueCustomers = useMemo(() => {
@@ -776,6 +792,8 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
                 </div>
                 {/* Customer */}
                 <div style={{ height: 11, width: `${50 + (i % 4) * 10}%`, borderRadius: 4, backgroundColor: "var(--theme-bg-surface-subtle)" }} />
+                {/* Account Owner */}
+                <div style={{ height: 11, width: `${45 + (i % 3) * 12}%`, borderRadius: 4, backgroundColor: "var(--theme-bg-surface-subtle)" }} />
                 {/* Services */}
                 <div style={{ display: "flex", gap: 4 }}>
                   <div style={{ height: 20, width: 52, borderRadius: 10, backgroundColor: "var(--theme-bg-surface-subtle)" }} />
@@ -971,6 +989,41 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
                 </div>
               </div>
               <div style={{ padding: "10px 0", display: "flex", alignItems: "center", position: "relative" }}>
+                ACCOUNT OWNER
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize Account Owner column"
+                  tabIndex={0}
+                  onMouseDown={(e) => handleResizeStart('accountOwner', e)}
+                  onKeyDown={handleResizeKeyDown('accountOwner')}
+                  style={{
+                    position: "absolute",
+                    right: "-6px",
+                    top: 0,
+                    bottom: 0,
+                    width: "12px",
+                    cursor: "col-resize",
+                    zIndex: 10,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center"
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = "transparent";
+                  }}
+                >
+                  <div style={{
+                    width: "2px",
+                    height: "60%",
+                    backgroundColor: resizingColumn === 'accountOwner' ? "var(--theme-action-primary-bg)" : "var(--theme-border-default)"
+                  }} />
+                </div>
+              </div>
+              <div style={{ padding: "10px 0", display: "flex", alignItems: "center", position: "relative" }}>
                 SERVICE TYPES
                 <div
                   role="separator"
@@ -1067,6 +1120,7 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
                 showStatus={showStatus}
                 showAssignee={showAssigneeCol}
                 assigneeName={pricingUserMap[(item as any).assigned_to] || ""}
+                accountOwnerName={(item as any).created_by_name || ""}
                 unread={unreadQuotationIds.has(item.id) || unreadInquiryIds.has(item.id) || unreadContractIds.has(item.id)}
               />
             ))}

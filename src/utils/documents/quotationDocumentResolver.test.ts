@@ -318,6 +318,132 @@ describe("resolveQuotationPrintableDocument — pricing & totals", () => {
     const charges = doc.tables.find((t) => t.id === "charges")!;
     expect(charges.columns.map((c) => c.id)).toContain("forex");
   });
+
+  it("prints PHP totals for PHP-only quotation charges", () => {
+    const doc = resolveQuotationPrintableDocument({
+      quotation: baseQuote({
+        currency: "PHP",
+        charge_categories: [
+          {
+            id: "cat-1",
+            category_name: "X",
+            subtotal: 1500,
+            line_items: [
+              {
+                id: "li-1",
+                description: "Item",
+                price: 750,
+                currency: "PHP",
+                quantity: 2,
+                forex_rate: 1,
+                is_taxed: false,
+                remarks: "",
+                amount: 1500,
+              } as any,
+            ],
+          },
+        ],
+      }),
+    });
+
+    const charges = doc.tables.find((t) => t.id === "charges")!;
+    expect(charges.groups?.[0].subtotal?.cells.currency).toBe("PHP");
+    expect(charges.groups?.[0].subtotal?.cells.amount).toBe(1500);
+    expect(doc.totals?.rows.find((row) => row.id === "subtotal")?.currency).toBe("PHP");
+    expect(doc.totals?.grandTotal.currency).toBe("PHP");
+    expect(doc.totals?.grandTotal.value).toBe(1500);
+  });
+
+  it("prints USD totals for USD-only quotation charges", () => {
+    const doc = resolveQuotationPrintableDocument({
+      quotation: baseQuote({
+        currency: "PHP",
+        charge_categories: [
+          {
+            id: "cat-1",
+            category_name: "X",
+            subtotal: 2352000,
+            line_items: [
+              {
+                id: "li-1",
+                description: "Freight",
+                price: 21000,
+                currency: "USD",
+                quantity: 2,
+                forex_rate: 56,
+                is_taxed: false,
+                remarks: "",
+                amount: 2352000,
+              } as any,
+            ],
+          },
+        ],
+        financial_summary: {
+          subtotal_non_taxed: 2352000,
+          subtotal_taxed: 0,
+          tax_rate: 0.12,
+          tax_amount: 0,
+          other_charges: 0,
+          grand_total: 2352000,
+        },
+      }),
+    });
+
+    const charges = doc.tables.find((t) => t.id === "charges")!;
+    expect(charges.groups?.[0].subtotal?.cells.currency).toBe("USD");
+    expect(charges.groups?.[0].subtotal?.cells.amount).toBe(42000);
+    expect(doc.totals?.rows.find((row) => row.id === "subtotal")?.currency).toBe("USD");
+    expect(doc.totals?.rows.find((row) => row.id === "subtotal")?.value).toBe(42000);
+    expect(doc.totals?.grandTotal.currency).toBe("USD");
+    expect(doc.totals?.grandTotal.value).toBe(42000);
+  });
+
+  it("prints mixed-currency quotation totals in PHP base", () => {
+    const doc = resolveQuotationPrintableDocument({
+      quotation: baseQuote({
+        currency: "USD",
+        charge_categories: [
+          {
+            id: "cat-1",
+            category_name: "X",
+            subtotal: 2370000,
+            line_items: [
+              {
+                id: "li-1",
+                description: "Documentation",
+                price: 18000,
+                currency: "PHP",
+                quantity: 1,
+                forex_rate: 1,
+                is_taxed: false,
+                remarks: "",
+                amount: 18000,
+              } as any,
+              {
+                id: "li-2",
+                description: "Freight",
+                price: 21000,
+                currency: "USD",
+                quantity: 2,
+                forex_rate: 56,
+                is_taxed: false,
+                remarks: "",
+                amount: 2352000,
+              } as any,
+            ],
+          },
+        ],
+      }),
+    });
+
+    const charges = doc.tables.find((t) => t.id === "charges")!;
+    expect(charges.groups?.[0].subtotal?.cells.currency).toBe("PHP");
+    expect(charges.groups?.[0].subtotal?.cells.amount).toBe(2370000);
+    expect(doc.totals?.rows.find((row) => row.id === "subtotal")?.currency).toBe("PHP");
+    expect(doc.totals?.rows.find((row) => row.id === "subtotal")?.value).toBe(2370000);
+    expect(doc.totals?.grandTotal.currency).toBe("PHP");
+    expect(doc.totals?.grandTotal.value).toBe(2370000);
+  });
 });
 
 describe("resolveQuotationPrintableDocument — contract", () => {
