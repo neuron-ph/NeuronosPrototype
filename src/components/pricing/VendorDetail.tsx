@@ -5,9 +5,10 @@ import { NeuronModal } from "../ui/NeuronModal";
 import { supabase } from "../../utils/supabase/client";
 import { useNetworkPartners } from "../../hooks/useNetworkPartners";
 import type { NetworkPartner } from "../../data/networkPartners";
-import { isExpired, formatExpiryDate, COUNTRIES } from "../../data/networkPartners";
+import { isExpired, formatExpiryDate } from "../../data/networkPartners";
 import type { QuotationChargeCategory } from "../../types/pricing";
 import { CustomDropdown } from "../bd/CustomDropdown";
+import { ProfileLookupCombobox } from "../shared/profiles/ProfileLookupCombobox";
 import { CustomDatePicker } from "../common/CustomDatePicker";
 import { ChargeCategoriesManager } from "./shared/ChargeCategoriesManager";
 import { PartnerSheet } from "./partners/PartnerSheet";
@@ -504,13 +505,12 @@ export function VendorDetail({ vendor: initialVendor, onBack, onSave }: VendorDe
                     <UnifiedFieldWrapper label="Location & Address" icon={MapPin}>
                        <div className="space-y-3">
                          <div className="grid grid-cols-2 gap-2">
-                           <UnifiedSelect
-                             value={isEditing ? (editedVendor.country || "China") : (currentVendor.country || "China")}
-                             onChange={(val) => setEditedVendor({ ...editedVendor, country: val })}
-                             options={COUNTRIES.map(c => ({ value: c, label: c }))}
+                           <ProfileLookupCombobox
+                             profileType="country"
+                             value={isEditing ? (editedVendor.country || "") : (currentVendor.country || "")}
+                             onChange={(val) => setEditedVendor({ ...editedVendor, country: val.label })}
+                             disabled={!isEditing}
                              placeholder="Country"
-                             readOnly={!isEditing}
-                             fullWidth
                            />
                            <UnifiedText
                              value={isEditing ? (editedVendor.territory || "") : (currentVendor.territory || "")}

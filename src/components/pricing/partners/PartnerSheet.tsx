@@ -2,9 +2,10 @@ import { X, Building2, MapPin, User, Globe, Calendar, CheckSquare, Plus, Trash2 
 import { motion, AnimatePresence } from "motion/react";
 import { useEffect, useState } from "react";
 import { useForm, Controller, useFieldArray } from "react-hook-form";
-import { NetworkPartner, COUNTRIES } from "../../../data/networkPartners";
+import { NetworkPartner } from "../../../data/networkPartners";
 import { CustomDropdown } from "../../bd/CustomDropdown";
 import { CustomDatePicker } from "../../common/CustomDatePicker";
+import { ProfileLookupCombobox } from "../../shared/profiles/ProfileLookupCombobox";
 
 interface PartnerSheetProps {
   isOpen: boolean;
@@ -363,13 +364,11 @@ export function PartnerSheet({ isOpen, onClose, initialData, onSave }: PartnerSh
                         control={control}
                         rules={{ required: "Country is required" }}
                         render={({ field }) => (
-                          <CustomDropdown
+                          <ProfileLookupCombobox
+                            profileType="country"
                             value={field.value}
-                            onChange={field.onChange}
-                            options={COUNTRIES.map(country => ({ value: country, label: country }))}
+                            onChange={(val) => field.onChange(val.label)}
                             placeholder="Select Country"
-                            fullWidth
-                            required
                           />
                         )}
                       />

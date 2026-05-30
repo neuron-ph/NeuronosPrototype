@@ -306,6 +306,38 @@ export function resolveModeColumn(
 }
 
 /**
+ * Select the rate matrix for a given service type and (optionally) the
+ * booking's POD. Precedence:
+ *   1. a matrix scoped to this POD (pod_scope includes the POD)
+ *   2. the global/unscoped matrix (no pod_scope) — also the legacy default
+ *   3. the first matrix of the service (safety net)
+ *
+ * Matching is case/whitespace-insensitive. When bookingPod is empty, only
+ * the global matrix is considered, so existing (POD-blind) contracts behave
+ * exactly as before.
+ */
+export function selectMatrixForPod(
+  rateMatrices: ContractRateMatrix[],
+  serviceType: string,
+  bookingPod?: string,
+): ContractRateMatrix | undefined {
+  const svc = serviceType.toLowerCase();
+  const ofService = rateMatrices.filter((m) => m.service_type.toLowerCase() === svc);
+  if (ofService.length === 0) return undefined;
+
+  const pod = (bookingPod ?? "").trim().toLowerCase();
+  if (pod) {
+    const scoped = ofService.find((m) =>
+      (m.pod_scope ?? []).some((p) => p.trim().toLowerCase() === pod)
+    );
+    if (scoped) return scoped; // precedence 1: scoped POD wins
+  }
+
+  const global = ofService.find((m) => !m.pod_scope || m.pod_scope.length === 0);
+  return global ?? ofService[0]; // precedence 2: global → 3: legacy safety
+}
+
+/**
  * High-level convenience: given a full contract's rate matrices,
  * a service type, a mode, and quantities — produce the applied rates
  * and total amount.
@@ -319,11 +351,10 @@ export function calculateContractBilling(
   facts?: BookingFacts,
   containers?: BookingContainer[],
   deliveryAddress?: string,
+  bookingPod?: string,
 ): { appliedRates: AppliedRate[]; total: number } {
-  // Find the matrix for this service type
-  const matrix = rateMatrices.find(
-    (m) => m.service_type.toLowerCase() === serviceType.toLowerCase()
-  );
+  // Find the matrix for this service type, scoped to the booking's POD
+  const matrix = selectMatrixForPod(rateMatrices, serviceType, bookingPod);
 
   if (!matrix) {
     console.warn(`[RateEngine] No rate matrix found for service type "${serviceType}"`);

@@ -47,6 +47,13 @@ export function BookingRateCardButton({
 
   const bookingId = booking.bookingId || booking.id;
   const mode = booking.mode || "FCL";
+  // POD selects the POD-scoped rate matrix (when the contract has per-POD cards).
+  // Booking POD lives under different keys per service (Brokerage uses pod_aod);
+  // check every known variant so the engine can match the matrix's pod_scope.
+  const bookingPod =
+    booking.pod_aod || booking.podAod ||
+    booking.aod_pod || booking.aodPod ||
+    booking.pod || booking.aod || booking.portOfDischarge || "";
   const alreadyGenerated = hasExistingRateCardBilling(existingBillingItems, bookingId);
 
   // Derive quantities for the sheet's initial state
@@ -96,6 +103,7 @@ export function BookingRateCardButton({
       currency={rateCard.currency}
       initialQuantities={initialQuantities}
       bookingMode={mode}
+      bookingPod={bookingPod}
       selections={selections}
       truckingLineItems={truckingLineItems}
       onRefresh={onRefresh}

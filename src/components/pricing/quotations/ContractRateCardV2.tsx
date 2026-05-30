@@ -142,6 +142,8 @@ interface ContractRateCardV2Props {
   onChange: (matrix: ContractRateMatrix) => void;
   viewMode?: boolean;
   serviceLabel?: string;
+  /** Rendered inside the card, directly under the title bar (e.g. POD tabs). */
+  headerSlot?: React.ReactNode;
 }
 
 // ============================================
@@ -153,6 +155,7 @@ export function ContractRateCardV2({
   onChange,
   viewMode = false,
   serviceLabel,
+  headerSlot,
 }: ContractRateCardV2Props) {
   const displayLabel = serviceLabel || matrix.service_type;
   const columns = matrix.columns;
@@ -366,7 +369,8 @@ export function ContractRateCardV2({
       }}
     >
       {/* ── Header ── */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px", paddingBottom: "20px", borderBottom: "2px solid var(--neuron-ui-border)" }}>
+      <div style={{ marginBottom: "24px", paddingBottom: "20px", borderBottom: "2px solid var(--neuron-ui-border)" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <PhilippinePeso size={18} style={{ color: "var(--neuron-brand-green)" }} />
           <h2 style={{ fontSize: "17px", fontWeight: 600, color: "var(--neuron-brand-green)", margin: 0, letterSpacing: "-0.01em" }}>
@@ -462,6 +466,10 @@ export function ContractRateCardV2({
             )}
           </div>
         )}
+      </div>
+
+      {/* ── POD selector / per-card slot (injected by ContractServiceRateGroup) ── */}
+      {headerSlot && <div style={{ marginTop: "16px" }}>{headerSlot}</div>}
       </div>
 
       {/* ── Trucking: Destination Blocks ── */}

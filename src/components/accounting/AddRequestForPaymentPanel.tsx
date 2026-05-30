@@ -1,8 +1,8 @@
-import { X, Plus, Printer, Download, Calendar as CalendarIcon, CreditCard, Clock, Tag, ChevronDown, ChevronRight, RefreshCw, FileText, Banknote, Receipt, ArrowRight, CheckSquare, Square, Loader2, Save, Zap, Trash2, Check } from "lucide-react";
+import { X, Plus, Printer, Download, Calendar as CalendarIcon, CreditCard, Clock, Tag, ChevronDown, ChevronRight, RefreshCw, FileText, Banknote, Receipt, ArrowRight, CheckSquare, Square, Loader2, Save, Zap, Trash2, Check, Paperclip } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { NeuronLogo } from "../NeuronLogo";
+import { VoucherBrandLogo } from "../VoucherBrandLogo";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { CatalogItemCombobox } from "../shared/pricing/CatalogItemCombobox";
 import { CategoryDropdown } from "../pricing/quotations/CategoryDropdown";
@@ -22,6 +22,7 @@ import {
   type AccountingCurrency,
 } from "../../utils/accountingCurrency";
 import { resolveExchangeRate } from "../../utils/exchangeRates";
+import { uploadCrmAttachments, formatAttachmentSize, type CrmAttachment } from "../../utils/crmAttachments";
 
 interface LineItem {
   id: string;
@@ -140,6 +141,9 @@ export function AddRequestForPaymentPanel({
   const [creditTerms, setCreditTerms] = useState<CreditTerm>("None");
   const [paymentSchedule, setPaymentSchedule] = useState("");
   const [notes, setNotes] = useState("");
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [existingAttachments, setExistingAttachments] = useState<CrmAttachment[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Multi-currency. Defaults to PHP; user picks USD when needed and either
   // accepts a rate looked up from `exchange_rates` or enters a custom one.
@@ -283,6 +287,7 @@ export function AddRequestForPaymentPanel({
       if (dataToLoad.source_account_id) setSourceAccountId(dataToLoad.source_account_id || "");
       
       if (dataToLoad.linked_billings) setLinkedBillings(dataToLoad.linked_billings);
+      if (Array.isArray(dataToLoad.attachments)) setExistingAttachments(dataToLoad.attachments as CrmAttachment[]);
     }
   }, [mode, existingData, initialValues, context]);
 
@@ -444,6 +449,21 @@ export function AddRequestForPaymentPanel({
     return true;
   };
 
+  // Uploads any pending files to storage, returning the persisted attachment
+  // metadata. Throws on failure so callers can abort the save.
+  const uploadPendingFiles = async (): Promise<CrmAttachment[]> => {
+    if (pendingFiles.length === 0) return [];
+    setIsUploading(true);
+    try {
+      return await uploadCrmAttachments(pendingFiles, "evouchers", crypto.randomUUID());
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to upload attachments");
+      throw err;
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -453,8 +473,9 @@ export function AddRequestForPaymentPanel({
     }
 
     if (!ensureFxRateValid()) return;
-    
+
     try {
+      const attachments = await uploadPendingFiles();
       // Prepare form data
       const formData = {
         transactionType,
@@ -470,6 +491,7 @@ export function AddRequestForPaymentPanel({
         creditTerms,
         paymentSchedule,
         notes,
+        attachments,
         requestor: defaultRequestor || user?.name || "Current User",
         bookingId,
         isBillable: transactionSubtype === "billable_expense",
@@ -504,6 +526,7 @@ export function AddRequestForPaymentPanel({
     if (!ensureFxRateValid()) return;
 
     try {
+      const attachments = await uploadPendingFiles();
       // Prepare form data
       const formData = {
         transactionType,
@@ -519,6 +542,7 @@ export function AddRequestForPaymentPanel({
         creditTerms,
         paymentSchedule,
         notes,
+        attachments,
         requestor: defaultRequestor || user?.name || "Current User",
         bookingId,
         isBillable: transactionSubtype === "billable_expense",
@@ -548,6 +572,7 @@ export function AddRequestForPaymentPanel({
     if (!ensureFxRateValid()) return;
 
     try {
+      const attachments = await uploadPendingFiles();
       // Prepare form data
       const formData = {
         transactionType,
@@ -563,6 +588,7 @@ export function AddRequestForPaymentPanel({
         creditTerms,
         paymentSchedule,
         notes,
+        attachments,
         requestor: defaultRequestor || user?.name || "Current User",
         bookingId,
         isBillable: transactionSubtype === "billable_expense",
@@ -596,6 +622,8 @@ export function AddRequestForPaymentPanel({
     setCreditTerms("None");
     setPaymentSchedule("");
     setNotes("");
+    setPendingFiles([]);
+    setExistingAttachments([]);
     setTransactionSubtype("regular_expense");
     setLinkedBillings([]);
     setSelectedStatementRef("");
@@ -644,6 +672,9 @@ export function AddRequestForPaymentPanel({
     requestName.trim() !== "" &&
     (isCollectionMode || categorySections.some(s => s.items.some(item => item.particular.trim() !== "" && item.amount > 0))) &&
     vendor.trim() !== "";
+
+  // Disable save paths while the mutation runs OR files are uploading
+  const busy = isSaving || isUploading;
 
   // Context-aware labels
   const isAccounting = context === "accounting";
@@ -852,7 +883,7 @@ export function AddRequestForPaymentPanel({
               borderBottom: "1px solid var(--theme-border-default)"
             }}>
               <div style={{ marginBottom: "12px" }}>
-                <NeuronLogo height={32} />
+                <VoucherBrandLogo height={32} />
               </div>
               
               <div style={{ textAlign: "right" }}>
@@ -1460,6 +1491,115 @@ export function AddRequestForPaymentPanel({
                 }}
               />
             </div>
+
+            {/* Attachments Section */}
+            <div>
+              <label style={{
+                display: "block",
+                fontSize: "12px",
+                fontWeight: 500,
+                color: "var(--theme-text-secondary)",
+                marginBottom: "8px"
+              }}>
+                Attachments
+              </label>
+
+              {existingAttachments.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: pendingFiles.length || !isViewMode ? "8px" : 0 }}>
+                  {existingAttachments.map((att, idx) => (
+                    <a
+                      key={`existing-${idx}`}
+                      href={att.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        padding: "8px 12px",
+                        fontSize: "13px",
+                        color: "var(--neuron-brand-green, #0F766E)",
+                        border: "1px solid var(--theme-border-default)",
+                        borderRadius: "6px",
+                        textDecoration: "none",
+                      }}
+                    >
+                      <FileText size={16} />
+                      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{att.name}</span>
+                      <span style={{ color: "var(--theme-text-secondary)", fontSize: "12px" }}>{formatAttachmentSize(att.size)}</span>
+                      <Download size={14} />
+                    </a>
+                  ))}
+                </div>
+              )}
+
+              {!isViewMode && (
+                <>
+                  {pendingFiles.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "8px" }}>
+                      {pendingFiles.map((file, idx) => (
+                        <div
+                          key={`pending-${idx}`}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            padding: "8px 12px",
+                            fontSize: "13px",
+                            border: "1px solid var(--theme-border-default)",
+                            borderRadius: "6px",
+                            backgroundColor: "var(--theme-bg-surface)",
+                          }}
+                        >
+                          <FileText size={16} style={{ color: "var(--theme-text-secondary)" }} />
+                          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name}</span>
+                          <span style={{ color: "var(--theme-text-secondary)", fontSize: "12px" }}>{formatAttachmentSize(file.size)}</span>
+                          <button
+                            type="button"
+                            onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== idx))}
+                            style={{ display: "flex", background: "none", border: "none", cursor: "pointer", color: "var(--theme-text-secondary)", padding: 0 }}
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <label
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      padding: "8px 14px",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "var(--neuron-brand-green, #0F766E)",
+                      border: "1px dashed var(--theme-border-default)",
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <Paperclip size={16} />
+                    Attach files
+                    <input
+                      type="file"
+                      multiple
+                      style={{ display: "none" }}
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files || []);
+                        if (files.length) setPendingFiles(prev => [...prev, ...files]);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                </>
+              )}
+
+              {isViewMode && existingAttachments.length === 0 && (
+                <p style={{ fontSize: "13px", color: "var(--theme-text-secondary)", margin: 0 }}>No attachments</p>
+              )}
+            </div>
           </form>
         </div>
 
@@ -1494,7 +1634,7 @@ export function AddRequestForPaymentPanel({
             <button
               type="button"
               onClick={handleSaveDraft}
-              disabled={isSaving}
+              disabled={busy}
               style={{
                 padding: "10px 20px",
                 fontSize: "14px",
@@ -1503,23 +1643,23 @@ export function AddRequestForPaymentPanel({
                 backgroundColor: "var(--theme-bg-surface)",
                 border: "1px solid var(--theme-text-primary)",
                 borderRadius: "6px",
-                cursor: isSaving ? "not-allowed" : "pointer",
+                cursor: busy ? "not-allowed" : "pointer",
                 transition: "all 0.2s",
-                opacity: isSaving ? 0.7 : 1,
+                opacity: busy ? 0.7 : 1,
                 display: "flex",
                 alignItems: "center",
                 gap: "8px"
               }}
             >
-              <Save size={16} />
-              Save Draft
+              {isUploading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              {isUploading ? "Uploading…" : "Save Draft"}
             </button>
             
             {isAccounting && (
               <button
                 type="button"
                 onClick={handleAutoApprove}
-                disabled={!isFormValid || isSaving}
+                disabled={!isFormValid || busy}
                 style={{
                   padding: "10px 20px",
                   fontSize: "14px",
@@ -1528,23 +1668,23 @@ export function AddRequestForPaymentPanel({
                   backgroundColor: "var(--theme-action-primary-bg)", // Slightly different shade if needed
                   border: "none",
                   borderRadius: "6px",
-                  cursor: (isFormValid && !isSaving) ? "pointer" : "not-allowed",
+                  cursor: (isFormValid && !busy) ? "pointer" : "not-allowed",
                   transition: "all 0.2s",
-                  opacity: (isFormValid && !isSaving) ? 1 : 0.5,
+                  opacity: (isFormValid && !busy) ? 1 : 0.5,
                   display: "flex",
                   alignItems: "center",
                   gap: "8px"
                 }}
               >
-                <Zap size={16} />
-                Auto-Approve
+                {isUploading ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
+                {isUploading ? "Uploading…" : "Auto-Approve"}
               </button>
             )}
             
             <button
               type="button"
               onClick={(e) => handleSubmit(e)}
-              disabled={!isFormValid || isSaving}
+              disabled={!isFormValid || busy}
               style={{
                 padding: "10px 24px",
                 fontSize: "14px",
@@ -1553,18 +1693,18 @@ export function AddRequestForPaymentPanel({
                 backgroundColor: isAccounting ? "var(--theme-action-primary-border)" : "var(--theme-action-primary-bg)",
                 border: "none",
                 borderRadius: "6px",
-                cursor: (isFormValid && !isSaving) ? "pointer" : "not-allowed",
+                cursor: (isFormValid && !busy) ? "pointer" : "not-allowed",
                 transition: "all 0.2s",
-                opacity: (isFormValid && !isSaving) ? 1 : 0.5,
+                opacity: (isFormValid && !busy) ? 1 : 0.5,
                 display: "flex",
                 alignItems: "center",
                 gap: "8px"
               }}
             >
-              {isSaving ? (
+              {busy ? (
                 <>
                   <Loader2 size={16} className="animate-spin" />
-                  Processing...
+                  {isUploading ? "Uploading…" : "Processing..."}
                 </>
               ) : (
                 <>

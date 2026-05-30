@@ -1,6 +1,6 @@
 import { X, Calendar, CreditCard, Building, User, FileText, CheckCircle2, Clock, AlertCircle, Loader2, BookOpen } from "lucide-react";
 import { useEffect, useState } from "react";
-import defaultLogoImage from "figma:asset/28c84ed117b026fbf800de0882eb478561f37f4f.png";
+import defaultLogoImage from "../../../assets/white.svg";
 import { getDocumentDesign, getBrandedLogo } from "../../../utils/documentDesign";
 const logoImage = getDocumentDesign() === "branded" ? getBrandedLogo() : defaultLogoImage;
 import { supabase } from "../../../utils/supabase/client";

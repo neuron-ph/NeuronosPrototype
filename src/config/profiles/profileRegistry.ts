@@ -28,7 +28,7 @@ export const profileRegistry: Record<string, ProfileRegistryEntry> = {
   },
   country: {
     source: 'profile_countries',
-    searchFields: ['name', 'iso_code'],
+    searchFields: ['name'],
     strictness: 'strict',
     quickCreateAllowed: false,
     seedStrategy: 'stable-list',
@@ -39,12 +39,10 @@ export const profileRegistry: Record<string, ProfileRegistryEntry> = {
       duplicateGuard: 'normalized-primary',
       orderBy: { column: 'sort_order', ascending: true },
       columns: [
-        { key: 'iso_code', header: 'ISO', width: '80px', type: 'monospace' },
         { key: 'name', header: 'Name' },
         { key: 'sort_order', header: 'Priority', width: '120px', align: 'right' },
       ],
       formFields: [
-        { key: 'iso_code', label: 'ISO Code', control: 'text', required: true, maxLength: 2, uppercase: true, placeholder: 'e.g. PH' },
         { key: 'name', label: 'Name', control: 'text', required: true, placeholder: 'Philippines' },
         { key: 'sort_order', label: 'Priority', control: 'number', placeholder: '999', helpText: 'Lower numbers appear first. Defaults to 999.' },
       ],

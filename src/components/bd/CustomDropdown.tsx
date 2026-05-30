@@ -36,6 +36,11 @@ interface CustomDropdownProps {
   onMultiChange?: (values: string[]) => void;
   portalZIndex?: number;
   dropdownMaxWidth?: number;
+  /** Opt-in: render a search box at the top of the menu that filters options by label. */
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  /** Horizontal alignment of the menu relative to the trigger. Default "left". */
+  align?: "left" | "right";
 }
 
 export function CustomDropdown({
@@ -57,12 +62,16 @@ export function CustomDropdown({
   onMultiChange,
   portalZIndex = 9999,
   dropdownMaxWidth,
+  searchable = false,
+  searchPlaceholder = "Search...",
+  align = "left",
 }: CustomDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number; minWidth: number; maxWidth: number; openUpward: boolean } | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left?: number; right?: number; minWidth: number; maxWidth: number; openUpward: boolean } | null>(null);
 
   const computeMenuPos = () => {
     if (!buttonRef.current) return null;
@@ -78,13 +87,23 @@ export function CustomDropdown({
     // Only flip upward when there's critically little space below (<80px),
     // not whenever the space is less than the full max height.
     const openUpward = spaceBelow < 80 && rect.top > maxMenuHeight;
-    const availableWidth = window.innerWidth - rect.left - viewportPad;
+    // Right-aligned menus grow leftward, so the available room is measured from
+    // the trigger's right edge instead of its left.
+    const availableWidth = align === "right"
+      ? rect.right - viewportPad
+      : window.innerWidth - rect.left - viewportPad;
     const cappedWidth = dropdownMaxWidth
       ? Math.min(availableWidth, dropdownMaxWidth)
       : availableWidth;
+    // Right-aligned menus are anchored with the CSS `right` property so the
+    // browser keeps the menu's right edge at the trigger's right edge without
+    // needing to measure the menu width — this survives scroll repositioning.
+    const horizontal = align === "right"
+      ? { right: Math.max(viewportPad, window.innerWidth - rect.right) }
+      : { left: rect.left };
     return {
       top: openUpward ? rect.top - gap - maxMenuHeight : rect.bottom + gap,
-      left: rect.left,
+      ...horizontal,
       minWidth: rect.width,
       maxWidth: Math.max(rect.width, cappedWidth),
       openUpward,
@@ -96,6 +115,11 @@ export function CustomDropdown({
     if (isOpen && buttonRef.current) {
       setMenuPos(computeMenuPos());
     }
+  }, [isOpen]);
+
+  // Clear the search query whenever the menu closes
+  useEffect(() => {
+    if (!isOpen) setQuery("");
   }, [isOpen]);
 
   // When opening upward, re-measure the actual menu height and adjust top
@@ -151,6 +175,9 @@ export function CustomDropdown({
   }, [isOpen]);
 
   const selectedOption = options.find(opt => opt.value === value);
+  const filteredOptions = searchable && query.trim()
+    ? options.filter(opt => opt.label.toLowerCase().includes(query.trim().toLowerCase()))
+    : options;
   const displayValue = multiSelect
     ? (multiValue.length > 0 
         ? multiValue.map(v => options.find(o => o.value === v)?.label || v).join(", ")
@@ -193,6 +220,41 @@ export function CustomDropdown({
   };
 
   const currentSize = sizeStyles[size];
+
+  // Sticky search box rendered at the top of the menu when `searchable`
+  const searchHeader = searchable ? (
+    <div
+      onMouseDown={(e) => e.stopPropagation()}
+      style={{
+        position: "sticky",
+        top: 0,
+        zIndex: 1,
+        padding: 8,
+        backgroundColor: "var(--theme-bg-surface)",
+        borderBottom: "1px solid var(--theme-border-subtle)",
+      }}
+    >
+      <input
+        autoFocus
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onClick={(e) => e.stopPropagation()}
+        placeholder={searchPlaceholder}
+        className="w-full px-2.5 py-1.5 rounded-md text-[13px] outline-none"
+        style={{
+          border: "1px solid var(--theme-border-default)",
+          backgroundColor: "var(--theme-bg-page)",
+          color: "var(--theme-text-primary)",
+        }}
+      />
+    </div>
+  ) : null;
+
+  const noMatches = searchable && filteredOptions.length === 0 ? (
+    <div style={{ padding: "10px 14px", fontSize: 13, color: "var(--theme-text-muted)" }}>
+      No matches
+    </div>
+  ) : null;
 
   // Inline label version (original)
   if (!label) {
@@ -269,12 +331,15 @@ export function CustomDropdown({
                 zIndex: portalZIndex,
                 top: menuPos.top,
                 left: menuPos.left,
+                right: menuPos.right,
                 minWidth: menuPos.minWidth,
                 maxWidth: menuPos.maxWidth,
                 width: "max-content"
               }}
             >
-              {options.map((option) => {
+              {searchHeader}
+              {noMatches}
+              {filteredOptions.map((option) => {
                 const isSelected = multiSelect
                   ? multiValue.includes(option.value)
                   : value === option.value;
@@ -401,12 +466,15 @@ export function CustomDropdown({
                 zIndex: portalZIndex,
                 top: menuPos.top,
                 left: menuPos.left,
+                right: menuPos.right,
                 minWidth: menuPos.minWidth,
                 maxWidth: menuPos.maxWidth,
                 width: "max-content"
               }}
             >
-              {options.map((option, index) => {
+              {searchHeader}
+              {noMatches}
+              {filteredOptions.map((option, index) => {
                 const isSelected = multiSelect
                   ? multiValue.includes(option.value)
                   : value === option.value;
@@ -432,7 +500,7 @@ export function CustomDropdown({
                     style={{
                       backgroundColor: optionBackgroundColor,
                       color: optionColor,
-                      borderBottom: index < options.length - 1 ? "1px solid var(--theme-border-subtle)" : "none"
+                      borderBottom: index < filteredOptions.length - 1 ? "1px solid var(--theme-border-subtle)" : "none"
                     }}
                     onMouseEnter={(e) => {
                       if (!isSelected) {

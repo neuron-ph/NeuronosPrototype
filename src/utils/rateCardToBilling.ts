@@ -15,6 +15,7 @@ import {
   instantiateRates,
   generateContractBilling,
   resolveModeColumn,
+  selectMatrixForPod,
   type BookingQuantities,
   type BookingFacts,
   type BookingContainer,
@@ -83,6 +84,12 @@ export interface RateCardGenerationContext {
    * the top-level address but not the per-container one).
    */
   deliveryAddress?: string;
+  /**
+   * The booking's POD (port of discharge / entry). Selects the POD-scoped
+   * rate matrix when the contract has per-POD rate cards. When omitted, the
+   * global/unscoped matrix is used (legacy behaviour).
+   */
+  bookingPod?: string;
 }
 
 export interface RateCardGenerationResult {
@@ -124,10 +131,8 @@ export interface RateCardGenerationResult {
 export function generateRateCardBillingItems(
   ctx: RateCardGenerationContext
 ): RateCardGenerationResult {
-  // 1. Find the matrix for this service type
-  const matrix = ctx.rateMatrices.find(
-    (m) => m.service_type.toLowerCase() === ctx.serviceType.toLowerCase()
-  );
+  // 1. Find the matrix for this service type, scoped to the booking's POD
+  const matrix = selectMatrixForPod(ctx.rateMatrices, ctx.serviceType, ctx.bookingPod);
 
   if (!matrix) {
     return { items: [], total: 0, count: 0, modeColumn: null };

@@ -252,7 +252,7 @@ export interface EVoucher {
   notes?: string;
 
   // Attachments & History
-  attachments?: string[];
+  attachments?: { name: string; size: number; type: string; url?: string }[];
   workflow_history: EVoucherWorkflowHistory[];
   
   // Timestamps
