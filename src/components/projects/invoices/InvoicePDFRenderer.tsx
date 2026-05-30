@@ -7,7 +7,7 @@ import type { CompanySettings } from "../../../hooks/useCompanySettings";
 import { resolveInvoicePrintableDocument } from "../../../utils/documents/invoiceDocumentResolver";
 import { PrintableDocumentPdf } from "../../documents/PrintableDocumentPdf";
 import { applyBrandedDesign } from "../../../utils/documentDesign";
-import logoImage from "figma:asset/28c84ed117b026fbf800de0882eb478561f37f4f.png";
+import logoImage from "../../../assets/white.svg";
 
 interface InvoicePDFDocumentProps {
   invoice: Invoice;

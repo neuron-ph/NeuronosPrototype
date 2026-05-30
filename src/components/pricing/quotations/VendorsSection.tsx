@@ -2,8 +2,9 @@ import { Plus, X, Building2, Download, User, MapPin, ChevronDown, Loader } from 
 import { useMemo, useState } from "react";
 import type { Vendor, VendorType, ServiceType, QuotationChargeCategory } from "../../../types/pricing";
 import type { VendorLineItem } from "../../../data/networkPartners"; // ⚠️ DEPRECATED - kept for backward compatibility
-import { NETWORK_PARTNERS, COUNTRIES } from "../../../data/networkPartners";
+import { NETWORK_PARTNERS } from "../../../data/networkPartners";
 import { FormSelect } from "./FormSelect";
+import { ProfileLookupCombobox } from "../../shared/profiles/ProfileLookupCombobox";
 import { SearchableFormSelect } from "./SearchableFormSelect";
 import { supabase } from "../../../utils/supabase/client";
 import { ChargeCategoriesManager } from "../shared/ChargeCategoriesManager";
@@ -123,15 +124,6 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [partners]);
 
-  const countryOptions = useMemo(() => {
-    const countries = vendorMasterlist
-      .map((vendor) => vendor.country)
-      .filter((country): country is string => Boolean(country));
-    const sourceCountries = countries.length > 0 ? countries : COUNTRIES;
-
-    return Array.from(new Set(sourceCountries)).sort();
-  }, [vendorMasterlist]);
-  
   // ✨ PHASE 1: Toggle vendor expansion
   const toggleVendorExpansion = (vendorId: string) => {
     const isCurrentlyExpanded = expandedVendorIds.has(vendorId);
@@ -508,10 +500,10 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
                   }}>
                     Country
                   </label>
-                  <FormSelect
+                  <ProfileLookupCombobox
+                    profileType="country"
                     value={newVendorCountry}
-                    onChange={handleCountryChange}
-                    options={countryOptions.map(country => ({ value: country, label: country }))}
+                    onChange={(val) => handleCountryChange(val.label)}
                     placeholder="Select country..."
                   />
                 </div>

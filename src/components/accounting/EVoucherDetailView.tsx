@@ -1,5 +1,6 @@
-import { CheckCircle } from "lucide-react";
-import { NeuronLogo } from "../NeuronLogo";
+import { CheckCircle, FileText, Download } from "lucide-react";
+import { VoucherBrandLogo } from "../VoucherBrandLogo";
+import { formatAttachmentSize } from "../../utils/crmAttachments";
 import { EVoucherWorkflowPanel } from "./evouchers/EVoucherWorkflowPanel";
 import { EVoucherStatusBadge } from "./evouchers/EVoucherStatusBadge";
 import { EVoucherHistoryTimeline } from "./evouchers/EVoucherHistoryTimeline";
@@ -110,7 +111,7 @@ export function EVoucherDetailView({
             borderBottom: "1px solid var(--theme-border-default)",
           }}
         >
-          <NeuronLogo height={32} />
+          <VoucherBrandLogo height={32} />
 
           <div style={{ textAlign: "right" }}>
             <h1
@@ -492,6 +493,52 @@ export function EVoucherDetailView({
             </div>
           )}
         </div>
+
+        {/* ── Attachments ──────────────────────────────────────────────────── */}
+        {Array.isArray(evoucher.attachments) && evoucher.attachments.length > 0 && (
+          <div
+            style={{
+              marginBottom: "28px",
+              padding: "16px 20px",
+              border: "1px solid var(--theme-border-default)",
+              borderRadius: "8px",
+              backgroundColor: "var(--theme-bg-surface-subtle)",
+            }}
+          >
+            <div style={sectionHeading}>Attachments</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {evoucher.attachments.map((att, idx) => (
+                <a
+                  key={idx}
+                  href={att.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                    padding: "10px 12px",
+                    fontSize: "13px",
+                    color: "var(--theme-text-secondary)",
+                    border: "1px solid var(--theme-border-default)",
+                    borderRadius: "6px",
+                    backgroundColor: "var(--theme-bg-surface)",
+                    textDecoration: "none",
+                  }}
+                >
+                  <FileText size={16} style={{ color: "var(--theme-text-muted)", flexShrink: 0 }} />
+                  <span style={{ flex: 1, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {att.name}
+                  </span>
+                  <span style={{ fontSize: "12px", color: "var(--theme-text-muted)", flexShrink: 0 }}>
+                    {formatAttachmentSize(att.size)}
+                  </span>
+                  <Download size={15} style={{ color: "var(--theme-text-muted)", flexShrink: 0 }} />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── Workflow History ─────────────────────────────────────────────── */}
         <div style={{ marginBottom: "28px" }}>

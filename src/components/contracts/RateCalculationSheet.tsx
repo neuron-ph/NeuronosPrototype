@@ -49,6 +49,8 @@ interface RateCalculationSheetProps {
   initialQuantities: BookingQuantities;
   /** Detected booking mode */
   bookingMode: string;
+  /** Booking's POD — selects the POD-scoped rate matrix (empty = global/legacy). */
+  bookingPod?: string;
   /** Optional selections for alternative row filtering (@see SELECTION_GROUP_BLUEPRINT.md) */
   selections?: Record<string, string>;
   /** Optional: multi-line trucking line items for grouped display (@see MULTI_LINE_TRUCKING_BLUEPRINT.md) */
@@ -73,6 +75,7 @@ export function RateCalculationSheet({
   currency,
   initialQuantities,
   bookingMode,
+  bookingPod,
   selections,
   truckingLineItems,
   onRefresh,
@@ -113,8 +116,8 @@ export function RateCalculationSheet({
   // Run the rate engine with current quantities (reactive — recalculates on every change)
   const calculation = useMemo(() => {
     if (isMultiLine) return { appliedRates: [] as AppliedRate[], total: 0 };
-    return calculateContractBilling(rateMatrices, serviceType, bookingMode, quantities, selections, facts, containers, deliveryAddress);
-  }, [rateMatrices, serviceType, bookingMode, quantities, selections, isMultiLine, facts, containers, deliveryAddress]);
+    return calculateContractBilling(rateMatrices, serviceType, bookingMode, quantities, selections, facts, containers, deliveryAddress, bookingPod);
+  }, [rateMatrices, serviceType, bookingMode, quantities, selections, isMultiLine, facts, containers, deliveryAddress, bookingPod]);
 
   // Grand total
   const grandTotal = isMultiLine && multiLineResults
@@ -161,6 +164,7 @@ export function RateCalculationSheet({
         facts,
         containers,
         deliveryAddress,
+        bookingPod,
       });
 
       if (result.items.length === 0) {

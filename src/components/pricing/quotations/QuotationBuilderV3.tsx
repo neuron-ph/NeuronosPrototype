@@ -75,6 +75,7 @@ import type { QuotationNew, QuotationChargeCategory, QuotationLineItemNew, Inqui
 import type { VendorLineItem } from "../../../data/networkPartners"; // ⚠️ DEPRECATED - kept for backward compatibility
 import { calculateFinancialSummary, generateLineItemId, generateCategoryId } from "../../../utils/quotationCalculations";
 import { ContractRateCardV2, createEmptyMatrixV2 } from "./ContractRateCardV2";
+import { ContractServiceRateGroup } from "./ContractServiceRateGroup";
 import type { ContractRateMatrix, QuotationType, ContractSummary } from "../../../types/pricing";
 import { findContractForCustomerService, fetchFullContract } from "../../../utils/contractLookup";
 import { contractRatesToSellingPrice, getContractModeColumns, multiLineRatesToSellingPrice } from "../../../utils/contractRateEngine";
@@ -2614,16 +2615,30 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
                   Select one or more services above to configure rate cards.
                 </div>
               )}
-              {rateMatrices.map((matrix) => (
-                <ContractRateCardV2
-                  key={matrix.id}
-                  matrix={matrix}
-                  onChange={(updated) => {
-                    setRateMatrices(prev => prev.map(m => m.id === updated.id ? updated : m));
-                  }}
-                  viewMode={viewMode}
-                />
-              ))}
+              {(() => {
+                // POD tabs are driven by each service's own discharge-port list
+                // (the "Port of Discharge/s (POD)" multi-select on the service form).
+                const podsByService: Record<string, string[]> = {
+                  Brokerage: brokerageData.pods ?? [],
+                  Forwarding: (forwardingData as any).pods ?? [],
+                  Trucking: (truckingData as any).pods ?? [],
+                  "Marine Insurance": (marineInsuranceData as any).pods ?? [],
+                  Others: (othersData as any).pods ?? [],
+                };
+                return Array.from(new Set(rateMatrices.map(m => m.service_type))).map((svc) => (
+                  <div key={svc} style={{ marginBottom: "24px" }}>
+                    <ContractServiceRateGroup
+                      serviceType={svc}
+                      matrices={rateMatrices.filter(m => m.service_type === svc)}
+                      availablePods={podsByService[svc] ?? []}
+                      viewMode={viewMode}
+                      onChange={(nextForSvc) =>
+                        setRateMatrices(prev => [...prev.filter(m => m.service_type !== svc), ...nextForSvc])
+                      }
+                    />
+                  </div>
+                ));
+              })()}
             </div>
           )}
 

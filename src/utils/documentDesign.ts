@@ -1,10 +1,23 @@
 import type { PrintableContactFooter, PrintableDocument } from "./documents/printableDocument";
 import fullPageImage from "../assets/Full page.png";
-import brandedLogoUrl from "../assets/Logo left.png";
+import brandedLogoUrl from "../assets/white.svg";
 
 const STORAGE_KEY = "neuron_doc_design";
+const VOUCHER_LOGO_KEY = "neuron_voucher_logo";
 
 export type DocumentDesign = "branded" | "classic";
+
+// E-voucher heading logo. Locked to "aplus" in prod; togglable in dev.
+export type VoucherLogo = "aplus" | "neuron";
+
+export function getVoucherLogo(): VoucherLogo {
+  if (import.meta.env.PROD) return "aplus";
+  return (localStorage.getItem(VOUCHER_LOGO_KEY) as VoucherLogo) || "aplus";
+}
+
+export function setVoucherLogo(logo: VoucherLogo): void {
+  localStorage.setItem(VOUCHER_LOGO_KEY, logo);
+}
 
 const BRANDED_CONTACT_FOOTER: PrintableContactFooter = {
   callNumbers: ["+63 (2) 8283 8046", "+63 (2) 7000 1665", "+63 920 2821730"],

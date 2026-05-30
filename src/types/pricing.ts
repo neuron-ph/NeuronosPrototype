@@ -588,6 +588,7 @@ export interface ContractRateMatrix {
   categories?: ContractRateCategory[]; // UI grouping (optional — auto-migrated from rows if missing)
   currency?: string;                   // "PHP" | "USD" — denomination of every rate in this matrix. Defaults to PHP for legacy rows.
   exchange_rate?: number;              // Locked rate to PHP at matrix creation. 1 for PHP matrices; required positive for non-PHP.
+  pod_scope?: string[];                // PODs this matrix applies to (must match contract_general_details.port_of_entry[]). undefined/empty = applies to ALL PODs (global / legacy default).
 }
 
 /**

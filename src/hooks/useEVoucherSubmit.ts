@@ -65,6 +65,7 @@ interface EVoucherData {
   exchangeRate?: number;
   /** Date the rate was locked (ISO yyyy-mm-dd). Defaults to today. */
   exchangeRateDate?: string;
+  attachments?: { name: string; size: number; type: string; url?: string }[];
 }
 
 type CreatedVoucher = {
@@ -194,6 +195,7 @@ export function useEVoucherSubmit(
       notes: data.notes || null,
       created_by: actor?.id || null,
       created_by_name: actor?.name || data.requestor || null,
+      attachments: data.attachments || [],
       details: buildVoucherDetails(data),
       created_at: now,
       updated_at: now,

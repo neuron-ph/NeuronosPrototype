@@ -7,7 +7,7 @@ import { useUser } from "../../hooks/useUser";
 import { useAutoCaps } from "../../context/AutoCapsProvider";
 import { getThemeModePreference, setThemeModePreference } from "../../theme/themeMode";
 import { ThemeModePreference } from "../../theme/workspaceTheme";
-import { getDocumentDesign, setDocumentDesign, isDocumentDesignToggleable, type DocumentDesign } from "../../utils/documentDesign";
+import { getDocumentDesign, setDocumentDesign, isDocumentDesignToggleable, getVoucherLogo, setVoucherLogo, type DocumentDesign, type VoucherLogo } from "../../utils/documentDesign";
 
 // ---------------------------------------------------------------------------
 // Primitives
@@ -523,6 +523,9 @@ export function Settings() {
   // Document design (dev-only toggle)
   const [docDesign, setDocDesign] = useState<DocumentDesign>(() => getDocumentDesign());
 
+  // Voucher heading logo (dev-only toggle)
+  const [voucherLogo, setVoucherLogoState] = useState<VoucherLogo>(() => getVoucherLogo());
+
   // Logout
   const [loggingOut, setLoggingOut] = useState(false);
   const [confirmingLogout, setConfirmingLogout] = useState(false);
@@ -1011,6 +1014,39 @@ export function Settings() {
                 >
                   <option value="branded">Branded (Falcons)</option>
                   <option value="classic">Classic</option>
+                </select>
+              </SettingsRow>
+              <SettingsRow
+                label="Voucher logo"
+                description="Logo shown on e-voucher headings. Locked to A Plus in production."
+              >
+                <select
+                  value={voucherLogo}
+                  onChange={(e) => {
+                    const next = e.target.value as VoucherLogo;
+                    setVoucherLogo(next);
+                    setVoucherLogoState(next);
+                    toast.success(`Voucher logo set to ${next === "aplus" ? "A Plus" : "Neuron"} — reopen the voucher to see changes`);
+                  }}
+                  style={{
+                    height: "32px",
+                    padding: "0 28px 0 10px",
+                    border: "1px solid var(--theme-border-default)",
+                    borderRadius: "8px",
+                    backgroundColor: "var(--theme-bg-surface)",
+                    color: "var(--theme-text-primary)",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    outline: "none",
+                    appearance: "none",
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23667085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
+                    backgroundRepeat: "no-repeat",
+                    backgroundPosition: "right 8px center",
+                  }}
+                >
+                  <option value="aplus">A Plus</option>
+                  <option value="neuron">Neuron</option>
                 </select>
               </SettingsRow>
             </Section>

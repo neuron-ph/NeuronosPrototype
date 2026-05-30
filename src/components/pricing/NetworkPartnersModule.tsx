@@ -1,14 +1,16 @@
 import { Search, Plus, Globe, Award, ChevronDown, ChevronRight, Plane, Ship, Loader2, User, Phone, Mail } from "lucide-react";
 import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "../../utils/supabase/client";
 import { usePermission } from "../../context/PermissionProvider";
-import { 
-  COUNTRIES, 
-  isExpired, 
+import {
+  isExpired,
   expiresSoon,
   getDaysUntilExpiry,
   type NetworkPartner,
 } from "../../data/networkPartners";
 import { PartnerSheet } from "./partners/PartnerSheet";
+import { CustomDropdown } from "../bd/CustomDropdown";
 import { useNetworkPartners } from "../../hooks/useNetworkPartners";
 import React from "react";
 
@@ -94,6 +96,37 @@ export function NetworkPartnersModule({
       active
     };
   }, [partners]);
+
+  // Managed country list (Admin → Profiling → Countries)
+  const { data: managedCountries = [] } = useQuery({
+    queryKey: ["profile_countries", "active-names"],
+    queryFn: async (): Promise<string[]> => {
+      const { data, error } = await supabase
+        .from("profile_countries")
+        .select("name")
+        .eq("is_active", true)
+        .order("sort_order")
+        .order("name");
+      if (error) throw new Error(error.message);
+      return (data ?? []).map(r => r.name as string);
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Filter options: managed countries unioned with any country already on a
+  // partner (so legacy values never disappear). Newly added countries show
+  // up immediately, even before any partner uses them.
+  const countryOptions = useMemo(() => {
+    const set = new Set<string>(managedCountries);
+    partners.forEach(p => { if (p.country) set.add(p.country); });
+    return Array.from(set).sort();
+  }, [managedCountries, partners]);
+
+  // Count of countries that actually have partners (for the header stat)
+  const partnerCountryCount = useMemo(
+    () => new Set(partners.map(p => p.country).filter(Boolean)).size,
+    [partners]
+  );
 
   // Calculate counts for each tab
   const tabCounts = useMemo(() => ({
@@ -258,7 +291,7 @@ export function NetworkPartnersModule({
                   margin: 0,
                 }}
               >
-                {stats.total} active agents across {COUNTRIES.length} countries
+                {stats.total} active agents across {partnerCountryCount} countries
               </p>
             </div>
 
@@ -426,30 +459,18 @@ export function NetworkPartnersModule({
                 />
               </div>
 
-              <select
+              <CustomDropdown
                 value={countryFilter}
-                onChange={(e) => setCountryFilter(e.target.value)}
-                style={{
-                  padding: "8px 32px 8px 12px",
-                  border: "1px solid var(--neuron-ui-border)",
-                  borderRadius: "8px",
-                  fontSize: "13px",
-                  color: "var(--neuron-ink-secondary)",
-                  backgroundColor: "var(--theme-bg-surface)",
-                  cursor: "pointer",
-                  outline: "none",
-                  appearance: "none",
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%236B7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
-                  backgroundRepeat: "no-repeat",
-                  backgroundPosition: "right 10px center",
-                  minWidth: "160px",
-                }}
-              >
-                <option value="All">All Countries</option>
-                {COUNTRIES.map(country => (
-                  <option key={country} value={country}>{country}</option>
-                ))}
-              </select>
+                onChange={setCountryFilter}
+                triggerAriaLabel="Filter by country"
+                align="right"
+                searchable
+                searchPlaceholder="Search countries..."
+                options={[
+                  { value: "All", label: "All Countries" },
+                  ...countryOptions.map(country => ({ value: country, label: country })),
+                ]}
+              />
             </div>
           </div>
 

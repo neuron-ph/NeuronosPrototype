@@ -31,7 +31,7 @@ export function formatAttachmentSize(bytes: number): string {
 
 export async function uploadCrmAttachments(
   files: File[],
-  folder: "crm_activities" | "tasks",
+  folder: "crm_activities" | "tasks" | "evouchers",
   entityId: string,
 ): Promise<CrmAttachment[]> {
   const uploaded: CrmAttachment[] = [];

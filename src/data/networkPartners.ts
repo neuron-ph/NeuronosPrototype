@@ -1742,9 +1742,6 @@ export const NETWORK_PARTNERS: NetworkPartner[] = [
   },
 ];
 
-// Get unique countries for filtering
-export const COUNTRIES = Array.from(new Set(NETWORK_PARTNERS.map(p => p.country))).sort();
-
 // Get counts by status
 export function getPartnerStats() {
   const expired = NETWORK_PARTNERS.filter(p => p.expires && isExpired(p.expires)).length;

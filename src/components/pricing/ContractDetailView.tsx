@@ -20,7 +20,7 @@ import { queryKeys } from "../../lib/queryKeys";
 import { ArrowLeft, Edit3, RefreshCw, FileText, Calendar, Building2, Briefcase, Ship, Shield, Truck, Clock, Zap, Plus, ChevronDown, Layout, Layers, Users, Receipt, FileStack, DollarSign, TrendingUp, Paperclip, MessageSquare, Eye, MoreVertical } from "lucide-react";
 import type { QuotationNew, ContractRateMatrix } from "../../types/pricing";
 import type { FinancialContainer } from "../../types/financials";
-import { ContractRateCardV2 } from "./quotations/ContractRateCardV2";
+import { ContractServiceRateGroup } from "./quotations/ContractServiceRateGroup";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
 import { createRateVersion, getCurrentVersion, getVersionHistory, rateMatricesChanged, type ContractRateVersion } from "../../utils/contractVersioning";
@@ -556,14 +556,28 @@ export function ContractDetailView({
           No rate matrices configured for this contract.
         </div>
       ) : (
-        rateMatrices.map((matrix) => (
-          <ContractRateCardV2
-            key={matrix.id}
-            matrix={matrix}
-            onChange={() => {}} // Read-only
-            viewMode={true}
-          />
-        ))
+        (() => {
+          // Per-service POD list (matches the editor): saved service_details.pods,
+          // falling back to the contract-level port_of_entry allow-list.
+          const meta: any[] = (quotation as any).services_metadata ?? [];
+          const podsForService = (svc: string): string[] => {
+            const entry = meta.find((m) => (m.service_type || "").toLowerCase() === svc.toLowerCase());
+            const pods = entry?.service_details?.pods;
+            if (Array.isArray(pods) && pods.length > 0) return pods;
+            return quotation.contract_general_details?.port_of_entry || [];
+          };
+          return Array.from(new Set(rateMatrices.map((m: any) => m.service_type))).map((svc: any) => (
+            <div key={svc} style={{ marginBottom: "24px" }}>
+              <ContractServiceRateGroup
+                serviceType={svc}
+                matrices={rateMatrices.filter((m: any) => m.service_type === svc)}
+                availablePods={podsForService(svc)}
+                viewMode={true}
+                onChange={() => {}} // Read-only
+              />
+            </div>
+          ));
+        })()
       )}
     </div>
   );

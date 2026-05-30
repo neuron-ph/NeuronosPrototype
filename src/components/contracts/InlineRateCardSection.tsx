@@ -36,6 +36,8 @@ interface InlineRateCardSectionProps {
   currency: string;
   initialQuantities: BookingQuantities;
   bookingMode: string;
+  /** Booking's POD — selects the POD-scoped rate matrix (empty = global/legacy). */
+  bookingPod?: string;
   selections?: Record<string, string>;
   truckingLineItems?: TruckingLineItem[];
   onRefresh: () => void;
@@ -67,6 +69,7 @@ export function InlineRateCardSection({
   currency,
   initialQuantities,
   bookingMode,
+  bookingPod,
   selections,
   truckingLineItems,
   onRefresh,
@@ -115,8 +118,8 @@ export function InlineRateCardSection({
 
   const calculation = useMemo(() => {
     if (isMultiLine) return { appliedRates: [] as AppliedRate[], total: 0 };
-    return calculateContractBilling(rateMatrices, serviceType, bookingMode, quantities, selections, facts, containers, deliveryAddress);
-  }, [rateMatrices, serviceType, bookingMode, quantities, selections, isMultiLine, facts, containers, deliveryAddress]);
+    return calculateContractBilling(rateMatrices, serviceType, bookingMode, quantities, selections, facts, containers, deliveryAddress, bookingPod);
+  }, [rateMatrices, serviceType, bookingMode, quantities, selections, isMultiLine, facts, containers, deliveryAddress, bookingPod]);
 
   const grandTotal = isMultiLine && multiLineResults ? multiLineResults.grandTotal : calculation.total;
   const totalItems = isMultiLine && multiLineResults
@@ -217,6 +220,7 @@ export function InlineRateCardSection({
         facts,
         containers,
         deliveryAddress,
+        bookingPod,
       });
       if (result.items.length === 0) {
         toast.warning("No billing items generated — check rate card configuration.");

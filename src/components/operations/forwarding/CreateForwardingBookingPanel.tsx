@@ -33,6 +33,17 @@ import { useCustomerAccountOwnerAutofill } from "../shared/useCustomerAccountOwn
 import { saveBookingDraft } from "../shared/saveBookingDraft";
 import { CustomDropdown } from "../../bd/CustomDropdown";
 
+// Translates the bookings_unique_mbl_mawb unique-violation (migration 124) into a
+// readable message; returns null for any other error so the caller falls back.
+function duplicateMblMawbMessage(err: unknown, formState: Record<string, unknown>): string | null {
+  const msg = String((err as { message?: string })?.message ?? "");
+  if (!msg.includes("bookings_unique_mbl_mawb")) return null;
+  const value = String(formState.mbl_mawb ?? "").trim();
+  return value
+    ? `MBL/MAWB "${value}" is already in use by another booking.`
+    : "This MBL/MAWB is already in use by another booking.";
+}
+
 interface CreateForwardingBookingPanelProps {
   isOpen: boolean;
   onClose: () => void;
@@ -278,7 +289,7 @@ export function CreateForwardingBookingPanel({
       onClose();
     } catch (err) {
       console.error("CreateForwardingBookingPanel:", err);
-      toast.error("Failed to create booking. Please try again.");
+      toast.error(duplicateMblMawbMessage(err, formState) ?? "Failed to create booking. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -302,7 +313,7 @@ export function CreateForwardingBookingPanel({
       onClose();
     } catch (err) {
       console.error("CreateForwardingBookingPanel saveDraft:", err);
-      toast.error("Failed to save draft. Please try again.");
+      toast.error(duplicateMblMawbMessage(err, formState) ?? "Failed to save draft. Please try again.");
     } finally {
       setSavingDraft(false);
     }
