@@ -6,6 +6,7 @@ import { logStatusChange } from "../../utils/activityLog";
 import { toast } from "sonner@2.0.3";
 import { useThread } from "../../hooks/useThread";
 import type { ThreadMessage } from "../../hooks/useThread";
+import type { CloseableThread } from "../../hooks/useInbox";
 import { MessageBubble } from "./MessageBubble";
 import { SystemEventRow } from "./SystemEventRow";
 import { ComposeBox } from "./ComposeBox";
@@ -46,11 +47,14 @@ interface ThreadDetailPanelProps {
   onThreadUpdated: () => void;
   threadIds?: string[];
   onNavigate?: (id: string) => void;
+  isClosedView?: boolean;
+  onCloseTicket?: (thread: CloseableThread) => Promise<void> | void;
+  onReopenTicket?: (thread: CloseableThread) => Promise<void> | void;
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavigate }: ThreadDetailPanelProps) {
+export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavigate, isClosedView, onCloseTicket, onReopenTicket }: ThreadDetailPanelProps) {
   const { user } = useUser();
   const { can } = usePermission();
   const { thread, isLoading, refresh } = useThread(ticketId);
@@ -107,6 +111,28 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
   const isApprovalPending = thread.type === "approval" && thread.approval_result === null && isRecipient;
   const isDone = thread.status === "done";
   const isReturned = thread.status === "returned";
+
+  // Close / dismiss (FYI = per-person dismiss, request/approval = shared archive)
+  const isClosed = isClosedView || thread.status === "archived";
+  const canCloseTicket = !!onCloseTicket && (isRecipient || isSender || canAssign);
+
+  const handleCloseTicket = async () => {
+    if (!onCloseTicket) return;
+    setIsUpdatingStatus(true);
+    await onCloseTicket({ id: thread.id, type: thread.type, status: thread.status, subject: thread.subject });
+    toast.success(thread.type === "fyi" ? "Dismissed" : "Ticket closed");
+    onThreadUpdated();
+    setIsUpdatingStatus(false);
+  };
+
+  const handleReopenTicket = async () => {
+    if (!onReopenTicket) return;
+    setIsUpdatingStatus(true);
+    await onReopenTicket({ id: thread.id, type: thread.type, status: thread.status, subject: thread.subject });
+    toast.success("Ticket reopened");
+    onThreadUpdated();
+    setIsUpdatingStatus(false);
+  };
 
   const toParticipants = thread.participants.filter((p) => p.role === "to");
   const ccParticipants = thread.participants.filter((p) => p.role === "cc");
@@ -462,6 +488,20 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
 
         {isSender && (isDone || isReturned) && (
           <ActionButton onClick={handleReopen} disabled={isUpdatingStatus} variant="ghost" label="Reopen" />
+        )}
+
+        {isClosed && onReopenTicket && (isRecipient || isSender || canAssign) && (
+          <ActionButton onClick={handleReopenTicket} disabled={isUpdatingStatus} variant="ghost" icon={<CornerUpLeft size={12} />} label="Reopen" />
+        )}
+
+        {!isClosed && canCloseTicket && (
+          <ActionButton
+            onClick={handleCloseTicket}
+            disabled={isUpdatingStatus}
+            variant="ghost"
+            icon={<X size={12} />}
+            label={thread.type === "fyi" ? "Dismiss" : "Close"}
+          />
         )}
 
         {canAssign && (

@@ -139,8 +139,8 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment, 
       });
     }
 
-    // Mark as Ongoing (for revisions/negotiations) - BD ONLY
-    if ((normalizedStatus === "Sent to Client" || normalizedStatus === "Priced") && canActAsBD) {
+    // Mark as Ongoing (for revisions/negotiations) - BD and Pricing
+    if ((normalizedStatus === "Sent to Client" || normalizedStatus === "Priced") && (canActAsBD || canActAsPricing)) {
       actions.push({
         label: "Mark as Ongoing",
         sublabel: "Send back for revisions",
@@ -153,8 +153,8 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment, 
       });
     }
 
-    // Recall for Edits - BD ONLY (pull back a sent or ongoing quotation to Draft)
-    if ((normalizedStatus === "Sent to Client" || normalizedStatus === "Needs Revision") && canActAsBD) {
+    // Recall for Edits - BD and Pricing (pull back a sent or ongoing quotation to Draft)
+    if ((normalizedStatus === "Sent to Client" || normalizedStatus === "Needs Revision") && (canActAsBD || canActAsPricing)) {
       actions.push({
         label: "Recall for Edits",
         sublabel: "Pull back to Draft for corrections",
@@ -167,8 +167,8 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment, 
       });
     }
 
-    // Send to Client - BD ONLY (after PD finishes pricing)
-    if ((normalizedStatus === "Priced" || normalizedStatus === "Needs Revision") && canActAsBD) {
+    // Send to Client - BD and Pricing (after PD finishes pricing)
+    if ((normalizedStatus === "Priced" || normalizedStatus === "Needs Revision") && (canActAsBD || canActAsPricing)) {
       actions.push({
         label: "Send to Client",
         sublabel: "Mark as Waiting Approval",

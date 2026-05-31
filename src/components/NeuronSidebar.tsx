@@ -77,11 +77,17 @@ const PAGE_TO_NOTIF: Record<string, { module: NotifModule; sub: NotifSubSection 
   "hr":                  { module: "hr", sub: "" },
 };
 
+// Master switch for the sidebar notification badges (module/section/sub-item
+// counts + the Inbox unread badge). Set to true to re-enable. Counts are still
+// fetched in the background; this only controls whether the badges render.
+const SHOW_SIDEBAR_BADGES = false;
+
 interface SidebarBadgeProps {
   count: number;
   variant: "trailing" | "icon-overlay";
 }
 function SidebarBadge({ count, variant }: SidebarBadgeProps) {
+  if (!SHOW_SIDEBAR_BADGES) return null;
   if (!count || count <= 0) return null;
   const display = count > 99 ? "99+" : String(count);
   if (variant === "icon-overlay") {
@@ -1147,7 +1153,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
                     size={20}
                     style={{ color: isActive ? "var(--neuron-brand-green)" : "var(--neuron-ink-muted)" }}
                   />
-                  {inboxUnreadCount > 0 && (
+                  {SHOW_SIDEBAR_BADGES && inboxUnreadCount > 0 && (
                     <span
                       style={{
                         position: "absolute",
@@ -1186,7 +1192,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
                   )}
                 </AnimatePresence>
                 <AnimatePresence initial={false}>
-                  {!isCollapsed && inboxUnreadCount > 0 && (
+                  {!isCollapsed && SHOW_SIDEBAR_BADGES && inboxUnreadCount > 0 && (
                     <motion.span
                       key="inbox-badge"
                       initial={{ opacity: 0, scale: 0.8 }}

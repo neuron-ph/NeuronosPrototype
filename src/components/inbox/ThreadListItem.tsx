@@ -1,4 +1,5 @@
-import { Paperclip } from "lucide-react";
+import { useState } from "react";
+import { Paperclip, X, CornerUpLeft, Check } from "lucide-react";
 import type { ThreadSummary } from "../../hooks/useInbox";
 import { TICKET_ENTITY_TONES, TICKET_TYPE_TONES, ticketBadgeStyle } from "./ticketingTheme";
 
@@ -61,19 +62,46 @@ interface ThreadListItemProps {
   thread: ThreadSummary;
   isSelected: boolean;
   onClick: () => void;
+  /** Closed-view mode swaps the hover Dismiss/Close action for Reopen */
+  isClosedView?: boolean;
+  onClose?: (thread: ThreadSummary) => void;
+  onReopen?: (thread: ThreadSummary) => void;
+  /** Bulk selection */
+  selectMode?: boolean;
+  isChecked?: boolean;
+  onToggleSelect?: (id: string) => void;
 }
 
-export function ThreadListItem({ thread, isSelected, onClick }: ThreadListItemProps) {
+export function ThreadListItem({
+  thread,
+  isSelected,
+  onClick,
+  isClosedView,
+  onClose,
+  onReopen,
+  selectMode,
+  isChecked,
+  onToggleSelect,
+}: ThreadListItemProps) {
   const sender = getSender(thread);
   const senderName = sender.name;
   const tone = avatarTone(senderName);
   const typeTone = TICKET_TYPE_TONES[thread.type] ?? TICKET_TYPE_TONES.fyi;
   const isUrgent = thread.priority === "urgent";
   const nonDefaultStatus = STATUS_LABEL[thread.status];
+  const [hovered, setHovered] = useState(false);
+
+  const showRowAction = hovered && !selectMode && (isClosedView ? !!onReopen : !!onClose);
+  const rowActionLabel = isClosedView ? "Reopen" : thread.type === "fyi" ? "Dismiss" : "Close";
 
   return (
+    <div
+      style={{ position: "relative" }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
     <button
-      onClick={onClick}
+      onClick={() => (selectMode ? onToggleSelect?.(thread.id) : onClick())}
       className="w-full text-left"
       style={{
         borderLeft: isSelected
@@ -95,6 +123,26 @@ export function ThreadListItem({ thread, isSelected, onClick }: ThreadListItemPr
       aria-selected={isSelected}
     >
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+
+        {/* ── Bulk selection checkbox ─────────────────────────── */}
+        {selectMode && (
+          <span
+            style={{
+              flexShrink: 0,
+              marginTop: 11,
+              width: 16,
+              height: 16,
+              borderRadius: 4,
+              border: `1.5px solid ${isChecked ? "var(--theme-action-primary-bg)" : "var(--theme-border-default)"}`,
+              backgroundColor: isChecked ? "var(--theme-action-primary-bg)" : "transparent",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {isChecked && <Check size={11} color="#fff" />}
+          </span>
+        )}
 
         {/* ── Avatar with unread badge ─────────────────────────── */}
         <div style={{ position: "relative", flexShrink: 0, marginTop: 1 }}>
@@ -290,5 +338,47 @@ export function ThreadListItem({ thread, isSelected, onClick }: ThreadListItemPr
         </div>
       </div>
     </button>
+
+    {/* ── Hover row action (Dismiss / Close / Reopen) ── */}
+    {showRowAction && (
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          if (isClosedView) onReopen?.(thread);
+          else onClose?.(thread);
+        }}
+        title={rowActionLabel}
+        aria-label={`${rowActionLabel} ticket`}
+        style={{
+          position: "absolute",
+          top: 10,
+          right: 12,
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          padding: "3px 8px",
+          borderRadius: 6,
+          border: "1px solid var(--theme-border-default)",
+          backgroundColor: "var(--theme-bg-surface)",
+          color: "var(--theme-text-secondary)",
+          fontSize: 11,
+          fontWeight: 500,
+          cursor: "pointer",
+          boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.borderColor = "var(--neuron-ui-active-border)";
+          e.currentTarget.style.color = "var(--neuron-brand-green)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.borderColor = "var(--theme-border-default)";
+          e.currentTarget.style.color = "var(--theme-text-secondary)";
+        }}
+      >
+        {isClosedView ? <CornerUpLeft size={12} /> : <X size={12} />}
+        {rowActionLabel}
+      </button>
+    )}
+    </div>
   );
 }
