@@ -48,18 +48,26 @@ describe("access schema integrity", () => {
     }
   });
 
-  it("module and tab moduleIds are globally unique", () => {
-    const seen = new Set<string>();
-    const dupes: string[] = [];
+  it("module and tab moduleIds are globally unique (except cross-listed shares)", () => {
+    // `ops_others` is cross-listed under BOTH Operations and Pricing (shared
+    // booking module — same key, two department homes). It and its own tabs may
+    // appear exactly twice; every other moduleId must be unique.
+    const SHARED = new Set<string>([
+      "ops_others",
+      "ops_others_all_tab", "ops_others_my_tab", "ops_others_draft_tab",
+      "ops_others_in_progress_tab", "ops_others_completed_tab", "ops_others_cancelled_tab",
+    ]);
+    const counts = new Map<string, number>();
+    const bump = (id: string) => counts.set(id, (counts.get(id) ?? 0) + 1);
     for (const m of ALL_MODULE_NODES) {
-      if (seen.has(m.moduleId)) dupes.push(m.moduleId);
-      seen.add(m.moduleId);
-      for (const t of m.tabs) {
-        if (seen.has(t.moduleId)) dupes.push(t.moduleId);
-        seen.add(t.moduleId);
-      }
+      bump(m.moduleId);
+      for (const t of m.tabs) bump(t.moduleId);
     }
-    expect(dupes).toEqual([]);
+    const offenders: string[] = [];
+    for (const [id, n] of counts) {
+      if (n > (SHARED.has(id) ? 2 : 1)) offenders.push(`${id} x${n}`);
+    }
+    expect(offenders).toEqual([]);
   });
 
   it("PERM_MODULES is derived from schema (count matches)", () => {
@@ -161,8 +169,11 @@ describe("access schema integrity", () => {
     const tabToParent = new Map<string, string>();
     for (const m of ALL_MODULE_NODES) {
       for (const t of m.tabs) {
-        expect(tabToParent.has(t.moduleId)).toBe(false);
-        tabToParent.set(t.moduleId, m.moduleId);
+        // A cross-listed module (e.g. ops_others) re-declares its own tabs under
+        // each department home — allowed as long as the parent is identical.
+        const existing = tabToParent.get(t.moduleId);
+        if (existing !== undefined) expect(existing).toBe(m.moduleId);
+        else tabToParent.set(t.moduleId, m.moduleId);
       }
     }
   });

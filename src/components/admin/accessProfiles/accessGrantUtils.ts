@@ -129,14 +129,25 @@ export const chooseRoleDefaultProfile = (
   profiles: AccessProfileSummary[],
   role: string,
   department?: string | null,
+  service?: string | null,
 ): AccessProfileSummary | null => {
   const roleMatches = profiles.filter((profile) => profile.target_role === role);
   if (roleMatches.length === 0) return null;
 
-  const exactDepartmentMatch = department
-    ? roleMatches.find((profile) => profile.target_department === department)
-    : null;
-  if (exactDepartmentMatch) return exactDepartmentMatch;
+  const departmentMatches = department
+    ? roleMatches.filter((profile) => profile.target_department === department)
+    : [];
+
+  if (departmentMatches.length > 0) {
+    // Within a department, prefer the exact service match (Operations only),
+    // then a service-less row. `service` is undefined for non-Operations
+    // callers, so this preserves the prior (department, role) behavior.
+    if (service) {
+      const exactService = departmentMatches.find((profile) => profile.target_service === service);
+      if (exactService) return exactService;
+    }
+    return departmentMatches.find((profile) => !profile.target_service) ?? departmentMatches[0];
+  }
 
   return roleMatches.find((profile) => !profile.target_department) ?? roleMatches[0];
 };

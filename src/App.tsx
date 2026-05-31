@@ -18,7 +18,7 @@ import { NeuronLogo } from "./components/NeuronLogo";
 import { useWorkspaceTheme } from "./theme/useWorkspaceTheme";
 import { getThemeModePreference, setThemeModePreference } from "./theme/themeMode";
 import { resolveThemeMode } from "./theme/themeBootstrap";
-import { Moon, Sun } from "lucide-react";
+import { Moon, Sun, Eye, EyeOff } from "lucide-react";
 import { useReferenceDataPrefetch } from "./hooks/useReferenceDataPrefetch";
 import { BetaWelcomeScreen } from "./components/onboarding/BetaWelcomeScreen";
 import { ErrorPage } from "./components/ErrorPage";
@@ -100,6 +100,7 @@ function LoginPage() {
   const { login } = useUser();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [isDark, setIsDark] = useState(() =>
@@ -176,15 +177,26 @@ function LoginPage() {
             <label htmlFor="login-password" className="block text-[var(--theme-text-primary)] font-['Inter:Medium',sans-serif] font-medium text-[14px]">
               Password
             </label>
-            <input
-              id="login-password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your password"
-              className="w-full px-3.5 py-2.5 rounded-lg border border-[var(--theme-border-default)] bg-[var(--theme-input-subtle-bg)] text-[var(--theme-text-primary)] font-['Inter:Regular',sans-serif] placeholder:text-[var(--theme-text-muted)] focus:outline-none focus:border-[var(--theme-border-strong)] transition-all"
-              disabled={isLoading}
-            />
+            <div className="relative">
+              <input
+                id="login-password"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                className="w-full px-3.5 py-2.5 pr-11 rounded-lg border border-[var(--theme-border-default)] bg-[var(--theme-input-subtle-bg)] text-[var(--theme-text-primary)] font-['Inter:Regular',sans-serif] placeholder:text-[var(--theme-text-muted)] focus:outline-none focus:border-[var(--theme-border-strong)] transition-all"
+                disabled={isLoading}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                disabled={isLoading}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                className="absolute inset-y-0 right-0 flex items-center px-3.5 text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)] transition-colors disabled:opacity-50"
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
 
           <button

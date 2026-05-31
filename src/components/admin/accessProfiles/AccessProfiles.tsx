@@ -14,7 +14,6 @@ import { NeuronModal } from "../../ui/NeuronModal";
 import { PermissionGrantEditor } from "./PermissionGrantEditor";
 import type { AccessProfile, AccessProfileSummary, ModuleGrants, VisibilityScope } from "./accessProfileTypes";
 import {
-  chooseRoleDefaultProfile,
   cloneGrants,
   countGrantOverrides,
   normalizeProfileName,
@@ -23,6 +22,12 @@ import {
 import type { ConfigUser } from "../AccessConfiguration";
 import { SidePanel } from "../../common/SidePanel";
 import { deriveHiddenModuleGrants } from "../../../config/access/accessSchema";
+
+// Operations service tags for access profiles. Distinct from the booking
+// service-type enum: Marine Insurance is owned by Pricing (not an Operations
+// service), and Others — though shared with Pricing — remains an Operations
+// service here.
+const OPERATIONS_ACCESS_SERVICES = ["Forwarding", "Brokerage", "Trucking", "Others"] as const;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -47,8 +52,6 @@ const VISIBILITY_OPTIONS: Array<{ value: VisibilityScope; label: string; descrip
   { value: "own", label: "Own Records", description: "Only records personally owned or assigned to the user." },
   { value: "team", label: "Team Wide", description: "Records owned by users in the same team." },
   { value: "department", label: "Department Wide", description: "Records owned by users in the same department." },
-  { value: "selected_departments", label: "Selected Departments", description: "Records in the specific departments chosen below." },
-  { value: "all", label: "Company Wide", description: "All records across the company." },
 ];
 
 function formatDate(iso: string): string {
@@ -571,7 +574,8 @@ export function ProfileEditor({
   const [name, setName] = useState(profile?.name ?? "");
   const [description, setDescription] = useState(profile?.description ?? "");
   const [targetDepartment, setTargetDepartment] = useState(profile?.target_department ?? "");
-  const [targetRole, setTargetRole] = useState(profile?.target_role ?? "");
+  const [targetRole, setTargetRole] = useState(profile?.target_role ?? "staff");
+  const [targetService, setTargetService] = useState(profile?.target_service ?? "");
   const [visibilityScope, setVisibilityScope] = useState<VisibilityScope>(
     resolveProfileVisibilityScope(profile?.visibility_scope ?? null, profile?.target_role ?? "staff"),
   );
@@ -583,7 +587,8 @@ export function ProfileEditor({
   const [savedName, setSavedName] = useState(profile?.name ?? "");
   const [savedDescription, setSavedDescription] = useState(profile?.description ?? "");
   const [savedTargetDepartment, setSavedTargetDepartment] = useState(profile?.target_department ?? "");
-  const [savedTargetRole, setSavedTargetRole] = useState(profile?.target_role ?? "");
+  const [savedTargetRole, setSavedTargetRole] = useState(profile?.target_role ?? "staff");
+  const [savedTargetService, setSavedTargetService] = useState(profile?.target_service ?? "");
   const [savedVisibilityScope, setSavedVisibilityScope] = useState<VisibilityScope>(
     resolveProfileVisibilityScope(profile?.visibility_scope ?? null, profile?.target_role ?? "staff"),
   );
@@ -602,8 +607,9 @@ export function ProfileEditor({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("access_profiles")
-        .select("id, name, description, target_department, target_role, module_grants, visibility_scope, visibility_departments, updated_at")
-        .eq("is_active", true);
+        .select("id, name, description, target_department, target_role, target_service, module_grants, visibility_scope, visibility_departments, updated_at")
+        .eq("is_active", true)
+        .eq("is_baseline", true);
       if (error) throw error;
       return (data ?? []) as AccessProfileSummary[];
     },
@@ -615,6 +621,7 @@ export function ProfileEditor({
     if (description !== savedDescription) return true;
     if (targetDepartment !== savedTargetDepartment) return true;
     if (targetRole !== savedTargetRole) return true;
+    if (targetService !== savedTargetService) return true;
     if (visibilityScope !== savedVisibilityScope) return true;
     if (visibilityScope === "selected_departments") {
       if (visibilityDepartments.length !== savedVisibilityDepartments.length) return true;
@@ -632,10 +639,12 @@ export function ProfileEditor({
     savedName,
     savedTargetDepartment,
     savedTargetRole,
+    savedTargetService,
     savedVisibilityDepartments,
     savedVisibilityScope,
     targetDepartment,
     targetRole,
+    targetService,
     visibilityDepartments,
     visibilityScope,
   ]);
@@ -659,6 +668,7 @@ export function ProfileEditor({
       description,
       targetDepartment,
       targetRole,
+      targetService,
       visibilityScope,
       visibilityDepartments: [...visibilityDepartments],
     };
@@ -674,6 +684,7 @@ export function ProfileEditor({
           setDescription(snapshot.description);
           setTargetDepartment(snapshot.targetDepartment);
           setTargetRole(snapshot.targetRole);
+          setTargetService(snapshot.targetService);
           setVisibilityScope(snapshot.visibilityScope);
           setVisibilityDepartments(snapshot.visibilityDepartments);
         },
@@ -692,16 +703,44 @@ export function ProfileEditor({
     });
   };
 
-  const baselineProfile = useMemo(
-    () => chooseRoleDefaultProfile(profiles, targetRole || "staff", targetDepartment || null),
-    [profiles, targetDepartment, targetRole],
-  );
+  // Exact baseline seed for the chosen (department, role, service). Executive is
+  // universal (department-agnostic); Operations keys on service; others key on
+  // (department, role). Null until a confident match exists — so Operations
+  // waits for a service before prefilling.
+  const baselineProfile = useMemo(() => {
+    if (targetRole === "executive") {
+      return profiles.find((p) => p.target_role === "executive") ?? null;
+    }
+    if (!targetDepartment) return null;
+    return profiles.find((p) =>
+      p.target_role === targetRole &&
+      p.target_department === targetDepartment &&
+      (targetDepartment === "Operations" ? p.target_service === (targetService || null) : !p.target_service),
+    ) ?? null;
+  }, [profiles, targetRole, targetDepartment, targetService]);
   const baselineGrants = useMemo(
     () => cloneGrants(baselineProfile?.module_grants),
     [baselineProfile],
   );
   const canShowBaseline = !!baselineProfile;
   const grantCount = countGrantOverrides(grants);
+
+  // Prefill-on-create: when creating a NEW profile, selecting a department/role/
+  // service auto-fills the ticks + visibility from the matching baseline seed.
+  // The admin can adjust afterward (the door-to-correct). Re-runs only when the
+  // matched archetype changes; never touches an existing profile's saved grants.
+  const prefilledBaselineIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isNew || !baselineProfile) return;
+    if (prefilledBaselineIdRef.current === baselineProfile.id) return;
+    prefilledBaselineIdRef.current = baselineProfile.id;
+    setGrants(cloneGrants(baselineProfile.module_grants));
+    setVisibilityScope(
+      resolveProfileVisibilityScope(baselineProfile.visibility_scope, baselineProfile.target_role ?? targetRole),
+    );
+    const label = baselineProfile.name.replace(/^Baseline — /, "");
+    toast(`Prefilled from "${label}" — adjust as needed.`, { duration: 3500 });
+  }, [isNew, baselineProfile]);
 
   const handleSave = async () => {
     const trimmed = normalizeProfileName(name);
@@ -730,6 +769,7 @@ export function ProfileEditor({
         description: description.trim() || null,
         target_department: targetDepartment || null,
         target_role: targetRole || null,
+        target_service: targetDepartment === "Operations" ? (targetService || null) : null,
         module_grants: finalGrants,
         visibility_scope: visibilityScope,
         visibility_departments: visibilityScope === "selected_departments" ? visibilityDepartments : null,
@@ -742,6 +782,7 @@ export function ProfileEditor({
         description: description.trim() || null,
         target_department: targetDepartment || null,
         target_role: targetRole || null,
+        target_service: targetDepartment === "Operations" ? (targetService || null) : null,
         module_grants: finalGrants,
         visibility_scope: visibilityScope,
         visibility_departments: visibilityScope === "selected_departments" ? visibilityDepartments : null,
@@ -781,6 +822,7 @@ export function ProfileEditor({
     setSavedDescription(description);
     setSavedTargetDepartment(targetDepartment);
     setSavedTargetRole(targetRole);
+    setSavedTargetService(targetDepartment === "Operations" ? targetService : "");
     setSavedVisibilityScope(visibilityScope);
     setSavedVisibilityDepartments([...visibilityDepartments]);
     onSaved();
@@ -909,7 +951,11 @@ export function ProfileEditor({
               <label style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Target Department</label>
               <select
                 value={targetDepartment}
-                onChange={e => setTargetDepartment(e.target.value)}
+                onChange={e => {
+                  const next = e.target.value;
+                  setTargetDepartment(next);
+                  if (next !== "Operations") setTargetService("");
+                }}
                 style={{ padding: "8px 12px", borderRadius: 8, fontSize: 13, border: "1px solid var(--neuron-ui-border)", background: "var(--neuron-bg-elevated)", color: "var(--neuron-ink-primary)", outline: "none" }}
               >
                 <option value="">Any department</option>
@@ -923,10 +969,22 @@ export function ProfileEditor({
                 onChange={e => setTargetRole(e.target.value)}
                 style={{ padding: "8px 12px", borderRadius: 8, fontSize: 13, border: "1px solid var(--neuron-ui-border)", background: "var(--neuron-bg-elevated)", color: "var(--neuron-ink-primary)", outline: "none" }}
               >
-                <option value="">Any role</option>
                 {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
             </div>
+            {targetDepartment === "Operations" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Target Service</label>
+                <select
+                  value={targetService}
+                  onChange={e => setTargetService(e.target.value)}
+                  style={{ padding: "8px 12px", borderRadius: 8, fontSize: 13, border: "1px solid var(--neuron-ui-border)", background: "var(--neuron-bg-elevated)", color: "var(--neuron-ink-primary)", outline: "none" }}
+                >
+                  <option value="">Any service</option>
+                  {OPERATIONS_ACCESS_SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            )}
             <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: 8 }}>
               <label style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Record Visibility</label>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
@@ -1041,6 +1099,7 @@ export function ProfileEditor({
         onChange={(nextGrants) => setGrants(nextGrants)}
         showInheritedBaseline={showBaseline && canShowBaseline}
         baselineGrants={baselineGrants}
+        othersPrimaryGroup={targetDepartment === "Pricing" ? "Pricing" : "Operations"}
       />
 
       {/* Exit confirmation */}
@@ -1069,8 +1128,9 @@ export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditPr
     queryFn: async () => {
       const { data, error } = await supabase
         .from("access_profiles")
-        .select("id, name, description, target_department, target_role, module_grants, visibility_scope, visibility_departments, updated_at")
+        .select("id, name, description, target_department, target_role, target_service, module_grants, visibility_scope, visibility_departments, updated_at")
         .eq("is_active", true)
+        .eq("is_baseline", false)
         .order("name");
       if (error) throw error;
       return (data ?? []) as AccessProfileSummary[];
@@ -1102,7 +1162,7 @@ export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditPr
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {row.target_department && (
               <span style={{ fontSize: 11, fontWeight: 500, padding: "1px 7px", borderRadius: 999, backgroundColor: "var(--neuron-bg-surface-subtle)", color: "var(--neuron-ink-secondary, var(--neuron-ink-muted))", width: "fit-content" }}>
-                {row.target_department}
+                {row.target_department}{row.target_department === "Operations" && row.target_service ? ` · ${row.target_service}` : ""}
               </span>
             )}
             {row.target_role && (

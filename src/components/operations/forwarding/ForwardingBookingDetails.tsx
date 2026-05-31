@@ -9,6 +9,7 @@ import { UnifiedInvoicesTab } from "../../shared/invoices/UnifiedInvoicesTab";
 import { UnifiedCollectionsTab } from "../../shared/collections/UnifiedCollectionsTab";
 import { ExpensesTab } from "../shared/ExpensesTab";
 import { BookingCommentsTab } from "../../shared/BookingCommentsTab";
+import { BookingChronologicalTab } from "../../shared/BookingChronologicalTab";
 import { useProjectFinancials } from "../../../hooks/useProjectFinancials";
 import { StatusSelector } from "../../StatusSelector";
 
@@ -33,7 +34,7 @@ interface ForwardingBookingDetailsProps {
   highlightId?: string | null;
 }
 
-type DetailTab = "booking-info" | "billings" | "invoices" | "collections" | "expenses" | "comments";
+type DetailTab = "booking-info" | "billings" | "invoices" | "collections" | "expenses" | "comments" | "chrono";
 
 
 // Activity Timeline Data Structure
@@ -79,6 +80,7 @@ export function ForwardingBookingDetails({
   const canViewBillings = can("ops_bookings_billings_tab", "view");
   const canViewInvoices = can("ops_bookings_invoices_tab", "view") || can("accounting_bookings_invoices_tab", "view");
   const canViewCollections = can("ops_bookings_collections_tab", "view") || can("accounting_bookings_collections_tab", "view");
+  const canViewChrono = can("ops_bookings_chrono_tab", "view");
   const [activeTab, setActiveTab] = useState<DetailTab>(
     (initialTab === "billings" && !canViewBillings) || (initialTab === "invoices" && !canViewInvoices) || (initialTab === "collections" && !canViewCollections)
       ? "booking-info"
@@ -477,6 +479,33 @@ export function ForwardingBookingDetails({
           >
             Comments
           </button>
+          {canViewChrono && (
+            <button
+              onClick={() => setActiveTab("chrono")}
+              style={{
+                padding: "0 4px",
+                fontSize: "14px",
+                fontWeight: 500,
+                color: activeTab === "chrono" ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-muted)",
+                background: "none",
+                borderTop: "none",
+                borderLeft: "none",
+                borderRight: "none",
+                borderBottom: activeTab === "chrono" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
+                cursor: "pointer",
+                transition: "all 0.2s",
+                height: "100%"
+              }}
+              onMouseEnter={(e) => {
+                if (activeTab !== "chrono") e.currentTarget.style.color = "var(--neuron-ink-secondary)";
+              }}
+              onMouseLeave={(e) => {
+                if (activeTab !== "chrono") e.currentTarget.style.color = "var(--neuron-ink-muted)";
+              }}
+            >
+              Chrono
+            </button>
+          )}
         </div>
 
         {/* Action Buttons - Right Side */}
@@ -638,6 +667,9 @@ export function ForwardingBookingDetails({
           )}
           {activeTab === "comments" && (
             <BookingCommentsTab bookingId={booking.bookingId} />
+          )}
+          {activeTab === "chrono" && canViewChrono && (
+            <BookingChronologicalTab bookingId={booking.bookingId} />
           )}
         </div>
 

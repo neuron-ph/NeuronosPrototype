@@ -20,6 +20,13 @@ export interface PermissionGrantEditorProps {
   /** Shows skeleton loading state */
   loading?: boolean;
   disabled?: boolean;
+  /**
+   * Which department group the cross-listed "Others" module renders under.
+   * Others (`ops_others`) is shared by Operations + Pricing, so it appears in
+   * both groups by default — confusing. This shows it only in the relevant
+   * group (the profile/user's department). Defaults to "Operations".
+   */
+  othersPrimaryGroup?: "Operations" | "Pricing";
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -59,7 +66,8 @@ function zoneDividerStyle(action: ActionId): React.CSSProperties {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 type PermModule = typeof PERM_MODULES[0];
-type Segment = { parent: PermModule; children: PermModule[] };
+type SegmentChild = PermModule & { contained?: boolean };
+type Segment = { parent: PermModule; children: SegmentChild[] };
 
 const moduleById = new Map<string, PermModule>(PERM_MODULES.map((mod) => [mod.id, mod]));
 const visibleMatrixModuleIds = new Set(
@@ -83,11 +91,14 @@ function buildSegments(modules: typeof PERM_MODULES): Segment[] {
 
 function buildVisibleSegments(modules: PermModule[]): Segment[] {
   return modules.map((parent) => {
-    const children: PermModule[] = [];
+    const children: SegmentChild[] = [];
     const childIds = new Set<string>();
-    const addChild = (child: PermModule | undefined) => {
+    // `contained` children are shared surfaces reused under many modules (e.g.
+    // the booking-detail tabs under every service). They're hidden when the
+    // parent module isn't granted, so an ungranted service shows no "trail".
+    const addChild = (child: PermModule | undefined, contained = false) => {
       if (!child || childIds.has(child.id)) return;
-      children.push({ ...child, parentId: parent.id });
+      children.push({ ...child, parentId: parent.id, contained });
       childIds.add(child.id);
     };
 
@@ -95,7 +106,7 @@ function buildVisibleSegments(modules: PermModule[]): Segment[] {
       if (child.parentId === parent.id) addChild(child);
     }
     for (const containedId of parent.containsModuleIds ?? []) {
-      addChild(moduleById.get(containedId));
+      addChild(moduleById.get(containedId), true);
     }
 
     return { parent, children };
@@ -592,7 +603,11 @@ function GroupAccordion({
               });
               const childrenOpen = childrenMatchSearch || childrenHaveHighlight || expandedParents.has(seg.parent.id);
               const parentHighlighted = searching && matchedIds.has(seg.parent.id);
-              const visibleChildren = searching ? seg.children.filter(c => matchedIds.has(c.id)) : seg.children;
+              // Hide shared "contained" children (e.g. booking-detail tabs) when
+              // the parent module isn't granted — kills the cross-service "trail".
+              const parentGranted = PERM_ACTIONS.some(a => grants[`${seg.parent.id}:${a}`] === true);
+              const baseChildren = searching ? seg.children.filter(c => matchedIds.has(c.id)) : seg.children;
+              const visibleChildren = parentGranted ? baseChildren : baseChildren.filter(c => !c.contained);
 
               return (
                 <div key={seg.parent.id} style={{ borderTop: si > 0 ? "1px solid var(--neuron-ui-border)" : undefined }}>
@@ -709,6 +724,7 @@ export function PermissionGrantEditor({
   showInheritedBaseline = false,
   loading = false,
   disabled = false,
+  othersPrimaryGroup = "Operations",
 }: PermissionGrantEditorProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeActionFilter, setActiveActionFilter] = useState<ActionId | null>(null);
@@ -731,12 +747,15 @@ export function PermissionGrantEditor({
     for (const group of GROUP_ORDER) map.set(group, []);
     for (const mod of PERM_MODULES) {
       if (mod.parentId || !visibleMatrixModuleIds.has(mod.id)) continue;
+      // "Others" is cross-listed under Operations + Pricing. Render it only in
+      // the relevant group to avoid a confusing duplicate row.
+      if (mod.id === "ops_others" && mod.group !== othersPrimaryGroup) continue;
       const arr = map.get(mod.group);
       if (arr) arr.push(mod);
       else map.set(mod.group, [mod]);
     }
     return Array.from(map.entries()).filter(([, mods]) => mods.length > 0);
-  }, []);
+  }, [othersPrimaryGroup]);
 
   const matchedIds = useMemo(() => {
     if (!searchQuery.trim()) return new Set<string>();

@@ -28,3 +28,7 @@ vite-qa*.log
 
 # Marketing showcase — separate sub-workspace, not part of the main app
 marketing-showcase/
+
+# Local junk (do not commit)
+image.png
+UsersMarcus.claudesettings.json
