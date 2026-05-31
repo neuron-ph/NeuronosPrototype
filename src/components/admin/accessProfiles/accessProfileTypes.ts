@@ -7,9 +7,11 @@ export interface AccessProfile {
   description: string | null;
   target_department: string | null;
   target_role: string | null;
+  target_service: string | null;
   module_grants: ModuleGrants;
   visibility_scope: VisibilityScope | null;
   visibility_departments: string[] | null;
+  is_baseline: boolean;
   is_active: boolean;
   created_by: string | null;
   updated_by: string | null;
@@ -23,9 +25,11 @@ export interface AccessProfileSummary {
   description: string | null;
   target_department: string | null;
   target_role: string | null;
+  target_service: string | null;
   module_grants: ModuleGrants;
   visibility_scope: VisibilityScope | null;
   visibility_departments: string[] | null;
+  is_baseline?: boolean;
   updated_at: string;
 }
 

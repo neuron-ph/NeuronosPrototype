@@ -418,7 +418,14 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
   }, [can, permissionsLoaded]);
 
   const visibleBdSubItems = bdSubItems.filter((item) => canViewPage(item.id));
-  const visiblePricingSubItems = pricingSubItems.filter((item) => canViewPage(item.id));
+  const visiblePricingSubItems = pricingSubItems.filter((item) => {
+    if (!canViewPage(item.id)) return false;
+    // "Others" is cross-listed under Operations + Pricing (shared module). For
+    // Operations users it already appears under Operations, so suppress the
+    // redundant Pricing entry.
+    if (item.id === "ops-others" && userDepartment === "Operations") return false;
+    return true;
+  });
   const visibleOperationsSubItems = operationsSubItems.filter((item) => canViewPage(item.id));
   const visibleAcctSubItems = acctSubItems
     .filter((item) => {
@@ -880,7 +887,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
             {/* Pricing Sub-items */}
             <div 
               style={{
-                maxHeight: isPricingExpanded ? "280px" : "0px",
+                maxHeight: isPricingExpanded ? "360px" : "0px",
                 opacity: isPricingExpanded ? 1 : 0,
                 overflow: "hidden",
                 transition: "max-height 0.3s ease-in-out, opacity 0.25s ease-in-out",

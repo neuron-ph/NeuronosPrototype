@@ -130,6 +130,7 @@ const OPS_BOOKING_DETAIL_TABS: ModuleId[] = [
   "ops_bookings_collections_tab",
   "ops_bookings_expenses_tab",
   "ops_bookings_comments_tab",
+  "ops_bookings_chrono_tab",
 ];
 
 // ─── Schema ──────────────────────────────────────────────────────────────────
@@ -269,6 +270,36 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
           tab("pricing_network_partners_all_in_tab",        "All-In"),
         ],
       },
+      // Marine Insurance — booking module owned by Pricing (relocated from
+      // Operations). Others — booking module SHARED with Operations (same
+      // `ops_*` keys appear under both departments). moduleIds keep the `ops_`
+      // prefix to avoid a permission-data migration; the prefix is internal.
+      {
+        kind: "module", id: "ops_marine_insurance", moduleId: "ops_marine_insurance",
+        label: "Marine Insurance", pageId: "ops-marine-insurance",
+        containsModuleIds: OPS_BOOKING_DETAIL_TABS,
+        tabs: [
+          tab("ops_marine_insurance_all_tab",         "All"),
+          tab("ops_marine_insurance_my_tab",          "My"),
+          tab("ops_marine_insurance_draft_tab",       "Draft"),
+          tab("ops_marine_insurance_in_progress_tab", "In Progress"),
+          tab("ops_marine_insurance_completed_tab",   "Completed"),
+          tab("ops_marine_insurance_cancelled_tab",   "Archived"),
+        ],
+      },
+      {
+        kind: "module", id: "ops_others", moduleId: "ops_others",
+        label: "Others", pageId: "ops-others",
+        containsModuleIds: OPS_BOOKING_DETAIL_TABS,
+        tabs: [
+          tab("ops_others_all_tab",         "All"),
+          tab("ops_others_my_tab",          "My"),
+          tab("ops_others_draft_tab",       "Draft"),
+          tab("ops_others_in_progress_tab", "In Progress"),
+          tab("ops_others_completed_tab",   "Completed"),
+          tab("ops_others_cancelled_tab",   "Archived"),
+        ],
+      },
     ],
   },
 
@@ -317,19 +348,6 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
         ],
       },
       {
-        kind: "module", id: "ops_marine_insurance", moduleId: "ops_marine_insurance",
-        label: "Marine Insurance", pageId: "ops-marine-insurance",
-        containsModuleIds: OPS_BOOKING_DETAIL_TABS,
-        tabs: [
-          tab("ops_marine_insurance_all_tab",         "All"),
-          tab("ops_marine_insurance_my_tab",          "My"),
-          tab("ops_marine_insurance_draft_tab",       "Draft"),
-          tab("ops_marine_insurance_in_progress_tab", "In Progress"),
-          tab("ops_marine_insurance_completed_tab",   "Completed"),
-          tab("ops_marine_insurance_cancelled_tab",   "Archived"),
-        ],
-      },
-      {
         kind: "module", id: "ops_others", moduleId: "ops_others",
         label: "Others", pageId: "ops-others",
         containsModuleIds: OPS_BOOKING_DETAIL_TABS,
@@ -358,6 +376,7 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
           tab("ops_bookings_collections_tab", "Collections"),
           tab("ops_bookings_expenses_tab",    "Expenses"),
           tab("ops_bookings_comments_tab",    "Comments"),
+          tab("ops_bookings_chrono_tab",      "Chrono"),
         ],
       },
       {
@@ -699,14 +718,24 @@ interface HiddenModuleMapping {
 
 const HIDDEN_MODULE_MAPPINGS: HiddenModuleMapping[] = (() => {
   const mappings: HiddenModuleMapping[] = [];
+  // Sources are matched across ALL departments, not just within the hidden
+  // module's own department. Booking-service modules now span Operations
+  // (Forwarding/Brokerage/Trucking) AND Pricing (Marine Insurance/Others, with
+  // Others shared in both), so a hidden module's contributing sources may live
+  // in a different department. This keeps `deriveHiddenModuleGrants` consistent
+  // with the DB backfill (migration 118), which ORs the service modules by name.
+  const allVisible = ACCESS_SCHEMA
+    .flatMap(d => d.modules)
+    .filter(m => m.visibleInAccessMatrix !== false);
   for (const dept of ACCESS_SCHEMA) {
     const hidden = dept.modules.filter(m => m.visibleInAccessMatrix === false);
-    const visible = dept.modules.filter(m => m.visibleInAccessMatrix !== false);
     for (const h of hidden) {
       const tabIds = new Set(h.tabs.map(t => t.moduleId));
-      const sources = visible
-        .filter(v => (v.containsModuleIds ?? []).some(id => tabIds.has(id)))
-        .map(v => v.moduleId);
+      const sources = [...new Set(
+        allVisible
+          .filter(v => (v.containsModuleIds ?? []).some(id => tabIds.has(id)))
+          .map(v => v.moduleId),
+      )];
       if (sources.length > 0) mappings.push({ hiddenModuleId: h.moduleId, sourceModuleIds: sources });
     }
   }

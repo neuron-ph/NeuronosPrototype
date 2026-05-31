@@ -51,7 +51,7 @@ export type ModuleId =
   | "ops_others_in_progress_tab" | "ops_others_completed_tab" | "ops_others_cancelled_tab"
   | "ops_bookings_info_tab" | "ops_bookings_billings_tab"
   | "ops_bookings_invoices_tab" | "ops_bookings_collections_tab"
-  | "ops_bookings_expenses_tab" | "ops_bookings_comments_tab"
+  | "ops_bookings_expenses_tab" | "ops_bookings_comments_tab" | "ops_bookings_chrono_tab"
   | "ops_projects_all_tab" | "ops_projects_active_tab" | "ops_projects_completed_tab"
   | "ops_projects_info_tab" | "ops_projects_bookings_tab"
   | "ops_projects_quotation_tab" | "ops_projects_expenses_tab" | "ops_projects_billings_tab"

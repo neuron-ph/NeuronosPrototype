@@ -231,6 +231,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
         .from("access_profiles")
         .select("id, name, description, target_department, target_role, module_grants, visibility_scope, visibility_departments, updated_at")
         .eq("is_active", true)
+        .eq("is_baseline", false)
         .order("name");
       return (data ?? []) as AccessProfileSummary[];
     },
@@ -810,6 +811,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
             baselineGrants={baselineGrants}
             showInheritedBaseline={true}
             loading={loading}
+            othersPrimaryGroup={user.department === "Pricing" ? "Pricing" : "Operations"}
           />
         </div>
       </div>

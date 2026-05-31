@@ -66,16 +66,18 @@ export function AccountingBookingsShell() {
     const targetHighlight = searchParams.get("highlight");
     if (!bookingId) return;
 
-    // Detect service type from booking ID prefix
-    const prefix = bookingId.split("-")[0]?.toUpperCase();
-    const serviceMap: Record<string, ServiceTab> = {
-      "FWD": "forwarding",
-      "BRK": "brokerage",
-      "TRK": "trucking",
-      "MI": "marine-insurance",
-      "OTH": "others",
-    };
-    const detected = serviceMap[prefix] || "forwarding";
+    // Detect service type from booking number prefix (format: {PREFIX}{YYYYMM}-{NNN}).
+    // Longest-prefix-first so TKG/MIP/FWD/OTH match before the shorter BR.
+    // UUID booking ids carry no known prefix and fall through to the default.
+    const upper = bookingId.toUpperCase();
+    const prefixMap: [string, ServiceTab][] = [
+      ["FWD", "forwarding"],
+      ["TKG", "trucking"],
+      ["MIP", "marine-insurance"],
+      ["OTH", "others"],
+      ["BR", "brokerage"],
+    ];
+    const detected = prefixMap.find(([p]) => upper.startsWith(p))?.[1] || "forwarding";
     setActiveTab(detected);
     setPendingBookingId(bookingId);
     setPendingTab(targetTab || null);

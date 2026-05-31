@@ -5,10 +5,11 @@ import { supabase } from "./supabase/client";
  * Calls the `generate_booking_number` Postgres RPC which atomically increments
  * the per-type counter and returns a formatted string.
  *
- * Format: {PREFIX}-{YYYY}-{NNNN}
- * Examples: FWD-2026-0001, BRK-2026-0042, TRK-2026-0007, MIP-2026-0003, OTH-2026-0011
+ * Format: {PREFIX}{YYYYMM}-{NNN}
+ * Examples: FWD202606-001, BR202606-042, TKG202606-007, MIP202606-003, OTH202606-011
  *
- * The counter is global-per-type (not year-resetting). The year is cosmetic.
+ * The counter is global-per-type (it never resets on month rollover). The
+ * YYYYMM date segment is cosmetic.
  */
 export async function generateBookingNumber(serviceType: string): Promise<string> {
   const { data, error } = await supabase.rpc("generate_booking_number", {
