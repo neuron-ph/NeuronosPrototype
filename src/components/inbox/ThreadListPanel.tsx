@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Edit, Inbox, Send, FileText, Layers, Search, X } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Edit, Inbox, Send, FileText, Layers, Search, X, CheckSquare } from "lucide-react";
 import type { InboxTab, ThreadSummary } from "../../hooks/useInbox";
 import { ThreadListItem } from "./ThreadListItem";
 import { usePermission } from "../../context/PermissionProvider";
@@ -16,6 +16,11 @@ interface ThreadListPanelProps {
   onTabChange: (tab: InboxTab) => void;
   onSelectThread: (id: string) => void;
   onCompose: () => void;
+  closedView: boolean;
+  onToggleClosedView: (v: boolean) => void;
+  onCloseTicket: (thread: ThreadSummary) => void;
+  onReopenTicket: (thread: ThreadSummary) => void;
+  onBulkClose: (threads: ThreadSummary[]) => Promise<void> | void;
 }
 
 function ThreadListSkeleton() {
@@ -72,9 +77,25 @@ export function ThreadListPanel({
   onTabChange,
   onSelectThread,
   onCompose,
+  closedView,
+  onToggleClosedView,
+  onCloseTicket,
+  onReopenTicket,
+  onBulkClose,
 }: ThreadListPanelProps) {
   const { can } = usePermission();
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // The Open/Closed filter and bulk-select only apply to inbox & queue.
+  const supportsClose = activeTab === "inbox" || activeTab === "queue";
+
+  // Reset selection when the view changes underneath it
+  useEffect(() => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }, [activeTab, closedView]);
 
   const filteredThreads = searchQuery.trim()
     ? threads.filter((t) => {
@@ -87,6 +108,28 @@ export function ThreadListPanel({
         );
       })
     : threads;
+
+  const toggleSelect = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const selectedThreads = filteredThreads.filter((t) => selectedIds.has(t.id));
+  const readThreads = filteredThreads.filter((t) => !t.is_unread);
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const handleBulkClose = async (list: ThreadSummary[]) => {
+    if (list.length === 0) return;
+    await onBulkClose(list);
+    exitSelectMode();
+  };
 
   const tabs: { key: InboxTab; label: string; icon: React.ReactNode; count?: number }[] = [
     ...(can("inbox_inbox_tab", "view") ? [{ key: "inbox" as InboxTab, label: "Inbox", icon: <Inbox size={13} />, count: unreadCount || undefined }] : []),
@@ -104,6 +147,27 @@ export function ThreadListPanel({
       <div style={{ padding: "16px 16px 0", borderBottom: "1px solid var(--theme-border-default)" }}>
         <div className="flex items-center justify-between mb-3">
           <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--theme-text-primary)" }}>Tickets</h2>
+          <div className="flex items-center gap-1.5">
+          {supportsClose && !closedView && filteredThreads.length > 0 && (
+            <button
+              onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+              className="flex items-center gap-1.5"
+              style={{
+                padding: "5px 10px",
+                borderRadius: 6,
+                border: `1px solid ${selectMode ? "var(--neuron-ui-active-border)" : "var(--theme-border-default)"}`,
+                backgroundColor: selectMode ? "var(--neuron-state-hover)" : "var(--theme-bg-surface)",
+                fontSize: 12,
+                fontWeight: 500,
+                color: selectMode ? "var(--neuron-brand-green)" : "var(--theme-text-secondary)",
+                cursor: "pointer",
+              }}
+              title="Select multiple to close"
+            >
+              <CheckSquare size={12} />
+              {selectMode ? "Cancel" : "Select"}
+            </button>
+          )}
           <button
             onClick={onCompose}
             className="flex items-center gap-1.5"
@@ -124,6 +188,7 @@ export function ThreadListPanel({
             <Edit size={12} />
             Compose
           </button>
+          </div>
         </div>
 
         {/* Search bar */}
@@ -223,6 +288,84 @@ export function ThreadListPanel({
         </div>
       </div>
 
+      {/* Open / Closed filter + bulk actions */}
+      {supportsClose && (
+        <div
+          style={{
+            padding: "8px 12px",
+            borderBottom: "1px solid var(--theme-border-default)",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <div style={{ display: "inline-flex", border: "1px solid var(--theme-border-default)", borderRadius: 6, overflow: "hidden" }}>
+            {([["open", "Open"], ["closed", "Closed"]] as const).map(([seg, label]) => {
+              const active = (seg === "closed") === closedView;
+              return (
+                <button
+                  key={seg}
+                  onClick={() => onToggleClosedView(seg === "closed")}
+                  style={{
+                    padding: "4px 12px",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    border: "none",
+                    cursor: "pointer",
+                    backgroundColor: active ? "var(--neuron-state-selected)" : "transparent",
+                    color: active ? "var(--neuron-brand-green)" : "var(--theme-text-muted)",
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
+          <span style={{ flex: 1 }} />
+
+          {selectMode && (
+            <>
+              <button
+                onClick={() => handleBulkClose(selectedThreads)}
+                disabled={selectedThreads.length === 0}
+                style={{
+                  padding: "4px 11px",
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  border: "1px solid var(--neuron-ui-active-border)",
+                  backgroundColor: selectedThreads.length ? "var(--neuron-state-selected)" : "transparent",
+                  color: selectedThreads.length ? "var(--neuron-brand-green)" : "var(--theme-text-muted)",
+                  cursor: selectedThreads.length ? "pointer" : "default",
+                  opacity: selectedThreads.length ? 1 : 0.6,
+                }}
+              >
+                Close ({selectedThreads.length})
+              </button>
+              <button
+                onClick={() => handleBulkClose(readThreads)}
+                disabled={readThreads.length === 0}
+                style={{
+                  padding: "4px 11px",
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontWeight: 500,
+                  border: "1px solid var(--theme-border-default)",
+                  backgroundColor: "transparent",
+                  color: "var(--theme-text-secondary)",
+                  cursor: readThreads.length ? "pointer" : "default",
+                  opacity: readThreads.length ? 1 : 0.6,
+                }}
+                title="Close every already-read ticket in this list"
+              >
+                Close all read
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Thread list */}
       <div className="flex-1 overflow-y-auto" style={{ overscrollBehavior: "contain" }}>
         {isLoading ? (
@@ -236,6 +379,12 @@ export function ThreadListPanel({
               thread={thread}
               isSelected={selectedId === thread.id}
               onClick={() => onSelectThread(thread.id)}
+              isClosedView={closedView}
+              onClose={supportsClose ? onCloseTicket : undefined}
+              onReopen={supportsClose ? onReopenTicket : undefined}
+              selectMode={selectMode}
+              isChecked={selectedIds.has(thread.id)}
+              onToggleSelect={toggleSelect}
             />
           ))
         )}

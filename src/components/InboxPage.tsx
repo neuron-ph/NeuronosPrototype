@@ -19,6 +19,11 @@ export function InboxPage() {
     queueCount,
     isManager,
     refresh,
+    closedView,
+    setClosedView,
+    closeTicket,
+    reopenTicket,
+    bulkClose,
   } = useInbox();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -132,6 +137,11 @@ export function InboxPage() {
         onTabChange={setActiveTab}
         onSelectThread={handleSelectThread}
         onCompose={handleCompose}
+        closedView={closedView}
+        onToggleClosedView={setClosedView}
+        onCloseTicket={closeTicket}
+        onReopenTicket={reopenTicket}
+        onBulkClose={bulkClose}
       />
 
       {/* Right panel — compose or thread detail */}
@@ -154,6 +164,9 @@ export function InboxPage() {
             onThreadUpdated={handleThreadUpdated}
             threadIds={listRef.current}
             onNavigate={setSelectedId}
+            isClosedView={closedView}
+            onCloseTicket={async (t) => { await closeTicket(t); setSelectedId(null); }}
+            onReopenTicket={reopenTicket}
           />
         )}
       </div>
