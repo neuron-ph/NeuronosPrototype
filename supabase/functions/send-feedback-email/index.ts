@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const ALLOWED_ORIGIN_RE = /^https?:\/\/(localhost(:\d+)?|127\.0\.0\.1(:\d+)?|[\w-]+\.vercel\.app)$/;
+const ALLOWED_ORIGIN_RE = /^https?:\/\/(localhost(:\d+)?|127\.0\.0\.1(:\d+)?|[\w-]+\.vercel\.app|([\w-]+\.)*neuron\.com\.ph)$/;
 function buildCors(req: Request) {
   const origin = req.headers.get("Origin") ?? "";
   const allow = ALLOWED_ORIGIN_RE.test(origin) ? origin : "";

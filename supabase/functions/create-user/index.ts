@@ -5,7 +5,7 @@ import { hasAdminUsersGrant } from "./adminUsersPermissions.ts";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-const ALLOWED_ORIGIN_RE = /^https?:\/\/(localhost(:\d+)?|127\.0\.0\.1(:\d+)?|[\w-]+\.vercel\.app)$/;
+const ALLOWED_ORIGIN_RE = /^https?:\/\/(localhost(:\d+)?|127\.0\.0\.1(:\d+)?|[\w-]+\.vercel\.app|([\w-]+\.)*neuron\.com\.ph)$/;
 function buildCors(req: Request) {
   const origin = req.headers.get("Origin") ?? "";
   const allow = ALLOWED_ORIGIN_RE.test(origin) ? origin : "";

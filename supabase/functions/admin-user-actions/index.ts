@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { hasAdminUsersGrant, type AdminUsersAction } from "./adminUsersPermissions.ts";
 
-const ALLOWED_ORIGIN_RE = /^https?:\/\/(localhost(:\d+)?|127\.0\.0\.1(:\d+)?|[\w-]+\.vercel\.app)$/;
+const ALLOWED_ORIGIN_RE = /^https?:\/\/(localhost(:\d+)?|127\.0\.0\.1(:\d+)?|[\w-]+\.vercel\.app|([\w-]+\.)*neuron\.com\.ph)$/;
 function buildCors(req: Request) {
   const origin = req.headers.get("Origin") ?? "";
   const allow = ALLOWED_ORIGIN_RE.test(origin) ? origin : "";
