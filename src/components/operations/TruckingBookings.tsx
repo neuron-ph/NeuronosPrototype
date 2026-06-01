@@ -15,6 +15,7 @@ import { SkeletonTable } from "../shared/NeuronSkeleton";
 import { usePermission } from "../../context/PermissionProvider";
 import { logDeletion } from "../../utils/activityLog";
 import { normalizeDetails } from "../../utils/bookings/bookingDetailsCompat";
+import { getStatusOptions } from "../../config/booking/bookingFieldOptions";
 import type { ExecutionStatus } from "../../types/operations";
 import { NeuronModal } from "../ui/NeuronModal";
 import { useUnreadEntityIds } from "../../hooks/useNotifications";
@@ -445,13 +446,9 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
               }}
             >
               <option value="all">All Statuses</option>
-              <option value="Draft">Draft</option>
-              <option value="Confirmed">Confirmed</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Pending">Pending</option>
-              <option value="On Hold">On Hold</option>
-              <option value="Completed">Completed</option>
-              <option value="Cancelled">Cancelled</option>
+              {getStatusOptions("Trucking").map((status) => (
+                <option key={status} value={status}>{status}</option>
+              ))}
             </select>
 
             {/* Movement Filter */}

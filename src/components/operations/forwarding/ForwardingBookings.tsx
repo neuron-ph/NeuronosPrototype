@@ -17,6 +17,7 @@ import { logDeletion } from "../../../utils/activityLog";
 import { NeuronModal } from "../../ui/NeuronModal";
 import { useUnreadEntityIds } from "../../../hooks/useNotifications";
 import { normalizeDetails } from "../../../utils/bookings/bookingDetailsCompat";
+import { getStatusOptions } from "../../../config/booking/bookingFieldOptions";
 import { useRealtimeSync } from "../../../hooks/useRealtimeSync";
 
 interface ForwardingBookingsProps {
@@ -388,13 +389,9 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
               }}
             >
               <option value="all">All Statuses</option>
-              <option value="Draft">Draft</option>
-              <option value="Confirmed">Confirmed</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Pending">Pending</option>
-              <option value="On Hold">On Hold</option>
-              <option value="Completed">Completed</option>
-              <option value="Cancelled">Cancelled</option>
+              {getStatusOptions("Forwarding").map((status) => (
+                <option key={status} value={status}>{status}</option>
+              ))}
             </select>
 
             {/* Movement Filter */}
