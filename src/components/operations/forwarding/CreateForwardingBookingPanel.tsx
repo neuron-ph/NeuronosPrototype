@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Package, Users } from "lucide-react";
+import { Package, Users, AlertTriangle } from "lucide-react";
 import { supabase } from "../../../utils/supabase/client";
 import { toast } from "../../ui/toast-utils";
 import {
@@ -182,8 +182,10 @@ export function CreateForwardingBookingPanel({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!detectedContractId) {
-      toast.error("A contract is required to create a booking. Save as draft if no contract is available.");
+    const hasProjectLink =
+      Boolean(fetchedProject) || String(formState.project_number ?? "").trim() !== "";
+    if (!hasProjectLink) {
+      toast.error("A project is required to create a booking. Save as draft if no project is available.");
       return;
     }
 
@@ -323,7 +325,9 @@ export function CreateForwardingBookingPanel({
 
   const isEditingDraft = editingId !== null;
   const bookingName = String(formState.booking_name ?? "");
-  const isFormValid = customerName.trim() !== "" && bookingName.trim() !== "" && detectedContractId !== null;
+  const hasProjectLink =
+    Boolean(fetchedProject) || String(formState.project_number ?? "").trim() !== "";
+  const isFormValid = customerName.trim() !== "" && bookingName.trim() !== "" && hasProjectLink;
 
   return (
     <BookingCreationPanel
@@ -399,9 +403,17 @@ export function CreateForwardingBookingPanel({
               setConstraint("delivery_destinations", null);
             }
           }}
-          requireContract
-          requireContractLabel="Forwarding"
         />
+      )}
+
+      {customerName && !hasProjectLink && (
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "6px", marginTop: "6px", paddingLeft: "2px" }}>
+          <AlertTriangle size={12} style={{ color: "#B45309", flexShrink: 0, marginTop: "2px" }} />
+          <span style={{ fontSize: "12px", color: "var(--theme-text-muted)", lineHeight: 1.4 }}>
+            Link a project to create this booking. Forwarding bookings are created from project
+            specifications - select a project above, or save as draft if none is available yet.
+          </span>
+        </div>
       )}
 
       {customerName && (
