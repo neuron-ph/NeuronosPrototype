@@ -131,7 +131,7 @@ function SaveAsProfileForm({
         changes: { action: "access_profile_saved_from_user", profile_name: trimmed, changed_keys: Object.keys(grants) },
       });
     } catch { console.warn("[AccessConfiguration] audit log failed") }
-    queryClient.invalidateQueries({ queryKey: ["access_profiles"] });
+    queryClient.invalidateQueries({ queryKey: ["access_profiles"], refetchType: "all" });
     toast.success(`Profile "${trimmed}" created`);
     onSaved();
     onClose();
@@ -217,8 +217,8 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
       });
     } catch { console.warn("[AccessConfiguration] audit log failed") }
     if (appliedProfileId === profile.id) setAppliedProfileName(trimmed);
-    queryClient.invalidateQueries({ queryKey: ["access_profiles"] });
-    queryClient.invalidateQueries({ queryKey: ["permission_overrides", "access-summary"] });
+    queryClient.invalidateQueries({ queryKey: ["access_profiles"], refetchType: "all" });
+    queryClient.invalidateQueries({ queryKey: ["permission_overrides", "access-summary"], refetchType: "all" });
     toast.success("Profile renamed");
     setRenamingProfileId(null);
   };
@@ -400,9 +400,9 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
 
     toast.success("Access rules saved");
 
-    queryClient.invalidateQueries({ queryKey: ["permission_overrides"] });
-    queryClient.invalidateQueries({ queryKey: ["permission_overrides", "access-summary"] });
-    queryClient.invalidateQueries({ queryKey: ["permission_overrides", "module_grants", user.id] });
+    queryClient.invalidateQueries({ queryKey: ["permission_overrides"], refetchType: "all" });
+    queryClient.invalidateQueries({ queryKey: ["permission_overrides", "access-summary"], refetchType: "all" });
+    queryClient.invalidateQueries({ queryKey: ["permission_overrides", "module_grants", user.id], refetchType: "all" });
 
     try {
       const added = Object.keys(overrides).filter(k => !(k in savedOverrides) || overrides[k] !== savedOverrides[k]);
@@ -916,8 +916,8 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
             setAppliedProfileId(null);
             setAppliedProfileName(null);
           }
-          queryClient.invalidateQueries({ queryKey: ["access_profiles"] });
-          queryClient.invalidateQueries({ queryKey: ["permission_overrides", "access-summary"] });
+          queryClient.invalidateQueries({ queryKey: ["access_profiles"], refetchType: "all" });
+          queryClient.invalidateQueries({ queryKey: ["permission_overrides", "access-summary"], refetchType: "all" });
           toast.success(`Profile "${target.name}" deleted`);
           setDeletingProfileBusy(false);
           setDeletingProfile(null);

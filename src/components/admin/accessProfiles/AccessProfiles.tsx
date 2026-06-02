@@ -308,8 +308,8 @@ function ApplyProfileContent({
     }
 
     setApplying(false);
-    queryClient.invalidateQueries({ queryKey: ["permission_overrides"] });
-    queryClient.invalidateQueries({ queryKey: ["permission_overrides", "access-summary"] });
+    queryClient.invalidateQueries({ queryKey: ["permission_overrides"], refetchType: "all" });
+    queryClient.invalidateQueries({ queryKey: ["permission_overrides", "access-summary"], refetchType: "all" });
 
     const appliedCount = selected.length - failed;
     if (appliedCount === 0) {
@@ -519,8 +519,8 @@ function DeleteProfileContent({
       });
     } catch { console.warn("[AccessProfiles] audit log failed") }
     setDeleting(false);
-    queryClient.invalidateQueries({ queryKey: ["access_profiles"] });
-    queryClient.invalidateQueries({ queryKey: ["permission_overrides", "access-summary"] });
+    queryClient.invalidateQueries({ queryKey: ["access_profiles"], refetchType: "all" });
+    queryClient.invalidateQueries({ queryKey: ["permission_overrides", "access-summary"], refetchType: "all" });
     toast.success(`Profile "${profile.name}" deleted`);
     onDeleted();
     onClose();
@@ -813,8 +813,16 @@ export function ProfileEditor({
       });
     } catch { console.warn("[AccessProfiles] audit log failed") }
 
-    queryClient.invalidateQueries({ queryKey: ["access_profiles"] });
-    queryClient.invalidateQueries({ queryKey: ["permission_overrides", "access-summary"] });
+    // refetchType: "all" forces inactive queries to refetch too. The profile
+    // list is unmounted while this editor is open, so a plain invalidate would
+    // only mark it stale — and the global refetchOnMount:false would then serve
+    // the pre-edit cache on remount. "all" makes the saved change actually show.
+    queryClient.invalidateQueries({ queryKey: ["access_profiles"], refetchType: "all" });
+    queryClient.invalidateQueries({ queryKey: ["permission_overrides", "access-summary"], refetchType: "all" });
+    // Editing a profile changes the live access of every user linked to it.
+    // Refresh the resolved permission grants so those users' sidebar/route/action
+    // gates update instead of waiting out the 5-minute staleTime.
+    queryClient.invalidateQueries({ queryKey: ["permission_overrides"], refetchType: "all" });
     toast.success(isNew ? "Profile created" : "Profile saved");
     setName(trimmed);
     setSavedGrants(grants);
