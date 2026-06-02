@@ -588,10 +588,11 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
               />
             )}
             {subView === "detail" && selectedQuotation && (
-                <QuotationDetail 
-                  quotation={selectedQuotation} 
+                <QuotationDetail
+                  quotation={selectedQuotation}
                   onBack={handleBackFromQuotation}
                   userDepartment={userDepartment}
+                  currentUser={currentUser as any}
                   onUpdate={handleUpdateQuotation}
                   onSaveQuotation={handleSaveQuotation}
                   onEdit={handleEditQuotation}
