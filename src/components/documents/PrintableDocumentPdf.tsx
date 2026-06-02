@@ -506,9 +506,16 @@ function TableBlock({ table }: { table: PrintableTable }) {
               <Text style={[{ width: "82%" }, s.subtotalLabel]}>
                 {String(group.subtotal.cells["description"] || "Subtotal").toUpperCase()}
               </Text>
-              <Text style={[{ width: "18%" }, s.subtotalVal, s.tdText]}>
-                {formatPrintableValue(group.subtotal.cells["amount"], "money", String(group.subtotal.cells["currency"] || "") || undefined)}
-              </Text>
+              <View style={{ width: "18%" }}>
+                <Text style={[s.subtotalVal, s.tdText]}>
+                  {formatPrintableValue(group.subtotal.cells["amount"], "money", String(group.subtotal.cells["currency"] || "") || undefined)}
+                </Text>
+                {group.subtotal.cells["_foreignSubtotal"] ? (
+                  <Text style={{ fontSize: 6.5, color: "#667085", marginTop: 1, textAlign: "right" }}>
+                    {"≈ " + formatPrintableValue(group.subtotal.cells["_foreignSubtotal"], "money", String(group.subtotal.cells["_foreignCurrency"] || "") || undefined)}
+                  </Text>
+                ) : null}
+              </View>
             </View>
           ) : null}
         </View>

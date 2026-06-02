@@ -192,6 +192,11 @@ function TableBlock({ table }: { table: PrintableTable }) {
                   </td>
                   <td className="p-subtotal-val">
                     {formatPrintableValue(subAmount, "money", String(group.subtotal.cells["currency"] || "") || undefined)}
+                    {group.subtotal.cells["_foreignSubtotal"] ? (
+                      <div style={{ fontSize: "7pt", color: "#667085", fontWeight: 400, marginTop: "1px" }}>
+                        ≈ {formatPrintableValue(group.subtotal.cells["_foreignSubtotal"], "money", String(group.subtotal.cells["_foreignCurrency"] || "") || undefined)}
+                      </div>
+                    ) : null}
                   </td>
                 </tr>,
               );

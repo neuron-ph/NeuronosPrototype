@@ -3,23 +3,21 @@
  * all Operations booking modules via a service-type tab bar.
  *
  * Zero duplication: each tab renders the existing Operations booking list
- * component directly. Detail views are handled internally by each component
- * (Brokerage, Trucking, Marine Insurance, Others handle detail inline;
- * Forwarding uses a list→detail callback pattern managed here).
+ * component directly. Detail views are handled internally by every component
+ * (Forwarding, Brokerage, Trucking, Marine Insurance, Others all handle
+ * detail inline via their own list→detail state).
  */
 
 import { useState, useEffect } from "react";
-import { useSearchParams } from "react-router";
+import { useSearchParams, useNavigationType } from "react-router";
 import { usePermission } from "../../context/PermissionProvider";
 import { useUrlSelection } from "../../hooks/useUrlSelection";
 import { Container, Ship, Truck, FileText, Package } from "lucide-react";
 import { ForwardingBookings } from "../operations/forwarding/ForwardingBookings";
-import { ForwardingBookingDetails } from "../operations/forwarding/ForwardingBookingDetails";
 import { BrokerageBookings } from "../operations/BrokerageBookings";
 import { TruckingBookings } from "../operations/TruckingBookings";
 import { MarineInsuranceBookings } from "../operations/MarineInsuranceBookings";
 import { OthersBookings } from "../operations/OthersBookings";
-import type { ForwardingBooking } from "../../types/operations";
 
 type ServiceTab = "forwarding" | "brokerage" | "trucking" | "marine-insurance" | "others";
 
@@ -49,18 +47,20 @@ export function AccountingBookingsShell() {
 
   const [activeTab, setActiveTab] = useState<ServiceTab>(firstAllowedTab);
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigationType = useNavigationType();
   const [urlBookingId, setUrlBookingId] = useUrlSelection("booking");
   const [pendingBookingId, setPendingBookingId] = useState<string | null>(null);
   const [pendingTab, setPendingTab] = useState<string | null>(null);
   const [pendingHighlightId, setPendingHighlightId] = useState<string | null>(null);
 
-  // Forwarding uses an external list→detail pattern (like Operations.tsx)
-  const [fwdSubView, setFwdSubView] = useState<"list" | "detail">("list");
-  const [selectedFwdBooking, setSelectedFwdBooking] = useState<ForwardingBooking | null>(null);
-
   // Deep-link: auto-select booking from ?booking= query param
   // Detect service type from booking ID prefix and switch tabs
   useEffect(() => {
+    // Only react to genuine navigations (real deep-links push a new history
+    // entry, mount/refresh is a POP). Ignore REPLACE updates — that's how the
+    // child booking lists persist their own selection to the URL, and reacting
+    // to those mis-routes the UUID id to the default forwarding tab.
+    if (navigationType === "REPLACE") return;
     const bookingId = searchParams.get("booking");
     const targetTab = searchParams.get("tab");
     const targetHighlight = searchParams.get("highlight");
@@ -85,43 +85,18 @@ export function AccountingBookingsShell() {
 
     // Clean the query param
     setSearchParams({}, { replace: true });
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, navigationType]);
 
-  // Reset forwarding detail view when switching tabs
+  // Clear the active forwarding selection when switching tabs
   useEffect(() => {
-    setFwdSubView("list");
-    setSelectedFwdBooking(null);
     setUrlBookingId(null);
   }, [activeTab]);
-
-  const handleSelectFwdBooking = (booking: ForwardingBooking) => {
-    setSelectedFwdBooking(booking);
-    setFwdSubView("detail");
-    setUrlBookingId(booking.id ?? booking.bookingId);
-  };
-
-  const handleBackToList = () => {
-    setFwdSubView("list");
-    setSelectedFwdBooking(null);
-    setUrlBookingId(null);
-  };
 
   const renderContent = () => {
     switch (activeTab) {
       case "forwarding":
         if (!canForwarding) return null;
-        if (fwdSubView === "detail" && selectedFwdBooking) {
-          return (
-            <ForwardingBookingDetails
-              booking={selectedFwdBooking}
-              onBack={handleBackToList}
-              onBookingUpdated={() => console.log("Booking updated from Accounting")}
-              initialTab={pendingTab}
-              highlightId={pendingHighlightId}
-            />
-          );
-        }
-        return <ForwardingBookings onSelectBooking={handleSelectFwdBooking} pendingBookingId={urlBookingId ?? pendingBookingId} />;
+        return <ForwardingBookings pendingBookingId={urlBookingId ?? pendingBookingId} initialTab={pendingTab} highlightId={pendingHighlightId} />;
       case "brokerage":
         if (!canBrokerage) return null;
         return <BrokerageBookings pendingBookingId={pendingBookingId} initialTab={pendingTab} highlightId={pendingHighlightId} />;

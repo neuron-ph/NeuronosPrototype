@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getAvailableBookingStatuses } from "./StatusSelector";
 
 describe("getAvailableBookingStatuses", () => {
-  it("allows a cancelled brokerage booking to move back to a valid brokerage status", () => {
+  it("exposes the full flat brokerage status list regardless of current status", () => {
     expect(getAvailableBookingStatuses("Cancelled", "Brokerage")).toEqual([
       "Draft",
       "Waiting for Arrival",
@@ -11,15 +11,17 @@ describe("getAvailableBookingStatuses", () => {
       "Billed",
       "Paid",
       "Audited",
+      "Cancelled",
     ]);
   });
 
-  it("allows a completed forwarding booking to move back to a valid forwarding status", () => {
+  it("exposes the full flat forwarding status list regardless of current status", () => {
     expect(getAvailableBookingStatuses("Completed", "Forwarding")).toEqual([
       "Draft",
       "Ongoing",
       "In Transit",
       "Delivered",
+      "Completed",
       "Billed",
       "Paid",
       "Cancelled",

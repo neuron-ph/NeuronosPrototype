@@ -45,15 +45,18 @@ const DEFAULT_REVERSIBLE_STATUS_OPTIONS: Partial<Record<ExecutionStatus, Executi
 
 export function getAvailableBookingStatuses(status: ExecutionStatus, serviceType?: string): ExecutionStatus[] {
   const serviceStatuses = serviceType ? getStatusOptions(serviceType) : [];
-  const reversibleStatuses = serviceStatuses.length > 0
-    ? serviceStatuses
-    : DEFAULT_REVERSIBLE_STATUS_OPTIONS[status] ?? [];
+
+  // With a service type, expose the full flat status list for that service.
+  if (serviceStatuses.length > 0) {
+    return Array.from(new Set(serviceStatuses as ExecutionStatus[]));
+  }
+
+  // No service type: fall back to the lifecycle transition map.
+  const reversibleStatuses = DEFAULT_REVERSIBLE_STATUS_OPTIONS[status] ?? [];
   const nextStatuses = (
     REVERSIBLE_BOOKING_STATUSES.has(status) && reversibleStatuses.length > 0
       ? reversibleStatuses
-      : status === "Created" && serviceStatuses.length > 0
-        ? serviceStatuses
-        : BOOKING_STATUS_TRANSITIONS[status] ?? []
+      : BOOKING_STATUS_TRANSITIONS[status] ?? []
   ).filter((s): s is ExecutionStatus => s !== status);
 
   return Array.from(new Set(nextStatuses));
@@ -72,7 +75,11 @@ export function StatusSelector({
 
   const availableStatuses = getAvailableBookingStatuses(status, serviceType);
 
-  const optionStatuses = [status, ...availableStatuses];
+  // The flat service list already includes the current status; only prepend it
+  // when the fallback transition list doesn't contain it (no service type).
+  const optionStatuses = availableStatuses.includes(status)
+    ? availableStatuses
+    : [status, ...availableStatuses];
   const options = optionStatuses.map((optionStatus) => {
     const optionStyle = getBookingStatusStyles(optionStatus);
     const OptionIcon = optionStyle.icon;
