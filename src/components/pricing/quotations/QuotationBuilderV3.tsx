@@ -2279,7 +2279,7 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
       }
     }
 
-    if (isContractMode) {
+    if (isContractMode && builderMode === "quotation") {
       const hasRateRows = rateMatrices.some(m => m.rows.length > 0);
       if (!hasRateRows) reasons.push("Add at least one rate row to a service matrix");
     }
