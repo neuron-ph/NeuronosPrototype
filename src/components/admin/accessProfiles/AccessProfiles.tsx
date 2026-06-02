@@ -7,7 +7,7 @@ import { supabase } from "../../../utils/supabase/client";
 import { toast } from "sonner@2.0.3";
 import { useUser } from "../../../hooks/useUser";
 import {
-  Plus, ArrowLeft, Save, Trash2, UserCheck, AlertTriangle, BookMarked, Search, X, ChevronUp,
+  Plus, ArrowLeft, Save, Trash2, UserCheck, AlertTriangle, BookMarked, Search, X, ChevronUp, Wand2,
 } from "lucide-react";
 import { DataTable, type ColumnDef } from "../../common/DataTable";
 import { NeuronModal } from "../../ui/NeuronModal";
@@ -601,6 +601,7 @@ export function ProfileEditor({
   const [showBaseline, setShowBaseline] = useState(false);
   const [emptyGrantsWarning, setEmptyGrantsWarning] = useState(false);
   const [confirmExitOpen, setConfirmExitOpen] = useState(false);
+  const [confirmAutofillOpen, setConfirmAutofillOpen] = useState(false);
   const prevGrantsRef = useRef<ModuleGrants>({});
   const { data: profiles = [] } = useQuery<AccessProfileSummary[]>({
     queryKey: ["access_profiles", "role-default-baselines"],
@@ -690,6 +691,10 @@ export function ProfileEditor({
         },
       },
       duration: 5000,
+      // Navigate back whether the toast auto-closes (onAutoClose) or is
+      // dismissed manually (onDismiss). sonner does NOT fire onDismiss on
+      // timeout — relying on it alone left the editor stuck open.
+      onAutoClose: () => { if (!undone) onBack(); },
       onDismiss: () => { if (!undone) onBack(); },
     });
   };
@@ -725,22 +730,24 @@ export function ProfileEditor({
   const canShowBaseline = !!baselineProfile;
   const grantCount = countGrantOverrides(grants);
 
-  // Prefill-on-create: when creating a NEW profile, selecting a department/role/
-  // service auto-fills the ticks + visibility from the matching baseline seed.
-  // The admin can adjust afterward (the door-to-correct). Re-runs only when the
-  // matched archetype changes; never touches an existing profile's saved grants.
-  const prefilledBaselineIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!isNew || !baselineProfile) return;
-    if (prefilledBaselineIdRef.current === baselineProfile.id) return;
-    prefilledBaselineIdRef.current = baselineProfile.id;
+  // Deliberate autofill: the admin presses "Autofill from baseline" to copy the
+  // matching baseline seed's ticks + visibility into the form. Unlike a reactive
+  // prefill, this never overwrites the admin's corrections when they tweak the
+  // Role/Department/Service afterward — it only runs when explicitly invoked. If
+  // explicit rules already exist, we confirm before overwriting them.
+  const applyBaseline = () => {
+    if (!baselineProfile) return;
     setGrants(cloneGrants(baselineProfile.module_grants));
     setVisibilityScope(
       resolveProfileVisibilityScope(baselineProfile.visibility_scope, baselineProfile.target_role ?? targetRole),
     );
     const label = baselineProfile.name.replace(/^Baseline — /, "");
-    toast(`Prefilled from "${label}" — adjust as needed.`, { duration: 3500 });
-  }, [isNew, baselineProfile]);
+    toast(`Autofilled from "${label}" — adjust as needed.`, { duration: 3500 });
+  };
+  const handleApplyBaseline = () => {
+    if (grantCount > 0) { setConfirmAutofillOpen(true); return; }
+    applyBaseline();
+  };
 
   const handleSave = async () => {
     const trimmed = normalizeProfileName(name);
@@ -1061,6 +1068,29 @@ export function ProfileEditor({
                   })}
                 </div>
               )}
+              {canShowBaseline && (
+                <button
+                  type="button"
+                  onClick={handleApplyBaseline}
+                  style={{
+                    alignSelf: "flex-start",
+                    marginTop: 4,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "8px 14px",
+                    borderRadius: 8,
+                    border: "1px solid var(--neuron-action-primary)",
+                    background: "color-mix(in oklch, var(--neuron-action-primary) 10%, transparent)",
+                    color: "var(--neuron-action-primary)",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  <Wand2 size={14} /> Autofill from {ROLES.find(r => r.value === targetRole)?.label} baseline
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1119,6 +1149,18 @@ export function ProfileEditor({
         confirmLabel="Discard & go back"
         confirmIcon={<ArrowLeft size={15} />}
         onConfirm={handleDiscard}
+        variant="danger"
+      />
+
+      {/* Autofill overwrite confirmation */}
+      <NeuronModal
+        isOpen={confirmAutofillOpen}
+        onClose={() => setConfirmAutofillOpen(false)}
+        title="Overwrite current rules?"
+        description="Autofilling from the baseline will replace your current access rules and record visibility. This can't be undone."
+        confirmLabel="Overwrite with baseline"
+        confirmIcon={<Wand2 size={15} />}
+        onConfirm={() => { setConfirmAutofillOpen(false); applyBaseline(); }}
         variant="danger"
       />
     </div>

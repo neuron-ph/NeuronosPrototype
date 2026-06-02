@@ -42,7 +42,7 @@ interface BusinessDevelopmentProps {
   customerData?: Customer | null;
   inquiryId?: string | null;
   contactId?: string;
-  currentUser?: { name: string; email: string; department: string } | null;
+  currentUser?: { id?: string; name: string; email: string; department: string; role?: string } | null;
   onCreateTicket?: (quotation: QuotationNew) => void;
 }
 
@@ -871,10 +871,11 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
               />
             )}
             {subView === "detail" && selectedQuotation && (
-              <QuotationDetail 
-                quotation={selectedQuotation} 
+              <QuotationDetail
+                quotation={selectedQuotation}
                 onBack={handleBackFromInquiry}
-                userDepartment="Business Development"
+                userDepartment={currentUser?.department === "Pricing" ? "Pricing" : "Business Development"}
+                currentUser={currentUser as any}
                 onUpdate={handleUpdateQuotation}
                 onSaveQuotation={handleSaveInquiry}
                 onEdit={handleEditInquiry}

@@ -171,39 +171,6 @@ function summarizePricingCurrency(
   };
 }
 
-function summarizeCategoryCurrency(
-  category: QuotationChargeCategory,
-  fallbackCurrency: string,
-): { currency: string; subtotal: number } {
-  const nonZeroCurrencies = new Set<string>();
-  let originalSubtotal = 0;
-  let baseSubtotal = 0;
-
-  category.line_items?.forEach((item: any) => {
-    const itemCurrency = normalizeCurrency(item.currency, FUNCTIONAL_CURRENCY);
-    const originalAmt = originalItemAmount(item);
-    const baseAmt = effectiveItemAmount(item);
-
-    if (Math.abs(originalAmt) > 0) {
-      nonZeroCurrencies.add(itemCurrency);
-    }
-    originalSubtotal += originalAmt;
-    baseSubtotal += baseAmt;
-  });
-
-  if (nonZeroCurrencies.size === 1) {
-    return {
-      currency: [...nonZeroCurrencies][0],
-      subtotal: originalSubtotal,
-    };
-  }
-
-  return {
-    currency: normalizeCurrency(fallbackCurrency, FUNCTIONAL_CURRENCY),
-    subtotal: category.subtotal && category.subtotal !== 0 ? category.subtotal : baseSubtotal,
-  };
-}
-
 function calcSummary(
   categories: QuotationChargeCategory[],
   existing?: FinancialSummary,
@@ -793,6 +760,8 @@ function buildChargeTable(
   categories.forEach((cat, catIdx) => {
     const groupId = cat.id || `cat-${catIdx}`;
     let subtotal = 0;
+    let originalSubtotal = 0;
+    const catCurrencies = new Set<string>();
     (cat.line_items || []).forEach((item: any, itemIdx: number) => {
       const itemCurrency = normalizeCurrency(item.currency, FUNCTIONAL_CURRENCY);
       const displayPrice = item.final_price ?? item.price ?? 0;
@@ -800,6 +769,8 @@ function buildChargeTable(
       const convertedAmt = effectiveItemAmount(item);
       const originalAmt = Number(displayPrice) * Number(item.quantity || 1);
       subtotal += convertedAmt;
+      originalSubtotal += originalAmt;
+      if (Math.abs(originalAmt) > 0) catCurrencies.add(itemCurrency);
       // Prefer the user-typed remark; only fall back to the unit code when no
       // remark exists, since unit codes ("per_container") are less informative.
       const subtext = (item.remarks && String(item.remarks).trim()) || (item.unit && String(item.unit).trim()) || "";
@@ -820,16 +791,29 @@ function buildChargeTable(
         subtext: subtext || undefined,
       });
     });
-    const categoryCurrency = summarizeCategoryCurrency(cat, currency);
-    // Subtotal row
+    // Subtotal row follows the document-level currency decision (made in
+    // summarizePricingCurrency), not the category's own currency. A
+    // single-currency foreign category (e.g. all-USD destination charges)
+    // inside a mixed/PHP document must still total in PHP using the converted
+    // amounts — matching the grand total. Only when the whole document is a
+    // single foreign currency do we show originals in that currency.
+    const useOriginalForSubtotal = currency !== FUNCTIONAL_CURRENCY;
+    // When the PHP subtotal is shown but the whole category is a single foreign
+    // currency, surface its original total as a tiny muted hint (mirrors the
+    // per-line "≈ ₱" conversion, reversed).
+    const onlyCurrency = catCurrencies.size === 1 ? [...catCurrencies][0] : undefined;
+    const showForeignHint =
+      !useOriginalForSubtotal && !!onlyCurrency && onlyCurrency !== FUNCTIONAL_CURRENCY;
     const subtotalRow: PrintableTableRow = {
       id: `${groupId}-subtotal`,
       groupId,
       emphasis: "subtotal",
       cells: {
         description: "Subtotal",
-        amount: categoryCurrency.subtotal || subtotal,
-        currency: categoryCurrency.currency,
+        amount: useOriginalForSubtotal ? originalSubtotal : subtotal,
+        currency,
+        _foreignSubtotal: showForeignHint ? originalSubtotal : "",
+        _foreignCurrency: showForeignHint ? onlyCurrency! : "",
       },
     };
     groups.push({

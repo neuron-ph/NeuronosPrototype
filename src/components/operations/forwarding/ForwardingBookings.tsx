@@ -1,6 +1,8 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Plus, Search, Package, Briefcase, UserCheck, FileEdit, Clock, CheckCircle, Trash2, Archive } from "lucide-react";
 import { CreateForwardingBookingPanel } from "./CreateForwardingBookingPanel";
+import { ForwardingBookingDetails } from "./ForwardingBookingDetails";
+import { useUrlSelection } from "../../../hooks/useUrlSelection";
 import type { ForwardingBooking, ExecutionStatus } from "../../../types/operations";
 import { supabase } from "../../../utils/supabase/client";
 import { assessBookingFinancialState, canHardDeleteBooking, getBookingCancellationMessage } from "../../../utils/bookingCancellation";
@@ -21,10 +23,15 @@ import { getStatusOptions } from "../../../config/booking/bookingFieldOptions";
 import { useRealtimeSync } from "../../../hooks/useRealtimeSync";
 
 interface ForwardingBookingsProps {
-  onSelectBooking: (booking: ForwardingBooking) => void;
+  /** Optional notification when a booking is opened (e.g. to record a recent). */
+  onSelectBooking?: (booking: ForwardingBooking) => void;
   currentUser?: { id?: string; name: string; email: string; department: string } | null;
   /** Deep-link: auto-select this booking when loaded */
   pendingBookingId?: string | null;
+  /** Deep-link: tab to open the detail on */
+  initialTab?: string | null;
+  /** Deep-link: row/item to highlight inside the detail */
+  highlightId?: string | null;
 }
 
 /** Maps a unified bookings row to the ForwardingBooking shape */
@@ -72,7 +79,7 @@ function mapToForwardingBooking(row: Record<string, any>): ForwardingBooking {
   } as unknown as ForwardingBooking;
 }
 
-export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookingId }: ForwardingBookingsProps) {
+export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookingId, initialTab, highlightId }: ForwardingBookingsProps) {
   const { can } = usePermission();
   const canViewAllTab        = can("ops_forwarding_all_tab", "view");
   const canViewMyTab         = can("ops_forwarding_my_tab", "view");
@@ -99,6 +106,9 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
   const [modeFilter, setModeFilter] = useState<string>("all");
   const [resumeDraft, setResumeDraft] = useState<Record<string, unknown> | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; label: string } | null>(null);
+  const [urlBookingId, setUrlBookingId] = useUrlSelection("booking");
+  const suppressUrlSelectionRef = useRef(false);
+  const [selectedBooking, setSelectedBooking] = useState<ForwardingBooking | null>(null);
 
   const { scope, isLoaded: scopeLoaded } = useDataScope('bookings');
   const { index: assignmentIndex, isLoaded: assignmentIndexLoaded } = useBookingAssignmentVisibility({
@@ -128,14 +138,33 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
     return filterBookingsByScope(rawBookings, scope, assignmentIndex);
   }, [rawBookings, scope, scopeLoaded, assignmentIndex, assignmentIndexLoaded]);
 
-  // Deep-link: auto-select booking from pendingBookingId
+  // Keep the open detail in sync with the latest bookings data after a refetch
   useEffect(() => {
-    if (!pendingBookingId || bookings.length === 0 || isLoading) return;
-    const match = bookings.find(b => b.bookingId === pendingBookingId || b.id === pendingBookingId);
-    if (match) {
-      onSelectBooking(match);
+    if (selectedBooking && bookings.length > 0) {
+      const updated = bookings.find(b => b.bookingId === selectedBooking.bookingId);
+      if (updated && updated !== selectedBooking) {
+        setSelectedBooking(updated);
+      }
     }
-  }, [pendingBookingId, bookings, isLoading]);
+  }, [bookings]);
+
+  // Deep-link: auto-select booking from URL param or pendingBookingId.
+  // suppressUrlSelectionRef prevents the just-cleared id from re-opening the
+  // detail right after the user clicks "Back" (the bounce-back bug).
+  const effectiveBookingId = urlBookingId ?? pendingBookingId;
+  useEffect(() => {
+    if (suppressUrlSelectionRef.current) {
+      if (!effectiveBookingId) suppressUrlSelectionRef.current = false;
+      return;
+    }
+    if (!effectiveBookingId || selectedBooking || isLoading) return;
+    const match = bookings.find(b => b.bookingId === effectiveBookingId || b.id === effectiveBookingId);
+    if (match) {
+      setSelectedBooking(match);
+      setUrlBookingId(match.bookingId);
+      onSelectBooking?.(match);
+    }
+  }, [effectiveBookingId, bookings, isLoading, selectedBooking]);
 
   const handleBookingCreated = () => {
     setShowCreateModal(false);
@@ -261,6 +290,23 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
   const inProgressCount = bookings.filter(b => b.status === "In Progress").length;
   const completedCount = bookings.filter(b => b.status === "Completed").length;
   const cancelledCount = bookings.filter(b => ["Cancelled", "Closed", "Paid"].includes(b.status)).length;
+
+  if (selectedBooking) {
+    return (
+      <ForwardingBookingDetails
+        booking={selectedBooking}
+        onBack={() => {
+          suppressUrlSelectionRef.current = true;
+          setUrlBookingId(null);
+          setSelectedBooking(null);
+        }}
+        onBookingUpdated={fetchBookings}
+        currentUser={currentUser}
+        initialTab={initialTab}
+        highlightId={highlightId}
+      />
+    );
+  }
 
   return (
     <>
@@ -620,7 +666,10 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
                         if (booking.status === "Draft") {
                           setResumeDraft({ ...(booking as any), id: booking.bookingId });
                         } else {
-                          onSelectBooking(booking);
+                          suppressUrlSelectionRef.current = false;
+                          setSelectedBooking(booking);
+                          setUrlBookingId(booking.bookingId);
+                          onSelectBooking?.(booking);
                         }
                       }}
                     >
