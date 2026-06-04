@@ -44,10 +44,10 @@ If any answer is wrong, the slice fails — fix the design, don't paper over.
 - [x] `bookings_delete`  → `can_act_on_booking('delete')`; scope preserved
 - **Verify (dev, all 60 users, OLD-vs-NEW expression diff):** zero `ops_bookings` refs left in policies. `create` identical for all. `view`/`edit`/`delete` differ ONLY for `ops_projects_bookings_tab` holders (8/9/1, all explained, 0 unexplained) — the intended, documented widening; no user lost access. Brokerage user full ✓, Accounting ✗ (no acct_bookings:view grant), Jayson ✓, HR ✗.
 
-### Step 2 — cross-read policies (remove the `ops_bookings` disjunct, swap to helper-view)
-- [ ] `quotations_select` — replace `ops_bookings:view` disjunct with `current_user_can_act_on_booking('view')`.
-- [ ] `customers_select` — replace the `ops_bookings:view` disjunct with `current_user_can_act_on_booking('view')`. **Leave the `ops_projects` disjunct untouched** (that's Phase A2).
-- **Verify:** a booking-only user can still see the customers/quotations they could before (no visibility regression); a user with neither loses nothing they shouldn't have had.
+### Step 2 — cross-read policies (remove the `ops_bookings` disjunct, swap to helper-view)  ✅ done (migration 144, dev)
+- [x] `quotations_select` — both groups: `ops_bookings:view` → `current_user_can_act_on_booking('view')`; all other disjuncts + record-scope preserved verbatim.
+- [x] `customers_select` — `ops_bookings:view` → helper; **`ops_projects:view` disjunct left untouched** (Contract #2).
+- **Verify (dev, all 60 users):** zero `ops_bookings` refs left in both policies. Each changed module-gate group: 0 losses, 0 unexplained — only the `ops_projects_bookings_tab:view` holder gains. No visibility regression.
 
 ### Step 3 — app booking buttons (`can("ops_bookings", …)` → `canActOnBooking(can, …)`)
 - [ ] `ProjectServiceCard.tsx:34`  (`create`)
