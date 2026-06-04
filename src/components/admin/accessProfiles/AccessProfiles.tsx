@@ -18,10 +18,11 @@ import {
   countGrantOverrides,
   normalizeProfileName,
   resolveProfileVisibilityScope,
+  resolveCascadedGrants,
 } from "./accessGrantUtils";
 import type { ConfigUser } from "../AccessConfiguration";
 import { SidePanel } from "../../common/SidePanel";
-import { deriveHiddenModuleGrants } from "../../../config/access/accessSchema";
+import { PERM_MODULES } from "../permissionsConfig";
 
 // Operations service tags for access profiles. Distinct from the booking
 // service-type enum: Marine Insurance is owned by Pricing (not an Operations
@@ -767,7 +768,11 @@ export function ProfileEditor({
     setSaving(true);
 
     const now = new Date().toISOString();
-    const finalGrants = deriveHiddenModuleGrants(grants);
+    // NEU-012 (strict): cascade is a UX convenience — persist the fully RESOLVED
+    // (explicit) grant set so what's stored == what the editor showed == what the
+    // resolver enforces (which no longer cascades at read). Materializes every
+    // parent→child grant into explicit keys.
+    const finalGrants = resolveCascadedGrants(grants, PERM_MODULES);
     let error: any;
 
     if (isNew) {
