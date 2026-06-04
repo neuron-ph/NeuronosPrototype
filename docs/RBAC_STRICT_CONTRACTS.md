@@ -28,7 +28,7 @@ There are **six kinds** of strict violation across the system, all governed by t
 | # | Contract | Kind | Status | Doc |
 |---|----------|------|--------|-----|
 | 1 | **`ops_bookings` umbrella** (bookings + customers/quotations cross-reads + 4 buttons + 2 routes) | H | ✅ Steps 1–5 + drift fix done (dev); Marcus visual smoke pending; prod pending | `RBAC_PATHA_BOOKINGS.md` |
-| 2 | **`ops_projects` umbrella** (project list/detail via `PROJECT_MODULE_IDS.ops.root`; `customers_select`) | H | Inventory pending | _todo_ |
+| 2 | **`ops_projects` umbrella** (`customers_select` disjunct + resolver branch; `ids.root` was dead) | H | ✅ done (dev, migrations 148–149); resolver now has zero umbrella derivation; prod pending | `RBAC_CONTRACT2_OPS_PROJECTS.md` |
 | 3 | **`inbox_entity_picker` umbrella** (inbox entity tabs) | H | Not started | _todo_ |
 | 4 | **Cascade → UX-only; every grant explicit & visible** — stop resolving `containsModuleIds`/parent→child at read/enforcement; cascade becomes an editor bulk-fill that writes explicit child grants; borrowed/contained tabs become real visible rows; DB resolver + `PermissionProvider` read explicit grants only | C | Not started | _todo_ |
 | 5 | **Eliminate per-user overrides** — remove the `permission_overrides` layer from the DB resolver + `PermissionProvider`; remove the per-user matrix editor (Users → assign a profile, not edit a grid); migrate every existing override into a named profile (or assign a clean one); drop the table last | U | Not started | _todo_ |

@@ -722,7 +722,7 @@ interface HiddenModuleMapping {
 // save path runs deriveHiddenModuleGrants) — that hidden umbrella key. The whole
 // derivation mechanism is removed at Contract #4. `ops_projects` (Contract #2)
 // and `inbox_entity_picker` (Contract #3) stay derived until their contracts.
-const RETIRED_UMBRELLA_DERIVATIONS = new Set<ModuleId>(["ops_bookings"]);
+const RETIRED_UMBRELLA_DERIVATIONS = new Set<ModuleId>(["ops_bookings", "ops_projects"]);
 
 const HIDDEN_MODULE_MAPPINGS: HiddenModuleMapping[] = (() => {
   const mappings: HiddenModuleMapping[] = [];
