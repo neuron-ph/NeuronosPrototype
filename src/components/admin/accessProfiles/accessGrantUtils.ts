@@ -131,23 +131,34 @@ export const chooseRoleDefaultProfile = (
   department?: string | null,
   service?: string | null,
 ): AccessProfileSummary | null => {
-  const roleMatches = profiles.filter((profile) => profile.target_role === role);
-  if (roleMatches.length === 0) return null;
+  // STRICT (NEU-012): mirror the DB resolver current_user_effective_module_grant
+  // EXACTLY. A baseline profile applies only when role matches AND
+  // (department matches OR is null) AND (service matches OR is null). If nothing
+  // matches, return null — no profile, no access. There is NO last-resort
+  // fallback to "any profile of this role": that fabricated implied access the
+  // DB never honored (the two-RBAC drift) and violated strict.
+  const dept = department ?? null;
+  const svc = service ?? null;
 
-  const departmentMatches = department
-    ? roleMatches.filter((profile) => profile.target_department === department)
-    : [];
+  const candidates = profiles.filter(
+    (profile) =>
+      profile.target_role === role &&
+      (profile.target_department === dept || profile.target_department == null) &&
+      (profile.target_service === svc || profile.target_service == null),
+  );
+  if (candidates.length === 0) return null;
 
-  if (departmentMatches.length > 0) {
-    // Within a department, prefer the exact service match (Operations only),
-    // then a service-less row. `service` is undefined for non-Operations
-    // callers, so this preserves the prior (department, role) behavior.
-    if (service) {
-      const exactService = departmentMatches.find((profile) => profile.target_service === service);
-      if (exactService) return exactService;
-    }
-    return departmentMatches.find((profile) => !profile.target_service) ?? departmentMatches[0];
-  }
+  // Ordering mirrors the DB: department-exact before department-null, then
+  // service-exact before service-null, then most-recently-updated.
+  const deptRank = (p: AccessProfileSummary) => (p.target_department === dept ? 0 : 1);
+  const svcRank = (p: AccessProfileSummary) =>
+    p.target_service === svc ? 0 : p.target_service == null ? 1 : 2;
 
-  return roleMatches.find((profile) => !profile.target_department) ?? roleMatches[0];
+  return [...candidates].sort((a, b) => {
+    const d = deptRank(a) - deptRank(b);
+    if (d !== 0) return d;
+    const s = svcRank(a) - svcRank(b);
+    if (s !== 0) return s;
+    return (b.updated_at ?? "").localeCompare(a.updated_at ?? "");
+  })[0];
 };

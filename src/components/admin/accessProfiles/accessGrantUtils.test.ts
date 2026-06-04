@@ -182,4 +182,37 @@ describe("accessGrantUtils", () => {
 
     expect(chosen?.id).toBe("ops-manager");
   });
+
+  it("returns null when no profile matches the role+department (no phantom fallback) — STRICT", () => {
+    // Mirrors the DB resolver: an HR manager with no HR profile (and no
+    // department-less manager profile) gets NOTHING, never a borrowed profile.
+    const chosen = chooseRoleDefaultProfile([
+      {
+        id: "bd-manager",
+        name: "BD Manager",
+        description: null,
+        target_department: "Business Development",
+        target_role: "manager",
+        target_service: null,
+        module_grants: { "ops_projects_bookings_tab:create": true },
+        visibility_scope: null,
+        visibility_departments: null,
+        updated_at: "",
+      },
+      {
+        id: "pricing-manager",
+        name: "Pricing Manager",
+        description: null,
+        target_department: "Pricing",
+        target_role: "manager",
+        target_service: null,
+        module_grants: {},
+        visibility_scope: null,
+        visibility_departments: null,
+        updated_at: "",
+      },
+    ], "manager", "HR");
+
+    expect(chosen).toBeNull();
+  });
 });
