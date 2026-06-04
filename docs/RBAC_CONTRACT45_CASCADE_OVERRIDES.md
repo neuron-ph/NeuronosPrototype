@@ -12,9 +12,9 @@ Merged because both are achieved by one operation: **snapshot each user's effect
 For each user, **effective = deriveHiddenModuleGrants(resolveCascadedGrants(mergeGrantLayers(baselineOrAssignedProfile.grants, override.grants), PERM_MODULES))** — the EXACT `PermissionProvider` computation (reused from `src/`, not reimplemented). That explicit set becomes the user's single profile.
 
 ## Slices
-1. **Dry run (writes nothing)** — `scripts/rbac-snapshot.ts`: compute every user's effective grants using the real app logic; report distinct shapes (→ profile count), per-user key counts, anomalies. Confirm it computes cleanly.
-2. **Materialize + assign** — for each user create/reuse a profile = their effective grants, assign it; keep old override+cascade ALIVE. **Verify per user: post == pre effective** (the snapshot reproduces today's UI view exactly).
-3. **Flip enforcement to explicit-only** — `PermissionProvider` stops cascading (reads the assigned profile's explicit grants); DB resolver already explicit. App == DB.
+1. ✅ **Dry run (writes nothing)** — `src/rbacSnapshot.test.ts` (guarded vitest tool; `RBAC_SNAPSHOT=report`). Reused the real app logic. Result: 60 users → 28 grant-shapes, 0 would-be-empty.
+2. ✅ **Materialize + assign** — migration 151 added `users.access_profile_id`; the tool (`RBAC_SNAPSHOT=apply`) created **30 snapshot profiles** (grants + scope + departments per distinct shape, marker description `NEU-012 verbatim snapshot (Phase 2)`) and assigned all 60 users. Idempotent + reversible (clears prior snapshot profiles first). **Verified: 0 unassigned, 0 mismatches** (assigned profile == computed effective). Override+cascade still LIVE; enforcement unchanged. NOTE: the data migration is performed by the tool (not a SQL file) — prod release of Phase 2 = run the tool against prod, alongside the schema/code migrations.
+3. **Flip enforcement to explicit-only** — DB resolver reads `users.access_profile_id` → profile (exact key, no merge/cascade); `current_user_visibility_scope/departments` read the profile (no override, no role fallback); `PermissionProvider` reads the assigned profile's explicit grants (no cascade). **Verify per user: new effective == old effective** (grants + scope), app == DB. Smoke test.
 4. **Editor cascade = UX-only** — tick-parent fills + WRITES explicit children; borrowed/contained tabs render as real visible rows.
 5. **Drop the override layer** — remove `permission_overrides` reads from resolver + provider; drop the per-user matrix editor (Users → assign a profile); drop the table last.
 
