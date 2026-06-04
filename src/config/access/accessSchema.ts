@@ -720,9 +720,14 @@ interface HiddenModuleMapping {
 // contract lands (all enforcement reads its real grants directly), its id moves
 // here so the client stops deriving — and therefore stops STORING (the profile
 // save path runs deriveHiddenModuleGrants) — that hidden umbrella key. The whole
-// derivation mechanism is removed at Contract #4. `ops_projects` (Contract #2)
-// and `inbox_entity_picker` (Contract #3) stay derived until their contracts.
-const RETIRED_UMBRELLA_DERIVATIONS = new Set<ModuleId>(["ops_bookings", "ops_projects"]);
+// derivation mechanism is removed entirely at Contract #4. All three hidden
+// umbrellas are now retired (ops_bookings #1, ops_projects #2, inbox_entity_picker
+// #3), so deriveHiddenModuleGrants is effectively a no-op pending that removal.
+const RETIRED_UMBRELLA_DERIVATIONS = new Set<ModuleId>([
+  "ops_bookings",
+  "ops_projects",
+  "inbox_entity_picker",
+]);
 
 const HIDDEN_MODULE_MAPPINGS: HiddenModuleMapping[] = (() => {
   const mappings: HiddenModuleMapping[] = [];
