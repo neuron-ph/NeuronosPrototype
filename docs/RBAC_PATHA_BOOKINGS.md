@@ -49,25 +49,27 @@ If any answer is wrong, the slice fails — fix the design, don't paper over.
 - [x] `customers_select` — `ops_bookings:view` → helper; **`ops_projects:view` disjunct left untouched** (Contract #2).
 - **Verify (dev, all 60 users):** zero `ops_bookings` refs left in both policies. Each changed module-gate group: 0 losses, 0 unexplained — only the `ops_projects_bookings_tab:view` holder gains. No visibility regression.
 
-### Step 3 — app booking buttons (`can("ops_bookings", …)` → `canActOnBooking(can, …)`)
-- [ ] `ProjectServiceCard.tsx:34`  (`create`)
-- [ ] `ProjectBookingsTabBD.tsx:34` (`create`)
-- [ ] `ProjectBookingReadOnlyView.tsx:42` (`delete`)
-- [ ] `QuotationFileView.tsx:108` (`create`)
+### Step 3 — app booking buttons (`can("ops_bookings", …)` → `canActOnBooking(can, …)`)  ✅ code done (dev, diagnostics clean) — visual test pending
+- [x] `ProjectServiceCard.tsx`  (`create`)
+- [x] `ProjectBookingsTabBD.tsx` (`create`)
+- [x] `ProjectBookingReadOnlyView.tsx` (`delete`)
+- [x] `QuotationFileView.tsx` (`create`)
 - *(already done: `ProjectBookingsTab.tsx` → `ops_projects_bookings_tab:create`)*
-- **Verify:** each button shows for a granted user, hidden for non-granted; matches its table policy.
+- **Verify (Marcus, visual):** each button shows for a granted user, hidden for non-granted; matches its table policy.
 
-### Step 4 — route guards (`App.tsx`)
-- [ ] `App.tsx:1155` `ops_bookings:create` route → real-grant predicate.
-- [ ] `App.tsx:1158` `ops_bookings:view` route → real-grant predicate.
-- **Verify:** a granted user reaches the route; a non-granted user is redirected.
+### Step 4 — route guards (`App.tsx`)  ✅ code done (dev, diagnostics clean) — visual test pending
+- [x] Added `requiredPredicate` form to `RouteGuard` + `GuardedLayout` (reuses `canActOnBooking`, so route == button == DB).
+- [x] `/operations/create` route → `requiredPredicate={(can) => canActOnBooking(can, 'create')}`.
+- [x] `/operations/:bookingId` route → `requiredPredicate={(can) => canActOnBooking(can, 'view')}`.
+- **Verify (Marcus, visual):** a granted user reaches the route; a non-granted user is redirected to /dashboard.
 
-### Step 5 — prove unused, then remove the umbrella
-- [ ] Fresh grep + `pg_policies` query: **zero** `'ops_bookings'` enforcement references (DB policies, routes, components).
-- [ ] Remove the `ops_bookings` derivation branch from `current_user_effective_module_grant` (migration 140) — it auto-drops from `HIDDEN_MODULE_MAPPINGS`/client once nothing reads it.
-- [ ] `accessSchema.test.ts` — update assertions (134/142/163) to reflect `ops_bookings` no longer derived/enforced (module node + tabs remain).
-- [ ] `CreateUserPage.tsx:62` — remove the `ops_bookings` quick-grant entry (or repoint).
-- **Verify:** full app smoke (booking create/view/edit/delete across a service user, Pricing, project flow) + the harness, all green; nothing references the umbrella.
+### Step 5 — prove unused, then remove the umbrella  ✅ done (migration 145, dev)
+- [x] Fresh grep + `pg_policies` sweep: **zero** `'ops_bookings'` enforcement references (all tables' policies, all functions, routes, components). Only the module node (`accessSchema.ts:369`) + tabs + the `ModuleId` type union remain — all intentionally kept.
+- [x] Removed the `ops_bookings` derivation branch from `current_user_effective_module_grant` (migration 145) — kept `ops_projects` (Contract #2). Client: added `RETIRED_UMBRELLA_DERIVATIONS` so `deriveHiddenModuleGrants` no longer derives/stores `ops_bookings` (stops the profile-save path re-adding it).
+- [x] Stripped inert stored `ops_bookings:<action>` keys from `access_profiles` + `permission_overrides` (0 remaining, both tables).
+- [x] `CreateUserPage.tsx` — removed the `ops_bookings` quick-grant entry (kept `ops_bookings_billings_tab`).
+- [x] `accessSchema.test.ts` — assertions 134/142/163 left as-is: they assert the node stays **hidden** + reachable, which is still true (we keep the node + tabs; only the derivation/enforcement/stored-keys were removed). 33 tests pass.
+- **Verify (dev):** zero umbrella refs in DB; resolver no longer mentions `ops_bookings`; 0 stored umbrella keys; booking gates unchanged for Brokerage (full), Jayson (full), HR (none). **Remaining: Marcus visual smoke** (booking create/view/edit/delete across a service user, Pricing, project flow).
 
 ---
 

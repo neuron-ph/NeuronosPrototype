@@ -9,6 +9,7 @@ import { UserProvider, useUser } from "./hooks/useUser";
 import { PermissionProvider } from "./context/PermissionProvider";
 import { AutoCapsProvider } from "./context/AutoCapsProvider";
 import { RouteGuard } from "./components/RouteGuard";
+import { canActOnBooking } from "./utils/bookingPermissions";
 import type { ActionId, ModuleId } from "./components/admin/permissionsConfig";
 import { toast } from "sonner@2.0.3";
 import { Toaster } from "./components/ui/sonner";
@@ -1020,11 +1021,19 @@ function DesignSystemPage() {
 // Layout route that enforces explicit module permission on child routes
 function GuardedLayout({
   requiredPermission,
+  requiredPredicate,
+  predicateLabel,
 }: {
   requiredPermission?: { moduleId: ModuleId; action: ActionId };
+  requiredPredicate?: (can: (moduleId: ModuleId, action: ActionId) => boolean) => boolean;
+  predicateLabel?: string;
 }) {
   return (
-    <RouteGuard requiredPermission={requiredPermission}>
+    <RouteGuard
+      requiredPermission={requiredPermission}
+      requiredPredicate={requiredPredicate}
+      predicateLabel={predicateLabel}
+    >
       <Outlet />
     </RouteGuard>
   );
@@ -1152,10 +1161,10 @@ function AppContent() {
         <Route element={<GuardedLayout requiredPermission={{ moduleId: "ops_others", action: "view" }} />}>
           <Route path="/operations/others" element={<OthersBookingsPage />} />
         </Route>
-        <Route element={<GuardedLayout requiredPermission={{ moduleId: "ops_bookings", action: "create" }} />}>
+        <Route element={<GuardedLayout requiredPredicate={(can) => canActOnBooking(can, "create")} predicateLabel="bookings.create" />}>
           <Route path="/operations/create" element={<CreateBookingPage />} />
         </Route>
-        <Route element={<GuardedLayout requiredPermission={{ moduleId: "ops_bookings", action: "view" }} />}>
+        <Route element={<GuardedLayout requiredPredicate={(can) => canActOnBooking(can, "view")} predicateLabel="bookings.view" />}>
           <Route path="/operations/:bookingId" element={<BookingDetailPage />} />
         </Route>
         

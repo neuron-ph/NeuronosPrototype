@@ -24,6 +24,7 @@ import { useMarkEntityReadOnMount } from "../../hooks/useNotifications";
 import { logActivity, logCreation, logStatusChange } from "../../utils/activityLog";
 import { buildProjectInsertFromQuotation, normalizeProjectRow } from "../../utils/projectHydration";
 import { canUseQuotationLens, canViewQuotationComments, canViewQuotationFile } from "../../utils/quotationAccess";
+import { canActOnBooking } from "../../utils/bookingPermissions";
 import {
   getNormalizedContractStatus,
   getNormalizedQuotationStatus,
@@ -105,7 +106,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
   const canExportQuotation = canUseQuotationLens(can, userDepartment, "export");
   const canCreateProject = can("bd_projects", "create") || can("pricing_projects", "create");
   const canActivateContract = can("pricing_contracts", "edit");
-  const canCreateBookings = can("ops_bookings", "create");
+  const canCreateBookings = canActOnBooking(can, "create");
 
   // Fetch all Pricing users for the assignment dropdown, filter out managers/above in JS
   // No 'enabled' guard — query always runs; the UI is already gated by canAssign

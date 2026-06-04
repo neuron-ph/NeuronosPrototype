@@ -59,7 +59,6 @@ const DEPT_PREVIEW: Partial<Record<string, Array<{ id: ModuleId; label: string }
   "Operations": [
     { id: "ops_forwarding",            label: "Forwarding" },
     { id: "ops_brokerage",             label: "Brokerage" },
-    { id: "ops_bookings",              label: "Bookings" },
     { id: "ops_bookings_billings_tab", label: "Billing visibility" },
     { id: "ops_projects",              label: "Projects" },
   ],

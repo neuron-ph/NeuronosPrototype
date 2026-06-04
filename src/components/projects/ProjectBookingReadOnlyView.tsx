@@ -11,6 +11,7 @@ import { toast } from "../ui/toast-utils";
 import { UnifiedBillingsTab } from "../shared/billings/UnifiedBillingsTab";
 import { BookingCommentsTab } from "../shared/BookingCommentsTab";
 import { usePermission } from "../../context/PermissionProvider";
+import { canActOnBooking } from "../../utils/bookingPermissions";
 
 interface ProjectBookingReadOnlyViewProps {
   bookingId: string;
@@ -39,7 +40,7 @@ export function ProjectBookingReadOnlyView({
   const [activeTab, setActiveTab] = useState<DetailTab>("booking-info");
   const { can } = usePermission();
 
-  const canCancelOrDelete = can("ops_bookings", "delete");
+  const canCancelOrDelete = canActOnBooking(can, "delete");
 
   const { data: booking = null, isFetching: isLoading } = useQuery({
     queryKey: [...queryKeys.bookings.detail(bookingId), bookingType],
