@@ -157,7 +157,7 @@ function ApplyProfileModal({
                     {(profile.target_department || profile.target_role) && ruleCount > 0 && " · "}
                     {ruleCount > 0 && (
                       <span style={{ color: "var(--neuron-action-primary)", fontWeight: 600 }}>
-                        {ruleCount} {ruleCount === 1 ? "rule" : "rules"}
+                        {ruleCount} {ruleCount === 1 ? "permission" : "permissions"}
                       </span>
                     )}
                     {!profile.target_department && !profile.target_role && ruleCount === 0 && (
@@ -529,7 +529,7 @@ function DeleteProfileContent({
           Are you sure you want to delete <strong style={{ color: "var(--neuron-ink-primary)" }}>{profile.name}</strong>?
         </p>
         <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: "8px 0 0", lineHeight: 1.5 }}>
-          Users who had this profile applied will keep their current access rules unchanged. The profile reference will be cleared.
+          People on this profile keep their current access unchanged; they just stop being linked to it.
         </p>
       </div>
       <div style={{ flexShrink: 0, padding: "12px 24px 20px", borderTop: "1px solid var(--neuron-ui-border)", display: "flex", justifyContent: "flex-end", gap: 8 }}>
@@ -597,10 +597,28 @@ export function ProfileEditor({
   const [nameError, setNameError] = useState("");
   const [metaOpen, setMetaOpen] = useState(isNew);
   const [showBaseline, setShowBaseline] = useState(false);
-  const [emptyGrantsWarning, setEmptyGrantsWarning] = useState(false);
   const [confirmExitOpen, setConfirmExitOpen] = useState(false);
   const [confirmAutofillOpen, setConfirmAutofillOpen] = useState(false);
+  const [confirmEmptyOpen, setConfirmEmptyOpen] = useState(false);
+  const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
   const prevGrantsRef = useRef<ModuleGrants>({});
+  // Blast radius: editing a profile changes live access for everyone assigned
+  // to it — surface who that is, and confirm before saving onto them.
+  const { data: assignedUsers = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["access_profiles", "assignees", profile?.id ?? "new"],
+    enabled: !isNew,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("users")
+        .select("id, name")
+        .eq("access_profile_id", profile!.id!)
+        .order("name");
+      if (error) throw error;
+      return (data ?? []) as { id: string; name: string }[];
+    },
+  });
+  const assignedCount = assignedUsers.length;
   const { data: profiles = [] } = useQuery<AccessProfileSummary[]>({
     queryKey: ["access_profiles", "role-default-baselines"],
     queryFn: async () => {
@@ -666,48 +684,17 @@ export function ProfileEditor({
   };
 
   const handleDiscard = () => {
-    const snapshot = {
-      grants: { ...grants },
-      visibilityScopes: { ...visibilityScopes },
-      name,
-      description,
-      targetDepartment,
-      targetRole,
-      targetService,
-      visibilityScope,
-      visibilityDepartments: [...visibilityDepartments],
-    };
-    let undone = false;
+    // The exit-confirm dialog was the deliberate second step — leave
+    // immediately instead of stranding the admin until a toast expires.
     setConfirmExitOpen(false);
-    toast("Changes discarded.", {
-      action: {
-        label: "Undo",
-        onClick: () => {
-          undone = true;
-          setGrants(snapshot.grants);
-          setVisibilityScopes(snapshot.visibilityScopes);
-          setName(snapshot.name);
-          setDescription(snapshot.description);
-          setTargetDepartment(snapshot.targetDepartment);
-          setTargetRole(snapshot.targetRole);
-          setTargetService(snapshot.targetService);
-          setVisibilityScope(snapshot.visibilityScope);
-          setVisibilityDepartments(snapshot.visibilityDepartments);
-        },
-      },
-      duration: 5000,
-      // Navigate back whether the toast auto-closes (onAutoClose) or is
-      // dismissed manually (onDismiss). sonner does NOT fire onDismiss on
-      // timeout — relying on it alone left the editor stuck open.
-      onAutoClose: () => { if (!undone) onBack(); },
-      onDismiss: () => { if (!undone) onBack(); },
-    });
+    toast("Changes discarded.");
+    onBack();
   };
 
   const handleClearAll = () => {
     prevGrantsRef.current = { ...grants };
     setGrants({});
-    toast("Access rules cleared.", {
+    toast("All permissions cleared.", {
       action: { label: "Undo", onClick: () => setGrants(prevGrantsRef.current) },
       duration: 5000,
     });
@@ -761,7 +748,9 @@ export function ProfileEditor({
     applyBaseline();
   };
 
-  const handleSave = async () => {
+  // Validation gates run first; the actual write lives in performSave so the
+  // empty-profile and update-N-people confirms can both funnel into it.
+  const handleSave = () => {
     const trimmed = normalizeProfileName(name);
     if (!trimmed) { setNameError("Profile name is required"); return; }
     setNameError("");
@@ -769,13 +758,15 @@ export function ProfileEditor({
       toast.error("Select at least one department for the selected visibility scope.");
       return;
     }
+    if (Object.keys(grants).length === 0) { setConfirmEmptyOpen(true); return; }
+    if (!isNew && assignedCount > 0) { setConfirmSaveOpen(true); return; }
+    void performSave();
+  };
 
-    if (Object.keys(grants).length === 0 && !emptyGrantsWarning) {
-      setEmptyGrantsWarning(true);
-      return;
-    }
-    setEmptyGrantsWarning(false);
-
+  const performSave = async () => {
+    const trimmed = normalizeProfileName(name);
+    setConfirmEmptyOpen(false);
+    setConfirmSaveOpen(false);
     setSaving(true);
 
     const now = new Date().toISOString();
@@ -880,10 +871,26 @@ export function ProfileEditor({
           >
             <ArrowLeft size={13} /> Back
           </button>
-          <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
             <h2 style={{ fontSize: 16, fontWeight: 600, color: "var(--neuron-ink-primary)", margin: 0 }}>
               {isNew ? "New Profile" : `Edit: ${savedName}`}
             </h2>
+            {!isNew && (
+              <span
+                title={assignedCount > 0 ? assignedUsers.map(u => u.name).join(", ") : undefined}
+                style={{
+                  fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap",
+                  backgroundColor: assignedCount > 0
+                    ? "color-mix(in oklch, var(--neuron-action-primary) 12%, transparent)"
+                    : "var(--neuron-bg-surface-subtle)",
+                  color: assignedCount > 0 ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
+                }}
+              >
+                {assignedCount > 0
+                  ? `Applied to ${assignedCount} ${assignedCount === 1 ? "person" : "people"}`
+                  : "Not assigned to anyone yet"}
+              </span>
+            )}
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1057,7 +1064,7 @@ export function ProfileEditor({
         onVisibilityChange={setVisibilityScopes}
         featureAccessToolbar={
           <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Access Rules</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Permissions</span>
             {grantCount > 0 && (
               <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 8px", borderRadius: 999,
                 backgroundColor: "color-mix(in oklch, var(--neuron-action-primary) 12%, transparent)",
@@ -1075,11 +1082,6 @@ export function ProfileEditor({
                   cursor: "pointer" }}>
                 {showBaseline ? "Hide template" : `Preview ${ROLES.find(r => r.value === targetRole)?.label} template`}
               </button>
-            )}
-            {emptyGrantsWarning && (
-              <span style={{ fontSize: 11, color: "var(--theme-status-warning-fg)", display: "flex", alignItems: "center", gap: 4 }}>
-                <AlertTriangle size={11} /> No permissions set — click Save again to confirm
-              </span>
             )}
             {grantCount > 0 && (
               <button onClick={handleClearAll} style={{ fontSize: 11, color: "var(--neuron-semantic-error, #dc2626)",
@@ -1108,12 +1110,39 @@ export function ProfileEditor({
       <NeuronModal
         isOpen={confirmAutofillOpen}
         onClose={() => setConfirmAutofillOpen(false)}
-        title="Overwrite current rules?"
-        description="Autofilling from the baseline will replace your current access rules and record visibility. This can't be undone."
-        confirmLabel="Overwrite with baseline"
+        title="Overwrite current permissions?"
+        description="Autofilling from the template will replace this profile's current permissions and record visibility."
+        confirmLabel="Overwrite with template"
         confirmIcon={<Wand2 size={15} />}
         onConfirm={() => { setConfirmAutofillOpen(false); applyBaseline(); }}
         variant="danger"
+      />
+
+      {/* Empty-profile confirmation — replaces the old silent click-Save-twice gate */}
+      <NeuronModal
+        isOpen={confirmEmptyOpen}
+        onClose={() => setConfirmEmptyOpen(false)}
+        title="This profile grants no access"
+        description={
+          assignedCount > 0
+            ? `${assignedCount} ${assignedCount === 1 ? "person is" : "people are"} on this profile — saving it empty removes their access to everything. Save anyway?`
+            : "Anyone assigned to this profile will see nothing in Neuron OS. Save it empty anyway?"
+        }
+        confirmLabel="Save empty profile"
+        confirmIcon={<Save size={15} />}
+        onConfirm={() => void performSave()}
+        variant="danger"
+      />
+
+      {/* Blast-radius confirmation — saving a profile updates live access */}
+      <NeuronModal
+        isOpen={confirmSaveOpen}
+        onClose={() => setConfirmSaveOpen(false)}
+        title={`Update access for ${assignedCount} ${assignedCount === 1 ? "person" : "people"}?`}
+        description={`Saving applies these changes immediately to everyone on this profile: ${assignedUsers.slice(0, 4).map(u => u.name).join(", ")}${assignedCount > 4 ? ` and ${assignedCount - 4} more` : ""}.`}
+        confirmLabel="Save & update access"
+        confirmIcon={<Save size={15} />}
+        onConfirm={() => void performSave()}
       />
     </div>
   );
@@ -1177,7 +1206,7 @@ export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditPr
       },
     },
     {
-      header: "Access Rules",
+      header: "Permissions",
       accessorKey: "module_grants",
       cell: (row) => {
         const count = countGrantOverrides(row.module_grants);
@@ -1187,7 +1216,7 @@ export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditPr
             backgroundColor: count > 0 ? "color-mix(in oklch, var(--neuron-action-primary) 12%, transparent)" : "var(--neuron-bg-surface-subtle)",
             color: count > 0 ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
           }}>
-            {count > 0 ? `${count} rules` : "Empty"}
+            {count > 0 ? `${count} permissions` : "No access yet"}
           </span>
         );
       },
@@ -1226,9 +1255,14 @@ export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditPr
           >
             <UserCheck size={12} /> Apply
           </button>
+          <div style={{ width: 1, height: 18, backgroundColor: "var(--neuron-ui-border)", margin: "0 2px" }} />
           <button
             onClick={() => setDeletingProfile(row)}
+            aria-label={`Delete ${row.name}`}
+            title={`Delete ${row.name}`}
             style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--neuron-ui-border)", background: "transparent", fontSize: 12, fontWeight: 500, color: "var(--neuron-ink-muted)", cursor: "pointer" }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--neuron-semantic-error, #dc2626)"; e.currentTarget.style.borderColor = "var(--neuron-semantic-error, #dc2626)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = "var(--neuron-ink-muted)"; e.currentTarget.style.borderColor = "var(--neuron-ui-border)"; }}
           >
             <Trash2 size={12} />
           </button>
@@ -1247,7 +1281,7 @@ export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditPr
             <h2 style={{ fontSize: 16, fontWeight: 600, color: "var(--neuron-ink-primary)", margin: 0 }}>Access Profiles</h2>
           </div>
           <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: 0 }}>
-            Saved access rule templates. Applying a profile links the user to that baseline while keeping user-specific overrides separate.
+            Reusable access setups you can assign to staff. Editing a profile updates everyone using it; per-person custom changes stay separate.
           </p>
         </div>
         <button
@@ -1270,7 +1304,7 @@ export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditPr
           <BookMarked size={32} style={{ color: "var(--neuron-ui-border)", margin: "0 auto 12px" }} />
           <p style={{ fontSize: 14, fontWeight: 500, color: "var(--neuron-ink-muted)", margin: "0 0 4px" }}>No access profiles yet</p>
           <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: "0 0 16px" }}>
-            Create profiles like "BD Manager" or "Ops Supervisor" to quickly assign access rules to new or promoted users.
+            Create profiles like "BD Manager" or "Ops Supervisor" to quickly set up access for new or promoted staff.
           </p>
           <button
             onClick={() => onEditProfile(null)}

@@ -13,7 +13,7 @@ export type RecordVisibilityMap = Partial<Record<string, RecordDial>>;
 export const RECORD_DIALS: { value: RecordDial; label: string; description: string }[] = [
   { value: "own", label: "Own", description: "Records they created or are directly assigned to." },
   { value: "team", label: "Team", description: "Their own records plus their teammates'." },
-  { value: "everything", label: "Everything", description: "Every record of this type." },
+  { value: "everything", label: "All records", description: "Every record of this type, across all departments." },
 ];
 
 export const DIAL_RANK: Record<RecordDial, number> = { own: 0, team: 1, everything: 2 };
