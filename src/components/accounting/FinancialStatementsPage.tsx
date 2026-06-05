@@ -697,12 +697,16 @@ function FilingWorkflowBar({
   onRetract: () => void;
   advancing: boolean;
 }) {
+  // NEU-017: advancing/retracting a filing writes financial_statement_filings —
+  // require a statements write grant (mirrors the filings RLS).
+  const { can } = usePermission();
+  const canWriteFiling = can("acct_statements", "create") || can("acct_statements", "edit");
   const status: FilingStatus = filing?.status ?? "draft";
   const meta = FILING_STATUS_META[status];
   const StatusIcon = meta.icon;
   const currentIdx = STATUS_ORDER.indexOf(status);
-  const canAdvance = currentIdx < STATUS_ORDER.length - 1;
-  const canRetract = currentIdx > 0;
+  const canAdvance = canWriteFiling && currentIdx < STATUS_ORDER.length - 1;
+  const canRetract = canWriteFiling && currentIdx > 0;
 
   const nextStatus = canAdvance ? STATUS_ORDER[currentIdx + 1] : null;
   const nextMeta   = nextStatus ? FILING_STATUS_META[nextStatus] : null;

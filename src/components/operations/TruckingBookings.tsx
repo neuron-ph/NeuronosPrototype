@@ -350,7 +350,7 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
             
             {/* Action Button */}
             <div className="flex items-center gap-3">
-              <button
+              {can("ops_trucking", "create") && <button
                 onClick={() => setShowCreateModal(true)}
                 style={{
                   display: "flex",
@@ -368,7 +368,7 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
               >
                 <Plus size={16} />
                 New Booking
-              </button>
+              </button>}
             </div>
           </div>
 

@@ -356,7 +356,7 @@ export function MarineInsuranceBookings({ currentUser, pendingBookingId, initial
             
             {/* Action Button */}
             <div className="flex items-center gap-3">
-              <button
+              {can("ops_marine_insurance", "create") && <button
                 onClick={() => setShowCreateModal(true)}
                 style={{
                   display: "flex",
@@ -374,7 +374,7 @@ export function MarineInsuranceBookings({ currentUser, pendingBookingId, initial
               >
                 <Plus size={16} />
                 New Booking
-              </button>
+              </button>}
             </div>
           </div>
 

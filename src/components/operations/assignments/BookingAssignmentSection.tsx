@@ -23,6 +23,8 @@ import { appendBookingActivity } from '../../../utils/bookingActivityLog';
 import { fireBookingAssignmentTickets } from '../../../utils/workflowTickets';
 import { recordNotificationEvent, operationsSubSectionFor } from '../../../utils/notifications';
 import { useUser } from '../../../hooks/useUser';
+import { usePermission } from '../../../context/PermissionProvider';
+import { opsModuleForService } from '../../../utils/bookings/opsModuleForService';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../../../lib/queryKeys';
 import {
@@ -104,6 +106,10 @@ export function BookingAssignmentSection({
 }: BookingAssignmentSectionProps) {
   const { user } = useUser();
   const qc = useQueryClient();
+  // NEU-017: reassigning the team writes booking_assignments + the bookings row —
+  // hide the Edit affordance without the service's edit grant.
+  const { can } = usePermission();
+  const canEditAssignment = can(opsModuleForService(serviceType), "edit");
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [pendingPayload, setPendingPayload] = useState<ServiceRoleAssignmentPayload | null>(null);
@@ -283,10 +289,10 @@ export function BookingAssignmentSection({
       subtitle={!isEditing && !hasAssignment ? 'No assignments yet' : undefined}
       isEditing={isEditing}
       isSaving={isSaving}
-      onEdit={() => {
+      onEdit={canEditAssignment ? () => {
         setPendingPayload(null);
         setIsEditing(true);
-      }}
+      } : undefined}
       onCancel={() => {
         setIsEditing(false);
         setPendingPayload(null);

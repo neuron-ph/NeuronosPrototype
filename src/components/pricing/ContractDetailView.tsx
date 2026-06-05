@@ -14,6 +14,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { usePermission } from "../../context/PermissionProvider";
+import { opsModuleForService } from "../../utils/bookings/opsModuleForService";
 import { CONTRACT_MODULE_IDS, type ContractDept } from "../../config/access/accessSchema";
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "../../lib/queryKeys";
@@ -510,6 +511,10 @@ export function ContractDetailView({
       return meta || { service_type: s as any, service_details: {} };
     });
 
+  // NEU-017: only offer Create Booking for services the user may create.
+  const creatableServices = contractServices.filter(svc =>
+    can(opsModuleForService(svc.service_type), "create"));
+
   const handleCreateBookingForService = (service: InquiryService) => {
     setCreateBookingService(service);
     setShowCreateBooking(true);
@@ -586,11 +591,11 @@ export function ContractDetailView({
   const renderBookingsTab = () => (
     <div style={{ padding: "24px 0" }}>
       {/* ✨ PHASE 3: Create Booking button — only when contract is Active */}
-      {["Active", "Expiring"].includes(contractStatus) && contractServices.length > 0 && (
+      {["Active", "Expiring"].includes(contractStatus) && creatableServices.length > 0 && (
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "16px", position: "relative" }}>
-          {contractServices.length === 1 ? (
+          {creatableServices.length === 1 ? (
             <button
-              onClick={() => handleCreateBookingForService(contractServices[0])}
+              onClick={() => handleCreateBookingForService(creatableServices[0])}
               style={{
                 display: "flex", alignItems: "center", gap: "6px",
                 padding: "8px 16px", fontSize: "13px", fontWeight: 600,
@@ -599,7 +604,7 @@ export function ContractDetailView({
               }}
             >
               <Plus size={14} />
-              Create {contractServices[0].service_type} Booking
+              Create {creatableServices[0].service_type} Booking
             </button>
           ) : (
             <>
@@ -624,7 +629,7 @@ export function ContractDetailView({
                   boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 10,
                   minWidth: "200px", overflow: "hidden",
                 }}>
-                  {contractServices.map(svc => (
+                  {creatableServices.map(svc => (
                     <button
                       key={svc.service_type}
                       onClick={() => handleCreateBookingForService(svc)}

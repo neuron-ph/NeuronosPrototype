@@ -142,6 +142,9 @@ function ItemsTab() {
   const canAll = can("accounting_catalog_all_tab", "view");
   const canBilling = can("accounting_catalog_billing_tab", "view");
   const canExpense = can("accounting_catalog_expense_tab", "view");
+  // NEU-017: catalog writes require acct_catalog grants (mirrors catalog RLS).
+  const canCreateCatalog = can("acct_catalog", "create");
+  const canWriteCatalog = canCreateCatalog || can("acct_catalog", "edit") || can("acct_catalog", "delete");
 
   // ── State ──
   const [sideFilter, setSideFilter] = useState<SideFilter>(
@@ -527,20 +530,20 @@ function ItemsTab() {
         )}
 
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "8px" }}>
-          <button
+          {canCreateCatalog && <button
             onClick={() => { setShowAddCategoryForm(true); setShowAddForm(false); }}
             style={ghostBtnStyle}
           >
             <Plus size={14} />
             Category
-          </button>
-          <button
+          </button>}
+          {canCreateCatalog && <button
             onClick={() => { setShowAddForm(true); setShowAddCategoryForm(false); }}
             style={ghostBtnStyle}
           >
             <Plus size={14} />
             Item
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -892,6 +895,9 @@ function ItemViewRow({
   onDelete: () => void;
   onMove: () => void;
 }) {
+  // NEU-017: hide the row actions menu without a catalog write grant.
+  const { can } = usePermission();
+  const canWriteCatalog = can("acct_catalog", "edit") || can("acct_catalog", "delete");
   return (
     <div
       style={{
@@ -933,7 +939,7 @@ function ItemViewRow({
         opacity: hovered ? 1 : 0,
         transition: "opacity 100ms",
       }}>
-        <RowActionsMenu onEdit={onEdit} onDelete={onDelete} onMove={onMove} />
+        {canWriteCatalog && <RowActionsMenu onEdit={onEdit} onDelete={onDelete} onMove={onMove} />}
       </div>
     </div>
   );
@@ -1098,6 +1104,9 @@ function CategoryGroupMenu({
   onRename: () => void;
   onDelete: () => void;
 }) {
+  // NEU-017: hide the category rename/delete menu without a catalog write grant.
+  const { can } = usePermission();
+  const canWriteCatalog = can("acct_catalog", "edit") || can("acct_catalog", "delete");
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ top: 0, left: 0 });
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -1122,6 +1131,8 @@ function CategoryGroupMenu({
     width: "100%", padding: "7px 12px",
     fontSize: "13px", background: "none", border: "none", textAlign: "left",
   };
+
+  if (!canWriteCatalog) return null;
 
   return (
     <>

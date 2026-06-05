@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { usePermission } from "../../context/PermissionProvider";
 import { Search, Plus, Calendar, Flag, Phone, Mail, Send, Users, MessageSquare, MessageCircle, Linkedin, ListTodo, CheckCircle2 } from "lucide-react";
 import { supabase } from '../../utils/supabase/client';
 import { useUser } from "../../hooks/useUser";
@@ -20,6 +21,7 @@ interface TasksListProps {
 }
 
 export function TasksList({ onViewTask }: TasksListProps) {
+  const { can } = usePermission();
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<TaskType | "All">("All");
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "All">("All");
@@ -225,7 +227,7 @@ export function TasksList({ onViewTask }: TasksListProps) {
               Manage follow-ups and business development activities
             </p>
           </div>
-          <button
+          {can("bd_tasks", "create") && <button
             style={{
               height: "48px",
               padding: "0 24px",
@@ -250,7 +252,7 @@ export function TasksList({ onViewTask }: TasksListProps) {
           >
             <Plus size={20} />
             Add Task
-          </button>
+          </button>}
         </div>
 
         {/* Search and Filters */}

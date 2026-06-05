@@ -395,7 +395,7 @@ export function ChartOfAccounts() {
                 <Download size={16} />
                 Export
              </button>
-             <button
+             {can("acct_coa", "create") && <button
                onClick={handleAddAccount}
                style={{
                   display: "flex",
@@ -420,7 +420,7 @@ export function ChartOfAccounts() {
              >
                <Plus size={18} />
                New Account
-             </button>
+             </button>}
           </div>
         </div>
 

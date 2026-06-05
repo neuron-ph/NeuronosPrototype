@@ -339,7 +339,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
             
             {/* Action Button */}
             <div className="flex items-center gap-3">
-              <button
+              {can("ops_forwarding", "create") && <button
                 onClick={() => setShowCreateModal(true)}
                 style={{
                   display: "flex",
@@ -357,7 +357,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
               >
                 <Plus size={16} />
                 New Booking
-              </button>
+              </button>}
             </div>
           </div>
 

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { saveAccount, deleteAccount, getAccounts } from "../../../utils/accounting-api";
 import type { Account, AccountType } from "../../../types/accounting-core";
 import { formatMoney } from "../../../utils/accountingCurrency";
+import { usePermission } from "../../../context/PermissionProvider";
 
 interface AccountSidePanelProps {
   isOpen: boolean;
@@ -27,6 +28,11 @@ function allowsForeignCurrency(type: unknown): boolean {
 }
 
 export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSidePanelProps) {
+  // NEU-017: row-click opens this panel for any viewer — hide Save/Delete
+  // without the matching acct_coa grant (mirrors the accounts RLS).
+  const { can } = usePermission();
+  const canWriteAccount = account ? can("acct_coa", "edit") : can("acct_coa", "create");
+  const canDeleteAccount = can("acct_coa", "delete");
   const [formData, setFormData] = useState<Partial<Account>>({
     name: "",
     code: "",
@@ -354,7 +360,7 @@ export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSi
 
             {/* Footer */}
             <div className="px-8 py-6 border-t border-[var(--theme-border-subtle)] flex items-center justify-between bg-[var(--theme-bg-surface)]">
-              {account ? (
+              {account && canDeleteAccount ? (
                 <button
                   type="button"
                   onClick={handleDelete}
@@ -376,7 +382,7 @@ export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSi
                 >
                   Cancel
                 </button>
-                <button
+                {canWriteAccount && <button
                   onClick={handleSubmit}
                   disabled={loading}
                   className="px-6 py-2.5 bg-[var(--theme-action-primary-bg)] hover:bg-[var(--theme-action-primary-border)] text-white rounded-xl font-semibold text-sm shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
@@ -392,7 +398,7 @@ export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSi
                       Save Account
                     </>
                   )}
-                </button>
+                </button>}
               </div>
             </div>
           </motion.div>

@@ -251,7 +251,9 @@ export function GeneralJournal() {
   const canInvoice = can("accounting_journal_invoice_tab", "view");
   const canCollection = can("accounting_journal_collection_tab", "view");
   const canManual = can("accounting_journal_manual_tab", "view");
-  const canCreateJournal = can("acct_journal", "view") && (can("accounting_journal_manual_tab", "view") || can("accounting_journal_all_sources_tab", "view"));
+  // NEU-017: New Entry + void/reverse are writes — require a journal write grant,
+  // not just view (create=4 holders, view=11 on dev: viewers read, accountants write).
+  const canCreateJournal = can("acct_journal", "create") || can("acct_journal", "edit");
 
   // ── Data state ──
   const [entries, setEntries] = useState<JournalEntry[]>([]);

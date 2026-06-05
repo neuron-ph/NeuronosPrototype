@@ -59,6 +59,10 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
   const canDeleteContact      = can(ids.root,        "delete");
   const canEditContact        = can(ids.root,        "edit");
   const canCreateCustomer     = can(variant === "pricing" ? "pricing_customers" : "bd_customers", "create");
+  const canCreateActivity     = can(ids.activities,  "create");
+  const canCreateTask         = can(ids.tasks,       "create");
+  const canEditTask           = can(ids.tasks,       "edit");
+  const canCreateInquiry      = can(ids.inquiries,   "create");
 
   const [activeTab, setActiveTab] = useState<"activities" | "tasks" | "inquiries" | "attachments" | "comments" | "teams">(() => {
     if (variant === "pricing") {
@@ -1183,7 +1187,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                         <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
                           Activity Timeline
                         </h3>
-                        <button
+                        {canCreateActivity && <button
                           onClick={() => {
                             setIsLoggingActivity(true);
                             setSelectedActivity(null);
@@ -1201,7 +1205,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                           }}
                         >
                           Log Activity
-                        </button>
+                        </button>}
                       </div>
 
                       {isLoadingData ? (
@@ -1355,7 +1359,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                         <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
                           Tasks
                         </h3>
-                        <button
+                        {canCreateTask && <button
                           onClick={() => {
                             setIsCreatingTask(true);
                             setSelectedTask(null);
@@ -1374,7 +1378,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                           }}
                         >
                           Create Task
-                        </button>
+                        </button>}
                       </div>
 
                       {tasks.length === 0 ? (
@@ -1490,7 +1494,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                             Task Details
                           </h3>
                         </div>
-                        {!isEditingTask && (
+                        {!isEditingTask && canEditTask && (
                           <button
                             onClick={() => setIsEditingTask(true)}
                             className="flex items-center gap-2 px-3 py-2 rounded-lg transition-colors text-[13px]"
@@ -1851,7 +1855,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                               </>
                             ) : (
                               <>
-                                {selectedTask && selectedTask.status !== "Completed" && (
+                                {selectedTask && selectedTask.status !== "Completed" && canEditTask && (
                                   <button
                                     onClick={() => {
                                       // Check if proof is required
@@ -1908,7 +1912,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                     <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
                       Inquiries
                     </h3>
-                    {onCreateInquiry && company && (
+                    {onCreateInquiry && company && canCreateInquiry && (
                       <CreateQuotationMenu
                         buttonText="Create Inquiry"
                         entityWord="Inquiry"
