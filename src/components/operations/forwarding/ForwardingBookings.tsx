@@ -110,7 +110,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
   const suppressUrlSelectionRef = useRef(false);
   const [selectedBooking, setSelectedBooking] = useState<ForwardingBooking | null>(null);
 
-  const { scope, isLoaded: scopeLoaded } = useDataScope('bookings');
+  const { scope, isLoaded: scopeLoaded } = useDataScope('bookings_forwarding');
   const { index: assignmentIndex, isLoaded: assignmentIndexLoaded } = useBookingAssignmentVisibility({
     userIds: scope.type === 'userIds' ? scope.ids : null,
   });

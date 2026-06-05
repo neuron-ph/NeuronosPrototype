@@ -29,7 +29,7 @@ export function TasksList({ onViewTask }: TasksListProps) {
   const { user, effectiveRole, effectiveDepartment } = useUser();
   const canAssignToOthers = effectiveRole === 'manager' || effectiveDepartment === 'Executive';
 
-  const { scope, isLoaded } = useDataScope();
+  const { scope, isLoaded } = useDataScope('tasks');
 
   // Build scope-aware filters for useTasks
   // 'all' → no extra filter (RLS handles it)

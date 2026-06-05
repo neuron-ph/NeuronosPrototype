@@ -78,7 +78,7 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
   const [resumeDraft, setResumeDraft] = useState<Record<string, unknown> | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; label: string } | null>(null);
 
-  const { scope, isLoaded: scopeLoaded } = useDataScope('bookings');
+  const { scope, isLoaded: scopeLoaded } = useDataScope('bookings_brokerage');
   const { index: assignmentIndex, isLoaded: assignmentIndexLoaded } = useBookingAssignmentVisibility({
     userIds: scope.type === 'userIds' ? scope.ids : null,
   });

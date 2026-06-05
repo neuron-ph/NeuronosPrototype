@@ -53,7 +53,7 @@ export function ContractsModule({ currentUser, onCreateTicket, initialContract, 
     }
   }, [initialContract]);
 
-  const { scope, isLoaded: scopeLoaded } = useDataScope();
+  const { scope, isLoaded: scopeLoaded } = useDataScope('quotations');
 
   // ── Contracts fetch ───────────────────────────────────────
   const {
