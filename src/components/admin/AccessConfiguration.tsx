@@ -14,9 +14,10 @@ import {
   hasGrantOverrides,
   mergeGrantLayers,
   normalizeProfileName,
+  resolvePerUserOverride,
   resolveProfileVisibilityScope,
 } from "./accessProfiles/accessGrantUtils";
-import { deriveHiddenModuleGrants } from "../../config/access/accessSchema";
+import { PERM_MODULES } from "./permissionsConfig";
 import { NeuronModal } from "../ui/NeuronModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -369,7 +370,9 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
       .maybeSingle();
 
     const nextAppliedProfileId = appliedProfileId;
-    const finalGrants = deriveHiddenModuleGrants(overrides);
+    // Cascade is UX-only: persist the explicit delta (incl. borrowed/contained
+    // child tab grants) so enforcement's exact-key lookup matches what's shown.
+    const finalGrants = resolvePerUserOverride(baselineGrants, overrides, PERM_MODULES);
 
     let error: any;
     if (existing) {

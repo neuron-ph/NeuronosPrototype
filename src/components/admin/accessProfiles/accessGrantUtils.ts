@@ -103,6 +103,22 @@ export const deriveGrantOverrides = (
   return next;
 };
 
+// NEU-012 Contract #4: a per-user override is a DELTA on top of the assigned
+// profile, and — like the profile editor — cascade must be UX-only: ticking a
+// host module (e.g. Projects) must persist its borrowed/contained child tab
+// grants EXPLICITLY, because enforcement (DB resolver + PermissionProvider) does
+// exact-key lookup with no cascade. Returns the explicit delta to store:
+//   delta = cascaded(base ⊕ edits)  minus  cascaded(base)
+export const resolvePerUserOverride = (
+  baselineGrants: ModuleGrants | null | undefined,
+  overrides: ModuleGrants | null | undefined,
+  modules: CascadeModule[],
+): ModuleGrants => {
+  const resolvedUser = resolveCascadedGrants(mergeGrantLayers(baselineGrants, overrides), modules);
+  const resolvedBase = resolveCascadedGrants(baselineGrants, modules);
+  return deriveGrantOverrides(resolvedUser, resolvedBase);
+};
+
 export const roleDefaultVisibilityScope = (role: string): VisibilityScope => {
   if (role === "executive") return "all";
   if (role === "manager") return "department";

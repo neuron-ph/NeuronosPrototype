@@ -10,6 +10,7 @@ import {
   normalizeProfileName,
   normalizeLegacyVisibilityScope,
   resolveCascadedGrants,
+  resolvePerUserOverride,
   resolveProfileVisibilityScope,
   roleDefaultVisibilityScope,
 } from "./accessGrantUtils";
@@ -125,6 +126,38 @@ describe("accessGrantUtils", () => {
 
     expect(resolved["ops_projects_info_tab:view"]).toBe(true);
     expect(resolved["ops_projects_billings_tab:view"]).toBe(false);
+  });
+
+  it("persists borrowed/contained child tab grants when a per-user override ticks the host", () => {
+    const modules = [
+      { id: "pricing_projects", containsModuleIds: ["ops_projects_info_tab", "ops_projects_billings_tab"] },
+      { id: "ops_projects" },
+      { id: "ops_projects_info_tab", parentId: "ops_projects" },
+      { id: "ops_projects_billings_tab", parentId: "ops_projects" },
+    ];
+
+    const delta = resolvePerUserOverride(
+      {}, // base profile grants nothing here
+      { "pricing_projects:view": true }, // admin ticks the host module for this one user
+      modules,
+    );
+
+    // The host grant AND its borrowed child tabs are stored explicitly, so the
+    // exact-key DB resolver actually grants the tabs.
+    expect(delta["pricing_projects:view"]).toBe(true);
+    expect(delta["ops_projects_info_tab:view"]).toBe(true);
+    expect(delta["ops_projects_billings_tab:view"]).toBe(true);
+  });
+
+  it("returns an empty delta when the user matches the (cascaded) base", () => {
+    const modules = [
+      { id: "pricing_projects", containsModuleIds: ["ops_projects_info_tab"] },
+      { id: "ops_projects" },
+      { id: "ops_projects_info_tab", parentId: "ops_projects" },
+    ];
+    // Base already grants the host; user changes nothing.
+    const delta = resolvePerUserOverride({ "pricing_projects:view": true }, {}, modules);
+    expect(delta).toEqual({});
   });
 
   it("derives minimal overrides relative to the baseline profile", () => {

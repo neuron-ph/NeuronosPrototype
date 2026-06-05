@@ -702,75 +702,14 @@ export function getAccessModuleByModuleId(
   return ACCESS_NODE_BY_MODULE_ID[moduleId];
 }
 
-// ─── Hidden-module grant derivation ─────────────────────────────────────────
+// ─── Hidden-module grant derivation — REMOVED (NEU-012 Contract #4) ──────────
 //
-// Hidden modules (visibleInAccessMatrix: false) like ops_bookings are never
-// shown in the permission editor, so admins can't toggle their grants
-// directly.  Their grants must be derived from the visible service modules
-// that "contain" their child tabs via containsModuleIds.
-//
-// Rule: hidden_module:action = OR(source1:action, source2:action, ...)
-
-interface HiddenModuleMapping {
-  hiddenModuleId: ModuleId;
-  sourceModuleIds: ModuleId[];
-}
-
-// NEU-012 (strict): umbrella derivations being retired. Once an umbrella's
-// contract lands (all enforcement reads its real grants directly), its id moves
-// here so the client stops deriving — and therefore stops STORING (the profile
-// save path runs deriveHiddenModuleGrants) — that hidden umbrella key. The whole
-// derivation mechanism is removed entirely at Contract #4. All three hidden
-// umbrellas are now retired (ops_bookings #1, ops_projects #2, inbox_entity_picker
-// #3), so deriveHiddenModuleGrants is effectively a no-op pending that removal.
-const RETIRED_UMBRELLA_DERIVATIONS = new Set<ModuleId>([
-  "ops_bookings",
-  "ops_projects",
-  "inbox_entity_picker",
-]);
-
-const HIDDEN_MODULE_MAPPINGS: HiddenModuleMapping[] = (() => {
-  const mappings: HiddenModuleMapping[] = [];
-  // Sources are matched across ALL departments, not just within the hidden
-  // module's own department. Booking-service modules now span Operations
-  // (Forwarding/Brokerage/Trucking) AND Pricing (Marine Insurance/Others, with
-  // Others shared in both), so a hidden module's contributing sources may live
-  // in a different department. This keeps `deriveHiddenModuleGrants` consistent
-  // with the DB backfill (migration 118), which ORs the service modules by name.
-  const allVisible = ACCESS_SCHEMA
-    .flatMap(d => d.modules)
-    .filter(m => m.visibleInAccessMatrix !== false);
-  for (const dept of ACCESS_SCHEMA) {
-    const hidden = dept.modules.filter(
-      m => m.visibleInAccessMatrix === false && !RETIRED_UMBRELLA_DERIVATIONS.has(m.moduleId),
-    );
-    for (const h of hidden) {
-      const tabIds = new Set(h.tabs.map(t => t.moduleId));
-      const sources = [...new Set(
-        allVisible
-          .filter(v => (v.containsModuleIds ?? []).some(id => tabIds.has(id)))
-          .map(v => v.moduleId),
-      )];
-      if (sources.length > 0) mappings.push({ hiddenModuleId: h.moduleId, sourceModuleIds: sources });
-    }
-  }
-  return mappings;
-})();
-
-const DERIVABLE_ACTIONS = ["view", "create", "edit", "approve", "delete", "export"];
-
-export function deriveHiddenModuleGrants(
-  grants: Record<string, boolean>,
-): Record<string, boolean> {
-  const result = { ...grants };
-  for (const { hiddenModuleId, sourceModuleIds } of HIDDEN_MODULE_MAPPINGS) {
-    for (const action of DERIVABLE_ACTIONS) {
-      const key = `${hiddenModuleId}:${action}`;
-      result[key] = sourceModuleIds.some(src => grants[`${src}:${action}`] === true);
-    }
-  }
-  return result;
-}
+// All three hidden umbrellas (ops_bookings #1, ops_projects #2,
+// inbox_entity_picker #3) are retired, so the derive-at-write mechanism
+// (deriveHiddenModuleGrants + HIDDEN_MODULE_MAPPINGS) became a no-op and is now
+// deleted. Cascade is UX-only: the editors persist explicit child grants via
+// resolveCascadedGrants / resolvePerUserOverride, and enforcement (DB resolver +
+// PermissionProvider) reads explicit grants only. Nothing derives hidden keys.
 
 // ─── Dept-scoped moduleId families ───────────────────────────────────────────
 //
