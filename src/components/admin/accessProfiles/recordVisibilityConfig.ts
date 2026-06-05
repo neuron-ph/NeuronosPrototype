@@ -33,7 +33,15 @@ export const RECORD_TYPE_GROUPS: { group: string; types: RecordType[] }[] = [
       { key: "customers", label: "Customers", gatingModules: ["bd_customers", "pricing_customers", "acct_customers"] },
       { key: "quotations", label: "Quotations & Contracts", gatingModules: ["pricing_quotations", "pricing_contracts", "bd_contracts", "bd_inquiries"] },
       { key: "tasks", label: "Tasks", gatingModules: ["bd_tasks"] },
+      { key: "activities", label: "Activities", gatingModules: ["bd_activities"] },
+      { key: "budget_requests", label: "Budget Requests", gatingModules: ["bd_budget_requests"] },
       { key: "evouchers", label: "E-Vouchers", gatingModules: ["acct_evouchers", "my_evouchers", "bd_budget_requests"] },
+    ],
+  },
+  {
+    group: "Projects",
+    types: [
+      { key: "projects", label: "Projects", gatingModules: ["bd_projects", "pricing_projects", "ops_projects", "acct_projects"] },
     ],
   },
   {
@@ -53,17 +61,32 @@ export const RECORD_TYPE_GROUPS: { group: string; types: RecordType[] }[] = [
       { key: "collections", label: "Collections", gatingModules: ["acct_financials", "accounting_financials_collections_tab", "acct_collections"] },
       { key: "billings", label: "Billings", gatingModules: ["acct_financials", "accounting_financials_billings_tab", "acct_billings", "acct_bookings", "ops_bookings_billings_tab", "ops_projects_billings_tab", "pricing_contracts_billings_tab"] },
       { key: "expenses", label: "Expenses", gatingModules: ["acct_financials", "accounting_financials_expenses_tab", "acct_expenses", "ops_bookings_expenses_tab", "ops_projects_expenses_tab"] },
+      { key: "transactions", label: "Transactions", gatingModules: ["acct_financials", "acct_journal"] },
+      { key: "journal_entries", label: "Journal Entries", gatingModules: ["acct_journal", "acct_financials"] },
+      { key: "financial_filings", label: "Financial Statement Filings", gatingModules: ["acct_statements"] },
+      { key: "liquidations", label: "Liquidation Submissions", gatingModules: ["acct_evouchers", "my_evouchers"] },
+    ],
+  },
+  {
+    group: "Support & Internal",
+    types: [
+      // Tickets have no gating feature-module — always editable (gated by the
+      // dial + ticket participation, see migration 162).
+      { key: "tickets", label: "Tickets", gatingModules: [] },
+      { key: "memos", label: "Memos", gatingModules: ["exec_memos"] },
     ],
   },
 ];
 
 export const ALL_RECORD_TYPES: RecordType[] = RECORD_TYPE_GROUPS.flatMap((g) => g.types);
 
-/** A type is reachable when the profile has `view` on any of its gating modules. */
+/** A type is reachable when the profile has `view` on any of its gating modules.
+ *  Types with NO gating module (e.g. Tickets) are always reachable. */
 export function isRecordTypeAccessible(
   rt: RecordType,
   resolvedGrants: Record<string, boolean>,
 ): boolean {
+  if (rt.gatingModules.length === 0) return true;
   return rt.gatingModules.some((m) => resolvedGrants[`${m}:view`] === true);
 }
 
