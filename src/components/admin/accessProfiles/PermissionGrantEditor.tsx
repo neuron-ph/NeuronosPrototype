@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Check, ChevronDown, ChevronRight, ChevronsDown, ChevronsUp, EyeOff, Search, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, ChevronsDown, ChevronsUp, Search, X } from "lucide-react";
 import {
   PERM_MODULES, PERM_ACTIONS,
   type ModuleId, type ActionId,
@@ -7,7 +7,6 @@ import {
 import { getVisibleAccessMatrixDepartments } from "../../../config/access/accessSchema";
 import type { ModuleGrants } from "./accessProfileTypes";
 import { resolveCascadedGrants } from "./accessGrantUtils";
-import { BLOCK_HIGHER_RANK_VISIBILITY_GRANT } from "../../../lib/rbacGrantKeys";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -198,52 +197,6 @@ function PermToggle({
         flexShrink: 0,
       }} />
     </div>
-  );
-}
-
-function RbacRuleSwitch({
-  checked,
-  onChange,
-  disabled,
-}: {
-  checked: boolean;
-  onChange: (next: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      aria-pressed={checked}
-      aria-label="Block higher-rank visibility"
-      style={{
-        flexShrink: 0,
-        width: 44,
-        height: 24,
-        borderRadius: 12,
-        border: "none",
-        backgroundColor: checked ? "var(--neuron-action-primary)" : "var(--neuron-ui-border)",
-        cursor: disabled ? "not-allowed" : "pointer",
-        position: "relative",
-        transition: "background-color 0.18s cubic-bezier(0.16,1,0.3,1)",
-        opacity: disabled ? 0.55 : 1,
-      }}
-    >
-      <span
-        style={{
-          position: "absolute",
-          top: 2,
-          left: checked ? 22 : 2,
-          width: 20,
-          height: 20,
-          borderRadius: "50%",
-          backgroundColor: "#fff",
-          transition: "left 0.18s cubic-bezier(0.16,1,0.3,1)",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-        }}
-      />
-    </button>
   );
 }
 
@@ -737,7 +690,6 @@ export function PermissionGrantEditor({
 }: PermissionGrantEditorProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeActionFilter, setActiveActionFilter] = useState<ActionId | null>(null);
-  const blockHigherRankVisibility = grants[BLOCK_HIGHER_RANK_VISIBILITY_GRANT] === true;
   const resolvedGrants = useMemo(() => resolveCascadedGrants(grants, PERM_MODULES), [grants]);
   const resolvedBaselineGrants = useMemo(
     () => resolveCascadedGrants(baselineGrants, PERM_MODULES),
@@ -862,17 +814,6 @@ export function PermissionGrantEditor({
     onChange(newGrants, { manual: true });
   };
 
-  const handleHigherRankRuleChange = (next: boolean) => {
-    if (disabled) return;
-    const newGrants = { ...grants };
-    if (next) {
-      newGrants[BLOCK_HIGHER_RANK_VISIBILITY_GRANT] = true;
-    } else {
-      delete newGrants[BLOCK_HIGHER_RANK_VISIBILITY_GRANT];
-    }
-    onChange(newGrants, { manual: true });
-  };
-
   if (loading) return <SkeletonLoader />;
 
   return (
@@ -972,23 +913,6 @@ export function PermissionGrantEditor({
             <X size={10} /> Clear
           </button>
         )}
-      </div>
-
-      {/* Block higher-rank visibility — compact row */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "7px 12px", marginBottom: 10, borderRadius: 8,
-        border: "1px solid var(--neuron-ui-border)",
-        backgroundColor: "var(--neuron-bg-surface-subtle)", gap: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-          <EyeOff size={13} style={{ color: "var(--neuron-ink-muted)", flexShrink: 0 }} />
-          <span style={{ fontSize: 12, fontWeight: 500, color: "var(--neuron-ink-muted)", whiteSpace: "nowrap" }}>
-            Block higher-rank visibility
-          </span>
-          <span style={{ fontSize: 11, color: "var(--neuron-ink-muted)", opacity: 0.6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
-            — hide records owned by higher-rank users unless directly assigned
-          </span>
-        </div>
-        <RbacRuleSwitch checked={blockHigherRankVisibility} onChange={handleHigherRankRuleChange} disabled={disabled} />
       </div>
 
       {/* Column header — sticky to keep action labels visible while scrolling the matrix */}
