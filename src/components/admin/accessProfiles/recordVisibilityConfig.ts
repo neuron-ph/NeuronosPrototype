@@ -71,6 +71,34 @@ export function dialFor(map: RecordVisibilityMap, key: string): RecordDial {
   return map[key] ?? "own";
 }
 
+/** Effective per-type dials for a user: profile baseline overlaid with the
+ *  per-user override (override wins per key), defaulting to 'own'. Mirrors the
+ *  DB resolver current_user_visibility_dial. */
+export function mergeVisibility(
+  baseline: RecordVisibilityMap,
+  override: RecordVisibilityMap,
+): RecordVisibilityMap {
+  const out: RecordVisibilityMap = {};
+  for (const rt of ALL_RECORD_TYPES) {
+    out[rt.key] = override[rt.key] ?? baseline[rt.key] ?? "own";
+  }
+  return out;
+}
+
+/** Minimal per-user override: only the types whose dial differs from the
+ *  profile baseline (so profile changes still propagate to the rest). */
+export function deriveVisibilityOverride(
+  effective: RecordVisibilityMap,
+  baseline: RecordVisibilityMap,
+): RecordVisibilityMap {
+  const out: RecordVisibilityMap = {};
+  for (const rt of ALL_RECORD_TYPES) {
+    const eff = dialFor(effective, rt.key);
+    if (eff !== dialFor(baseline, rt.key)) out[rt.key] = eff;
+  }
+  return out;
+}
+
 /** Legacy single-scope column is inert under the dial model but kept coherent:
  *  the broadest dial across accessible types, mapped to the old vocabulary. */
 export function legacyScopeFromMap(map: RecordVisibilityMap): "own" | "team" | "department" {
