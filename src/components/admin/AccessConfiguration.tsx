@@ -5,7 +5,7 @@ import { supabase } from "../../utils/supabase/client";
 import { toast } from "sonner@2.0.3";
 import { ArrowLeft, Save, AlertTriangle, RotateCcw, BookMarked, ChevronDown, BookOpen, Check, Pencil, Trash2, X } from "lucide-react";
 import { useUser } from "../../hooks/useUser";
-import { PermissionGrantEditor } from "./accessProfiles/PermissionGrantEditor";
+import { AccessEditorTabs } from "./accessProfiles/AccessEditorTabs";
 import type { ModuleGrants, AccessProfileSummary } from "./accessProfiles/accessProfileTypes";
 import {
   chooseRoleDefaultProfile,
@@ -17,7 +17,6 @@ import {
   resolveCascadedGrants,
   resolvePerUserOverride,
 } from "./accessProfiles/accessGrantUtils";
-import { RecordVisibilityEditor } from "./accessProfiles/RecordVisibilityEditor";
 import {
   type RecordVisibilityMap,
   legacyScopeFromMap,
@@ -723,32 +722,16 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
             </div>
           )}
 
-          {!loading && (
-            <div style={{ marginBottom: 16, border: "1px solid var(--neuron-ui-border)", borderRadius: 10, backgroundColor: "var(--neuron-bg-elevated)", padding: 16 }}>
-              <div style={{ marginBottom: 12 }}>
-                <h3 style={{ margin: 0, marginBottom: 4, fontSize: 14, fontWeight: 600, color: "var(--neuron-ink-primary)" }}>
-                  Record Visibility
-                </h3>
-                <p style={{ margin: 0, fontSize: 12, color: "var(--neuron-ink-muted)" }}>
-                  Set per record type how broadly this user sees records. Each dial overrides the
-                  profile for that type; untouched types follow the profile.
-                </p>
-              </div>
-              <RecordVisibilityEditor
-                scopes={visibilityScopes}
-                onChange={setVisibilityScopes}
-                resolvedGrants={resolvedViewGrants}
-              />
-            </div>
-          )}
-
-          <PermissionGrantEditor
+          <AccessEditorTabs
             grants={overrides}
-            onChange={(nextGrants) => handleGrantChange(nextGrants)}
+            onGrantsChange={(nextGrants) => handleGrantChange(nextGrants)}
             baselineGrants={baselineGrants}
             showInheritedBaseline={true}
-            loading={loading}
             othersPrimaryGroup={user.department === "Pricing" ? "Pricing" : "Operations"}
+            loading={loading}
+            resolvedViewGrants={resolvedViewGrants}
+            visibilityScopes={visibilityScopes}
+            onVisibilityChange={setVisibilityScopes}
           />
         </div>
       </div>

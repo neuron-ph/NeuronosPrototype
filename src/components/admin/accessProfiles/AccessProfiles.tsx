@@ -8,11 +8,9 @@ import { toast } from "sonner@2.0.3";
 import { useUser } from "../../../hooks/useUser";
 import {
   Plus, ArrowLeft, Save, Trash2, UserCheck, AlertTriangle, BookMarked, Search, X, ChevronUp, Wand2,
-  ListChecks, Eye,
 } from "lucide-react";
 import { DataTable, type ColumnDef } from "../../common/DataTable";
 import { NeuronModal } from "../../ui/NeuronModal";
-import { PermissionGrantEditor } from "./PermissionGrantEditor";
 import type { AccessProfile, AccessProfileSummary, ModuleGrants, VisibilityScope } from "./accessProfileTypes";
 import {
   cloneGrants,
@@ -24,7 +22,7 @@ import {
 import type { ConfigUser } from "../AccessConfiguration";
 import { SidePanel } from "../../common/SidePanel";
 import { PERM_MODULES } from "../permissionsConfig";
-import { RecordVisibilityEditor } from "./RecordVisibilityEditor";
+import { AccessEditorTabs } from "./AccessEditorTabs";
 import { legacyScopeFromMap, type RecordVisibilityMap } from "./recordVisibilityConfig";
 
 // Operations service tags for access profiles. Distinct from the booking
@@ -584,7 +582,6 @@ export function ProfileEditor({
   const [savedGrants, setSavedGrants] = useState<ModuleGrants>(profile?.module_grants ?? {});
   const [visibilityScopes, setVisibilityScopes] = useState<RecordVisibilityMap>(profile?.visibility_scopes ?? {});
   const [savedVisibilityScopes, setSavedVisibilityScopes] = useState<RecordVisibilityMap>(profile?.visibility_scopes ?? {});
-  const [activeTab, setActiveTab] = useState<"access" | "visibility">("access");
   const [savedName, setSavedName] = useState(profile?.name ?? "");
   const [savedDescription, setSavedDescription] = useState(profile?.description ?? "");
   const [savedTargetDepartment, setSavedTargetDepartment] = useState(profile?.target_department ?? "");
@@ -1049,35 +1046,16 @@ export function ProfileEditor({
         </div>
       </div>
 
-      {/* Feature Access | Record Visibility tabs */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 16, borderBottom: "1px solid var(--neuron-ui-border)" }}>
-        {([
-          ["access", "Feature Access", ListChecks] as const,
-          ["visibility", "Record Visibility", Eye] as const,
-        ]).map(([id, label, Icon]) => {
-          const on = activeTab === id;
-          return (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setActiveTab(id)}
-              style={{
-                display: "flex", alignItems: "center", gap: 6, padding: "8px 14px",
-                border: "none", background: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-                color: on ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
-                borderBottom: on ? "2px solid var(--neuron-action-primary)" : "2px solid transparent",
-                marginBottom: -1,
-              }}
-            >
-              <Icon size={14} /> {label}
-            </button>
-          );
-        })}
-      </div>
-
-      {activeTab === "access" ? (
-        <>
-          {/* Grant count / controls row */}
+      <AccessEditorTabs
+        grants={grants}
+        onGrantsChange={(nextGrants) => setGrants(nextGrants)}
+        baselineGrants={baselineGrants}
+        showInheritedBaseline={showBaseline && canShowBaseline}
+        othersPrimaryGroup={targetDepartment === "Pricing" ? "Pricing" : "Operations"}
+        resolvedViewGrants={resolvedGrants}
+        visibilityScopes={visibilityScopes}
+        onVisibilityChange={setVisibilityScopes}
+        featureAccessToolbar={
           <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Access Rules</span>
             {grantCount > 0 && (
@@ -1111,23 +1089,8 @@ export function ProfileEditor({
               </button>
             )}
           </div>
-
-          {/* Grant editor */}
-          <PermissionGrantEditor
-            grants={grants}
-            onChange={(nextGrants) => setGrants(nextGrants)}
-            showInheritedBaseline={showBaseline && canShowBaseline}
-            baselineGrants={baselineGrants}
-            othersPrimaryGroup={targetDepartment === "Pricing" ? "Pricing" : "Operations"}
-          />
-        </>
-      ) : (
-        <RecordVisibilityEditor
-          scopes={visibilityScopes}
-          onChange={setVisibilityScopes}
-          resolvedGrants={resolvedGrants}
-        />
-      )}
+        }
+      />
 
       {/* Exit confirmation */}
       <NeuronModal
