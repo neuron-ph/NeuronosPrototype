@@ -8,6 +8,7 @@ import { toast } from "sonner@2.0.3";
 import { useUser } from "../../../hooks/useUser";
 import {
   Plus, ArrowLeft, Save, Trash2, UserCheck, AlertTriangle, BookMarked, Search, X, ChevronUp, Wand2,
+  ListChecks, Eye,
 } from "lucide-react";
 import { DataTable, type ColumnDef } from "../../common/DataTable";
 import { NeuronModal } from "../../ui/NeuronModal";
@@ -23,6 +24,8 @@ import {
 import type { ConfigUser } from "../AccessConfiguration";
 import { SidePanel } from "../../common/SidePanel";
 import { PERM_MODULES } from "../permissionsConfig";
+import { RecordVisibilityEditor } from "./RecordVisibilityEditor";
+import { legacyScopeFromMap, type RecordVisibilityMap } from "./recordVisibilityConfig";
 
 // Operations service tags for access profiles. Distinct from the booking
 // service-type enum: Marine Insurance is owned by Pricing (not an Operations
@@ -47,12 +50,6 @@ const ROLES = [
   { value: "supervisor",  label: "Supervisor" },
   { value: "manager",     label: "Manager" },
   { value: "executive",   label: "Executive" },
-];
-
-const VISIBILITY_OPTIONS: Array<{ value: VisibilityScope; label: string; description: string }> = [
-  { value: "own", label: "Own Records", description: "Only records personally owned or assigned to the user." },
-  { value: "team", label: "Team Wide", description: "Records owned by users in the same team." },
-  { value: "department", label: "Department Wide", description: "Records owned by users in the same department." },
 ];
 
 function formatDate(iso: string): string {
@@ -585,6 +582,9 @@ export function ProfileEditor({
   );
   const [grants, setGrants] = useState<ModuleGrants>(profile?.module_grants ?? {});
   const [savedGrants, setSavedGrants] = useState<ModuleGrants>(profile?.module_grants ?? {});
+  const [visibilityScopes, setVisibilityScopes] = useState<RecordVisibilityMap>(profile?.visibility_scopes ?? {});
+  const [savedVisibilityScopes, setSavedVisibilityScopes] = useState<RecordVisibilityMap>(profile?.visibility_scopes ?? {});
+  const [activeTab, setActiveTab] = useState<"access" | "visibility">("access");
   const [savedName, setSavedName] = useState(profile?.name ?? "");
   const [savedDescription, setSavedDescription] = useState(profile?.description ?? "");
   const [savedTargetDepartment, setSavedTargetDepartment] = useState(profile?.target_department ?? "");
@@ -609,7 +609,7 @@ export function ProfileEditor({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("access_profiles")
-        .select("id, name, description, target_department, target_role, target_service, module_grants, visibility_scope, visibility_departments, updated_at")
+        .select("id, name, description, target_department, target_role, target_service, module_grants, visibility_scope, visibility_departments, visibility_scopes, updated_at")
         .eq("is_active", true)
         .eq("is_baseline", true);
       if (error) throw error;
@@ -631,10 +631,15 @@ export function ProfileEditor({
     }
     const gk = Object.keys(grants), sk = Object.keys(savedGrants);
     if (gk.length !== sk.length) return true;
-    return gk.some(k => grants[k] !== savedGrants[k]);
+    if (gk.some(k => grants[k] !== savedGrants[k])) return true;
+    const vk = Object.keys(visibilityScopes), svk = Object.keys(savedVisibilityScopes);
+    if (vk.length !== svk.length) return true;
+    return vk.some(k => visibilityScopes[k] !== savedVisibilityScopes[k]);
   }, [
     description,
     grants,
+    visibilityScopes,
+    savedVisibilityScopes,
     name,
     savedDescription,
     savedGrants,
@@ -666,6 +671,7 @@ export function ProfileEditor({
   const handleDiscard = () => {
     const snapshot = {
       grants: { ...grants },
+      visibilityScopes: { ...visibilityScopes },
       name,
       description,
       targetDepartment,
@@ -682,6 +688,7 @@ export function ProfileEditor({
         onClick: () => {
           undone = true;
           setGrants(snapshot.grants);
+          setVisibilityScopes(snapshot.visibilityScopes);
           setName(snapshot.name);
           setDescription(snapshot.description);
           setTargetDepartment(snapshot.targetDepartment);
@@ -730,6 +737,12 @@ export function ProfileEditor({
   );
   const canShowBaseline = !!baselineProfile;
   const grantCount = countGrantOverrides(grants);
+  // Resolved (cascaded) feature-access grants — drives which record types are
+  // reachable, so the Record Visibility tab greys what Feature Access can't open.
+  const resolvedGrants = useMemo(
+    () => resolveCascadedGrants(grants, PERM_MODULES) as Record<string, boolean>,
+    [grants],
+  );
 
   // Deliberate autofill: the admin presses "Autofill from baseline" to copy the
   // matching baseline seed's ticks + visibility into the form. Unlike a reactive
@@ -742,6 +755,7 @@ export function ProfileEditor({
     setVisibilityScope(
       resolveProfileVisibilityScope(baselineProfile.visibility_scope, baselineProfile.target_role ?? targetRole),
     );
+    setVisibilityScopes({ ...(baselineProfile.visibility_scopes ?? {}) });
     const label = baselineProfile.name.replace(/^Baseline — /, "");
     toast(`Autofilled from "${label}" — adjust as needed.`, { duration: 3500 });
   };
@@ -783,8 +797,9 @@ export function ProfileEditor({
         target_role: targetRole || null,
         target_service: targetDepartment === "Operations" ? (targetService || null) : null,
         module_grants: finalGrants,
-        visibility_scope: visibilityScope,
-        visibility_departments: visibilityScope === "selected_departments" ? visibilityDepartments : null,
+        visibility_scope: legacyScopeFromMap(visibilityScopes),
+        visibility_departments: null,
+        visibility_scopes: visibilityScopes,
         created_by: currentUser?.id ?? null,
         updated_by: currentUser?.id ?? null,
       }));
@@ -796,8 +811,9 @@ export function ProfileEditor({
         target_role: targetRole || null,
         target_service: targetDepartment === "Operations" ? (targetService || null) : null,
         module_grants: finalGrants,
-        visibility_scope: visibilityScope,
-        visibility_departments: visibilityScope === "selected_departments" ? visibilityDepartments : null,
+        visibility_scope: legacyScopeFromMap(visibilityScopes),
+        visibility_departments: null,
+        visibility_scopes: visibilityScopes,
         updated_by: currentUser?.id ?? null,
         updated_at: now,
       }).eq("id", profile!.id!));
@@ -838,6 +854,7 @@ export function ProfileEditor({
     toast.success(isNew ? "Profile created" : "Profile saved");
     setName(trimmed);
     setSavedGrants(grants);
+    setSavedVisibilityScopes(visibilityScopes);
     setSavedName(trimmed);
     setSavedDescription(description);
     setSavedTargetDepartment(targetDepartment);
@@ -1005,81 +1022,12 @@ export function ProfileEditor({
                 </select>
               </div>
             )}
-            <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: 8 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Record Visibility</label>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
-                {VISIBILITY_OPTIONS.map((option) => {
-                  const active = visibilityScope === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => {
-                        setVisibilityScope(option.value);
-                        if (option.value !== "selected_departments") setVisibilityDepartments([]);
-                      }}
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "flex-start",
-                        gap: 4,
-                        padding: "12px 14px",
-                        borderRadius: 10,
-                        border: `1px solid ${active ? "var(--neuron-action-primary)" : "var(--neuron-ui-border)"}`,
-                        background: active ? "color-mix(in oklch, var(--neuron-action-primary) 10%, transparent)" : "var(--neuron-bg-elevated)",
-                        cursor: "pointer",
-                        textAlign: "left",
-                      }}
-                    >
-                      <span style={{ fontSize: 12, fontWeight: 600, color: active ? "var(--neuron-action-primary)" : "var(--neuron-ink-primary)" }}>
-                        {option.label}
-                      </span>
-                      <span style={{ fontSize: 11, lineHeight: 1.45, color: "var(--neuron-ink-muted)" }}>
-                        {option.description}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              {visibilityScope === "selected_departments" && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {DEPARTMENTS.map((department) => {
-                    const selected = visibilityDepartments.includes(department);
-                    return (
-                      <button
-                        key={department}
-                        type="button"
-                        onClick={() =>
-                          setVisibilityDepartments((current) =>
-                            current.includes(department)
-                              ? current.filter((value) => value !== department)
-                              : [...current, department],
-                          )
-                        }
-                        style={{
-                          padding: "4px 10px",
-                          borderRadius: 999,
-                          border: `1px solid ${selected ? "var(--neuron-action-primary)" : "var(--neuron-ui-border)"}`,
-                          background: selected ? "color-mix(in oklch, var(--neuron-action-primary) 12%, transparent)" : "var(--neuron-bg-elevated)",
-                          color: selected ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
-                          fontSize: 12,
-                          fontWeight: 500,
-                          cursor: "pointer",
-                        }}
-                      >
-                        {department}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-              {canShowBaseline && (
+            {canShowBaseline && (
+              <div style={{ gridColumn: "1 / -1" }}>
                 <button
                   type="button"
                   onClick={handleApplyBaseline}
                   style={{
-                    alignSelf: "flex-start",
-                    marginTop: 4,
                     display: "flex",
                     alignItems: "center",
                     gap: 6,
@@ -1095,55 +1043,91 @@ export function ProfileEditor({
                 >
                   <Wand2 size={14} /> Autofill from {ROLES.find(r => r.value === targetRole)?.label} baseline
                 </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Grant count / controls row */}
-      <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Access Rules</span>
-        {grantCount > 0 && (
-          <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 8px", borderRadius: 999,
-            backgroundColor: "color-mix(in oklch, var(--neuron-action-primary) 12%, transparent)",
-            color: "var(--neuron-action-primary)" }}>
-            {grantCount} explicit rules
-          </span>
-        )}
-        {canShowBaseline && (
-          <button
-            onClick={() => setShowBaseline(s => !s)}
-            style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6,
-              border: showBaseline ? "1.5px solid var(--neuron-action-primary)" : "1px solid var(--neuron-ui-border)",
-              backgroundColor: showBaseline ? "color-mix(in oklch, var(--neuron-action-primary) 10%, transparent)" : "transparent",
-              color: showBaseline ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
-              cursor: "pointer" }}>
-            {showBaseline ? "Hide baseline" : `Preview ${ROLES.find(r => r.value === targetRole)?.label} baseline`}
-          </button>
-        )}
-        {emptyGrantsWarning && (
-          <span style={{ fontSize: 11, color: "var(--theme-status-warning-fg)", display: "flex", alignItems: "center", gap: 4 }}>
-            <AlertTriangle size={11} /> No rules set — click Save again to confirm
-          </span>
-        )}
-        {grantCount > 0 && (
-          <button onClick={handleClearAll} style={{ fontSize: 11, color: "var(--neuron-semantic-error, #dc2626)",
-            border: "none", background: "none", cursor: "pointer", padding: "2px 0", marginLeft: "auto",
-            textDecoration: "underline", textUnderlineOffset: 2, opacity: 0.8 }}>
-            Clear all
-          </button>
-        )}
+      {/* Feature Access | Record Visibility tabs */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 16, borderBottom: "1px solid var(--neuron-ui-border)" }}>
+        {([
+          ["access", "Feature Access", ListChecks] as const,
+          ["visibility", "Record Visibility", Eye] as const,
+        ]).map(([id, label, Icon]) => {
+          const on = activeTab === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setActiveTab(id)}
+              style={{
+                display: "flex", alignItems: "center", gap: 6, padding: "8px 14px",
+                border: "none", background: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
+                color: on ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
+                borderBottom: on ? "2px solid var(--neuron-action-primary)" : "2px solid transparent",
+                marginBottom: -1,
+              }}
+            >
+              <Icon size={14} /> {label}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Grant editor */}
-      <PermissionGrantEditor
-        grants={grants}
-        onChange={(nextGrants) => setGrants(nextGrants)}
-        showInheritedBaseline={showBaseline && canShowBaseline}
-        baselineGrants={baselineGrants}
-        othersPrimaryGroup={targetDepartment === "Pricing" ? "Pricing" : "Operations"}
-      />
+      {activeTab === "access" ? (
+        <>
+          {/* Grant count / controls row */}
+          <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Access Rules</span>
+            {grantCount > 0 && (
+              <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 8px", borderRadius: 999,
+                backgroundColor: "color-mix(in oklch, var(--neuron-action-primary) 12%, transparent)",
+                color: "var(--neuron-action-primary)" }}>
+                {grantCount} explicit rules
+              </span>
+            )}
+            {canShowBaseline && (
+              <button
+                onClick={() => setShowBaseline(s => !s)}
+                style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6,
+                  border: showBaseline ? "1.5px solid var(--neuron-action-primary)" : "1px solid var(--neuron-ui-border)",
+                  backgroundColor: showBaseline ? "color-mix(in oklch, var(--neuron-action-primary) 10%, transparent)" : "transparent",
+                  color: showBaseline ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
+                  cursor: "pointer" }}>
+                {showBaseline ? "Hide baseline" : `Preview ${ROLES.find(r => r.value === targetRole)?.label} baseline`}
+              </button>
+            )}
+            {emptyGrantsWarning && (
+              <span style={{ fontSize: 11, color: "var(--theme-status-warning-fg)", display: "flex", alignItems: "center", gap: 4 }}>
+                <AlertTriangle size={11} /> No rules set — click Save again to confirm
+              </span>
+            )}
+            {grantCount > 0 && (
+              <button onClick={handleClearAll} style={{ fontSize: 11, color: "var(--neuron-semantic-error, #dc2626)",
+                border: "none", background: "none", cursor: "pointer", padding: "2px 0", marginLeft: "auto",
+                textDecoration: "underline", textUnderlineOffset: 2, opacity: 0.8 }}>
+                Clear all
+              </button>
+            )}
+          </div>
+
+          {/* Grant editor */}
+          <PermissionGrantEditor
+            grants={grants}
+            onChange={(nextGrants) => setGrants(nextGrants)}
+            showInheritedBaseline={showBaseline && canShowBaseline}
+            baselineGrants={baselineGrants}
+            othersPrimaryGroup={targetDepartment === "Pricing" ? "Pricing" : "Operations"}
+          />
+        </>
+      ) : (
+        <RecordVisibilityEditor
+          scopes={visibilityScopes}
+          onChange={setVisibilityScopes}
+          resolvedGrants={resolvedGrants}
+        />
+      )}
 
       {/* Exit confirmation */}
       <NeuronModal
@@ -1183,7 +1167,7 @@ export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditPr
     queryFn: async () => {
       const { data, error } = await supabase
         .from("access_profiles")
-        .select("id, name, description, target_department, target_role, target_service, module_grants, visibility_scope, visibility_departments, updated_at")
+        .select("id, name, description, target_department, target_role, target_service, module_grants, visibility_scope, visibility_departments, visibility_scopes, updated_at")
         .eq("is_active", true)
         .eq("is_baseline", false)
         .order("name");
