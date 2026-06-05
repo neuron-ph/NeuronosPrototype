@@ -751,6 +751,25 @@ export function PermissionGrantEditor({
     return map;
   }, []);
 
+  // Parent → its child rows (own tabs via parentId + borrowed/contained tabs).
+  // Used to make a parent checkbox a true bulk-fill (Model B): one click sets the
+  // parent AND every child explicitly for that action.
+  const childrenByModuleId = useMemo(() => {
+    const map = new Map<string, ModuleId[]>();
+    const add = (parent: string, child: ModuleId) => {
+      const arr = map.get(parent) ?? [];
+      if (!arr.includes(child)) arr.push(child);
+      map.set(parent, arr);
+    };
+    for (const mod of PERM_MODULES) {
+      if (mod.parentId) add(mod.parentId, mod.id);
+    }
+    for (const mod of PERM_MODULES) {
+      for (const containedId of mod.containsModuleIds ?? []) add(mod.id, containedId);
+    }
+    return map;
+  }, []);
+
   const grouped = useMemo(() => {
     const map = new Map<string, PermModule[]>();
     for (const group of GROUP_ORDER) map.set(group, []);
@@ -788,6 +807,21 @@ export function PermissionGrantEditor({
 
   const handleToggle = (moduleId: ModuleId, action: ActionId, next: boolean, cascadeParentId?: ModuleId) => {
     if (disabled) return;
+
+    // Model B (NEU-012 Contract #4): a parent-row checkbox is a bulk-fill /
+    // select-all for its column. One click force-sets the parent AND every child
+    // explicitly to `next` — so re-clicking a parent re-fills children you'd
+    // manually flipped (the child cell reads its explicit value, no cascade).
+    // Child rows fall through to the single-cell logic below.
+    const childIds = childrenByModuleId.get(moduleId);
+    if (childIds && childIds.length > 0) {
+      const bulk = { ...grants };
+      bulk[`${moduleId}:${action}`] = next;
+      for (const childId of childIds) bulk[`${childId}:${action}`] = next;
+      onChange(bulk, { manual: true });
+      return;
+    }
+
     const key = `${moduleId}:${action}`;
     const newGrants = { ...grants };
     const parentId = cascadeParentId ?? parentByModuleId.get(moduleId);
