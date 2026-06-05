@@ -8,10 +8,11 @@ import type { ModuleGrants } from '../components/admin/accessProfiles/accessProf
 interface PermissionContextType {
   /**
    * Check whether the current user has access to a module+action.
-   * NEU-012 (strict): access is the explicit grant set of the ONE Access Profile
-   * the user is assigned (users.access_profile_id). No per-user overrides, no
-   * parent→child cascade at read — the profile is the single source of truth,
-   * read identically here and by the DB resolver (current_user_effective_module_grant).
+   * NEU-012 (strict, corrected 2026-06-05): access is the assigned Access Profile
+   * (users.access_profile_id) with a VISIBLE per-user customization layer on top:
+   *   effective(key) = override[key] if present else profile[key] else false.
+   * Explicit, no parent→child cascade at read, no role fallback — read identically
+   * here and by the DB resolver (current_user_effective_module_grant).
    */
   can: (moduleId: ModuleId, action: ActionId) => boolean;
   /**
@@ -38,8 +39,7 @@ export function PermissionProvider({ children }: { children: ReactNode }) {
     queryFn: async () => {
       if (!user) return { moduleGrants: {} };
 
-      // The user is assigned exactly one Access Profile; its module_grants ARE
-      // their access. Two simple reads (access_profiles is world-readable to
+      // Base: the assigned Access Profile (access_profiles is world-readable to
       // authenticated users via access_profiles_select).
       const { data: urow, error: uErr } = await supabase
         .from('users')
@@ -49,17 +49,31 @@ export function PermissionProvider({ children }: { children: ReactNode }) {
       if (uErr) console.warn('[PermissionProvider] user fetch failed:', uErr.message);
 
       const profileId = (urow as { access_profile_id: string | null } | null)?.access_profile_id ?? null;
-      if (!profileId) return { moduleGrants: {} };
 
-      const { data: prof, error: pErr } = await supabase
-        .from('access_profiles')
-        .select('module_grants, is_active')
-        .eq('id', profileId)
+      let profileGrants: ModuleGrants = {};
+      if (profileId) {
+        const { data: prof, error: pErr } = await supabase
+          .from('access_profiles')
+          .select('module_grants, is_active')
+          .eq('id', profileId)
+          .maybeSingle();
+        if (pErr) console.warn('[PermissionProvider] profile fetch failed:', pErr.message);
+        const row = prof as { module_grants: ModuleGrants | null; is_active: boolean } | null;
+        profileGrants = (row?.is_active ? row.module_grants : null) ?? {};
+      }
+
+      // Overlay: the visible per-user customization (permission_overrides). RLS
+      // (overrides_select) lets a user read its own row.
+      const { data: ovr, error: oErr } = await supabase
+        .from('permission_overrides')
+        .select('module_grants')
+        .eq('user_id', user.id)
         .maybeSingle();
-      if (pErr) console.warn('[PermissionProvider] profile fetch failed:', pErr.message);
+      if (oErr) console.warn('[PermissionProvider] override fetch failed:', oErr.message);
+      const overrideGrants = ((ovr as { module_grants: ModuleGrants | null } | null)?.module_grants ?? {}) as ModuleGrants;
 
-      const row = prof as { module_grants: ModuleGrants | null; is_active: boolean } | null;
-      const moduleGrants = (row?.is_active ? row.module_grants : null) ?? {};
+      // effective(key) = override[key] if present else profile[key] else false.
+      const moduleGrants = { ...profileGrants, ...overrideGrants };
       return { moduleGrants: moduleGrants as ModuleGrants };
     },
   });
