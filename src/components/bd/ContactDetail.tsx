@@ -57,6 +57,8 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
   const canViewTeamsTab       = can(ids.teams,       "view");
   const canEditTeamsTab       = can(ids.teams,       "edit");
   const canDeleteContact      = can(ids.root,        "delete");
+  const canEditContact        = can(ids.root,        "edit");
+  const canCreateCustomer     = can(variant === "pricing" ? "pricing_customers" : "bd_customers", "create");
 
   const [activeTab, setActiveTab] = useState<"activities" | "tasks" | "inquiries" | "attachments" | "comments" | "teams">(() => {
     if (variant === "pricing") {
@@ -546,6 +548,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                   <div className="flex items-center gap-2">
                     {!isEditing ? (
                     <>
+                      {canEditContact && (
                       <button
                         onClick={() => setIsEditing(true)}
                         className="flex items-center gap-2 px-3 py-2 rounded-lg transition-colors text-[13px]"
@@ -564,7 +567,8 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                         <Edit size={14} />
                         Update Details
                       </button>
-                      {!effectiveCustomerId ? (
+                      )}
+                      {!effectiveCustomerId ? (canCreateCustomer && (
                         <button
                           onClick={handleConvertToCustomer}
                           disabled={isConverting}
@@ -586,7 +590,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                           <UserCheck size={14} />
                           {isConverting ? "Converting..." : "Convert to Customer"}
                         </button>
-                      ) : (
+                      )) : (
                         <span
                           className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm text-[12px] font-medium"
                           style={{

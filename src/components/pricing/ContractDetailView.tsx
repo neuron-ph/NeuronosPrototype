@@ -126,6 +126,7 @@ export function ContractDetailView({
   const canViewAttachmentsTab  = can(ids.attachments, "view");
   const canViewCommentsTab     = can(ids.comments,    "view");
   const canViewActivityTab     = can(ids.activity,    "view");
+  const canEditContract        = can("pricing_contracts", "edit") || can("bd_contracts", "edit");
 
   const resolveInitialTab = (): ContractTab => {
     if (initialTab) return initialTab as ContractTab;
@@ -978,6 +979,7 @@ export function ContractDetailView({
             />
 
             {/* Actions Menu (⋮) — Edit, Renew, etc. */}
+            {canEditContract && (
             <div style={{ position: "relative" }}>
               <button
                 onClick={() => setShowActionsMenu(!showActionsMenu)}
@@ -1087,6 +1089,7 @@ export function ContractDetailView({
                 </>
               )}
             </div>
+            )}
         </div>
       </div>
 

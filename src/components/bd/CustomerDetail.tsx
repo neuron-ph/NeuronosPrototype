@@ -53,6 +53,10 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
   const canViewAttachmentsTab = can(ids.attachments, "view");
   const canViewTeamsTab       = can(ids.teams,       "view");
   const canEditTeamsTab       = can(ids.teams,       "edit");
+  const canEditCustomer       = can(ids.root,        "edit");
+  const canCreateContact      = can(ids.contacts,    "create");
+  const canCreateActivity     = can(ids.activities,  "create");
+  const canCreateTask         = can(ids.tasks,       "create");
   const [activeTab, setActiveTab] = useState<"contacts" | "activities" | "tasks" | "inquiries" | "comments" | "attachments" | "projects" | "contracts" | "teams">(() => {
     if (variant === "pricing") {
       if (canViewInquiriesTab) return "inquiries";
@@ -402,7 +406,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                     </div>
                   </div>
                   
-                  {variant === "bd" && (
+                  {variant === "bd" && canEditCustomer && (
                     <button
                       onClick={() => setIsEditing(!isEditing)}
                       className="p-2 rounded-lg transition-colors flex-shrink-0"
@@ -903,6 +907,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                     <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
                       Contact List
                     </h3>
+                    {canCreateContact && (
                     <button
                       onClick={() => setIsAddContactPanelOpen(true)}
                       className="px-4 py-2.5 rounded-lg text-[13px] font-medium transition-colors"
@@ -919,6 +924,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                     >
                       Add Contact
                     </button>
+                    )}
                   </div>
 
                   {isLoadingContacts ? (
@@ -1060,6 +1066,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                         <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
                           Activity Timeline
                         </h3>
+                        {canCreateActivity && (
                         <button
                           onClick={() => {
                             setIsLoggingActivity(true);
@@ -1079,6 +1086,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                         >
                           Log Activity
                         </button>
+                        )}
                       </div>
 
                       {activities.length === 0 ? (
@@ -1176,6 +1184,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                         <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
                           Tasks
                         </h3>
+                        {canCreateTask && (
                         <button
                           onClick={() => {
                             setIsCreatingTask(true);
@@ -1195,6 +1204,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                         >
                           Create Task
                         </button>
+                        )}
                       </div>
 
                       {tasks.length === 0 ? (
