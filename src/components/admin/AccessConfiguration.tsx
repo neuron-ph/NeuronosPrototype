@@ -261,26 +261,36 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
     let cancelled = false;
     async function load() {
       setLoading(true);
-      const { data } = await supabase
-        .from("permission_overrides")
-        .select("module_grants, applied_profile_id, scope, departments, profile:applied_profile_id(id, name, description, target_department, target_role, module_grants, visibility_scope, visibility_departments, updated_at)")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      // NEU-012 (strict): the enforced base is users.access_profile_id, and the stored
+      // delta is permission_overrides.module_grants. Source the baseline from the
+      // enforced field (not the legacy applied_profile_id pointer) so the grid shows
+      // exactly what the resolver enforces.
+      const [{ data }, { data: urow }] = await Promise.all([
+        supabase
+          .from("permission_overrides")
+          .select("module_grants, applied_profile_id, scope, departments")
+          .eq("user_id", user.id)
+          .maybeSingle(),
+        supabase
+          .from("users")
+          .select("access_profile_id")
+          .eq("id", user.id)
+          .maybeSingle(),
+      ]);
       if (!cancelled) {
         const grants = cloneGrants((data?.module_grants ?? {}) as ModuleGrants);
-        const explicitProfile = ((data as any)?.profile ?? null) as AccessProfileSummary | null;
         const fallbackProfile = chooseRoleDefaultProfile(profiles, user.role, user.department);
-        const baselineProfile = explicitProfile ?? fallbackProfile;
-        const pid = (data as any)?.applied_profile_id ?? baselineProfile?.id ?? null;
-        const pname = explicitProfile?.name ?? fallbackProfile?.name ?? null;
+        const baseProfileId = (urow as { access_profile_id: string | null } | null)?.access_profile_id ?? null;
+        const baselineProfile = profiles.find((p) => p.id === baseProfileId) ?? fallbackProfile;
+        const pid = baselineProfile?.id ?? null;
+        const pname = baselineProfile?.name ?? null;
         const nextScope = resolveProfileVisibilityScope(
-          (data as any)?.scope ?? explicitProfile?.visibility_scope ?? fallbackProfile?.visibility_scope ?? null,
+          (data as any)?.scope ?? baselineProfile?.visibility_scope ?? null,
           user.role,
         );
         const nextDepartments =
           ((data as any)?.departments as string[] | null | undefined)
-          ?? explicitProfile?.visibility_departments
-          ?? fallbackProfile?.visibility_departments
+          ?? baselineProfile?.visibility_departments
           ?? [];
         setAppliedProfileId(pid);
         setAppliedProfileName(pname);
@@ -382,6 +392,17 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
           module_grants: finalGrants,
           applied_profile_id: nextAppliedProfileId,
         }));
+    }
+
+    // NEU-012 (strict): enforcement reads users.access_profile_id as the base, so the
+    // assignment must land there too — applied_profile_id alone is no longer read.
+    // The override row above carries the visible per-user delta on top.
+    if (!error) {
+      const { error: uErr } = await supabase
+        .from("users")
+        .update({ access_profile_id: nextAppliedProfileId })
+        .eq("id", user.id);
+      if (uErr) error = uErr;
     }
 
     setSaving(false);
