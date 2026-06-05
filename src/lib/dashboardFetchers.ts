@@ -69,11 +69,16 @@ export interface DeptQueueData {
 
 // ─── Fetchers ─────────────────────────────────────────────────────────────────
 
-export async function fetchMyWork(dept: string, role: string): Promise<MyWorkData> {
+export async function fetchMyWork(
+  dept: string,
+  gates: { holdsManagerGate: boolean; holdsAccountingGate: boolean },
+): Promise<MyWorkData> {
+  // NEU-012 Phase 5b: approval queues come from EV grants, not role strings —
+  // my_evouchers:approve = dept-manager step, acct_evouchers:approve = CEO +
+  // Accounting steps (mirrors the evouchers RLS).
   const approvalStatuses: string[] = [];
-  if (role.includes("tl") || role === "team_lead" || role === "manager") approvalStatuses.push("pending_manager");
-  if (dept === "Executive" || role.includes("executive") || role === "ceo") approvalStatuses.push("pending_ceo");
-  if (dept === "Accounting") approvalStatuses.push("pending_accounting");
+  if (gates.holdsManagerGate) approvalStatuses.push("pending_manager");
+  if (gates.holdsAccountingGate) approvalStatuses.push("pending_ceo", "pending_accounting");
 
   const evQuery = approvalStatuses.length > 0
     ? supabase

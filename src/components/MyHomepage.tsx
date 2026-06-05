@@ -1130,9 +1130,12 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
     .join(" · ");
 
   // ── Data ────────────────────────────────────────────────────────────────────
+  // NEU-012 Phase 5b: approval-queue scope comes from EV grants, not role.
+  const holdsManagerGate = can("my_evouchers", "approve");
+  const holdsAccountingGate = can("acct_evouchers", "approve");
   const { data: myWorkData, isLoading: loadingMyWork } = useQuery({
-    queryKey: ["myWork", dept, role],
-    queryFn:  () => fetchMyWork(dept, role),
+    queryKey: ["myWork", dept, holdsManagerGate, holdsAccountingGate],
+    queryFn:  () => fetchMyWork(dept, { holdsManagerGate, holdsAccountingGate }),
     enabled:  !!dept,
     staleTime: 2 * 60 * 1000,
   });

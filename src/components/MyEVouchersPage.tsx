@@ -9,7 +9,6 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useUser } from "../hooks/useUser";
 import { useEVouchers } from "../hooks/useEVouchers";
-import { canPerformEVAction } from "../utils/permissions";
 import { queryKeys } from "../lib/queryKeys";
 import { approveEVInline } from "../utils/evoucherApproval";
 import { toast } from "sonner@2.0.3";
@@ -69,9 +68,12 @@ export function MyEVouchersPage() {
   const { user, effectiveDepartment, effectiveRole } = useUser();
   const queryClient = useQueryClient();
 
-  // ── Role capabilities ───────────────────────────────────────────────────
-  const isExecutive = effectiveDepartment === "Executive";
-  const canApproveMgrGate = canPerformEVAction("approve_tl", effectiveRole, effectiveDepartment);
+  // ── Approval capabilities (NEU-012 Phase 5b: grants, not identity) ──────
+  // Dept-manager gate = my_evouchers:approve (DB also enforces the requestor-
+  // department match); CEO gate = acct_evouchers:approve. isExecutive keeps
+  // steering which QUEUE is shown (routing), now derived from the CEO grant.
+  const canApproveMgrGate = can("my_evouchers", "approve");
+  const isExecutive = can("acct_evouchers", "approve");
   const showApprovalQueue = canApproveMgrGate || isExecutive;
   const showScopeFilter = canApproveMgrGate || isExecutive;
 

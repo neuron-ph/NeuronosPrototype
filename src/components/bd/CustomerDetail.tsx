@@ -88,8 +88,10 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
   const [isEditingTask, setIsEditingTask] = useState(false);
   const [editedTask, setEditedTask] = useState<Task | null>(null);
   const [isAddContactPanelOpen, setIsAddContactPanelOpen] = useState(false);
-  const { user, effectiveRole, effectiveDepartment } = useUser();
-  const canAssignOwner = effectiveDepartment === "Executive" || effectiveRole === "manager" || effectiveRole === "executive";
+  const { user, effectiveDepartment } = useUser();
+  // NEU-012 Phase 5b: reassigning the owner is a customer edit — DB allows any
+  // customers editor, so the UI mirrors that rather than the old manager check.
+  const canAssignOwner = canEditCustomer;
   const queryClient = useQueryClient();
   const { industryOptions, leadSourceOptions } = useCustomerProfileOptions({
     currentIndustry: editedCustomer.industry,

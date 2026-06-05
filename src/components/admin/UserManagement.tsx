@@ -1103,6 +1103,7 @@ function DepartmentTeamsSection({
   refreshTeamsData: () => Promise<void>;
 }) {
   const queryClient = useQueryClient();
+  const { can } = usePermission();
   const {
     data: deptRolesData,
     error: deptRolesError,
@@ -1116,8 +1117,9 @@ function DepartmentTeamsSection({
   const deptRoles = deptRolesData?.roles ?? [];
   const supportsRequiredRoles = deptRolesData?.supportsRequired ?? true;
 
-  const canEditRoleConfig =
-    currentUser?.department === "Executive" || currentUser?.role === "executive";
+  // NEU-012 Phase 5b: department-role config writes mirror the
+  // department_assignment_roles RLS (exec_profiling:edit).
+  const canEditRoleConfig = can("exec_profiling", "edit");
 
   const activeRoles = useMemo(
     () => deptRoles.filter((role) => role.is_active).sort((a, b) => a.sort_order - b.sort_order),

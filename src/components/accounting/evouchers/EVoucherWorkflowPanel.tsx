@@ -1,5 +1,5 @@
 import { supabase } from "../../../utils/supabase/client";
-import { canPerformEVAction } from "../../../utils/permissions";
+import { usePermission } from "../../../context/PermissionProvider";
 import { createWorkflowTicket } from "../../../utils/workflowTickets";
 import { logActivity, logApproval } from "../../../utils/activityLog";
 import { useState } from "react";
@@ -107,27 +107,31 @@ export function EVoucherWorkflowPanel({
     ? { id: currentUser.id, name: currentUser.name, department: currentUser.department ?? "" }
     : null;
 
-  const role = currentUser?.role ?? "";
-  const department = currentUser?.department ?? "";
-
   // ── Permission gates ──────────────────────────────────────────────────────
+  // NEU-012 Phase 5b: gates mirror the evouchers RLS — dept-manager step =
+  // my_evouchers:approve (DB additionally enforces the requestor-department
+  // match), CEO/Accounting steps = acct_evouchers:approve.
+  const { can } = usePermission();
+  const holdsManagerGate = can("my_evouchers", "approve");
+  const holdsAccountingGate = can("acct_evouchers", "approve");
+
   const canSubmit = isOwner && currentStatus === "draft";
   const canCancel = isOwner && (currentStatus === "draft" || currentStatus === "rejected");
 
-  const canApproveAsTL   = canPerformEVAction("approve_tl", role, department) && currentStatus === "pending_manager";
-  const canRejectAsTL    = canPerformEVAction("approve_tl", role, department) && currentStatus === "pending_manager";
-  const canApproveAsCEO  = canPerformEVAction("approve_ceo", role, department) && currentStatus === "pending_ceo";
-  const canRejectAsCEO   = canPerformEVAction("approve_ceo", role, department) && currentStatus === "pending_ceo";
-  const canDisburse      = canPerformEVAction("approve_accounting", role, department) && currentStatus === "pending_accounting";
-  const canVerifyAndPost = canPerformEVAction("post_gl", role, department) && currentStatus === "pending_verification";
-  const canUnlockForCorrection = canPerformEVAction("unlock_posted", role, department) && currentStatus === "posted";
+  const canApproveAsTL   = holdsManagerGate && currentStatus === "pending_manager";
+  const canRejectAsTL    = holdsManagerGate && currentStatus === "pending_manager";
+  const canApproveAsCEO  = holdsAccountingGate && currentStatus === "pending_ceo";
+  const canRejectAsCEO   = holdsAccountingGate && currentStatus === "pending_ceo";
+  const canDisburse      = holdsAccountingGate && currentStatus === "pending_accounting";
+  const canVerifyAndPost = holdsAccountingGate && currentStatus === "pending_verification";
+  const canUnlockForCorrection = holdsAccountingGate && currentStatus === "posted";
 
   const isAdvanceType = transactionType === "cash_advance" || transactionType === "budget_request";
   const canOpenLiquidation =
     isOwner && isAdvanceType &&
     (currentStatus === "disbursed" || currentStatus === "pending_liquidation");
   const canCloseLiquidation =
-    canPerformEVAction("approve_accounting", role, department) && currentStatus === "pending_verification";
+    holdsAccountingGate && currentStatus === "pending_verification";
 
   const noActionsAvailable =
     !canSubmit && !canApproveAsTL && !canRejectAsTL && !canApproveAsCEO && !canRejectAsCEO &&

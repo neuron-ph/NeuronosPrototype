@@ -5,6 +5,7 @@ import { FormDropdown } from "./FormDropdown";
 import { getDisplayStatus, getStatusStyle } from "../../utils/statusMapping";
 import { getNormalizedQuotationStatus } from "../../utils/quotationStatus";
 import { SidePanel } from "../common/SidePanel";
+import { usePermission } from "../../context/PermissionProvider";
 
 interface StatusChangeButtonProps {
   quotation: QuotationNew;
@@ -14,17 +15,13 @@ interface StatusChangeButtonProps {
   variant?: "button" | "chip";
 }
 
-// Manager and Executive can perform any transition regardless of department.
-// Staff/Team Leader/Supervisor remain gated by department.
-function isElevatedRole(role?: string): boolean {
-  if (!role) return false;
-  const normalized = role.toLowerCase();
-  return normalized === "manager" || normalized === "executive";
-}
-
 export function StatusChangeButton({ quotation, onStatusChange, userDepartment, userRole, variant = "button" }: StatusChangeButtonProps) {
-  const canActAsBD = userDepartment === "Business Development" || isElevatedRole(userRole);
-  const canActAsPricing = userDepartment === "Pricing" || isElevatedRole(userRole);
+  // NEU-012 Phase 5b: workflow-side transitions are gated by the quotation
+  // module grants (BD side = bd_inquiries, Pricing side = pricing_quotations),
+  // not by department/role identity.
+  const { can } = usePermission();
+  const canActAsBD = can("bd_inquiries", "edit");
+  const canActAsPricing = can("pricing_quotations", "edit");
   const [showMenu, setShowMenu] = useState(false);
   const [showDisapproveModal, setShowDisapproveModal] = useState(false);
   const [selectedDisapprovalStatus, setSelectedDisapprovalStatus] = useState<"Rejected by Client" | "Disapproved" | "Cancelled">("Disapproved");

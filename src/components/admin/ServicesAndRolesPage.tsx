@@ -18,6 +18,7 @@ import { CustomDropdown } from '../bd/CustomDropdown';
 import { Checkbox } from '../ui/checkbox';
 import { Input } from '../ui/input';
 import { toast } from '../ui/toast-utils';
+import { usePermission } from '../../context/PermissionProvider';
 import { NeuronModal } from '../ui/NeuronModal';
 import { normalizeRoleKey } from '../../utils/assignments/normalizeRoleKey';
 import { queryKeys } from '../../lib/queryKeys';
@@ -34,7 +35,10 @@ interface ManagerOption {
 
 export function ServicesAndRolesPage() {
   const { user } = useUser();
-  const isExec = user?.department === 'Executive' || user?.role === 'executive';
+  // NEU-012 Phase 5b: service/role config writes are gated by exec_profiling
+  // (mirrors the operational_services / service_assignment_roles RLS).
+  const { can } = usePermission();
+  const isExec = can("exec_profiling", "edit");
   const qc = useQueryClient();
 
   const { data: services = [] } = useQuery<OperationalService[]>({

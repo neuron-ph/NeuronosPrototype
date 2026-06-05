@@ -315,13 +315,10 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
     inboxUnreadCount,
   ]);
   
-  // Role level map — mirrors RouteGuard so sidebar visibility matches route access
-  const ROLE_LEVEL: Record<string, number> = { staff: 0, team_leader: 1, supervisor: 2, manager: 3, executive: 4 };
-
   // Use effectiveDepartment from context for dev role override support
   const { user, effectiveDepartment, effectiveRole } = useUser();
   const { moduleCount, subSectionCount } = useNotifications();
-  const { can, hasExplicitGrant, isLoaded: permissionsLoaded } = usePermission();
+  const { can, isLoaded: permissionsLoaded } = usePermission();
 
   // Fetch inbox unread count — with hard timeout so a hung Supabase client
   // doesn't block the main thread or accumulate zombie requests.
@@ -354,16 +351,16 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
   
   // Determine what modules to show based on effective department
   const userDepartment = effectiveDepartment || currentUser?.department || "Operations";
-  const isExecutive = userDepartment === "Executive";
-  const showHR = !import.meta.env.PROD && (isExecutive || userDepartment === "HR");
+  // NEU-012 Phase 5b: HR visibility comes from the hr module grant (dev-only).
+  const showHR = !import.meta.env.PROD && can("hr", "view");
   
   // Dashboard - standalone
   const dashboardItem = { id: "dashboard" as Page, label: "Dashboard", icon: Home };
   // const transactionsItem = { id: "transactions" as Page, label: "Transactions", icon: CreditCard };
   
   // Sidebar entries derive their order + labels from the canonical access schema.
-  // Icons and per-item minRole gates live here because they are sidebar-only
-  // presentation concerns, keyed by sidebar pageId.
+  // Icons live here because they are sidebar-only presentation concerns, keyed
+  // by sidebar pageId.
   const SIDEBAR_PAGE_ICON: Record<string, any> = {
     "bd-contacts":         User,
     "bd-customers":        Building,
@@ -396,11 +393,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
     "acct-reports":        BarChart3,
     "acct-statements":     TrendingUp,
   };
-  const SIDEBAR_PAGE_MIN_ROLE: Partial<Record<string, string>> = {
-    "acct-financials": "manager",
-  };
-
-  type SubItem = { id: Page; label: string; icon: any; minRole?: string };
+  type SubItem = { id: Page; label: string; icon: any };
   const buildSubItems = (deptLabel: string): SubItem[] =>
     getSidebarModulesForDepartment(deptLabel)
       .filter(m => !!m.pageId)
@@ -408,7 +401,6 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
         id: m.pageId as Page,
         label: m.label,
         icon: SIDEBAR_PAGE_ICON[m.pageId as string] ?? FileText,
-        minRole: SIDEBAR_PAGE_MIN_ROLE[m.pageId as string],
       }));
 
   const bdSubItems         = buildSubItems("Business Development");
@@ -433,14 +425,9 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
     return true;
   });
   const visibleOperationsSubItems = operationsSubItems.filter((item) => canViewPage(item.id));
-  const visibleAcctSubItems = acctSubItems
-    .filter((item) => {
-      if (!item.minRole || isExecutive) return true;
-      if (hasExplicitGrant(sidebarPermissionMap[item.id] ?? "acct_financials", "view")) return true;
-      const userLevel = ROLE_LEVEL[effectiveRole || "staff"] ?? 0;
-      return userLevel >= (ROLE_LEVEL[item.minRole] ?? 0);
-    })
-    .filter((item) => canViewPage(item.id));
+  // NEU-012 Phase 5b: the old minRole layer is redundant under strict grants —
+  // canViewPage's grant check is the single source of truth.
+  const visibleAcctSubItems = acctSubItems.filter((item) => canViewPage(item.id));
 
   const showBDSection = visibleBdSubItems.length > 0;
   const showPricingSection = visiblePricingSubItems.length > 0;

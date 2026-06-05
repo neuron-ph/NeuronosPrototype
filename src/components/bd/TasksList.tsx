@@ -28,8 +28,9 @@ export function TasksList({ onViewTask }: TasksListProps) {
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | "All">("All");
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
 
-  const { user, effectiveRole, effectiveDepartment } = useUser();
-  const canAssignToOthers = effectiveRole === 'manager' || effectiveDepartment === 'Executive';
+  const { user } = useUser();
+  // NEU-012 Phase 5b: assigning tasks to others = managing tasks beyond your own.
+  const canAssignToOthers = can("bd_tasks", "edit");
 
   const { scope, isLoaded } = useDataScope('tasks');
 

@@ -133,8 +133,10 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
     }
   };
 
-  const { user, effectiveRole, effectiveDepartment } = useUser();
-  const canAssignOwner = effectiveDepartment === "Executive" || effectiveRole === "manager" || effectiveRole === "executive";
+  const { user, effectiveDepartment } = useUser();
+  // NEU-012 Phase 5b: reassigning the owner is a contact edit — DB allows any
+  // contacts editor, so the UI mirrors that rather than the old manager check.
+  const canAssignOwner = canEditContact;
 
   // Optimistic override so the UI flips to "Converted" immediately after the
   // convert call returns, without waiting for the parent to refetch and pass
