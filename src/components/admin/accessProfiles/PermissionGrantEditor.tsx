@@ -605,7 +605,16 @@ function GroupAccordion({
               const parentHighlighted = searching && matchedIds.has(seg.parent.id);
               // Hide shared "contained" children (e.g. booking-detail tabs) when
               // the parent module isn't granted — kills the cross-service "trail".
-              const parentGranted = PERM_ACTIONS.some(a => grants[`${seg.parent.id}:${a}`] === true);
+              // Gate on the EFFECTIVE grant (override layer OR inherited baseline),
+              // mirroring how each checkbox computes its checked state below — else
+              // an all-borrowed host (Projects/Contracts, whose children are ALL
+              // contained) whose grant lives in the assigned profile, not the
+              // per-user override, would expand to zero rows.
+              const parentGranted = PERM_ACTIONS.some(a => {
+                const k = `${seg.parent.id}:${a}`;
+                if (k in grants) return grants[k] === true;
+                return showInheritedBaseline ? baselineGrants[k] === true : false;
+              });
               const baseChildren = searching ? seg.children.filter(c => matchedIds.has(c.id)) : seg.children;
               const visibleChildren = parentGranted ? baseChildren : baseChildren.filter(c => !c.contained);
 
