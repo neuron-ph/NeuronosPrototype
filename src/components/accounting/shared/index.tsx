@@ -14,4 +14,3 @@ export type { Category } from "./ListCategories";
 export { ImportPreviewTable } from "./ImportPreviewTable";
 export type { ImportRow } from "./ImportPreviewTable";
 export { CommandBarAccounting } from "./CommandBarAccounting";
-export { DrawerEntryDetails } from "./DrawerEntryDetails";
