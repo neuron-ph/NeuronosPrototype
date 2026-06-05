@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { Search, X, Plus, Filter, Download, Loader2, Pencil, Check, Link2 } from "lucide-react";
 import { useUser } from "../../../hooks/useUser";
+import { usePermission } from "../../../context/PermissionProvider";
 import { logActivity } from "../../../utils/activityLog";
 import { CustomDropdown } from "../../bd/CustomDropdown";
 import { CustomDatePicker } from "../../common/CustomDatePicker";
@@ -75,7 +76,7 @@ export function UnifiedBillingsTab({
   bookingId,
   onRefresh,
   isLoading = false,
-  readOnly = false,
+  readOnly: readOnlyProp = false,
   title,
   subtitle,
   extraActions,
@@ -85,6 +86,17 @@ export function UnifiedBillingsTab({
   pendingBillableCount,
 }: UnifiedBillingsTabProps) {
   const { user } = useUser();
+  // NEU-017: hide write affordances without a billing write grant — mirrors the
+  // billing_line_items RLS OR-list (any module that can write billings).
+  // "acct_billings" is a legacy grant key still honored by RLS (and still held by
+  // Accounting profiles) but absent from the ModuleId union — hence the loose alias.
+  const { can } = usePermission();
+  const canKey = can as unknown as (moduleId: string, action: string) => boolean;
+  const canWriteBillings = ["create", "edit"].some(a =>
+    canKey("acct_financials", a) || canKey("accounting_financials_billings_tab", a) ||
+    canKey("acct_billings", a) || canKey("ops_bookings_billings_tab", a) ||
+    canKey("ops_projects_billings_tab", a));
+  const readOnly = readOnlyProp || !canWriteBillings;
   // Stable reference for empty array to prevent infinite re-render loops
   const stableLinkedBookings = linkedBookings && linkedBookings.length > 0 ? linkedBookings : EMPTY_LINKED_BOOKINGS;
   

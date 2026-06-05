@@ -81,6 +81,8 @@ export function ForwardingBookingDetails({
   const canViewInvoices = can("ops_bookings_invoices_tab", "view") || can("accounting_bookings_invoices_tab", "view");
   const canViewCollections = can("ops_bookings_collections_tab", "view") || can("accounting_bookings_collections_tab", "view");
   const canViewChrono = can("ops_bookings_chrono_tab", "view");
+  const canEditBooking = can("ops_forwarding", "edit");
+  const canCancelDeleteBooking = canEditBooking || can("ops_forwarding", "delete");
   const [activeTab, setActiveTab] = useState<DetailTab>(
     (initialTab === "billings" && !canViewBillings) || (initialTab === "invoices" && !canViewInvoices) || (initialTab === "collections" && !canViewCollections)
       ? "booking-info"
@@ -305,6 +307,7 @@ export function ForwardingBookingDetails({
             status={editedBooking.status}
             serviceType="Forwarding"
             onUpdateStatus={handleStatusUpdate}
+            readOnly={!canEditBooking}
           />
         </div>
       </div>
@@ -556,7 +559,7 @@ export function ForwardingBookingDetails({
           </div>
 
           {/* Kebab Menu */}
-          <div style={{ position: "relative" }} ref={moreMenuRef}>
+          {canCancelDeleteBooking && <div style={{ position: "relative" }} ref={moreMenuRef}>
             <button
               onClick={() => setShowMoreMenu(v => !v)}
               style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "36px", height: "36px", backgroundColor: "var(--theme-bg-surface)", border: "1px solid var(--neuron-ui-border)", borderRadius: "6px", cursor: "pointer" }}
@@ -575,7 +578,7 @@ export function ForwardingBookingDetails({
                 </button>
               </div>
             )}
-          </div>
+          </div>}
         </div>
       </div>
 

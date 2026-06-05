@@ -11,6 +11,7 @@ import { buildCatalogSnapshot } from "../../utils/catalogSnapshot";
 import { formatMoney } from "../../utils/accountingCurrency";
 import { toast } from "../ui/toast-utils";
 import { supabase } from "../../utils/supabase/client";
+import { usePermission } from "../../context/PermissionProvider";
 // Expenses received here are raw Supabase evoucher rows, not the OperationsExpense type
 const str = (v: unknown): string => (v == null ? "" : String(v));
 const num = (v: unknown): number => Number(v ?? 0);
@@ -47,12 +48,21 @@ export function UnifiedExpensesTab({
   bookingType,
   title,
   subtitle,
-  readOnly = false,
+  readOnly: readOnlyProp = false,
   highlightId = null,
   existingBillingItems = [],
   onPendingCountChange,
 }: UnifiedExpensesTabProps) {
-  
+  // NEU-017: hide write affordances without an expense write grant — mirrors the
+  // expenses RLS OR-list. "acct_expenses" is a legacy grant key still honored by
+  // RLS (and held by Accounting profiles) but absent from the ModuleId union.
+  const { can } = usePermission();
+  const canKey = can as unknown as (moduleId: string, action: string) => boolean;
+  const canWriteExpenses = ["create", "edit"].some(a =>
+    canKey("acct_financials", a) || canKey("acct_expenses", a) ||
+    canKey("ops_bookings_expenses_tab", a) || canKey("ops_projects_expenses_tab", a));
+  const readOnly = readOnlyProp || !canWriteExpenses;
+
   // -- Local State for Filters & UI --
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");

@@ -93,6 +93,8 @@ export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, curre
   const canViewInvoices = can("ops_bookings_invoices_tab", "view") || can("accounting_bookings_invoices_tab", "view");
   const canViewCollections = can("ops_bookings_collections_tab", "view") || can("accounting_bookings_collections_tab", "view");
   const canViewChrono = can("ops_bookings_chrono_tab", "view");
+  const canEditBooking = can("ops_marine_insurance", "edit");
+  const canCancelDeleteBooking = canEditBooking || can("ops_marine_insurance", "delete");
   const [activeTab, setActiveTab] = useState<DetailTab>(
     (initialTab === "billings" && !canViewBillings) || (initialTab === "invoices" && !canViewInvoices) || (initialTab === "collections" && !canViewCollections)
       ? "booking-info"
@@ -241,7 +243,7 @@ export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, curre
               currentUser={currentUser}
             />
           )}
-          <StatusSelector status={editedBooking.status} serviceType="Marine Insurance" onUpdateStatus={handleStatusUpdate} />
+          <StatusSelector status={editedBooking.status} serviceType="Marine Insurance" onUpdateStatus={handleStatusUpdate} readOnly={!canEditBooking} />
         </div>
       </div>
 
@@ -259,7 +261,7 @@ export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, curre
           <button onClick={() => setShowTimeline(!showTimeline)} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", backgroundColor: showTimeline ? "var(--theme-bg-surface-tint)" : "var(--theme-bg-surface)", border: `1px solid ${showTimeline ? "var(--theme-action-primary-bg)" : "var(--neuron-ui-border)"}`, borderRadius: "6px", fontSize: "13px", fontWeight: 500, color: showTimeline ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-secondary)", cursor: "pointer" }}>
             <Clock size={16} /> Activity
           </button>
-          <div style={{ position: "relative" }} ref={moreMenuRef}>
+          {canCancelDeleteBooking && <div style={{ position: "relative" }} ref={moreMenuRef}>
             <button
               onClick={() => setShowMoreMenu(v => !v)}
               style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "36px", height: "36px", backgroundColor: "var(--theme-bg-surface)", border: "1px solid var(--neuron-ui-border)", borderRadius: "6px", cursor: "pointer" }}
@@ -278,7 +280,7 @@ export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, curre
                 </button>
               </div>
             )}
-          </div>
+          </div>}
         </div>
       </div>
 

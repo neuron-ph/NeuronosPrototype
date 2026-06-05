@@ -12,6 +12,17 @@ import { groupBookingSections } from "../../../utils/bookings/groupBookingSectio
 import { BookingSectionGroupCard } from "./BookingSectionGroupCard";
 import { fetchFullContract } from "../../../utils/contractLookup";
 import { extractDeliveryChargeOptions } from "../../../utils/contractQuantityExtractor";
+import { usePermission } from "../../../context/PermissionProvider";
+import type { ModuleId } from "../../../components/admin/permissionsConfig";
+
+// NEU-017: which ops module gates editing a booking of this service type.
+const OPS_MODULE_BY_SERVICE: Record<string, ModuleId> = {
+  Forwarding: "ops_forwarding",
+  Brokerage: "ops_brokerage",
+  Trucking: "ops_trucking",
+  "Marine Insurance": "ops_marine_insurance",
+  Others: "ops_others",
+};
 
 interface BookingInfoTabProps {
   booking: Record<string, unknown>;
@@ -30,6 +41,8 @@ export function BookingInfoTab({
 }: BookingInfoTabProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const { can } = usePermission();
+  const canEditBooking = can(OPS_MODULE_BY_SERVICE[serviceType] ?? "ops_others", "edit");
   const errors = {};
 
   const { formState, setField, initFromRecord, context, setConstraint } = useBookingFormState(serviceType);
@@ -117,7 +130,7 @@ export function BookingInfoTab({
     );
   }
 
-  const editControls = !isEditing ? (
+  const editControls = !canEditBooking ? null : !isEditing ? (
     <button
       onClick={() => setIsEditing(true)}
       style={{
