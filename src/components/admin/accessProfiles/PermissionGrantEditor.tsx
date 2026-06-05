@@ -452,7 +452,7 @@ function GroupAccordion({
               backgroundColor: "color-mix(in oklch, var(--neuron-action-primary) 12%, transparent)",
               color: "var(--neuron-action-primary)",
             }}>
-              {overrideCount} {overrideCount === 1 ? "override" : "overrides"}
+              {overrideCount} {overrideCount === 1 ? "custom change" : "custom changes"}
             </span>
           )}
           {searching && filteredSegments.length > 0 && (

@@ -89,7 +89,7 @@ function SaveAsProfileForm({
 
   const handleSave = async () => {
     const trimmed = normalizeProfileName(name);
-    if (!trimmed) { setError("Name is required"); return; }
+    if (!trimmed) { setError("Please enter a profile name."); return; }
     setSaving(true);
     const { error: dbError } = await supabase.from("access_profiles").insert({
       name: trimmed,
@@ -176,7 +176,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
 
   const commitRename = async (profile: AccessProfileSummary) => {
     const trimmed = normalizeProfileName(renameValue);
-    if (!trimmed) { toast.error("Name is required"); return; }
+    if (!trimmed) { toast.error("Please enter a profile name before saving."); return; }
     if (trimmed === profile.name) { setRenamingProfileId(null); return; }
     setRenameBusy(true);
     const { error } = await supabase
@@ -186,7 +186,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
     setRenameBusy(false);
     if (error) {
       if ((error as any).code === "23505") toast.error("A profile with this name already exists");
-      else toast.error("Failed to rename profile");
+      else toast.error("Couldn't rename the profile. Please try again.");
       return;
     }
     try {
@@ -387,7 +387,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
 
     setSaving(false);
     if (error) {
-      toast.error("Failed to save access rules");
+      toast.error("Couldn't save these changes. Please try again.");
       return;
     }
 
@@ -470,8 +470,8 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
                   Access Configuration
                 </h2>
                 <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: 0 }}>
-                  Access rules for <strong style={{ fontWeight: 600, color: "var(--neuron-ink-secondary, var(--neuron-ink-primary))" }}>{user.name}</strong>.
-                  A teal dot beneath a cell means it differs from the role baseline.
+                  Access settings for <strong style={{ fontWeight: 600, color: "var(--neuron-ink-secondary, var(--neuron-ink-primary))" }}>{user.name}</strong>.
+                  A dot beneath a cell marks a custom change for this user.
                 </p>
               </div>
 
@@ -761,7 +761,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
                 </div>
                 {appliedProfileId && (
                   <span style={{ fontSize: 11, color: "var(--neuron-ink-muted)" }}>
-                    Profile <strong>{appliedProfileName}</strong> remains the baseline. Saving stores only this user's explicit overrides.
+                    Profile <strong>{appliedProfileName}</strong> remains the starting point. Saving stores only the changes you've made for this user.
                   </span>
                 )}
               </div>
@@ -823,7 +823,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
           const { error } = await supabase.from("access_profiles").delete().eq("id", target.id);
           if (error) {
             setDeletingProfileBusy(false);
-            toast.error("Failed to delete profile");
+            toast.error("Couldn't delete the profile. Please try again.");
             return;
           }
           try {

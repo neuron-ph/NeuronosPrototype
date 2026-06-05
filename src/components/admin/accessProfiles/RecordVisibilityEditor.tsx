@@ -235,7 +235,7 @@ export function RecordVisibilityEditor({ scopes, onChange, resolvedGrants }: Rec
                         </span>
                         {!accessible && (
                           <span style={{ fontSize: 11, color: "var(--neuron-ink-muted)", fontStyle: "italic" }}>
-                            grant in Feature Access to enable
+                            turn on in Feature Access to use
                           </span>
                         )}
                       </div>

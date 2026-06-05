@@ -309,7 +309,7 @@ function ApplyProfileContent({
 
     const appliedCount = selected.length - failed;
     if (appliedCount === 0) {
-      toast.error("Couldn't apply the profile — please try again");
+      toast.error("Couldn't assign the profile to the selected user(s). Please try again.");
     } else if (failed > 0) {
       toast.warning(`Applied to ${appliedCount} of ${selected.length} users — ${failed} failed`);
     } else {
@@ -501,7 +501,7 @@ function DeleteProfileContent({
     const { error } = await supabase.from("access_profiles").delete().eq("id", profile.id);
     if (error) {
       setDeleting(false);
-      toast.error("Failed to delete profile");
+      toast.error("Couldn't delete the profile. Please try again.");
       return;
     }
     try {
@@ -821,7 +821,7 @@ export function ProfileEditor({
       if (error.code === "23505") {
         setNameError("A profile with this name already exists");
       } else {
-        toast.error("Failed to save profile");
+        toast.error("Couldn't save the profile. Please try again.");
       }
       return;
     }
@@ -1062,7 +1062,7 @@ export function ProfileEditor({
               <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 8px", borderRadius: 999,
                 backgroundColor: "color-mix(in oklch, var(--neuron-action-primary) 12%, transparent)",
                 color: "var(--neuron-action-primary)" }}>
-                {grantCount} explicit rules
+                {grantCount} permissions set
               </span>
             )}
             {canShowBaseline && (
@@ -1073,12 +1073,12 @@ export function ProfileEditor({
                   backgroundColor: showBaseline ? "color-mix(in oklch, var(--neuron-action-primary) 10%, transparent)" : "transparent",
                   color: showBaseline ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
                   cursor: "pointer" }}>
-                {showBaseline ? "Hide baseline" : `Preview ${ROLES.find(r => r.value === targetRole)?.label} baseline`}
+                {showBaseline ? "Hide template" : `Preview ${ROLES.find(r => r.value === targetRole)?.label} template`}
               </button>
             )}
             {emptyGrantsWarning && (
               <span style={{ fontSize: 11, color: "var(--theme-status-warning-fg)", display: "flex", alignItems: "center", gap: 4 }}>
-                <AlertTriangle size={11} /> No rules set — click Save again to confirm
+                <AlertTriangle size={11} /> No permissions set — click Save again to confirm
               </span>
             )}
             {grantCount > 0 && (
