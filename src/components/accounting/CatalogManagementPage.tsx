@@ -515,6 +515,7 @@ function ItemsTab() {
           categories={categoriesWithCount as CatalogCategory[]}
           onMutate={invalidateCatalog}
           currentSideFilter={sideFilter}
+          canWrite={canWriteCatalog}
         />
 
         {/* Expand/Collapse all */}
@@ -1197,13 +1198,16 @@ function CategoryGroupMenu({
 // ==================== CATEGORY FILTER POPOVER ====================
 
 function CategoryFilterPopover({
-  filterValue, onFilterChange, categories, onMutate, currentSideFilter,
+  filterValue, onFilterChange, categories, onMutate, currentSideFilter, canWrite,
 }: {
   filterValue: string;
   onFilterChange: (v: string) => void;
   categories: CatalogCategory[];
   onMutate: () => void;
   currentSideFilter: SideFilter;
+  /** NEU-017: rename/delete/add-category affordances need a catalog write grant
+   *  — same gate as the page's main buttons, this popover is not a side door. */
+  canWrite: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
@@ -1381,15 +1385,19 @@ function CategoryFilterPopover({
                       {cat.name}
                     </span>
                     <span style={{ fontSize: "11px", color: "var(--theme-text-muted)", minWidth: 18, textAlign: "right" }}>{cat.item_count ?? 0}</span>
-                    <button onClick={e => { e.stopPropagation(); setRenamingId(cat.id); setRenameValue(cat.name); }} style={{ ...iconBtnStyle, color: "var(--theme-text-muted)" }} title="Rename"><Pencil size={12} /></button>
-                    <button onClick={e => { e.stopPropagation(); handleDelete(cat); }} style={{ ...iconBtnStyle, color: (cat.item_count ?? 0) > 0 ? "var(--theme-border-default)" : "var(--theme-status-danger-fg)" }} title={(cat.item_count ?? 0) > 0 ? `${cat.item_count} items — reassign first` : "Delete"}><X size={12} /></button>
+                    {canWrite && (
+                      <>
+                        <button onClick={e => { e.stopPropagation(); setRenamingId(cat.id); setRenameValue(cat.name); }} style={{ ...iconBtnStyle, color: "var(--theme-text-muted)" }} title="Rename"><Pencil size={12} /></button>
+                        <button onClick={e => { e.stopPropagation(); handleDelete(cat); }} style={{ ...iconBtnStyle, color: (cat.item_count ?? 0) > 0 ? "var(--theme-border-default)" : "var(--theme-status-danger-fg)" }} title={(cat.item_count ?? 0) > 0 ? `${cat.item_count} items — reassign first` : "Delete"}><X size={12} /></button>
+                      </>
+                    )}
                   </>
                 )}
               </div>
             ))}
           </div>
 
-          <div style={{ borderTop: "1px solid var(--theme-border-subtle)", padding: "8px 12px" }}>
+          {canWrite && <div style={{ borderTop: "1px solid var(--theme-border-subtle)", padding: "8px 12px" }}>
             {addingNew ? (
               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                 <input
@@ -1429,7 +1437,7 @@ function CategoryFilterPopover({
                 New category
               </button>
             )}
-          </div>
+          </div>}
         </div>,
         document.body
       )}

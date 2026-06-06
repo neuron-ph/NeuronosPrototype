@@ -106,7 +106,10 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
   const deptParticipants = thread.participants.filter(
     (p) => p.participant_type === "department" && p.role === "to"
   );
-  const canAssign = can("inbox_queue_tab", "view") && deptParticipants.length > 0;
+  // NEU-017: assigning mutates the ticket — gate by the write key the DB
+  // enforces (tickets UPDATE policy: participant OR inbox:edit), not by the
+  // queue tab's VIEW key. Queue-viewers without inbox:edit failed at RLS anyway.
+  const canAssign = can("inbox", "edit") && deptParticipants.length > 0;
   const canAdvanceStatus = isRecipient && !["done", "returned", "archived", "draft"].includes(thread.status);
   const isApprovalPending = thread.type === "approval" && thread.approval_result === null && isRecipient;
   const isDone = thread.status === "done";

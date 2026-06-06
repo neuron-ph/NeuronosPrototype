@@ -9,6 +9,7 @@ import { CustomDatePicker } from "../../common/CustomDatePicker";
 import { DataTable, ColumnDef } from "../../common/DataTable";
 import { getCollectionResolutionLabel } from "../../../utils/collectionResolution";
 import { formatMoney as formatMoneyHelper, pickReportingAmount } from "../../../utils/accountingCurrency";
+import { usePermission } from "../../../context/PermissionProvider";
 
 interface UnifiedCollectionsTabProps {
   financials: FinancialData;
@@ -50,6 +51,17 @@ export function UnifiedCollectionsTab({
   readOnly = false,
   highlightId,
 }: UnifiedCollectionsTabProps) {
+  // NEU-017: hide write affordances without a collections write grant — mirrors
+  // UnifiedBillingsTab's OR-gate (any module that can write collections).
+  // "acct_collections" is a legacy grant key still honored by RLS (and still held
+  // by Accounting profiles) but absent from the ModuleId union — hence the alias.
+  const { can } = usePermission();
+  const canKey = can as unknown as (moduleId: string, action: string) => boolean;
+  const canWriteCollections = ["create", "edit"].some(a =>
+    canKey("acct_financials", a) || canKey("accounting_financials_collections_tab", a) ||
+    canKey("acct_collections", a) || canKey("ops_bookings_collections_tab", a) ||
+    canKey("ops_projects_collections_tab", a));
+  const effectiveReadOnly = readOnly || !canWriteCollections;
   const { collections, invoices, refresh, isLoading } = financials;
 
   const invoiceById = useMemo(() => {
@@ -288,7 +300,7 @@ export function UnifiedCollectionsTab({
         </div>
 
         <div className="flex items-center gap-3">
-          {!readOnly && (
+          {!effectiveReadOnly && (
             <button
               onClick={() => setInterfaceMode("create")}
               className="flex items-center gap-2 px-4 py-2 bg-[var(--theme-action-primary-bg)] text-white rounded-lg hover:bg-[#0D6559] transition-colors font-medium text-[14px]"

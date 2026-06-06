@@ -72,6 +72,9 @@ export function MyEVouchersPage() {
   // Dept-manager gate = my_evouchers:approve (DB also enforces the requestor-
   // department match); CEO gate = acct_evouchers:approve. isExecutive keeps
   // steering which QUEUE is shown (routing), now derived from the CEO grant.
+  // NEU-017: the DB already enforces my_evouchers:create on insert — gate the
+  // button too, so users without the grant don't fill a form that fails at save.
+  const canCreateEvoucher = can("my_evouchers", "create");
   const canApproveMgrGate = can("my_evouchers", "approve");
   const isExecutive = can("acct_evouchers", "approve");
   const showApprovalQueue = canApproveMgrGate || isExecutive;
@@ -370,23 +373,25 @@ export function MyEVouchersPage() {
             </p>
           </div>
 
-          <button
-            onClick={() => setShowCreate(true)}
-            style={{
-              display: "flex", alignItems: "center", gap: "8px",
-              padding: "10px 20px", borderRadius: "8px", border: "none",
-              backgroundColor: "var(--theme-action-primary-bg)",
-              color: "var(--theme-action-primary-text)", fontSize: "14px", fontWeight: 500,
-              cursor: "pointer", letterSpacing: "0.01em",
-              transition: "background-color 0.15s",
-              flexShrink: 0,
-            }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--theme-action-primary-border)"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--theme-action-primary-bg)"; }}
-          >
-            <Plus size={16} />
-            New Request
-          </button>
+          {canCreateEvoucher && (
+            <button
+              onClick={() => setShowCreate(true)}
+              style={{
+                display: "flex", alignItems: "center", gap: "8px",
+                padding: "10px 20px", borderRadius: "8px", border: "none",
+                backgroundColor: "var(--theme-action-primary-bg)",
+                color: "var(--theme-action-primary-text)", fontSize: "14px", fontWeight: 500,
+                cursor: "pointer", letterSpacing: "0.01em",
+                transition: "background-color 0.15s",
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--theme-action-primary-border)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--theme-action-primary-bg)"; }}
+            >
+              <Plus size={16} />
+              New Request
+            </button>
+          )}
         </motion.div>
 
         {/* ── Search Bar ──────────────────────────────────────────────────── */}

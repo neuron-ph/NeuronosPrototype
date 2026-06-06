@@ -57,6 +57,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
   const canCreateContact      = can(ids.contacts,    "create");
   const canCreateActivity     = can(ids.activities,  "create");
   const canCreateTask         = can(ids.tasks,       "create");
+  const canCreateInquiry      = can(ids.inquiries,   "create");
   const [activeTab, setActiveTab] = useState<"contacts" | "activities" | "tasks" | "inquiries" | "comments" | "attachments" | "projects" | "contracts" | "teams">(() => {
     if (variant === "pricing") {
       if (canViewInquiriesTab) return "inquiries";
@@ -1340,7 +1341,12 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                 <CustomerInquiriesTab 
                   inquiries={inquiries}
                   onViewInquiry={onViewInquiry}
-                  onCreateInquiry={(quotationType) => onCreateInquiry && onCreateInquiry(customer, quotationType)}
+                  onCreateInquiry={
+                    // NEU-017: mirror ContactDetail — no create grant, no button.
+                    canCreateInquiry && onCreateInquiry
+                      ? (quotationType) => onCreateInquiry(customer, quotationType)
+                      : undefined
+                  }
                   isLoading={isLoadingQuotations}
                 />
               </div>

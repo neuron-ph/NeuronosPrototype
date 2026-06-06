@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { supabase } from "../../utils/supabase/client";
 import { queryKeys } from "../../lib/queryKeys";
 import { useUser } from "../../hooks/useUser";
+import { usePermission } from "../../context/PermissionProvider";
 import { toast } from "sonner@2.0.3";
 import {
   ArrowLeft, Loader2, KeyRound, Trash2,
@@ -181,6 +182,12 @@ export function UserDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user: currentUser } = useUser();
+  // NEU-017: the route only requires exec_users:view — write affordances need
+  // the same gates the backend enforces (users RLS = exec_users:edit/delete;
+  // admin-user-actions edge fn also honors the admin_users_tab equivalents).
+  const { can } = usePermission();
+  const canEditUsers   = can("exec_users", "edit")   || can("admin_users_tab", "edit");
+  const canDeleteUsers = can("exec_users", "delete") || can("admin_users_tab", "delete");
 
   const [editing, setEditing]             = useState(false);
   const [editDept, setEditDept]           = useState("");
@@ -527,7 +534,7 @@ export function UserDetailPage() {
             </div>
 
             {/* Edit button */}
-            {!editing && (
+            {!editing && canEditUsers && (
               <button
                 type="button"
                 onClick={handleStartEdit}
@@ -679,11 +686,11 @@ export function UserDetailPage() {
                   <p style={{ fontSize: 13, fontWeight: 500, color: "var(--neuron-ink-primary)", margin: "0 0 2px" }}>E-Voucher Approval</p>
                   <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: 0 }}>Can approve and post e-vouchers</p>
                 </div>
-                <Switch checked={evAuthority} onCheckedChange={handleEvAuthorityToggle} />
+                <Switch checked={evAuthority} onCheckedChange={handleEvAuthorityToggle} disabled={!canEditUsers} />
               </div>
 
               {/* Reset Password */}
-              <div>
+              {canEditUsers && <div>
                 <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: "0 0 8px" }}>Security</p>
                 <button
                   type="button"
@@ -742,11 +749,11 @@ export function UserDetailPage() {
                     </motion.div>
                   )}
                 </AnimatePresence>
-              </div>
+              </div>}
             </div>
 
             {/* DANGER ZONE — collapsed by default */}
-            {user.id !== currentUser?.id && (
+            {user.id !== currentUser?.id && canDeleteUsers && (
               <div style={{ borderTop: "1px solid var(--neuron-ui-border)" }}>
                 <button
                   type="button"
