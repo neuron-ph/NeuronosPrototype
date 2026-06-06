@@ -1,6 +1,6 @@
 # NEU-020 — The Door-Scoped Grid ("the wiring matches the prediction")
 
-> **Status:** PLANNED — Phase 0 may start on "Go Ahead"; later phases gated on the Decision Register
+> **Status:** PHASE 1 (Decisions) COMPLETE — DD-1..10 ruled 2026-06-06; Phase 0 (Door Map) may start on "Go Ahead"
 > **Depends on:** NEU-019 (complete through Phase 6; Phase 5 deletions + Phase 7 ratchet still pending)
 > **Owner of every judgment call:** Marcus. This document exists so the implementation cannot drift from what he confirmed.
 
@@ -99,20 +99,20 @@ section, merged and committed as `docs/NEU020_DOOR_MAP.md` before any wiring cha
 
 ---
 
-## 5. Decision Register (standing items already known; Phase 0 may add more)
+## 5. Decision Register — RULED by Marcus, 2026-06-06
 
-| ID | Conflict | Why wiring alone can't fix it | Recommendation |
-|---|---|---|---|
-| DD-1 | **Shared booking-detail keys** (`ops_bookings_billings/invoices/collections/expenses/comments/chrono/info_tab`) render under all five service rows but are ONE key — flipping "Billings" under Trucking flips it under Forwarding. Direct violation of door purity. | Fixing requires splitting into per-service keys (~30+ new keys) and rewiring every booking-detail surface to resolve per service; alternatively accept the shared key and visibly signal it. | **Split per-service** — it is the only outcome consistent with the confirmed scoping rule; the key count is the cost of the granularity Marcus said "we HAVE to have." Seeding mirrors the shared key so day one is identical. |
-| DD-2 | **"Others" module** rendered under both Pricing and Operations as one key (`ops_others`) — a cross-DEPARTMENT mirror, which Marcus rejected as a pattern. | Same as DD-1: split (`pricing_others`?) or keep single-homed. | Show it in ONE department only (Operations); Pricing group drops the row. No rename involved — it's a placement removal. |
-| DD-3 | **Quotations × Export** — Sir Mark reads the dash as "can't download the PDF"; in reality View carries the PDF. | Needs a real product gate: Export key wired to the PDF/print/download affordances on quotation surfaces. | Wire it. Export becomes a true knob (per-door where PDF buttons exist). Seed from View holders. |
-| DD-4 | **Cancel rides inside Edit on bookings** — "only the TL deletes" is defeated by Edit-holders cancelling. | Cancel is a distinct human concept with no column of its own; no renames allowed, and there is no "Cancel" column. | Gate cancel under **Delete** (Sir Mark's own folk-model: "Delete is how Jayson cancels bad bookings"). Wiring change only: `allowCancel` ← per-service `:delete` instead of `:edit`. Blast-radius checked. |
-| DD-5 | **Inbox · Edit** — his sentence is "fix your own messages"; the wiring is "close/reassign anyone's ticket." Renames banned. | The sentence and the capability genuinely diverge; no wiring makes "Edit" mean ticket-management without abandoning the close/assign gate. | Keep `inbox:edit` as-is for now; register as the ONE standing sentence-violation, revisit when renames are allowed. (Explicit, signed deviation — better than a silent one.) |
-| DD-6 | **Activity Log Edit/Delete + Inbox Delete dials** — live dials with RLS consumers but no buttons. Sir Mark reads "someone can edit history." | Applicability doctrine currently counts ANY consumer (incl. RLS). His test demands a visible button. | Narrow the doctrine for the GRID: cells render live only with a UI consumer; RLS-only keys remain enforced but display as dashes. Guard layer distinguishes the two. |
-| DD-7 | **`my_evouchers:approve`** reads as self-approval (it's the manager gate). | Label fix banned. | Verify enforcement forbids self-approval (approver ≠ owner) in code/RLS; if it doesn't, add the check. The dial stays; the danger goes. |
-| DD-8 | **HR dial dead in prod** (`!import.meta.env.PROD` sidebar gate). | A live dial whose building doesn't exist in prod. | Hide the HR row in prod builds until the module ships (placement, not rename). |
-| DD-9 | **Invoice finalize/void verbs** — he maps void→delete, finalize→edit; neither mapping is true. | New columns are renames-adjacent (new words). | Wire to his folk-model instead: finalize = `edit`-class (already true post-WG-06), void = `delete`-class (currently edit-class). Re-home void under the invoices delete key. |
-| DD-10 | **"Assign who prices what"** has no row (rides on `pricing_quotations:approve`). | Approve-as-assign is a sentence stretch but Approve IS where he found it and succeeded in the walkthrough. | Leave as-is; record as accepted reading. |
+| ID | Conflict | Marcus's ruling |
+|---|---|---|
+| DD-1 | Shared booking-detail keys (`ops_bookings_*`) render under all five service rows as ONE key each | **Split per service** (~30 new keys, e.g. `trucking_billings_tab`); seeded from the shared key so day one is identical. |
+| DD-2 | "Others" rendered under Pricing AND Operations as one key | **Split the keys** — verbatim: "these behaviors must explicitly be split." Each appearance becomes its own key (Pricing door distinct from Operations door). This generalizes to doctrine: **no key is ever rendered in two rows.** |
+| DD-3 | Export dash on Quotations reads as a PDF lock but View carries the PDF | **Wire Export** — real knob gating PDF/print/download on quotation surfaces, per-door; seeded from View holders. |
+| DD-4 | Cancel rides inside Edit on bookings | **Keep Cancel under Edit** (recommendation overridden). Accepted reading: "Edit includes cancelling." Recorded; no rewiring. |
+| DD-5 | Inbox · Edit reads "fix your own messages" but gates close/reassign of anyone's ticket | **Rewire Edit to own-message editing.** Close/reassign must find a new home — Phase 0 MUST propose one in the Door Map (candidates: close/archive under `inbox:delete` ["take tickets down"]; assign under the Queue door key) and Marcus approves before wiring. |
+| DD-6 | Live dials with RLS-only consumers (Activity Log Edit/Delete, Inbox Delete) | **Dash them, keep RLS underneath.** Grid doctrine narrows: a cell renders live only with a visible UI consumer; guard distinguishes UI-consumed vs RLS-only keys. |
+| DD-7 | `my_evouchers:approve` reads as self-approval | **Verify + enforce approver ≠ owner** in code/RLS; add the check if missing. Dial stays. |
+| DD-8 | HR dials live but module compiled out of prod | **Hide the HR row in prod builds** until the module ships. |
+| DD-9 | Void is edit-class; Sir Mark maps void→Delete | **Void becomes delete-class** on the invoices keys; finalize stays edit-class. |
+| DD-10 | Quotation assignment rides Approve | **Move assignment to `pricing_quotations:edit`.** ⚠ Recorded tension: this widens who can assign (all editors, not just approvers) — e.g. a pricer can reassign work. Marcus is aware and ruled it; blast-radius numbers will be shown at the wiring commit. |
 
 ---
 
