@@ -20,16 +20,14 @@
   **(F)** the DD-5 inbox re-homing (proposal below), and
   **(G)** one failed security verification (DD-7 — fix immediately).
 
-## 1. 🔴 DD-7 VERIFICATION FAILED — self-approval of e-vouchers is possible TODAY
+## 1. DD-7 — RE-RULED by Marcus, 2026-06-06: manager self-approval is BY DESIGN
 
-A non-Executive holder of `my_evouchers:approve` who files their own e-voucher can
-approve it end-to-end: submit routes to `pending_manager` (EVoucherWorkflowPanel.tsx:62-65),
-it appears in their own queue (useEVouchers.ts:39-41 — no `created_by` exclusion; same in
-dashboardFetchers.ts:74-80), the UI approve gate has no `!isOwner` (EVoucherWorkflowPanel.tsx:121-122;
-MyEVouchersPage.tsx:166), and the RLS Key-D branch has no owner exclusion (133:89-92,104-106; 158:100,104).
-**Fix per the DD-7 ruling: add approver≠owner in UI gates, queue filters, and RLS.**
-Carve-out question for Marcus: WG-30's accounting auto-approve intentionally creates
-pre-approved vouchers where creator=approver — exempt it, or owner-exclude there too?
+Verification found a manager holding `my_evouchers:approve` can approve their own voucher
+at the `pending_manager` step (no owner exclusion in UI/queue/RLS). Marcus ruled this is
+intended: "a manager SHOULD be allowed to approve their own e-vouchers as they get sent to
+CEO for final approval anyway." The dual-control lives at the CEO gate (`acct_evouchers:approve`),
+which remains mandatory after manager approval. No code change. Signed accepted reading;
+the WG-30 accounting auto-approve carve-out is moot under this ruling.
 
 ## 2. The key splits (DD-1 / DD-2 — ruled; this is the inventory)
 
