@@ -34,6 +34,12 @@ interface UnifiedExpensesTabProps {
   existingBillingItems?: { source_id?: string | null; [key: string]: any }[];
   /** Called whenever the pending billable count changes — lets parent show a badge on the Billings tab */
   onPendingCountChange?: (count: number) => void;
+  /** NEU-020 door purity: the grid row (door key) this tab is rendered behind,
+   *  e.g. "ops_trucking_expenses_tab". When provided, ONLY that key's
+   *  create/edit/delete govern this surface — no OR-gate, no foreign keys.
+   *  Transitional: parents not yet threaded fall back to the NEU-017 OR-gate;
+   *  the fallback is removed once every parent passes its door. */
+  permissionDoor?: string;
 }
 
 export function UnifiedExpensesTab({
@@ -52,15 +58,21 @@ export function UnifiedExpensesTab({
   highlightId = null,
   existingBillingItems = [],
   onPendingCountChange,
+  permissionDoor,
 }: UnifiedExpensesTabProps) {
   // NEU-017: hide write affordances without an expense write grant — mirrors the
   // expenses RLS OR-list. "acct_expenses" is a legacy grant key still honored by
   // RLS (and held by Accounting profiles) but absent from the ModuleId union.
   const { can } = usePermission();
   const canKey = can as unknown as (moduleId: string, action: string) => boolean;
-  const canWriteExpenses = ["create", "edit"].some(a =>
-    canKey("acct_financials", a) || canKey("acct_expenses", a) ||
-    canKey("ops_bookings_expenses_tab", a) || canKey("ops_projects_expenses_tab", a));
+  // NEU-020 door purity: with a door, only that key governs. Without one
+  // (transitional), the NEU-017 OR-gate still applies until every parent
+  // threads its door — then the fallback dies.
+  const canWriteExpenses = permissionDoor
+    ? ["create", "edit"].some(a => canKey(permissionDoor, a))
+    : ["create", "edit"].some(a =>
+        canKey("acct_financials", a) || canKey("acct_expenses", a) ||
+        canKey("ops_bookings_expenses_tab", a) || canKey("ops_projects_expenses_tab", a));
   const readOnly = readOnlyProp || !canWriteExpenses;
 
   // -- Local State for Filters & UI --

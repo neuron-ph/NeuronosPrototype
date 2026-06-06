@@ -13,6 +13,8 @@ interface InvoiceCreatorPageProps {
   onClose: () => void;
   onSuccess?: () => void;
   onRefreshData?: () => Promise<void>;
+  /** NEU-020 door purity: forwarded verbatim to InvoiceBuilder — see its prop doc. */
+  permissionDoor?: string;
 }
 
 export function InvoiceCreatorPage({
@@ -24,6 +26,7 @@ export function InvoiceCreatorPage({
   onClose,
   onSuccess,
   onRefreshData,
+  permissionDoor,
 }: InvoiceCreatorPageProps) {
   return (
     <motion.div
@@ -134,6 +137,7 @@ export function InvoiceCreatorPage({
           onSuccess={onSuccess}
           onRefreshData={onRefreshData}
           onBack={onClose}
+          permissionDoor={permissionDoor}
         />
       </div>
     </motion.div>

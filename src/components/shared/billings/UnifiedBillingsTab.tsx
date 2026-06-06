@@ -58,6 +58,12 @@ interface UnifiedBillingsTabProps {
   highlightId?: string | null;
   /** Amber badge count: unconverted billable expenses pending conversion */
   pendingBillableCount?: number;
+  /** NEU-020 door purity: the grid row (door key) this tab is rendered behind,
+   *  e.g. "ops_trucking_billings_tab". When provided, ONLY that key's
+   *  create/edit/delete govern this surface — no OR-gate, no foreign keys.
+   *  Transitional: parents not yet threaded fall back to the NEU-017 OR-gate;
+   *  the fallback is removed once every parent passes its door. */
+  permissionDoor?: string;
 }
 
 const formatCurrency = (amount: number, currency: string = "PHP") =>
@@ -84,18 +90,20 @@ export function UnifiedBillingsTab({
   linkedBookings,
   highlightId,
   pendingBillableCount,
+  permissionDoor,
 }: UnifiedBillingsTabProps) {
   const { user } = useUser();
-  // NEU-017: hide write affordances without a billing write grant — mirrors the
-  // billing_line_items RLS OR-list (any module that can write billings).
-  // "acct_billings" is a legacy grant key still honored by RLS (and still held by
-  // Accounting profiles) but absent from the ModuleId union — hence the loose alias.
   const { can } = usePermission();
   const canKey = can as unknown as (moduleId: string, action: string) => boolean;
-  const canWriteBillings = ["create", "edit"].some(a =>
-    canKey("acct_financials", a) || canKey("accounting_financials_billings_tab", a) ||
-    canKey("acct_billings", a) || canKey("ops_bookings_billings_tab", a) ||
-    canKey("ops_projects_billings_tab", a));
+  // NEU-020 door purity: with a door, only that key governs. Without one
+  // (transitional), the NEU-017 OR-gate still applies until every parent
+  // threads its door — then the fallback dies.
+  const canWriteBillings = permissionDoor
+    ? ["create", "edit"].some(a => canKey(permissionDoor, a))
+    : ["create", "edit"].some(a =>
+        canKey("acct_financials", a) || canKey("accounting_financials_billings_tab", a) ||
+        canKey("acct_billings", a) || canKey("ops_bookings_billings_tab", a) ||
+        canKey("ops_projects_billings_tab", a));
   const readOnly = readOnlyProp || !canWriteBillings;
   // Stable reference for empty array to prevent infinite re-render loops
   const stableLinkedBookings = linkedBookings && linkedBookings.length > 0 ? linkedBookings : EMPTY_LINKED_BOOKINGS;

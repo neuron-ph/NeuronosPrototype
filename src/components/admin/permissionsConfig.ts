@@ -53,6 +53,12 @@ export type ModuleId =
   | "ops_bookings_info_tab" | "ops_bookings_billings_tab"
   | "ops_bookings_invoices_tab" | "ops_bookings_collections_tab"
   | "ops_bookings_expenses_tab" | "ops_bookings_comments_tab" | "ops_bookings_chrono_tab"
+  // NEU-020 DD-1: per-service booking-detail door keys
+  | "ops_forwarding_info_tab" | "ops_forwarding_billings_tab" | "ops_forwarding_invoices_tab" | "ops_forwarding_collections_tab" | "ops_forwarding_expenses_tab" | "ops_forwarding_comments_tab" | "ops_forwarding_chrono_tab"
+  | "ops_brokerage_info_tab" | "ops_brokerage_billings_tab" | "ops_brokerage_invoices_tab" | "ops_brokerage_collections_tab" | "ops_brokerage_expenses_tab" | "ops_brokerage_comments_tab" | "ops_brokerage_chrono_tab"
+  | "ops_trucking_info_tab" | "ops_trucking_billings_tab" | "ops_trucking_invoices_tab" | "ops_trucking_collections_tab" | "ops_trucking_expenses_tab" | "ops_trucking_comments_tab" | "ops_trucking_chrono_tab"
+  | "ops_marine_insurance_info_tab" | "ops_marine_insurance_billings_tab" | "ops_marine_insurance_invoices_tab" | "ops_marine_insurance_collections_tab" | "ops_marine_insurance_expenses_tab" | "ops_marine_insurance_comments_tab" | "ops_marine_insurance_chrono_tab"
+  | "ops_others_info_tab" | "ops_others_billings_tab" | "ops_others_invoices_tab" | "ops_others_collections_tab" | "ops_others_expenses_tab" | "ops_others_comments_tab" | "ops_others_chrono_tab"
   | "ops_projects_all_tab" | "ops_projects_active_tab" | "ops_projects_completed_tab"
   | "ops_projects_info_tab" | "ops_projects_bookings_tab"
   | "ops_projects_quotation_tab" | "ops_projects_expenses_tab" | "ops_projects_billings_tab"

@@ -51,6 +51,13 @@ interface InvoiceBuilderProps {
   // View Mode
   invoice?: Invoice;
   onBack?: () => void;
+
+  /** NEU-020 door purity: the grid row (door key) this builder is rendered behind,
+   *  e.g. "ops_trucking_invoices_tab". When provided, ONLY that key's
+   *  create/edit/delete/export govern this surface — no OR-gate, no foreign keys.
+   *  Transitional: parents not yet threaded fall back to the NEU-019 OR-gate;
+   *  the fallback is removed once every parent passes its door. */
+  permissionDoor?: string;
 }
 
 interface ItemOverride {
@@ -72,7 +79,8 @@ export function InvoiceBuilder({
   onSuccess,
   invoice: initialInvoice,
   onBack,
-  onRefreshData
+  onRefreshData,
+  permissionDoor
 }: InvoiceBuilderProps) {
   // -- Common State --
   const { user } = useUser();
@@ -82,13 +90,23 @@ export function InvoiceBuilder({
   // no permission beyond tab views. Same OR-gate family as billings/collections
   // (NEU-017) — any invoice-write key authorizes; delete stays accounting-only.
   const canKey = can as unknown as (moduleId: string, action: string) => boolean;
-  const canWriteInvoices = ["create", "edit"].some(a =>
-    canKey("acct_financials", a) ||
-    canKey("accounting_financials_invoices_tab", a) ||
-    canKey("ops_bookings_invoices_tab", a) ||
-    canKey("ops_projects_invoices_tab", a));
-  const canDeleteInvoices =
-    canKey("acct_financials", "delete") || canKey("accounting_financials_invoices_tab", "delete");
+  // NEU-020 door purity: with a door, only that key governs. Without one
+  // (transitional), the NEU-019 OR-gate still applies until every parent
+  // threads its door — then the fallback dies.
+  const canWriteInvoices = permissionDoor
+    ? ["create", "edit"].some(a => canKey(permissionDoor, a))
+    : ["create", "edit"].some(a =>
+        canKey("acct_financials", a) ||
+        canKey("accounting_financials_invoices_tab", a) ||
+        canKey("ops_bookings_invoices_tab", a) ||
+        canKey("ops_projects_invoices_tab", a));
+  const canDeleteInvoices = permissionDoor
+    ? canKey(permissionDoor, "delete")
+    : canKey("acct_financials", "delete") || canKey("accounting_financials_invoices_tab", "delete");
+  // NEU-020 DD-3: PDF/Print are export-class. With a door, the door's export
+  // toggle governs. Without one (transitional fallback), exports stay open —
+  // current behavior — so unthreaded parents don't lose printing before their batch.
+  const canExportInvoices = permissionDoor ? canKey(permissionDoor, "export") : true;
   const canViewItemsTab = can("ops_invoices_items_tab", "view");
   const canViewDetailsTab = can("ops_invoices_details_tab", "view");
   const canViewLegalTab = can("ops_invoices_legal_tab", "view");
@@ -833,7 +851,7 @@ export function InvoiceBuilder({
   };
 
   const handleVoidInvoice = async () => {
-    if (!viewInvoice || !user || !canWriteInvoices) return; // WG-06 backstop
+    if (!viewInvoice || !user || !canDeleteInvoices) return; // WG-06 backstop — NEU-020 DD-9: void is delete-class
     setIsVoiding(true);
     try {
       const inv = viewInvoice as any;
@@ -1623,8 +1641,8 @@ export function InvoiceBuilder({
                   </>
                 )}
 
-                {/* Void action for posted invoices */}
-                {isPosted && !isVoid && canWriteInvoices && (
+                {/* Void action for posted invoices — NEU-020 DD-9: void is delete-class */}
+                {isPosted && !isVoid && canDeleteInvoices && (
                   <>
                     {!confirmVoid ? (
                       <button
@@ -1671,7 +1689,8 @@ export function InvoiceBuilder({
                   </div>
                 )}
 
-                {/* PDF / Print always available */}
+                {/* PDF / Print — NEU-020 DD-3: export-class, gated by the door's export toggle */}
+                {canExportInvoices && (
                 <div className="flex gap-2 pt-1">
                   <button
                     onClick={handleDownloadPDF}
@@ -1689,6 +1708,7 @@ export function InvoiceBuilder({
                     Print
                   </button>
                 </div>
+                )}
               </div>
             )}
           </div>

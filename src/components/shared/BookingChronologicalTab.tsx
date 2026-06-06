@@ -21,6 +21,12 @@ interface ChronoEntry {
 
 interface BookingChronologicalTabProps {
   bookingId: string;
+  /** NEU-020 door purity: the grid row (door key) this tab is rendered behind,
+   *  e.g. "ops_trucking_chrono_tab". When provided, ONLY that key's
+   *  create/edit/delete govern this surface. Transitional: parents not yet
+   *  threaded fall back to the legacy shared "ops_bookings_chrono_tab" key
+   *  until every parent passes its door. */
+  permissionDoor?: string;
 }
 
 const TH_CLASS =
@@ -103,12 +109,16 @@ function groupByDay(entries: ChronoEntry[]) {
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export function BookingChronologicalTab({ bookingId }: BookingChronologicalTabProps) {
+export function BookingChronologicalTab({ bookingId, permissionDoor }: BookingChronologicalTabProps) {
   const { user, session } = useUser();
   const { can } = usePermission();
-  const canCreate = can("ops_bookings_chrono_tab", "create");
-  const canEdit = can("ops_bookings_chrono_tab", "edit");
-  const canDelete = can("ops_bookings_chrono_tab", "delete");
+  // NEU-020 door purity: with a door, only that key governs; the legacy shared
+  // key is the fallback until every parent threads its door.
+  const canKey = can as unknown as (moduleId: string, action: string) => boolean;
+  const chronoDoor = permissionDoor ?? "ops_bookings_chrono_tab";
+  const canCreate = canKey(chronoDoor, "create");
+  const canEdit = canKey(chronoDoor, "edit");
+  const canDelete = canKey(chronoDoor, "delete");
 
   const currentUserName =
     user?.name ||

@@ -89,17 +89,33 @@ function ActivityTimeline({ activities }: { activities: ActivityLogEntry[] }) {
 
 export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, currentUser, initialTab, highlightId }: MarineInsuranceBookingDetailsProps) {
   const { can } = usePermission();
-  const canViewBillings = can("ops_bookings_billings_tab", "view");
-  const canViewInvoices = can("ops_bookings_invoices_tab", "view") || can("accounting_bookings_invoices_tab", "view");
-  const canViewCollections = can("ops_bookings_collections_tab", "view") || can("accounting_bookings_collections_tab", "view");
-  const canViewChrono = can("ops_bookings_chrono_tab", "view");
-  const canViewCommentsTab = can("ops_bookings_comments_tab", "view"); // NEU-019 WG-15
+  // NEU-020 DD-1: per-service door keys
+  const canViewInfo = can("ops_marine_insurance_info_tab", "view");
+  const canViewBillings = can("ops_marine_insurance_billings_tab", "view");
+  const canViewInvoices = can("ops_marine_insurance_invoices_tab", "view");
+  const canViewCollections = can("ops_marine_insurance_collections_tab", "view");
+  const canViewExpenses = can("ops_marine_insurance_expenses_tab", "view");
+  const canViewChrono = can("ops_marine_insurance_chrono_tab", "view");
+  const canViewCommentsTab = can("ops_marine_insurance_comments_tab", "view"); // NEU-019 WG-15
   const canEditBooking = can("ops_marine_insurance", "edit");
   const canCancelDeleteBooking = canEditBooking || can("ops_marine_insurance", "delete");
+  const firstViewableTab: DetailTab = canViewInfo
+    ? "booking-info"
+    : canViewBillings
+      ? "billings"
+      : canViewInvoices
+        ? "invoices"
+        : canViewCollections
+          ? "collections"
+          : canViewExpenses
+            ? "expenses"
+            : canViewCommentsTab
+              ? "comments"
+              : "chrono";
   const [activeTab, setActiveTab] = useState<DetailTab>(
-    (initialTab === "billings" && !canViewBillings) || (initialTab === "invoices" && !canViewInvoices) || (initialTab === "collections" && !canViewCollections)
-      ? "booking-info"
-      : (initialTab as DetailTab) || "booking-info"
+    (initialTab === "booking-info" && !canViewInfo) || (initialTab === "billings" && !canViewBillings) || (initialTab === "invoices" && !canViewInvoices) || (initialTab === "collections" && !canViewCollections) || (initialTab === "expenses" && !canViewExpenses)
+      ? firstViewableTab
+      : (initialTab as DetailTab) || firstViewableTab
   );
   const [showTimeline, setShowTimeline] = useState(false);
   const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>(initialActivityLog);
@@ -250,11 +266,11 @@ export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, curre
 
       <div style={{ padding: "0 48px", borderBottom: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--theme-bg-surface)", display: "flex", justifyContent: "space-between", alignItems: "center", height: "56px", position: "relative", zIndex: 20 }}>
         <div style={{ display: "flex", gap: "24px", height: "100%" }}>
-          <button onClick={() => setActiveTab("booking-info")} style={tabStyle("booking-info")}>Booking Information</button>
+          {canViewInfo && <button onClick={() => setActiveTab("booking-info")} style={tabStyle("booking-info")}>Booking Information</button>}
           {canViewBillings && <button onClick={() => setActiveTab("billings")} style={tabStyle("billings")}>Billings</button>}
           {canViewInvoices && <button onClick={() => setActiveTab("invoices")} style={tabStyle("invoices")}>Invoices</button>}
           {canViewCollections && <button onClick={() => setActiveTab("collections")} style={tabStyle("collections")}>Collections</button>}
-          <button onClick={() => setActiveTab("expenses")} style={tabStyle("expenses")}>Expenses</button>
+          {canViewExpenses && <button onClick={() => setActiveTab("expenses")} style={tabStyle("expenses")}>Expenses</button>}
           {canViewCommentsTab && <button onClick={() => setActiveTab("comments")} style={tabStyle("comments")}>Comments</button>}
           {canViewChrono && <button onClick={() => setActiveTab("chrono")} style={tabStyle("chrono")}>Chrono</button>}
         </div>
@@ -307,7 +323,7 @@ export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, curre
 
       <div style={{ flex: 1, overflow: "hidden", display: "flex", position: "relative", zIndex: 0 }}>
         <div style={{ flex: showTimeline ? "0 0 65%" : "1", overflow: "auto", transition: "flex 0.3s ease" }}>
-          {activeTab === "booking-info" && (
+          {activeTab === "booking-info" && canViewInfo && (
             <BookingInfoTab
               booking={editedBooking as Record<string, unknown>}
               serviceType="Marine Insurance"
@@ -316,12 +332,12 @@ export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, curre
               currentUser={currentUser}
             />
           )}
-          {activeTab === "billings" && canViewBillings && <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]"><UnifiedBillingsTab items={bookingBillingItems} projectId={booking.projectNumber || ""} bookingId={booking.bookingId} onRefresh={financials.refresh} isLoading={financials.isLoading} pendingBillableCount={pendingBillableCount} extraActions={<BookingRateCardButton booking={booking} serviceType="Marine Insurance" existingBillingItems={bookingBillingItems} onRefresh={financials.refresh} />} /></div>}
-          {activeTab === "invoices" && canViewInvoices && <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]"><UnifiedInvoicesTab financials={bookingFinancials} project={bookingContainer} currentUser={currentUser ? { ...currentUser, id: user?.id || "" } : null} onRefresh={financials.refresh} highlightId={activeTab === "invoices" ? highlightId : undefined} /></div>}
-          {activeTab === "collections" && canViewCollections && <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]"><UnifiedCollectionsTab financials={bookingFinancials} project={bookingContainer} currentUser={currentUser ? { ...currentUser, id: user?.id || "" } : null} onRefresh={financials.refresh} highlightId={activeTab === "collections" ? highlightId : undefined} /></div>}
-          {activeTab === "expenses" && <ExpensesTab bookingId={booking.bookingId} bookingNumber={(booking as any).booking_number || booking.bookingId} bookingType="marine-insurance" currentUser={currentUser} highlightId={activeTab === "expenses" ? highlightId : undefined} existingBillingItems={bookingBillingItems} onPendingCountChange={setPendingBillableCount} />}
-          {activeTab === "comments" && canViewCommentsTab && <BookingCommentsTab bookingId={booking.bookingId} />}
-          {activeTab === "chrono" && canViewChrono && <BookingChronologicalTab bookingId={booking.bookingId} />}
+          {activeTab === "billings" && canViewBillings && <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]"><UnifiedBillingsTab items={bookingBillingItems} projectId={booking.projectNumber || ""} bookingId={booking.bookingId} onRefresh={financials.refresh} isLoading={financials.isLoading} pendingBillableCount={pendingBillableCount} extraActions={<BookingRateCardButton booking={booking} serviceType="Marine Insurance" existingBillingItems={bookingBillingItems} onRefresh={financials.refresh} />} permissionDoor="ops_marine_insurance_billings_tab" /></div>}
+          {activeTab === "invoices" && canViewInvoices && <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]"><UnifiedInvoicesTab financials={bookingFinancials} project={bookingContainer} currentUser={currentUser ? { ...currentUser, id: user?.id || "" } : null} onRefresh={financials.refresh} highlightId={activeTab === "invoices" ? highlightId : undefined} permissionDoor="ops_marine_insurance_invoices_tab" /></div>}
+          {activeTab === "collections" && canViewCollections && <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]"><UnifiedCollectionsTab financials={bookingFinancials} project={bookingContainer} currentUser={currentUser ? { ...currentUser, id: user?.id || "" } : null} onRefresh={financials.refresh} highlightId={activeTab === "collections" ? highlightId : undefined} permissionDoor="ops_marine_insurance_collections_tab" /></div>}
+          {activeTab === "expenses" && canViewExpenses && <ExpensesTab bookingId={booking.bookingId} bookingNumber={(booking as any).booking_number || booking.bookingId} bookingType="marine-insurance" currentUser={currentUser} highlightId={activeTab === "expenses" ? highlightId : undefined} existingBillingItems={bookingBillingItems} onPendingCountChange={setPendingBillableCount} permissionDoor="ops_marine_insurance_expenses_tab" />}
+          {activeTab === "comments" && canViewCommentsTab && <BookingCommentsTab bookingId={booking.bookingId} permissionDoor="ops_marine_insurance_comments_tab" />}
+          {activeTab === "chrono" && canViewChrono && <BookingChronologicalTab bookingId={booking.bookingId} permissionDoor="ops_marine_insurance_chrono_tab" />}
         </div>
         {showTimeline && <div style={{ flex: "0 0 35%", borderLeft: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--neuron-pill-inactive-bg)", overflow: "auto" }}><ActivityTimeline activities={activityLog} /></div>}
       </div>

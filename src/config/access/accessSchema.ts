@@ -125,15 +125,9 @@ const PRICING_CONTRACT_SURFACE_TABS: ModuleId[] = [
   "pricing_contracts_activity_tab",
 ];
 
-const OPS_BOOKING_DETAIL_TABS: ModuleId[] = [
-  "ops_bookings_info_tab",
-  "ops_bookings_billings_tab",
-  "ops_bookings_invoices_tab",
-  "ops_bookings_collections_tab",
-  "ops_bookings_expenses_tab",
-  "ops_bookings_comments_tab",
-  "ops_bookings_chrono_tab",
-];
+// NEU-020 DD-1: the shared OPS_BOOKING_DETAIL_TABS borrow-list is gone — each
+// service row now declares its own per-service detail tab keys. The legacy
+// ops_bookings_* keys live on only in RLS (DB pass retires them later).
 
 // ─── Schema ──────────────────────────────────────────────────────────────────
 
@@ -281,8 +275,14 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
       {
         kind: "module", id: "ops_marine_insurance", moduleId: "ops_marine_insurance",
         label: "Marine Insurance", pageId: "ops-marine-insurance",
-        containsModuleIds: OPS_BOOKING_DETAIL_TABS,
         tabs: [
+          tab("ops_marine_insurance_info_tab", "Booking Info"),
+          tab("ops_marine_insurance_billings_tab", "Billings"),
+          tab("ops_marine_insurance_invoices_tab", "Invoices"),
+          tab("ops_marine_insurance_collections_tab", "Collections"),
+          tab("ops_marine_insurance_expenses_tab", "Expenses"),
+          tab("ops_marine_insurance_comments_tab", "Comments"),
+          tab("ops_marine_insurance_chrono_tab", "Chrono"),
           tab("ops_marine_insurance_all_tab",         "All"),
           tab("ops_marine_insurance_my_tab",          "My"),
           tab("ops_marine_insurance_draft_tab",       "Draft"),
@@ -294,8 +294,14 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
       {
         kind: "module", id: "ops_others", moduleId: "ops_others",
         label: "Others", pageId: "ops-others",
-        containsModuleIds: OPS_BOOKING_DETAIL_TABS,
         tabs: [
+          tab("ops_others_info_tab", "Booking Info"),
+          tab("ops_others_billings_tab", "Billings"),
+          tab("ops_others_invoices_tab", "Invoices"),
+          tab("ops_others_collections_tab", "Collections"),
+          tab("ops_others_expenses_tab", "Expenses"),
+          tab("ops_others_comments_tab", "Comments"),
+          tab("ops_others_chrono_tab", "Chrono"),
           tab("ops_others_all_tab",         "All"),
           tab("ops_others_my_tab",          "My"),
           tab("ops_others_draft_tab",       "Draft"),
@@ -315,8 +321,14 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
       {
         kind: "module", id: "ops_forwarding", moduleId: "ops_forwarding",
         label: "Forwarding", pageId: "ops-forwarding",
-        containsModuleIds: OPS_BOOKING_DETAIL_TABS,
         tabs: [
+          tab("ops_forwarding_info_tab", "Booking Info"),
+          tab("ops_forwarding_billings_tab", "Billings"),
+          tab("ops_forwarding_invoices_tab", "Invoices"),
+          tab("ops_forwarding_collections_tab", "Collections"),
+          tab("ops_forwarding_expenses_tab", "Expenses"),
+          tab("ops_forwarding_comments_tab", "Comments"),
+          tab("ops_forwarding_chrono_tab", "Chrono"),
           tab("ops_forwarding_all_tab",         "All"),
           tab("ops_forwarding_my_tab",          "My"),
           tab("ops_forwarding_draft_tab",       "Draft"),
@@ -328,8 +340,14 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
       {
         kind: "module", id: "ops_brokerage", moduleId: "ops_brokerage",
         label: "Brokerage", pageId: "ops-brokerage",
-        containsModuleIds: OPS_BOOKING_DETAIL_TABS,
         tabs: [
+          tab("ops_brokerage_info_tab", "Booking Info"),
+          tab("ops_brokerage_billings_tab", "Billings"),
+          tab("ops_brokerage_invoices_tab", "Invoices"),
+          tab("ops_brokerage_collections_tab", "Collections"),
+          tab("ops_brokerage_expenses_tab", "Expenses"),
+          tab("ops_brokerage_comments_tab", "Comments"),
+          tab("ops_brokerage_chrono_tab", "Chrono"),
           tab("ops_brokerage_all_tab",         "All"),
           tab("ops_brokerage_my_tab",          "My"),
           tab("ops_brokerage_draft_tab",       "Draft"),
@@ -341,8 +359,14 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
       {
         kind: "module", id: "ops_trucking", moduleId: "ops_trucking",
         label: "Trucking", pageId: "ops-trucking",
-        containsModuleIds: OPS_BOOKING_DETAIL_TABS,
         tabs: [
+          tab("ops_trucking_info_tab", "Booking Info"),
+          tab("ops_trucking_billings_tab", "Billings"),
+          tab("ops_trucking_invoices_tab", "Invoices"),
+          tab("ops_trucking_collections_tab", "Collections"),
+          tab("ops_trucking_expenses_tab", "Expenses"),
+          tab("ops_trucking_comments_tab", "Comments"),
+          tab("ops_trucking_chrono_tab", "Chrono"),
           tab("ops_trucking_all_tab",         "All"),
           tab("ops_trucking_my_tab",          "My"),
           tab("ops_trucking_draft_tab",       "Draft"),
@@ -354,8 +378,14 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
       {
         kind: "module", id: "ops_others", moduleId: "ops_others",
         label: "Others", pageId: "ops-others",
-        containsModuleIds: OPS_BOOKING_DETAIL_TABS,
         tabs: [
+          tab("ops_others_info_tab", "Booking Info"),
+          tab("ops_others_billings_tab", "Billings"),
+          tab("ops_others_invoices_tab", "Invoices"),
+          tab("ops_others_collections_tab", "Collections"),
+          tab("ops_others_expenses_tab", "Expenses"),
+          tab("ops_others_comments_tab", "Comments"),
+          tab("ops_others_chrono_tab", "Chrono"),
           tab("ops_others_all_tab",         "All"),
           tab("ops_others_my_tab",          "My"),
           tab("ops_others_draft_tab",       "Draft"),

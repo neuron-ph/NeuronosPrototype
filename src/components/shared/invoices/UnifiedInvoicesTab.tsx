@@ -28,11 +28,17 @@ interface UnifiedInvoicesTabProps {
   readOnly?: boolean;
   linkedBookings?: any[];
   highlightId?: string | null;
+  /** NEU-020 door purity: the grid row (door key) this tab is rendered behind,
+   *  e.g. "ops_trucking_invoices_tab". When provided, ONLY that key's
+   *  create/edit/delete govern this surface — no OR-gate, no foreign keys.
+   *  Transitional: parents not yet threaded fall back to the NEU-019 OR-gate;
+   *  the fallback is removed once every parent passes its door. */
+  permissionDoor?: string;
 }
 
-export function UnifiedInvoicesTab({ 
-  financials, 
-  project, 
+export function UnifiedInvoicesTab({
+  financials,
+  project,
   currentUser,
   onRefresh,
   title,
@@ -40,6 +46,7 @@ export function UnifiedInvoicesTab({
   readOnly = false,
   linkedBookings,
   highlightId,
+  permissionDoor,
 }: UnifiedInvoicesTabProps) {
   const { invoices, collections, billingItems: rawBillingItems, refresh } = financials;
 
@@ -47,11 +54,16 @@ export function UnifiedInvoicesTab({
   // tab view — same OR-gate family as billings (NEU-017) / collections (Group A).
   const { can } = usePermission();
   const canKey = can as unknown as (moduleId: string, action: string) => boolean;
-  const canWriteInvoices = ["create", "edit"].some(a =>
-    canKey("acct_financials", a) ||
-    canKey("accounting_financials_invoices_tab", a) ||
-    canKey("ops_bookings_invoices_tab", a) ||
-    canKey("ops_projects_invoices_tab", a));
+  // NEU-020 door purity: with a door, only that key governs. Without one
+  // (transitional), the NEU-019 OR-gate still applies until every parent
+  // threads its door — then the fallback dies.
+  const canWriteInvoices = permissionDoor
+    ? ["create", "edit"].some(a => canKey(permissionDoor, a))
+    : ["create", "edit"].some(a =>
+        canKey("acct_financials", a) ||
+        canKey("accounting_financials_invoices_tab", a) ||
+        canKey("ops_bookings_invoices_tab", a) ||
+        canKey("ops_projects_invoices_tab", a));
   const effectiveReadOnly = readOnly || !canWriteInvoices;
 
   const invoiceLineage = useMemo(() => {
@@ -354,6 +366,7 @@ export function UnifiedInvoicesTab({
         onClose={handleClose}
         onSuccess={handleCreateSuccess}
         onRefreshData={refresh}
+        permissionDoor={permissionDoor}
       />
     );
   }

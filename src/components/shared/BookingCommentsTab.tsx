@@ -27,14 +27,20 @@ interface BookingComment {
 
 interface BookingCommentsTabProps {
   bookingId: string;
+  /** NEU-020 door purity: the grid row (door key) this tab is rendered behind,
+   *  e.g. "ops_trucking_comments_tab". When provided, ONLY that key governs
+   *  posting. Transitional: parents not yet threaded fall back to the legacy
+   *  shared "ops_bookings_comments_tab" key until every parent passes its door. */
+  permissionDoor?: string;
 }
 
-export function BookingCommentsTab({ bookingId }: BookingCommentsTabProps) {
+export function BookingCommentsTab({ bookingId, permissionDoor }: BookingCommentsTabProps) {
   const { user, session } = useUser();
-  // NEU-019 WG-15: posting gates on the booking comments knob. Self-gated
-  // (single knob, six parents) rather than prop-threaded.
+  // NEU-019 WG-15: posting gates on the booking comments knob. NEU-020: with a
+  // door, only that key governs; the legacy shared key is the fallback.
   const { can } = usePermission();
-  const canPost = can("ops_bookings_comments_tab", "create");
+  const canKey = can as unknown as (moduleId: string, action: string) => boolean;
+  const canPost = canKey(permissionDoor ?? "ops_bookings_comments_tab", "create");
   const currentUserName =
     user?.name ||
     session?.user?.user_metadata?.name ||

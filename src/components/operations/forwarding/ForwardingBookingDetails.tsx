@@ -77,17 +77,33 @@ export function ForwardingBookingDetails({
   highlightId
 }: ForwardingBookingDetailsProps) {
   const { can } = usePermission();
-  const canViewBillings = can("ops_bookings_billings_tab", "view");
-  const canViewInvoices = can("ops_bookings_invoices_tab", "view") || can("accounting_bookings_invoices_tab", "view");
-  const canViewCollections = can("ops_bookings_collections_tab", "view") || can("accounting_bookings_collections_tab", "view");
-  const canViewChrono = can("ops_bookings_chrono_tab", "view");
-  const canViewCommentsTab = can("ops_bookings_comments_tab", "view"); // NEU-019 WG-15
+  // NEU-020 DD-1: per-service door keys
+  const canViewInfo = can("ops_forwarding_info_tab", "view");
+  const canViewBillings = can("ops_forwarding_billings_tab", "view");
+  const canViewInvoices = can("ops_forwarding_invoices_tab", "view");
+  const canViewCollections = can("ops_forwarding_collections_tab", "view");
+  const canViewExpenses = can("ops_forwarding_expenses_tab", "view");
+  const canViewChrono = can("ops_forwarding_chrono_tab", "view");
+  const canViewCommentsTab = can("ops_forwarding_comments_tab", "view"); // NEU-019 WG-15
   const canEditBooking = can("ops_forwarding", "edit");
   const canCancelDeleteBooking = canEditBooking || can("ops_forwarding", "delete");
+  const firstViewableTab: DetailTab = canViewInfo
+    ? "booking-info"
+    : canViewBillings
+      ? "billings"
+      : canViewInvoices
+        ? "invoices"
+        : canViewCollections
+          ? "collections"
+          : canViewExpenses
+            ? "expenses"
+            : canViewCommentsTab
+              ? "comments"
+              : "chrono";
   const [activeTab, setActiveTab] = useState<DetailTab>(
-    (initialTab === "billings" && !canViewBillings) || (initialTab === "invoices" && !canViewInvoices) || (initialTab === "collections" && !canViewCollections)
-      ? "booking-info"
-      : (initialTab as DetailTab) || "booking-info"
+    (initialTab === "booking-info" && !canViewInfo) || (initialTab === "billings" && !canViewBillings) || (initialTab === "invoices" && !canViewInvoices) || (initialTab === "collections" && !canViewCollections) || (initialTab === "expenses" && !canViewExpenses)
+      ? firstViewableTab
+      : (initialTab as DetailTab) || firstViewableTab
   );
   const [showTimeline, setShowTimeline] = useState(false);
   const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>(initialActivityLog);
@@ -327,31 +343,33 @@ export function ForwardingBookingDetails({
       }}>
         {/* Tabs - Left Side */}
         <div style={{ display: "flex", gap: "24px", height: "100%" }}>
-          <button
-            onClick={() => setActiveTab("booking-info")}
-            style={{
-              padding: "0 4px",
-              fontSize: "14px",
-              fontWeight: 500,
-              color: activeTab === "booking-info" ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-muted)",
-              background: "none",
-              borderTop: "none",
-              borderLeft: "none",
-              borderRight: "none",
-              borderBottom: activeTab === "booking-info" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
-              cursor: "pointer",
-              transition: "all 0.2s",
-              height: "100%"
-            }}
-            onMouseEnter={(e) => {
-              if (activeTab !== "booking-info") e.currentTarget.style.color = "var(--neuron-ink-secondary)";
-            }}
-            onMouseLeave={(e) => {
-              if (activeTab !== "booking-info") e.currentTarget.style.color = "var(--neuron-ink-muted)";
-            }}
-          >
-            Booking Information
-          </button>
+          {canViewInfo && (
+            <button
+              onClick={() => setActiveTab("booking-info")}
+              style={{
+                padding: "0 4px",
+                fontSize: "14px",
+                fontWeight: 500,
+                color: activeTab === "booking-info" ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-muted)",
+                background: "none",
+                borderTop: "none",
+                borderLeft: "none",
+                borderRight: "none",
+                borderBottom: activeTab === "booking-info" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
+                cursor: "pointer",
+                transition: "all 0.2s",
+                height: "100%"
+              }}
+              onMouseEnter={(e) => {
+                if (activeTab !== "booking-info") e.currentTarget.style.color = "var(--neuron-ink-secondary)";
+              }}
+              onMouseLeave={(e) => {
+                if (activeTab !== "booking-info") e.currentTarget.style.color = "var(--neuron-ink-muted)";
+              }}
+            >
+              Booking Information
+            </button>
+          )}
           {canViewBillings && (
             <button
               onClick={() => setActiveTab("billings")}
@@ -433,31 +451,33 @@ export function ForwardingBookingDetails({
               Collections
             </button>
           )}
-          <button
-            onClick={() => setActiveTab("expenses")}
-            style={{
-              padding: "0 4px",
-              fontSize: "14px",
-              fontWeight: 500,
-              color: activeTab === "expenses" ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-muted)",
-              background: "none",
-              borderTop: "none",
-              borderLeft: "none",
-              borderRight: "none",
-              borderBottom: activeTab === "expenses" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
-              cursor: "pointer",
-              transition: "all 0.2s",
-              height: "100%"
-            }}
-            onMouseEnter={(e) => {
-              if (activeTab !== "expenses") e.currentTarget.style.color = "var(--neuron-ink-secondary)";
-            }}
-            onMouseLeave={(e) => {
-              if (activeTab !== "expenses") e.currentTarget.style.color = "var(--neuron-ink-muted)";
-            }}
-          >
-            Expenses
-          </button>
+          {canViewExpenses && (
+            <button
+              onClick={() => setActiveTab("expenses")}
+              style={{
+                padding: "0 4px",
+                fontSize: "14px",
+                fontWeight: 500,
+                color: activeTab === "expenses" ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-muted)",
+                background: "none",
+                borderTop: "none",
+                borderLeft: "none",
+                borderRight: "none",
+                borderBottom: activeTab === "expenses" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
+                cursor: "pointer",
+                transition: "all 0.2s",
+                height: "100%"
+              }}
+              onMouseEnter={(e) => {
+                if (activeTab !== "expenses") e.currentTarget.style.color = "var(--neuron-ink-secondary)";
+              }}
+              onMouseLeave={(e) => {
+                if (activeTab !== "expenses") e.currentTarget.style.color = "var(--neuron-ink-muted)";
+              }}
+            >
+              Expenses
+            </button>
+          )}
           {canViewCommentsTab && (
             <button
               onClick={() => setActiveTab("comments")}
@@ -619,7 +639,7 @@ export function ForwardingBookingDetails({
           overflow: "auto",
           transition: "flex 0.3s ease"
         }}>
-          {activeTab === "booking-info" && (
+          {activeTab === "booking-info" && canViewInfo && (
             <BookingInfoTab
               booking={editedBooking as Record<string, unknown>}
               serviceType="Forwarding"
@@ -637,6 +657,7 @@ export function ForwardingBookingDetails({
                 onRefresh={financials.refresh}
                 isLoading={financials.isLoading}
                 pendingBillableCount={pendingBillableCount}
+                permissionDoor="ops_forwarding_billings_tab"
               />
             </div>
           )}
@@ -648,6 +669,7 @@ export function ForwardingBookingDetails({
                 currentUser={currentUser ? { ...currentUser, id: user?.id || "" } : null}
                 onRefresh={financials.refresh}
                 highlightId={activeTab === "invoices" ? highlightId : undefined}
+                permissionDoor="ops_forwarding_invoices_tab"
               />
             </div>
           )}
@@ -659,10 +681,11 @@ export function ForwardingBookingDetails({
                 currentUser={currentUser ? { ...currentUser, id: user?.id || "" } : null}
                 onRefresh={financials.refresh}
                 highlightId={activeTab === "collections" ? highlightId : undefined}
+                permissionDoor="ops_forwarding_collections_tab"
               />
             </div>
           )}
-          {activeTab === "expenses" && (
+          {activeTab === "expenses" && canViewExpenses && (
             <ExpensesTab
               bookingId={booking.bookingId}
               bookingNumber={(booking as any).booking_number || booking.bookingId}
@@ -671,13 +694,14 @@ export function ForwardingBookingDetails({
               highlightId={activeTab === "expenses" ? highlightId : undefined}
               existingBillingItems={bookingBillingItems}
               onPendingCountChange={setPendingBillableCount}
+              permissionDoor="ops_forwarding_expenses_tab"
             />
           )}
           {activeTab === "comments" && canViewCommentsTab && (
-            <BookingCommentsTab bookingId={booking.bookingId} />
+            <BookingCommentsTab bookingId={booking.bookingId} permissionDoor="ops_forwarding_comments_tab" />
           )}
           {activeTab === "chrono" && canViewChrono && (
-            <BookingChronologicalTab bookingId={booking.bookingId} />
+            <BookingChronologicalTab bookingId={booking.bookingId} permissionDoor="ops_forwarding_chrono_tab" />
           )}
         </div>
 

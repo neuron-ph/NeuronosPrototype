@@ -25,6 +25,12 @@ interface UnifiedCollectionsTabProps {
   subtitle?: string;
   readOnly?: boolean;
   highlightId?: string | null;
+  /** NEU-020 door purity: the grid row (door key) this tab is rendered behind,
+   *  e.g. "ops_trucking_collections_tab". When provided, ONLY that key's
+   *  create/edit/delete govern this surface — no OR-gate, no foreign keys.
+   *  Transitional: parents not yet threaded fall back to the NEU-017 OR-gate;
+   *  the fallback is removed once every parent passes its door. */
+  permissionDoor?: string;
 }
 
 const describeInvoiceApplication = (invoice: any) => {
@@ -50,6 +56,7 @@ export function UnifiedCollectionsTab({
   subtitle,
   readOnly = false,
   highlightId,
+  permissionDoor,
 }: UnifiedCollectionsTabProps) {
   // NEU-017: hide write affordances without a collections write grant — mirrors
   // UnifiedBillingsTab's OR-gate (any module that can write collections).
@@ -57,10 +64,15 @@ export function UnifiedCollectionsTab({
   // by Accounting profiles) but absent from the ModuleId union — hence the alias.
   const { can } = usePermission();
   const canKey = can as unknown as (moduleId: string, action: string) => boolean;
-  const canWriteCollections = ["create", "edit"].some(a =>
-    canKey("acct_financials", a) || canKey("accounting_financials_collections_tab", a) ||
-    canKey("acct_collections", a) || canKey("ops_bookings_collections_tab", a) ||
-    canKey("ops_projects_collections_tab", a));
+  // NEU-020 door purity: with a door, only that key governs. Without one
+  // (transitional), the NEU-017 OR-gate still applies until every parent
+  // threads its door — then the fallback dies.
+  const canWriteCollections = permissionDoor
+    ? ["create", "edit"].some(a => canKey(permissionDoor, a))
+    : ["create", "edit"].some(a =>
+        canKey("acct_financials", a) || canKey("accounting_financials_collections_tab", a) ||
+        canKey("acct_collections", a) || canKey("ops_bookings_collections_tab", a) ||
+        canKey("ops_projects_collections_tab", a));
   const effectiveReadOnly = readOnly || !canWriteCollections;
   const { collections, invoices, refresh, isLoading } = financials;
 
