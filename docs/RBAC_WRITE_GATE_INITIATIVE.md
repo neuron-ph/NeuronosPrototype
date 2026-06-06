@@ -82,11 +82,11 @@ Status: `OPEN` → `GATED` / `EXCEPTION` / `DELETED` / `NON-USER`. Verdict flips
 
 | ID | Surface & writes | Target | Status |
 |---|---|---|---|
-| WG-01 | `AccessConfiguration.tsx` — access_profiles insert/update/delete, permission_overrides insert/update, users.access_profile_id (5 user-facing sites) | save/apply behind `admin_users_tab:edit`; profile CRUD behind `admin_access_profiles_tab:create/edit/delete` | OPEN |
-| WG-02 | `AccessProfiles.tsx` — profile CRUD + Apply-to-users (3 sites) | `admin_access_profiles_tab:create/edit/delete`; Apply behind `:edit` | OPEN |
-| WG-03 | Inbox resolution → `workflowTickets.ts:155–170` quotations.update / bookings.update | record-module edit check before `executeResolutionAction`; on missing grant: ticket completes, record write skipped + surfaced | OPEN |
-| WG-04 | `useCompanySettings` upsert from QuotationPDFScreen + InvoicePDFScreen | NEW `company_settings` knob (D4): schema node + applicability + seeding; save buttons behind its `edit` | OPEN |
-| WG-05 | `UserDetailPage` status pills → `admin-user-actions updateStatus` | `exec_users:edit \| admin_users_tab:edit` | OPEN |
+| WG-01 | `AccessConfiguration.tsx` — access_profiles insert/update/delete, permission_overrides insert/update, users.access_profile_id (5 user-facing sites) | save/apply behind `admin_users_tab:edit`; profile CRUD behind `admin_access_profiles_tab:create/edit/delete` | **GATED** (`7e22654`, blast: 14/14 keep save, delete 14→10) |
+| WG-02 | `AccessProfiles.tsx` — profile CRUD + Apply-to-users (3 sites) | `admin_access_profiles_tab:create/edit/delete`; Apply behind `:edit` | **GATED** (`c310a98`, blast: 0 lockouts, delete −4) |
+| WG-03 | Inbox resolution → `workflowTickets.ts` quotations.update / bookings.update | `RESOLUTION_ACTION_GRANTS` map + `canExecuteResolutionAction()` at all 3 ThreadDetailPanel sites; ticket completes, skipped write surfaced | **GATED** (`f8353fe`, blast: Pricing 8/8, Acct 8/11 graceful) |
+| WG-04 | `useCompanySettings` upsert from QuotationPDFScreen + InvoicePDFScreen | NEW `company_settings` knob (tab under Executive→Profiling, edit-only); migration 168 seeds exec_profiling:edit holders | **GATED** (`e0e54d0`, 16 seeded, applied to dev) |
+| WG-05 | `UserDetailPage` status pills → `admin-user-actions updateStatus` | `exec_users:edit \| admin_users_tab:edit`; read-only status display otherwise | **GATED** (`2f4dfd5`, blast: 14/14) |
 
 ### Tier 2 — Ungated lifecycles (Phase 2)
 
