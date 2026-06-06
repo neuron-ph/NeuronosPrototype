@@ -109,7 +109,10 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
   // NEU-017: assigning mutates the ticket — gate by the write key the DB
   // enforces (tickets UPDATE policy: participant OR inbox:edit), not by the
   // queue tab's VIEW key. Queue-viewers without inbox:edit failed at RLS anyway.
-  const canAssign = can("inbox", "edit") && deptParticipants.length > 0;
+  // NEU-020 2.7 (DD-5): assign/reassign is a Queue power — "while in the Queue,
+  // they can edit queue tickets". (RLS still checks inbox:edit until Phase 4;
+  // every inbox_queue_tab:edit holder is seeded from inbox:edit so it passes.)
+  const canAssign = can("inbox_queue_tab", "edit") && deptParticipants.length > 0;
   // WG-03: resolution actions write linked records via legacy keys outside the
   // ModuleId union (acct_billings et al.) — same canKey pattern as NEU-017.
   const canKey = can as unknown as (moduleId: string, action: string) => boolean;
@@ -126,18 +129,19 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
       toast.warning("Ticket completed — the linked record was left unchanged because you don't have permission to update it.");
     }
   };
-  // NEU-019 WG-19 (D1): status changes and approvals are inbox:edit AND
-  // identity — the knob makes them revocable, identity keeps them scoped to
-  // the ticket's actual participants.
-  const canActOnInbox = can("inbox", "edit");
+  // NEU-020 2.7 (DD-5): the old single inbox:edit splits five ways. Status
+  // advance / mark done / reopen is the Inbox-tab edit power; approvals get
+  // their own approve key; closing is a delete-class power. Identity (isRecipient
+  // / isSender) stays AND'd so each power is still scoped to real participants.
+  const canActOnInbox = can("inbox_inbox_tab", "edit");
   const canAdvanceStatus = canActOnInbox && isRecipient && !["done", "returned", "archived", "draft"].includes(thread.status);
-  const isApprovalPending = thread.type === "approval" && thread.approval_result === null && isRecipient && canActOnInbox;
+  const isApprovalPending = thread.type === "approval" && thread.approval_result === null && isRecipient && can("inbox", "approve");
   const isDone = thread.status === "done";
   const isReturned = thread.status === "returned";
 
   // Close / dismiss (FYI = per-person dismiss, request/approval = shared archive)
   const isClosed = isClosedView || thread.status === "archived";
-  const canCloseTicket = !!onCloseTicket && canActOnInbox && (isRecipient || isSender || canAssign);
+  const canCloseTicket = !!onCloseTicket && can("inbox", "delete") && (isRecipient || isSender || canAssign);
 
   const handleCloseTicket = async () => {
     if (!onCloseTicket) return;

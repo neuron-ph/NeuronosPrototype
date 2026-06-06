@@ -350,10 +350,14 @@ export const APPLICABLE_ACTIONS: Record<ModuleId, readonly ActionId[]> = {
   company_settings: ["edit"],
 
   // ─── Inbox ──────────────────────────────────────────────────────────────────
-  inbox: ["view", "create", "edit", "delete"],
+  // NEU-020 2.7 (DD-5): inbox:edit was five powers wearing one switch. Now —
+  //   retract own message → inbox:edit        close/archive ticket → inbox:delete
+  //   approval accept/decline → inbox:approve  assign/reassign → inbox_queue_tab:edit
+  //   status advance/mark done/reopen → inbox_inbox_tab:edit
+  inbox: ["view", "create", "edit", "delete", "approve"],
   inbox_entity_picker: ["view"],
-  inbox_inbox_tab: ["view"],
-  inbox_queue_tab: ["view"],
+  inbox_inbox_tab: ["view", "edit"],
+  inbox_queue_tab: ["view", "edit"],
   inbox_sent_tab: ["view"],
   inbox_drafts_tab: ["view"],
   inbox_entity_inquiry_tab: ["view"],

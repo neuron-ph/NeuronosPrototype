@@ -89,9 +89,9 @@ export function ThreadListPanel({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // The Open/Closed filter and bulk-select only apply to inbox & queue.
-  // NEU-019 WG-19 (D1): closing archives shared tickets — inbox:edit;
-  // composing writes tickets/messages — inbox:create.
-  const supportsClose = (activeTab === "inbox" || activeTab === "queue") && can("inbox", "edit");
+  // NEU-020 2.7 (DD-5): closing/archiving a ticket is a delete-class power
+  // (take it down) — inbox:delete; composing writes tickets — inbox:create.
+  const supportsClose = (activeTab === "inbox" || activeTab === "queue") && can("inbox", "delete");
   const canCompose = can("inbox", "create");
 
   // Reset selection when the view changes underneath it
