@@ -78,6 +78,17 @@ export function InvoiceBuilder({
   const { user } = useUser();
   const { settings: companySettings } = useCompanySettings();
   const { can } = usePermission();
+  // NEU-019 WG-06: the invoice lifecycle (draft/finalize/delete/void) wrote with
+  // no permission beyond tab views. Same OR-gate family as billings/collections
+  // (NEU-017) — any invoice-write key authorizes; delete stays accounting-only.
+  const canKey = can as unknown as (moduleId: string, action: string) => boolean;
+  const canWriteInvoices = ["create", "edit"].some(a =>
+    canKey("acct_financials", a) ||
+    canKey("accounting_financials_invoices_tab", a) ||
+    canKey("ops_bookings_invoices_tab", a) ||
+    canKey("ops_projects_invoices_tab", a));
+  const canDeleteInvoices =
+    canKey("acct_financials", "delete") || canKey("accounting_financials_invoices_tab", "delete");
   const canViewItemsTab = can("ops_invoices_items_tab", "view");
   const canViewDetailsTab = can("ops_invoices_details_tab", "view");
   const canViewLegalTab = can("ops_invoices_legal_tab", "view");
@@ -515,6 +526,7 @@ export function InvoiceBuilder({
   };
 
   const handleSubmit = async () => {
+    if (!canWriteInvoices) return; // WG-06 backstop
     if (selectedIds.size === 0) {
       toast.error("Please select at least one billing item.");
       return;
@@ -707,7 +719,7 @@ export function InvoiceBuilder({
   const hasJournalEntry = !!(viewInvoice as any)?.journal_entry_id;
 
   const handleFinalize = async () => {
-    if (!viewInvoice || !user) return;
+    if (!viewInvoice || !user || !canWriteInvoices) return; // WG-06 backstop
     setIsFinalizing(true);
     try {
       const inv = viewInvoice as any;
@@ -789,7 +801,7 @@ export function InvoiceBuilder({
   };
 
   const handleDeleteDraft = async () => {
-    if (!viewInvoice || !user) return;
+    if (!viewInvoice || !user || !canDeleteInvoices) return; // WG-06 backstop
     setIsDeletingDraft(true);
     try {
       const inv = viewInvoice as any;
@@ -821,7 +833,7 @@ export function InvoiceBuilder({
   };
 
   const handleVoidInvoice = async () => {
-    if (!viewInvoice || !user) return;
+    if (!viewInvoice || !user || !canWriteInvoices) return; // WG-06 backstop
     setIsVoiding(true);
     try {
       const inv = viewInvoice as any;
@@ -1553,6 +1565,7 @@ export function InvoiceBuilder({
                   </div>
                 </div>
 
+                {canWriteInvoices && (
                 <button
                   onClick={handleSubmit}
                   disabled={isSubmitting || selectedIds.size === 0}
@@ -1565,11 +1578,12 @@ export function InvoiceBuilder({
                   )}
                   {isSubmitting ? "Saving..." : "Save as Draft"}
                 </button>
+                )}
               </>
             ) : (
               <div className="flex flex-col gap-2.5">
                 {/* Draft actions */}
-                {isDraft && (
+                {isDraft && canWriteInvoices && (
                   <>
                     <button
                       onClick={handleFinalize}
@@ -1580,6 +1594,7 @@ export function InvoiceBuilder({
                       {isFinalizing ? "Finalizing..." : "Finalize Invoice"}
                     </button>
                     {!confirmDelete ? (
+                      canDeleteInvoices &&
                       <button
                         onClick={() => setConfirmDelete(true)}
                         className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-[13px] font-medium text-[var(--theme-status-danger-fg)] border border-[var(--theme-status-danger-border)] rounded-lg hover:bg-[var(--theme-status-danger-bg)] transition-all"
@@ -1609,7 +1624,7 @@ export function InvoiceBuilder({
                 )}
 
                 {/* Void action for posted invoices */}
-                {isPosted && !isVoid && (
+                {isPosted && !isVoid && canWriteInvoices && (
                   <>
                     {!confirmVoid ? (
                       <button

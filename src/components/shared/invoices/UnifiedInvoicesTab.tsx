@@ -11,6 +11,7 @@ import { calculateInvoiceBalance } from "../../../utils/accounting-math";
 import { formatMoney as formatMoneyHelper, pickReportingAmount } from "../../../utils/accountingCurrency";
 import { getInvoiceLifecycleStatus, isInvoiceFinanciallyActive } from "../../../utils/invoiceReversal";
 import { useBillingMerge } from "../../../hooks/useBillingMerge";
+import { usePermission } from "../../../context/PermissionProvider";
 
 interface UnifiedInvoicesTabProps {
   financials: FinancialData;
@@ -41,6 +42,17 @@ export function UnifiedInvoicesTab({
   highlightId,
 }: UnifiedInvoicesTabProps) {
   const { invoices, collections, billingItems: rawBillingItems, refresh } = financials;
+
+  // NEU-019 WG-06: invoice creation needs an invoice-write grant, not just the
+  // tab view — same OR-gate family as billings (NEU-017) / collections (Group A).
+  const { can } = usePermission();
+  const canKey = can as unknown as (moduleId: string, action: string) => boolean;
+  const canWriteInvoices = ["create", "edit"].some(a =>
+    canKey("acct_financials", a) ||
+    canKey("accounting_financials_invoices_tab", a) ||
+    canKey("ops_bookings_invoices_tab", a) ||
+    canKey("ops_projects_invoices_tab", a));
+  const effectiveReadOnly = readOnly || !canWriteInvoices;
 
   const invoiceLineage = useMemo(() => {
     return invoices.reduce((map, invoice: any) => {
@@ -360,7 +372,7 @@ export function UnifiedInvoicesTab({
         </div>
         
         <div className="flex items-center gap-3">
-           {!readOnly && (
+           {!effectiveReadOnly && (
              <button
                onClick={() => setInterfaceMode('create')}
                className="flex items-center gap-2 px-4 py-2 bg-[var(--theme-action-primary-bg)] text-white rounded-lg hover:bg-[#0D6559] transition-colors font-medium text-[14px]"
