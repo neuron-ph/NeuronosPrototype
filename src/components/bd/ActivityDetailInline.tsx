@@ -1,5 +1,5 @@
 import { supabase } from '../../utils/supabase/client';
-import { ArrowLeft, User, Building2, Calendar, MessageSquare, Upload, Paperclip, Send, Trash2, FileText, Download } from "lucide-react";
+import { ArrowLeft, User, Building2, Calendar, MessageSquare, Upload, Paperclip, Send, Trash2, FileText } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { Activity, Contact, Customer } from "../../types/bd";
 import { toast } from "../ui/toast-utils";
@@ -422,12 +422,7 @@ export function ActivityDetailInline({
                       </div>
                     </div>
 
-                    <button
-                      className="p-2 text-[var(--theme-text-muted)] hover:text-[var(--theme-action-primary-bg)] transition-colors"
-                      title="Download"
-                    >
-                      <Download size={16} />
-                    </button>
+                    {/* NEU-020 DD-17: dead Download button (no onClick) deleted */}
                   </div>
                 ))}
               </div>

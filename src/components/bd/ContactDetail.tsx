@@ -1,4 +1,4 @@
-import { ArrowLeft, Mail, Phone, Building2, User, Edit, Trash2, Paperclip, Download, FileText, Image as ImageIcon, File, Upload, CheckCircle2, AlertCircle, MessageSquare, Send, Plus, Users, MessageCircle, Linkedin, Flag, CheckSquare, UserCheck } from "lucide-react";
+import { ArrowLeft, Mail, Phone, Building2, User, Edit, Trash2, Paperclip, FileText, Image as ImageIcon, File, Upload, CheckCircle2, AlertCircle, MessageSquare, Send, Plus, Users, MessageCircle, Linkedin, Flag, CheckSquare, UserCheck } from "lucide-react";
 import { useRef, useState } from "react";
 import { usePermission } from "../../context/PermissionProvider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -1789,22 +1789,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                                         </div>
                                       </div>
                                     </div>
-                                    <button
-                                      className="flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-medium transition-colors"
-                                      style={{
-                                        backgroundColor: "var(--theme-action-primary-bg)",
-                                        color: "#FFFFFF"
-                                      }}
-                                      onMouseEnter={(e) => {
-                                        e.currentTarget.style.backgroundColor = "var(--theme-action-primary-border)";
-                                      }}
-                                      onMouseLeave={(e) => {
-                                        e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
-                                      }}
-                                    >
-                                      <Download size={12} />
-                                      Download
-                                    </button>
+                                    {/* NEU-020 DD-17: dead Download button (no onClick) deleted */}
                                   </div>
                                 ))}
                               </div>

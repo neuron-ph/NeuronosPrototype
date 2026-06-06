@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { toast } from "sonner@2.0.3";
-import { ArrowLeft, Search, Download, Filter } from 'lucide-react';
+import { ArrowLeft, Search, Filter } from 'lucide-react';
 import { format } from 'date-fns';
 import { Account } from '../../../types/accounting-core';
 import { supabase } from '../../../utils/supabase/client';
@@ -268,10 +268,7 @@ export function AccountLedger({ account, onBack }: AccountLedgerProps) {
                  <Filter size={16} />
                  Filter
               </button>
-              <button className="h-9 px-3 bg-[var(--theme-bg-surface)] border border-[var(--theme-border-default)] text-[var(--theme-text-secondary)] rounded-lg font-medium text-sm hover:bg-[var(--theme-bg-surface-subtle)] transition-colors flex items-center gap-2">
-                 <Download size={16} />
-                 Export
-              </button>
+              {/* NEU-020 DD-17: dead Export button (no onClick) deleted */}
            </div>
         </div>
       </div>

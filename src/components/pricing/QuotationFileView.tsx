@@ -98,7 +98,9 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
   const currentUserName = currentUser?.name || "John Doe";
   const currentUserDepartment = currentUser?.department || userDepartment || "BD";
 
-  const canAssign = can("pricing_quotations", "approve");
+  // NEU-020 DD-10 (ruled): assignment is part of working quotations — edit-class.
+  // DD-13: with assignment moved, pricing_quotations:approve retired (dashed).
+  const canAssign = can("pricing_quotations", "edit");
   const canEditPricing = can("pricing_quotations", "edit");
   const canEditQuotation = canUseQuotationLens(can, userDepartment, "edit");
   const canCreateQuotation = canUseQuotationLens(can, userDepartment, "create");
