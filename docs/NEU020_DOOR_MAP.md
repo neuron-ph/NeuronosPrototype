@@ -102,7 +102,24 @@ genuinely shapes what renders — treat as legitimate consumer (recommended) or 
 Seeding: every current `inbox:edit` holder ⇐ all five keys (L3, zero loss). RLS (165:49-55)
 must learn the new keys in Phase 4 or UI grants fail at the DB.
 
-## 7. ESCALATIONS — new decisions for Marcus (DD-11+)
+## 7. ESCALATIONS — RULED by Marcus, 2026-06-06 (second register round)
+
+| ID | Ruling |
+|---|---|
+| DD-11 | **Strict purity.** Master keys retire; each door has exactly one key; accounting works through Accounting's own rows; current side-door users seeded into the doors they use (day one identical). |
+| DD-12 | **Write cells where accounting works.** Acct window tab rows gain create/edit cells for the money work accounting genuinely does inside projects/bookings (seeded from current usage); non-accounting powers (booking edit/cancel) suppressed through the windows. |
+| DD-13 | **Dash the Quotations Approve column.** Approve/Disapprove status actions keep riding Edit (accepted reading); `pricing_quotations:approve` retires with assignment's move to edit (DD-10). |
+| DD-14 | **OVERRIDDEN** by the Grammar ruling below. |
+| DD-15 | **Build the in-door inquiry click-through** (BD + Pricing contact/customer inquiry tabs open the file in-door; the file obeys the door's keys). The case that started NEU-020 becomes fully true. |
+| DD-16 | **Basement switches stay.** A key whose RLS visibly shapes the screen (Memos·View, my-EV edit) is a legitimate consumer. Guard learns three classes: button-backed / select-shaping-RLS / write-RLS-only — only the last dashes. |
+| DD-17 | **Delete the 5 dead buttons** (CoA Export ×2, attachment Download ×3). Dead code is deleted, never gated. |
+| DD-18 | **Add route guards** to /inbox, /calendar, /my-evouchers — View OFF = no page. |
+| DD-19 | **Remove the auto-caps toggle from Settings and build a Company Settings surface** as the home for org-wide config (auto-caps now; letterhead/bank defaults can join later). The grid tab exists since D4; this gives it its page. |
+| DD-20 | **Legacy confirmed** ("isn't BR approval just e-voucher approval?"). Budget request approval IS the e-voucher manager→CEO chain. Dash `bd_budget_requests:approve`; the unreachable approve-panel path joins the deletion list with proof. |
+| DD-21 | **Attachment file downloads are part of View** (Export reserved for document PDFs / data exports). Signed line. |
+| DD-22 + **THE GRAMMAR RULING** | **Room governs everywhere** (universal; overrides DD-14). *"Every button in a room answers to a labeled fuse in that room's own box — and the label always names the machine, never the wall it's mounted on."* Mechanism: **indented sub-rows** — a room hosting another machine's buttons grows an indented row for that machine (the existing Contacts→Inquiries pattern). Known inventory: Finance Overview→Journal (Post-to-GL), Finance Overview→Invoices governs ALL invoice buttons in that room incl. the reversal in the Billings sheet, Quotations→Projects (create-project), Contacts→Customers (convert), plus the booking/contract rooms' cross-machine buttons (create-booking, request-billing) — Phase 2 enumerates the full sub-row inventory. Accepted cost (knowingly): a machine-row's switch is NOT absolute across rooms — locking Invoices·Delete does not reach the invoice buttons in other rooms; each room is locked at its own fuse box. All Phase-0 rows classified under the old DD-14 convention are reclassified accordingly. |
+
+### (original escalation analysis retained below for reference)
 
 | ID | Question | Recommendation |
 |---|---|---|
