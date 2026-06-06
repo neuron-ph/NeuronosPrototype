@@ -73,7 +73,8 @@ interface EditableSectionCardProps {
   title: string;
   subtitle?: string;
   isEditing: boolean;
-  onEdit: () => void;
+  /** Omit to hide the Edit affordance (e.g. viewer lacks the edit grant). */
+  onEdit?: () => void;
   onSave: () => void;
   onCancel: () => void;
   isSaving?: boolean;
@@ -179,7 +180,7 @@ export function EditableSectionCard({
                     {subtitle}
                   </span>
                 )}
-                <button
+                {onEdit && <button
                   type="button"
                   onClick={onEdit}
                   style={{
@@ -206,7 +207,7 @@ export function EditableSectionCard({
                 >
                   <Pencil size={13} />
                   Edit
-                </button>
+                </button>}
               </>
             )}
           </div>
@@ -320,7 +321,7 @@ export function EditableSectionCard({
                   {subtitle}
                 </span>
               )}
-              <button
+              {onEdit && <button
                 type="button"
                 onClick={onEdit}
                 style={{
@@ -348,7 +349,7 @@ export function EditableSectionCard({
               >
                 <Pencil size={13} />
                 Edit
-              </button>
+              </button>}
             </>
           )}
         </div>

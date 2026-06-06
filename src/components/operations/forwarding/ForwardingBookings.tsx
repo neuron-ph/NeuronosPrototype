@@ -110,7 +110,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
   const suppressUrlSelectionRef = useRef(false);
   const [selectedBooking, setSelectedBooking] = useState<ForwardingBooking | null>(null);
 
-  const { scope, isLoaded: scopeLoaded } = useDataScope('bookings');
+  const { scope, isLoaded: scopeLoaded } = useDataScope('bookings_forwarding');
   const { index: assignmentIndex, isLoaded: assignmentIndexLoaded } = useBookingAssignmentVisibility({
     userIds: scope.type === 'userIds' ? scope.ids : null,
   });
@@ -178,6 +178,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
     e: React.MouseEvent
   ) => {
     e.stopPropagation();
+    if (!can("ops_forwarding", "delete")) return; // NEU-019 WG-09 backstop
     try {
       const financialState = await assessBookingFinancialState(bookingId);
       if (!canHardDeleteBooking(currentStatus, financialState)) {
@@ -339,7 +340,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
             
             {/* Action Button */}
             <div className="flex items-center gap-3">
-              <button
+              {can("ops_forwarding", "create") && <button
                 onClick={() => setShowCreateModal(true)}
                 style={{
                   display: "flex",
@@ -357,7 +358,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
               >
                 <Plus size={16} />
                 New Booking
-              </button>
+              </button>}
             </div>
           </div>
 
@@ -608,12 +609,14 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
                   ? "No bookings match your filters" 
                   : "No forwarding bookings yet"}
               </div>
+              {can("ops_forwarding", "create") && (
               <button
                 onClick={() => setShowCreateModal(true)}
                 className="text-[var(--theme-action-primary-bg)] hover:underline"
               >
                 Create your first booking
               </button>
+              )}
             </div>
           ) : (
             <div style={{
@@ -664,7 +667,11 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
                       className="border-b border-[var(--theme-text-primary)]/5 hover:bg-[var(--theme-action-primary-bg)]/5 transition-colors cursor-pointer"
                       onClick={() => {
                         if (booking.status === "Draft") {
-                          setResumeDraft({ ...(booking as any), id: booking.bookingId });
+                          // WG-09: resuming a draft re-opens the create panel in
+                          // edit mode (updates the row) — needs a write grant
+                          if (can("ops_forwarding", "create") || can("ops_forwarding", "edit")) {
+                            setResumeDraft({ ...(booking as any), id: booking.bookingId });
+                          }
                         } else {
                           suppressUrlSelectionRef.current = false;
                           setSelectedBooking(booking);
@@ -773,6 +780,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
                         </div>
                       </td>
                       <td className="py-4 px-4 text-center">
+                        {can("ops_forwarding", "delete") && (
                         <button
                           onClick={(e) => handleDeleteBooking(
                             booking.bookingId,
@@ -806,6 +814,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
                         >
                           <Trash2 size={14} />
                         </button>
+                        )}
                       </td>
                     </tr>
                   ))}

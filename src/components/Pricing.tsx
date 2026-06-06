@@ -56,8 +56,9 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
   // Hook for Network Partners (Lifting State Up)
   const { partners, isLoading: isPartnersLoading, savePartner } = useNetworkPartners();
 
-  // Map department name to userDepartment format
-  const userDepartment: "Business Development" | "Pricing" = currentUser?.department === "Pricing" ? "Pricing" : "Business Development";
+  // NEU-020 2.8: the quotation door is the ROUTE, not the user's department.
+  // This is the Pricing Quotations surface → always the pricing_quotations lens.
+  const userDepartment: "Business Development" | "Pricing" = "Pricing";
 
   // Fetch quotations from backend — Pricing sees the full pipeline (no scope
   // filter). RLS policy already restricts to permitted departments; owner-based

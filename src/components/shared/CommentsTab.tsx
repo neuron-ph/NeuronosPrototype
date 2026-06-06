@@ -49,6 +49,10 @@ interface CommentsTabProps {
   currentUserId: string;
   currentUserName: string;
   currentUserDepartment: string;
+  /** NEU-019 WG-14: posting requires the surface's `<surface>_comments_tab:create`
+   *  knob — parents pass `can(ids.comments, "create")`. Defaults to false so a
+   *  parent that forgets the prop renders read-only, never ungated. */
+  canPost?: boolean;
 }
 
 export function CommentsTab({
@@ -57,6 +61,7 @@ export function CommentsTab({
   currentUserId,
   currentUserName,
   currentUserDepartment,
+  canPost = false,
 }: CommentsTabProps) {
   const { setHasCommentBar } = useFeedbackPosition();
   useEffect(() => {
@@ -97,6 +102,7 @@ export function CommentsTab({
 
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canPost) return; // WG-14 backstop
 
     if (!newComment.trim() && attachedFiles.length === 0) {
       return;
@@ -387,7 +393,8 @@ export function CommentsTab({
         )}
       </div>
 
-      {/* Comment Input Form - Fixed at bottom */}
+      {/* Comment Input Form - Fixed at bottom (hidden without the create knob, WG-14) */}
+      {canPost && (
       <div className="border-t border-[var(--theme-border-default)] bg-[var(--theme-bg-surface)] px-6 py-4">
         {/* Attached Files Preview */}
         {attachedFiles.length > 0 && (
@@ -497,6 +504,7 @@ export function CommentsTab({
           </div>
         </form>
       </div>
+      )}
     </div>
   );
 }

@@ -8,6 +8,7 @@
  */
 
 import { useState, useEffect, useMemo, useRef } from "react";
+import type { ContractDept } from "../../config/access/accessSchema";
 import { useSearchParams } from "react-router";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
@@ -32,10 +33,12 @@ interface ContractsModuleProps {
   } | null;
   onCreateTicket?: (entity: { type: string; id: string; name: string }) => void;
   initialContract?: QuotationNew | null;
-  departmentOverride?: "BD" | "Operations" | "Accounting";
+  // NEU-020 2.5: the door is the ROUTE the user entered through, never the
+  // user's own department. Each route page passes its own door explicitly.
+  door?: ContractDept;
 }
 
-export function ContractsModule({ currentUser, onCreateTicket, initialContract, departmentOverride }: ContractsModuleProps) {
+export function ContractsModule({ currentUser, onCreateTicket, initialContract, door = "pricing" }: ContractsModuleProps) {
   const [view, setView] = useState<ContractsView>(initialContract ? "detail" : "list");
   const [selectedContract, setSelectedContract] = useState<QuotationNew | null>(initialContract || null);
   const queryClient = useQueryClient();
@@ -53,7 +56,7 @@ export function ContractsModule({ currentUser, onCreateTicket, initialContract, 
     }
   }, [initialContract]);
 
-  const { scope, isLoaded: scopeLoaded } = useDataScope();
+  const { scope, isLoaded: scopeLoaded } = useDataScope('quotations');
 
   // ── Contracts fetch ───────────────────────────────────────
   const {
@@ -342,19 +345,9 @@ export function ContractsModule({ currentUser, onCreateTicket, initialContract, 
   // 2. If user is BD/Pricing -> BD
   // 3. Else -> Operations
   
-  let department: "BD" | "Operations" | "Accounting" = "Operations";
-  
-  if (departmentOverride) {
-    department = departmentOverride;
-  } else if (
-    currentUser?.department === "BD" || 
-    currentUser?.department === "Business Development" ||
-    currentUser?.department === "Pricing"
-  ) {
-    department = "BD";
-  }
-  
-  console.log("ContractsModule - Department:", department, "- User:", currentUser?.department);
+  // NEU-020 2.5: display flavour is derived from the route door, not the user.
+  const department: "BD" | "Operations" | "Accounting" =
+    door === "accounting" ? "Accounting" : "BD";
 
   return (
     <div className="h-full bg-[var(--theme-bg-surface)]">
@@ -365,6 +358,7 @@ export function ContractsModule({ currentUser, onCreateTicket, initialContract, 
           isLoading={isLoading}
           currentUser={currentUser}
           department={department}
+          door={door}
           onRefresh={refreshContracts}
         />
       )}
@@ -378,7 +372,7 @@ export function ContractsModule({ currentUser, onCreateTicket, initialContract, 
           currentUser={currentUser}
           initialTab={initialTab}
           highlightId={highlightId}
-          contractDept={department === "Accounting" ? "accounting" : "pricing"}
+          contractDept={door}
         />
       )}
 

@@ -78,7 +78,7 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
   const [resumeDraft, setResumeDraft] = useState<Record<string, unknown> | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; label: string } | null>(null);
 
-  const { scope, isLoaded: scopeLoaded } = useDataScope('bookings');
+  const { scope, isLoaded: scopeLoaded } = useDataScope('bookings_brokerage');
   const { index: assignmentIndex, isLoaded: assignmentIndexLoaded } = useBookingAssignmentVisibility({
     userIds: scope.type === 'userIds' ? scope.ids : null,
   });
@@ -186,6 +186,7 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
 
   const handleDeleteBooking = async (bookingId: string, bookingLabel: string, currentStatus: ExecutionStatus, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!can("ops_brokerage", "delete")) return; // NEU-019 WG-09 backstop
     try {
       const financialState = await assessBookingFinancialState(bookingId);
       if (!canHardDeleteBooking(currentStatus, financialState)) {
@@ -348,7 +349,7 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
             
             {/* Action Button */}
             <div className="flex items-center gap-3">
-              <button
+              {can("ops_brokerage", "create") && <button
                 onClick={() => setShowCreateModal(true)}
                 style={{
                   display: "flex",
@@ -366,7 +367,7 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
               >
                 <Plus size={16} />
                 New Booking
-              </button>
+              </button>}
             </div>
           </div>
 
@@ -617,12 +618,14 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
                   ? "No bookings match your filters" 
                   : "No brokerage bookings yet"}
               </div>
+              {can("ops_brokerage", "create") && (
               <button
                 onClick={() => setShowCreateModal(true)}
                 className="text-[var(--theme-action-primary-bg)] hover:underline"
               >
                 Create your first booking
               </button>
+              )}
             </div>
           ) : (
             <div style={{
@@ -673,7 +676,11 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
                       className="border-b border-[var(--theme-text-primary)]/5 hover:bg-[var(--theme-action-primary-bg)]/5 transition-colors cursor-pointer"
                       onClick={() => {
                         if (booking.status === "Draft") {
-                          setResumeDraft({ ...(booking as any), id: booking.bookingId });
+                          // WG-09: resuming a draft re-opens the create panel in
+                          // edit mode (updates the row) — needs a write grant
+                          if (can("ops_brokerage", "create") || can("ops_brokerage", "edit")) {
+                            setResumeDraft({ ...(booking as any), id: booking.bookingId });
+                          }
                         } else {
                           suppressUrlSelectionRef.current = false;
                           setSelectedBooking(booking);
@@ -767,6 +774,7 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
                         </div>
                       </td>
                       <td className="py-4 px-4 text-center">
+                        {can("ops_brokerage", "delete") && (
                         <button
                           onClick={(e) => handleDeleteBooking(booking.bookingId, (booking as any).booking_number || booking.bookingId, booking.status as ExecutionStatus, e)}
                           style={{
@@ -795,6 +803,7 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
                         >
                           <Trash2 size={14} />
                         </button>
+                        )}
                       </td>
                     </tr>
                   ))}

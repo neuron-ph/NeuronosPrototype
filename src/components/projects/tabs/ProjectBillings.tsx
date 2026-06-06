@@ -8,66 +8,41 @@ interface ProjectBillingsProps {
   financials: FinancialData;
   project: Project;
   highlightId?: string | null;
+  /** NEU-020 2.6: project-door billings key (PROJECT_MODULE_IDS[door].billings). */
+  permissionDoor?: string;
 }
 
-export function ProjectBillings({ financials, project, highlightId }: ProjectBillingsProps) {
+export function ProjectBillings({ financials, project, highlightId, permissionDoor }: ProjectBillingsProps) {
   const { billingItems, refresh, isLoading } = financials;
   const { data: liveLinkedBookings = [] } = useQuery({
     queryKey: ["project-billings-linked-bookings", project.id],
     queryFn: async () => {
-      const { data: projectData } = await supabase
-        .from("projects")
-        .select("linked_bookings")
-        .eq("id", project.id)
-        .maybeSingle();
+      // Single source of truth: bookings.project_id (NEU-013).
+      const { data, error } = await supabase
+        .from("bookings")
+        .select("id, status, service_type, booking_number, name")
+        .eq("project_id", project.id);
 
-      const linkedBookings: any[] = projectData?.linked_bookings || [];
-      if (linkedBookings.length === 0) {
+      if (error) {
+        console.error("[ProjectBillings] Failed to fetch project bookings:", error);
         return [];
       }
 
-      const verifiedBookings = await Promise.all(
-        linkedBookings.map(async (booking) => {
-          const bookingId = booking.bookingId || booking.id;
-          if (!bookingId) {
-            return null;
-          }
-
-          try {
-            const { data: bookingData } = await supabase
-              .from("bookings")
-              .select("id, status, service_type, booking_number, name")
-              .eq("id", bookingId)
-              .maybeSingle();
-
-            if (!bookingData) {
-              return null;
-            }
-
-            return {
-              ...booking,
-              bookingId,
-              status: bookingData.status || booking.status,
-              serviceType: booking.serviceType || booking.service_type || bookingData.service_type,
-              service_type: booking.service_type || booking.serviceType || bookingData.service_type,
-              bookingNumber: booking.bookingNumber || booking.booking_number || bookingData.booking_number,
-              booking_number: booking.booking_number || booking.bookingNumber || bookingData.booking_number,
-              name: booking.name || bookingData.name || undefined,
-            };
-          } catch (error) {
-            console.error(`Error verifying linked booking ${bookingId}:`, error);
-            return null;
-          }
-        })
-      );
-
-      return verifiedBookings.filter(Boolean);
+      return (data ?? []).map((b) => ({
+        bookingId: b.id,
+        id: b.id,
+        status: b.status,
+        serviceType: b.service_type,
+        service_type: b.service_type,
+        bookingNumber: b.booking_number,
+        booking_number: b.booking_number,
+        name: b.name ?? undefined,
+      }));
     },
     staleTime: 30_000,
   });
 
-  const linkedBookings =
-    liveLinkedBookings.length > 0 ? liveLinkedBookings : project.linkedBookings || [];
+  const linkedBookings = liveLinkedBookings;
 
   return (
     <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]">
@@ -81,6 +56,7 @@ export function ProjectBillings({ financials, project, highlightId }: ProjectBil
           enableGroupByToggle={false}
           linkedBookings={linkedBookings}
           highlightId={highlightId}
+          permissionDoor={permissionDoor}
       />
     </div>
   );

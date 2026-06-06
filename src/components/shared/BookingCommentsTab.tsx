@@ -4,6 +4,7 @@ import { Send, Paperclip, X, Download, FileText } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../utils/supabase/client";
 import { useUser } from "../../hooks/useUser";
+import { usePermission } from "../../context/PermissionProvider";
 import { toast } from "sonner@2.0.3";
 
 interface FileAttachment {
@@ -26,10 +27,20 @@ interface BookingComment {
 
 interface BookingCommentsTabProps {
   bookingId: string;
+  /** NEU-020 door purity: the grid row (door key) this tab is rendered behind,
+   *  e.g. "ops_trucking_comments_tab". When provided, ONLY that key governs
+   *  posting. Transitional: parents not yet threaded fall back to the legacy
+   *  shared "ops_bookings_comments_tab" key until every parent passes its door. */
+  permissionDoor?: string;
 }
 
-export function BookingCommentsTab({ bookingId }: BookingCommentsTabProps) {
+export function BookingCommentsTab({ bookingId, permissionDoor }: BookingCommentsTabProps) {
   const { user, session } = useUser();
+  // NEU-019 WG-15: posting gates on the booking comments knob. NEU-020: with a
+  // door, only that key governs; the legacy shared key is the fallback.
+  const { can } = usePermission();
+  const canKey = can as unknown as (moduleId: string, action: string) => boolean;
+  const canPost = canKey(permissionDoor ?? "ops_bookings_comments_tab", "create");
   const currentUserName =
     user?.name ||
     session?.user?.user_metadata?.name ||
@@ -74,6 +85,7 @@ export function BookingCommentsTab({ bookingId }: BookingCommentsTabProps) {
 
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canPost) return; // WG-15 backstop
 
     if (!newComment.trim() && attachedFiles.length === 0) {
       return;
@@ -347,7 +359,8 @@ export function BookingCommentsTab({ bookingId }: BookingCommentsTabProps) {
         )}
       </div>
 
-      {/* Comment Input Form - Fixed at bottom */}
+      {/* Comment Input Form - Fixed at bottom (hidden without the create knob, WG-15) */}
+      {canPost && (
       <div className="border-t border-[var(--theme-border-default)] bg-[var(--theme-bg-surface)] px-6 py-4">
         {/* Attached Files Preview */}
         {attachedFiles.length > 0 && (
@@ -457,6 +470,7 @@ export function BookingCommentsTab({ bookingId }: BookingCommentsTabProps) {
           </div>
         </form>
       </div>
+      )}
     </div>
   );
 }

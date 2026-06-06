@@ -6,22 +6,25 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { supabase } from "../../../utils/supabase/client";
 import { toast } from "sonner@2.0.3";
 import { useUser } from "../../../hooks/useUser";
+import { usePermission } from "../../../context/PermissionProvider";
 import {
   Plus, ArrowLeft, Save, Trash2, UserCheck, AlertTriangle, BookMarked, Search, X, ChevronUp, Wand2,
 } from "lucide-react";
 import { DataTable, type ColumnDef } from "../../common/DataTable";
 import { NeuronModal } from "../../ui/NeuronModal";
-import { PermissionGrantEditor } from "./PermissionGrantEditor";
 import type { AccessProfile, AccessProfileSummary, ModuleGrants, VisibilityScope } from "./accessProfileTypes";
 import {
   cloneGrants,
   countGrantOverrides,
   normalizeProfileName,
   resolveProfileVisibilityScope,
+  resolveCascadedGrants,
 } from "./accessGrantUtils";
 import type { ConfigUser } from "../AccessConfiguration";
 import { SidePanel } from "../../common/SidePanel";
-import { deriveHiddenModuleGrants } from "../../../config/access/accessSchema";
+import { PERM_MODULES } from "../permissionsConfig";
+import { AccessEditorTabs } from "./AccessEditorTabs";
+import { legacyScopeFromMap, type RecordVisibilityMap } from "./recordVisibilityConfig";
 
 // Operations service tags for access profiles. Distinct from the booking
 // service-type enum: Marine Insurance is owned by Pricing (not an Operations
@@ -46,12 +49,6 @@ const ROLES = [
   { value: "supervisor",  label: "Supervisor" },
   { value: "manager",     label: "Manager" },
   { value: "executive",   label: "Executive" },
-];
-
-const VISIBILITY_OPTIONS: Array<{ value: VisibilityScope; label: string; description: string }> = [
-  { value: "own", label: "Own Records", description: "Only records personally owned or assigned to the user." },
-  { value: "team", label: "Team Wide", description: "Records owned by users in the same team." },
-  { value: "department", label: "Department Wide", description: "Records owned by users in the same department." },
 ];
 
 function formatDate(iso: string): string {
@@ -161,7 +158,7 @@ function ApplyProfileModal({
                     {(profile.target_department || profile.target_role) && ruleCount > 0 && " · "}
                     {ruleCount > 0 && (
                       <span style={{ color: "var(--neuron-action-primary)", fontWeight: 600 }}>
-                        {ruleCount} {ruleCount === 1 ? "rule" : "rules"}
+                        {ruleCount} {ruleCount === 1 ? "permission" : "permissions"}
                       </span>
                     )}
                     {!profile.target_department && !profile.target_role && ruleCount === 0 && (
@@ -212,6 +209,9 @@ function ApplyProfileContent({
   onApplied: (userId: string) => void;
 }) {
   const { user: currentUser } = useUser();
+  const { can } = usePermission();
+  // WG-02: applying a profile writes permission_overrides for other users
+  const canApplyProfiles = can("admin_access_profiles_tab", "edit");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<UserOption[]>([]);
   const [applying, setApplying] = useState(false);
@@ -269,6 +269,7 @@ function ApplyProfileContent({
 
   const handleApply = async () => {
     if (selected.length === 0) return;
+    if (!canApplyProfiles) return; // WG-02 backstop: Apply writes permission_overrides
     setApplying(true);
     let failed = 0;
 
@@ -313,7 +314,7 @@ function ApplyProfileContent({
 
     const appliedCount = selected.length - failed;
     if (appliedCount === 0) {
-      toast.error("Couldn't apply the profile — please try again");
+      toast.error("Couldn't assign the profile to the selected user(s). Please try again.");
     } else if (failed > 0) {
       toast.warning(`Applied to ${appliedCount} of ${selected.length} users — ${failed} failed`);
     } else {
@@ -497,15 +498,17 @@ function DeleteProfileContent({
   onDeleted: () => void;
 }) {
   const { user: currentUser } = useUser();
+  const { can } = usePermission();
   const [deleting, setDeleting] = useState(false);
   const queryClient = useQueryClient();
 
   const handleDelete = async () => {
+    if (!can("admin_access_profiles_tab", "delete")) return; // WG-02 backstop
     setDeleting(true);
     const { error } = await supabase.from("access_profiles").delete().eq("id", profile.id);
     if (error) {
       setDeleting(false);
-      toast.error("Failed to delete profile");
+      toast.error("Couldn't delete the profile. Please try again.");
       return;
     }
     try {
@@ -533,7 +536,7 @@ function DeleteProfileContent({
           Are you sure you want to delete <strong style={{ color: "var(--neuron-ink-primary)" }}>{profile.name}</strong>?
         </p>
         <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: "8px 0 0", lineHeight: 1.5 }}>
-          Users who had this profile applied will keep their current access rules unchanged. The profile reference will be cleared.
+          People on this profile keep their current access unchanged; they just stop being linked to it.
         </p>
       </div>
       <div style={{ flexShrink: 0, padding: "12px 24px 20px", borderTop: "1px solid var(--neuron-ui-border)", display: "flex", justifyContent: "flex-end", gap: 8 }}>
@@ -568,8 +571,14 @@ export function ProfileEditor({
   onSaved: () => void;
 }) {
   const { user: currentUser } = useUser();
+  const { can } = usePermission();
   const queryClient = useQueryClient();
   const isNew = !profile?.id;
+  // WG-02 backstop: entry buttons are gated, but the editor is also mounted from
+  // UserManagement — the write itself re-checks the matching profile knob.
+  const canWriteProfile = isNew
+    ? can("admin_access_profiles_tab", "create")
+    : can("admin_access_profiles_tab", "edit");
 
   const [name, setName] = useState(profile?.name ?? "");
   const [description, setDescription] = useState(profile?.description ?? "");
@@ -584,6 +593,8 @@ export function ProfileEditor({
   );
   const [grants, setGrants] = useState<ModuleGrants>(profile?.module_grants ?? {});
   const [savedGrants, setSavedGrants] = useState<ModuleGrants>(profile?.module_grants ?? {});
+  const [visibilityScopes, setVisibilityScopes] = useState<RecordVisibilityMap>(profile?.visibility_scopes ?? {});
+  const [savedVisibilityScopes, setSavedVisibilityScopes] = useState<RecordVisibilityMap>(profile?.visibility_scopes ?? {});
   const [savedName, setSavedName] = useState(profile?.name ?? "");
   const [savedDescription, setSavedDescription] = useState(profile?.description ?? "");
   const [savedTargetDepartment, setSavedTargetDepartment] = useState(profile?.target_department ?? "");
@@ -599,16 +610,34 @@ export function ProfileEditor({
   const [nameError, setNameError] = useState("");
   const [metaOpen, setMetaOpen] = useState(isNew);
   const [showBaseline, setShowBaseline] = useState(false);
-  const [emptyGrantsWarning, setEmptyGrantsWarning] = useState(false);
   const [confirmExitOpen, setConfirmExitOpen] = useState(false);
   const [confirmAutofillOpen, setConfirmAutofillOpen] = useState(false);
+  const [confirmEmptyOpen, setConfirmEmptyOpen] = useState(false);
+  const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
   const prevGrantsRef = useRef<ModuleGrants>({});
+  // Blast radius: editing a profile changes live access for everyone assigned
+  // to it — surface who that is, and confirm before saving onto them.
+  const { data: assignedUsers = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["access_profiles", "assignees", profile?.id ?? "new"],
+    enabled: !isNew,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("users")
+        .select("id, name")
+        .eq("access_profile_id", profile!.id!)
+        .order("name");
+      if (error) throw error;
+      return (data ?? []) as { id: string; name: string }[];
+    },
+  });
+  const assignedCount = assignedUsers.length;
   const { data: profiles = [] } = useQuery<AccessProfileSummary[]>({
     queryKey: ["access_profiles", "role-default-baselines"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("access_profiles")
-        .select("id, name, description, target_department, target_role, target_service, module_grants, visibility_scope, visibility_departments, updated_at")
+        .select("id, name, description, target_department, target_role, target_service, module_grants, visibility_scope, visibility_departments, visibility_scopes, updated_at")
         .eq("is_active", true)
         .eq("is_baseline", true);
       if (error) throw error;
@@ -630,10 +659,15 @@ export function ProfileEditor({
     }
     const gk = Object.keys(grants), sk = Object.keys(savedGrants);
     if (gk.length !== sk.length) return true;
-    return gk.some(k => grants[k] !== savedGrants[k]);
+    if (gk.some(k => grants[k] !== savedGrants[k])) return true;
+    const vk = Object.keys(visibilityScopes), svk = Object.keys(savedVisibilityScopes);
+    if (vk.length !== svk.length) return true;
+    return vk.some(k => visibilityScopes[k] !== savedVisibilityScopes[k]);
   }, [
     description,
     grants,
+    visibilityScopes,
+    savedVisibilityScopes,
     name,
     savedDescription,
     savedGrants,
@@ -663,46 +697,17 @@ export function ProfileEditor({
   };
 
   const handleDiscard = () => {
-    const snapshot = {
-      grants: { ...grants },
-      name,
-      description,
-      targetDepartment,
-      targetRole,
-      targetService,
-      visibilityScope,
-      visibilityDepartments: [...visibilityDepartments],
-    };
-    let undone = false;
+    // The exit-confirm dialog was the deliberate second step — leave
+    // immediately instead of stranding the admin until a toast expires.
     setConfirmExitOpen(false);
-    toast("Changes discarded.", {
-      action: {
-        label: "Undo",
-        onClick: () => {
-          undone = true;
-          setGrants(snapshot.grants);
-          setName(snapshot.name);
-          setDescription(snapshot.description);
-          setTargetDepartment(snapshot.targetDepartment);
-          setTargetRole(snapshot.targetRole);
-          setTargetService(snapshot.targetService);
-          setVisibilityScope(snapshot.visibilityScope);
-          setVisibilityDepartments(snapshot.visibilityDepartments);
-        },
-      },
-      duration: 5000,
-      // Navigate back whether the toast auto-closes (onAutoClose) or is
-      // dismissed manually (onDismiss). sonner does NOT fire onDismiss on
-      // timeout — relying on it alone left the editor stuck open.
-      onAutoClose: () => { if (!undone) onBack(); },
-      onDismiss: () => { if (!undone) onBack(); },
-    });
+    toast("Changes discarded.");
+    onBack();
   };
 
   const handleClearAll = () => {
     prevGrantsRef.current = { ...grants };
     setGrants({});
-    toast("Access rules cleared.", {
+    toast("All permissions cleared.", {
       action: { label: "Undo", onClick: () => setGrants(prevGrantsRef.current) },
       duration: 5000,
     });
@@ -729,6 +734,12 @@ export function ProfileEditor({
   );
   const canShowBaseline = !!baselineProfile;
   const grantCount = countGrantOverrides(grants);
+  // Resolved (cascaded) feature-access grants — drives which record types are
+  // reachable, so the Record Visibility tab greys what Feature Access can't open.
+  const resolvedGrants = useMemo(
+    () => resolveCascadedGrants(grants, PERM_MODULES) as Record<string, boolean>,
+    [grants],
+  );
 
   // Deliberate autofill: the admin presses "Autofill from baseline" to copy the
   // matching baseline seed's ticks + visibility into the form. Unlike a reactive
@@ -741,6 +752,7 @@ export function ProfileEditor({
     setVisibilityScope(
       resolveProfileVisibilityScope(baselineProfile.visibility_scope, baselineProfile.target_role ?? targetRole),
     );
+    setVisibilityScopes({ ...(baselineProfile.visibility_scopes ?? {}) });
     const label = baselineProfile.name.replace(/^Baseline — /, "");
     toast(`Autofilled from "${label}" — adjust as needed.`, { duration: 3500 });
   };
@@ -749,7 +761,9 @@ export function ProfileEditor({
     applyBaseline();
   };
 
-  const handleSave = async () => {
+  // Validation gates run first; the actual write lives in performSave so the
+  // empty-profile and update-N-people confirms can both funnel into it.
+  const handleSave = () => {
     const trimmed = normalizeProfileName(name);
     if (!trimmed) { setNameError("Profile name is required"); return; }
     setNameError("");
@@ -757,17 +771,24 @@ export function ProfileEditor({
       toast.error("Select at least one department for the selected visibility scope.");
       return;
     }
+    if (Object.keys(grants).length === 0) { setConfirmEmptyOpen(true); return; }
+    if (!isNew && assignedCount > 0) { setConfirmSaveOpen(true); return; }
+    void performSave();
+  };
 
-    if (Object.keys(grants).length === 0 && !emptyGrantsWarning) {
-      setEmptyGrantsWarning(true);
-      return;
-    }
-    setEmptyGrantsWarning(false);
-
+  const performSave = async () => {
+    if (!canWriteProfile) return; // WG-02 backstop
+    const trimmed = normalizeProfileName(name);
+    setConfirmEmptyOpen(false);
+    setConfirmSaveOpen(false);
     setSaving(true);
 
     const now = new Date().toISOString();
-    const finalGrants = deriveHiddenModuleGrants(grants);
+    // NEU-012 (strict): cascade is a UX convenience — persist the fully RESOLVED
+    // (explicit) grant set so what's stored == what the editor showed == what the
+    // resolver enforces (which no longer cascades at read). Materializes every
+    // parent→child grant into explicit keys.
+    const finalGrants = resolveCascadedGrants(grants, PERM_MODULES);
     let error: any;
 
     if (isNew) {
@@ -778,8 +799,9 @@ export function ProfileEditor({
         target_role: targetRole || null,
         target_service: targetDepartment === "Operations" ? (targetService || null) : null,
         module_grants: finalGrants,
-        visibility_scope: visibilityScope,
-        visibility_departments: visibilityScope === "selected_departments" ? visibilityDepartments : null,
+        visibility_scope: legacyScopeFromMap(visibilityScopes),
+        visibility_departments: null,
+        visibility_scopes: visibilityScopes,
         created_by: currentUser?.id ?? null,
         updated_by: currentUser?.id ?? null,
       }));
@@ -791,8 +813,9 @@ export function ProfileEditor({
         target_role: targetRole || null,
         target_service: targetDepartment === "Operations" ? (targetService || null) : null,
         module_grants: finalGrants,
-        visibility_scope: visibilityScope,
-        visibility_departments: visibilityScope === "selected_departments" ? visibilityDepartments : null,
+        visibility_scope: legacyScopeFromMap(visibilityScopes),
+        visibility_departments: null,
+        visibility_scopes: visibilityScopes,
         updated_by: currentUser?.id ?? null,
         updated_at: now,
       }).eq("id", profile!.id!));
@@ -803,7 +826,7 @@ export function ProfileEditor({
       if (error.code === "23505") {
         setNameError("A profile with this name already exists");
       } else {
-        toast.error("Failed to save profile");
+        toast.error("Couldn't save the profile. Please try again.");
       }
       return;
     }
@@ -833,6 +856,7 @@ export function ProfileEditor({
     toast.success(isNew ? "Profile created" : "Profile saved");
     setName(trimmed);
     setSavedGrants(grants);
+    setSavedVisibilityScopes(visibilityScopes);
     setSavedName(trimmed);
     setSavedDescription(description);
     setSavedTargetDepartment(targetDepartment);
@@ -861,10 +885,26 @@ export function ProfileEditor({
           >
             <ArrowLeft size={13} /> Back
           </button>
-          <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
             <h2 style={{ fontSize: 16, fontWeight: 600, color: "var(--neuron-ink-primary)", margin: 0 }}>
               {isNew ? "New Profile" : `Edit: ${savedName}`}
             </h2>
+            {!isNew && (
+              <span
+                title={assignedCount > 0 ? assignedUsers.map(u => u.name).join(", ") : undefined}
+                style={{
+                  fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap",
+                  backgroundColor: assignedCount > 0
+                    ? "color-mix(in oklch, var(--neuron-action-primary) 12%, transparent)"
+                    : "var(--neuron-bg-surface-subtle)",
+                  color: assignedCount > 0 ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
+                }}
+              >
+                {assignedCount > 0
+                  ? `Applied to ${assignedCount} ${assignedCount === 1 ? "person" : "people"}`
+                  : "Not assigned to anyone yet"}
+              </span>
+            )}
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1000,81 +1040,12 @@ export function ProfileEditor({
                 </select>
               </div>
             )}
-            <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: 8 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Record Visibility</label>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
-                {VISIBILITY_OPTIONS.map((option) => {
-                  const active = visibilityScope === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => {
-                        setVisibilityScope(option.value);
-                        if (option.value !== "selected_departments") setVisibilityDepartments([]);
-                      }}
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "flex-start",
-                        gap: 4,
-                        padding: "12px 14px",
-                        borderRadius: 10,
-                        border: `1px solid ${active ? "var(--neuron-action-primary)" : "var(--neuron-ui-border)"}`,
-                        background: active ? "color-mix(in oklch, var(--neuron-action-primary) 10%, transparent)" : "var(--neuron-bg-elevated)",
-                        cursor: "pointer",
-                        textAlign: "left",
-                      }}
-                    >
-                      <span style={{ fontSize: 12, fontWeight: 600, color: active ? "var(--neuron-action-primary)" : "var(--neuron-ink-primary)" }}>
-                        {option.label}
-                      </span>
-                      <span style={{ fontSize: 11, lineHeight: 1.45, color: "var(--neuron-ink-muted)" }}>
-                        {option.description}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              {visibilityScope === "selected_departments" && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {DEPARTMENTS.map((department) => {
-                    const selected = visibilityDepartments.includes(department);
-                    return (
-                      <button
-                        key={department}
-                        type="button"
-                        onClick={() =>
-                          setVisibilityDepartments((current) =>
-                            current.includes(department)
-                              ? current.filter((value) => value !== department)
-                              : [...current, department],
-                          )
-                        }
-                        style={{
-                          padding: "4px 10px",
-                          borderRadius: 999,
-                          border: `1px solid ${selected ? "var(--neuron-action-primary)" : "var(--neuron-ui-border)"}`,
-                          background: selected ? "color-mix(in oklch, var(--neuron-action-primary) 12%, transparent)" : "var(--neuron-bg-elevated)",
-                          color: selected ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
-                          fontSize: 12,
-                          fontWeight: 500,
-                          cursor: "pointer",
-                        }}
-                      >
-                        {department}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-              {canShowBaseline && (
+            {canShowBaseline && (
+              <div style={{ gridColumn: "1 / -1" }}>
                 <button
                   type="button"
                   onClick={handleApplyBaseline}
                   style={{
-                    alignSelf: "flex-start",
-                    marginTop: 4,
                     display: "flex",
                     alignItems: "center",
                     gap: 6,
@@ -1090,54 +1061,51 @@ export function ProfileEditor({
                 >
                   <Wand2 size={14} /> Autofill from {ROLES.find(r => r.value === targetRole)?.label} baseline
                 </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Grant count / controls row */}
-      <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Access Rules</span>
-        {grantCount > 0 && (
-          <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 8px", borderRadius: 999,
-            backgroundColor: "color-mix(in oklch, var(--neuron-action-primary) 12%, transparent)",
-            color: "var(--neuron-action-primary)" }}>
-            {grantCount} explicit rules
-          </span>
-        )}
-        {canShowBaseline && (
-          <button
-            onClick={() => setShowBaseline(s => !s)}
-            style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6,
-              border: showBaseline ? "1.5px solid var(--neuron-action-primary)" : "1px solid var(--neuron-ui-border)",
-              backgroundColor: showBaseline ? "color-mix(in oklch, var(--neuron-action-primary) 10%, transparent)" : "transparent",
-              color: showBaseline ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
-              cursor: "pointer" }}>
-            {showBaseline ? "Hide baseline" : `Preview ${ROLES.find(r => r.value === targetRole)?.label} baseline`}
-          </button>
-        )}
-        {emptyGrantsWarning && (
-          <span style={{ fontSize: 11, color: "var(--theme-status-warning-fg)", display: "flex", alignItems: "center", gap: 4 }}>
-            <AlertTriangle size={11} /> No rules set — click Save again to confirm
-          </span>
-        )}
-        {grantCount > 0 && (
-          <button onClick={handleClearAll} style={{ fontSize: 11, color: "var(--neuron-semantic-error, #dc2626)",
-            border: "none", background: "none", cursor: "pointer", padding: "2px 0", marginLeft: "auto",
-            textDecoration: "underline", textUnderlineOffset: 2, opacity: 0.8 }}>
-            Clear all
-          </button>
-        )}
-      </div>
-
-      {/* Grant editor */}
-      <PermissionGrantEditor
+      <AccessEditorTabs
         grants={grants}
-        onChange={(nextGrants) => setGrants(nextGrants)}
-        showInheritedBaseline={showBaseline && canShowBaseline}
+        onGrantsChange={(nextGrants) => setGrants(nextGrants)}
         baselineGrants={baselineGrants}
+        showInheritedBaseline={showBaseline && canShowBaseline}
         othersPrimaryGroup={targetDepartment === "Pricing" ? "Pricing" : "Operations"}
+        resolvedViewGrants={resolvedGrants}
+        visibilityScopes={visibilityScopes}
+        onVisibilityChange={setVisibilityScopes}
+        featureAccessToolbar={
+          <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Permissions</span>
+            {grantCount > 0 && (
+              <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 8px", borderRadius: 999,
+                backgroundColor: "color-mix(in oklch, var(--neuron-action-primary) 12%, transparent)",
+                color: "var(--neuron-action-primary)" }}>
+                {grantCount} permissions set
+              </span>
+            )}
+            {canShowBaseline && (
+              <button
+                onClick={() => setShowBaseline(s => !s)}
+                style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6,
+                  border: showBaseline ? "1.5px solid var(--neuron-action-primary)" : "1px solid var(--neuron-ui-border)",
+                  backgroundColor: showBaseline ? "color-mix(in oklch, var(--neuron-action-primary) 10%, transparent)" : "transparent",
+                  color: showBaseline ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
+                  cursor: "pointer" }}>
+                {showBaseline ? "Hide template" : `Preview ${ROLES.find(r => r.value === targetRole)?.label} template`}
+              </button>
+            )}
+            {grantCount > 0 && (
+              <button onClick={handleClearAll} style={{ fontSize: 11, color: "var(--neuron-semantic-error, #dc2626)",
+                border: "none", background: "none", cursor: "pointer", padding: "2px 0", marginLeft: "auto",
+                textDecoration: "underline", textUnderlineOffset: 2, opacity: 0.8 }}>
+                Clear all
+              </button>
+            )}
+          </div>
+        }
       />
 
       {/* Exit confirmation */}
@@ -1156,12 +1124,39 @@ export function ProfileEditor({
       <NeuronModal
         isOpen={confirmAutofillOpen}
         onClose={() => setConfirmAutofillOpen(false)}
-        title="Overwrite current rules?"
-        description="Autofilling from the baseline will replace your current access rules and record visibility. This can't be undone."
-        confirmLabel="Overwrite with baseline"
+        title="Overwrite current permissions?"
+        description="Autofilling from the template will replace this profile's current permissions and record visibility."
+        confirmLabel="Overwrite with template"
         confirmIcon={<Wand2 size={15} />}
         onConfirm={() => { setConfirmAutofillOpen(false); applyBaseline(); }}
         variant="danger"
+      />
+
+      {/* Empty-profile confirmation — replaces the old silent click-Save-twice gate */}
+      <NeuronModal
+        isOpen={confirmEmptyOpen}
+        onClose={() => setConfirmEmptyOpen(false)}
+        title="This profile grants no access"
+        description={
+          assignedCount > 0
+            ? `${assignedCount} ${assignedCount === 1 ? "person is" : "people are"} on this profile — saving it empty removes their access to everything. Save anyway?`
+            : "Anyone assigned to this profile will see nothing in Neuron OS. Save it empty anyway?"
+        }
+        confirmLabel="Save empty profile"
+        confirmIcon={<Save size={15} />}
+        onConfirm={() => void performSave()}
+        variant="danger"
+      />
+
+      {/* Blast-radius confirmation — saving a profile updates live access */}
+      <NeuronModal
+        isOpen={confirmSaveOpen}
+        onClose={() => setConfirmSaveOpen(false)}
+        title={`Update access for ${assignedCount} ${assignedCount === 1 ? "person" : "people"}?`}
+        description={`Saving applies these changes immediately to everyone on this profile: ${assignedUsers.slice(0, 4).map(u => u.name).join(", ")}${assignedCount > 4 ? ` and ${assignedCount - 4} more` : ""}.`}
+        confirmLabel="Save & update access"
+        confirmIcon={<Save size={15} />}
+        onConfirm={() => void performSave()}
       />
     </div>
   );
@@ -1172,13 +1167,18 @@ export function ProfileEditor({
 export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditProfile }: AccessProfilesProps) {
   const [applyingProfile, setApplyingProfile] = useState<AccessProfileSummary | null>(null);
   const [deletingProfile, setDeletingProfile] = useState<AccessProfileSummary | null>(null);
+  const { can } = usePermission();
+  // WG-02: profile CRUD + Apply ran on the tab's view grant alone
+  const canCreateProfiles = can("admin_access_profiles_tab", "create");
+  const canEditProfiles = can("admin_access_profiles_tab", "edit");
+  const canDeleteProfiles = can("admin_access_profiles_tab", "delete");
 
   const { data: profiles = [], isLoading } = useQuery<AccessProfileSummary[]>({
     queryKey: ["access_profiles"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("access_profiles")
-        .select("id, name, description, target_department, target_role, target_service, module_grants, visibility_scope, visibility_departments, updated_at")
+        .select("id, name, description, target_department, target_role, target_service, module_grants, visibility_scope, visibility_departments, visibility_scopes, updated_at")
         .eq("is_active", true)
         .eq("is_baseline", false)
         .order("name");
@@ -1225,7 +1225,7 @@ export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditPr
       },
     },
     {
-      header: "Access Rules",
+      header: "Permissions",
       accessorKey: "module_grants",
       cell: (row) => {
         const count = countGrantOverrides(row.module_grants);
@@ -1235,7 +1235,7 @@ export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditPr
             backgroundColor: count > 0 ? "color-mix(in oklch, var(--neuron-action-primary) 12%, transparent)" : "var(--neuron-bg-surface-subtle)",
             color: count > 0 ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
           }}>
-            {count > 0 ? `${count} rules` : "Empty"}
+            {count > 0 ? `${count} permissions` : "No access yet"}
           </span>
         );
       },
@@ -1250,12 +1250,15 @@ export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditPr
       accessorKey: "id",
       cell: (row) => (
         <div style={{ display: "flex", gap: 6 }}>
+          {canEditProfiles && (
           <button
             onClick={() => onEditProfile(row as unknown as Partial<AccessProfile>)}
             style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--neuron-ui-border)", background: "transparent", fontSize: 12, fontWeight: 500, color: "var(--neuron-ink-muted)", cursor: "pointer" }}
           >
             Edit
           </button>
+          )}
+          {canCreateProfiles && (
           <button
             onClick={() => onEditProfile({
               ...row as unknown as Partial<AccessProfile>,
@@ -1268,18 +1271,30 @@ export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditPr
           >
             Duplicate
           </button>
+          )}
+          {canEditProfiles && (
           <button
             onClick={() => setApplyingProfile(row)}
             style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--neuron-ui-border)", background: "transparent", fontSize: 12, fontWeight: 500, color: "var(--neuron-action-primary)", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}
           >
             <UserCheck size={12} /> Apply
           </button>
+          )}
+          {canDeleteProfiles && (
+          <>
+          <div style={{ width: 1, height: 18, backgroundColor: "var(--neuron-ui-border)", margin: "0 2px" }} />
           <button
             onClick={() => setDeletingProfile(row)}
+            aria-label={`Delete ${row.name}`}
+            title={`Delete ${row.name}`}
             style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--neuron-ui-border)", background: "transparent", fontSize: 12, fontWeight: 500, color: "var(--neuron-ink-muted)", cursor: "pointer" }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--neuron-semantic-error, #dc2626)"; e.currentTarget.style.borderColor = "var(--neuron-semantic-error, #dc2626)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = "var(--neuron-ink-muted)"; e.currentTarget.style.borderColor = "var(--neuron-ui-border)"; }}
           >
             <Trash2 size={12} />
           </button>
+          </>
+          )}
         </div>
       ),
     },
@@ -1295,15 +1310,17 @@ export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditPr
             <h2 style={{ fontSize: 16, fontWeight: 600, color: "var(--neuron-ink-primary)", margin: 0 }}>Access Profiles</h2>
           </div>
           <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: 0 }}>
-            Saved access rule templates. Applying a profile links the user to that baseline while keeping user-specific overrides separate.
+            Reusable access setups you can assign to staff. Editing a profile updates everyone using it; per-person custom changes stay separate.
           </p>
         </div>
+        {canCreateProfiles && (
         <button
           onClick={() => onEditProfile(null)}
           style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "none", background: "var(--neuron-action-primary)", color: "var(--neuron-action-primary-text)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
         >
           <Plus size={14} /> New Profile
         </button>
+        )}
       </div>
 
       {/* Profile list */}
@@ -1318,14 +1335,16 @@ export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditPr
           <BookMarked size={32} style={{ color: "var(--neuron-ui-border)", margin: "0 auto 12px" }} />
           <p style={{ fontSize: 14, fontWeight: 500, color: "var(--neuron-ink-muted)", margin: "0 0 4px" }}>No access profiles yet</p>
           <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: "0 0 16px" }}>
-            Create profiles like "BD Manager" or "Ops Supervisor" to quickly assign access rules to new or promoted users.
+            Create profiles like "BD Manager" or "Ops Supervisor" to quickly set up access for new or promoted staff.
           </p>
+          {canCreateProfiles && (
           <button
             onClick={() => onEditProfile(null)}
             style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, border: "none", background: "var(--neuron-action-primary)", color: "var(--neuron-action-primary-text)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
           >
             <Plus size={14} /> Create First Profile
           </button>
+          )}
         </div>
       ) : (
         <DataTable

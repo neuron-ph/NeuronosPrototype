@@ -25,6 +25,12 @@ interface EntityAttachmentsTabProps {
     email: string;
     department: string;
   } | null;
+  /** NEU-019 WG-16: uploads require `<surface>_attachments_tab:create` —
+   *  parents pass `can(ids.attachments, "create")`. Defaults to false so a
+   *  parent that forgets the prop renders read-only, never ungated. */
+  canUpload?: boolean;
+  /** WG-16: deletes require `<surface>_attachments_tab:delete`. */
+  canDelete?: boolean;
 }
 
 interface Attachment {
@@ -47,7 +53,7 @@ const TABLE_MAP: Record<string, { table: string; fkColumn: string }> = {
   quotations: { table: "quotation_attachments", fkColumn: "quotation_id" },
 };
 
-export function EntityAttachmentsTab({ entityId, entityType, currentUser }: EntityAttachmentsTabProps) {
+export function EntityAttachmentsTab({ entityId, entityType, currentUser, canUpload = false, canDelete = false }: EntityAttachmentsTabProps) {
   const queryClient = useQueryClient();
   const [isUploading, setIsUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -77,6 +83,7 @@ export function EntityAttachmentsTab({ entityId, entityType, currentUser }: Enti
 
   // Handle file upload
   const handleFileUpload = async (files: FileList | null) => {
+    if (!canUpload) return; // WG-16 backstop (also covers drag-and-drop)
     if (!files || files.length === 0) return;
     if (!currentUser) {
       toast.error("You must be logged in to upload files");
@@ -128,6 +135,7 @@ export function EntityAttachmentsTab({ entityId, entityType, currentUser }: Enti
 
   // Handle file delete
   const handleDelete = async (attachmentId: string) => {
+    if (!canDelete) return; // WG-16 backstop
     if (!confirm("Are you sure you want to delete this file?")) return;
 
     try {
@@ -245,6 +253,7 @@ export function EntityAttachmentsTab({ entityId, entityType, currentUser }: Enti
           </p>
         </div>
         
+        {canUpload && (
         <label
           style={{
             display: "inline-flex",
@@ -282,10 +291,11 @@ export function EntityAttachmentsTab({ entityId, entityType, currentUser }: Enti
             style={{ display: "none" }}
           />
         </label>
+        )}
       </div>
 
       {/* Drag and Drop Zone - Only show when no files or during drag */}
-      {(attachments.length === 0 || isDragging) && (
+      {canUpload && (attachments.length === 0 || isDragging) && (
         <div
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -472,6 +482,7 @@ export function EntityAttachmentsTab({ entityId, entityType, currentUser }: Enti
                   <Download size={12} />
                   Download
                 </button>
+                {canDelete && (
                 <button
                   onClick={() => handleDelete(attachment.id)}
                   disabled={attachment.isUploading}
@@ -501,6 +512,7 @@ export function EntityAttachmentsTab({ entityId, entityType, currentUser }: Enti
                 >
                   <Trash2 size={12} />
                 </button>
+                )}
               </div>
             </div>
           ))}

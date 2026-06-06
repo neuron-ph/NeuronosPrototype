@@ -326,7 +326,7 @@ export function BudgetRequestList() {
               Manage and track budget requests for business development activities
             </p>
           </div>
-          <button
+          {can("bd_budget_requests", "create") && <button
             className="neuron-btn-primary"
             style={{
               display: "flex",
@@ -338,7 +338,7 @@ export function BudgetRequestList() {
           >
             <Plus size={18} />
             New Request
-          </button>
+          </button>}
         </div>
 
         {/* Quick Filter Tabs */}

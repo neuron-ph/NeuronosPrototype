@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { Plus } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { supabase } from "../../../utils/supabase/client";
+import { usePermission } from "../../../context/PermissionProvider";
 
 // ==================== TYPES ====================
 
@@ -193,6 +194,11 @@ export function CatalogItemCombobox({
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  // NEU-017: quick-adding an item writes catalog_items — governed master data,
+  // gated on acct_catalog:create (mirrors the catalog RLS). Non-holders pick
+  // from existing items only.
+  const { can } = usePermission();
+  const canAddCatalogItem = can("acct_catalog", "create");
 
   // Refs
   const inputRef = useRef<HTMLInputElement>(null);
@@ -452,7 +458,9 @@ export function CatalogItemCombobox({
 
           {!isLoading && !hasResults && searchText.trim() && (
             <div style={{ padding: "8px 12px", color: "var(--theme-text-muted)", fontSize: "12px" }}>
-              No matching items
+              {canAddCatalogItem
+                ? "No matching items"
+                : "No matching items — ask Accounting or Pricing to add it to the catalog"}
             </div>
           )}
 
@@ -461,8 +469,8 @@ export function CatalogItemCombobox({
             <ItemOption key={item.id} item={item} onSelect={handleSelect} />
           ))}
 
-          {/* Quick-add option — one click, no form */}
-          {searchText.trim() && !exactMatch && (
+          {/* Quick-add option — one click, no form (acct_catalog:create only) */}
+          {canAddCatalogItem && searchText.trim() && !exactMatch && (
             <>
               {hasResults && <div style={{ margin: "2px 12px", borderTop: "1px solid var(--theme-border-subtle)" }} />}
               <button

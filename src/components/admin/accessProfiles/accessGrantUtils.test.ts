@@ -10,6 +10,7 @@ import {
   normalizeProfileName,
   normalizeLegacyVisibilityScope,
   resolveCascadedGrants,
+  resolvePerUserOverride,
   resolveProfileVisibilityScope,
   roleDefaultVisibilityScope,
 } from "./accessGrantUtils";
@@ -54,7 +55,7 @@ describe("accessGrantUtils", () => {
     });
   });
 
-  it("cascades parent grants to child tabs by default", () => {
+  it("cascades parent grants to child tabs by default, skipping inapplicable actions", () => {
     const resolved = resolveCascadedGrants(
       { "ops_projects:view": true, "ops_projects:create": true },
       [
@@ -67,8 +68,11 @@ describe("accessGrantUtils", () => {
     expect(resolved).toEqual({
       "ops_projects:view": true,
       "ops_projects:create": true,
+      // ops_projects_info_tab is a real moduleId whose only applicable action
+      // is "view" (actionApplicability.ts) — cascade must not fabricate
+      // ops_projects_info_tab:create, a key nothing consumes.
       "ops_projects_info_tab:view": true,
-      "ops_projects_info_tab:create": true,
+      // Unknown/synthetic ids are treated as fully applicable (permissive).
       "ops_projects_accounting_tab:view": true,
       "ops_projects_accounting_tab:create": true,
     });
@@ -127,6 +131,38 @@ describe("accessGrantUtils", () => {
     expect(resolved["ops_projects_billings_tab:view"]).toBe(false);
   });
 
+  it("persists borrowed/contained child tab grants when a per-user override ticks the host", () => {
+    const modules = [
+      { id: "pricing_projects", containsModuleIds: ["ops_projects_info_tab", "ops_projects_billings_tab"] },
+      { id: "ops_projects" },
+      { id: "ops_projects_info_tab", parentId: "ops_projects" },
+      { id: "ops_projects_billings_tab", parentId: "ops_projects" },
+    ];
+
+    const delta = resolvePerUserOverride(
+      {}, // base profile grants nothing here
+      { "pricing_projects:view": true }, // admin ticks the host module for this one user
+      modules,
+    );
+
+    // The host grant AND its borrowed child tabs are stored explicitly, so the
+    // exact-key DB resolver actually grants the tabs.
+    expect(delta["pricing_projects:view"]).toBe(true);
+    expect(delta["ops_projects_info_tab:view"]).toBe(true);
+    expect(delta["ops_projects_billings_tab:view"]).toBe(true);
+  });
+
+  it("returns an empty delta when the user matches the (cascaded) base", () => {
+    const modules = [
+      { id: "pricing_projects", containsModuleIds: ["ops_projects_info_tab"] },
+      { id: "ops_projects" },
+      { id: "ops_projects_info_tab", parentId: "ops_projects" },
+    ];
+    // Base already grants the host; user changes nothing.
+    const delta = resolvePerUserOverride({ "pricing_projects:view": true }, {}, modules);
+    expect(delta).toEqual({});
+  });
+
   it("derives minimal overrides relative to the baseline profile", () => {
     expect(
       deriveGrantOverrides(
@@ -181,5 +217,38 @@ describe("accessGrantUtils", () => {
     ], "manager", "Operations");
 
     expect(chosen?.id).toBe("ops-manager");
+  });
+
+  it("returns null when no profile matches the role+department (no phantom fallback) — STRICT", () => {
+    // Mirrors the DB resolver: an HR manager with no HR profile (and no
+    // department-less manager profile) gets NOTHING, never a borrowed profile.
+    const chosen = chooseRoleDefaultProfile([
+      {
+        id: "bd-manager",
+        name: "BD Manager",
+        description: null,
+        target_department: "Business Development",
+        target_role: "manager",
+        target_service: null,
+        module_grants: { "ops_projects_bookings_tab:create": true },
+        visibility_scope: null,
+        visibility_departments: null,
+        updated_at: "",
+      },
+      {
+        id: "pricing-manager",
+        name: "Pricing Manager",
+        description: null,
+        target_department: "Pricing",
+        target_role: "manager",
+        target_service: null,
+        module_grants: {},
+        visibility_scope: null,
+        visibility_departments: null,
+        updated_at: "",
+      },
+    ], "manager", "HR");
+
+    expect(chosen).toBeNull();
   });
 });

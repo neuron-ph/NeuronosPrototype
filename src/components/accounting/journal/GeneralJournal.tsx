@@ -251,7 +251,14 @@ export function GeneralJournal() {
   const canInvoice = can("accounting_journal_invoice_tab", "view");
   const canCollection = can("accounting_journal_collection_tab", "view");
   const canManual = can("accounting_journal_manual_tab", "view");
-  const canCreateJournal = can("acct_journal", "view") && (can("accounting_journal_manual_tab", "view") || can("accounting_journal_all_sources_tab", "view"));
+  // NEU-017: New Entry + void/reverse are writes — require a journal write grant,
+  // not just view (create=4 holders, view=11 on dev: viewers read, accountants write).
+  const canCreateJournal = can("acct_journal", "create") || can("acct_journal", "edit");
+  // NEU-020 2.10b (#8): editing/reversing a POSTED entry is edit-class — it must
+  // ride acct_journal:edit, not the create-inclusive umbrella above (a create-only
+  // user must not be able to edit or reverse posted journal entries).
+  const canEditJournal = can("acct_journal", "edit");
+  const canExportJournal = can("acct_journal", "export"); // NEU-020 2.10c (#10)
 
   // ── Data state ──
   const [entries, setEntries] = useState<JournalEntry[]>([]);
@@ -498,6 +505,7 @@ export function GeneralJournal() {
               <RefreshCw size={15} className={loadingEntries ? "animate-spin" : ""} />
             </button>
             {/* Export */}
+            {canExportJournal && (
             <button
               onClick={handleExportCSV}
               className="h-10 px-4 flex items-center gap-2 border border-[var(--theme-border-default)] rounded-lg bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-state-hover)] transition-colors font-medium text-[14px]"
@@ -505,6 +513,7 @@ export function GeneralJournal() {
               <Download size={15} />
               Export
             </button>
+            )}
             {/* New Entry */}
             {canCreateJournal && (
               <button
@@ -805,6 +814,7 @@ export function GeneralJournal() {
               handleEntryCreated();
             }}
             canAct={canCreateJournal}
+            canEdit={canEditJournal}
             highlightAccountId={filters.accountId || undefined}
           />
         )}

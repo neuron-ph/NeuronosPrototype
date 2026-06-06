@@ -3,6 +3,7 @@ import { Loader2, ChevronDown, BookOpen } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../../../utils/supabase/client";
 import { useUser } from "../../../hooks/useUser";
+import { usePermission } from "../../../context/PermissionProvider";
 import { logActivity } from "../../../utils/activityLog";
 import { toast } from "../../ui/toast-utils";
 import { SidePanel } from "../../common/SidePanel";
@@ -172,6 +173,7 @@ export function CollectionGLPostingSheet({
   onPosted,
 }: CollectionGLPostingSheetProps) {
   const { user } = useUser();
+  const { can } = usePermission();
   // ---- local form state ----
   const [debitAccountId, setDebitAccountId] = useState("");
   const [debitAccountName, setDebitAccountName] = useState("");
@@ -314,6 +316,8 @@ export function CollectionGLPostingSheet({
 
   // ---- post handler ----
   const handlePost = async () => {
+    // WG-08 backstop: posting writes journal_entries — same gate as General Journal
+    if (!(can("acct_journal", "create") || can("acct_journal", "edit"))) return;
     if (!debitAccountId || !creditAccountId) {
       toast.error("Select both a debit and credit account");
       return;

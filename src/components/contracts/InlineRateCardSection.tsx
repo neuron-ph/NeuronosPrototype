@@ -25,6 +25,7 @@ import { supabase } from "../../utils/supabase/client";
 import { RateBreakdownTable, formatCurrency } from "../pricing/shared/RateBreakdownTable";
 import { QuantityDisplaySection } from "../pricing/shared/QuantityDisplaySection";
 import { extractMultiLineSelectionsAndQuantities, extractBookingFacts, extractBookingContainers } from "../../utils/contractQuantityExtractor";
+import { usePermission } from "../../context/PermissionProvider";
 
 interface InlineRateCardSectionProps {
   booking: any;
@@ -81,6 +82,17 @@ export function InlineRateCardSection({
 }: InlineRateCardSectionProps) {
   const [quantities, setQuantities] = useState<BookingQuantities>({ ...initialQuantities });
   const [isSaving, setIsSaving] = useState(false);
+  // NEU-017: applying a rate card inserts billing_line_items — hide the button
+  // without a billing write grant (same OR-list as the billing_line_items RLS;
+  // "acct_billings" is a legacy grant key absent from the ModuleId union).
+  const { can } = usePermission();
+  const canKey = can as unknown as (moduleId: string, action: string) => boolean;
+  // 2.6-final: acct_financials master key retired (holders seeded into
+  // accounting_financials_billings_tab).
+  const canWriteBillings = ["create", "edit"].some(a =>
+    canKey("accounting_financials_billings_tab", a) ||
+    canKey("acct_billings", a) || canKey("ops_bookings_billings_tab", a) ||
+    canKey("ops_projects_billings_tab", a));
   // Collapse the calculator by default once the user has applied rates — they
   // can still expand to recalculate or apply additional rounds.
   const [collapsed, setCollapsed] = useState(alreadyApplied);
@@ -535,7 +547,7 @@ export function InlineRateCardSection({
                 </span>
               )}
             </div>
-            <button
+            {canWriteBillings && <button
               onClick={handleApply}
               disabled={isSaving || totalItems === 0 || allApplied}
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-medium text-white transition-colors"
@@ -554,7 +566,7 @@ export function InlineRateCardSection({
                         ? "Bill New Items"
                         : "Sync to Billings")
                   : "Apply to Billings"}
-            </button>
+            </button>}
           </div>
         </>
       )}

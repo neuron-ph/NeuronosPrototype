@@ -42,7 +42,7 @@ function ThreadListSkeleton() {
   );
 }
 
-function EmptyState({ tab, onCompose }: { tab: InboxTab; onCompose: () => void }) {
+function EmptyState({ tab, onCompose }: { tab: InboxTab; onCompose?: () => void }) {
   const messages: Record<InboxTab, string> = {
     inbox: "Your inbox is empty",
     queue: "No pending requests in the queue",
@@ -53,7 +53,7 @@ function EmptyState({ tab, onCompose }: { tab: InboxTab; onCompose: () => void }
     <div className="flex flex-col items-center justify-center h-full text-center" style={{ padding: 32, minHeight: 240 }}>
       <Inbox size={32} style={{ color: "var(--theme-border-default)", marginBottom: 12 }} />
       <p style={{ fontSize: 13, color: "var(--theme-text-muted)", marginBottom: 8 }}>{messages[tab]}</p>
-      {tab === "inbox" && (
+      {tab === "inbox" && onCompose && (
         <button
           onClick={onCompose}
           style={{ fontSize: 12, color: "var(--theme-action-primary-bg)", fontWeight: 500, background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}
@@ -89,7 +89,10 @@ export function ThreadListPanel({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // The Open/Closed filter and bulk-select only apply to inbox & queue.
-  const supportsClose = activeTab === "inbox" || activeTab === "queue";
+  // NEU-020 2.7 (DD-5): closing/archiving a ticket is a delete-class power
+  // (take it down) — inbox:delete; composing writes tickets — inbox:create.
+  const supportsClose = (activeTab === "inbox" || activeTab === "queue") && can("inbox", "delete");
+  const canCompose = can("inbox", "create");
 
   // Reset selection when the view changes underneath it
   useEffect(() => {
@@ -168,6 +171,7 @@ export function ThreadListPanel({
               {selectMode ? "Cancel" : "Select"}
             </button>
           )}
+          {canCompose && (
           <button
             onClick={onCompose}
             className="flex items-center gap-1.5"
@@ -188,6 +192,7 @@ export function ThreadListPanel({
             <Edit size={12} />
             Compose
           </button>
+          )}
           </div>
         </div>
 
@@ -371,7 +376,7 @@ export function ThreadListPanel({
         {isLoading ? (
           <ThreadListSkeleton />
         ) : filteredThreads.length === 0 ? (
-          <EmptyState tab={activeTab} onCompose={onCompose} />
+          <EmptyState tab={activeTab} onCompose={canCompose ? onCompose : undefined} />
         ) : (
           filteredThreads.map((thread) => (
             <ThreadListItem

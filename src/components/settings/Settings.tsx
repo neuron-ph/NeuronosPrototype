@@ -5,6 +5,7 @@ import { toast } from "sonner@2.0.3";
 import { supabase } from "../../utils/supabase/client";
 import { useUser } from "../../hooks/useUser";
 import { useAutoCaps } from "../../context/AutoCapsProvider";
+import { usePermission } from "../../context/PermissionProvider";
 import { getThemeModePreference, setThemeModePreference } from "../../theme/themeMode";
 import { ThemeModePreference } from "../../theme/workspaceTheme";
 import { getDocumentDesign, setDocumentDesign, isDocumentDesignToggleable, getVoucherLogo, setVoucherLogo, type DocumentDesign, type VoucherLogo } from "../../utils/documentDesign";
@@ -518,7 +519,9 @@ export function Settings() {
   // Workspace — org-wide auto-uppercase
   const { enabled: autoCapsEnabled, setEnabled: setAutoCapsEnabled } = useAutoCaps();
   const [autoCapsSaving, setAutoCapsSaving] = useState(false);
-  const canEditWorkspace = user?.role === "executive" || user?.department === "Executive";
+  // NEU-012 Phase 5b: workspace settings write mirrors the org_settings RLS.
+  const { can } = usePermission();
+  const canEditWorkspace = can("exec_profiling", "edit");
 
   // Document design (dev-only toggle)
   const [docDesign, setDocDesign] = useState<DocumentDesign>(() => getDocumentDesign());

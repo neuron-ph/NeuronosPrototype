@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Search, Plus, FolderPlus } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { supabase } from "../../../utils/supabase/client";
+import { usePermission } from "../../../context/PermissionProvider";
 
 interface CategoryDropdownProps {
   onAdd: (name: string, catalogCategoryId?: string) => void;
@@ -15,6 +16,10 @@ interface CategoryOption {
 }
 
 export function CategoryDropdown({ onAdd, onClose, side = "revenue" }: CategoryDropdownProps) {
+  // NEU-017: creating a custom category writes catalog_categories — governed
+  // master data, gated on acct_catalog:create (mirrors the catalog RLS).
+  const { can } = usePermission();
+  const canCreateCategory = can("acct_catalog", "create");
   const [searchTerm, setSearchTerm] = useState("");
   const [isCustomMode, setIsCustomMode] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -85,10 +90,9 @@ export function CategoryDropdown({ onAdd, onClose, side = "revenue" }: CategoryD
       toast.success(`"${data.name}" added to catalog`);
       onClose();
     } catch (error) {
+      // No free-text fallback — every category must exist in the catalog.
       console.error("Failed to create catalog category:", error);
-      toast.error(`Category added locally, but catalog sync failed: ${error instanceof Error ? error.message : "Unknown error"}`);
-      onAdd(name);
-      onClose();
+      toast.error(`Failed to create category: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
       setIsCreating(false);
     }
@@ -105,7 +109,7 @@ export function CategoryDropdown({ onAdd, onClose, side = "revenue" }: CategoryD
       );
       if (exactMatch) {
         handleSelectCategory(exactMatch);
-      } else {
+      } else if (canCreateCategory) {
         handleCustomSubmit();
       }
     }
@@ -214,8 +218,8 @@ export function CategoryDropdown({ onAdd, onClose, side = "revenue" }: CategoryD
           </div>
         )}
 
-        {/* Custom Category Option */}
-        {searchTerm.trim() && !filteredCategories.some(cat => 
+        {/* Custom Category Option (acct_catalog:create only) */}
+        {canCreateCategory && searchTerm.trim() && !filteredCategories.some(cat =>
           cat.name.toLowerCase() === searchTerm.toLowerCase()
         ) && (
           <div style={{ 
@@ -276,7 +280,7 @@ export function CategoryDropdown({ onAdd, onClose, side = "revenue" }: CategoryD
             fontSize: "12px"
           }}>
             <FolderPlus size={32} style={{ margin: "0 auto 8px", opacity: 0.3 }} />
-            <p style={{ margin: 0 }}>Type to search or create a custom category</p>
+            <p style={{ margin: 0 }}>{canCreateCategory ? "Type to search or create a custom category" : "Type to search categories"}</p>
           </div>
         )}
       </div>

@@ -23,9 +23,15 @@ interface ProjectOverviewTabProps {
   onUpdate?: () => void;
   onViewBooking?: (bookingId: string, serviceType: string) => void;
   onSaveQuotation?: (data: any) => Promise<void>;
+  /** NEU-019 WG-25: the Amend button enters full edit mode and saves the
+   *  quotation — needs the record's edit grant. Defaults to false (fail closed). */
+  canAmend?: boolean;
+  /** NEU-020 2.11 (WT4/DD-3): Print PDF is export-class — gated on the Quotation
+   *  tab's own :export cell. Defaults to false (fail closed). */
+  canExport?: boolean;
 }
 
-export function ProjectOverviewTab({ project, currentUser, onUpdate, onViewBooking, onSaveQuotation }: ProjectOverviewTabProps) {
+export function ProjectOverviewTab({ project, currentUser, onUpdate, onViewBooking, onSaveQuotation, canAmend = false, canExport = false }: ProjectOverviewTabProps) {
   const [isPDFStudioOpen, setIsPDFStudioOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   // ✨ Optimistic UI: Local state to show updates immediately while background fetch happens
@@ -166,6 +172,8 @@ export function ProjectOverviewTab({ project, currentUser, onUpdate, onViewBooki
     }}>
       
       {/* Open PDF Studio — publishing surface lives in a full-screen overlay, not a peer view */}
+      {/* NEU-020 2.11 (WT4): Print PDF obeys the Quotation tab's Export cell. */}
+      {canExport && (
       <div className="flex items-center justify-end mb-6">
         <button
           onClick={() => setIsPDFStudioOpen(true)}
@@ -175,11 +183,12 @@ export function ProjectOverviewTab({ project, currentUser, onUpdate, onViewBooki
           Print PDF
         </button>
       </div>
+      )}
 
       <QuotationFormView
         project={displayProject}
         onSave={onSaveQuotation}
-        onAmend={() => setIsEditing(true)}
+        onAmend={canAmend ? () => setIsEditing(true) : undefined}
       />
 
       <PDFStudioOverlay

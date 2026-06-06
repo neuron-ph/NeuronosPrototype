@@ -28,6 +28,7 @@ export type ModuleId =
   | "pricing_customers_inquiries_tab" | "pricing_customers_projects_tab" | "pricing_customers_contracts_tab"
   | "pricing_customers_comments_tab" | "pricing_customers_attachments_tab" | "pricing_customers_teams_tab"
   | "pricing_quotations_details_tab" | "pricing_quotations_comments_tab"
+  | "pricing_quotations_attachments_tab"
   | "pricing_contracts_all_tab" | "pricing_contracts_active_tab" | "pricing_contracts_expiring_tab"
   | "pricing_contracts_financial_overview_tab" | "pricing_contracts_quotation_tab" | "pricing_contracts_rate_card_tab"
   | "pricing_contracts_bookings_tab" | "pricing_contracts_billings_tab"
@@ -52,6 +53,16 @@ export type ModuleId =
   | "ops_bookings_info_tab" | "ops_bookings_billings_tab"
   | "ops_bookings_invoices_tab" | "ops_bookings_collections_tab"
   | "ops_bookings_expenses_tab" | "ops_bookings_comments_tab" | "ops_bookings_chrono_tab"
+  // NEU-020 2.5 (DD-2): bd/pricing projects + bd contracts door families
+  | "bd_projects_all_tab" | "bd_projects_active_tab" | "bd_projects_completed_tab" | "bd_projects_info_tab" | "bd_projects_quotation_tab" | "bd_projects_bookings_tab" | "bd_projects_expenses_tab" | "bd_projects_billings_tab" | "bd_projects_invoices_tab" | "bd_projects_collections_tab" | "bd_projects_attachments_tab" | "bd_projects_comments_tab" | "pricing_projects_all_tab" | "pricing_projects_active_tab" | "pricing_projects_completed_tab" | "pricing_projects_info_tab" | "pricing_projects_quotation_tab" | "pricing_projects_bookings_tab" | "pricing_projects_expenses_tab" | "pricing_projects_billings_tab" | "pricing_projects_invoices_tab" | "pricing_projects_collections_tab" | "pricing_projects_attachments_tab" | "pricing_projects_comments_tab" | "bd_contracts_all_tab" | "bd_contracts_active_tab" | "bd_contracts_expiring_tab" | "bd_contracts_financial_overview_tab" | "bd_contracts_quotation_tab" | "bd_contracts_rate_card_tab" | "bd_contracts_bookings_tab" | "bd_contracts_billings_tab" | "bd_contracts_invoices_tab" | "bd_contracts_collections_tab" | "bd_contracts_expenses_tab" | "bd_contracts_attachments_tab" | "bd_contracts_comments_tab" | "bd_contracts_activity_tab"
+  // NEU-020 DD-2: the Pricing-door Others family (split from ops_others)
+  | "pricing_others" | "pricing_others_all_tab" | "pricing_others_my_tab" | "pricing_others_draft_tab" | "pricing_others_in_progress_tab" | "pricing_others_completed_tab" | "pricing_others_cancelled_tab" | "pricing_others_info_tab" | "pricing_others_billings_tab" | "pricing_others_invoices_tab" | "pricing_others_collections_tab" | "pricing_others_expenses_tab" | "pricing_others_comments_tab" | "pricing_others_chrono_tab"
+  // NEU-020 DD-1: per-service booking-detail door keys
+  | "ops_forwarding_info_tab" | "ops_forwarding_billings_tab" | "ops_forwarding_invoices_tab" | "ops_forwarding_collections_tab" | "ops_forwarding_expenses_tab" | "ops_forwarding_comments_tab" | "ops_forwarding_chrono_tab"
+  | "ops_brokerage_info_tab" | "ops_brokerage_billings_tab" | "ops_brokerage_invoices_tab" | "ops_brokerage_collections_tab" | "ops_brokerage_expenses_tab" | "ops_brokerage_comments_tab" | "ops_brokerage_chrono_tab"
+  | "ops_trucking_info_tab" | "ops_trucking_billings_tab" | "ops_trucking_invoices_tab" | "ops_trucking_collections_tab" | "ops_trucking_expenses_tab" | "ops_trucking_comments_tab" | "ops_trucking_chrono_tab"
+  | "ops_marine_insurance_info_tab" | "ops_marine_insurance_billings_tab" | "ops_marine_insurance_invoices_tab" | "ops_marine_insurance_collections_tab" | "ops_marine_insurance_expenses_tab" | "ops_marine_insurance_comments_tab" | "ops_marine_insurance_chrono_tab"
+  | "ops_others_info_tab" | "ops_others_billings_tab" | "ops_others_invoices_tab" | "ops_others_collections_tab" | "ops_others_expenses_tab" | "ops_others_comments_tab" | "ops_others_chrono_tab"
   | "ops_projects_all_tab" | "ops_projects_active_tab" | "ops_projects_completed_tab"
   | "ops_projects_info_tab" | "ops_projects_bookings_tab"
   | "ops_projects_quotation_tab" | "ops_projects_expenses_tab" | "ops_projects_billings_tab"
@@ -98,6 +109,7 @@ export type ModuleId =
   // ─── Executive / Admin ────────────────────────────────────────────────────────
   | "exec_activity_log" | "exec_users" | "exec_profiling" | "exec_memos"
   | "admin_users_tab" | "admin_teams_tab" | "admin_access_profiles_tab"
+  | "company_settings"
   // ─── Inbox ───────────────────────────────────────────────────────────────────
   | "inbox" | "inbox_entity_picker"
   | "inbox_inbox_tab" | "inbox_queue_tab" | "inbox_sent_tab" | "inbox_drafts_tab"
@@ -106,6 +118,7 @@ export type ModuleId =
   | "inbox_entity_collection_tab" | "inbox_entity_expense_tab" | "inbox_entity_customer_tab"
   | "inbox_entity_contact_tab" | "inbox_entity_vendor_tab" | "inbox_entity_budget_request_tab"
   // ─── Personal ────────────────────────────────────────────────────────────────
+  | "calendar"
   | "my_evouchers"
   | "my_evouchers_all_tab" | "my_evouchers_draft_tab" | "my_evouchers_pending_tab"
   | "my_evouchers_active_tab" | "my_evouchers_done_tab";
@@ -123,6 +136,12 @@ export interface PermModule {
   parentId?: ModuleId;
   /** Product-level children owned by this parent even when technically reused elsewhere. */
   containsModuleIds?: ModuleId[];
+  /**
+   * Actions actually consumed for this moduleId (audited — see
+   * config/access/actionApplicability.ts). The editors render the rest as
+   * inert "—" cells. Enforcement never reads this: it gates affordances only.
+   */
+  applicableActions?: readonly ActionId[];
 }
 
 // ─── PERM_MODULES — derived from canonical schema ────────────────────────────
@@ -131,6 +150,7 @@ export interface PermModule {
 // Tabs carry parentId pointing at their containing module.
 
 import { ACCESS_SCHEMA } from "../../config/access/accessSchema";
+import { APPLICABLE_ACTIONS } from "../../config/access/actionApplicability";
 
 export const PERM_MODULES: PermModule[] = (() => {
   const out: PermModule[] = [];
@@ -142,6 +162,7 @@ export const PERM_MODULES: PermModule[] = (() => {
         group: dept.label,
         dept: dept.label,
         containsModuleIds: mod.containsModuleIds,
+        applicableActions: APPLICABLE_ACTIONS[mod.moduleId],
       });
       for (const t of mod.tabs) {
         out.push({
@@ -153,6 +174,7 @@ export const PERM_MODULES: PermModule[] = (() => {
           group: dept.label,
           dept: dept.label,
           parentId: mod.moduleId,
+          applicableActions: APPLICABLE_ACTIONS[t.moduleId],
         });
       }
     }

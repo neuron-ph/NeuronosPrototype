@@ -11,6 +11,7 @@ import { calculateInvoiceBalance } from "../../../utils/accounting-math";
 import { formatMoney as formatMoneyHelper, pickReportingAmount } from "../../../utils/accountingCurrency";
 import { getInvoiceLifecycleStatus, isInvoiceFinanciallyActive } from "../../../utils/invoiceReversal";
 import { useBillingMerge } from "../../../hooks/useBillingMerge";
+import { usePermission } from "../../../context/PermissionProvider";
 
 interface UnifiedInvoicesTabProps {
   financials: FinancialData;
@@ -27,11 +28,17 @@ interface UnifiedInvoicesTabProps {
   readOnly?: boolean;
   linkedBookings?: any[];
   highlightId?: string | null;
+  /** NEU-020 door purity: the grid row (door key) this tab is rendered behind,
+   *  e.g. "ops_trucking_invoices_tab". When provided, ONLY that key's
+   *  create/edit/delete govern this surface — no OR-gate, no foreign keys.
+   *  Transitional: parents not yet threaded fall back to the NEU-019 OR-gate;
+   *  the fallback is removed once every parent passes its door. */
+  permissionDoor?: string;
 }
 
-export function UnifiedInvoicesTab({ 
-  financials, 
-  project, 
+export function UnifiedInvoicesTab({
+  financials,
+  project,
   currentUser,
   onRefresh,
   title,
@@ -39,8 +46,26 @@ export function UnifiedInvoicesTab({
   readOnly = false,
   linkedBookings,
   highlightId,
+  permissionDoor,
 }: UnifiedInvoicesTabProps) {
   const { invoices, collections, billingItems: rawBillingItems, refresh } = financials;
+
+  // NEU-019 WG-06: invoice creation needs an invoice-write grant, not just the
+  // tab view — same OR-gate family as billings (NEU-017) / collections (Group A).
+  const { can } = usePermission();
+  const canKey = can as unknown as (moduleId: string, action: string) => boolean;
+  // NEU-020 door purity: with a door, only that key governs. Without one
+  // (transitional), the NEU-019 OR-gate still applies until every parent
+  // threads its door — then the fallback dies.
+  // 2.6-final: acct_financials master key retired (holders seeded into
+  // accounting_financials_invoices_tab). Transitional fallback now master-free.
+  const canWriteInvoices = permissionDoor
+    ? ["create", "edit"].some(a => canKey(permissionDoor, a))
+    : ["create", "edit"].some(a =>
+        canKey("accounting_financials_invoices_tab", a) ||
+        canKey("ops_bookings_invoices_tab", a) ||
+        canKey("ops_projects_invoices_tab", a));
+  const effectiveReadOnly = readOnly || !canWriteInvoices;
 
   const invoiceLineage = useMemo(() => {
     return invoices.reduce((map, invoice: any) => {
@@ -342,6 +367,7 @@ export function UnifiedInvoicesTab({
         onClose={handleClose}
         onSuccess={handleCreateSuccess}
         onRefreshData={refresh}
+        permissionDoor={permissionDoor}
       />
     );
   }
@@ -360,7 +386,7 @@ export function UnifiedInvoicesTab({
         </div>
         
         <div className="flex items-center gap-3">
-           {!readOnly && (
+           {!effectiveReadOnly && (
              <button
                onClick={() => setInterfaceMode('create')}
                className="flex items-center gap-2 px-4 py-2 bg-[var(--theme-action-primary-bg)] text-white rounded-lg hover:bg-[#0D6559] transition-colors font-medium text-[14px]"

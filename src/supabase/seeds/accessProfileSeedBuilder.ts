@@ -203,6 +203,7 @@ export function buildSeeds(): Seed[] {
   // the seed. Seeds store only EXPLICIT per-tab grants — the editor cascades a
   // parent's grant down to its child tabs for display, so a stored ops_bookings
   // rollup would wrongly light up Invoices/Collections (whose own keys are off).
-  // The rollup is recomputed on save via deriveHiddenModuleGrants in handleSave.
+  // (Hidden-umbrella derivation was removed in NEU-012 Contract #4; nothing
+  // re-derives these keys on save.)
   return seeds;
 }

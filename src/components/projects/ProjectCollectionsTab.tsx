@@ -7,23 +7,27 @@ interface ProjectCollectionsTabProps {
   project: Project;
   currentUser: any;
   highlightId?: string | null;
+  /** NEU-020 2.6: project-door collections key (PROJECT_MODULE_IDS[door].collections). */
+  permissionDoor?: string;
 }
 
-export function ProjectCollectionsTab({ 
+export function ProjectCollectionsTab({
   financials,
-  project, 
+  project,
   currentUser,
-  highlightId
+  highlightId,
+  permissionDoor
 }: ProjectCollectionsTabProps) {
   // Simple wrapper around the unified component with consistent padding
   return (
     <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]">
-      <UnifiedCollectionsTab 
+      <UnifiedCollectionsTab
         financials={financials}
         project={project}
         currentUser={currentUser}
         onRefresh={financials.refresh}
         highlightId={highlightId}
+        permissionDoor={permissionDoor}
       />
     </div>
   );

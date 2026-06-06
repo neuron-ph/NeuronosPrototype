@@ -84,54 +84,19 @@ export interface AccessDepartmentNode {
   modules: AccessModuleNode[];
 }
 
-// Tab factory — every node exposes all 6 actions in the matrix; per-module
-// applicability is no longer encoded in the schema. The Access Configuration
-// matrix is the sole control surface for which actions a role may perform.
+// Tab factory — structure only. Which of the 6 actions are actually live per
+// node is owned by config/access/actionApplicability.ts (audited from real
+// can()/RLS consumption, guard-enforced); the editors render the rest as inert
+// "—" cells. The Access Configuration matrix remains the sole control surface
+// for which actions a role may perform.
 
 const tab = (moduleId: ModuleId, label: string): AccessTabNode =>
   ({ kind: "tab", id: moduleId, moduleId, label });
 
-const OPS_PROJECT_SURFACE_TABS: ModuleId[] = [
-  "ops_projects_all_tab",
-  "ops_projects_active_tab",
-  "ops_projects_completed_tab",
-  "ops_projects_info_tab",
-  "ops_projects_quotation_tab",
-  "ops_projects_bookings_tab",
-  "ops_projects_expenses_tab",
-  "ops_projects_billings_tab",
-  "ops_projects_invoices_tab",
-  "ops_projects_collections_tab",
-  "ops_projects_attachments_tab",
-  "ops_projects_comments_tab",
-];
-
-const PRICING_CONTRACT_SURFACE_TABS: ModuleId[] = [
-  "pricing_contracts_all_tab",
-  "pricing_contracts_active_tab",
-  "pricing_contracts_expiring_tab",
-  "pricing_contracts_financial_overview_tab",
-  "pricing_contracts_quotation_tab",
-  "pricing_contracts_rate_card_tab",
-  "pricing_contracts_bookings_tab",
-  "pricing_contracts_billings_tab",
-  "pricing_contracts_invoices_tab",
-  "pricing_contracts_collections_tab",
-  "pricing_contracts_expenses_tab",
-  "pricing_contracts_attachments_tab",
-  "pricing_contracts_comments_tab",
-  "pricing_contracts_activity_tab",
-];
-
-const OPS_BOOKING_DETAIL_TABS: ModuleId[] = [
-  "ops_bookings_info_tab",
-  "ops_bookings_billings_tab",
-  "ops_bookings_invoices_tab",
-  "ops_bookings_collections_tab",
-  "ops_bookings_expenses_tab",
-  "ops_bookings_comments_tab",
-  "ops_bookings_chrono_tab",
-];
+// NEU-020 DD-1/2.5: the shared borrow-lists (OPS_BOOKING_DETAIL_TABS,
+// OPS_PROJECT_SURFACE_TABS, PRICING_CONTRACT_SURFACE_TABS) are gone — every
+// grid row now declares its own door-key family. The legacy ops_bookings_*
+// keys live on only in RLS (DB pass retires them later).
 
 // ─── Schema ──────────────────────────────────────────────────────────────────
 
@@ -169,18 +134,49 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
           tab("bd_customers_teams_tab",       "Teams"),
         ],
       },
-      { kind: "module", id: "bd_inquiries", moduleId: "bd_inquiries", label: "Inquiries", pageId: "bd-inquiries", tabs: [] },
+      {
+        kind: "module", id: "bd_inquiries", moduleId: "bd_inquiries",
+        label: "Inquiries", pageId: "bd-inquiries", tabs: [],
+      },
       {
         kind: "module", id: "bd_projects", moduleId: "bd_projects",
         label: "Projects", pageId: "bd-projects",
-        containsModuleIds: OPS_PROJECT_SURFACE_TABS,
-        tabs: [],
+        // NEU-020 2.5: own door family (was borrowing ops_projects_* — DD-2)
+        tabs: [
+          tab("bd_projects_all_tab", "All"),
+          tab("bd_projects_active_tab", "Active"),
+          tab("bd_projects_completed_tab", "Completed"),
+          tab("bd_projects_info_tab", "Info"),
+          tab("bd_projects_quotation_tab", "Quotation"),
+          tab("bd_projects_bookings_tab", "Bookings"),
+          tab("bd_projects_expenses_tab", "Expenses"),
+          tab("bd_projects_billings_tab", "Billings"),
+          tab("bd_projects_invoices_tab", "Invoices"),
+          tab("bd_projects_collections_tab", "Collections"),
+          tab("bd_projects_attachments_tab", "Attachments"),
+          tab("bd_projects_comments_tab", "Comments"),
+        ],
       },
       {
         kind: "module", id: "bd_contracts", moduleId: "bd_contracts",
         label: "Contracts", pageId: "bd-contracts",
-        containsModuleIds: PRICING_CONTRACT_SURFACE_TABS,
-        tabs: [],
+        // NEU-020 2.5: own door family (was borrowing pricing_contracts_* — DD-2)
+        tabs: [
+          tab("bd_contracts_all_tab", "All"),
+          tab("bd_contracts_active_tab", "Active"),
+          tab("bd_contracts_expiring_tab", "Expiring"),
+          tab("bd_contracts_financial_overview_tab", "Financial Overview"),
+          tab("bd_contracts_quotation_tab", "Quotation"),
+          tab("bd_contracts_rate_card_tab", "Rate Card"),
+          tab("bd_contracts_bookings_tab", "Bookings"),
+          tab("bd_contracts_billings_tab", "Billings"),
+          tab("bd_contracts_invoices_tab", "Invoices"),
+          tab("bd_contracts_collections_tab", "Collections"),
+          tab("bd_contracts_expenses_tab", "Expenses"),
+          tab("bd_contracts_attachments_tab", "Attachments"),
+          tab("bd_contracts_comments_tab", "Comments"),
+          tab("bd_contracts_activity_tab", "Activity"),
+        ],
       },
       { kind: "module", id: "bd_tasks",      moduleId: "bd_tasks",      label: "Tasks",      pageId: "bd-tasks", tabs: [] },
       { kind: "module", id: "bd_activities", moduleId: "bd_activities", label: "Activities", pageId: "bd-activities", tabs: [] },
@@ -233,13 +229,28 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
         tabs: [
           tab("pricing_quotations_details_tab",  "Details"),
           tab("pricing_quotations_comments_tab", "Comments"),
+          // NEU-019 WG-16: the quotation Attachments tab had no knob at all
+          tab("pricing_quotations_attachments_tab", "Attachments"),
         ],
       },
       {
         kind: "module", id: "pricing_projects", moduleId: "pricing_projects",
         label: "Projects", pageId: "pricing-projects",
-        containsModuleIds: OPS_PROJECT_SURFACE_TABS,
-        tabs: [],
+        // NEU-020 2.5: own door family (DD-2)
+        tabs: [
+          tab("pricing_projects_all_tab", "All"),
+          tab("pricing_projects_active_tab", "Active"),
+          tab("pricing_projects_completed_tab", "Completed"),
+          tab("pricing_projects_info_tab", "Info"),
+          tab("pricing_projects_quotation_tab", "Quotation"),
+          tab("pricing_projects_bookings_tab", "Bookings"),
+          tab("pricing_projects_expenses_tab", "Expenses"),
+          tab("pricing_projects_billings_tab", "Billings"),
+          tab("pricing_projects_invoices_tab", "Invoices"),
+          tab("pricing_projects_collections_tab", "Collections"),
+          tab("pricing_projects_attachments_tab", "Attachments"),
+          tab("pricing_projects_comments_tab", "Comments"),
+        ],
       },
       {
         kind: "module", id: "pricing_contracts", moduleId: "pricing_contracts",
@@ -277,8 +288,14 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
       {
         kind: "module", id: "ops_marine_insurance", moduleId: "ops_marine_insurance",
         label: "Marine Insurance", pageId: "ops-marine-insurance",
-        containsModuleIds: OPS_BOOKING_DETAIL_TABS,
         tabs: [
+          tab("ops_marine_insurance_info_tab", "Booking Info"),
+          tab("ops_marine_insurance_billings_tab", "Billings"),
+          tab("ops_marine_insurance_invoices_tab", "Invoices"),
+          tab("ops_marine_insurance_collections_tab", "Collections"),
+          tab("ops_marine_insurance_expenses_tab", "Expenses"),
+          tab("ops_marine_insurance_comments_tab", "Comments"),
+          tab("ops_marine_insurance_chrono_tab", "Chrono"),
           tab("ops_marine_insurance_all_tab",         "All"),
           tab("ops_marine_insurance_my_tab",          "My"),
           tab("ops_marine_insurance_draft_tab",       "Draft"),
@@ -288,16 +305,24 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
         ],
       },
       {
-        kind: "module", id: "ops_others", moduleId: "ops_others",
-        label: "Others", pageId: "ops-others",
-        containsModuleIds: OPS_BOOKING_DETAIL_TABS,
+        // NEU-020 DD-2: the Pricing appearance of Others is its OWN key family —
+        // no key is ever rendered in two rows. Same component, own door.
+        kind: "module", id: "pricing_others", moduleId: "pricing_others",
+        label: "Others", pageId: "pricing-others",
         tabs: [
-          tab("ops_others_all_tab",         "All"),
-          tab("ops_others_my_tab",          "My"),
-          tab("ops_others_draft_tab",       "Draft"),
-          tab("ops_others_in_progress_tab", "In Progress"),
-          tab("ops_others_completed_tab",   "Completed"),
-          tab("ops_others_cancelled_tab",   "Archived"),
+          tab("pricing_others_info_tab", "Booking Info"),
+          tab("pricing_others_billings_tab", "Billings"),
+          tab("pricing_others_invoices_tab", "Invoices"),
+          tab("pricing_others_collections_tab", "Collections"),
+          tab("pricing_others_expenses_tab", "Expenses"),
+          tab("pricing_others_comments_tab", "Comments"),
+          tab("pricing_others_chrono_tab", "Chrono"),
+          tab("pricing_others_all_tab", "All"),
+          tab("pricing_others_my_tab", "My"),
+          tab("pricing_others_draft_tab", "Draft"),
+          tab("pricing_others_in_progress_tab", "In Progress"),
+          tab("pricing_others_completed_tab", "Completed"),
+          tab("pricing_others_cancelled_tab", "Archived"),
         ],
       },
     ],
@@ -311,8 +336,14 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
       {
         kind: "module", id: "ops_forwarding", moduleId: "ops_forwarding",
         label: "Forwarding", pageId: "ops-forwarding",
-        containsModuleIds: OPS_BOOKING_DETAIL_TABS,
         tabs: [
+          tab("ops_forwarding_info_tab", "Booking Info"),
+          tab("ops_forwarding_billings_tab", "Billings"),
+          tab("ops_forwarding_invoices_tab", "Invoices"),
+          tab("ops_forwarding_collections_tab", "Collections"),
+          tab("ops_forwarding_expenses_tab", "Expenses"),
+          tab("ops_forwarding_comments_tab", "Comments"),
+          tab("ops_forwarding_chrono_tab", "Chrono"),
           tab("ops_forwarding_all_tab",         "All"),
           tab("ops_forwarding_my_tab",          "My"),
           tab("ops_forwarding_draft_tab",       "Draft"),
@@ -324,8 +355,14 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
       {
         kind: "module", id: "ops_brokerage", moduleId: "ops_brokerage",
         label: "Brokerage", pageId: "ops-brokerage",
-        containsModuleIds: OPS_BOOKING_DETAIL_TABS,
         tabs: [
+          tab("ops_brokerage_info_tab", "Booking Info"),
+          tab("ops_brokerage_billings_tab", "Billings"),
+          tab("ops_brokerage_invoices_tab", "Invoices"),
+          tab("ops_brokerage_collections_tab", "Collections"),
+          tab("ops_brokerage_expenses_tab", "Expenses"),
+          tab("ops_brokerage_comments_tab", "Comments"),
+          tab("ops_brokerage_chrono_tab", "Chrono"),
           tab("ops_brokerage_all_tab",         "All"),
           tab("ops_brokerage_my_tab",          "My"),
           tab("ops_brokerage_draft_tab",       "Draft"),
@@ -337,8 +374,14 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
       {
         kind: "module", id: "ops_trucking", moduleId: "ops_trucking",
         label: "Trucking", pageId: "ops-trucking",
-        containsModuleIds: OPS_BOOKING_DETAIL_TABS,
         tabs: [
+          tab("ops_trucking_info_tab", "Booking Info"),
+          tab("ops_trucking_billings_tab", "Billings"),
+          tab("ops_trucking_invoices_tab", "Invoices"),
+          tab("ops_trucking_collections_tab", "Collections"),
+          tab("ops_trucking_expenses_tab", "Expenses"),
+          tab("ops_trucking_comments_tab", "Comments"),
+          tab("ops_trucking_chrono_tab", "Chrono"),
           tab("ops_trucking_all_tab",         "All"),
           tab("ops_trucking_my_tab",          "My"),
           tab("ops_trucking_draft_tab",       "Draft"),
@@ -350,8 +393,14 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
       {
         kind: "module", id: "ops_others", moduleId: "ops_others",
         label: "Others", pageId: "ops-others",
-        containsModuleIds: OPS_BOOKING_DETAIL_TABS,
         tabs: [
+          tab("ops_others_info_tab", "Booking Info"),
+          tab("ops_others_billings_tab", "Billings"),
+          tab("ops_others_invoices_tab", "Invoices"),
+          tab("ops_others_collections_tab", "Collections"),
+          tab("ops_others_expenses_tab", "Expenses"),
+          tab("ops_others_comments_tab", "Comments"),
+          tab("ops_others_chrono_tab", "Chrono"),
           tab("ops_others_all_tab",         "All"),
           tab("ops_others_my_tab",          "My"),
           tab("ops_others_draft_tab",       "Draft"),
@@ -567,7 +616,16 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
           // the active Users screen tab model.
         ],
       },
-      { kind: "module", id: "exec_profiling", moduleId: "exec_profiling", label: "Profiling", pageId: "admin-profiling", tabs: [] },
+      {
+        kind: "module", id: "exec_profiling", moduleId: "exec_profiling",
+        label: "Profiling", pageId: "admin-profiling",
+        tabs: [
+          // NEU-019 WG-04 (D4): dedicated knob for org-wide company settings
+          // (letterhead/bank details printed on every invoice). Consumed by the
+          // PDF screens' "Save as company default" — edit is the only live action.
+          tab("company_settings", "Company Settings"),
+        ],
+      },
       { kind: "module", id: "exec_memos", moduleId: "exec_memos", label: "Memos", pageId: "homepage", tabs: [] },
     ],
   },
@@ -617,6 +675,9 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
     id: "personal",
     label: DEPT_LABEL.personal,
     modules: [
+      // NEU-019 WG-07 (D2): calendar gets real knobs; edit/delete are
+      // additionally ownership-scoped in useCalendarEvents (own events only).
+      { kind: "module", id: "calendar", moduleId: "calendar", label: "Calendar", pageId: "calendar", tabs: [] },
       {
         kind: "module", id: "my_evouchers", moduleId: "my_evouchers",
         label: "E-Vouchers", pageId: "my-evouchers",
@@ -690,10 +751,16 @@ export function getVisibleAccessMatrixDepartments(): Array<{
   dept: AccessDepartmentNode;
   modules: AccessModuleNode[];
 }> {
-  return ACCESS_SCHEMA.map(dept => ({
-    dept,
-    modules: getVisibleAccessMatrixModules(dept),
-  })).filter(entry => entry.modules.length > 0);
+  // NEU-020 2.9 (DD-8): HR isn't shipped to clients yet — hide its access-grid
+  // row in any deployed (production) build, mirroring the sidebar nav hide
+  // (NeuronSidebar: showHR = !import.meta.env.PROD). Visible in local dev only.
+  const hideHR = import.meta.env.PROD;
+  return ACCESS_SCHEMA
+    .filter(dept => !(hideHR && dept.id === "hr"))
+    .map(dept => ({
+      dept,
+      modules: getVisibleAccessMatrixModules(dept),
+    })).filter(entry => entry.modules.length > 0);
 }
 
 export function getAccessModuleByModuleId(
@@ -702,60 +769,14 @@ export function getAccessModuleByModuleId(
   return ACCESS_NODE_BY_MODULE_ID[moduleId];
 }
 
-// ─── Hidden-module grant derivation ─────────────────────────────────────────
+// ─── Hidden-module grant derivation — REMOVED (NEU-012 Contract #4) ──────────
 //
-// Hidden modules (visibleInAccessMatrix: false) like ops_bookings are never
-// shown in the permission editor, so admins can't toggle their grants
-// directly.  Their grants must be derived from the visible service modules
-// that "contain" their child tabs via containsModuleIds.
-//
-// Rule: hidden_module:action = OR(source1:action, source2:action, ...)
-
-interface HiddenModuleMapping {
-  hiddenModuleId: ModuleId;
-  sourceModuleIds: ModuleId[];
-}
-
-const HIDDEN_MODULE_MAPPINGS: HiddenModuleMapping[] = (() => {
-  const mappings: HiddenModuleMapping[] = [];
-  // Sources are matched across ALL departments, not just within the hidden
-  // module's own department. Booking-service modules now span Operations
-  // (Forwarding/Brokerage/Trucking) AND Pricing (Marine Insurance/Others, with
-  // Others shared in both), so a hidden module's contributing sources may live
-  // in a different department. This keeps `deriveHiddenModuleGrants` consistent
-  // with the DB backfill (migration 118), which ORs the service modules by name.
-  const allVisible = ACCESS_SCHEMA
-    .flatMap(d => d.modules)
-    .filter(m => m.visibleInAccessMatrix !== false);
-  for (const dept of ACCESS_SCHEMA) {
-    const hidden = dept.modules.filter(m => m.visibleInAccessMatrix === false);
-    for (const h of hidden) {
-      const tabIds = new Set(h.tabs.map(t => t.moduleId));
-      const sources = [...new Set(
-        allVisible
-          .filter(v => (v.containsModuleIds ?? []).some(id => tabIds.has(id)))
-          .map(v => v.moduleId),
-      )];
-      if (sources.length > 0) mappings.push({ hiddenModuleId: h.moduleId, sourceModuleIds: sources });
-    }
-  }
-  return mappings;
-})();
-
-const DERIVABLE_ACTIONS = ["view", "create", "edit", "approve", "delete", "export"];
-
-export function deriveHiddenModuleGrants(
-  grants: Record<string, boolean>,
-): Record<string, boolean> {
-  const result = { ...grants };
-  for (const { hiddenModuleId, sourceModuleIds } of HIDDEN_MODULE_MAPPINGS) {
-    for (const action of DERIVABLE_ACTIONS) {
-      const key = `${hiddenModuleId}:${action}`;
-      result[key] = sourceModuleIds.some(src => grants[`${src}:${action}`] === true);
-    }
-  }
-  return result;
-}
+// All three hidden umbrellas (ops_bookings #1, ops_projects #2,
+// inbox_entity_picker #3) are retired, so the derive-at-write mechanism
+// (deriveHiddenModuleGrants + HIDDEN_MODULE_MAPPINGS) became a no-op and is now
+// deleted. Cascade is UX-only: the editors persist explicit child grants via
+// resolveCascadedGrants / resolvePerUserOverride, and enforcement (DB resolver +
+// PermissionProvider) reads explicit grants only. Nothing derives hidden keys.
 
 // ─── Dept-scoped moduleId families ───────────────────────────────────────────
 //
@@ -767,8 +788,12 @@ export function deriveHiddenModuleGrants(
 
 export type ContactDept  = "bd" | "pricing";
 export type CustomerDept = "bd" | "pricing";
-export type ProjectDept  = "ops" | "accounting";
-export type ContractDept = "pricing" | "accounting";
+// NEU-020 2.5: the project/contract door is the ROUTE the user entered through
+// (/bd/* , /pricing/* , /accounting/* — and the legacy unprefixed route → ops),
+// never the user's own department. "ops" survives only as the legacy/deep-link
+// fallback; the live sidebar exposes bd / pricing / accounting.
+export type ProjectDept  = "bd" | "pricing" | "ops" | "accounting";
+export type ContractDept = "bd" | "pricing" | "accounting";
 
 export interface ContactModuleIds {
   root: ModuleId;
@@ -876,6 +901,36 @@ export const CUSTOMER_MODULE_IDS: Record<CustomerDept, CustomerModuleIds> = {
 };
 
 export const PROJECT_MODULE_IDS: Record<ProjectDept, ProjectModuleIds> = {
+  bd: {
+    root:        "bd_projects",
+    all:         "bd_projects_all_tab",
+    active:      "bd_projects_active_tab",
+    completed:   "bd_projects_completed_tab",
+    info:        "bd_projects_info_tab",
+    quotation:   "bd_projects_quotation_tab",
+    bookings:    "bd_projects_bookings_tab",
+    expenses:    "bd_projects_expenses_tab",
+    billings:    "bd_projects_billings_tab",
+    invoices:    "bd_projects_invoices_tab",
+    collections: "bd_projects_collections_tab",
+    attachments: "bd_projects_attachments_tab",
+    comments:    "bd_projects_comments_tab",
+  },
+  pricing: {
+    root:        "pricing_projects",
+    all:         "pricing_projects_all_tab",
+    active:      "pricing_projects_active_tab",
+    completed:   "pricing_projects_completed_tab",
+    info:        "pricing_projects_info_tab",
+    quotation:   "pricing_projects_quotation_tab",
+    bookings:    "pricing_projects_bookings_tab",
+    expenses:    "pricing_projects_expenses_tab",
+    billings:    "pricing_projects_billings_tab",
+    invoices:    "pricing_projects_invoices_tab",
+    collections: "pricing_projects_collections_tab",
+    attachments: "pricing_projects_attachments_tab",
+    comments:    "pricing_projects_comments_tab",
+  },
   ops: {
     root:        "ops_projects",
     all:         "ops_projects_all_tab",
@@ -909,6 +964,23 @@ export const PROJECT_MODULE_IDS: Record<ProjectDept, ProjectModuleIds> = {
 };
 
 export const CONTRACT_MODULE_IDS: Record<ContractDept, ContractModuleIds> = {
+  bd: {
+    root:               "bd_contracts",
+    all:                "bd_contracts_all_tab",
+    active:             "bd_contracts_active_tab",
+    expiring:           "bd_contracts_expiring_tab",
+    financialOverview:  "bd_contracts_financial_overview_tab",
+    quotation:          "bd_contracts_quotation_tab",
+    rateCard:           "bd_contracts_rate_card_tab",
+    bookings:           "bd_contracts_bookings_tab",
+    billings:           "bd_contracts_billings_tab",
+    invoices:           "bd_contracts_invoices_tab",
+    collections:        "bd_contracts_collections_tab",
+    expenses:           "bd_contracts_expenses_tab",
+    attachments:        "bd_contracts_attachments_tab",
+    comments:           "bd_contracts_comments_tab",
+    activity:           "bd_contracts_activity_tab",
+  },
   pricing: {
     root:               "pricing_contracts",
     all:                "pricing_contracts_all_tab",

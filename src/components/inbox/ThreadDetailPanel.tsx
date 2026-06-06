@@ -13,7 +13,7 @@ import { ComposeBox } from "./ComposeBox";
 import type { RecipientChip } from "./RecipientField";
 import { AssignModal } from "./AssignModal";
 import { TICKET_PRIORITY_TONES, TICKET_STATUS_TONES, TICKET_TYPE_TONES, ticketBadgeStyle } from "./ticketingTheme";
-import { executeResolutionAction } from "../../utils/workflowTickets";
+import { executeResolutionAction, canExecuteResolutionAction } from "../../utils/workflowTickets";
 import { usePermission } from "../../context/PermissionProvider";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -106,15 +106,42 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
   const deptParticipants = thread.participants.filter(
     (p) => p.participant_type === "department" && p.role === "to"
   );
-  const canAssign = can("inbox_queue_tab", "view") && deptParticipants.length > 0;
-  const canAdvanceStatus = isRecipient && !["done", "returned", "archived", "draft"].includes(thread.status);
-  const isApprovalPending = thread.type === "approval" && thread.approval_result === null && isRecipient;
+  // NEU-017: assigning mutates the ticket — gate by the write key the DB
+  // enforces (tickets UPDATE policy: participant OR inbox:edit), not by the
+  // queue tab's VIEW key. Queue-viewers without inbox:edit failed at RLS anyway.
+  // NEU-020 2.7 (DD-5): assign/reassign is a Queue power — "while in the Queue,
+  // they can edit queue tickets". (RLS still checks inbox:edit until Phase 4;
+  // every inbox_queue_tab:edit holder is seeded from inbox:edit so it passes.)
+  const canAssign = can("inbox_queue_tab", "edit") && deptParticipants.length > 0;
+  // WG-03: resolution actions write linked records via legacy keys outside the
+  // ModuleId union (acct_billings et al.) — same canKey pattern as NEU-017.
+  const canKey = can as unknown as (moduleId: string, action: string) => boolean;
+
+  /** Runs the ticket's resolution action only when the user holds the record
+   *  permission it writes with; otherwise the ticket completes and the skip is
+   *  surfaced (WG-03: no inbox→record privilege escalation). */
+  const runResolutionAction = async (): Promise<void> => {
+    if (!thread.resolution_action || !thread.linked_record_type || !thread.linked_record_id) return;
+    if (canExecuteResolutionAction(canKey, thread.resolution_action)) {
+      await executeResolutionAction(thread.resolution_action, thread.linked_record_type, thread.linked_record_id);
+      toast.success("Done — linked record updated");
+    } else {
+      toast.warning("Ticket completed — the linked record was left unchanged because you don't have permission to update it.");
+    }
+  };
+  // NEU-020 2.7 (DD-5): the old single inbox:edit splits five ways. Status
+  // advance / mark done / reopen is the Inbox-tab edit power; approvals get
+  // their own approve key; closing is a delete-class power. Identity (isRecipient
+  // / isSender) stays AND'd so each power is still scoped to real participants.
+  const canActOnInbox = can("inbox_inbox_tab", "edit");
+  const canAdvanceStatus = canActOnInbox && isRecipient && !["done", "returned", "archived", "draft"].includes(thread.status);
+  const isApprovalPending = thread.type === "approval" && thread.approval_result === null && isRecipient && can("inbox", "approve");
   const isDone = thread.status === "done";
   const isReturned = thread.status === "returned";
 
   // Close / dismiss (FYI = per-person dismiss, request/approval = shared archive)
   const isClosed = isClosedView || thread.status === "archived";
-  const canCloseTicket = !!onCloseTicket && (isRecipient || isSender || canAssign);
+  const canCloseTicket = !!onCloseTicket && can("inbox", "delete") && (isRecipient || isSender || canAssign);
 
   const handleCloseTicket = async () => {
     if (!onCloseTicket) return;
@@ -238,8 +265,7 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
       logStatusChange("ticket", thread.id, thread.subject ?? thread.id, thread.status, nextStatus, actor);
 
       if (nextStatus === "done" && thread.resolution_action && thread.linked_record_type && thread.linked_record_id) {
-        await executeResolutionAction(thread.resolution_action, thread.linked_record_type, thread.linked_record_id);
-        toast.success("Done — linked record updated");
+        await runResolutionAction();
       } else {
         toast.success(`Marked as ${STATUS_LABELS[nextStatus]}`);
       }
@@ -267,8 +293,7 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
       const actor = { id: user!.id, name: user!.name, department: user!.department };
       logStatusChange("ticket", thread.id, thread.subject ?? thread.id, thread.status, targetStatus, actor);
       if (targetStatus === "done" && thread.resolution_action && thread.linked_record_type && thread.linked_record_id) {
-        await executeResolutionAction(thread.resolution_action, thread.linked_record_type, thread.linked_record_id);
-        toast.success("Done — linked record updated");
+        await runResolutionAction();
       } else {
         toast.success(`Marked as ${STATUS_LABELS[targetStatus]}`);
       }
@@ -346,11 +371,15 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
         thread.linked_record_type &&
         thread.linked_record_id
       ) {
-        await executeResolutionAction(
-          thread.resolution_action,
-          thread.linked_record_type,
-          thread.linked_record_id
-        );
+        if (canExecuteResolutionAction(canKey, thread.resolution_action)) {
+          await executeResolutionAction(
+            thread.resolution_action,
+            thread.linked_record_type,
+            thread.linked_record_id
+          );
+        } else {
+          toast.warning("Approved — the linked record was left unchanged because you don't have permission to update it.");
+        }
       }
       toast.success(result === "accepted" ? "Request approved" : "Request declined");
       setShowReturnPanel(false);
@@ -364,7 +393,7 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
   };
 
   const handleReopen = async () => {
-    if (!isSender) return;
+    if (!isSender || !canActOnInbox) return; // WG-19
     setIsUpdatingStatus(true);
     const oldStatus = thread.status;
     await supabase
@@ -482,15 +511,15 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
           );
         })()}
 
-        {isSender && thread.status === "in_progress" && (
+        {isSender && canActOnInbox && thread.status === "in_progress" && (
           <ActionButton onClick={advanceStatus} disabled={isUpdatingStatus} variant="success" icon={<CheckCircle size={12} />} label="Mark Done" />
         )}
 
-        {isSender && (isDone || isReturned) && (
+        {isSender && canActOnInbox && (isDone || isReturned) && (
           <ActionButton onClick={handleReopen} disabled={isUpdatingStatus} variant="ghost" label="Reopen" />
         )}
 
-        {isClosed && onReopenTicket && (isRecipient || isSender || canAssign) && (
+        {isClosed && onReopenTicket && canActOnInbox && (isRecipient || isSender || canAssign) && (
           <ActionButton onClick={handleReopenTicket} disabled={isUpdatingStatus} variant="ghost" icon={<CornerUpLeft size={12} />} label="Reopen" />
         )}
 
@@ -679,8 +708,8 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
           )
         )}
 
-        {/* ── Reply pill ── */}
-        {!showCompose && !["done", "returned", "archived", "draft"].includes(thread.status) && (
+        {/* ── Reply pill (WG-19/D1: replying writes messages — inbox:create) ── */}
+        {!showCompose && can("inbox", "create") && !["done", "returned", "archived", "draft"].includes(thread.status) && (
           <div style={{ padding: "16px 24px 20px" }}>
             <button
               onClick={() => setShowCompose(true)}
@@ -728,7 +757,7 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
         )}
 
         {/* ── Closed / reopen footer ── */}
-        {(isDone || isReturned) && isSender && (
+        {(isDone || isReturned) && isSender && canActOnInbox && (
           <div style={{ textAlign: "center", padding: "12px 24px 20px" }}>
             <button
               onClick={handleReopen}

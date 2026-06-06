@@ -15,6 +15,8 @@ interface ExpensesTabProps {
   highlightId?: string | null;
   existingBillingItems?: { source_id?: string | null; [key: string]: any }[];
   onPendingCountChange?: (count: number) => void;
+  /** NEU-020 DD-1: per-service door key forwarded to UnifiedExpensesTab. */
+  permissionDoor?: string;
 }
 
 export function ExpensesTab({
@@ -26,6 +28,7 @@ export function ExpensesTab({
   highlightId,
   existingBillingItems = [],
   onPendingCountChange,
+  permissionDoor,
 }: ExpensesTabProps) {
   const queryClient = useQueryClient();
 
@@ -108,6 +111,7 @@ export function ExpensesTab({
         highlightId={highlightId}
         existingBillingItems={existingBillingItems}
         onPendingCountChange={onPendingCountChange}
+        permissionDoor={permissionDoor}
       />
     </div>
   );

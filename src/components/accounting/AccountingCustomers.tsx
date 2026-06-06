@@ -1,17 +1,15 @@
-import { useState, useRef, useEffect } from "react";
-import { Search, Plus, Building2, MoreHorizontal, Users as UsersIcon, Trash2, AlertTriangle } from "lucide-react";
-import { toast } from "../ui/toast-utils";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+// NEU-019 WG-11 (D3): this surface is READ-ONLY — customer management
+// (create/delete) belongs to BD. Ledger drill-down only.
+import { useState, useEffect } from "react";
+import { Search, Building2, Users as UsersIcon } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "../../lib/queryKeys";
 import { supabase } from "../../utils/supabase/client";
 import type { Customer, Industry, CustomerStatus } from "../../types/bd";
 import { CustomDropdown } from "../bd/CustomDropdown";
-import { AddCustomerPanel } from "../bd/AddCustomerPanel";
 import { CustomerLedgerDetail } from "./CustomerLedgerDetail";
 import { useCustomerProfileOptions } from "../../hooks/useCustomerProfileOptions";
 import { useUrlSelection } from "../../hooks/useUrlSelection";
-import { useUser } from "../../hooks/useUser";
-import { logDeletion } from "../../utils/activityLog";
 import { useRealtimeSync } from "../../hooks/useRealtimeSync";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -46,18 +44,12 @@ const formatDate = (dateString: string | null) => {
 // ────────────────────────────────────────────────────────────────────────────
 
 export function AccountingCustomers() {
-  const { user } = useUser();
-  const queryClient = useQueryClient();
   const [view, setView] = useState<"list" | "detail">("list");
   const [searchQuery, setSearchQuery] = useState("");
   const [industryFilter, setIndustryFilter] = useState<Industry | "All">("All");
   const [statusFilter, setStatusFilter] = useState<CustomerStatus | "All">("All");
   const [ownerFilter, setOwnerFilter] = useState<string>("All");
-  const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
-  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const [urlDetailId, setUrlDetailId] = useUrlSelection("detail");
 
   // ── Restore detail view from URL ────────────────────────────────────
@@ -152,34 +144,6 @@ export function AccountingCustomers() {
   const getOwnerName = (ownerId: string) =>
     users.find(u => u.id === ownerId)?.name ?? "—";
 
-  // ── Mutations ──────────────────────────────────────────────────────────
-  const handleDeleteCustomer = async (customerId: string, customerName: string) => {
-    const { error } = await supabase.from("customers").delete().eq("id", customerId);
-    if (error) {
-      toast.error(`Failed to delete: ${error.message}`);
-      return;
-    }
-    const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
-    logDeletion("customer", customerId, customerName, actor);
-    queryClient.invalidateQueries({ queryKey: queryKeys.customers.all() });
-    queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all() });
-    setOpenDropdownId(null);
-    setConfirmDeleteId(null);
-    toast.success("Customer deleted");
-  };
-
-  const handleSaveCustomer = async (customerData: Partial<Customer>) => {
-    const { error } = await supabase.from("customers").insert(customerData);
-    if (error) {
-      toast.error(`Failed to create: ${error.message}`);
-      return;
-    }
-    queryClient.invalidateQueries({ queryKey: queryKeys.customers.all() });
-    queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all() });
-    setIsAddCustomerOpen(false);
-    toast.success("Customer added");
-  };
-
   // ── Detail view ────────────────────────────────────────────────────────
   if (view === "detail" && selectedCustomer) {
     return (
@@ -203,16 +167,9 @@ export function AccountingCustomers() {
               Customers
             </h1>
             <p className="text-sm text-[var(--theme-text-muted)] mt-0.5">
-              Manage customer companies and prospects
+              Customer ledgers and balances — managed in Business Development
             </p>
           </div>
-          <button
-            onClick={() => setIsAddCustomerOpen(true)}
-            className="h-10 px-5 rounded-lg bg-[var(--theme-action-primary-bg)] text-white text-[13px] font-semibold flex items-center gap-2 cursor-pointer hover:opacity-90 transition-opacity border-none"
-          >
-            <Plus size={16} />
-            Add Customer
-          </button>
         </div>
 
         {/* Filters & Search */}
@@ -271,14 +228,13 @@ export function AccountingCustomers() {
           style={{ overflow: "visible" }}
         >
           {/* Header */}
-          <div className="grid grid-cols-[40px_minmax(200px,1fr)_minmax(120px,140px)_110px_80px_130px_40px] gap-3 px-6 py-3 border-b border-[var(--neuron-ui-divider)] bg-[var(--neuron-bg-page)] rounded-t-2xl overflow-hidden sticky top-0 z-10">
+          <div className="grid grid-cols-[40px_minmax(200px,1fr)_minmax(120px,140px)_110px_80px_130px] gap-3 px-6 py-3 border-b border-[var(--neuron-ui-divider)] bg-[var(--neuron-bg-page)] rounded-t-2xl overflow-hidden sticky top-0 z-10">
             <div />
             <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--neuron-ink-muted)]">Company</div>
             <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--neuron-ink-muted)]">Industry</div>
             <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--neuron-ink-muted)]">Status</div>
             <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--neuron-ink-muted)]">Contacts</div>
             <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--neuron-ink-muted)]">Last Activity</div>
-            <div />
           </div>
 
           {/* Body */}
@@ -299,17 +255,9 @@ export function AccountingCustomers() {
                   <p className="text-[13px] text-[var(--neuron-ink-muted)] mt-0.5">
                     {searchQuery || industryFilter !== "All" || statusFilter !== "All" || ownerFilter !== "All"
                       ? "Try adjusting your search or filter criteria"
-                      : "Add your first customer to get started"}
+                      : "Customers added in Business Development appear here"}
                   </p>
                 </div>
-                {!searchQuery && industryFilter === "All" && statusFilter === "All" && ownerFilter === "All" && (
-                  <button
-                    onClick={() => setIsAddCustomerOpen(true)}
-                    className="mt-1 h-9 px-4 rounded-lg bg-[var(--theme-action-primary-bg)] text-white text-[13px] font-medium flex items-center gap-2 border-none cursor-pointer hover:opacity-90 transition-opacity"
-                  >
-                    <Plus size={14} /> Add Customer
-                  </button>
-                )}
               </div>
             ) : (
               customers.map((customer, idx) => {
@@ -320,15 +268,13 @@ export function AccountingCustomers() {
                 const contacts  = getContactCount(customer.id);
                 const lastAct   = getLastActivityDate(customer.id);
                 const isLast    = idx === customers.length - 1;
-                const isOpen    = openDropdownId === customer.id;
-                const isConfirming = confirmDeleteId === customer.id;
 
                 return (
                   <div
                     key={customer.id}
                     role="row"
                     tabIndex={0}
-                    className={`grid grid-cols-[40px_minmax(200px,1fr)_minmax(120px,140px)_110px_80px_130px_40px] gap-3 px-6 py-4 items-center hover:bg-[var(--theme-bg-surface-subtle)] transition-colors cursor-pointer group focus:outline-none focus:bg-[var(--theme-bg-surface-subtle)] ${isLast ? "rounded-b-2xl" : ""}`}
+                    className={`grid grid-cols-[40px_minmax(200px,1fr)_minmax(120px,140px)_110px_80px_130px] gap-3 px-6 py-4 items-center hover:bg-[var(--theme-bg-surface-subtle)] transition-colors cursor-pointer group focus:outline-none focus:bg-[var(--theme-bg-surface-subtle)] ${isLast ? "rounded-b-2xl" : ""}`}
                     onClick={() => { setSelectedCustomer(customer); setView("detail"); setUrlDetailId(customer.id); }}
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedCustomer(customer); setView("detail"); setUrlDetailId(customer.id); }}}
                   >
@@ -374,73 +320,6 @@ export function AccountingCustomers() {
                     <div className="text-[12px] text-[var(--neuron-ink-muted)] truncate">
                       {lastAct ? formatDate(lastAct) : "No activity"}
                     </div>
-
-                    {/* Row actions */}
-                    <div
-                      className="relative flex justify-end"
-                      ref={isOpen ? dropdownRef : undefined}
-                    >
-                      <button
-                        aria-label="Customer actions"
-                        aria-haspopup="menu"
-                        aria-expanded={isOpen}
-                        className="p-1 rounded-md text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)] hover:bg-[var(--neuron-ui-border)] opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 focus:outline-none"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setOpenDropdownId(isOpen ? null : customer.id);
-                          setConfirmDeleteId(null);
-                        }}
-                      >
-                        <MoreHorizontal size={16} />
-                      </button>
-
-                      {isOpen && (
-                        <div
-                          className="absolute right-0 top-full mt-1 w-52 bg-[var(--theme-bg-surface)] rounded-xl border border-[var(--neuron-ui-border)] py-1.5 z-30"
-                          style={{ boxShadow: "0 4px 16px rgba(0,0,0,0.10)" }}
-                          onClick={(e) => e.stopPropagation()}
-                          role="menu"
-                        >
-                          {isConfirming ? (
-                            <div className="px-4 py-3">
-                              <div className="flex items-start gap-2 mb-3">
-                                <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" style={{ color: "var(--theme-status-danger-fg)" }} />
-                                <p className="text-[12px] text-[var(--neuron-ink-primary)] leading-snug">
-                                  Delete <span className="font-semibold">{name}</span>? This cannot be undone.
-                                </p>
-                              </div>
-                              <div className="flex gap-2">
-                                <button
-                                  className="flex-1 h-7 rounded-md text-[12px] font-medium border border-[var(--neuron-ui-border)] text-[var(--neuron-ink-secondary)] bg-transparent cursor-pointer hover:bg-[var(--theme-bg-page)] transition-colors"
-                                  onClick={() => { setConfirmDeleteId(null); setOpenDropdownId(null); }}
-                                >
-                                  Cancel
-                                </button>
-                                <button
-                                  className="flex-1 h-7 rounded-md text-[12px] font-semibold text-white cursor-pointer border-none transition-opacity hover:opacity-90"
-                                  style={{ backgroundColor: "var(--theme-status-danger-fg)" }}
-                                  onClick={() => handleDeleteCustomer(customer.id, name)}
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <button
-                              role="menuitem"
-                              className="w-full px-4 py-2 text-left text-[13px] flex items-center gap-2 transition-colors cursor-pointer"
-                              style={{ color: "var(--theme-status-danger-fg)" }}
-                              onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--theme-status-danger-bg)")}
-                              onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
-                              onClick={() => setConfirmDeleteId(customer.id)}
-                            >
-                              <Trash2 size={14} />
-                              Delete Customer
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
                   </div>
                 );
               })
@@ -448,12 +327,6 @@ export function AccountingCustomers() {
           </div>
         </div>
       </div>
-
-      <AddCustomerPanel
-        isOpen={isAddCustomerOpen}
-        onClose={() => setIsAddCustomerOpen(false)}
-        onSave={handleSaveCustomer}
-      />
     </div>
   );
 }

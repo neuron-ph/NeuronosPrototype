@@ -111,7 +111,10 @@ export function OperationsTeamsSection({
   const { can } = usePermission();
   const [expandedServiceType, setExpandedServiceType] = useState<string | null>(null);
 
-  const canEditServiceConfig = can("admin_teams_tab", "edit");
+  // NEU-020 2.10b: service + assignment-role config writes are governed by
+  // exec_profiling:edit at the DB (RLS, migration 166) — match it here so the
+  // UI affordance and the database agree (was admin_teams_tab:edit → desync).
+  const canEditServiceConfig = can("exec_profiling", "edit");
 
   const { data: services = [], isLoading: servicesLoading } = useQuery<OperationalService[]>({
     queryKey: queryKeys.assignments.services(),
@@ -272,6 +275,12 @@ function OperationsServiceRow({
   const [deletingTeamId, setDeletingTeamId] = useState<string | null>(null);
   const [confirmDeleteTeamId, setConfirmDeleteTeamId] = useState<string | null>(null);
 
+  // NEU-019 WG-10: team CRUD ran ungated next to the properly gated service
+  // config in this same accordion — now action-fidelity on the Teams tab knobs.
+  const { can } = usePermission();
+  const canCreateTeams = can("admin_teams_tab", "create");
+  const canDeleteTeams = can("admin_teams_tab", "delete");
+
   useEffect(() => {
     setPendingManagerId(service.default_manager_id ?? "");
   }, [service.default_manager_id]);
@@ -384,6 +393,7 @@ function OperationsServiceRow({
   };
 
   const handleDeleteTeamConfirmed = async (teamId: string, teamName: string) => {
+    if (!canDeleteTeams) return; // WG-10 backstop
     setConfirmDeleteTeamId(null);
     setDeletingTeamId(teamId);
     try {
@@ -638,6 +648,7 @@ function OperationsServiceRow({
                   <span style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                     Teams
                   </span>
+                  {canCreateTeams && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -649,6 +660,7 @@ function OperationsServiceRow({
                     <Plus size={12} />
                     New team
                   </Button>
+                  )}
                 </div>
 
                 {creatingTeamPool && (
@@ -738,6 +750,7 @@ function OperationsServiceRow({
                                 </span>
                               </div>
                               <div style={{ display: "flex", gap: 4, flexShrink: 0 }} onClick={(event) => event.stopPropagation()}>
+                                {canEditServiceConfig && (
                                 <button
                                   onClick={() => {
                                     setEditingTeamId(team.id);
@@ -751,7 +764,8 @@ function OperationsServiceRow({
                                 >
                                   <Edit size={13} />
                                 </button>
-                                {confirmDeleteTeamId === team.id ? (
+                                )}
+                                {!canDeleteTeams ? null : confirmDeleteTeamId === team.id ? (
                                   <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                                     <button
                                       onClick={() => handleDeleteTeamConfirmed(team.id, team.name)}

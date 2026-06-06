@@ -28,6 +28,8 @@ import { generateBookingNumber, peekNextBookingNumber } from "../../utils/bookin
 import { getSelectedCustomer } from "../../utils/bookings/selectedCustomer";
 import { useCustomerAccountOwnerAutofill } from "./shared/useCustomerAccountOwnerAutofill";
 import { saveBookingDraft } from "./shared/saveBookingDraft";
+import { usePermission } from "../../context/PermissionProvider";
+import { OTHERS_DOOR_IDS, type OthersDoor } from "./OthersBookings";
 
 interface CreateOthersBookingPanelProps {
   isOpen: boolean;
@@ -41,6 +43,7 @@ interface CreateOthersBookingPanelProps {
   currentUser?: { id?: string; name?: string; department?: string } | null;
   draftBookingId?: string;
   draftData?: Record<string, unknown>;
+  door?: OthersDoor;
 }
 
 export function CreateOthersBookingPanel({
@@ -54,7 +57,10 @@ export function CreateOthersBookingPanel({
   currentUser,
   draftBookingId,
   draftData,
+  door = "ops",
 }: CreateOthersBookingPanelProps) {
+  const { can } = usePermission(); // NEU-019 WG-32
+  const ids = OTHERS_DOOR_IDS[door]; // NEU-020 DD-2
   const [loading, setLoading] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(draftBookingId ?? null);
@@ -102,6 +108,7 @@ export function CreateOthersBookingPanel({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!can(ids.root, "create") && !can(ids.root, "edit")) return; // NEU-019 WG-32 backstop
 
     if (!detectedContractId) {
       toast.error("A contract is required to create a booking. Save as draft if no contract is available.");
@@ -201,6 +208,7 @@ export function CreateOthersBookingPanel({
   };
 
   const handleSaveDraft = async () => {
+    if (!can(ids.root, "create") && !can(ids.root, "edit")) return; // NEU-019 WG-32 backstop
     setSavingDraft(true);
     try {
       const result = await saveBookingDraft(formState, "Others", {

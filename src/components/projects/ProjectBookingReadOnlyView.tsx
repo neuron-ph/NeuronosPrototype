@@ -11,6 +11,7 @@ import { toast } from "../ui/toast-utils";
 import { UnifiedBillingsTab } from "../shared/billings/UnifiedBillingsTab";
 import { BookingCommentsTab } from "../shared/BookingCommentsTab";
 import { usePermission } from "../../context/PermissionProvider";
+import { opsModuleForService } from "../../utils/bookings/opsModuleForService";
 
 interface ProjectBookingReadOnlyViewProps {
   bookingId: string;
@@ -39,7 +40,17 @@ export function ProjectBookingReadOnlyView({
   const [activeTab, setActiveTab] = useState<DetailTab>("booking-info");
   const { can } = usePermission();
 
-  const canCancelOrDelete = can("ops_bookings", "delete");
+  // NEU-019 WG-21: gate on this booking's own ops module, not any cross-module delete grant
+  const serviceLabelByType: Record<string, string> = {
+    "forwarding": "Forwarding",
+    "brokerage": "Brokerage",
+    "trucking": "Trucking",
+    "marine-insurance": "Marine Insurance",
+    "others": "Others",
+  };
+  const opsModule = opsModuleForService(serviceLabelByType[bookingType] || "Others");
+  const canCancelOrDelete = can(opsModule, "edit") || can(opsModule, "delete");
+  const canViewCommentsTab = can("ops_bookings_comments_tab", "view"); // NEU-019 WG-15
 
   const { data: booking = null, isFetching: isLoading } = useQuery({
     queryKey: [...queryKeys.bookings.detail(bookingId), bookingType],
@@ -313,23 +324,25 @@ export function ProjectBookingReadOnlyView({
               >
                 Expenses
               </button>
-              <button
-                onClick={() => setActiveTab("comments")}
-                style={{
-                  padding: "14px 0",
-                  background: "none",
-                  border: "none",
-                  borderBottom: activeTab === "comments" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
-                  color: activeTab === "comments" ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)",
-                  fontSize: "13px",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  transition: "all 0.2s ease",
-                  marginBottom: "-1px"
-                }}
-              >
-                Comments
-              </button>
+              {canViewCommentsTab && (
+                <button
+                  onClick={() => setActiveTab("comments")}
+                  style={{
+                    padding: "14px 0",
+                    background: "none",
+                    border: "none",
+                    borderBottom: activeTab === "comments" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
+                    color: activeTab === "comments" ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                    marginBottom: "-1px"
+                  }}
+                >
+                  Comments
+                </button>
+              )}
             </div>
 
             {/* Content */}
@@ -362,7 +375,7 @@ export function ProjectBookingReadOnlyView({
                   readOnly={true}
                 />
               )}
-              {activeTab === "comments" && (
+              {activeTab === "comments" && canViewCommentsTab && (
                 <BookingCommentsTab
                   bookingId={bookingId}
                   currentUserId={currentUser?.email || "unknown"}

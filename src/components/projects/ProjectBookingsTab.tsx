@@ -8,8 +8,9 @@ import { BookingsTable } from "../shared/BookingsTable";
 import { getServiceIcon } from "../../utils/quotation-helpers";
 import type { Project } from "../../types/pricing";
 import { ProjectBookingReadOnlyView } from "./ProjectBookingReadOnlyView";
-import { canPerformBookingAction } from "../../utils/permissions";
+import { usePermission } from "../../context/PermissionProvider";
 import { BookingCancelDeletePanel } from "../operations/shared/BookingCancelDeletePanel";
+import { opsModuleForService } from "../../utils/bookings/opsModuleForService";
 import type { ExecutionStatus } from "../../types/operations";
 
 interface ProjectBookingsTabProps {
@@ -21,93 +22,57 @@ interface ProjectBookingsTabProps {
     department: string;
   } | null;
   selectedBookingId?: string | null;
+  /** NEU-020 2.10b: the project Bookings tab's OWN door key
+   *  (PROJECT_MODULE_IDS[door].bookings) — so Create Booking obeys the cell of
+   *  the door the user entered through, not a hardcoded ops_projects key. */
+  permissionDoor?: string;
 }
 
-export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: ProjectBookingsTabProps) {
+export function ProjectBookingsTab({ project, currentUser, selectedBookingId, permissionDoor = "ops_projects_bookings_tab" }: ProjectBookingsTabProps) {
   const queryClient = useQueryClient();
+  const { can } = usePermission();
+  const canKey = can as unknown as (moduleId: string, action: string) => boolean;
+  // NEU-020 2.10b: creating a booking FROM a project gates on THIS door's
+  // Bookings-tab Create cell (bd/pricing/ops/acct), not a hardcoded ops key.
+  const canCreateBooking = canKey(permissionDoor, "create");
   const [selectedBooking, setSelectedBooking] = useState<{
     bookingId: string;
     bookingType: string;
     bookingLabel?: string;
     bookingStatus?: ExecutionStatus;
+    serviceType?: string; // NEU-019 WG-21: raw service label for per-service grants
   } | null>(null);
   const [cancelPanelOpen, setCancelPanelOpen] = useState(false);
-  const [hasCleanedUp, setHasCleanedUp] = useState(false);
   const [createBookingService, setCreateBookingService] = useState<any>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [showServiceDropdown, setShowServiceDropdown] = useState(false);
 
   const servicesMetadata = project.services_metadata || [];
 
-  const bookingsQueryKey = ["project_bookings", project.id, hasCleanedUp, refreshTrigger];
+  const bookingsQueryKey = ["project_bookings", project.id, refreshTrigger];
 
   const { data: verifiedBookings = [], isLoading: isVerifying } = useQuery({
     queryKey: bookingsQueryKey,
     queryFn: async () => {
-      // Always fetch live linked_bookings from DB (not from stale prop)
-      const { data: projectData } = await supabase
-        .from('projects')
-        .select('linked_bookings')
-        .eq('id', project.id)
-        .maybeSingle();
+      // Single source of truth: bookings linked via the bookings.project_id
+      // column (NEU-013). No more projects.linked_bookings JSONB array.
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('id, status, service_type, booking_number, name')
+        .eq('project_id', project.id);
 
-      const liveLinkedBookings: any[] = projectData?.linked_bookings || [];
-      const verified: any[] = [];
-
-      for (const booking of liveLinkedBookings) {
-        try {
-          const { data: bookingData } = await supabase
-            .from('bookings')
-            .select('id, status, service_type, booking_number, name')
-            .eq('id', booking.bookingId)
-            .maybeSingle();
-
-          if (bookingData) {
-            verified.push({
-              ...booking,
-              status: bookingData.status || booking.status,
-              bookingNumber: bookingData.booking_number || booking.bookingNumber,
-              name: bookingData.name ?? undefined,
-            });
-          } else {
-            console.warn(`Booking ${booking.bookingId} not found in bookings table`);
-          }
-        } catch (error) {
-          console.error(`Error verifying booking ${booking.bookingId}:`, error);
-        }
+      if (error) {
+        console.error('[ProjectBookingsTab] Failed to fetch project bookings:', error);
+        return [];
       }
 
-      // Use liveLinkedBookings for orphan check
-      const linkedBookings = liveLinkedBookings;
-
-      // If some bookings were removed, clean up the project automatically
-      if (verified.length !== linkedBookings.length && !hasCleanedUp) {
-        const orphanedCount = linkedBookings.length - verified.length;
-        console.warn(
-          `Found ${orphanedCount} orphaned booking reference(s) in project ${project.project_number}. ` +
-          `Only ${verified.length} of ${linkedBookings.length} linked bookings actually exist.`
-        );
-
-        try {
-          console.log(`Automatically cleaning up orphaned bookings from project ${project.project_number}...`);
-          const { error: cleanupError } = await supabase.from('projects').update({
-            linked_bookings: verified,
-            updated_at: new Date().toISOString(),
-          }).eq('id', project.id);
-
-          if (!cleanupError) {
-            console.log(`Cleanup completed: removed ${orphanedCount} orphaned reference(s)`);
-            setHasCleanedUp(true);
-            return [];
-          } else {
-            console.error('Failed to clean up orphaned bookings:', cleanupError?.message);
-          }
-        } catch (error) {
-          console.error('Error during automatic cleanup:', error);
-        }
-      }
-
-      return verified;
+      return (data ?? []).map((b) => ({
+        bookingId: b.id,
+        bookingNumber: b.booking_number,
+        serviceType: b.service_type,
+        status: b.status,
+        name: b.name ?? undefined,
+      }));
     },
     staleTime: 30_000,
   });
@@ -129,12 +94,13 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
     if (selectedBookingId && !selectedBooking && verifiedBookings.length > 0) {
       const booking = verifiedBookings.find((b: any) => b.bookingId === selectedBookingId);
       if (booking) {
-        const type = booking.bookingType || booking.serviceType || booking.service || "others";
+        const type = booking.serviceType || "others";
         setSelectedBooking({
           bookingId: selectedBookingId,
           bookingType: type.toLowerCase().replace(' ', '-'),
           bookingLabel: booking.name || booking.bookingNumber || selectedBookingId,
           bookingStatus: booking.status as ExecutionStatus,
+          serviceType: booking.serviceType, // NEU-019 WG-21
         });
       }
     }
@@ -180,7 +146,7 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
           </div>
 
           {/* Create Booking dropdown — only when services exist AND user can create bookings */}
-          {servicesMetadata.length > 0 && canPerformBookingAction("create_booking", (currentUser?.department ?? "") as any) && (
+          {servicesMetadata.length > 0 && canCreateBooking && (
             <div style={{ position: "relative", flexShrink: 0 }}>
               {servicesMetadata.length === 1 ? (
                 <button
@@ -319,6 +285,7 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
               bookingType,
               bookingLabel: b?.name || b?.bookingNumber || bookingId,
               bookingStatus: b?.status as ExecutionStatus,
+              serviceType: b?.serviceType, // NEU-019 WG-21
             });
           }}
           emptyState={
@@ -331,7 +298,7 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
                 <p style={{ fontSize: "13px", color: "var(--theme-text-muted)", margin: "0 0 16px" }}>
                   Create bookings to start tracking operational execution for this project.
                 </p>
-                {canPerformBookingAction("create_booking", (currentUser?.department ?? "") as any) && (
+                {canCreateBooking && (
                   <button
                     onClick={() => setCreateBookingService(servicesMetadata[0])}
                     style={{
@@ -391,6 +358,8 @@ export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: 
           bookingLabel={selectedBooking.bookingLabel || selectedBooking.bookingId}
           currentStatus={selectedBooking.bookingStatus || "Draft"}
           currentUser={currentUser}
+          allowCancel={can(opsModuleForService(selectedBooking.serviceType || ""), "edit")} // NEU-019 WG-21
+          allowDelete={can(opsModuleForService(selectedBooking.serviceType || ""), "delete")} // NEU-019 WG-21
           onSuccess={(action) => {
             setCancelPanelOpen(false);
             setSelectedBooking(null);

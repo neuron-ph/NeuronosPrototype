@@ -9,6 +9,7 @@ import { Trash2 } from "lucide-react@0.487.0";
 import { toast } from "sonner@2.0.3";
 import { useUsers } from "../../../hooks/useUsers";
 import { useUser } from "../../../hooks/useUser";
+import { usePermission } from "../../../context/PermissionProvider";
 import {
   useCreateCalendarEvent,
   useUpdateCalendarEvent,
@@ -89,6 +90,13 @@ export function EventSheet({
 }: EventSheetProps) {
   const { user } = useUser();
   const { users: allUsers } = useUsers();
+  const { can } = usePermission();
+  // WG-07: the sheet only opens in edit mode for own events (isReadOnly flag),
+  // so the delete knob is the remaining check here.
+  const canDeleteEvents = can("calendar", "delete");
+  // NEU-020 2.10c (#11): saving edits to an existing event obeys the Calendar
+  // Edit cell — own-ness alone is no longer enough (matches DD-5 own-message edit).
+  const canEditEvents = can("calendar", "edit");
   const createMutation = useCreateCalendarEvent();
   const updateMutation = useUpdateCalendarEvent();
   const deleteMutation = useDeleteCalendarEvent();
@@ -183,6 +191,10 @@ export function EventSheet({
 
     try {
       if (isEditing && editEvent) {
+        if (!canEditEvents) {
+          toast.error("You don't have permission to edit calendar events.");
+          return;
+        }
         await updateMutation.mutateAsync({ id: editEvent.id, updates: formData });
         toast.success("Event updated");
       } else {
@@ -482,7 +494,7 @@ export function EventSheet({
           style={{ borderTop: "1px solid var(--neuron-ui-border)" }}
         >
           <div>
-            {isEditing && (
+            {isEditing && canDeleteEvents && (
               <button
                 type="button"
                 onClick={handleDelete}

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { usePermission } from "../../context/PermissionProvider";
 import { Phone, Mail, Send, Users, MessageSquare, MessageCircle, Linkedin, FileText, RefreshCw, Plus, Search, Calendar } from "lucide-react";
 import { supabase } from '../../utils/supabase/client';
 import { toast } from "../ui/toast-utils";
@@ -15,6 +16,7 @@ interface ActivitiesListProps {
 }
 
 export function ActivitiesList({ onViewActivity }: ActivitiesListProps) {
+  const { can } = usePermission();
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<ActivityType | "All">("All");
   const [dateRangeFilter, setDateRangeFilter] = useState<"Today" | "This Week" | "This Month" | "All Time">("All Time");
@@ -197,7 +199,7 @@ export function ActivitiesList({ onViewActivity }: ActivitiesListProps) {
               Historical record of completed tasks and logged interactions
             </p>
           </div>
-          <button
+          {can("bd_activities", "create") && <button
             style={{
               height: "48px",
               padding: "0 24px",
@@ -222,7 +224,7 @@ export function ActivitiesList({ onViewActivity }: ActivitiesListProps) {
           >
             <Plus size={20} />
             Add Activity
-          </button>
+          </button>}
         </div>
 
         {/* Search and Filters */}

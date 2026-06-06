@@ -1,13 +1,13 @@
 import { useState, useMemo } from "react";
-import { Check, ChevronDown, ChevronRight, ChevronsDown, ChevronsUp, EyeOff, Search, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, ChevronsDown, ChevronsUp, Search, X } from "lucide-react";
 import {
   PERM_MODULES, PERM_ACTIONS,
   type ModuleId, type ActionId,
 } from "../permissionsConfig";
 import { getVisibleAccessMatrixDepartments } from "../../../config/access/accessSchema";
+import { isActionApplicable, isGrantKeyApplicable } from "../../../config/access/actionApplicability";
 import type { ModuleGrants } from "./accessProfileTypes";
 import { resolveCascadedGrants } from "./accessGrantUtils";
-import { BLOCK_HIGHER_RANK_VISIBILITY_GRANT } from "../../../lib/rbacGrantKeys";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -198,52 +198,6 @@ function PermToggle({
         flexShrink: 0,
       }} />
     </div>
-  );
-}
-
-function RbacRuleSwitch({
-  checked,
-  onChange,
-  disabled,
-}: {
-  checked: boolean;
-  onChange: (next: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      aria-pressed={checked}
-      aria-label="Block higher-rank visibility"
-      style={{
-        flexShrink: 0,
-        width: 44,
-        height: 24,
-        borderRadius: 12,
-        border: "none",
-        backgroundColor: checked ? "var(--neuron-action-primary)" : "var(--neuron-ui-border)",
-        cursor: disabled ? "not-allowed" : "pointer",
-        position: "relative",
-        transition: "background-color 0.18s cubic-bezier(0.16,1,0.3,1)",
-        opacity: disabled ? 0.55 : 1,
-      }}
-    >
-      <span
-        style={{
-          position: "absolute",
-          top: 2,
-          left: checked ? 22 : 2,
-          width: 20,
-          height: 20,
-          borderRadius: "50%",
-          backgroundColor: "#fff",
-          transition: "left 0.18s cubic-bezier(0.16,1,0.3,1)",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-        }}
-      />
-    </button>
   );
 }
 
@@ -499,7 +453,7 @@ function GroupAccordion({
               backgroundColor: "color-mix(in oklch, var(--neuron-action-primary) 12%, transparent)",
               color: "var(--neuron-action-primary)",
             }}>
-              {overrideCount} {overrideCount === 1 ? "override" : "overrides"}
+              {overrideCount} {overrideCount === 1 ? "custom change" : "custom changes"}
             </span>
           )}
           {searching && filteredSegments.length > 0 && (
@@ -605,7 +559,16 @@ function GroupAccordion({
               const parentHighlighted = searching && matchedIds.has(seg.parent.id);
               // Hide shared "contained" children (e.g. booking-detail tabs) when
               // the parent module isn't granted — kills the cross-service "trail".
-              const parentGranted = PERM_ACTIONS.some(a => grants[`${seg.parent.id}:${a}`] === true);
+              // Gate on the EFFECTIVE grant (override layer OR inherited baseline),
+              // mirroring how each checkbox computes its checked state below — else
+              // an all-borrowed host (Projects/Contracts, whose children are ALL
+              // contained) whose grant lives in the assigned profile, not the
+              // per-user override, would expand to zero rows.
+              const parentGranted = PERM_ACTIONS.some(a => {
+                const k = `${seg.parent.id}:${a}`;
+                if (k in grants) return grants[k] === true;
+                return showInheritedBaseline ? baselineGrants[k] === true : false;
+              });
               const baseChildren = searching ? seg.children.filter(c => matchedIds.has(c.id)) : seg.children;
               const visibleChildren = parentGranted ? baseChildren : baseChildren.filter(c => !c.contained);
 
@@ -728,7 +691,6 @@ export function PermissionGrantEditor({
 }: PermissionGrantEditorProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeActionFilter, setActiveActionFilter] = useState<ActionId | null>(null);
-  const blockHigherRankVisibility = grants[BLOCK_HIGHER_RANK_VISIBILITY_GRANT] === true;
   const resolvedGrants = useMemo(() => resolveCascadedGrants(grants, PERM_MODULES), [grants]);
   const resolvedBaselineGrants = useMemo(
     () => resolveCascadedGrants(baselineGrants, PERM_MODULES),
@@ -738,6 +700,25 @@ export function PermissionGrantEditor({
     const map = new Map<string, string>();
     for (const mod of PERM_MODULES) {
       if (mod.parentId) map.set(mod.id, mod.parentId);
+    }
+    return map;
+  }, []);
+
+  // Parent → its child rows (own tabs via parentId + borrowed/contained tabs).
+  // Used to make a parent checkbox a true bulk-fill (Model B): one click sets the
+  // parent AND every child explicitly for that action.
+  const childrenByModuleId = useMemo(() => {
+    const map = new Map<string, ModuleId[]>();
+    const add = (parent: string, child: ModuleId) => {
+      const arr = map.get(parent) ?? [];
+      if (!arr.includes(child)) arr.push(child);
+      map.set(parent, arr);
+    };
+    for (const mod of PERM_MODULES) {
+      if (mod.parentId) add(mod.parentId, mod.id);
+    }
+    for (const mod of PERM_MODULES) {
+      for (const containedId of mod.containsModuleIds ?? []) add(mod.id, containedId);
     }
     return map;
   }, []);
@@ -779,6 +760,25 @@ export function PermissionGrantEditor({
 
   const handleToggle = (moduleId: ModuleId, action: ActionId, next: boolean, cascadeParentId?: ModuleId) => {
     if (disabled) return;
+
+    // Model B (NEU-012 Contract #4): a parent-row checkbox is a bulk-fill /
+    // select-all for its column. One click force-sets the parent AND every child
+    // explicitly to `next` — so re-clicking a parent re-fills children you'd
+    // manually flipped (the child cell reads its explicit value, no cascade).
+    // Child rows fall through to the single-cell logic below.
+    const childIds = childrenByModuleId.get(moduleId);
+    if (childIds && childIds.length > 0) {
+      const bulk = { ...grants };
+      bulk[`${moduleId}:${action}`] = next;
+      // Skip children whose cell is an inert "—" — bulk-fill must never
+      // fabricate grants on keys nothing consumes.
+      for (const childId of childIds) {
+        if (isActionApplicable(childId, action)) bulk[`${childId}:${action}`] = next;
+      }
+      onChange(bulk, { manual: true });
+      return;
+    }
+
     const key = `${moduleId}:${action}`;
     const newGrants = { ...grants };
     const parentId = cascadeParentId ?? parentByModuleId.get(moduleId);
@@ -816,17 +816,6 @@ export function PermissionGrantEditor({
       }
     }
 
-    onChange(newGrants, { manual: true });
-  };
-
-  const handleHigherRankRuleChange = (next: boolean) => {
-    if (disabled) return;
-    const newGrants = { ...grants };
-    if (next) {
-      newGrants[BLOCK_HIGHER_RANK_VISIBILITY_GRANT] = true;
-    } else {
-      delete newGrants[BLOCK_HIGHER_RANK_VISIBILITY_GRANT];
-    }
     onChange(newGrants, { manual: true });
   };
 
@@ -886,7 +875,9 @@ export function PermissionGrantEditor({
         </span>
         {PERM_ACTIONS.map(action => {
           const isActive = activeActionFilter === action;
-          const count = Object.keys(grants).filter(k => k.endsWith(`:${action}`)).length;
+          // Applicability filter keeps legacy stored keys on dead knobs (never
+          // rendered, never read) from inflating the chip counts.
+          const count = Object.keys(grants).filter(k => k.endsWith(`:${action}`) && isGrantKeyApplicable(k)).length;
           return (
             <button
               key={action}
@@ -929,23 +920,6 @@ export function PermissionGrantEditor({
             <X size={10} /> Clear
           </button>
         )}
-      </div>
-
-      {/* Block higher-rank visibility — compact row */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "7px 12px", marginBottom: 10, borderRadius: 8,
-        border: "1px solid var(--neuron-ui-border)",
-        backgroundColor: "var(--neuron-bg-surface-subtle)", gap: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-          <EyeOff size={13} style={{ color: "var(--neuron-ink-muted)", flexShrink: 0 }} />
-          <span style={{ fontSize: 12, fontWeight: 500, color: "var(--neuron-ink-muted)", whiteSpace: "nowrap" }}>
-            Block higher-rank visibility
-          </span>
-          <span style={{ fontSize: 11, color: "var(--neuron-ink-muted)", opacity: 0.6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
-            — hide records owned by higher-rank users unless directly assigned
-          </span>
-        </div>
-        <RbacRuleSwitch checked={blockHigherRankVisibility} onChange={handleHigherRankRuleChange} disabled={disabled} />
       </div>
 
       {/* Column header — sticky to keep action labels visible while scrolling the matrix */}

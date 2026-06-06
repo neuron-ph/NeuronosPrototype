@@ -280,6 +280,19 @@ export function PermissionsMatrix({
                         {mod.label}
                       </td>
                       {PERM_ACTIONS.map((action) => {
+                        // Inert cell for actions nothing consumes on this module
+                        // (see config/access/actionApplicability.ts).
+                        if (!(mod.applicableActions ?? PERM_ACTIONS).includes(action)) {
+                          return (
+                            <td
+                              key={action}
+                              title="This action doesn't apply to this module"
+                              style={{ width: 40, textAlign: "center", padding: "6px 0", borderRight: "1px solid var(--neuron-ui-border)", color: "var(--neuron-ink-muted)", opacity: 0.35, fontSize: 12, cursor: "not-allowed", userSelect: "none" }}
+                            >
+                              —
+                            </td>
+                          );
+                        }
                         const key = `${mod.id}:${action}`;
                         const granted = resolvedGrants[key] === true;
                         const isCustom = key in explicitGrants;

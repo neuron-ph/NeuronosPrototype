@@ -12,6 +12,7 @@ import { groupBookingSections } from "../../../utils/bookings/groupBookingSectio
 import { BookingSectionGroupCard } from "./BookingSectionGroupCard";
 import { fetchFullContract } from "../../../utils/contractLookup";
 import { extractDeliveryChargeOptions } from "../../../utils/contractQuantityExtractor";
+import { usePermission } from "../../../context/PermissionProvider";
 
 interface BookingInfoTabProps {
   booking: Record<string, unknown>;
@@ -19,6 +20,10 @@ interface BookingInfoTabProps {
   bookingId: string;
   onUpdate: () => void;
   currentUser?: { name: string; email: string; department: string } | null;
+  /** NEU-020 2.10a: the Info tab's OWN door key (ops_<svc>_info_tab /
+   *  pricing_others_info_tab). Editing booking fields must obey the Info row's
+   *  Edit cell — not the per-service module-root edit (which exists for status). */
+  permissionDoor: string;
 }
 
 export function BookingInfoTab({
@@ -27,9 +32,13 @@ export function BookingInfoTab({
   bookingId,
   onUpdate,
   currentUser,
+  permissionDoor,
 }: BookingInfoTabProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const { can } = usePermission();
+  const canKey = can as unknown as (moduleId: string, action: string) => boolean;
+  const canEditBooking = canKey(permissionDoor, "edit");
   const errors = {};
 
   const { formState, setField, initFromRecord, context, setConstraint } = useBookingFormState(serviceType);
@@ -117,7 +126,7 @@ export function BookingInfoTab({
     );
   }
 
-  const editControls = !isEditing ? (
+  const editControls = !canEditBooking ? null : !isEditing ? (
     <button
       onClick={() => setIsEditing(true)}
       style={{

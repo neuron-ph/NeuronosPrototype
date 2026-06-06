@@ -18,14 +18,19 @@ interface ProjectAttachmentsTabProps {
     email: string;
     department: string;
   } | null;
+  /** NEU-019 WG-16: threaded to the shared tab's write gates. */
+  canUpload?: boolean;
+  canDelete?: boolean;
 }
 
-export function ProjectAttachmentsTab({ project, currentUser }: ProjectAttachmentsTabProps) {
+export function ProjectAttachmentsTab({ project, currentUser, canUpload, canDelete }: ProjectAttachmentsTabProps) {
   return (
     <EntityAttachmentsTab
       entityId={project.id}
       entityType="projects"
       currentUser={currentUser}
+      canUpload={canUpload}
+      canDelete={canDelete}
     />
   );
 }

@@ -1,5 +1,5 @@
 import { supabase } from '../../utils/supabase/client';
-import { ArrowLeft, User, Building2, Calendar, MessageSquare, Upload, Paperclip, Send, Trash2, FileText, Download } from "lucide-react";
+import { ArrowLeft, User, Building2, Calendar, MessageSquare, Upload, Paperclip, Send, Trash2, FileText } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { Activity, Contact, Customer } from "../../types/bd";
 import { toast } from "../ui/toast-utils";
@@ -13,6 +13,12 @@ interface ActivityDetailInlineProps {
   contactInfo?: Contact | null; // Full contact object passed from parent
   customerInfo?: Customer | null; // Full customer object passed from parent
   userName?: string; // User name passed from parent
+  /** NEU-019 WG-18: attachment uploads write crm_activities — needs an edit
+   *  grant (bd_activities:edit / `<surface>_activities_tab:edit`). Defaults to
+   *  false so a parent that forgets the prop renders read-only, never ungated. */
+  canEdit?: boolean;
+  /** WG-18: hard delete needs bd_activities:delete / `<surface>_activities_tab:delete`. */
+  canDelete?: boolean;
 }
 
 interface Comment {
@@ -36,7 +42,9 @@ export function ActivityDetailInline({
   onDelete,
   contactInfo = null,
   customerInfo = null,
-  userName = "—"
+  userName = "—",
+  canEdit = false,
+  canDelete = false,
 }: ActivityDetailInlineProps) {
   const [newComment, setNewComment] = useState("");
   const [comments, setComments] = useState<Comment[]>([]);
@@ -107,6 +115,7 @@ export function ActivityDetailInline({
   };
 
   const handleDelete = async () => {
+    if (!canDelete) return; // WG-18 backstop
     if (!confirm('Are you sure you want to delete this activity? This action cannot be undone.')) {
       return;
     }
@@ -131,6 +140,7 @@ export function ActivityDetailInline({
   };
 
   const handleFileUpload = async (files: FileList | null) => {
+    if (!canEdit) return; // WG-18 backstop
     if (!files || files.length === 0) return;
 
     try {
@@ -360,6 +370,7 @@ export function ActivityDetailInline({
                   e.currentTarget.value = "";
                 }}
               />
+              {canEdit && (
               <button
                 onClick={handleUpload}
                 className="px-4 py-2 rounded-lg text-[13px] font-medium transition-colors flex items-center gap-2"
@@ -378,6 +389,7 @@ export function ActivityDetailInline({
                 <Upload size={14} />
                 Upload
               </button>
+              )}
             </div>
 
             {attachments.length > 0 ? (
@@ -410,12 +422,7 @@ export function ActivityDetailInline({
                       </div>
                     </div>
 
-                    <button
-                      className="p-2 text-[var(--theme-text-muted)] hover:text-[var(--theme-action-primary-bg)] transition-colors"
-                      title="Download"
-                    >
-                      <Download size={16} />
-                    </button>
+                    {/* NEU-020 DD-17: dead Download button (no onClick) deleted */}
                   </div>
                 ))}
               </div>
@@ -517,9 +524,10 @@ export function ActivityDetailInline({
           </div>
         </div>
 
-        {/* Delete Section */}
+        {/* Delete Section (WG-18: delete grant) */}
+        {canDelete && (
         <div className="mb-8">
-          <div 
+          <div
             className="rounded-lg p-6"
             style={{
               border: "1px solid var(--theme-status-danger-border)",
@@ -555,6 +563,7 @@ export function ActivityDetailInline({
             </div>
           </div>
         </div>
+        )}
         </div>
         {showTopScrollFade && (
           <div

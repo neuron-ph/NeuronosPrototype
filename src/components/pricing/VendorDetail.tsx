@@ -4,6 +4,7 @@ import { ArrowLeft, Building2, Award, MapPin, User, Mail, Phone, Ship, MessageSq
 import { NeuronModal } from "../ui/NeuronModal";
 import { supabase } from "../../utils/supabase/client";
 import { useNetworkPartners } from "../../hooks/useNetworkPartners";
+import { usePermission } from "../../context/PermissionProvider";
 import type { NetworkPartner } from "../../data/networkPartners";
 import { isExpired, formatExpiryDate } from "../../data/networkPartners";
 import type { QuotationChargeCategory } from "../../types/pricing";
@@ -209,6 +210,10 @@ interface VendorDetailProps {
 }
 
 export function VendorDetail({ vendor: initialVendor, onBack, onSave }: VendorDetailProps) {
+  // NEU-019 WG-12: vendor edits/rate-card saves/deletes write service_providers
+  const { can } = usePermission();
+  const canEditVendor = can("pricing_network_partners", "edit");
+  const canDeleteVendor = can("pricing_network_partners", "delete");
   const [currentVendor, setCurrentVendor] = useState<NetworkPartner>(initialVendor);
   const [editedVendor, setEditedVendor] = useState<NetworkPartner>(initialVendor);
   const [isEditing, setIsEditing] = useState(false);
@@ -258,6 +263,7 @@ export function VendorDetail({ vendor: initialVendor, onBack, onSave }: VendorDe
   }, [chargeCategories]);
 
   const saveChargeCategories = async () => {
+    if (!canEditVendor) return; // WG-12 backstop
     try {
       setIsSaving(true);
       await saveVendorChargeCategories(supabase, {
@@ -397,6 +403,7 @@ export function VendorDetail({ vendor: initialVendor, onBack, onSave }: VendorDe
                  {/* Action Buttons */}
                  <div className="flex items-center gap-2">
                     {!isEditing ? (
+                      canEditVendor &&
                       <button
                          onClick={() => setIsEditing(true)}
                          className="flex items-center gap-2 px-3 py-2 rounded-lg transition-colors text-[13px] border border-[var(--theme-border-default)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-primary)] hover:bg-[var(--theme-state-hover)]"
@@ -661,8 +668,9 @@ export function VendorDetail({ vendor: initialVendor, onBack, onSave }: VendorDe
                  )}
 
                  {/* Delete Section */}
+                 {canDeleteVendor && (
                  <div className="pt-6 mt-8 border-t border-[var(--theme-border-default)] pb-2">
-                   <button 
+                   <button
                       onClick={handleDeleteVendor}
                       className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-[var(--theme-status-danger-border)] text-[var(--theme-status-danger-fg)] bg-[var(--theme-bg-surface)] hover:bg-[var(--theme-status-danger-bg)] transition-colors text-[13px] font-medium group"
                    >
@@ -670,6 +678,7 @@ export function VendorDetail({ vendor: initialVendor, onBack, onSave }: VendorDe
                       Delete Vendor
                    </button>
                  </div>
+                 )}
 
               </div>
             </div>

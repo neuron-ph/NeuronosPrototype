@@ -14,6 +14,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { usePermission } from "../../context/PermissionProvider";
+import { opsModuleForService } from "../../utils/bookings/opsModuleForService";
 import { CONTRACT_MODULE_IDS, type ContractDept } from "../../config/access/accessSchema";
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "../../lib/queryKeys";
@@ -124,8 +125,17 @@ export function ContractDetailView({
   const canViewCollectionsTab  = can(ids.collections, "view");
   const canViewExpensesTab     = can(ids.expenses,    "view");
   const canViewAttachmentsTab  = can(ids.attachments, "view");
+  const canUploadAttachments   = can(ids.attachments, "create"); // WG-16
+  const canDeleteAttachments   = can(ids.attachments, "delete"); // WG-16
   const canViewCommentsTab     = can(ids.comments,    "view");
+  const canPostComments        = can(ids.comments,    "create"); // WG-14
   const canViewActivityTab     = can(ids.activity,    "view");
+  // NEU-020 2.5: contract-record-level edit authority (status, actions menu,
+  // activate) comes from the door the user entered through.
+  const canEditContract        = can(ids.root, "edit");
+  // NEU-020 2.10a: amending the contract's QUOTATION obeys the Quotation tab's
+  // own Edit cell — not the contract root (the grid's "Quotation → Edit" governs).
+  const canAmendQuotation      = can(ids.quotation, "edit");
 
   const resolveInitialTab = (): ContractTab => {
     if (initialTab) return initialTab as ContractTab;
@@ -254,6 +264,7 @@ export function ContractDetailView({
   );
 
   const handleActivateContract = async () => {
+    if (!canEditContract) return; // NEU-019 WG-26 backstop
     setIsActivating(true);
     try {
       const activationPayload = {
@@ -347,6 +358,13 @@ export function ContractDetailView({
   }), [quotation]);
 
   const handleSaveContractQuotation = async (updates: any) => {
+    // NEU-020 2.10a: amending the contract's QUOTATION obeys the Quotation tab's
+    // own Edit cell (ids.quotation), not the contract root. Also the PDF Studio
+    // save path (reachable with tab view alone).
+    if (!canAmendQuotation) {
+      toast.error("You don't have permission to save changes to this contract.");
+      return;
+    }
     try {
       // Allow-list of real top-level columns on `quotations`. Any key the builder
       // emits that isn't here lands inside the `details` JSONB. This is the
@@ -452,7 +470,9 @@ export function ContractDetailView({
 
   // Determine if the "Activate Contract" CTA should show
   // Show when: quotation status is "Accepted by Client" AND contract_status is not yet "Active"
-  const showActivateCTA = normalizedStatus === "Accepted by Client" && contractStatus !== "Active";
+  // NEU-019 WG-26: activation writes the contract — same knob as the gated
+  // twin in QuotationFileView
+  const showActivateCTA = canEditContract && normalizedStatus === "Accepted by Client" && contractStatus !== "Active";
 
   // ✨ PHASE 5: Renew contract
   const handleRenewContract = async () => {
@@ -508,6 +528,10 @@ export function ContractDetailView({
       const meta = quotation.services_metadata?.find(m => m.service_type === s);
       return meta || { service_type: s as any, service_details: {} };
     });
+
+  // NEU-017: only offer Create Booking for services the user may create.
+  const creatableServices = contractServices.filter(svc =>
+    can(opsModuleForService(svc.service_type), "create"));
 
   const handleCreateBookingForService = (service: InquiryService) => {
     setCreateBookingService(service);
@@ -585,11 +609,11 @@ export function ContractDetailView({
   const renderBookingsTab = () => (
     <div style={{ padding: "24px 0" }}>
       {/* ✨ PHASE 3: Create Booking button — only when contract is Active */}
-      {["Active", "Expiring"].includes(contractStatus) && contractServices.length > 0 && (
+      {["Active", "Expiring"].includes(contractStatus) && creatableServices.length > 0 && (
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "16px", position: "relative" }}>
-          {contractServices.length === 1 ? (
+          {creatableServices.length === 1 ? (
             <button
-              onClick={() => handleCreateBookingForService(contractServices[0])}
+              onClick={() => handleCreateBookingForService(creatableServices[0])}
               style={{
                 display: "flex", alignItems: "center", gap: "6px",
                 padding: "8px 16px", fontSize: "13px", fontWeight: 600,
@@ -598,7 +622,7 @@ export function ContractDetailView({
               }}
             >
               <Plus size={14} />
-              Create {contractServices[0].service_type} Booking
+              Create {creatableServices[0].service_type} Booking
             </button>
           ) : (
             <>
@@ -623,7 +647,7 @@ export function ContractDetailView({
                   boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 10,
                   minWidth: "200px", overflow: "hidden",
                 }}>
-                  {contractServices.map(svc => (
+                  {creatableServices.map(svc => (
                     <button
                       key={svc.service_type}
                       onClick={() => handleCreateBookingForService(svc)}
@@ -682,6 +706,7 @@ export function ContractDetailView({
         subtitle={`Read-only aggregate across ${linkedBookingIds.length} linked booking${linkedBookingIds.length !== 1 ? "s" : ""} — ${quotation.quote_number} · ${quotation.customer_name}`}
         enableGroupByToggle={true}
         linkedBookings={linkedBookings}
+        permissionDoor={ids.billings}
       />
     </div>
   );
@@ -698,6 +723,7 @@ export function ContractDetailView({
         title="Contract Invoices"
         subtitle={`Generate, track, and manage official invoices — ${quotation.quote_number} · ${quotation.customer_name}`}
         highlightId={activeTab === "invoices" ? highlightId : undefined}
+        permissionDoor={ids.invoices}
       />
     );
   };
@@ -714,6 +740,7 @@ export function ContractDetailView({
           title="Contract Collections"
           subtitle={`Track payments received from ${quotation.customer_name} — ${quotation.quote_number}`}
           highlightId={activeTab === "collections" ? highlightId : undefined}
+          permissionDoor={ids.collections}
         />
       </div>
     );
@@ -955,6 +982,7 @@ export function ContractDetailView({
 
             <ContractStatusSelector
               status={contractStatus as any}
+              readOnly={!canEditContract} // WG-26: prop existed, was never passed
               onUpdateStatus={async (newStatus) => {
                 try {
                   const { error: statusError } = await supabase.from('quotations').update({
@@ -978,6 +1006,7 @@ export function ContractDetailView({
             />
 
             {/* Actions Menu (⋮) — Edit, Renew, etc. */}
+            {canEditContract && (
             <div style={{ position: "relative" }}>
               <button
                 onClick={() => setShowActionsMenu(!showActionsMenu)}
@@ -1087,6 +1116,7 @@ export function ContractDetailView({
                 </>
               )}
             </div>
+            )}
         </div>
       </div>
 
@@ -1180,6 +1210,8 @@ export function ContractDetailView({
             project={contractAsProject}
             currentUser={currentUser ? { id: "current-user", ...currentUser } : null}
             onSaveQuotation={handleSaveContractQuotation}
+            canAmend={canAmendQuotation} // NEU-020 2.10a: Quotation tab's own edit cell
+            canExport={can(ids.quotation, "export")} // NEU-020 2.11 (WT4): Print PDF = export cell
           />
         )}
         {activeTab === "rate-card" && canViewRateCardTab && (
@@ -1204,6 +1236,8 @@ export function ContractDetailView({
               entityId={quotation.id}
               entityType="contracts"
               currentUser={currentUser}
+              canUpload={canUploadAttachments}
+              canDelete={canDeleteAttachments}
             />
           </div>
         )}
@@ -1215,6 +1249,7 @@ export function ContractDetailView({
               currentUserId={currentUser?.email || "unknown"}
               currentUserName={currentUser?.name || "Unknown User"}
               currentUserDepartment={currentUser?.department || ""}
+              canPost={canPostComments}
             />
           </div>
         )}

@@ -26,6 +26,11 @@ interface BookingCancelDeletePanelProps {
   currentStatus: ExecutionStatus;
   currentUser?: { id?: string; name: string; email: string; department: string } | null;
   onSuccess: (action: "cancelled" | "deleted") => void;
+  /** NEU-019 WG-21: cancel is an edit-class write — parents pass the
+   *  per-service edit grant. Defaults false (fail closed). */
+  allowCancel?: boolean;
+  /** WG-21: hard delete needs the per-service delete grant. */
+  allowDelete?: boolean;
 }
 
 export function BookingCancelDeletePanel({
@@ -36,6 +41,8 @@ export function BookingCancelDeletePanel({
   currentStatus,
   currentUser,
   onSuccess,
+  allowCancel = false,
+  allowDelete = false,
 }: BookingCancelDeletePanelProps) {
   const [isAssessing, setIsAssessing] = useState(false);
   const [financialState, setFinancialState] = useState<BookingFinancialState | null>(null);
@@ -65,8 +72,8 @@ export function BookingCancelDeletePanel({
     department: currentUser?.department ?? "",
   };
 
-  const canCancel = !!financialState && canTransitionBookingToCancelled(currentStatus, financialState);
-  const canDelete = !!financialState && canHardDeleteBooking(currentStatus, financialState);
+  const canCancel = allowCancel && !!financialState && canTransitionBookingToCancelled(currentStatus, financialState);
+  const canDelete = allowDelete && !!financialState && canHardDeleteBooking(currentStatus, financialState);
   const isBusy = isCancelling || isDeleting || isAssessing;
 
   const handleCancel = async () => {

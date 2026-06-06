@@ -1255,7 +1255,7 @@ Why it matters:
 
 Important note:
 
-- a compatibility check for `BLOCK_HIGHER_RANK_VISIBILITY_GRANT` still exists and is intentional
+- the `BLOCK_HIGHER_RANK_VISIBILITY_GRANT` mechanism was **retired** in NEU-012 Contract #6 (record visibility is now the explicit Own/Team/Everything dial). The app toggle, the grant key, and the dead `can_access_*` / `get_org_block_higher_rank` DB chain were removed (migration 160).
 
 ---
 

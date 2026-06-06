@@ -12,6 +12,7 @@ import { EventSheet } from "./components/EventSheet";
 import type { CalendarEvent, UpcomingDeadline, TeamMemberAvailability } from "../../types/calendar";
 import { supabase } from "../../utils/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { usePermission } from "../../context/PermissionProvider";
 
 import { isPast, addDays } from "date-fns";
 
@@ -19,6 +20,11 @@ export function CalendarModule() {
   const { user } = useUser();
   const navigate = useNavigate();
   const reschedule = useRescheduleEvent();
+  const { can } = usePermission();
+  // NEU-019 WG-07 (D2): event creation gates on the calendar knob; edit/drag
+  // gating rides the per-event isReadOnly/isDraggable flags (knob + ownership).
+  const canCreateEvents = can("calendar", "create");
+  const canEditEvents = can("calendar", "edit"); // NEU-020 2.10c (#11): drag-reschedule is an edit
 
   const {
     currentView,
@@ -133,9 +139,10 @@ export function CalendarModule() {
   // Event handlers
   const handleSlotClick = useCallback(
     (date: Date, hour?: number) => {
+      if (!canCreateEvents) return;
       openNewEvent(date, hour);
     },
-    [openNewEvent]
+    [openNewEvent, canCreateEvents]
   );
 
   const handleEventClick = useCallback(
@@ -151,9 +158,10 @@ export function CalendarModule() {
 
   const handleEventDrop = useCallback(
     (eventId: string, newStart: Date, newEnd: Date) => {
+      if (!canEditEvents) return; // NEU-020 2.10c (#11): reschedule obeys the Calendar Edit cell
       reschedule.mutate({ id: eventId, newStart, newEnd });
     },
-    [reschedule]
+    [reschedule, canEditEvents]
   );
 
   // Keyboard shortcuts
@@ -173,7 +181,7 @@ export function CalendarModule() {
           break;
         case "n":
         case "N":
-          openNewEvent();
+          if (canCreateEvents) openNewEvent();
           break;
         case "1":
           setCurrentView("day");
@@ -189,7 +197,7 @@ export function CalendarModule() {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [navDate, openNewEvent, setCurrentView]);
+  }, [navDate, openNewEvent, setCurrentView, canCreateEvents]);
 
   return (
     <div
@@ -222,7 +230,7 @@ export function CalendarModule() {
         onViewChange={setCurrentView}
         onNavigate={navDate}
         onDateSelect={goToDate}
-        onNewEvent={() => openNewEvent()}
+        onNewEvent={canCreateEvents ? () => openNewEvent() : undefined}
       />
 
       {/* Main content area */}

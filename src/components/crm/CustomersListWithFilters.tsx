@@ -43,6 +43,7 @@ export function CustomersListWithFilters({ userDepartment, moduleId, onViewCusto
   const permissions = {
     canCreate: can(moduleId, "create"),
     canEdit:   can(moduleId, "edit"),
+    canDelete: can(moduleId, "delete"), // NEU-019 WG-20: delete had hidden behind edit
     showKPIs: true, // Both BD and PD see KPIs
     showOwnerFilter: userDepartment === "Business Development",
   };
@@ -89,6 +90,7 @@ export function CustomersListWithFilters({ userDepartment, moduleId, onViewCusto
 
   // Handle delete customer
   const handleDeleteCustomer = async (customerId: string, customerName: string) => {
+    if (!permissions.canDelete) return; // WG-20 backstop
     if (!confirm(`Are you sure you want to delete "${customerName}"? This action cannot be undone.`)) {
       return;
     }
@@ -575,7 +577,7 @@ export function CustomersListWithFilters({ userDepartment, moduleId, onViewCusto
                     </button>
 
                     {/* Dropdown Menu */}
-                    {openDropdownId === customer.id && permissions.canEdit && (
+                    {openDropdownId === customer.id && permissions.canDelete && (
                       <div
                         className="absolute right-0 top-full mt-1 rounded-lg overflow-hidden z-50 shadow-lg"
                         style={{

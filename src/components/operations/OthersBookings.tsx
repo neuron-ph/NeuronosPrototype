@@ -21,6 +21,30 @@ import type { ExecutionStatus } from "../../types/operations";
 import { NeuronModal } from "../ui/NeuronModal";
 import { useUnreadEntityIds } from "../../hooks/useNotifications";
 import { useRealtimeSync } from "../../hooks/useRealtimeSync";
+import type { ModuleId } from "../admin/permissionsConfig";
+
+// NEU-020 DD-2: the Others module renders behind two doors — each with its
+// own key family. The door decides every key consulted on these surfaces.
+export type OthersDoor = "ops" | "pricing";
+
+interface OthersDoorIds {
+  root: ModuleId;
+  tabs: { all: ModuleId; my: ModuleId; draft: ModuleId; inProgress: ModuleId; completed: ModuleId; cancelled: ModuleId };
+  detail: { info: ModuleId; billings: ModuleId; invoices: ModuleId; collections: ModuleId; expenses: ModuleId; comments: ModuleId; chrono: ModuleId };
+}
+
+export const OTHERS_DOOR_IDS: Record<OthersDoor, OthersDoorIds> = {
+  ops: {
+    root: "ops_others",
+    tabs: { all: "ops_others_all_tab", my: "ops_others_my_tab", draft: "ops_others_draft_tab", inProgress: "ops_others_in_progress_tab", completed: "ops_others_completed_tab", cancelled: "ops_others_cancelled_tab" },
+    detail: { info: "ops_others_info_tab", billings: "ops_others_billings_tab", invoices: "ops_others_invoices_tab", collections: "ops_others_collections_tab", expenses: "ops_others_expenses_tab", comments: "ops_others_comments_tab", chrono: "ops_others_chrono_tab" },
+  },
+  pricing: {
+    root: "pricing_others",
+    tabs: { all: "pricing_others_all_tab", my: "pricing_others_my_tab", draft: "pricing_others_draft_tab", inProgress: "pricing_others_in_progress_tab", completed: "pricing_others_completed_tab", cancelled: "pricing_others_cancelled_tab" },
+    detail: { info: "pricing_others_info_tab", billings: "pricing_others_billings_tab", invoices: "pricing_others_invoices_tab", collections: "pricing_others_collections_tab", expenses: "pricing_others_expenses_tab", comments: "pricing_others_comments_tab", chrono: "pricing_others_chrono_tab" },
+  },
+};
 
 interface OthersBooking {
   bookingId: string;
@@ -40,19 +64,21 @@ interface OthersBookingsProps {
   pendingBookingId?: string | null;
   initialTab?: string | null;
   highlightId?: string | null;
+  door?: OthersDoor;
 }
 
-export function OthersBookings({ currentUser, pendingBookingId, initialTab, highlightId }: OthersBookingsProps = {}) {
+export function OthersBookings({ currentUser, pendingBookingId, initialTab, highlightId, door = "ops" }: OthersBookingsProps = {}) {
   const [urlBookingId, setUrlBookingId] = useUrlSelection("booking");
   const restoredFromUrl = useRef(false);
   const suppressUrlSelectionRef = useRef(false);
   const { can } = usePermission();
-  const canViewAllTab        = can("ops_others_all_tab", "view");
-  const canViewMyTab         = can("ops_others_my_tab", "view");
-  const canViewDraftTab      = can("ops_others_draft_tab", "view");
-  const canViewInProgressTab = can("ops_others_in_progress_tab", "view");
-  const canViewCompletedTab  = can("ops_others_completed_tab", "view");
-  const canViewCancelledTab  = can("ops_others_cancelled_tab", "view");
+  const ids = OTHERS_DOOR_IDS[door];
+  const canViewAllTab        = can(ids.tabs.all, "view");
+  const canViewMyTab         = can(ids.tabs.my, "view");
+  const canViewDraftTab      = can(ids.tabs.draft, "view");
+  const canViewInProgressTab = can(ids.tabs.inProgress, "view");
+  const canViewCompletedTab  = can(ids.tabs.completed, "view");
+  const canViewCancelledTab  = can(ids.tabs.cancelled, "view");
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -73,7 +99,7 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
   const [resumeDraft, setResumeDraft] = useState<Record<string, unknown> | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; label: string } | null>(null);
 
-  const { scope, isLoaded: scopeLoaded } = useDataScope('bookings');
+  const { scope, isLoaded: scopeLoaded } = useDataScope('bookings_others');
   const { index: assignmentIndex, isLoaded: assignmentIndexLoaded } = useBookingAssignmentVisibility({
     userIds: scope.type === 'userIds' ? scope.ids : null,
   });
@@ -180,6 +206,7 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
 
   const handleDeleteBooking = async (bookingId: string, bookingLabel: string, currentStatus: ExecutionStatus, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!can(ids.root, "delete")) return; // NEU-019 WG-09 backstop
     try {
       const financialState = await assessBookingFinancialState(bookingId);
       if (!canHardDeleteBooking(currentStatus, financialState)) {
@@ -302,6 +329,7 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
         onUpdate={fetchBookings}
         initialTab={initialTab}
         highlightId={highlightId}
+        door={door}
       />
     );
   }
@@ -337,7 +365,7 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
             
             {/* Action Button */}
             <div className="flex items-center gap-3">
-              <button
+              {can(ids.root, "create") && <button
                 onClick={() => setShowCreateModal(true)}
                 style={{
                   display: "flex",
@@ -355,7 +383,7 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
               >
                 <Plus size={16} />
                 New Booking
-              </button>
+              </button>}
             </div>
           </div>
 
@@ -585,12 +613,14 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
                   ? "No bookings match your filters" 
                   : "No other service bookings yet"}
               </div>
+              {can(ids.root, "create") && (
               <button
                 onClick={() => setShowCreateModal(true)}
                 className="text-[var(--theme-action-primary-bg)] hover:underline"
               >
                 Create your first booking
               </button>
+              )}
             </div>
           ) : (
             <div style={{
@@ -632,7 +662,11 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
                       className="border-b border-[var(--theme-text-primary)]/5 hover:bg-[var(--theme-action-primary-bg)]/5 transition-colors cursor-pointer"
                       onClick={() => {
                         if (booking.status === "Draft") {
-                          setResumeDraft({ ...(booking as any), id: booking.bookingId });
+                          // WG-09: resuming a draft re-opens the create panel in
+                          // edit mode (updates the row) — needs a write grant
+                          if (can(ids.root, "create") || can(ids.root, "edit")) {
+                            setResumeDraft({ ...(booking as any), id: booking.bookingId });
+                          }
                         } else {
                           suppressUrlSelectionRef.current = false;
                           setSelectedBooking(booking);
@@ -699,6 +733,7 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
                         </div>
                       </td>
                       <td className="py-4 px-4 text-center">
+                        {can(ids.root, "delete") && (
                         <button
                           onClick={(e) => handleDeleteBooking(booking.bookingId, (booking as any).booking_number || booking.bookingId, booking.status as ExecutionStatus, e)}
                           style={{
@@ -727,6 +762,7 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
                         >
                           <Trash2 size={14} />
                         </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -743,6 +779,7 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
           onClose={() => setShowCreateModal(false)}
           onBookingCreated={handleBookingCreated}
           currentUser={currentUser as any}
+          door={door}
         />
       )}
       {resumeDraft && (
@@ -756,6 +793,7 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
           currentUser={currentUser as any}
           draftBookingId={String(resumeDraft.id)}
           draftData={resumeDraft}
+          door={door}
         />
       )}
       <NeuronModal

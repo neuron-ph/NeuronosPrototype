@@ -3,6 +3,7 @@ import DOMPurify from "dompurify";
 import { RotateCcw, Download, FileText, FileSpreadsheet, FileImage, File } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { useUser } from "../../hooks/useUser";
+import { usePermission } from "../../context/PermissionProvider";
 import { toast } from "sonner@2.0.3";
 import type { ThreadMessage, ThreadAttachment } from "../../hooks/useThread";
 import { EntityContextCard } from "./EntityContextCard";
@@ -124,10 +125,14 @@ interface MessageBubbleProps {
 
 export function MessageBubble({ message, onRetract, variant = "default" }: MessageBubbleProps) {
   const { user } = useUser();
+  const { can } = usePermission();
   const [isRetracting, setIsRetracting] = useState(false);
   const [showActions, setShowActions] = useState(false);
   const [retractOpen, setRetractOpen] = useState(false);
+  // NEU-020 2.7 (DD-5): editing/retracting your OWN message is the inbox:edit
+  // power — own-ness alone is no longer enough; the knob makes it revocable.
   const isOwn = message.sender_id === user?.id;
+  const canRetractOwn = isOwn && can("inbox", "edit");
 
   const handleRetract = () => setRetractOpen(true);
 
@@ -348,7 +353,7 @@ export function MessageBubble({ message, onRetract, variant = "default" }: Messa
 
         {/* Right: timestamp + retract on hover */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          {isOwn && showActions && !isRetracting && (
+          {canRetractOwn && showActions && !isRetracting && (
             <button
               onClick={handleRetract}
               style={{

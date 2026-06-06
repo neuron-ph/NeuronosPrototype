@@ -697,12 +697,16 @@ function FilingWorkflowBar({
   onRetract: () => void;
   advancing: boolean;
 }) {
+  // NEU-017: advancing/retracting a filing writes financial_statement_filings —
+  // require a statements write grant (mirrors the filings RLS).
+  const { can } = usePermission();
+  const canWriteFiling = can("acct_statements", "create") || can("acct_statements", "edit");
   const status: FilingStatus = filing?.status ?? "draft";
   const meta = FILING_STATUS_META[status];
   const StatusIcon = meta.icon;
   const currentIdx = STATUS_ORDER.indexOf(status);
-  const canAdvance = currentIdx < STATUS_ORDER.length - 1;
-  const canRetract = currentIdx > 0;
+  const canAdvance = canWriteFiling && currentIdx < STATUS_ORDER.length - 1;
+  const canRetract = canWriteFiling && currentIdx > 0;
 
   const nextStatus = canAdvance ? STATUS_ORDER[currentIdx + 1] : null;
   const nextMeta   = nextStatus ? FILING_STATUS_META[nextStatus] : null;
@@ -1170,6 +1174,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
 export function FinancialStatementsPage() {
   const { user } = useUser();
   const { can } = usePermission();
+  const canExportStatements = can("acct_statements", "export"); // NEU-020 2.10c (#10)
   const canIncomeStatement = can("accounting_financial_statements_income_statement_tab", "view");
   const canBalanceSheet = can("accounting_financial_statements_balance_sheet_tab", "view");
   const canCashFlow = can("accounting_financial_statements_cash_flow_tab", "view");
@@ -1412,12 +1417,14 @@ export function FinancialStatementsPage() {
             )}
 
             {/* Export CSV */}
+            {canExportStatements && (
             <button onClick={() => handleExport([])}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium hover:bg-[var(--neuron-state-hover)] transition-colors"
               style={{ color: "var(--neuron-ink-muted)", border: "1px solid var(--neuron-ui-border)" }}>
               <Download size={14} />
               Export
             </button>
+            )}
 
             {/* Print */}
             <button onClick={() => window.print()}

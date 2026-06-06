@@ -8,6 +8,7 @@ import { ProjectDetail } from "./ProjectDetail";
 import { fetchProjectsWithQuotation, fetchProjectWithQuotation, fetchProjectByNumberWithQuotation } from "../../utils/projectHydration";
 import { useUrlSelection } from "../../hooks/useUrlSelection";
 import { useRealtimeSync } from "../../hooks/useRealtimeSync";
+import type { ProjectDept } from "../../config/access/accessSchema";
 
 export type ProjectsView = "list" | "detail";
 
@@ -20,10 +21,12 @@ interface ProjectsModuleProps {
   } | null;
   onCreateTicket?: (entity: { type: string; id: string; name: string }) => void;
   initialProject?: Project | null;
-  departmentOverride?: "BD" | "Operations" | "Accounting";
+  // NEU-020 2.5: the door is the ROUTE the user entered through, never the
+  // user's own department. Each route page passes its own door explicitly.
+  door?: ProjectDept;
 }
 
-export function ProjectsModule({ currentUser, onCreateTicket, initialProject, departmentOverride }: ProjectsModuleProps) {
+export function ProjectsModule({ currentUser, onCreateTicket, initialProject, door = "ops" }: ProjectsModuleProps) {
   const [urlProjectId, setUrlProjectId] = useUrlSelection("project");
   const [view, setView] = useState<ProjectsView>(initialProject ? "detail" : "list");
   const [selectedProject, setSelectedProject] = useState<Project | null>(initialProject || null);
@@ -145,28 +148,11 @@ export function ProjectsModule({ currentUser, onCreateTicket, initialProject, de
     queryClient.invalidateQueries({ queryKey: queryKeys.projects.list() });
   };
 
-  // Use the current user's department to determine which tabs to show
-  // BD and Pricing users see: Overview, Specifications, Pricing, Bookings, Activity, Comments
-  // Operations users see: Overview, Services & Bookings, Activity
-  
-  // Logic: 
-  // 1. If override provided, use it.
-  // 2. If user is BD/Pricing -> BD
-  // 3. Else -> Operations
-  
-  let department: "BD" | "Operations" | "Accounting" = "Operations";
-  
-  if (departmentOverride) {
-    department = departmentOverride;
-  } else if (
-    currentUser?.department === "BD" || 
-    currentUser?.department === "Business Development" ||
-    currentUser?.department === "Pricing"
-  ) {
-    department = "BD";
-  }
-  
-  console.log("ProjectsModule - Department:", department, "- User:", currentUser?.department);
+  // NEU-020 2.5: display flavour is derived from the route door, not the user.
+  // The door (bd | pricing | ops | accounting) decides which permission-key
+  // family governs; the display "department" only drives labels/placeholders.
+  const department: "BD" | "Operations" | "Accounting" =
+    door === "accounting" ? "Accounting" : door === "ops" ? "Operations" : "BD";
 
   return (
     <div className="h-full bg-[var(--theme-bg-surface)]">
@@ -177,6 +163,7 @@ export function ProjectsModule({ currentUser, onCreateTicket, initialProject, de
           isLoading={isLoading}
           currentUser={currentUser}
           department={department}
+          door={door}
           onRefresh={refreshProjects}
         />
       )}
@@ -188,6 +175,7 @@ export function ProjectsModule({ currentUser, onCreateTicket, initialProject, de
           onUpdate={handleProjectUpdated}
           currentUser={currentUser}
           department={department}
+          door={door}
           onCreateTicket={onCreateTicket}
           initialTab={initialTab}
           highlightId={highlightId}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { usePermission } from "../../../context/PermissionProvider";
-import { Plus, Search, Filter, Download, ChevronDown, ChevronRight, Folder, FileText, MoreHorizontal } from "lucide-react";
+import { Plus, Search, Filter, ChevronDown, ChevronRight, Folder, FileText, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { getAccounts, seedInitialAccounts } from "../../../utils/accounting-api";
 import { supabase } from "../../../utils/supabase/client";
@@ -391,11 +391,8 @@ export function ChartOfAccounts() {
           </div>
           
           <div className="flex gap-3">
-             <button className="h-10 px-4 bg-[var(--theme-bg-surface)] border border-[var(--theme-border-default)] text-[var(--theme-text-secondary)] rounded-lg font-medium text-sm hover:bg-[var(--theme-bg-surface-subtle)] transition-colors flex items-center gap-2">
-                <Download size={16} />
-                Export
-             </button>
-             <button
+             {/* NEU-020 DD-17: dead Export button (no onClick) deleted */}
+             {can("acct_coa", "create") && <button
                onClick={handleAddAccount}
                style={{
                   display: "flex",
@@ -420,7 +417,7 @@ export function ChartOfAccounts() {
              >
                <Plus size={18} />
                New Account
-             </button>
+             </button>}
           </div>
         </div>
 

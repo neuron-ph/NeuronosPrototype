@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { Search, X, Plus, Filter, Download, Loader2, Pencil, Check, Link2 } from "lucide-react";
 import { useUser } from "../../../hooks/useUser";
+import { usePermission } from "../../../context/PermissionProvider";
 import { logActivity } from "../../../utils/activityLog";
 import { CustomDropdown } from "../../bd/CustomDropdown";
 import { CustomDatePicker } from "../../common/CustomDatePicker";
@@ -57,6 +58,12 @@ interface UnifiedBillingsTabProps {
   highlightId?: string | null;
   /** Amber badge count: unconverted billable expenses pending conversion */
   pendingBillableCount?: number;
+  /** NEU-020 door purity: the grid row (door key) this tab is rendered behind,
+   *  e.g. "ops_trucking_billings_tab". When provided, ONLY that key's
+   *  create/edit/delete govern this surface — no OR-gate, no foreign keys.
+   *  Transitional: parents not yet threaded fall back to the NEU-017 OR-gate;
+   *  the fallback is removed once every parent passes its door. */
+  permissionDoor?: string;
 }
 
 const formatCurrency = (amount: number, currency: string = "PHP") =>
@@ -75,7 +82,7 @@ export function UnifiedBillingsTab({
   bookingId,
   onRefresh,
   isLoading = false,
-  readOnly = false,
+  readOnly: readOnlyProp = false,
   title,
   subtitle,
   extraActions,
@@ -83,8 +90,30 @@ export function UnifiedBillingsTab({
   linkedBookings,
   highlightId,
   pendingBillableCount,
+  permissionDoor,
 }: UnifiedBillingsTabProps) {
   const { user } = useUser();
+  const { can } = usePermission();
+  const canKey = can as unknown as (moduleId: string, action: string) => boolean;
+  // NEU-020 door purity: with a door, only that key governs. Without one
+  // (transitional), a master-free OR-gate still applies until every parent
+  // threads its door — then the fallback dies. (2.6-final: acct_financials
+  // master key retired — holders were seeded into accounting_financials_*.)
+  const canWriteBillings = permissionDoor
+    ? ["create", "edit"].some(a => canKey(permissionDoor, a))
+    : ["create", "edit"].some(a =>
+        canKey("accounting_financials_billings_tab", a) ||
+        canKey("acct_billings", a) || canKey("ops_bookings_billings_tab", a) ||
+        canKey("ops_projects_billings_tab", a));
+  const readOnly = readOnlyProp || !canWriteBillings;
+  // NEU-020 2.11 (WT2): delete-class billing actions (void an item, delete a
+  // category, remove a line) obey the Billings DELETE cell — not the create/edit
+  // write gate. With a door, only that door's :delete governs.
+  const canDeleteBillings = readOnlyProp ? false : (permissionDoor
+    ? canKey(permissionDoor, "delete")
+    : (canKey("accounting_financials_billings_tab", "delete") ||
+       canKey("acct_billings", "delete") || canKey("ops_bookings_billings_tab", "delete") ||
+       canKey("ops_projects_billings_tab", "delete")));
   // Stable reference for empty array to prevent infinite re-render loops
   const stableLinkedBookings = linkedBookings && linkedBookings.length > 0 ? linkedBookings : EMPTY_LINKED_BOOKINGS;
   
@@ -415,6 +444,7 @@ export function UnifiedBillingsTab({
 
     // Phase 3: Handle deletion
     if (field === 'delete') {
+        if (!canDeleteBillings) return; // NEU-020 2.11 (WT2): delete-class backstop
         if (confirm("Remove this billing item?")) {
             setLocalItems(prev => prev.filter(i => i.id !== id));
             setPendingChanges(true);
@@ -968,12 +998,13 @@ export function UnifiedBillingsTab({
         activeCategories={activeCategories}
         onAddCategory={!readOnly ? handleAddCategory : undefined}
         onRenameCategory={!readOnly ? handleRenameCategory : undefined}
-        onDeleteCategory={!readOnly ? handleDeleteCategory : undefined}
+        onDeleteCategory={canDeleteBillings ? handleDeleteCategory : undefined}
         onAddItem={!readOnly ? handleAddItemToCategory : undefined}
         groupBy={groupBy}
         linkedBookings={stableLinkedBookings}
         highlightId={highlightId}
-        onVoidItem={!readOnly ? handleVoidItem : undefined}
+        canDeleteItems={canDeleteBillings}
+        onVoidItem={canDeleteBillings ? handleVoidItem : undefined}
         onSendServiceToBooking={!readOnly ? handleSendServiceToBooking : undefined}
       />
     </div>

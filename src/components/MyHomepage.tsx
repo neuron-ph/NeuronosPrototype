@@ -1130,9 +1130,12 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
     .join(" · ");
 
   // ── Data ────────────────────────────────────────────────────────────────────
+  // NEU-012 Phase 5b: approval-queue scope comes from EV grants, not role.
+  const holdsManagerGate = can("my_evouchers", "approve");
+  const holdsAccountingGate = can("acct_evouchers", "approve");
   const { data: myWorkData, isLoading: loadingMyWork } = useQuery({
-    queryKey: ["myWork", dept, role],
-    queryFn:  () => fetchMyWork(dept, role),
+    queryKey: ["myWork", dept, holdsManagerGate, holdsAccountingGate],
+    queryFn:  () => fetchMyWork(dept, { holdsManagerGate, holdsAccountingGate }),
     enabled:  !!dept,
     staleTime: 2 * 60 * 1000,
   });
@@ -1159,6 +1162,7 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
   };
 
   const canWriteMemos = can("exec_memos", "create");
+  const canDeleteMemos = can("exec_memos", "delete"); // NEU-019 WG-22
 
   const [memoOpen, setMemoOpen] = useState(false);
   const [latestMemo, setLatestMemo] = useState<{ id: string; title: string; created_at: string } | null>(null);
@@ -1208,6 +1212,7 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
         onClose={() => setMemoOpen(false)}
         userId={userId}
         canWrite={canWriteMemos}
+        canDelete={canDeleteMemos}
       />
     );
   }

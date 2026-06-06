@@ -142,6 +142,9 @@ function ItemsTab() {
   const canAll = can("accounting_catalog_all_tab", "view");
   const canBilling = can("accounting_catalog_billing_tab", "view");
   const canExpense = can("accounting_catalog_expense_tab", "view");
+  // NEU-017: catalog writes require acct_catalog grants (mirrors catalog RLS).
+  const canCreateCatalog = can("acct_catalog", "create");
+  const canWriteCatalog = canCreateCatalog || can("acct_catalog", "edit") || can("acct_catalog", "delete");
 
   // ── State ──
   const [sideFilter, setSideFilter] = useState<SideFilter>(
@@ -512,6 +515,7 @@ function ItemsTab() {
           categories={categoriesWithCount as CatalogCategory[]}
           onMutate={invalidateCatalog}
           currentSideFilter={sideFilter}
+          canWrite={canWriteCatalog}
         />
 
         {/* Expand/Collapse all */}
@@ -527,20 +531,20 @@ function ItemsTab() {
         )}
 
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "8px" }}>
-          <button
+          {canCreateCatalog && <button
             onClick={() => { setShowAddCategoryForm(true); setShowAddForm(false); }}
             style={ghostBtnStyle}
           >
             <Plus size={14} />
             Category
-          </button>
-          <button
+          </button>}
+          {canCreateCatalog && <button
             onClick={() => { setShowAddForm(true); setShowAddCategoryForm(false); }}
             style={ghostBtnStyle}
           >
             <Plus size={14} />
             Item
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -892,6 +896,9 @@ function ItemViewRow({
   onDelete: () => void;
   onMove: () => void;
 }) {
+  // NEU-017: hide the row actions menu without a catalog write grant.
+  const { can } = usePermission();
+  const canWriteCatalog = can("acct_catalog", "edit") || can("acct_catalog", "delete");
   return (
     <div
       style={{
@@ -933,7 +940,7 @@ function ItemViewRow({
         opacity: hovered ? 1 : 0,
         transition: "opacity 100ms",
       }}>
-        <RowActionsMenu onEdit={onEdit} onDelete={onDelete} onMove={onMove} />
+        {canWriteCatalog && <RowActionsMenu onEdit={onEdit} onDelete={onDelete} onMove={onMove} />}
       </div>
     </div>
   );
@@ -1098,6 +1105,9 @@ function CategoryGroupMenu({
   onRename: () => void;
   onDelete: () => void;
 }) {
+  // NEU-017: hide the category rename/delete menu without a catalog write grant.
+  const { can } = usePermission();
+  const canWriteCatalog = can("acct_catalog", "edit") || can("acct_catalog", "delete");
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ top: 0, left: 0 });
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -1122,6 +1132,8 @@ function CategoryGroupMenu({
     width: "100%", padding: "7px 12px",
     fontSize: "13px", background: "none", border: "none", textAlign: "left",
   };
+
+  if (!canWriteCatalog) return null;
 
   return (
     <>
@@ -1186,13 +1198,16 @@ function CategoryGroupMenu({
 // ==================== CATEGORY FILTER POPOVER ====================
 
 function CategoryFilterPopover({
-  filterValue, onFilterChange, categories, onMutate, currentSideFilter,
+  filterValue, onFilterChange, categories, onMutate, currentSideFilter, canWrite,
 }: {
   filterValue: string;
   onFilterChange: (v: string) => void;
   categories: CatalogCategory[];
   onMutate: () => void;
   currentSideFilter: SideFilter;
+  /** NEU-017: rename/delete/add-category affordances need a catalog write grant
+   *  — same gate as the page's main buttons, this popover is not a side door. */
+  canWrite: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
@@ -1370,15 +1385,19 @@ function CategoryFilterPopover({
                       {cat.name}
                     </span>
                     <span style={{ fontSize: "11px", color: "var(--theme-text-muted)", minWidth: 18, textAlign: "right" }}>{cat.item_count ?? 0}</span>
-                    <button onClick={e => { e.stopPropagation(); setRenamingId(cat.id); setRenameValue(cat.name); }} style={{ ...iconBtnStyle, color: "var(--theme-text-muted)" }} title="Rename"><Pencil size={12} /></button>
-                    <button onClick={e => { e.stopPropagation(); handleDelete(cat); }} style={{ ...iconBtnStyle, color: (cat.item_count ?? 0) > 0 ? "var(--theme-border-default)" : "var(--theme-status-danger-fg)" }} title={(cat.item_count ?? 0) > 0 ? `${cat.item_count} items — reassign first` : "Delete"}><X size={12} /></button>
+                    {canWrite && (
+                      <>
+                        <button onClick={e => { e.stopPropagation(); setRenamingId(cat.id); setRenameValue(cat.name); }} style={{ ...iconBtnStyle, color: "var(--theme-text-muted)" }} title="Rename"><Pencil size={12} /></button>
+                        <button onClick={e => { e.stopPropagation(); handleDelete(cat); }} style={{ ...iconBtnStyle, color: (cat.item_count ?? 0) > 0 ? "var(--theme-border-default)" : "var(--theme-status-danger-fg)" }} title={(cat.item_count ?? 0) > 0 ? `${cat.item_count} items — reassign first` : "Delete"}><X size={12} /></button>
+                      </>
+                    )}
                   </>
                 )}
               </div>
             ))}
           </div>
 
-          <div style={{ borderTop: "1px solid var(--theme-border-subtle)", padding: "8px 12px" }}>
+          {canWrite && <div style={{ borderTop: "1px solid var(--theme-border-subtle)", padding: "8px 12px" }}>
             {addingNew ? (
               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                 <input
@@ -1418,7 +1437,7 @@ function CategoryFilterPopover({
                 New category
               </button>
             )}
-          </div>
+          </div>}
         </div>,
         document.body
       )}

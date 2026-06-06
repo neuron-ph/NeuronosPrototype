@@ -13,7 +13,7 @@ import { useUser } from "../../hooks/useUser";
 import { supabase } from "../../utils/supabase/client";
 import { getAccounts } from "../../utils/accounting-api";
 import type { Account } from "../../types/accounting-core";
-import { canDeleteEVoucher } from "../../utils/permissions";
+import { usePermission } from "../../context/PermissionProvider";
 import { toast } from "sonner@2.0.3";
 import {
   FUNCTIONAL_CURRENCY,
@@ -117,13 +117,16 @@ export function AddRequestForPaymentPanel({
   const existingCreatorId =
     (existingData as (EVoucher & { created_by?: string }) | undefined)?.created_by ??
     existingData?.requestor_id;
-  const canDeleteExistingVoucher = canDeleteEVoucher(
-    existingData?.status,
-    existingCreatorId,
-    user?.id,
-    user?.role ?? "",
-    user?.department ?? "",
-  );
+  // NEU-012 step 9: mirrors the evouchers DELETE RLS — acct_evouchers:delete
+  // (any status), or the owner with my_evouchers:delete on a terminal status.
+  const { can } = usePermission();
+  const isVoucherOwner =
+    !!existingCreatorId && !!user?.id && existingCreatorId === user.id;
+  const canDeleteExistingVoucher =
+    can("acct_evouchers", "delete") ||
+    (isVoucherOwner &&
+      can("my_evouchers", "delete") &&
+      ["draft", "rejected", "cancelled"].includes((existingData?.status || "").toLowerCase()));
 
   // Use the custom hook for E-Voucher submission
   const { createDraft, submitForApproval, autoApprove, deleteEVoucher, isSaving } = useEVoucherSubmit(context, currentActor);
@@ -567,7 +570,7 @@ export function AddRequestForPaymentPanel({
   };
 
   const handleAutoApprove = async () => {
-    if (isViewMode) return;
+    if (isViewMode || !canAutoApprove) return; // WG-30 backstop
 
     if (!ensureFxRateValid()) return;
 
@@ -678,6 +681,9 @@ export function AddRequestForPaymentPanel({
 
   // Context-aware labels
   const isAccounting = context === "accounting";
+  // NEU-019 WG-30: auto-approve creates a PRE-APPROVED voucher — that's an
+  // approve-class write, not just create. Context alone no longer suffices.
+  const canAutoApprove = isAccounting && (can("acct_evouchers", "approve") || can("my_evouchers", "approve"));
   const isOperations = context === "operations";
   const isBD = context === "bd";
   const isCollection = context === "collection";
@@ -1655,7 +1661,7 @@ export function AddRequestForPaymentPanel({
               {isUploading ? "Uploading…" : "Save Draft"}
             </button>
             
-            {isAccounting && (
+            {canAutoApprove && (
               <button
                 type="button"
                 onClick={handleAutoApprove}

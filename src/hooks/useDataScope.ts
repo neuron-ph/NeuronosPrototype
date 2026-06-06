@@ -2,35 +2,58 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../utils/supabase/client';
 import { useUser } from './useUser';
 import { queryKeys } from '../lib/queryKeys';
-import { BLOCK_HIGHER_RANK_VISIBILITY_GRANT } from '../lib/rbacGrantKeys';
-import {
-  normalizeLegacyVisibilityScope,
-  roleDefaultVisibilityScope,
-} from '../components/admin/accessProfiles/accessGrantUtils';
 
-type ScopedUser = { id: string; role: string | null };
+// NEU-012 Contract #6 — record visibility (Layer 2). This hook is the CLIENT
+// mirror of the DB resolver in migrations 157-159. It must agree with
+// public.current_user_visibility_dial / current_user_can_view_record:
+//   effective dial = per-user override map[key]  (if present)
+//                    else assigned-profile map[key]  (if present)
+//                    else 'own'                       (strict fail-closed)
+// No role fallback, no department concept, no team_memberships table — teams
+// are users sharing users.team_id, exactly like current_user_team_ids().
+// RLS is the real boundary; this only pre-filters the UI so it never over-hides.
 
-type PermissionOverrideScope = {
-  scope: 'own' | 'team' | 'department' | 'selected_departments' | 'all' | 'department_wide' | 'cross_department' | 'full' | null;
-  departments: string[] | null;
-  module_grants: Record<string, boolean> | null;
-  applied_profile_id?: string | null;
-  profile?: {
-    visibility_scope?: 'own' | 'team' | 'department' | 'selected_departments' | 'all' | null;
-    visibility_departments?: string[] | null;
-  } | null;
-};
+type Dial = 'own' | 'team' | 'everything';
+type DialMap = Partial<Record<string, Dial>>;
 
-const ROLE_LEVEL: Record<string, number> = {
-  staff: 0,
-  team_leader: 1,
-  supervisor: 2,
-  manager: 3,
-  executive: 4,
-};
+const DIAL_RANK: Record<Dial, number> = { own: 0, team: 1, everything: 2 };
 
-function getRoleLevel(role?: string | null): number {
-  return ROLE_LEVEL[role ?? 'staff'] ?? ROLE_LEVEL.staff;
+// Canonical record-type keys (must match the seed in migration 157).
+const BOOKING_KEYS = [
+  'bookings_forwarding', 'bookings_brokerage', 'bookings_trucking',
+  'bookings_marine_insurance', 'bookings_others',
+];
+const FINANCIAL_KEYS = ['invoices', 'collections', 'billings', 'expenses'];
+const ALL_KEYS = [
+  'contacts', 'customers', 'quotations', 'tasks', 'evouchers',
+  ...FINANCIAL_KEYS, ...BOOKING_KEYS,
+];
+
+// A resource hint maps to one or more record-type keys. For a single record
+// type we return its exact dial; for multi-type or unknown resources we return
+// the MOST PERMISSIVE dial across the relevant keys, so the client filter is
+// never stricter than the DB (RLS still tightens each type individually).
+function keysForResource(resource?: string): string[] {
+  if (!resource) return ALL_KEYS;
+  if (resource === 'financials') return FINANCIAL_KEYS;
+  if (resource === 'bookings') return BOOKING_KEYS;
+  if (ALL_KEYS.includes(resource)) return [resource];
+  return ALL_KEYS;
+}
+
+function dialForKey(key: string, override: DialMap, profile: DialMap): Dial {
+  if (override[key] !== undefined) return override[key] as Dial;
+  if (profile[key] !== undefined) return profile[key] as Dial;
+  return 'own';
+}
+
+function effectiveDial(resource: string | undefined, override: DialMap, profile: DialMap): Dial {
+  let best: Dial = 'own';
+  for (const key of keysForResource(resource)) {
+    const d = dialForKey(key, override, profile);
+    if (DIAL_RANK[d] > DIAL_RANK[best]) best = d;
+  }
+  return best;
 }
 
 export type DataScope =
@@ -43,116 +66,61 @@ export interface DataScopeResult {
   isLoaded: boolean;
 }
 
-export function useDataScope(_resource?: string): DataScopeResult {
-  const { user, effectiveRole } = useUser();
+export function useDataScope(resource?: string): DataScopeResult {
+  const { user } = useUser();
 
   const { data: scope = { type: 'own', userId: '' }, isLoading } = useQuery<DataScope>({
-    queryKey: queryKeys.dataScope.user(user?.id ?? '', _resource),
+    queryKey: queryKeys.dataScope.user(user?.id ?? '', resource),
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      if (!user) {
-        return { type: 'own', userId: '' };
+      if (!user) return { type: 'own', userId: '' };
+
+      const [{ data: overrideRow, error: overrideError }, { data: userRow, error: userError }] =
+        await Promise.all([
+          supabase
+            .from('permission_overrides')
+            .select('visibility_scopes')
+            .eq('user_id', user.id)
+            .maybeSingle(),
+          supabase
+            .from('users')
+            .select('team_id, access_profile:access_profile_id(visibility_scopes)')
+            .eq('id', user.id)
+            .maybeSingle(),
+        ]);
+
+      if (overrideError) console.warn('[DataScope] override fetch failed:', overrideError.message);
+      if (userError) console.warn('[DataScope] profile fetch failed:', userError.message);
+
+      const override = (overrideRow?.visibility_scopes ?? {}) as DialMap;
+      const apNode = (userRow as { access_profile?: unknown } | null)?.access_profile;
+      const profileNode = (Array.isArray(apNode) ? apNode[0] : apNode) as
+        | { visibility_scopes?: DialMap }
+        | null
+        | undefined;
+      const profile = (profileNode?.visibility_scopes ?? {}) as DialMap;
+
+      const dial = effectiveDial(resource, override, profile);
+
+      if (dial === 'everything') return { type: 'all' };
+      if (dial === 'own') return { type: 'own', userId: user.id };
+
+      // team — everyone sharing my team_id (incl. me), mirroring current_user_team_ids().
+      const teamId = (userRow as { team_id?: string | null } | null)?.team_id ?? null;
+      if (!teamId) return { type: 'own', userId: user.id };
+
+      const { data: teammates, error: teammatesError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('team_id', teamId);
+      if (teammatesError) {
+        console.warn('[DataScope] team fetch failed:', teammatesError.message);
+        return { type: 'own', userId: user.id };
       }
 
-      const { data: override, error: overrideError } = await supabase
-        .from('permission_overrides')
-        .select('scope, departments, module_grants, applied_profile_id, profile:applied_profile_id(visibility_scope, visibility_departments)')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (overrideError) {
-        console.warn('[DataScope] permission_override fetch failed:', overrideError.message);
-      }
-
-      const permissionOverride = override as PermissionOverrideScope | null;
-      const blockHigherRankVisibility =
-        permissionOverride?.module_grants?.[BLOCK_HIGHER_RANK_VISIBILITY_GRANT] === true;
-      const myRoleLevel = getRoleLevel(effectiveRole);
-      const visibleIds = (rows?: ScopedUser[] | null): string[] =>
-        (rows ?? [])
-          .filter((row) => (
-            row.id === user.id ||
-            !blockHigherRankVisibility ||
-            getRoleLevel(row.role) <= myRoleLevel
-          ))
-          .map((row) => row.id);
-
-      const resolvedScope = normalizeLegacyVisibilityScope(
-        permissionOverride?.scope ?? permissionOverride?.profile?.visibility_scope ?? null,
-      ) ?? roleDefaultVisibilityScope(effectiveRole ?? 'staff');
-      const resolvedDepartments =
-        permissionOverride?.departments
-        ?? permissionOverride?.profile?.visibility_departments
-        ?? [];
-
-      if (resolvedScope === 'all' || resolvedScope === 'department') {
-        return { type: 'all' };
-      }
-
-      if (resolvedScope === 'selected_departments') {
-        if (resolvedDepartments.length === 0) {
-          return { type: 'own', userId: user.id };
-        }
-        const { data: crossUsers, error: crossUsersError } = await supabase
-          .from('users')
-          .select('id, role')
-          .in('department', resolvedDepartments)
-          .eq('is_active', true);
-        if (crossUsersError) {
-          console.warn('[DataScope] selected departments fetch failed:', crossUsersError.message);
-          return { type: 'own', userId: user.id };
-        }
-        return { type: 'userIds', ids: visibleIds(crossUsers as ScopedUser[] | null) };
-      }
-
-      if (resolvedScope === 'team') {
-        const { data: membershipRows, error: membershipError } = await supabase
-          .from('team_memberships')
-          .select('team_id')
-          .eq('user_id', user.id)
-          .eq('is_active', true);
-        if (membershipError) {
-          console.warn('[DataScope] team memberships fetch failed:', membershipError.message);
-          return { type: 'own', userId: user.id };
-        }
-
-        const teamIds = Array.from(
-          new Set(((membershipRows ?? []) as Array<{ team_id: string | null }>).map((row) => row.team_id).filter(Boolean)),
-        ) as string[];
-        if (teamIds.length === 0) {
-          return { type: 'own', userId: user.id };
-        }
-
-        const { data: teamLinks, error: teamLinksError } = await supabase
-          .from('team_memberships')
-          .select('user_id')
-          .eq('is_active', true)
-          .in('team_id', teamIds);
-        if (teamLinksError) {
-          console.warn('[DataScope] team member links fetch failed:', teamLinksError.message);
-          return { type: 'own', userId: user.id };
-        }
-
-        const teamUserIds = Array.from(new Set((teamLinks ?? []).map((row) => row.user_id)));
-        if (teamUserIds.length === 0) {
-          return { type: 'own', userId: user.id };
-        }
-
-        const { data: teamUsers, error: teamUsersError } = await supabase
-          .from('users')
-          .select('id, role')
-          .in('id', teamUserIds)
-          .eq('is_active', true);
-        if (teamUsersError) {
-          console.warn('[DataScope] team users fetch failed:', teamUsersError.message);
-          return { type: 'own', userId: user.id };
-        }
-
-        return { type: 'userIds', ids: visibleIds(teamUsers as ScopedUser[] | null) };
-      }
-
-      return { type: 'own', userId: user.id };
+      const ids = Array.from(new Set([user.id, ...(teammates ?? []).map((r) => r.id)]));
+      return { type: 'userIds', ids };
     },
   });
 

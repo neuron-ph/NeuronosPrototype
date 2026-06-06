@@ -1,3 +1,5 @@
+import type { RecordVisibilityMap } from "./recordVisibilityConfig";
+
 export type ModuleGrants = Record<string, boolean>;
 export type VisibilityScope = "own" | "team" | "department" | "selected_departments" | "all";
 
@@ -11,6 +13,7 @@ export interface AccessProfile {
   module_grants: ModuleGrants;
   visibility_scope: VisibilityScope | null;
   visibility_departments: string[] | null;
+  visibility_scopes?: RecordVisibilityMap | null;
   is_baseline: boolean;
   is_active: boolean;
   created_by: string | null;
@@ -29,6 +32,7 @@ export interface AccessProfileSummary {
   module_grants: ModuleGrants;
   visibility_scope: VisibilityScope | null;
   visibility_departments: string[] | null;
+  visibility_scopes?: RecordVisibilityMap | null;
   is_baseline?: boolean;
   updated_at: string;
 }

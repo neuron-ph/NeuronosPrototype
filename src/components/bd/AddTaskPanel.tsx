@@ -6,6 +6,7 @@ import { useCustomers } from "../../hooks/useCustomers";
 import { useContacts } from "../../hooks/useContacts";
 import { useUsers } from "../../hooks/useUsers";
 import { useUser } from "../../hooks/useUser";
+import { usePermission } from "../../context/PermissionProvider";
 import { CustomDatePicker } from "../common/CustomDatePicker";
 
 interface AddTaskPanelProps {
@@ -19,8 +20,10 @@ interface AddTaskPanelProps {
 
 
 export function AddTaskPanel({ isOpen, onClose, onSave, inline, lockedCustomerId, lockedContactId }: AddTaskPanelProps) {
-  const { user, effectiveRole, effectiveDepartment } = useUser();
-  const canAssignToOthers = effectiveRole === 'manager' || effectiveDepartment === 'Executive';
+  const { user } = useUser();
+  // NEU-012 Phase 5b: assigning tasks to others = managing tasks beyond your own.
+  const { can } = usePermission();
+  const canAssignToOthers = can("bd_tasks", "edit");
 
   const { customers } = useCustomers({ enabled: isOpen });
   const { contacts } = useContacts({ enabled: isOpen });

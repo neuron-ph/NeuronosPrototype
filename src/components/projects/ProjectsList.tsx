@@ -22,6 +22,8 @@ interface ProjectsListProps {
     department: string;
   } | null;
   department: "BD" | "Operations" | "Accounting";
+  // NEU-020 2.5: route-derived permission door (bd | pricing | ops | accounting)
+  door: ProjectDept;
   onRefresh?: () => Promise<void>;
 }
 
@@ -31,13 +33,12 @@ export function ProjectsList({
   isLoading,
   currentUser,
   department,
+  door,
   onRefresh,
 }: ProjectsListProps) {
   const { can } = usePermission();
-  // Resolve dept-scoped moduleId family from the parent module's `department`
-  // string. BD is treated as ops projects (BD doesn't have its own projects matrix today).
-  const projectDept: ProjectDept = department === "Accounting" ? "accounting" : "ops";
-  const ids = PROJECT_MODULE_IDS[projectDept];
+  // NEU-020 2.5: the moduleId family is the route door, not the user's dept.
+  const ids = PROJECT_MODULE_IDS[door];
   const canViewAll = can(ids.all, "view");
   const canViewActive = can(ids.active, "view");
   const canViewCompleted = can(ids.completed, "view");

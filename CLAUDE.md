@@ -24,6 +24,19 @@ Never do just the git merge alone — Edge Functions and DB schema don't move wi
 
 Rollback: `git checkout main && git reset --hard stable/YYYY-MM-DD && git push origin main --force` (confirm with Marcus first).
 
+### "Sync prod to dev" — Full Checklist
+
+The mirror image of the release flow: code/migrations flow **dev → prod**; data flows **prod → dev**. Use this to make dev a verbatim 1:1 copy of prod (data + storage files, all passwords set to `devpassword123`) so you can reproduce prod-reported bugs against real data. Marcus's own dev login is preserved.
+
+When Marcus says **"Sync prod to dev"**, do these in order:
+
+1. **Confirm helpers** — `public.clone_exec_sql` + `public.clone_introspect` on dev, and `public.clone_introspect` on prod (read-only schema introspection). If missing, install via MCP (see `scripts/clone-prod-to-dev.mjs` header).
+2. **Run** `npm run sync:dev` (add `-- --no-storage` for data-only, `-- --strict` to abort on schema drift).
+3. **Review schema-drift warnings** — the script prints any table/column present in prod but missing in dev (these aren't copied). Surface them to Marcus; usually means dev has unreleased migrations (expected, dev leads).
+4. **Report** the per-table count summary + storage result. Remind Marcus: sign in with any prod email / `devpassword123`; his own dev login still works.
+
+The sync is self-discovering (reads prod's live schema each run) and re-runnable (truncates dev first). Never anonymize — copy verbatim.
+
 ## Tech Stack
 
 React 18 + TS, Tailwind v4 (config in `/src/styles/globals.css`, no `tailwind.config.js`), shadcn/ui, `react-router` (NOT `react-router-dom`), Supabase (direct client), Recharts, `sonner@2.0.3`, `motion/react`, `lucide-react`.

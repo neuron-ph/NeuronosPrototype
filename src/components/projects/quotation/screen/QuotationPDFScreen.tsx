@@ -7,6 +7,7 @@ import { QuotationDocument } from "../QuotationDocument";
 import { useQuotationDocumentState, type QuotationPrintOptions } from "./useQuotationDocumentState";
 
 import { useCompanySettings, useUpdateCompanySettings } from "../../../../hooks/useCompanySettings";
+import { usePermission } from "../../../../context/PermissionProvider";
 
 interface QuotationPDFScreenProps {
   project: Project;
@@ -97,6 +98,10 @@ export function QuotationPDFScreen({ project, quotation: quotationProp, onClose,
 
   const { settings: companySettings } = useCompanySettings();
   const updateCompanySettings = useUpdateCompanySettings();
+  const { can } = usePermission();
+  // WG-04 (D4): "Save as company default" overwrites org-wide letterhead/bank
+  // details printed on every invoice — dedicated knob, not just PDF access.
+  const canSaveCompanyDefaults = can("company_settings", "edit");
 
   const {
     options,
@@ -111,6 +116,7 @@ export function QuotationPDFScreen({ project, quotation: quotationProp, onClose,
   } = useQuotationDocumentState(resolvedQuotation as any, currentUser, companySettings);
 
   const handleSaveBankAsDefault = async () => {
+    if (!canSaveCompanyDefaults) return; // WG-04 backstop
     if (!options.bank_details) return;
     try {
       await updateCompanySettings.mutateAsync({
@@ -621,6 +627,7 @@ export function QuotationPDFScreen({ project, quotation: quotationProp, onClose,
                         placeholder="Account holder name"
                       />
                     </div>
+                    {canSaveCompanyDefaults && (
                     <button
                       type="button"
                       onClick={handleSaveBankAsDefault}
@@ -629,6 +636,7 @@ export function QuotationPDFScreen({ project, quotation: quotationProp, onClose,
                     >
                       {updateCompanySettings.isPending ? "Saving…" : "Save as company default"}
                     </button>
+                    )}
                   </ConsoleSection>
                 )}
 

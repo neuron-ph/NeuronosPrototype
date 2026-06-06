@@ -5,8 +5,9 @@ import { supabase } from "../../utils/supabase/client";
 import { toast } from "sonner@2.0.3";
 import { ArrowLeft, Save, AlertTriangle, RotateCcw, BookMarked, ChevronDown, BookOpen, Check, Pencil, Trash2, X } from "lucide-react";
 import { useUser } from "../../hooks/useUser";
-import { PermissionGrantEditor } from "./accessProfiles/PermissionGrantEditor";
-import type { ModuleGrants, AccessProfileSummary, VisibilityScope } from "./accessProfiles/accessProfileTypes";
+import { usePermission } from "../../context/PermissionProvider";
+import { AccessEditorTabs } from "./accessProfiles/AccessEditorTabs";
+import type { ModuleGrants, AccessProfileSummary } from "./accessProfiles/accessProfileTypes";
 import {
   chooseRoleDefaultProfile,
   cloneGrants,
@@ -14,9 +15,16 @@ import {
   hasGrantOverrides,
   mergeGrantLayers,
   normalizeProfileName,
-  resolveProfileVisibilityScope,
+  resolveCascadedGrants,
+  resolvePerUserOverride,
 } from "./accessProfiles/accessGrantUtils";
-import { deriveHiddenModuleGrants } from "../../config/access/accessSchema";
+import {
+  type RecordVisibilityMap,
+  legacyScopeFromMap,
+  mergeVisibility,
+  deriveVisibilityOverride,
+} from "./accessProfiles/recordVisibilityConfig";
+import { PERM_MODULES } from "./permissionsConfig";
 import { NeuronModal } from "../ui/NeuronModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -52,27 +60,6 @@ const ROLE_COLORS: Record<string, { bg: string; text: string }> = {
   staff:       { bg: "var(--neuron-bg-surface-subtle)",   text: "var(--theme-text-secondary)" },
 };
 
-const DEPARTMENTS = [
-  "Business Development",
-  "Pricing",
-  "Operations",
-  "Accounting",
-  "Executive",
-  "HR",
-] as const;
-
-const VISIBILITY_OPTIONS: Array<{
-  id: VisibilityScope;
-  label: string;
-  description: string;
-}> = [
-  { id: "own", label: "Own Records", description: "Only records this user owns or is assigned to." },
-  { id: "team", label: "Team Wide", description: "Records owned by users in their team." },
-  { id: "department", label: "Department Wide", description: "Records owned by users in their department." },
-  { id: "selected_departments", label: "Selected Departments", description: "Records from the departments you explicitly choose." },
-  { id: "all", label: "Company Wide", description: "All records across the company." },
-];
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatRelativeTime(date: Date): string {
@@ -86,14 +73,12 @@ function formatRelativeTime(date: Date): string {
 
 function SaveAsProfileForm({
   grants,
-  scope,
-  departments,
+  visibilityScopes,
   onSaved,
   onClose,
 }: {
   grants: ModuleGrants;
-  scope: VisibilityScope;
-  departments: string[];
+  visibilityScopes: RecordVisibilityMap;
   onSaved: () => void;
   onClose: () => void;
 }) {
@@ -105,17 +90,14 @@ function SaveAsProfileForm({
 
   const handleSave = async () => {
     const trimmed = normalizeProfileName(name);
-    if (!trimmed) { setError("Name is required"); return; }
-    if (scope === "selected_departments" && departments.length === 0) {
-      setError("Select at least one department for this scope");
-      return;
-    }
+    if (!trimmed) { setError("Please enter a profile name."); return; }
     setSaving(true);
     const { error: dbError } = await supabase.from("access_profiles").insert({
       name: trimmed,
       module_grants: grants,
-      visibility_scope: scope,
-      visibility_departments: scope === "selected_departments" ? departments : null,
+      visibility_scope: legacyScopeFromMap(visibilityScopes),
+      visibility_departments: null,
+      visibility_scopes: visibilityScopes,
       created_by: currentUser?.id ?? null,
       updated_by: currentUser?.id ?? null,
     });
@@ -168,8 +150,17 @@ function SaveAsProfileForm({
 
 export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) {
   const { user: currentAdmin } = useUser();
+  const { can } = usePermission();
   const queryClient = useQueryClient();
   const applyProfileBtnRef = useRef<HTMLDivElement>(null);
+
+  // NEU-019 WG-01: this screen writes permission_overrides + users.access_profile_id
+  // and creates/renames/deletes access_profiles. The route only requires a view grant,
+  // so every write affordance gates on its own knob here.
+  const canEditAccess = can("exec_users", "edit") || can("admin_users_tab", "edit");
+  const canCreateProfiles = can("admin_access_profiles_tab", "create");
+  const canEditProfiles = can("admin_access_profiles_tab", "edit");
+  const canDeleteProfiles = can("admin_access_profiles_tab", "delete");
 
   const [overrides, setOverrides] = useState<ModuleGrants>({});
   const [savedOverrides, setSavedOverrides] = useState<ModuleGrants>({});
@@ -183,12 +174,10 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
   const [showApplyProfileMenu, setShowApplyProfileMenu] = useState(false);
   const [showSaveAsProfile, setShowSaveAsProfile] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
-  const [resolvedScope, setResolvedScope] = useState<VisibilityScope>("own");
-  const [resolvedDepartments, setResolvedDepartments] = useState<string[]>([]);
+  const [visibilityScopes, setVisibilityScopes] = useState<RecordVisibilityMap>({});
+  const [savedVisibilityScopes, setSavedVisibilityScopes] = useState<RecordVisibilityMap>({});
   const [savedAppliedProfileId, setSavedAppliedProfileId] = useState<string | null>(null);
   const [savedAppliedProfileName, setSavedAppliedProfileName] = useState<string | null>(null);
-  const [savedScope, setSavedScope] = useState<VisibilityScope>("own");
-  const [savedDepartments, setSavedDepartments] = useState<string[]>([]);
   const [deletingProfile, setDeletingProfile] = useState<AccessProfileSummary | null>(null);
   const [deletingProfileBusy, setDeletingProfileBusy] = useState(false);
   const [renamingProfileId, setRenamingProfileId] = useState<string | null>(null);
@@ -197,7 +186,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
 
   const commitRename = async (profile: AccessProfileSummary) => {
     const trimmed = normalizeProfileName(renameValue);
-    if (!trimmed) { toast.error("Name is required"); return; }
+    if (!trimmed) { toast.error("Please enter a profile name before saving."); return; }
     if (trimmed === profile.name) { setRenamingProfileId(null); return; }
     setRenameBusy(true);
     const { error } = await supabase
@@ -207,7 +196,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
     setRenameBusy(false);
     if (error) {
       if ((error as any).code === "23505") toast.error("A profile with this name already exists");
-      else toast.error("Failed to rename profile");
+      else toast.error("Couldn't rename the profile. Please try again.");
       return;
     }
     try {
@@ -229,7 +218,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
     queryFn: async () => {
       const { data } = await supabase
         .from("access_profiles")
-        .select("id, name, description, target_department, target_role, module_grants, visibility_scope, visibility_departments, updated_at")
+        .select("id, name, description, target_department, target_role, module_grants, visibility_scope, visibility_departments, visibility_scopes, updated_at")
         .eq("is_active", true)
         .eq("is_baseline", false)
         .order("name");
@@ -255,41 +244,52 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
     () => mergeGrantLayers(baselineGrants, overrides),
     [baselineGrants, overrides],
   );
+  // Cascaded view grants drive which record-type rows are reachable (greying).
+  const resolvedViewGrants = useMemo(
+    () => resolveCascadedGrants(resolvedGrants, PERM_MODULES) as Record<string, boolean>,
+    [resolvedGrants],
+  );
 
   useEffect(() => {
     if (profilesLoading) return;
     let cancelled = false;
     async function load() {
       setLoading(true);
-      const { data } = await supabase
-        .from("permission_overrides")
-        .select("module_grants, applied_profile_id, scope, departments, profile:applied_profile_id(id, name, description, target_department, target_role, module_grants, visibility_scope, visibility_departments, updated_at)")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      // NEU-012 (strict): the enforced base is users.access_profile_id, and the stored
+      // delta is permission_overrides.module_grants. Source the baseline from the
+      // enforced field (not the legacy applied_profile_id pointer) so the grid shows
+      // exactly what the resolver enforces.
+      const [{ data }, { data: urow }] = await Promise.all([
+        supabase
+          .from("permission_overrides")
+          .select("module_grants, applied_profile_id, visibility_scopes")
+          .eq("user_id", user.id)
+          .maybeSingle(),
+        supabase
+          .from("users")
+          .select("access_profile_id")
+          .eq("id", user.id)
+          .maybeSingle(),
+      ]);
       if (!cancelled) {
         const grants = cloneGrants((data?.module_grants ?? {}) as ModuleGrants);
-        const explicitProfile = ((data as any)?.profile ?? null) as AccessProfileSummary | null;
         const fallbackProfile = chooseRoleDefaultProfile(profiles, user.role, user.department);
-        const baselineProfile = explicitProfile ?? fallbackProfile;
-        const pid = (data as any)?.applied_profile_id ?? baselineProfile?.id ?? null;
-        const pname = explicitProfile?.name ?? fallbackProfile?.name ?? null;
-        const nextScope = resolveProfileVisibilityScope(
-          (data as any)?.scope ?? explicitProfile?.visibility_scope ?? fallbackProfile?.visibility_scope ?? null,
-          user.role,
+        const baseProfileId = (urow as { access_profile_id: string | null } | null)?.access_profile_id ?? null;
+        const baselineProfile = profiles.find((p) => p.id === baseProfileId) ?? fallbackProfile;
+        const pid = baselineProfile?.id ?? null;
+        const pname = baselineProfile?.name ?? null;
+        // Effective per-type dials = profile baseline overlaid with the per-user
+        // override, mirroring the DB resolver current_user_visibility_dial.
+        const effective = mergeVisibility(
+          baselineProfile?.visibility_scopes ?? {},
+          ((data as any)?.visibility_scopes as RecordVisibilityMap | null) ?? {},
         );
-        const nextDepartments =
-          ((data as any)?.departments as string[] | null | undefined)
-          ?? explicitProfile?.visibility_departments
-          ?? fallbackProfile?.visibility_departments
-          ?? [];
         setAppliedProfileId(pid);
         setAppliedProfileName(pname);
         setSavedAppliedProfileId(pid);
         setSavedAppliedProfileName(pname);
-        setResolvedScope(nextScope);
-        setResolvedDepartments(nextDepartments);
-        setSavedScope(nextScope);
-        setSavedDepartments(nextDepartments);
+        setVisibilityScopes(effective);
+        setSavedVisibilityScopes(effective);
         setOverrides(grants);
         setSavedOverrides(grants);
         setLoading(false);
@@ -305,21 +305,17 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
     if (ok.length !== sk.length) return true;
     if (ok.some(k => overrides[k] !== savedOverrides[k])) return true;
     if (appliedProfileId !== savedAppliedProfileId) return true;
-    if (resolvedScope !== savedScope) return true;
-    if (resolvedScope === "selected_departments") {
-      if (resolvedDepartments.length !== savedDepartments.length) return true;
-      if (resolvedDepartments.some((department, index) => department !== savedDepartments[index])) return true;
-    }
+    const vk = Object.keys(visibilityScopes), svk = Object.keys(savedVisibilityScopes);
+    if (vk.length !== svk.length) return true;
+    if (vk.some(k => visibilityScopes[k] !== savedVisibilityScopes[k])) return true;
     return false;
   }, [
     appliedProfileId,
     overrides,
-    resolvedDepartments,
-    resolvedScope,
+    visibilityScopes,
     savedAppliedProfileId,
-    savedDepartments,
     savedOverrides,
-    savedScope,
+    savedVisibilityScopes,
   ]);
 
   const showProfileBadge = !!(appliedProfileId && appliedProfileName);
@@ -332,25 +328,21 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
     setOverrides({ ...savedOverrides });
     setAppliedProfileId(savedAppliedProfileId);
     setAppliedProfileName(savedAppliedProfileName);
-    setResolvedScope(savedScope);
-    setResolvedDepartments([...savedDepartments]);
+    setVisibilityScopes({ ...savedVisibilityScopes });
   };
 
   const handleApplyProfile = (profile: AccessProfileSummary) => {
     setOverrides({});
     setAppliedProfileId(profile.id);
     setAppliedProfileName(profile.name);
-    setResolvedScope(resolveProfileVisibilityScope(profile.visibility_scope, user.role));
-    setResolvedDepartments(profile.visibility_departments ?? []);
+    // Applying a profile clears per-user overrides → dials become the profile's.
+    setVisibilityScopes(mergeVisibility(profile.visibility_scopes ?? {}, {}));
     setShowApplyProfileMenu(false);
     toast.success(`Profile "${profile.name}" selected — save to confirm`);
   };
 
   const handleSave = async () => {
-    if (resolvedScope === "selected_departments" && resolvedDepartments.length === 0) {
-      toast.error("Select at least one visible department before saving.");
-      return;
-    }
+    if (!canEditAccess) return; // WG-01: affordances are hidden, this is the backstop
     setSaving(true);
     const { data: existing } = await supabase
       .from("permission_overrides")
@@ -359,7 +351,14 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
       .maybeSingle();
 
     const nextAppliedProfileId = appliedProfileId;
-    const finalGrants = deriveHiddenModuleGrants(overrides);
+    // Cascade is UX-only: persist the explicit delta (incl. borrowed/contained
+    // child tab grants) so enforcement's exact-key lookup matches what's shown.
+    const finalGrants = resolvePerUserOverride(baselineGrants, overrides, PERM_MODULES);
+    // Record-visibility: store only the per-type dials that differ from the
+    // assigned profile, so profile changes still propagate to the rest. The
+    // DB resolver reads permission_overrides.visibility_scopes (scope column is
+    // legacy/inert, kept coherent via legacyScopeFromMap).
+    const visibilityDelta = deriveVisibilityOverride(visibilityScopes, appliedProfile?.visibility_scopes ?? {});
 
     let error: any;
     if (existing) {
@@ -368,8 +367,9 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
         .update({
           module_grants: finalGrants,
           applied_profile_id: nextAppliedProfileId,
-          scope: resolvedScope,
-          departments: resolvedScope === "selected_departments" ? resolvedDepartments : null,
+          visibility_scopes: visibilityDelta,
+          scope: legacyScopeFromMap(visibilityScopes),
+          departments: null,
         })
         .eq("user_id", user.id));
     } else {
@@ -377,16 +377,28 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
         .from("permission_overrides")
         .insert({
           user_id: user.id,
-          scope: resolvedScope,
-          departments: resolvedScope === "selected_departments" ? resolvedDepartments : null,
+          visibility_scopes: visibilityDelta,
+          scope: legacyScopeFromMap(visibilityScopes),
+          departments: null,
           module_grants: finalGrants,
           applied_profile_id: nextAppliedProfileId,
         }));
     }
 
+    // NEU-012 (strict): enforcement reads users.access_profile_id as the base, so the
+    // assignment must land there too — applied_profile_id alone is no longer read.
+    // The override row above carries the visible per-user delta on top.
+    if (!error) {
+      const { error: uErr } = await supabase
+        .from("users")
+        .update({ access_profile_id: nextAppliedProfileId })
+        .eq("id", user.id);
+      if (uErr) error = uErr;
+    }
+
     setSaving(false);
     if (error) {
-      toast.error("Failed to save access rules");
+      toast.error("Couldn't save these changes. Please try again.");
       return;
     }
 
@@ -394,8 +406,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
     setSavedOverrides(saved);
     setSavedAppliedProfileId(nextAppliedProfileId);
     setSavedAppliedProfileName(appliedProfileName);
-    setSavedScope(resolvedScope);
-    setSavedDepartments([...resolvedDepartments]);
+    setSavedVisibilityScopes({ ...visibilityScopes });
     setLastSaved({ by: currentAdmin?.name || "you", at: new Date() });
 
     toast.success("Access rules saved");
@@ -470,8 +481,8 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
                   Access Configuration
                 </h2>
                 <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: 0 }}>
-                  Access rules for <strong style={{ fontWeight: 600, color: "var(--neuron-ink-secondary, var(--neuron-ink-primary))" }}>{user.name}</strong>.
-                  A teal dot beneath a cell means it differs from the role baseline.
+                  Access settings for <strong style={{ fontWeight: 600, color: "var(--neuron-ink-secondary, var(--neuron-ink-primary))" }}>{user.name}</strong>.
+                  A dot beneath a cell marks a custom change for this user.
                 </p>
               </div>
 
@@ -580,15 +591,17 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
                   )}
                 </AnimatePresence>
 
+                {canEditAccess && (
                 <button
                   onClick={() => setShowApplyProfileMenu(v => !v)}
                   style={{ height: 34, padding: "0 12px", borderRadius: 8, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-muted)", fontSize: 13, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, transition: "color 0.12s, border-color 0.12s" }}
                 >
                   <BookMarked size={13} /> Apply Profile <ChevronDown size={11} style={{ opacity: 0.6 }} />
                 </button>
+                )}
 
                 {/* Save as Profile */}
-                {hasGrantOverrides(overrides) && (
+                {canCreateProfiles && hasGrantOverrides(overrides) && (
                   <div style={{ position: "relative" }}>
                     <button
                       onClick={() => setShowSaveAsProfile(v => !v)}
@@ -599,8 +612,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
                     {showSaveAsProfile && (
                       <SaveAsProfileForm
                         grants={resolvedGrants}
-                        scope={resolvedScope}
-                        departments={resolvedDepartments}
+                        visibilityScopes={visibilityScopes}
                         onSaved={() => {}}
                         onClose={() => setShowSaveAsProfile(false)}
                       />
@@ -609,6 +621,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
                 )}
 
                 {/* Save Changes */}
+                {canEditAccess && (
                 <button
                   onClick={handleSave}
                   disabled={!isDirty || saving}
@@ -629,6 +642,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
                   <Save size={13} />
                   {saving ? "Saving…" : "Save Changes"}
                 </button>
+                )}
               </div>
 
               {/* Full-width profile dropdown */}
@@ -691,6 +705,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
                                     <span style={{ fontSize: 11, color: "var(--neuron-ink-muted)", marginTop: 1 }}>{p.target_department}</span>
                                   )}
                                 </button>
+                                {canEditProfiles && (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); setRenameValue(p.name); setRenamingProfileId(p.id); }}
                                   aria-label={`Rename ${p.name}`}
@@ -701,6 +716,8 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
                                 >
                                   <Pencil size={13} />
                                 </button>
+                                )}
+                                {canDeleteProfiles && (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); setDeletingProfile(p); }}
                                   aria-label={`Delete ${p.name}`}
@@ -711,6 +728,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
                                 >
                                   <Trash2 size={13} />
                                 </button>
+                                )}
                               </>
                             )}
                           </div>
@@ -723,95 +741,17 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
             </div>
           )}
 
-          {!loading && (
-            <div style={{ marginBottom: 16, border: "1px solid var(--neuron-ui-border)", borderRadius: 10, backgroundColor: "var(--neuron-bg-elevated)", padding: 16 }}>
-              <div style={{ marginBottom: 12 }}>
-                <h3 style={{ margin: 0, marginBottom: 4, fontSize: 14, fontWeight: 600, color: "var(--neuron-ink-primary)" }}>
-                  Record Visibility
-                </h3>
-                <p style={{ margin: 0, fontSize: 12, color: "var(--neuron-ink-muted)" }}>
-                  Choose how broadly this user can see records across the system.
-                </p>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
-                {VISIBILITY_OPTIONS.map((option) => {
-                  const active = resolvedScope === option.id;
-                  return (
-                    <button
-                      key={option.id}
-                      onClick={() => {
-                        setResolvedScope(option.id);
-                        if (option.id !== "selected_departments") setResolvedDepartments([]);
-                      }}
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "flex-start",
-                        gap: 4,
-                        padding: "12px 14px",
-                        textAlign: "left",
-                        borderRadius: 10,
-                        border: `1px solid ${active ? "var(--neuron-action-primary)" : "var(--neuron-ui-border)"}`,
-                        background: active ? "color-mix(in oklch, var(--neuron-action-primary) 10%, transparent)" : "transparent",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <span style={{ fontSize: 12, fontWeight: 600, color: active ? "var(--neuron-action-primary)" : "var(--neuron-ink-primary)" }}>
-                        {option.label}
-                      </span>
-                      <span style={{ fontSize: 11, lineHeight: 1.45, color: "var(--neuron-ink-muted)" }}>
-                        {option.description}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              {resolvedScope === "selected_departments" && (
-                <div style={{ marginTop: 12 }}>
-                  <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                    Visible Departments
-                  </p>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {DEPARTMENTS.map((department) => {
-                      const selected = resolvedDepartments.includes(department);
-                      return (
-                        <button
-                          key={department}
-                          onClick={() =>
-                            setResolvedDepartments((current) =>
-                              current.includes(department)
-                                ? current.filter((value) => value !== department)
-                                : [...current, department],
-                            )
-                          }
-                          style={{
-                            padding: "4px 10px",
-                            borderRadius: 999,
-                            border: `1px solid ${selected ? "var(--neuron-action-primary)" : "var(--neuron-ui-border)"}`,
-                            background: selected ? "color-mix(in oklch, var(--neuron-action-primary) 12%, transparent)" : "transparent",
-                            color: selected ? "var(--neuron-action-primary)" : "var(--neuron-ink-muted)",
-                            fontSize: 12,
-                            fontWeight: 500,
-                            cursor: "pointer",
-                          }}
-                        >
-                          {department}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          <PermissionGrantEditor
+          <AccessEditorTabs
             grants={overrides}
-            onChange={(nextGrants) => handleGrantChange(nextGrants)}
+            onGrantsChange={(nextGrants) => handleGrantChange(nextGrants)}
             baselineGrants={baselineGrants}
             showInheritedBaseline={true}
-            loading={loading}
+            readOnly={!canEditAccess}
             othersPrimaryGroup={user.department === "Pricing" ? "Pricing" : "Operations"}
+            loading={loading}
+            resolvedViewGrants={resolvedViewGrants}
+            visibilityScopes={visibilityScopes}
+            onVisibilityChange={setVisibilityScopes}
           />
         </div>
       </div>
@@ -819,7 +759,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
       {/* Sticky save bar — visible only while there are unsaved changes.
           Sits below the scrollable body so it remains visible during matrix scroll. */}
       <AnimatePresence>
-        {isDirty && !loading && (
+        {isDirty && !loading && canEditAccess && (
           <motion.div
             key="sticky-save-bar"
             initial={{ y: 56, opacity: 0 }}
@@ -841,7 +781,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
                 </div>
                 {appliedProfileId && (
                   <span style={{ fontSize: 11, color: "var(--neuron-ink-muted)" }}>
-                    Profile <strong>{appliedProfileName}</strong> remains the baseline. Saving stores only this user's explicit overrides.
+                    Profile <strong>{appliedProfileName}</strong> remains the starting point. Saving stores only the changes you've made for this user.
                   </span>
                 )}
               </div>
@@ -903,7 +843,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
           const { error } = await supabase.from("access_profiles").delete().eq("id", target.id);
           if (error) {
             setDeletingProfileBusy(false);
-            toast.error("Failed to delete profile");
+            toast.error("Couldn't delete the profile. Please try again.");
             return;
           }
           try {

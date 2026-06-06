@@ -1103,6 +1103,7 @@ function DepartmentTeamsSection({
   refreshTeamsData: () => Promise<void>;
 }) {
   const queryClient = useQueryClient();
+  const { can } = usePermission();
   const {
     data: deptRolesData,
     error: deptRolesError,
@@ -1116,8 +1117,15 @@ function DepartmentTeamsSection({
   const deptRoles = deptRolesData?.roles ?? [];
   const supportsRequiredRoles = deptRolesData?.supportsRequired ?? true;
 
-  const canEditRoleConfig =
-    currentUser?.department === "Executive" || currentUser?.role === "executive";
+  // NEU-012 Phase 5b: department-role config writes mirror the
+  // department_assignment_roles RLS (exec_profiling:edit).
+  const canEditRoleConfig = can("exec_profiling", "edit");
+
+  // NEU-019 WG-10: teams CRUD ran on the tab view alone — now action-fidelity
+  // gated on the Teams tab knobs (same family OperationsTeamsSection uses).
+  const canCreateTeams = can("admin_teams_tab", "create");
+  const canEditTeams = can("admin_teams_tab", "edit");
+  const canDeleteTeams = can("admin_teams_tab", "delete");
 
   const activeRoles = useMemo(
     () => deptRoles.filter((role) => role.is_active).sort((a, b) => a.sort_order - b.sort_order),
@@ -1368,6 +1376,7 @@ function DepartmentTeamsSection({
             <span style={{ fontSize: 11, fontWeight: 600, color: "var(--neuron-ink-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
               Teams
             </span>
+            {canCreateTeams && (
             <Button
               variant="outline"
               size="sm"
@@ -1379,6 +1388,7 @@ function DepartmentTeamsSection({
               <Plus size={12} />
               New team
             </Button>
+            )}
           </div>
 
           <AnimatePresence>
@@ -1470,6 +1480,7 @@ function DepartmentTeamsSection({
                           )}
                         </div>
                         <div style={{ display: "flex", gap: 4, flexShrink: 0 }} onClick={(event) => event.stopPropagation()}>
+                          {canEditTeams && (
                           <button
                             onClick={() => {
                               setEditingTeamId(team.id);
@@ -1483,7 +1494,8 @@ function DepartmentTeamsSection({
                           >
                             <Edit size={13} />
                           </button>
-                          {confirmDeleteId === team.id ? (
+                          )}
+                          {!canDeleteTeams ? null : confirmDeleteId === team.id ? (
                             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                               <button
                                 onClick={() => handleDeleteConfirmed(team.id, team.name)}
@@ -1628,6 +1640,7 @@ function DepartmentTeamsSection({
 function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void }) {
   const queryClient = useQueryClient();
   const { user: currentUser } = useUser();
+  const { can: canTeams } = usePermission(); // WG-10 backstop check
   const [expanded, setExpanded]           = useState<string | null>(null);
   const [creatingInDept, setCreatingInDept]   = useState<string | null>(null);
   const [editingTeamId, setEditingTeamId]     = useState<string | null>(null);
@@ -1719,6 +1732,7 @@ function TeamsTab({ onCountUpdate }: { onCountUpdate: (count: number) => void })
   }, [fetchActiveUsers, fetchMemberships, fetchTeams, queryClient]);
 
   const handleDeleteConfirmed = async (teamId: string, teamName: string) => {
+    if (!canTeams("admin_teams_tab", "delete")) return; // WG-10 backstop
     setConfirmDeleteId(null);
     setDeletingId(teamId);
     try {

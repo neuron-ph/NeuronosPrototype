@@ -20,7 +20,7 @@ import {
   persistAssignmentsForNewBooking,
 } from "../../../utils/assignments/applyAssignmentToBookingPayload";
 import { ContractDetectionBanner } from "../shared/ContractDetectionBanner";
-import { autofillForwardingFromProject, linkBookingToProject } from "../../../utils/projectAutofill";
+import { autofillForwardingFromProject, linkBookingToProject, isProjectBookingConflict } from "../../../utils/projectAutofill";
 import type { Project } from "../../../types/pricing";
 import { fetchProjectsWithQuotation } from "../../../utils/projectHydration";
 import { fetchFullContract } from "../../../utils/contractLookup";
@@ -31,6 +31,7 @@ import { generateBookingNumber, peekNextBookingNumber } from "../../../utils/boo
 import { getSelectedCustomer } from "../../../utils/bookings/selectedCustomer";
 import { useCustomerAccountOwnerAutofill } from "../shared/useCustomerAccountOwnerAutofill";
 import { saveBookingDraft } from "../shared/saveBookingDraft";
+import { usePermission } from "../../../context/PermissionProvider";
 import { CustomDropdown } from "../../bd/CustomDropdown";
 
 // Translates the bookings_unique_mbl_mawb unique-violation (migration 124) into a
@@ -68,6 +69,7 @@ export function CreateForwardingBookingPanel({
   draftBookingId,
   draftData,
 }: CreateForwardingBookingPanelProps) {
+  const { can } = usePermission(); // NEU-019 WG-32
   const [loading, setLoading] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(draftBookingId ?? null);
@@ -181,6 +183,7 @@ export function CreateForwardingBookingPanel({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!can("ops_forwarding", "create") && !can("ops_forwarding", "edit")) return; // NEU-019 WG-32 backstop
 
     const hasProjectLink =
       Boolean(fetchedProject) || String(formState.project_number ?? "").trim() !== "";
@@ -291,13 +294,19 @@ export function CreateForwardingBookingPanel({
       onClose();
     } catch (err) {
       console.error("CreateForwardingBookingPanel:", err);
-      toast.error(duplicateMblMawbMessage(err, formState) ?? "Failed to create booking. Please try again.");
+      const conflictMsg = isProjectBookingConflict((err as { message?: string })?.message)
+        ? "A Forwarding booking already exists for this project. Each project allows one booking per service type."
+        : null;
+      toast.error(
+        duplicateMblMawbMessage(err, formState) ?? conflictMsg ?? "Failed to create booking. Please try again.",
+      );
     } finally {
       setLoading(false);
     }
   };
 
   const handleSaveDraft = async () => {
+    if (!can("ops_forwarding", "create") && !can("ops_forwarding", "edit")) return; // NEU-019 WG-32 backstop
     setSavingDraft(true);
     try {
       const result = await saveBookingDraft(formState, "Forwarding", {

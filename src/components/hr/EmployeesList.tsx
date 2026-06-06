@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { toast } from "../ui/toast-utils";
+import { usePermission } from "../../context/PermissionProvider";
 
 interface EmployeeRowData {
   id: string;
@@ -386,7 +387,9 @@ export function EmployeesList({ filterCompany, userRole, onEmployeeClick }: Empl
     ? EMPLOYEE_DATA
     : EMPLOYEE_DATA.filter((group) => group.companyName === filterCompany);
 
-  const isAdmin = userRole === "manager";
+  // NEU-012 Phase 5b: suspend is an HR write — grant-gated, not role-gated.
+  const { can } = usePermission();
+  const isAdmin = can("hr", "edit");
 
   const handleSuspendEmployee = (employee: EmployeeRowData, e: React.MouseEvent) => {
     e.stopPropagation();

@@ -14,6 +14,7 @@ import {
 import { toast } from "../../ui/toast-utils";
 import { CollectionGLPostingSheet } from "./CollectionGLPostingSheet";
 import { useMarkEntityReadOnMount } from "../../../hooks/useNotifications";
+import { usePermission } from "../../../context/PermissionProvider";
 
 interface CollectionDetailsSheetProps {
   isOpen: boolean;
@@ -22,6 +23,19 @@ interface CollectionDetailsSheetProps {
 }
 
 export function CollectionDetailsSheet({ isOpen, onClose, collectionId }: CollectionDetailsSheetProps) {
+  // NEU-019 WG-08: credit/refund resolution writes collections + linked
+  // evouchers (collections OR-gate, as in UnifiedCollectionsTab); Post to GL
+  // writes journal entries (same gate as General Journal).
+  const { can } = usePermission();
+  const canKey = can as unknown as (moduleId: string, action: string) => boolean;
+  // 2.6-final: acct_financials master key retired (record-mirroring write gate,
+  // DD-22 signed); holders seeded into accounting_financials_collections_tab.
+  const canWriteCollections = ["create", "edit"].some(a =>
+    canKey("accounting_financials_collections_tab", a) ||
+    canKey("acct_collections", a) ||
+    canKey("ops_bookings_collections_tab", a) ||
+    canKey("ops_projects_collections_tab", a));
+  const canPostToGL = can("acct_journal", "create") || can("acct_journal", "edit");
   const [collection, setCollection] = useState<Collection | null>(null);
   const [collectionSource, setCollectionSource] = useState<"collections" | "evouchers" | null>(null);
   const [loading, setLoading] = useState(false);
@@ -112,6 +126,7 @@ export function CollectionDetailsSheet({ isOpen, onClose, collectionId }: Collec
 
   const statusStyle = collection ? getStatusColor(collection.status || "pending") : { bg: "var(--theme-bg-surface-subtle)", color: "var(--theme-text-muted)" };
   const canResolve = Boolean(
+    canWriteCollections && // WG-08
     collection &&
     collectionSource &&
     !isCollectionResolvedByCreditOrRefund(collection) &&
@@ -122,6 +137,7 @@ export function CollectionDetailsSheet({ isOpen, onClose, collectionId }: Collec
   );
 
   const handleResolveCollection = async (resolution: "credited" | "refunded") => {
+    if (!canWriteCollections) return; // WG-08 backstop
     if (!collection || !collectionSource) return;
 
     try {
@@ -356,7 +372,7 @@ export function CollectionDetailsSheet({ isOpen, onClose, collectionId }: Collec
                 </div>
               </div>
 
-              {!(collection as any).journal_entry_id && !isCollectionResolvedByCreditOrRefund(collection) && (
+              {canPostToGL && !(collection as any).journal_entry_id && !isCollectionResolvedByCreditOrRefund(collection) && (
                 <div style={{ marginBottom: "16px" }}>
                   <button
                     onClick={() => setShowGLPosting(true)}

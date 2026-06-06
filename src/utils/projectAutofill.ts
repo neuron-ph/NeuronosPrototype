@@ -233,36 +233,44 @@ export function autofillExpensesFromProject(project: Project): ExpenseChargeCate
 
 // ==================== Link Booking to Project ====================
 
+// Postgres unique-violation code for the one-booking-per-service-per-project index
+// (migration 110). Lets callers translate a link conflict into a friendly message.
+export const PROJECT_BOOKING_CONFLICT = "PROJECT_BOOKING_CONFLICT";
+
+export function isProjectBookingConflict(error?: string | null): boolean {
+  return (
+    !!error &&
+    (error === PROJECT_BOOKING_CONFLICT ||
+      error.includes("bookings_one_per_service_per_project"))
+  );
+}
+
+/**
+ * Link a booking to a project by setting `bookings.project_id` — the single
+ * source of truth. (Previously this pushed to a `projects.linked_bookings`
+ * JSONB array, which drifted from the column the unique constraint guards and
+ * the UI displayed; see NEU-013.) The `bookingNumber`/`serviceType`/`status`
+ * params are retained for call-site compatibility but no longer stored here.
+ */
 export async function linkBookingToProject(
   projectId: string,
   bookingId: string,
-  bookingNumber: string,
-  serviceType: string,
-  status: string,
+  _bookingNumber?: string,
+  _serviceType?: string,
+  _status?: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const { supabase } = await import("./supabase/client");
-    // Fetch the project
-    const { data: project, error: fetchErr } = await supabase
-      .from('projects')
-      .select('*')
-      .eq('id', projectId)
-      .maybeSingle();
-    
-    if (fetchErr || !project) {
-      return { success: false, error: fetchErr?.message || 'Project not found' };
-    }
-    
-    // Add booking to linked_bookings array
-    const linkedBookings = project.linked_bookings || [];
-    linkedBookings.push({ bookingId, bookingNumber, serviceType, status });
-
     const { error: updateErr } = await supabase
-      .from('projects')
-      .update({ linked_bookings: linkedBookings, updated_at: new Date().toISOString() })
-      .eq('id', projectId);
-    
-    if (updateErr) return { success: false, error: updateErr.message };
+      .from('bookings')
+      .update({ project_id: projectId, updated_at: new Date().toISOString() })
+      .eq('id', bookingId);
+
+    if (updateErr) {
+      // 23505 = unique_violation on bookings_one_per_service_per_project
+      if (updateErr.code === '23505') return { success: false, error: PROJECT_BOOKING_CONFLICT };
+      return { success: false, error: updateErr.message };
+    }
     return { success: true };
   } catch (error) {
     return { success: false, error: String(error) };
@@ -271,30 +279,21 @@ export async function linkBookingToProject(
 
 // ==================== Unlink Booking from Project ====================
 
+/**
+ * Unlink a booking from its project by clearing `bookings.project_id`.
+ * `projectId` is retained for call-site compatibility but not needed.
+ */
 export async function unlinkBookingFromProject(
-  projectId: string,
+  _projectId: string,
   bookingId: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const { supabase } = await import("./supabase/client");
-    const { data: project, error: fetchErr } = await supabase
-      .from('projects')
-      .select('*')
-      .eq('id', projectId)
-      .maybeSingle();
-    
-    if (fetchErr || !project) {
-      return { success: false, error: fetchErr?.message || 'Project not found' };
-    }
-    
-    const linkedBookings = (project.linked_bookings || [])
-      .filter((b: any) => b.bookingId !== bookingId);
-
     const { error: updateErr } = await supabase
-      .from('projects')
-      .update({ linked_bookings: linkedBookings, updated_at: new Date().toISOString() })
-      .eq('id', projectId);
-    
+      .from('bookings')
+      .update({ project_id: null, updated_at: new Date().toISOString() })
+      .eq('id', bookingId);
+
     if (updateErr) return { success: false, error: updateErr.message };
     return { success: true };
   } catch (error) {

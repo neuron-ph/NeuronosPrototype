@@ -64,7 +64,7 @@ serve(async (req) => {
     // Fetch caller identity (id needed for granted_by on profile application).
     const { data: callerProfile, error: profileError } = await adminClient
       .from("users")
-      .select("id, department, role")
+      .select("id, department, role, access_profile_id")
       .eq("auth_id", callerAuthId)
       .maybeSingle();
 
@@ -88,7 +88,25 @@ serve(async (req) => {
       );
     }
 
-    const callerModuleGrants = (callerOverride?.module_grants ?? {}) as Record<string, boolean>;
+    // Caller effective grants = assigned profile (base) overlaid with per-user override,
+    // mirroring the strict resolver. Reading the override alone would wrongly deny a
+    // caller whose create-users grant lives in their shared profile (post NEU-012).
+    let callerProfileGrants: Record<string, boolean> = {};
+    const callerProfileId = (callerProfile as { access_profile_id?: string | null }).access_profile_id;
+    if (callerProfileId) {
+      const { data: callerAp } = await adminClient
+        .from("access_profiles")
+        .select("module_grants, is_active")
+        .eq("id", callerProfileId)
+        .maybeSingle();
+      if (callerAp?.is_active) {
+        callerProfileGrants = (callerAp.module_grants ?? {}) as Record<string, boolean>;
+      }
+    }
+    const callerModuleGrants = {
+      ...callerProfileGrants,
+      ...((callerOverride?.module_grants ?? {}) as Record<string, boolean>),
+    };
     const canCreateUsers = hasAdminUsersGrant(callerModuleGrants, "create", "users");
 
     if (!canCreateUsers) {
@@ -184,7 +202,11 @@ serve(async (req) => {
     const isOps = department === "Operations";
     const resolvedStatus = status || "active";
 
-    // Update the trigger-created users row with all fields atomically
+    // Update the trigger-created users row with all fields atomically.
+    // NEU-012 (strict): enforcement reads users.access_profile_id as the base, so the
+    // new user must land on their profile here — applied_profile_id on the override
+    // row (below) is no longer read by the resolver. Without this the user has no base
+    // and therefore no access.
     const updatePayload = {
       name,
       department,
@@ -195,6 +217,7 @@ serve(async (req) => {
       team_role: isOps ? (team_role || null) : null,
       status: resolvedStatus,
       is_active: is_active !== false && resolvedStatus === "active",
+      access_profile_id: profileData?.id ?? null,
     };
 
     let updateResult = await adminClient

@@ -53,6 +53,10 @@ interface BillingsTableProps {
   highlightId?: string | null;
   /** Void an unbilled billing item (sets status=voided, preserves record) */
   onVoidItem?: (itemId: string) => void;
+  /** NEU-020 2.11 (WT2): the per-line Delete button is delete-class — hidden
+   *  unless the Billings DELETE cell is held. Default true (renderer is dumb;
+   *  the parent decides). */
+  canDeleteItems?: boolean;
   /** Send all unbilled items in a service group to their booking */
   onSendServiceToBooking?: (itemIds: string[], bookingId: string) => Promise<void>;
 }
@@ -133,6 +137,7 @@ export function BillingsTable({
   linkedBookings,
   highlightId = null,
   onVoidItem,
+  canDeleteItems = true,
   onSendServiceToBooking,
 }: BillingsTableProps) {
   // Ref for scrolling to highlighted item
@@ -259,6 +264,7 @@ export function BillingsTable({
             Void
           </button>
         )}
+        {canDeleteItems && (
         <button
           onClick={(e) => { e.stopPropagation(); onItemChange?.(item.id, "delete", true); }}
           style={{
@@ -272,6 +278,7 @@ export function BillingsTable({
           <Trash2 size={12} />
           Delete
         </button>
+        )}
       </div>
     );
   };

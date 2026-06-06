@@ -41,6 +41,8 @@ interface ProjectDetailProps {
     department: string;
   } | null;
   department: "BD" | "Operations" | "Accounting";
+  // NEU-020 2.5: route-derived permission door (bd | pricing | ops | accounting)
+  door: ProjectDept;
   onCreateTicket?: (entity: { type: string; id: string; name: string }) => void;
   initialTab?: string | null;
   highlightId?: string | null;
@@ -143,14 +145,14 @@ export function ProjectDetail({
   onUpdate,
   currentUser,
   department,
+  door,
   onCreateTicket,
   initialTab,
   highlightId
 }: ProjectDetailProps) {
   const { can } = usePermission();
   useMarkEntityReadOnMount("project", project.id);
-  const projectDept: ProjectDept = department === "Accounting" ? "accounting" : "ops";
-  const ids = PROJECT_MODULE_IDS[projectDept];
+  const ids = PROJECT_MODULE_IDS[door];
   const canViewInfoTab        = can(ids.info,        "view");
   const canViewQuotationTab   = can(ids.quotation,   "view");
   const canViewBookingsTab    = can(ids.bookings,    "view");
@@ -159,7 +161,10 @@ export function ProjectDetail({
   const canViewInvoicesTab    = can(ids.invoices,    "view");
   const canViewCollectionsTab = can(ids.collections, "view");
   const canViewAttachmentsTab = can(ids.attachments, "view");
+  const canUploadAttachments  = can(ids.attachments, "create"); // WG-16
+  const canDeleteAttachments  = can(ids.attachments, "delete"); // WG-16
   const canViewCommentsTab    = can(ids.comments,    "view");
+  const canPostComments       = can(ids.comments,    "create"); // WG-14
 
   const defaultTab: ProjectTab = (() => {
     if (initialTab) return initialTab as ProjectTab;
@@ -200,6 +205,13 @@ export function ProjectDetail({
   const currentUserDepartment = currentUser?.department || "BD";
 
   const handleSaveQuotation = async (updates: any) => {
+    // NEU-020 2.10a: amending the project's QUOTATION obeys the Quotation tab's
+    // own Edit cell (ids.quotation), not the Projects module-root edit. This is
+    // also the PDF Studio save path (reachable with quotation-tab VIEW alone).
+    if (!canAmendQuotation) {
+      toast.error("You don't have permission to save changes to this quotation.");
+      return;
+    }
     try {
       const quotationId = project.quotation_id || project.quotation?.id;
       const payload = buildQuotationUpdatePayload(updates);
@@ -225,7 +237,12 @@ export function ProjectDetail({
     }
   };
 
-  const showActions = can("bd_projects", "edit") || can("pricing_projects", "edit");
+  // NEU-020 2.5: project-level edit authority (status, actions menu) comes from
+  // the door the user entered through.
+  const showActions = can(ids.root, "edit");
+  // NEU-020 2.10a: amending the QUOTATION obeys the Quotation tab's own Edit
+  // cell — not the project root (the grid's "Quotation → Edit" must govern it).
+  const canAmendQuotation = can(ids.quotation, "edit");
 
   // Define the Tab Structure
   const TAB_STRUCTURE = {
@@ -274,6 +291,7 @@ export function ProjectDetail({
   };
 
   const handleUpdateProjectStatus = async (newStatus: ProjectStatus) => {
+    if (!showActions) return; // NEU-019 WG-27 backstop (projects edit grant)
     // 1. Optimistic Update: Update local state immediately
     const previousStatus = optimisticStatus;
     setOptimisticStatus(newStatus);
@@ -403,6 +421,7 @@ export function ProjectDetail({
             <ProjectStatusSelector
               status={optimisticStatus}
               onUpdateStatus={handleUpdateProjectStatus}
+              readOnly={!showActions} // WG-27: prop existed, was never passed
               className="mr-2"
             />
 
@@ -654,6 +673,8 @@ export function ProjectDetail({
             onUpdate={onUpdate}
             onViewBooking={handleViewBooking}
             onSaveQuotation={handleSaveQuotation}
+            canAmend={canAmendQuotation} // NEU-020 2.10a: Quotation tab's own edit cell
+            canExport={can(ids.quotation, "export")} // NEU-020 2.11 (WT4): Print PDF = export cell
           />
         )}
 
@@ -664,23 +685,24 @@ export function ProjectDetail({
             project={project}
             currentUser={currentUser}
             selectedBookingId={selectedBookingId}
+            permissionDoor={ids.bookings}
           />
         )}
 
         {activeTab === "expenses" && canViewExpensesTab && (
           <div className="max-w-7xl mx-auto">
-            <ProjectExpensesTab project={project} currentUser={currentUser} />
+            <ProjectExpensesTab project={project} currentUser={currentUser} permissionDoor={ids.expenses} />
           </div>
         )}
 
         {activeTab === "billings" && canViewBillingsTab && (
           <div className="max-w-7xl mx-auto">
-            <ProjectBillings financials={financials} project={project} highlightId={highlightId} />
+            <ProjectBillings financials={financials} project={project} highlightId={highlightId} permissionDoor={ids.billings} />
           </div>
         )}
 
         {activeTab === "invoices" && canViewInvoicesTab && (
-          <ProjectInvoices financials={financials} project={project} currentUser={currentUser} highlightId={highlightId} />
+          <ProjectInvoices financials={financials} project={project} currentUser={currentUser} highlightId={highlightId} permissionDoor={ids.invoices} />
         )}
 
         {activeTab === "collections" && canViewCollectionsTab && (
@@ -690,6 +712,7 @@ export function ProjectDetail({
               project={project}
               currentUser={currentUser}
               highlightId={highlightId}
+              permissionDoor={ids.collections}
             />
           </div>
         )}
@@ -698,6 +721,8 @@ export function ProjectDetail({
           <ProjectAttachmentsTab
             project={project}
             currentUser={currentUser}
+            canUpload={canUploadAttachments}
+            canDelete={canDeleteAttachments}
           />
         )}
 
@@ -708,6 +733,7 @@ export function ProjectDetail({
             currentUserId={currentUserId}
             currentUserName={currentUserName}
             currentUserDepartment={currentUserDepartment}
+            canPost={canPostComments}
           />
         )}
       </div>

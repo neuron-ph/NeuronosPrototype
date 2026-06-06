@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { usePermission } from "../../context/PermissionProvider";
 import { Search, Plus, Calendar, Flag, Phone, Mail, Send, Users, MessageSquare, MessageCircle, Linkedin, ListTodo, CheckCircle2 } from "lucide-react";
 import { supabase } from '../../utils/supabase/client';
 import { useUser } from "../../hooks/useUser";
@@ -20,16 +21,18 @@ interface TasksListProps {
 }
 
 export function TasksList({ onViewTask }: TasksListProps) {
+  const { can } = usePermission();
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<TaskType | "All">("All");
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "All">("All");
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | "All">("All");
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
 
-  const { user, effectiveRole, effectiveDepartment } = useUser();
-  const canAssignToOthers = effectiveRole === 'manager' || effectiveDepartment === 'Executive';
+  const { user } = useUser();
+  // NEU-012 Phase 5b: assigning tasks to others = managing tasks beyond your own.
+  const canAssignToOthers = can("bd_tasks", "edit");
 
-  const { scope, isLoaded } = useDataScope();
+  const { scope, isLoaded } = useDataScope('tasks');
 
   // Build scope-aware filters for useTasks
   // 'all' → no extra filter (RLS handles it)
@@ -225,7 +228,7 @@ export function TasksList({ onViewTask }: TasksListProps) {
               Manage follow-ups and business development activities
             </p>
           </div>
-          <button
+          {can("bd_tasks", "create") && <button
             style={{
               height: "48px",
               padding: "0 24px",
@@ -250,7 +253,7 @@ export function TasksList({ onViewTask }: TasksListProps) {
           >
             <Plus size={20} />
             Add Task
-          </button>
+          </button>}
         </div>
 
         {/* Search and Filters */}

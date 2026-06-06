@@ -1,4 +1,4 @@
-import { ArrowLeft, Mail, Phone, Building2, User, Edit, Trash2, Paperclip, Download, FileText, Image as ImageIcon, File, Upload, CheckCircle2, AlertCircle, MessageSquare, Send, Plus, Users, MessageCircle, Linkedin, Flag, CheckSquare, UserCheck } from "lucide-react";
+import { ArrowLeft, Mail, Phone, Building2, User, Edit, Trash2, Paperclip, FileText, Image as ImageIcon, File, Upload, CheckCircle2, AlertCircle, MessageSquare, Send, Plus, Users, MessageCircle, Linkedin, Flag, CheckSquare, UserCheck } from "lucide-react";
 import { useRef, useState } from "react";
 import { usePermission } from "../../context/PermissionProvider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -54,9 +54,18 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
   const canViewInquiriesTab   = can(ids.inquiries,   "view");
   const canViewAttachmentsTab = can(ids.attachments, "view");
   const canViewCommentsTab    = can(ids.comments,    "view");
+  const canPostComments       = can(ids.comments,    "create"); // WG-14
+  const canUploadAttachments  = can(ids.attachments, "create"); // WG-16
+  const canDeleteAttachments  = can(ids.attachments, "delete"); // WG-16
   const canViewTeamsTab       = can(ids.teams,       "view");
   const canEditTeamsTab       = can(ids.teams,       "edit");
   const canDeleteContact      = can(ids.root,        "delete");
+  const canEditContact        = can(ids.root,        "edit");
+  const canCreateCustomer     = can(variant === "pricing" ? "pricing_customers" : "bd_customers", "create");
+  const canCreateActivity     = can(ids.activities,  "create");
+  const canCreateTask         = can(ids.tasks,       "create");
+  const canEditTask           = can(ids.tasks,       "edit");
+  const canCreateInquiry      = can(ids.inquiries,   "create");
 
   const [activeTab, setActiveTab] = useState<"activities" | "tasks" | "inquiries" | "attachments" | "comments" | "teams">(() => {
     if (variant === "pricing") {
@@ -127,8 +136,10 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
     }
   };
 
-  const { user, effectiveRole, effectiveDepartment } = useUser();
-  const canAssignOwner = effectiveDepartment === "Executive" || effectiveRole === "manager" || effectiveRole === "executive";
+  const { user, effectiveDepartment } = useUser();
+  // NEU-012 Phase 5b: reassigning the owner is a contact edit — DB allows any
+  // contacts editor, so the UI mirrors that rather than the old manager check.
+  const canAssignOwner = canEditContact;
 
   // Optimistic override so the UI flips to "Converted" immediately after the
   // convert call returns, without waiting for the parent to refetch and pass
@@ -546,6 +557,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                   <div className="flex items-center gap-2">
                     {!isEditing ? (
                     <>
+                      {canEditContact && (
                       <button
                         onClick={() => setIsEditing(true)}
                         className="flex items-center gap-2 px-3 py-2 rounded-lg transition-colors text-[13px]"
@@ -564,7 +576,8 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                         <Edit size={14} />
                         Update Details
                       </button>
-                      {!effectiveCustomerId ? (
+                      )}
+                      {!effectiveCustomerId ? (canCreateCustomer && (
                         <button
                           onClick={handleConvertToCustomer}
                           disabled={isConverting}
@@ -586,7 +599,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                           <UserCheck size={14} />
                           {isConverting ? "Converting..." : "Convert to Customer"}
                         </button>
-                      ) : (
+                      )) : (
                         <span
                           className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm text-[12px] font-medium"
                           style={{
@@ -1179,7 +1192,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                         <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
                           Activity Timeline
                         </h3>
-                        <button
+                        {canCreateActivity && <button
                           onClick={() => {
                             setIsLoggingActivity(true);
                             setSelectedActivity(null);
@@ -1197,7 +1210,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                           }}
                         >
                           Log Activity
-                        </button>
+                        </button>}
                       </div>
 
                       {isLoadingData ? (
@@ -1351,7 +1364,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                         <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
                           Tasks
                         </h3>
-                        <button
+                        {canCreateTask && <button
                           onClick={() => {
                             setIsCreatingTask(true);
                             setSelectedTask(null);
@@ -1370,7 +1383,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                           }}
                         >
                           Create Task
-                        </button>
+                        </button>}
                       </div>
 
                       {tasks.length === 0 ? (
@@ -1486,7 +1499,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                             Task Details
                           </h3>
                         </div>
-                        {!isEditingTask && (
+                        {!isEditingTask && canEditTask && (
                           <button
                             onClick={() => setIsEditingTask(true)}
                             className="flex items-center gap-2 px-3 py-2 rounded-lg transition-colors text-[13px]"
@@ -1776,22 +1789,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                                         </div>
                                       </div>
                                     </div>
-                                    <button
-                                      className="flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-medium transition-colors"
-                                      style={{
-                                        backgroundColor: "var(--theme-action-primary-bg)",
-                                        color: "#FFFFFF"
-                                      }}
-                                      onMouseEnter={(e) => {
-                                        e.currentTarget.style.backgroundColor = "var(--theme-action-primary-border)";
-                                      }}
-                                      onMouseLeave={(e) => {
-                                        e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)";
-                                      }}
-                                    >
-                                      <Download size={12} />
-                                      Download
-                                    </button>
+                                    {/* NEU-020 DD-17: dead Download button (no onClick) deleted */}
                                   </div>
                                 ))}
                               </div>
@@ -1847,7 +1845,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                               </>
                             ) : (
                               <>
-                                {selectedTask && selectedTask.status !== "Completed" && (
+                                {selectedTask && selectedTask.status !== "Completed" && canEditTask && (
                                   <button
                                     onClick={() => {
                                       // Check if proof is required
@@ -1904,7 +1902,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                     <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
                       Inquiries
                     </h3>
-                    {onCreateInquiry && company && (
+                    {onCreateInquiry && company && canCreateInquiry && (
                       <CreateQuotationMenu
                         buttonText="Create Inquiry"
                         entityWord="Inquiry"
@@ -2021,6 +2019,8 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                   entityId={contact.id}
                   entityType="contacts"
                   currentUser={user ? { id: user.id, name: user.name || "", email: user.email || "", department: user.department || "" } : null}
+                  canUpload={canUploadAttachments}
+                  canDelete={canDeleteAttachments}
                 />
               )}
 
@@ -2032,6 +2032,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                     currentUserId={user?.id || ""}
                     currentUserName={user?.name || "Unknown"}
                     currentUserDepartment={user?.department || effectiveDepartment || "BD"}
+                    canPost={canPostComments}
                   />
                 </div>
               )}

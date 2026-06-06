@@ -5,7 +5,7 @@ import { supabase } from "../../../utils/supabase/client";
 import { createWorkflowTicket } from "../../../utils/workflowTickets";
 import { toast } from "sonner@2.0.3";
 import { useUser } from "../../../hooks/useUser";
-import { canPerformEVAction } from "../../../utils/permissions";
+import { usePermission } from "../../../context/PermissionProvider";
 import type { EVoucherAPType } from "../../../types/evoucher";
 import {
   FUNCTIONAL_CURRENCY,
@@ -212,12 +212,11 @@ export function DisburseEVoucherPage() {
   }, []);
 
   // ── Derived ───────────────────────────────────────────────────────────────
-  const role = user?.role ?? "";
-  const department = user?.department ?? "";
-
+  // NEU-012 Phase 5b: disbursement gate mirrors the evouchers RLS.
+  const { can } = usePermission();
   const canDisburse =
     !!user &&
-    canPerformEVAction("approve_accounting", role, department) &&
+    can("acct_evouchers", "approve") &&
     evoucher?.status === "pending_accounting";
 
   const isReimb = evoucher ? isReimbursement(evoucher.transaction_type) : false;

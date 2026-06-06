@@ -6,6 +6,7 @@ import type { FinancialContainer } from "../../../types/financials";
 import type { LinkedBilling } from "../../../types/evoucher";
 import { Invoice, Collection } from "../../../types/accounting";
 import { useUser } from "../../../hooks/useUser";
+import { usePermission } from "../../../context/PermissionProvider";
 import { fireGLPostingTicketOnCollection } from "../../../utils/workflowTickets";
 import { SidePanel } from "../../common/SidePanel";
 import { CustomDatePicker } from "../../common/CustomDatePicker";
@@ -66,6 +67,13 @@ export function CollectionCreatorPanel({
   mode = 'create' 
 }: CollectionCreatorPanelProps) {
   const { user } = useUser();
+  // NEU-019 WG-23: deleting a (reversed) invoice is an INVOICE write — it must
+  // not ride the collections grant that opened this panel.
+  const { can } = usePermission();
+  const canKey = can as unknown as (moduleId: string, action: string) => boolean;
+  // 2.6-final: acct_financials master key retired (holders seeded into
+  // accounting_financials_invoices_tab).
+  const canDeleteInvoices = canKey("accounting_financials_invoices_tab", "delete");
   const [isSaving, setIsSaving] = useState(false);
   const isReadOnly = mode === 'view';
   const [pendingDeleteInvoice, setPendingDeleteInvoice] = useState<{ id: string; voucherNumber: string } | null>(null);
@@ -340,13 +348,14 @@ export function CollectionCreatorPanel({
 
   // Delete a reversed invoice — only allowed when status='reversed'
   const handleDeleteInvoice = (id: string) => {
+    if (!canDeleteInvoices) return; // WG-23
     const target = invoices.find(inv => inv.id === id);
     if (!target?.isReversed) return;
     setPendingDeleteInvoice({ id, voucherNumber: target.voucher_number });
   };
 
   const handleDeleteInvoiceConfirm = async () => {
-    if (!pendingDeleteInvoice) return;
+    if (!pendingDeleteInvoice || !canDeleteInvoices) return; // WG-23 backstop
     const { id, voucherNumber } = pendingDeleteInvoice;
     const { error } = await supabase.from("invoices").delete().eq("id", id);
     if (error) {
@@ -775,7 +784,7 @@ export function CollectionCreatorPanel({
                           </td>
                           <td className="px-6 py-4 text-right">
                             {inv.isReversed ? (
-                              !isReadOnly && (
+                              !isReadOnly && canDeleteInvoices && (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleDeleteInvoice(inv.id); }}
                                   title="Delete reversed invoice"

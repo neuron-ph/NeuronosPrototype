@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Clipboard, Plus } from "lucide-react";
 import type { Project, InquiryService } from "../../types/pricing";
 import { usePermission } from "../../context/PermissionProvider";
+import { canActOnBooking } from "../../utils/bookingPermissions";
 import { ProjectBookingReadOnlyView } from "./ProjectBookingReadOnlyView";
 import { CreateBookingFromProjectModal } from "./CreateBookingFromProjectModal";
 import { ForwardingSpecsDisplay } from "../bd/service-displays/ForwardingSpecsDisplay";
@@ -31,7 +32,7 @@ export function ProjectBookingsTabBD({ project, currentUser, onUpdate }: Project
   const servicesMetadata = project.services_metadata || [];
   const linkedBookings = project.linkedBookings || [];
 
-  const canCreateBookings = can("ops_bookings", "create");
+  const canCreateBookings = canActOnBooking(can, "create");
 
   const toggleServiceExpanded = (index: number) => {
     setExpandedServices(prev => ({

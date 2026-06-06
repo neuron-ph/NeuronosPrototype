@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight, Plus, Eye } from "lucide-react";
 import type { Project, InquiryService } from "../../types/pricing";
 import { usePermission } from "../../context/PermissionProvider";
+import { opsModuleForService } from "../../utils/bookings/opsModuleForService";
 import { ForwardingSpecsDisplay } from "../bd/service-displays/ForwardingSpecsDisplay";
 import { BrokerageSpecsDisplay } from "../bd/service-displays/BrokerageSpecsDisplay";
 import { TruckingSpecsDisplay } from "../bd/service-displays/TruckingSpecsDisplay";
@@ -31,7 +32,9 @@ export function ProjectServiceCard({ service, project, currentUser, onUpdate, on
 
   const linkedBookings = project.linkedBookings || [];
 
-  const canCreateBookings = can("ops_bookings", "create");
+  // NEU-019 WG-32: per-service create grant (or the project Bookings-tab create grant), not any cross-module create
+  const canCreateBookings =
+    can(opsModuleForService(service.service_type), "create") || can("ops_projects_bookings_tab", "create");
 
   // Get bookings for this service
   const getBookingsForService = () => {

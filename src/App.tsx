@@ -9,6 +9,7 @@ import { UserProvider, useUser } from "./hooks/useUser";
 import { PermissionProvider } from "./context/PermissionProvider";
 import { AutoCapsProvider } from "./context/AutoCapsProvider";
 import { RouteGuard } from "./components/RouteGuard";
+import { canActOnBooking } from "./utils/bookingPermissions";
 import type { ActionId, ModuleId } from "./components/admin/permissionsConfig";
 import { toast } from "sonner@2.0.3";
 import { Toaster } from "./components/ui/sonner";
@@ -246,6 +247,7 @@ function RouteWrapper({ children, page }: { children: React.ReactNode; page: str
     if (path.startsWith("/pricing/projects")) return "pricing-projects";
     if (path.startsWith("/pricing/contracts")) return "pricing-contracts";
     if (path.startsWith("/pricing/vendors")) return "pricing-vendors";
+    if (path.startsWith("/pricing/others")) return "pricing-others"; // NEU-020 DD-2
     if (path.startsWith("/operations/forwarding")) return "ops-forwarding";
     if (path.startsWith("/operations/brokerage")) return "ops-brokerage";
     if (path.startsWith("/operations/trucking")) return "ops-trucking";
@@ -308,6 +310,7 @@ function RouteWrapper({ children, page }: { children: React.ReactNode; page: str
       "ops-trucking": "/operations/trucking",
       "ops-marine-insurance": "/operations/marine-insurance",
       "ops-others": "/operations/others",
+      "pricing-others": "/pricing/others", // NEU-020 DD-2
       "acct-journal": "/accounting/journal",
       "acct-coa": "/accounting/coa",
       "acct-evouchers": "/accounting/evouchers",
@@ -457,9 +460,10 @@ function BDContractsPage() {
 
   return (
     <RouteWrapper page="bd-contracts">
-      <ContractsModule 
+      <ContractsModule
         currentUser={user || undefined}
         onCreateTicket={handleCreateTicket}
+        door="bd"
       />
     </RouteWrapper>
   );
@@ -590,9 +594,10 @@ function PricingProjectsPage() {
 
   return (
     <RouteWrapper page="pricing-projects">
-      <ProjectsModule 
+      <ProjectsModule
         currentUser={user || undefined}
         onCreateTicket={handleCreateTicket}
+        door="pricing"
       />
     </RouteWrapper>
   );
@@ -608,9 +613,10 @@ function PricingContractsPage() {
 
   return (
     <RouteWrapper page="pricing-contracts">
-      <ContractsModule 
+      <ContractsModule
         currentUser={user || undefined}
         onCreateTicket={handleCreateTicket}
+        door="pricing"
       />
     </RouteWrapper>
   );
@@ -649,9 +655,10 @@ function OperationsProjectsPage() {
 
   return (
     <RouteWrapper page="ops-projects">
-      <ProjectsModule 
+      <ProjectsModule
         currentUser={user || undefined}
         onCreateTicket={handleCreateTicket}
+        door="ops"
       />
     </RouteWrapper>
   );
@@ -703,13 +710,13 @@ function MarineInsuranceBookingsPage() {
   );
 }
 
-function OthersBookingsPage() {
+function OthersBookingsPage({ door = "ops" }: { door?: "ops" | "pricing" }) {
   const { user } = useUser();
   const [searchParams] = useSearchParams();
   const pendingBookingId = searchParams.get("booking");
   return (
-    <RouteWrapper page="ops-others">
-      <OthersBookings currentUser={user} pendingBookingId={pendingBookingId} />
+    <RouteWrapper page={door === "pricing" ? "pricing-others" : "ops-others"}>
+      <OthersBookings currentUser={user} pendingBookingId={pendingBookingId} door={door} />
     </RouteWrapper>
   );
 }
@@ -880,7 +887,7 @@ function AccountingProjectsPage() {
   const { user } = useUser();
   return (
     <RouteWrapper page="acct-projects">
-      <ProjectsModule currentUser={user || undefined} departmentOverride="Accounting" />
+      <ProjectsModule currentUser={user || undefined} door="accounting" />
     </RouteWrapper>
   );
 }
@@ -889,7 +896,7 @@ function AccountingContractsPage() {
   const { user } = useUser();
   return (
     <RouteWrapper page="acct-contracts">
-      <ContractsModule currentUser={user || undefined} departmentOverride="Accounting" />
+      <ContractsModule currentUser={user || undefined} door="accounting" />
     </RouteWrapper>
   );
 }
@@ -1020,11 +1027,19 @@ function DesignSystemPage() {
 // Layout route that enforces explicit module permission on child routes
 function GuardedLayout({
   requiredPermission,
+  requiredPredicate,
+  predicateLabel,
 }: {
   requiredPermission?: { moduleId: ModuleId; action: ActionId };
+  requiredPredicate?: (can: (moduleId: ModuleId, action: ActionId) => boolean) => boolean;
+  predicateLabel?: string;
 }) {
   return (
-    <RouteGuard requiredPermission={requiredPermission}>
+    <RouteGuard
+      requiredPermission={requiredPermission}
+      requiredPredicate={requiredPredicate}
+      predicateLabel={predicateLabel}
+    >
       <Outlet />
     </RouteGuard>
   );
@@ -1152,10 +1167,14 @@ function AppContent() {
         <Route element={<GuardedLayout requiredPermission={{ moduleId: "ops_others", action: "view" }} />}>
           <Route path="/operations/others" element={<OthersBookingsPage />} />
         </Route>
-        <Route element={<GuardedLayout requiredPermission={{ moduleId: "ops_bookings", action: "create" }} />}>
+        {/* NEU-020 DD-2: the Pricing door into Others — its own route, its own keys */}
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "pricing_others", action: "view" }} />}>
+          <Route path="/pricing/others" element={<OthersBookingsPage door="pricing" />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPredicate={(can) => canActOnBooking(can, "create")} predicateLabel="bookings.create" />}>
           <Route path="/operations/create" element={<CreateBookingPage />} />
         </Route>
-        <Route element={<GuardedLayout requiredPermission={{ moduleId: "ops_bookings", action: "view" }} />}>
+        <Route element={<GuardedLayout requiredPredicate={(can) => canActOnBooking(can, "view")} predicateLabel="bookings.view" />}>
           <Route path="/operations/:bookingId" element={<BookingDetailPage />} />
         </Route>
         
@@ -1231,10 +1250,17 @@ function AppContent() {
           <Route path="/admin/profiling" element={<RouteWrapper page="admin-profiling"><ProfilingModule /></RouteWrapper>} />
         </Route>
 
-        {/* Open to all authenticated users */}
-        <Route path="/calendar" element={<CalendarPage />} />
-        <Route path="/inbox" element={<InboxPageWrapper />} />
-        <Route path="/my-evouchers" element={<MyEVouchersPageWrapper />} />
+        {/* NEU-020 DD-18: personal pages are view-gated like every other module —
+            View OFF = no page, not just a hidden sidebar link */}
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "calendar", action: "view" }} />}>
+          <Route path="/calendar" element={<CalendarPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "inbox", action: "view" }} />}>
+          <Route path="/inbox" element={<InboxPageWrapper />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "my_evouchers", action: "view" }} />}>
+          <Route path="/my-evouchers" element={<MyEVouchersPageWrapper />} />
+        </Route>
         <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_evouchers", action: "view" }} />}>
           <Route path="/evouchers/:id/disburse" element={<RouteWrapper page="acct-evouchers"><DisburseEVoucherPage /></RouteWrapper>} />
         </Route>

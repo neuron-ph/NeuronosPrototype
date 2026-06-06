@@ -146,7 +146,7 @@ const prefetchOperations = () => void import("./Operations");
 const prefetchAccounting = () => void import("./accounting/FinancialsModule");
 const prefetchInbox      = () => void import("./InboxPage");
 
-type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" |"pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" |"ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" |"operations" | "acct-transactions" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-journal" | "acct-coa" | "acct-reports" | "acct-statements" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "calendar" | "inbox" | "my-evouchers" | "ticket-queue" | "settings" | "admin-users" | "admin-profiling" | "admin" | "ticket-testing" | "activity-log" | "design-system";
+type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" |"pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" | "pricing-others" |"ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" |"operations" | "acct-transactions" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-journal" | "acct-coa" | "acct-reports" | "acct-statements" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "calendar" | "inbox" | "my-evouchers" | "ticket-queue" | "settings" | "admin-users" | "admin-profiling" | "admin" | "ticket-testing" | "activity-log" | "design-system";
 
 // Sidebar permission map — derived from canonical schema for sidebar-backed pages,
 // plus explicit entries for legacy non-sidebar accounting routes that still need
@@ -315,13 +315,10 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
     inboxUnreadCount,
   ]);
   
-  // Role level map — mirrors RouteGuard so sidebar visibility matches route access
-  const ROLE_LEVEL: Record<string, number> = { staff: 0, team_leader: 1, supervisor: 2, manager: 3, executive: 4 };
-
   // Use effectiveDepartment from context for dev role override support
   const { user, effectiveDepartment, effectiveRole } = useUser();
   const { moduleCount, subSectionCount } = useNotifications();
-  const { can, hasExplicitGrant, isLoaded: permissionsLoaded } = usePermission();
+  const { can, isLoaded: permissionsLoaded } = usePermission();
 
   // Fetch inbox unread count — with hard timeout so a hung Supabase client
   // doesn't block the main thread or accumulate zombie requests.
@@ -354,16 +351,16 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
   
   // Determine what modules to show based on effective department
   const userDepartment = effectiveDepartment || currentUser?.department || "Operations";
-  const isExecutive = userDepartment === "Executive";
-  const showHR = !import.meta.env.PROD && (isExecutive || userDepartment === "HR");
+  // NEU-012 Phase 5b: HR visibility comes from the hr module grant (dev-only).
+  const showHR = !import.meta.env.PROD && can("hr", "view");
   
   // Dashboard - standalone
   const dashboardItem = { id: "dashboard" as Page, label: "Dashboard", icon: Home };
   // const transactionsItem = { id: "transactions" as Page, label: "Transactions", icon: CreditCard };
   
   // Sidebar entries derive their order + labels from the canonical access schema.
-  // Icons and per-item minRole gates live here because they are sidebar-only
-  // presentation concerns, keyed by sidebar pageId.
+  // Icons live here because they are sidebar-only presentation concerns, keyed
+  // by sidebar pageId.
   const SIDEBAR_PAGE_ICON: Record<string, any> = {
     "bd-contacts":         User,
     "bd-customers":        Building,
@@ -384,6 +381,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
     "ops-trucking":        Truck,
     "ops-marine-insurance":Ship,
     "ops-others":          FileText,
+    "pricing-others":      FileText,
     "acct-financials":     CreditCard,
     "acct-evouchers":      Receipt,
     "acct-journal":        ScrollText,
@@ -396,11 +394,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
     "acct-reports":        BarChart3,
     "acct-statements":     TrendingUp,
   };
-  const SIDEBAR_PAGE_MIN_ROLE: Partial<Record<string, string>> = {
-    "acct-financials": "manager",
-  };
-
-  type SubItem = { id: Page; label: string; icon: any; minRole?: string };
+  type SubItem = { id: Page; label: string; icon: any };
   const buildSubItems = (deptLabel: string): SubItem[] =>
     getSidebarModulesForDepartment(deptLabel)
       .filter(m => !!m.pageId)
@@ -408,7 +402,6 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
         id: m.pageId as Page,
         label: m.label,
         icon: SIDEBAR_PAGE_ICON[m.pageId as string] ?? FileText,
-        minRole: SIDEBAR_PAGE_MIN_ROLE[m.pageId as string],
       }));
 
   const bdSubItems         = buildSubItems("Business Development");
@@ -426,21 +419,16 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
   const visibleBdSubItems = bdSubItems.filter((item) => canViewPage(item.id));
   const visiblePricingSubItems = pricingSubItems.filter((item) => {
     if (!canViewPage(item.id)) return false;
-    // "Others" is cross-listed under Operations + Pricing (shared module). For
-    // Operations users it already appears under Operations, so suppress the
-    // redundant Pricing entry.
-    if (item.id === "ops-others" && userDepartment === "Operations") return false;
+    // NEU-020 DD-2: "Others" under Pricing is now its own door (pricing_others)
+    // with its own route — no shared-key cross-listing. Keep the UX de-dup for
+    // Operations users who hold both doors.
+    if (item.id === "pricing-others" && userDepartment === "Operations") return false;
     return true;
   });
   const visibleOperationsSubItems = operationsSubItems.filter((item) => canViewPage(item.id));
-  const visibleAcctSubItems = acctSubItems
-    .filter((item) => {
-      if (!item.minRole || isExecutive) return true;
-      if (hasExplicitGrant(sidebarPermissionMap[item.id] ?? "acct_financials", "view")) return true;
-      const userLevel = ROLE_LEVEL[effectiveRole || "staff"] ?? 0;
-      return userLevel >= (ROLE_LEVEL[item.minRole] ?? 0);
-    })
-    .filter((item) => canViewPage(item.id));
+  // NEU-012 Phase 5b: the old minRole layer is redundant under strict grants —
+  // canViewPage's grant check is the single source of truth.
+  const visibleAcctSubItems = acctSubItems.filter((item) => canViewPage(item.id));
 
   const showBDSection = visibleBdSubItems.length > 0;
   const showPricingSection = visiblePricingSubItems.length > 0;
@@ -463,12 +451,13 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
     { id: "hr" as Page, label: "HR", icon: User },
   ];
   
-  // Personal section
+  // Personal section — view-gated like every other section (NEU-019 WG-07:
+  // calendar's view knob lands here; inbox/my-evouchers views now enforced too)
   const personalItems = [
     { id: "calendar" as Page, label: "Calendar", icon: Calendar },
     { id: "inbox" as Page, label: "Inbox", icon: Inbox },
     { id: "my-evouchers" as Page, label: "E-Vouchers", icon: FileText },
-  ];
+  ].filter(item => canViewPage(item.id));
   
 
   const otherItems: { id: Page; label: string; icon: any }[] = [];

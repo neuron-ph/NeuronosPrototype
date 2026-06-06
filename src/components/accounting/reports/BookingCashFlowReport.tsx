@@ -7,6 +7,7 @@
 
 import { useMemo, useState } from "react";
 import { Search, Download, FileText, DollarSign, TrendingUp, TrendingDown, Minus, Clock, ArrowUpDown } from "lucide-react";
+import { usePermission } from "../../../context/PermissionProvider";
 import type { DateScope } from "../aggregate/types";
 import { useBookingCashFlowReport } from "../../../hooks/useBookingCashFlowReport";
 import type { BookingCashFlowRow } from "../../../hooks/useBookingCashFlowReport";
@@ -203,6 +204,8 @@ interface Props {
 }
 
 export function BookingCashFlowReport({ scope }: Props) {
+  const { can } = usePermission();
+  const canExportReports = can("acct_reports", "export"); // NEU-020 2.10c (#10)
   const { rows, summary, isLoading } = useBookingCashFlowReport(scope);
   const [search, setSearch]           = useState("");
   const [groupBy, setGroupBy]         = useState<GroupBy>("none");
@@ -421,6 +424,7 @@ export function BookingCashFlowReport({ scope }: Props) {
         <div className="flex-1" />
 
         {/* Export */}
+        {canExportReports && (
         <button
           onClick={exportCSV}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors"
@@ -429,6 +433,7 @@ export function BookingCashFlowReport({ scope }: Props) {
           <Download size={14} />
           Export CSV
         </button>
+        )}
       </div>
 
       {/* Data Table(s) */}
