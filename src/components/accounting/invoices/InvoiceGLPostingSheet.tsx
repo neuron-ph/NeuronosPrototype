@@ -5,6 +5,7 @@ import { logActivity } from "../../../utils/activityLog";
 import { toast } from "../../ui/toast-utils";
 import { SidePanel } from "../../common/SidePanel";
 import { useUser } from "../../../hooks/useUser";
+import { usePermission } from "../../../context/PermissionProvider";
 import { fireInvoiceARTicket } from "../../../utils/workflowTickets";
 import {
   FUNCTIONAL_CURRENCY,
@@ -155,6 +156,7 @@ export function InvoiceGLPostingSheet({
   onPosted,
 }: InvoiceGLPostingSheetProps) {
   const { user } = useUser();
+  const { can } = usePermission();
 
   // Invoice data
   const [invoice, setInvoice] = useState<InvoiceRecord | null>(null);
@@ -302,6 +304,8 @@ export function InvoiceGLPostingSheet({
   // ---------------------------------------------------------------------------
 
   async function handlePost() {
+    // WG-08 backstop: posting writes journal_entries — same gate as General Journal
+    if (!(can("acct_journal", "create") || can("acct_journal", "edit"))) return;
     if (!debitAccountId || !creditAccountId) {
       toast.error("Select both a debit and credit account");
       return;

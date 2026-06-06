@@ -19,6 +19,7 @@ import {
 import { toast } from "../../ui/toast-utils";
 import { InvoiceGLPostingSheet } from "../invoices/InvoiceGLPostingSheet";
 import { useMarkEntityReadOnMount } from "../../../hooks/useNotifications";
+import { usePermission } from "../../../context/PermissionProvider";
 
 interface BillingDetailsSheetProps {
   isOpen: boolean;
@@ -27,6 +28,16 @@ interface BillingDetailsSheetProps {
 }
 
 export function BillingDetailsSheet({ isOpen, onClose, billingId }: BillingDetailsSheetProps) {
+  // NEU-019 WG-08: reversal drafts/completion write invoices (same OR-gate as
+  // WG-06); Post to GL writes journal entries (same gate as General Journal).
+  const { can } = usePermission();
+  const canKey = can as unknown as (moduleId: string, action: string) => boolean;
+  const canWriteInvoices = ["create", "edit"].some(a =>
+    canKey("acct_financials", a) ||
+    canKey("accounting_financials_invoices_tab", a) ||
+    canKey("ops_bookings_invoices_tab", a) ||
+    canKey("ops_projects_invoices_tab", a));
+  const canPostToGL = can("acct_journal", "create") || can("acct_journal", "edit");
   const [billing, setBilling] = useState<Billing | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -139,6 +150,7 @@ export function BillingDetailsSheet({ isOpen, onClose, billingId }: BillingDetai
   const statusStyle = getStatusColor(displayStatus);
 
   const handleCreateReversalDraft = async () => {
+    if (!canWriteInvoices) return; // WG-08 backstop
     if (!billing?.id || !billing.invoice_number) return;
 
     try {
@@ -155,6 +167,7 @@ export function BillingDetailsSheet({ isOpen, onClose, billingId }: BillingDetai
   };
 
   const handleCompleteReversal = async () => {
+    if (!canWriteInvoices) return; // WG-08 backstop
     const targetReversal =
       isInvoiceReversalDraft(billing) ? billing : reversalDocument;
 
@@ -435,7 +448,7 @@ export function BillingDetailsSheet({ isOpen, onClose, billingId }: BillingDetai
                  </div>
               </div>
 
-              {billing.invoice_number && !billing.journal_entry_id && !isInvoiceReversalPosted(billing) && !isInvoiceReversedOriginal(billing) && (
+              {canPostToGL && billing.invoice_number && !billing.journal_entry_id && !isInvoiceReversalPosted(billing) && !isInvoiceReversedOriginal(billing) && (
                 <div style={{ marginBottom: "16px" }}>
                   <button
                     onClick={() => setShowGLPosting(true)}
@@ -484,7 +497,7 @@ export function BillingDetailsSheet({ isOpen, onClose, billingId }: BillingDetai
                       )}
                     </div>
 
-                    {linkedCollectionCount === 0 && (
+                    {linkedCollectionCount === 0 && canWriteInvoices && (
                       <>
                         {!reversalDocument && !isInvoiceReversalPosted(billing) && !isInvoiceReversedOriginal(billing) && (
                           <button
