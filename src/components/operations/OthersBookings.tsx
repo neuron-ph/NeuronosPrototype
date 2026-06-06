@@ -180,6 +180,7 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
 
   const handleDeleteBooking = async (bookingId: string, bookingLabel: string, currentStatus: ExecutionStatus, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!can("ops_others", "delete")) return; // NEU-019 WG-09 backstop
     try {
       const financialState = await assessBookingFinancialState(bookingId);
       if (!canHardDeleteBooking(currentStatus, financialState)) {
@@ -585,12 +586,14 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
                   ? "No bookings match your filters" 
                   : "No other service bookings yet"}
               </div>
+              {can("ops_others", "create") && (
               <button
                 onClick={() => setShowCreateModal(true)}
                 className="text-[var(--theme-action-primary-bg)] hover:underline"
               >
                 Create your first booking
               </button>
+              )}
             </div>
           ) : (
             <div style={{
@@ -632,7 +635,11 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
                       className="border-b border-[var(--theme-text-primary)]/5 hover:bg-[var(--theme-action-primary-bg)]/5 transition-colors cursor-pointer"
                       onClick={() => {
                         if (booking.status === "Draft") {
-                          setResumeDraft({ ...(booking as any), id: booking.bookingId });
+                          // WG-09: resuming a draft re-opens the create panel in
+                          // edit mode (updates the row) — needs a write grant
+                          if (can("ops_others", "create") || can("ops_others", "edit")) {
+                            setResumeDraft({ ...(booking as any), id: booking.bookingId });
+                          }
                         } else {
                           suppressUrlSelectionRef.current = false;
                           setSelectedBooking(booking);
@@ -699,6 +706,7 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
                         </div>
                       </td>
                       <td className="py-4 px-4 text-center">
+                        {can("ops_others", "delete") && (
                         <button
                           onClick={(e) => handleDeleteBooking(booking.bookingId, (booking as any).booking_number || booking.bookingId, booking.status as ExecutionStatus, e)}
                           style={{
@@ -727,6 +735,7 @@ export function OthersBookings({ currentUser, pendingBookingId, initialTab, high
                         >
                           <Trash2 size={14} />
                         </button>
+                        )}
                       </td>
                     </tr>
                   ))}

@@ -195,6 +195,7 @@ export function MarineInsuranceBookings({ currentUser, pendingBookingId, initial
 
   const handleDeleteBooking = async (bookingId: string, bookingLabel: string, currentStatus: ExecutionStatus, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!can("ops_marine_insurance", "delete")) return; // NEU-019 WG-09 backstop
     try {
       const financialState = await assessBookingFinancialState(bookingId);
       if (!canHardDeleteBooking(currentStatus, financialState)) {
@@ -625,12 +626,14 @@ export function MarineInsuranceBookings({ currentUser, pendingBookingId, initial
                   ? "No bookings match your filters" 
                   : "No marine insurance bookings yet"}
               </div>
+              {can("ops_marine_insurance", "create") && (
               <button
                 onClick={() => setShowCreateModal(true)}
                 className="text-[var(--theme-action-primary-bg)] hover:underline"
               >
                 Create your first booking
               </button>
+              )}
             </div>
           ) : (
             <div style={{
@@ -675,7 +678,11 @@ export function MarineInsuranceBookings({ currentUser, pendingBookingId, initial
                       className="border-b border-[var(--theme-text-primary)]/5 hover:bg-[var(--theme-action-primary-bg)]/5 transition-colors cursor-pointer"
                       onClick={() => {
                         if (booking.status === "Draft") {
-                          setResumeDraft({ ...(booking as any), id: booking.bookingId });
+                          // WG-09: resuming a draft re-opens the create panel in
+                          // edit mode (updates the row) — needs a write grant
+                          if (can("ops_marine_insurance", "create") || can("ops_marine_insurance", "edit")) {
+                            setResumeDraft({ ...(booking as any), id: booking.bookingId });
+                          }
                         } else {
                           suppressUrlSelectionRef.current = false;
                           setSelectedBooking(booking);
@@ -751,6 +758,7 @@ export function MarineInsuranceBookings({ currentUser, pendingBookingId, initial
                         </div>
                       </td>
                       <td className="py-4 px-4 text-center">
+                        {can("ops_marine_insurance", "delete") && (
                         <button
                           onClick={(e) => handleDeleteBooking(booking.bookingId, (booking as any).booking_number || booking.bookingId, booking.status as ExecutionStatus, e)}
                           style={{
@@ -779,6 +787,7 @@ export function MarineInsuranceBookings({ currentUser, pendingBookingId, initial
                         >
                           <Trash2 size={14} />
                         </button>
+                        )}
                       </td>
                     </tr>
                   ))}
