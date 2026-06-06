@@ -5,6 +5,7 @@ import { supabase } from "../../utils/supabase/client";
 import { toast } from "sonner@2.0.3";
 import { ArrowLeft, Save, AlertTriangle, RotateCcw, BookMarked, ChevronDown, BookOpen, Check, Pencil, Trash2, X } from "lucide-react";
 import { useUser } from "../../hooks/useUser";
+import { usePermission } from "../../context/PermissionProvider";
 import { AccessEditorTabs } from "./accessProfiles/AccessEditorTabs";
 import type { ModuleGrants, AccessProfileSummary } from "./accessProfiles/accessProfileTypes";
 import {
@@ -149,8 +150,17 @@ function SaveAsProfileForm({
 
 export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) {
   const { user: currentAdmin } = useUser();
+  const { can } = usePermission();
   const queryClient = useQueryClient();
   const applyProfileBtnRef = useRef<HTMLDivElement>(null);
+
+  // NEU-019 WG-01: this screen writes permission_overrides + users.access_profile_id
+  // and creates/renames/deletes access_profiles. The route only requires a view grant,
+  // so every write affordance gates on its own knob here.
+  const canEditAccess = can("exec_users", "edit") || can("admin_users_tab", "edit");
+  const canCreateProfiles = can("admin_access_profiles_tab", "create");
+  const canEditProfiles = can("admin_access_profiles_tab", "edit");
+  const canDeleteProfiles = can("admin_access_profiles_tab", "delete");
 
   const [overrides, setOverrides] = useState<ModuleGrants>({});
   const [savedOverrides, setSavedOverrides] = useState<ModuleGrants>({});
@@ -332,6 +342,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
   };
 
   const handleSave = async () => {
+    if (!canEditAccess) return; // WG-01: affordances are hidden, this is the backstop
     setSaving(true);
     const { data: existing } = await supabase
       .from("permission_overrides")
@@ -580,15 +591,17 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
                   )}
                 </AnimatePresence>
 
+                {canEditAccess && (
                 <button
                   onClick={() => setShowApplyProfileMenu(v => !v)}
                   style={{ height: 34, padding: "0 12px", borderRadius: 8, border: "1px solid var(--neuron-ui-border)", background: "transparent", color: "var(--neuron-ink-muted)", fontSize: 13, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, transition: "color 0.12s, border-color 0.12s" }}
                 >
                   <BookMarked size={13} /> Apply Profile <ChevronDown size={11} style={{ opacity: 0.6 }} />
                 </button>
+                )}
 
                 {/* Save as Profile */}
-                {hasGrantOverrides(overrides) && (
+                {canCreateProfiles && hasGrantOverrides(overrides) && (
                   <div style={{ position: "relative" }}>
                     <button
                       onClick={() => setShowSaveAsProfile(v => !v)}
@@ -608,6 +621,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
                 )}
 
                 {/* Save Changes */}
+                {canEditAccess && (
                 <button
                   onClick={handleSave}
                   disabled={!isDirty || saving}
@@ -628,6 +642,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
                   <Save size={13} />
                   {saving ? "Saving…" : "Save Changes"}
                 </button>
+                )}
               </div>
 
               {/* Full-width profile dropdown */}
@@ -690,6 +705,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
                                     <span style={{ fontSize: 11, color: "var(--neuron-ink-muted)", marginTop: 1 }}>{p.target_department}</span>
                                   )}
                                 </button>
+                                {canEditProfiles && (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); setRenameValue(p.name); setRenamingProfileId(p.id); }}
                                   aria-label={`Rename ${p.name}`}
@@ -700,6 +716,8 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
                                 >
                                   <Pencil size={13} />
                                 </button>
+                                )}
+                                {canDeleteProfiles && (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); setDeletingProfile(p); }}
                                   aria-label={`Delete ${p.name}`}
@@ -710,6 +728,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
                                 >
                                   <Trash2 size={13} />
                                 </button>
+                                )}
                               </>
                             )}
                           </div>
@@ -727,6 +746,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
             onGrantsChange={(nextGrants) => handleGrantChange(nextGrants)}
             baselineGrants={baselineGrants}
             showInheritedBaseline={true}
+            readOnly={!canEditAccess}
             othersPrimaryGroup={user.department === "Pricing" ? "Pricing" : "Operations"}
             loading={loading}
             resolvedViewGrants={resolvedViewGrants}
@@ -739,7 +759,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
       {/* Sticky save bar — visible only while there are unsaved changes.
           Sits below the scrollable body so it remains visible during matrix scroll. */}
       <AnimatePresence>
-        {isDirty && !loading && (
+        {isDirty && !loading && canEditAccess && (
           <motion.div
             key="sticky-save-bar"
             initial={{ y: 56, opacity: 0 }}

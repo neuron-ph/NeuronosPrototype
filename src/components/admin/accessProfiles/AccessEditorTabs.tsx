@@ -19,6 +19,8 @@ interface AccessEditorTabsProps {
   showInheritedBaseline: boolean;
   othersPrimaryGroup: "Pricing" | "Operations";
   loading?: boolean;
+  /** Locks both tabs (grants matrix + visibility dials) for viewers without an edit grant. */
+  readOnly?: boolean;
   /** Optional toolbar shown above the matrix (e.g. grant count / baseline preview). */
   featureAccessToolbar?: ReactNode;
   // ── Record Visibility ──
@@ -35,6 +37,7 @@ export function AccessEditorTabs({
   showInheritedBaseline,
   othersPrimaryGroup,
   loading,
+  readOnly = false,
   featureAccessToolbar,
   visibilityScopes,
   onVisibilityChange,
@@ -79,13 +82,14 @@ export function AccessEditorTabs({
             showInheritedBaseline={showInheritedBaseline}
             baselineGrants={baselineGrants}
             loading={loading}
+            disabled={readOnly}
             othersPrimaryGroup={othersPrimaryGroup}
           />
         </>
       ) : (
         <RecordVisibilityEditor
           scopes={visibilityScopes}
-          onChange={onVisibilityChange}
+          onChange={readOnly ? () => {} : onVisibilityChange}
           resolvedGrants={resolvedViewGrants}
         />
       )}
