@@ -953,6 +953,7 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
             } : undefined}
             onCreateTicket={onCreateTicket as any}
             initialProject={selectedProject}
+            door="bd"
           />
         )}
       </div>

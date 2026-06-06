@@ -32,21 +32,23 @@ interface ContractsListProps {
     department: string;
   } | null;
   department: "BD" | "Operations" | "Accounting";
+  // NEU-020 2.5: route-derived permission door (bd | pricing | accounting)
+  door: ContractDept;
   onRefresh?: () => Promise<void>;
 }
 
-export function ContractsList({ 
-  contracts, 
-  onSelectContract, 
+export function ContractsList({
+  contracts,
+  onSelectContract,
   isLoading,
   currentUser,
   department,
+  door,
   onRefresh,
 }: ContractsListProps) {
   const { can } = usePermission();
-  // Resolve dept-scoped moduleId family. BD reuses Pricing's contracts matrix today.
-  const contractDept: ContractDept = department === "Accounting" ? "accounting" : "pricing";
-  const ids = CONTRACT_MODULE_IDS[contractDept];
+  // NEU-020 2.5: the moduleId family is the route door, not the user's dept.
+  const ids = CONTRACT_MODULE_IDS[door];
   const canViewAllTab      = can(ids.all,      "view");
   const canViewActiveTab   = can(ids.active,   "view");
   const canViewExpiringTab = can(ids.expiring, "view");

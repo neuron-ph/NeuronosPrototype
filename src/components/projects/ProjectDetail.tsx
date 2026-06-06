@@ -41,6 +41,8 @@ interface ProjectDetailProps {
     department: string;
   } | null;
   department: "BD" | "Operations" | "Accounting";
+  // NEU-020 2.5: route-derived permission door (bd | pricing | ops | accounting)
+  door: ProjectDept;
   onCreateTicket?: (entity: { type: string; id: string; name: string }) => void;
   initialTab?: string | null;
   highlightId?: string | null;
@@ -143,14 +145,14 @@ export function ProjectDetail({
   onUpdate,
   currentUser,
   department,
+  door,
   onCreateTicket,
   initialTab,
   highlightId
 }: ProjectDetailProps) {
   const { can } = usePermission();
   useMarkEntityReadOnMount("project", project.id);
-  const projectDept: ProjectDept = department === "Accounting" ? "accounting" : "ops";
-  const ids = PROJECT_MODULE_IDS[projectDept];
+  const ids = PROJECT_MODULE_IDS[door];
   const canViewInfoTab        = can(ids.info,        "view");
   const canViewQuotationTab   = can(ids.quotation,   "view");
   const canViewBookingsTab    = can(ids.bookings,    "view");
@@ -234,7 +236,8 @@ export function ProjectDetail({
     }
   };
 
-  const showActions = can("bd_projects", "edit") || can("pricing_projects", "edit");
+  // NEU-020 2.5: edit authority comes from the door the user entered through.
+  const showActions = can(ids.root, "edit");
 
   // Define the Tab Structure
   const TAB_STRUCTURE = {

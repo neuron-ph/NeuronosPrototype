@@ -460,9 +460,10 @@ function BDContractsPage() {
 
   return (
     <RouteWrapper page="bd-contracts">
-      <ContractsModule 
+      <ContractsModule
         currentUser={user || undefined}
         onCreateTicket={handleCreateTicket}
+        door="bd"
       />
     </RouteWrapper>
   );
@@ -593,9 +594,10 @@ function PricingProjectsPage() {
 
   return (
     <RouteWrapper page="pricing-projects">
-      <ProjectsModule 
+      <ProjectsModule
         currentUser={user || undefined}
         onCreateTicket={handleCreateTicket}
+        door="pricing"
       />
     </RouteWrapper>
   );
@@ -611,9 +613,10 @@ function PricingContractsPage() {
 
   return (
     <RouteWrapper page="pricing-contracts">
-      <ContractsModule 
+      <ContractsModule
         currentUser={user || undefined}
         onCreateTicket={handleCreateTicket}
+        door="pricing"
       />
     </RouteWrapper>
   );
@@ -652,9 +655,10 @@ function OperationsProjectsPage() {
 
   return (
     <RouteWrapper page="ops-projects">
-      <ProjectsModule 
+      <ProjectsModule
         currentUser={user || undefined}
         onCreateTicket={handleCreateTicket}
+        door="ops"
       />
     </RouteWrapper>
   );
@@ -883,7 +887,7 @@ function AccountingProjectsPage() {
   const { user } = useUser();
   return (
     <RouteWrapper page="acct-projects">
-      <ProjectsModule currentUser={user || undefined} departmentOverride="Accounting" />
+      <ProjectsModule currentUser={user || undefined} door="accounting" />
     </RouteWrapper>
   );
 }
@@ -892,7 +896,7 @@ function AccountingContractsPage() {
   const { user } = useUser();
   return (
     <RouteWrapper page="acct-contracts">
-      <ContractsModule currentUser={user || undefined} departmentOverride="Accounting" />
+      <ContractsModule currentUser={user || undefined} door="accounting" />
     </RouteWrapper>
   );
 }

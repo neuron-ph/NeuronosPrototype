@@ -130,7 +130,8 @@ export function ContractDetailView({
   const canViewCommentsTab     = can(ids.comments,    "view");
   const canPostComments        = can(ids.comments,    "create"); // WG-14
   const canViewActivityTab     = can(ids.activity,    "view");
-  const canEditContract        = can("pricing_contracts", "edit") || can("bd_contracts", "edit");
+  // NEU-020 2.5: edit authority comes from the door the user entered through.
+  const canEditContract        = can(ids.root, "edit");
 
   const resolveInitialTab = (): ContractTab => {
     if (initialTab) return initialTab as ContractTab;
