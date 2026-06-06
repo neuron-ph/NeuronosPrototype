@@ -674,6 +674,7 @@ export function ProjectDetail({
             onViewBooking={handleViewBooking}
             onSaveQuotation={handleSaveQuotation}
             canAmend={canAmendQuotation} // NEU-020 2.10a: Quotation tab's own edit cell
+            canExport={can(ids.quotation, "export")} // NEU-020 2.11 (WT4): Print PDF = export cell
           />
         )}
 

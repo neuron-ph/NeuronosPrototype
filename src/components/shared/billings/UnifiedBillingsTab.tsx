@@ -106,6 +106,14 @@ export function UnifiedBillingsTab({
         canKey("acct_billings", a) || canKey("ops_bookings_billings_tab", a) ||
         canKey("ops_projects_billings_tab", a));
   const readOnly = readOnlyProp || !canWriteBillings;
+  // NEU-020 2.11 (WT2): delete-class billing actions (void an item, delete a
+  // category, remove a line) obey the Billings DELETE cell — not the create/edit
+  // write gate. With a door, only that door's :delete governs.
+  const canDeleteBillings = readOnlyProp ? false : (permissionDoor
+    ? canKey(permissionDoor, "delete")
+    : (canKey("accounting_financials_billings_tab", "delete") ||
+       canKey("acct_billings", "delete") || canKey("ops_bookings_billings_tab", "delete") ||
+       canKey("ops_projects_billings_tab", "delete")));
   // Stable reference for empty array to prevent infinite re-render loops
   const stableLinkedBookings = linkedBookings && linkedBookings.length > 0 ? linkedBookings : EMPTY_LINKED_BOOKINGS;
   
@@ -436,6 +444,7 @@ export function UnifiedBillingsTab({
 
     // Phase 3: Handle deletion
     if (field === 'delete') {
+        if (!canDeleteBillings) return; // NEU-020 2.11 (WT2): delete-class backstop
         if (confirm("Remove this billing item?")) {
             setLocalItems(prev => prev.filter(i => i.id !== id));
             setPendingChanges(true);
@@ -989,12 +998,13 @@ export function UnifiedBillingsTab({
         activeCategories={activeCategories}
         onAddCategory={!readOnly ? handleAddCategory : undefined}
         onRenameCategory={!readOnly ? handleRenameCategory : undefined}
-        onDeleteCategory={!readOnly ? handleDeleteCategory : undefined}
+        onDeleteCategory={canDeleteBillings ? handleDeleteCategory : undefined}
         onAddItem={!readOnly ? handleAddItemToCategory : undefined}
         groupBy={groupBy}
         linkedBookings={stableLinkedBookings}
         highlightId={highlightId}
-        onVoidItem={!readOnly ? handleVoidItem : undefined}
+        canDeleteItems={canDeleteBillings}
+        onVoidItem={canDeleteBillings ? handleVoidItem : undefined}
         onSendServiceToBooking={!readOnly ? handleSendServiceToBooking : undefined}
       />
     </div>

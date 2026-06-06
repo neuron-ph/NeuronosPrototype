@@ -1211,6 +1211,7 @@ export function ContractDetailView({
             currentUser={currentUser ? { id: "current-user", ...currentUser } : null}
             onSaveQuotation={handleSaveContractQuotation}
             canAmend={canAmendQuotation} // NEU-020 2.10a: Quotation tab's own edit cell
+            canExport={can(ids.quotation, "export")} // NEU-020 2.11 (WT4): Print PDF = export cell
           />
         )}
         {activeTab === "rate-card" && canViewRateCardTab && (
