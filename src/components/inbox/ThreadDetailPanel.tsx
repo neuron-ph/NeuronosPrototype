@@ -13,7 +13,7 @@ import { ComposeBox } from "./ComposeBox";
 import type { RecipientChip } from "./RecipientField";
 import { AssignModal } from "./AssignModal";
 import { TICKET_PRIORITY_TONES, TICKET_STATUS_TONES, TICKET_TYPE_TONES, ticketBadgeStyle } from "./ticketingTheme";
-import { executeResolutionAction } from "../../utils/workflowTickets";
+import { executeResolutionAction, canExecuteResolutionAction } from "../../utils/workflowTickets";
 import { usePermission } from "../../context/PermissionProvider";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -110,6 +110,22 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
   // enforces (tickets UPDATE policy: participant OR inbox:edit), not by the
   // queue tab's VIEW key. Queue-viewers without inbox:edit failed at RLS anyway.
   const canAssign = can("inbox", "edit") && deptParticipants.length > 0;
+  // WG-03: resolution actions write linked records via legacy keys outside the
+  // ModuleId union (acct_billings et al.) — same canKey pattern as NEU-017.
+  const canKey = can as unknown as (moduleId: string, action: string) => boolean;
+
+  /** Runs the ticket's resolution action only when the user holds the record
+   *  permission it writes with; otherwise the ticket completes and the skip is
+   *  surfaced (WG-03: no inbox→record privilege escalation). */
+  const runResolutionAction = async (): Promise<void> => {
+    if (!thread.resolution_action || !thread.linked_record_type || !thread.linked_record_id) return;
+    if (canExecuteResolutionAction(canKey, thread.resolution_action)) {
+      await executeResolutionAction(thread.resolution_action, thread.linked_record_type, thread.linked_record_id);
+      toast.success("Done — linked record updated");
+    } else {
+      toast.warning("Ticket completed — the linked record was left unchanged because you don't have permission to update it.");
+    }
+  };
   const canAdvanceStatus = isRecipient && !["done", "returned", "archived", "draft"].includes(thread.status);
   const isApprovalPending = thread.type === "approval" && thread.approval_result === null && isRecipient;
   const isDone = thread.status === "done";
@@ -241,8 +257,7 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
       logStatusChange("ticket", thread.id, thread.subject ?? thread.id, thread.status, nextStatus, actor);
 
       if (nextStatus === "done" && thread.resolution_action && thread.linked_record_type && thread.linked_record_id) {
-        await executeResolutionAction(thread.resolution_action, thread.linked_record_type, thread.linked_record_id);
-        toast.success("Done — linked record updated");
+        await runResolutionAction();
       } else {
         toast.success(`Marked as ${STATUS_LABELS[nextStatus]}`);
       }
@@ -270,8 +285,7 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
       const actor = { id: user!.id, name: user!.name, department: user!.department };
       logStatusChange("ticket", thread.id, thread.subject ?? thread.id, thread.status, targetStatus, actor);
       if (targetStatus === "done" && thread.resolution_action && thread.linked_record_type && thread.linked_record_id) {
-        await executeResolutionAction(thread.resolution_action, thread.linked_record_type, thread.linked_record_id);
-        toast.success("Done — linked record updated");
+        await runResolutionAction();
       } else {
         toast.success(`Marked as ${STATUS_LABELS[targetStatus]}`);
       }
@@ -349,11 +363,15 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
         thread.linked_record_type &&
         thread.linked_record_id
       ) {
-        await executeResolutionAction(
-          thread.resolution_action,
-          thread.linked_record_type,
-          thread.linked_record_id
-        );
+        if (canExecuteResolutionAction(canKey, thread.resolution_action)) {
+          await executeResolutionAction(
+            thread.resolution_action,
+            thread.linked_record_type,
+            thread.linked_record_id
+          );
+        } else {
+          toast.warning("Approved — the linked record was left unchanged because you don't have permission to update it.");
+        }
       }
       toast.success(result === "accepted" ? "Request approved" : "Request declined");
       setShowReturnPanel(false);
