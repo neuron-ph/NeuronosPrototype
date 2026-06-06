@@ -98,6 +98,7 @@ export type ModuleId =
   // ─── Executive / Admin ────────────────────────────────────────────────────────
   | "exec_activity_log" | "exec_users" | "exec_profiling" | "exec_memos"
   | "admin_users_tab" | "admin_teams_tab" | "admin_access_profiles_tab"
+  | "company_settings"
   // ─── Inbox ───────────────────────────────────────────────────────────────────
   | "inbox" | "inbox_entity_picker"
   | "inbox_inbox_tab" | "inbox_queue_tab" | "inbox_sent_tab" | "inbox_drafts_tab"

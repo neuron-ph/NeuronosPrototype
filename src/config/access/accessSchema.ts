@@ -569,7 +569,16 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
           // the active Users screen tab model.
         ],
       },
-      { kind: "module", id: "exec_profiling", moduleId: "exec_profiling", label: "Profiling", pageId: "admin-profiling", tabs: [] },
+      {
+        kind: "module", id: "exec_profiling", moduleId: "exec_profiling",
+        label: "Profiling", pageId: "admin-profiling",
+        tabs: [
+          // NEU-019 WG-04 (D4): dedicated knob for org-wide company settings
+          // (letterhead/bank details printed on every invoice). Consumed by the
+          // PDF screens' "Save as company default" — edit is the only live action.
+          tab("company_settings", "Company Settings"),
+        ],
+      },
       { kind: "module", id: "exec_memos", moduleId: "exec_memos", label: "Memos", pageId: "homepage", tabs: [] },
     ],
   },

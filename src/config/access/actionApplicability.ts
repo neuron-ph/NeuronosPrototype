@@ -249,6 +249,7 @@ export const APPLICABLE_ACTIONS: Record<ModuleId, readonly ActionId[]> = {
   admin_users_tab: ["view", "create", "edit", "delete"],
   admin_teams_tab: ["view", "create", "edit", "delete"],
   admin_access_profiles_tab: ["view", "create", "edit", "delete"],
+  company_settings: ["edit"],
 
   // ─── Inbox ──────────────────────────────────────────────────────────────────
   inbox: ["view", "edit", "delete"],

@@ -12,6 +12,7 @@ import { ContactFooterControl } from "../../quotation/screen/controls/ContactFoo
 import { CollapsibleSection } from "./controls/CollapsibleSection";
 import { toast } from "../../../ui/toast-utils";
 import { useCompanySettings, useUpdateCompanySettings } from "../../../../hooks/useCompanySettings";
+import { usePermission } from "../../../../context/PermissionProvider";
 
 interface InvoicePDFScreenProps {
   project: Project;
@@ -28,6 +29,10 @@ const A4_HEIGHT_PX = 1123; // 297mm
 export function InvoicePDFScreen({ project, invoice, onClose, currentUser, isEmbedded = false }: InvoicePDFScreenProps) {
   const { settings: companySettings } = useCompanySettings();
   const updateCompanySettings = useUpdateCompanySettings();
+  const { can } = usePermission();
+  // WG-04 (D4): org-wide company settings get their own knob; the controls
+  // hide "Save as company default" when the handler prop is undefined.
+  const canSaveCompanyDefaults = can("company_settings", "edit");
   const {
     options,
     updateSignatory,
@@ -41,6 +46,7 @@ export function InvoicePDFScreen({ project, invoice, onClose, currentUser, isEmb
   } = useInvoiceDocumentState(project, invoice, currentUser, companySettings);
 
   const handleSaveBankAsDefault = async () => {
+    if (!canSaveCompanyDefaults) return; // WG-04 backstop
     if (!options.bank_details) return;
     try {
       await updateCompanySettings.mutateAsync({
@@ -55,6 +61,7 @@ export function InvoicePDFScreen({ project, invoice, onClose, currentUser, isEmb
   };
 
   const handleSaveContactAsDefault = async () => {
+    if (!canSaveCompanyDefaults) return; // WG-04 backstop
     if (!options.contact_footer) return;
     const lines = options.contact_footer.office_address.split("\n").map((l) => l.trim()).filter(Boolean);
     try {
@@ -251,7 +258,7 @@ export function InvoicePDFScreen({ project, invoice, onClose, currentUser, isEmb
                     <BankDetailsControl
                       bankDetails={options.bank_details}
                       onUpdate={updateBankDetails as any}
-                      onSaveAsDefault={handleSaveBankAsDefault}
+                      onSaveAsDefault={canSaveCompanyDefaults ? handleSaveBankAsDefault : undefined}
                       isSavingDefault={updateCompanySettings.isPending}
                     />
                   </CollapsibleSection>
@@ -265,7 +272,7 @@ export function InvoicePDFScreen({ project, invoice, onClose, currentUser, isEmb
                       onUpdateCallNumber={updateCallNumber}
                       onAddCallNumber={addCallNumber}
                       onRemoveCallNumber={removeCallNumber}
-                      onSaveAsDefault={handleSaveContactAsDefault}
+                      onSaveAsDefault={canSaveCompanyDefaults ? handleSaveContactAsDefault : undefined}
                       isSavingDefault={updateCompanySettings.isPending}
                     />
                   </CollapsibleSection>
