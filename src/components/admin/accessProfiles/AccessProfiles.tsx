@@ -6,6 +6,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { supabase } from "../../../utils/supabase/client";
 import { toast } from "sonner@2.0.3";
 import { useUser } from "../../../hooks/useUser";
+import { usePermission } from "../../../context/PermissionProvider";
 import {
   Plus, ArrowLeft, Save, Trash2, UserCheck, AlertTriangle, BookMarked, Search, X, ChevronUp, Wand2,
 } from "lucide-react";
@@ -208,6 +209,9 @@ function ApplyProfileContent({
   onApplied: (userId: string) => void;
 }) {
   const { user: currentUser } = useUser();
+  const { can } = usePermission();
+  // WG-02: applying a profile writes permission_overrides for other users
+  const canApplyProfiles = can("admin_access_profiles_tab", "edit");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<UserOption[]>([]);
   const [applying, setApplying] = useState(false);
@@ -265,6 +269,7 @@ function ApplyProfileContent({
 
   const handleApply = async () => {
     if (selected.length === 0) return;
+    if (!canApplyProfiles) return; // WG-02 backstop: Apply writes permission_overrides
     setApplying(true);
     let failed = 0;
 
@@ -493,10 +498,12 @@ function DeleteProfileContent({
   onDeleted: () => void;
 }) {
   const { user: currentUser } = useUser();
+  const { can } = usePermission();
   const [deleting, setDeleting] = useState(false);
   const queryClient = useQueryClient();
 
   const handleDelete = async () => {
+    if (!can("admin_access_profiles_tab", "delete")) return; // WG-02 backstop
     setDeleting(true);
     const { error } = await supabase.from("access_profiles").delete().eq("id", profile.id);
     if (error) {
@@ -564,8 +571,14 @@ export function ProfileEditor({
   onSaved: () => void;
 }) {
   const { user: currentUser } = useUser();
+  const { can } = usePermission();
   const queryClient = useQueryClient();
   const isNew = !profile?.id;
+  // WG-02 backstop: entry buttons are gated, but the editor is also mounted from
+  // UserManagement — the write itself re-checks the matching profile knob.
+  const canWriteProfile = isNew
+    ? can("admin_access_profiles_tab", "create")
+    : can("admin_access_profiles_tab", "edit");
 
   const [name, setName] = useState(profile?.name ?? "");
   const [description, setDescription] = useState(profile?.description ?? "");
@@ -764,6 +777,7 @@ export function ProfileEditor({
   };
 
   const performSave = async () => {
+    if (!canWriteProfile) return; // WG-02 backstop
     const trimmed = normalizeProfileName(name);
     setConfirmEmptyOpen(false);
     setConfirmSaveOpen(false);
@@ -1153,6 +1167,11 @@ export function ProfileEditor({
 export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditProfile }: AccessProfilesProps) {
   const [applyingProfile, setApplyingProfile] = useState<AccessProfileSummary | null>(null);
   const [deletingProfile, setDeletingProfile] = useState<AccessProfileSummary | null>(null);
+  const { can } = usePermission();
+  // WG-02: profile CRUD + Apply ran on the tab's view grant alone
+  const canCreateProfiles = can("admin_access_profiles_tab", "create");
+  const canEditProfiles = can("admin_access_profiles_tab", "edit");
+  const canDeleteProfiles = can("admin_access_profiles_tab", "delete");
 
   const { data: profiles = [], isLoading } = useQuery<AccessProfileSummary[]>({
     queryKey: ["access_profiles"],
@@ -1231,12 +1250,15 @@ export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditPr
       accessorKey: "id",
       cell: (row) => (
         <div style={{ display: "flex", gap: 6 }}>
+          {canEditProfiles && (
           <button
             onClick={() => onEditProfile(row as unknown as Partial<AccessProfile>)}
             style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--neuron-ui-border)", background: "transparent", fontSize: 12, fontWeight: 500, color: "var(--neuron-ink-muted)", cursor: "pointer" }}
           >
             Edit
           </button>
+          )}
+          {canCreateProfiles && (
           <button
             onClick={() => onEditProfile({
               ...row as unknown as Partial<AccessProfile>,
@@ -1249,12 +1271,17 @@ export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditPr
           >
             Duplicate
           </button>
+          )}
+          {canEditProfiles && (
           <button
             onClick={() => setApplyingProfile(row)}
             style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--neuron-ui-border)", background: "transparent", fontSize: 12, fontWeight: 500, color: "var(--neuron-action-primary)", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}
           >
             <UserCheck size={12} /> Apply
           </button>
+          )}
+          {canDeleteProfiles && (
+          <>
           <div style={{ width: 1, height: 18, backgroundColor: "var(--neuron-ui-border)", margin: "0 2px" }} />
           <button
             onClick={() => setDeletingProfile(row)}
@@ -1266,6 +1293,8 @@ export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditPr
           >
             <Trash2 size={12} />
           </button>
+          </>
+          )}
         </div>
       ),
     },
@@ -1284,12 +1313,14 @@ export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditPr
             Reusable access setups you can assign to staff. Editing a profile updates everyone using it; per-person custom changes stay separate.
           </p>
         </div>
+        {canCreateProfiles && (
         <button
           onClick={() => onEditProfile(null)}
           style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "none", background: "var(--neuron-action-primary)", color: "var(--neuron-action-primary-text)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
         >
           <Plus size={14} /> New Profile
         </button>
+        )}
       </div>
 
       {/* Profile list */}
@@ -1306,12 +1337,14 @@ export function AccessProfiles({ onConfigureAccess: _onConfigureAccess, onEditPr
           <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: "0 0 16px" }}>
             Create profiles like "BD Manager" or "Ops Supervisor" to quickly set up access for new or promoted staff.
           </p>
+          {canCreateProfiles && (
           <button
             onClick={() => onEditProfile(null)}
             style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, border: "none", background: "var(--neuron-action-primary)", color: "var(--neuron-action-primary-text)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
           >
             <Plus size={14} /> Create First Profile
           </button>
+          )}
         </div>
       ) : (
         <DataTable
