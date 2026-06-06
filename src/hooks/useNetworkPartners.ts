@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { NetworkPartner, NETWORK_PARTNERS } from "../data/networkPartners";
 import { supabase } from "../utils/supabase/client";
 import { queryKeys } from "../lib/queryKeys";
+import { usePermission } from "../context/PermissionProvider";
 
 // Map NetworkPartner interface fields → service_providers DB column names
 function toDbRow(p: Partial<NetworkPartner>): Record<string, unknown> {
@@ -49,6 +50,7 @@ function fromDbRow(row: Record<string, unknown>): NetworkPartner {
 
 export function useNetworkPartners() {
   const queryClient = useQueryClient();
+  const { can } = usePermission(); // NEU-019 WG-12
   const seedingAttempted = useRef(false);
 
   const { data: partners = [], isLoading, error: queryError } = useQuery({
@@ -96,6 +98,10 @@ export function useNetworkPartners() {
   const saveMutation = useMutation({
     mutationFn: async (partnerData: Partial<NetworkPartner>): Promise<NetworkPartner> => {
       const isNew = !partnerData.id || partnerData.id.startsWith("new-");
+      // NEU-019 WG-12: vendor master data writes need the partners knob
+      if (!can("pricing_network_partners", isNew ? "create" : "edit")) {
+        throw new Error("You don't have permission to save vendors.");
+      }
 
       if (isNew) {
         const newRow = toDbRow({ ...partnerData, id: `sp-${Date.now()}` });
@@ -145,6 +151,9 @@ export function useNetworkPartners() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string): Promise<void> => {
+      if (!can("pricing_network_partners", "delete")) {
+        throw new Error("You don't have permission to delete vendors."); // WG-12
+      }
       const { error: deleteErr } = await supabase
         .from('service_providers')
         .delete()

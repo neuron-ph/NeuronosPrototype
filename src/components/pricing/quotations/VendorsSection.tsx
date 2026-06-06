@@ -19,6 +19,7 @@ import {
 } from "../../../utils/pricing/vendorRateCards";
 import { NeuronModal } from "../../ui/NeuronModal";
 import { useNetworkPartners } from "../../../hooks/useNetworkPartners";
+import { usePermission } from "../../../context/PermissionProvider";
 
 /**
  * 🎯 VENDORS SECTION - INLINE RATE MANAGEMENT
@@ -82,6 +83,10 @@ interface VendorsSectionProps {
 
 export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode = false }: VendorsSectionProps) {
   const { partners } = useNetworkPartners();
+  // NEU-019 WG-12: "Save & Import" writes the vendor's master rate card
+  // (service_providers) — needs the partners edit knob, not just builder access.
+  const { can } = usePermission();
+  const canEditVendorMaster = can("pricing_network_partners", "edit");
   const [showAddVendor, setShowAddVendor] = useState(false);
   const [newVendorType, setNewVendorType] = useState<string>("International Partners");
   const [newVendorCountry, setNewVendorCountry] = useState("");
@@ -325,6 +330,7 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
 
   // ✨ PHASE 5: Save vendor rates to backend and import to buying price
   const handleSaveAndImport = async (vendorId: string) => {
+    if (!canEditVendorMaster) return; // WG-12 backstop
     const vendor = vendors.find(v => v.id === vendorId);
     if (!vendor) return;
     
@@ -759,7 +765,7 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
                       )}
                       
                       {/* Save & Import Button */}
-                      {vendor.vendor_id && (
+                      {vendor.vendor_id && canEditVendorMaster && (
                         <button
                           type="button"
                           onClick={(e) => {

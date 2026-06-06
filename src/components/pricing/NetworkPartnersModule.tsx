@@ -295,6 +295,7 @@ export function NetworkPartnersModule({
               </p>
             </div>
 
+            {can("pricing_network_partners", "create") && (
             <button
               onClick={() => setIsPartnerSheetOpen(true)}
               style={{
@@ -322,6 +323,7 @@ export function NetworkPartnersModule({
               <Plus size={16} />
               Add Partner
             </button>
+            )}
           </div>
 
           {/* Filters Row */}
