@@ -31,6 +31,10 @@ interface JournalEntryDetailPanelProps {
   onVoid: (entry: JournalEntry) => void;
   onPosted?: () => void;
   canAct: boolean;
+  /** NEU-020 2.10b (#8): acct_journal:edit — gates editing/reversing a POSTED
+   *  entry (edit-class), distinct from canAct (the create-inclusive umbrella
+   *  that gates footer visibility + posting a draft). */
+  canEdit: boolean;
   highlightAccountId?: string;
 }
 
@@ -101,6 +105,7 @@ export function JournalEntryDetailPanel({
   onVoid,
   onPosted,
   canAct,
+  canEdit,
   highlightAccountId,
 }: JournalEntryDetailPanelProps) {
   const navigate = useNavigate();
@@ -152,8 +157,10 @@ export function JournalEntryDetailPanel({
   const [editDate, setEditDate] = useState(entry.entry_date.slice(0, 10));
   const [editDescription, setEditDescription] = useState(entry.description ?? "");
   const needsAssignment = entry.status === "draft" && canAct && !hasLines;
-  const canEdit =
-    canAct &&
+  // NEU-020 2.10b (#8): edit-eligibility now requires the edit grant (canEdit),
+  // not the create-inclusive umbrella (canAct). Gates the Edit + Reverse buttons.
+  const canEditEntry =
+    canEdit &&
     (entry.status === "posted" || (entry.status === "draft" && hasLines)) &&
     !entry.id.startsWith("JE-VOID-");
 
@@ -763,7 +770,7 @@ export function JournalEntryDetailPanel({
       )}
 
       {/* (footer continued below) */}
-      {!isEditing && canAct && entry.status === "posted" && (
+      {!isEditing && canEditEntry && entry.status === "posted" && (
         <div style={{
           flexShrink: 0,
           padding: "14px 20px",
@@ -771,7 +778,7 @@ export function JournalEntryDetailPanel({
           backgroundColor: "var(--theme-bg-page)",
           display: "flex", gap: "8px",
         }}>
-          {canEdit && (
+          {canEditEntry && (
             <button
               onClick={handleStartEdit}
               style={{
@@ -789,7 +796,7 @@ export function JournalEntryDetailPanel({
           )}
           <button
             onClick={() => onVoid(entry)}
-            className={(canEdit ? "flex-1" : "w-full") + " h-[34px] flex items-center justify-center gap-[6px] border border-[var(--theme-status-danger-border)] rounded-[6px] bg-[var(--theme-status-danger-bg)] text-[var(--theme-status-danger-fg)] text-[12px] font-semibold cursor-pointer hover:bg-[var(--theme-status-danger-fg)] hover:text-white hover:border-[var(--theme-status-danger-fg)] transition-colors"}
+            className={(canEditEntry ? "flex-1" : "w-full") + " h-[34px] flex items-center justify-center gap-[6px] border border-[var(--theme-status-danger-border)] rounded-[6px] bg-[var(--theme-status-danger-bg)] text-[var(--theme-status-danger-fg)] text-[12px] font-semibold cursor-pointer hover:bg-[var(--theme-status-danger-fg)] hover:text-white hover:border-[var(--theme-status-danger-fg)] transition-colors"}
           >
             <RotateCcw size={13} />
             Reverse Entry
@@ -805,7 +812,7 @@ export function JournalEntryDetailPanel({
           backgroundColor: "var(--theme-bg-page)",
           display: "flex", gap: "8px",
         }}>
-          {canEdit && (
+          {canEditEntry && (
             <button
               onClick={handleStartEdit}
               style={{

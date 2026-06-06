@@ -684,6 +684,7 @@ export function ProjectDetail({
             project={project}
             currentUser={currentUser}
             selectedBookingId={selectedBookingId}
+            permissionDoor={ids.bookings}
           />
         )}
 

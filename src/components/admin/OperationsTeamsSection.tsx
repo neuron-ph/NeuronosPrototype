@@ -111,7 +111,10 @@ export function OperationsTeamsSection({
   const { can } = usePermission();
   const [expandedServiceType, setExpandedServiceType] = useState<string | null>(null);
 
-  const canEditServiceConfig = can("admin_teams_tab", "edit");
+  // NEU-020 2.10b: service + assignment-role config writes are governed by
+  // exec_profiling:edit at the DB (RLS, migration 166) — match it here so the
+  // UI affordance and the database agree (was admin_teams_tab:edit → desync).
+  const canEditServiceConfig = can("exec_profiling", "edit");
 
   const { data: services = [], isLoading: servicesLoading } = useQuery<OperationalService[]>({
     queryKey: queryKeys.assignments.services(),

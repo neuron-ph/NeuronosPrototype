@@ -22,16 +22,19 @@ interface ProjectBookingsTabProps {
     department: string;
   } | null;
   selectedBookingId?: string | null;
+  /** NEU-020 2.10b: the project Bookings tab's OWN door key
+   *  (PROJECT_MODULE_IDS[door].bookings) — so Create Booking obeys the cell of
+   *  the door the user entered through, not a hardcoded ops_projects key. */
+  permissionDoor?: string;
 }
 
-export function ProjectBookingsTab({ project, currentUser, selectedBookingId }: ProjectBookingsTabProps) {
+export function ProjectBookingsTab({ project, currentUser, selectedBookingId, permissionDoor = "ops_projects_bookings_tab" }: ProjectBookingsTabProps) {
   const queryClient = useQueryClient();
   const { can } = usePermission();
-  // NEU-012: creating a booking FROM a project gates on the project's
-  // Bookings-tab Create grant — the same key the bookings INSERT RLS policy
-  // accepts (migration 141) — not a hardcoded department allowlist. The project
-  // dictates which services it needs, so this is service-agnostic by design.
-  const canCreateBooking = can("ops_projects_bookings_tab", "create");
+  const canKey = can as unknown as (moduleId: string, action: string) => boolean;
+  // NEU-020 2.10b: creating a booking FROM a project gates on THIS door's
+  // Bookings-tab Create cell (bd/pricing/ops/acct), not a hardcoded ops key.
+  const canCreateBooking = canKey(permissionDoor, "create");
   const [selectedBooking, setSelectedBooking] = useState<{
     bookingId: string;
     bookingType: string;

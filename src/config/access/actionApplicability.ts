@@ -34,7 +34,10 @@ export const APPLICABLE_ACTIONS: Record<ModuleId, readonly ActionId[]> = {
   // ─── Business Development ──────────────────────────────────────────────────
   bd_contacts: ["view", "create", "edit", "delete"],
   bd_customers: ["view", "create", "edit", "delete"],
-  bd_inquiries: ["view", "create", "edit", "delete"],
+  // NEU-020 2.10b (#7): export is a real action — the quotation file's Export
+  // PDF / Quick Download buttons (QuotationFileView) ride :export, so the door
+  // needs an Export cell instead of riding a column that didn't exist.
+  bd_inquiries: ["view", "create", "edit", "delete", "export"],
   bd_projects: ["view", "create", "edit"],
   bd_contracts: ["view", "edit"],
   bd_tasks: ["view", "create", "edit", "delete"],
@@ -62,7 +65,7 @@ export const APPLICABLE_ACTIONS: Record<ModuleId, readonly ActionId[]> = {
   pricing_contacts: ["view", "create", "edit", "delete"],
   pricing_customers: ["view", "create", "edit", "delete"],
   pricing_projects: ["view", "create", "edit"],
-  pricing_quotations: ["view", "create", "edit", "delete"],
+  pricing_quotations: ["view", "create", "edit", "delete", "export"],
   pricing_contracts: ["view", "edit"],
   pricing_network_partners: ["view", "create", "edit", "delete"],
   pricing_contacts_activities_tab: ["view", "create"],

@@ -254,6 +254,10 @@ export function GeneralJournal() {
   // NEU-017: New Entry + void/reverse are writes — require a journal write grant,
   // not just view (create=4 holders, view=11 on dev: viewers read, accountants write).
   const canCreateJournal = can("acct_journal", "create") || can("acct_journal", "edit");
+  // NEU-020 2.10b (#8): editing/reversing a POSTED entry is edit-class — it must
+  // ride acct_journal:edit, not the create-inclusive umbrella above (a create-only
+  // user must not be able to edit or reverse posted journal entries).
+  const canEditJournal = can("acct_journal", "edit");
 
   // ── Data state ──
   const [entries, setEntries] = useState<JournalEntry[]>([]);
@@ -807,6 +811,7 @@ export function GeneralJournal() {
               handleEntryCreated();
             }}
             canAct={canCreateJournal}
+            canEdit={canEditJournal}
             highlightAccountId={filters.accountId || undefined}
           />
         )}
