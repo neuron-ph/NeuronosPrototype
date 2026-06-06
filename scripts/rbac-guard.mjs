@@ -13,6 +13,14 @@
 //           it to usePermission().can(moduleId, action) or, if it is genuinely
 //           semantic (data/routing, not gating), add it to the allowlist below
 //           with a comment saying why.
+//        d. action-applicability sync — every literal can("module", "action") /
+//           hasExplicitGrant(...) call in src/ must be declared applicable in
+//           config/access/actionApplicability.ts. Wiring a new affordance to a
+//           knob the editor renders as inert "—" fails the guard: add the
+//           action to the module's entry so the knob appears. (Dynamic first
+//           args and DB-side RLS checks can't be traced statically — the map
+//           was seeded from a full audit of those; keep it true by hand when
+//           policies change.)
 //   2. DB      — calls public.rbac_guard_report() (migration 167) and asserts
 //      every section is empty: no identity-gated policies outside the
 //      calendar/evoucher allowlist, no RLS-off tables, no wide-open INSERTs,
@@ -65,6 +73,26 @@ const IDENTITY_ALLOWLIST = {
   "src/components/operations/forwarding/CreateForwardingBookingPanel.tsx": 1,
 };
 
+// ── Static layer d: action-applicability sync ─────────────────────────────────
+// Parse the applicability map (format is line-regex-parseable by contract —
+// see the FORMAT IS LOAD-BEARING note in that file).
+const APPLICABILITY_FILE = "src/config/access/actionApplicability.ts";
+const applicabilityText = readFileSync(join(ROOT, APPLICABILITY_FILE), "utf8");
+const APPLICABLE = new Map(); // moduleId -> Set(actions)
+for (const m of applicabilityText.matchAll(/^\s{2}([a-z_]+):\s*\[([^\]]*)\],\s*$/gm)) {
+  APPLICABLE.set(m[1], new Set([...m[2].matchAll(/"([a-z]+)"/g)].map(a => a[1])));
+}
+if (APPLICABLE.size < 100) {
+  console.error(`✗ RBAC static guard FAILED: parsed only ${APPLICABLE.size} entries from ${APPLICABILITY_FILE} — format drift?`);
+  process.exit(1);
+}
+
+// Literal permission checks: can("module", "action") / hasExplicitGrant(...).
+// Legacy keys outside the ModuleId union (acct_billings/acct_expenses/
+// acct_collections — still honored by RLS, absent from the grid) go through
+// canKey() wrappers and are intentionally not matched here.
+const CAN_LITERAL_RE = /\b(?:can|hasExplicitGrant)\(\s*["']([a-z_]+)["']\s*,\s*["']([a-z]+)["']/g;
+
 const SKIP_DIRS = new Set(["node_modules", "migrations", "docs"]);
 const SKIP_FILE_RE = /\.(test|spec)\.[tj]sx?$|\.(md|sql|css|json)$/;
 
@@ -98,6 +126,17 @@ for (const file of walk(SRC)) {
         `${rel}: ${count} identity comparison(s) (allowlisted: ${allowed}). ` +
         `Convert new gates to usePermission().can(), or allowlist if semantic.`,
       );
+    }
+  }
+
+  if (rel === APPLICABILITY_FILE) continue; // the map's own docs mention can("…")
+  for (const m of text.matchAll(CAN_LITERAL_RE)) {
+    const [, moduleId, action] = m;
+    const actions = APPLICABLE.get(moduleId);
+    if (!actions) {
+      failures.push(`${rel}: can("${moduleId}", "${action}") — moduleId missing from ${APPLICABILITY_FILE} (typo, or add the module)`);
+    } else if (!actions.has(action)) {
+      failures.push(`${rel}: can("${moduleId}", "${action}") — action not declared applicable in ${APPLICABILITY_FILE}; the editor renders this knob as inert "—"`);
     }
   }
 }

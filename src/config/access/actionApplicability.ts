@@ -1,0 +1,298 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Action applicability — which actions each permission knob actually controls.
+//
+// AUDITED, NOT ASPIRATIONAL. An action is applicable for a moduleId iff some
+// code path consumes `moduleId:action` — a frontend `can()` call (including the
+// dept-family indirections in accessSchema.ts), a live RLS policy via
+// `current_user_has_module_permission`, or an Edge Function check. A knob whose
+// key nothing reads is a lie to the admin; the Access Configuration editors
+// render it as an inert "—" instead of a checkbox.
+//
+// This is the inverse half of the NEU-012 strict contract: the grid grants
+// nothing implicitly (no grant without a knob), and this map keeps the grid
+// from claiming control it doesn't have (no knob without an effect).
+//
+// KEEPING IT TRUE: `npm run rbac:guard` statically extracts every literal
+// `can("module", "action")` / `hasExplicitGrant(...)` call in src/ and fails
+// if a consumed key is missing here — so wiring up a new affordance forces the
+// knob to appear. The reverse direction (an action listed here that nothing
+// consumes) is not machine-checked: DB-side and dynamically-resolved consumers
+// can't be traced statically. When you remove a feature, prune its actions.
+//
+// FORMAT IS LOAD-BEARING: one `  module_id: [...],` entry per line — the guard
+// parses this file with a line regex. Don't introduce shorthand constants,
+// spreads, or multi-line entries.
+//
+// Typed Record<ModuleId, ...> so TypeScript enforces exhaustiveness in both
+// directions: a new ModuleId fails to compile until it gets an applicability
+// decision here.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import type { ModuleId, ActionId } from "../../components/admin/permissionsConfig";
+
+export const APPLICABLE_ACTIONS: Record<ModuleId, readonly ActionId[]> = {
+  // ─── Business Development ──────────────────────────────────────────────────
+  bd_contacts: ["view", "create", "edit", "delete"],
+  bd_customers: ["view", "create", "edit", "delete"],
+  bd_inquiries: ["view", "create", "edit", "delete"],
+  bd_projects: ["view", "create", "edit"],
+  bd_contracts: ["view", "edit"],
+  bd_tasks: ["view", "create", "edit", "delete"],
+  bd_activities: ["view", "create", "edit", "delete"],
+  bd_budget_requests: ["view", "create", "edit", "approve", "delete"],
+  bd_contacts_activities_tab: ["view", "create"],
+  bd_contacts_tasks_tab: ["view", "create", "edit"],
+  bd_contacts_inquiries_tab: ["view", "create"],
+  bd_contacts_attachments_tab: ["view"],
+  bd_contacts_comments_tab: ["view"],
+  bd_contacts_teams_tab: ["view", "edit"],
+  bd_customers_contacts_tab: ["view", "create"],
+  bd_customers_activities_tab: ["view", "create"],
+  bd_customers_tasks_tab: ["view", "create"],
+  bd_customers_inquiries_tab: ["view", "create"],
+  bd_customers_comments_tab: ["view"],
+  bd_customers_attachments_tab: ["view"],
+  bd_customers_projects_tab: ["view"],
+  bd_customers_contracts_tab: ["view"],
+  bd_customers_teams_tab: ["view", "edit"],
+  bd_budget_requests_all_tab: ["view"],
+  bd_budget_requests_my_requests_tab: ["view"],
+
+  // ─── Pricing ────────────────────────────────────────────────────────────────
+  pricing_contacts: ["view", "create", "edit", "delete"],
+  pricing_customers: ["view", "create", "edit", "delete"],
+  pricing_projects: ["view", "create", "edit"],
+  pricing_quotations: ["view", "create", "edit", "approve", "delete"],
+  pricing_contracts: ["view", "create", "edit", "delete"],
+  pricing_network_partners: ["view", "create", "edit", "delete"],
+  pricing_contacts_activities_tab: ["view", "create"],
+  pricing_contacts_tasks_tab: ["view", "create", "edit"],
+  pricing_contacts_inquiries_tab: ["view", "create"],
+  pricing_contacts_attachments_tab: ["view"],
+  pricing_contacts_comments_tab: ["view"],
+  pricing_contacts_teams_tab: ["view", "edit"],
+  pricing_customers_contacts_tab: ["view", "create"],
+  pricing_customers_activities_tab: ["view", "create"],
+  pricing_customers_tasks_tab: ["view", "create"],
+  pricing_customers_inquiries_tab: ["view", "create"],
+  pricing_customers_projects_tab: ["view"],
+  pricing_customers_contracts_tab: ["view"],
+  pricing_customers_comments_tab: ["view"],
+  pricing_customers_attachments_tab: ["view"],
+  pricing_customers_teams_tab: ["view", "edit"],
+  pricing_quotations_details_tab: ["view"],
+  pricing_quotations_comments_tab: ["view"],
+  pricing_contracts_all_tab: ["view"],
+  pricing_contracts_active_tab: ["view"],
+  pricing_contracts_expiring_tab: ["view"],
+  pricing_contracts_financial_overview_tab: ["view"],
+  pricing_contracts_quotation_tab: ["view"],
+  pricing_contracts_rate_card_tab: ["view"],
+  pricing_contracts_bookings_tab: ["view"],
+  pricing_contracts_billings_tab: ["view"],
+  pricing_contracts_invoices_tab: ["view"],
+  pricing_contracts_collections_tab: ["view"],
+  pricing_contracts_expenses_tab: ["view"],
+  pricing_contracts_attachments_tab: ["view"],
+  pricing_contracts_comments_tab: ["view"],
+  pricing_contracts_activity_tab: ["view"],
+  pricing_network_partners_international_tab: ["view"],
+  pricing_network_partners_co_loader_tab: ["view"],
+  pricing_network_partners_all_in_tab: ["view"],
+
+  // ─── Operations ─────────────────────────────────────────────────────────────
+  ops_forwarding: ["view", "create", "edit", "delete"],
+  ops_brokerage: ["view", "create", "edit", "delete"],
+  ops_trucking: ["view", "create", "edit", "delete"],
+  ops_marine_insurance: ["view", "create", "edit", "delete"],
+  ops_others: ["view", "create", "edit", "delete"],
+  ops_bookings: ["view", "create", "edit", "delete"],
+  ops_projects: ["view", "create"],
+  ops_forwarding_all_tab: ["view"],
+  ops_forwarding_my_tab: ["view"],
+  ops_forwarding_draft_tab: ["view"],
+  ops_forwarding_in_progress_tab: ["view"],
+  ops_forwarding_completed_tab: ["view"],
+  ops_forwarding_cancelled_tab: ["view"],
+  ops_brokerage_all_tab: ["view"],
+  ops_brokerage_my_tab: ["view"],
+  ops_brokerage_draft_tab: ["view"],
+  ops_brokerage_in_progress_tab: ["view"],
+  ops_brokerage_completed_tab: ["view"],
+  ops_brokerage_cancelled_tab: ["view"],
+  ops_trucking_all_tab: ["view"],
+  ops_trucking_my_tab: ["view"],
+  ops_trucking_draft_tab: ["view"],
+  ops_trucking_in_progress_tab: ["view"],
+  ops_trucking_completed_tab: ["view"],
+  ops_trucking_cancelled_tab: ["view"],
+  ops_marine_insurance_all_tab: ["view"],
+  ops_marine_insurance_my_tab: ["view"],
+  ops_marine_insurance_draft_tab: ["view"],
+  ops_marine_insurance_in_progress_tab: ["view"],
+  ops_marine_insurance_completed_tab: ["view"],
+  ops_marine_insurance_cancelled_tab: ["view"],
+  ops_others_all_tab: ["view"],
+  ops_others_my_tab: ["view"],
+  ops_others_draft_tab: ["view"],
+  ops_others_in_progress_tab: ["view"],
+  ops_others_completed_tab: ["view"],
+  ops_others_cancelled_tab: ["view"],
+  ops_bookings_info_tab: ["view"],
+  ops_bookings_billings_tab: ["view", "create", "edit", "delete"],
+  ops_bookings_invoices_tab: ["view"],
+  ops_bookings_collections_tab: ["view", "create", "edit"],
+  ops_bookings_expenses_tab: ["view", "create", "edit"],
+  ops_bookings_comments_tab: ["view"],
+  ops_bookings_chrono_tab: ["view", "create", "edit", "delete"],
+  ops_projects_all_tab: ["view"],
+  ops_projects_active_tab: ["view"],
+  ops_projects_completed_tab: ["view"],
+  ops_projects_info_tab: ["view"],
+  ops_projects_bookings_tab: ["view", "create", "edit"],
+  ops_projects_quotation_tab: ["view"],
+  ops_projects_expenses_tab: ["view", "create", "edit"],
+  ops_projects_billings_tab: ["view", "create", "edit", "delete"],
+  ops_projects_invoices_tab: ["view"],
+  ops_projects_collections_tab: ["view", "create", "edit"],
+  ops_projects_attachments_tab: ["view"],
+  ops_projects_comments_tab: ["view"],
+  ops_invoices_items_tab: ["view"],
+  ops_invoices_details_tab: ["view"],
+  ops_invoices_legal_tab: ["view"],
+  ops_invoices_settings_tab: ["view"],
+
+  // ─── Accounting ─────────────────────────────────────────────────────────────
+  acct_evouchers: ["view", "create", "edit", "approve", "delete"],
+  acct_reports: ["view"],
+  acct_financials: ["view", "create", "edit", "delete"],
+  acct_coa: ["view", "create", "edit", "delete"],
+  acct_projects: ["view", "create"],
+  acct_contracts: ["view"],
+  acct_bookings: ["view"],
+  acct_customers: ["view"],
+  acct_catalog: ["view", "create", "edit", "delete"],
+  acct_statements: ["view", "create", "edit"],
+  acct_journal: ["view", "create", "edit"],
+  accounting_evouchers_pending_disburse_tab: ["view"],
+  accounting_evouchers_waiting_on_rep_tab: ["view"],
+  accounting_evouchers_pending_verification_tab: ["view"],
+  accounting_evouchers_archive_tab: ["view"],
+  accounting_financials_dashboard_tab: ["view"],
+  accounting_financials_billings_tab: ["view", "create", "edit", "delete"],
+  accounting_financials_invoices_tab: ["view", "create", "edit", "delete"],
+  accounting_financials_collections_tab: ["view", "create", "edit"],
+  accounting_financials_expenses_tab: ["view"],
+  accounting_bookings_forwarding_tab: ["view"],
+  accounting_bookings_brokerage_tab: ["view"],
+  accounting_bookings_trucking_tab: ["view"],
+  accounting_bookings_marine_insurance_tab: ["view"],
+  accounting_bookings_others_tab: ["view"],
+  accounting_bookings_invoices_tab: ["view"],
+  accounting_bookings_collections_tab: ["view"],
+  accounting_coa_all_tab: ["view"],
+  accounting_coa_balance_sheet_tab: ["view"],
+  accounting_coa_income_statement_tab: ["view"],
+  accounting_customer_ledger_overview_tab: ["view"],
+  accounting_customer_ledger_projects_tab: ["view"],
+  accounting_customer_ledger_billings_tab: ["view"],
+  accounting_customer_ledger_collections_tab: ["view"],
+  accounting_customer_ledger_expenses_tab: ["view"],
+  accounting_catalog_items_tab: ["view"],
+  accounting_catalog_matrix_tab: ["view"],
+  accounting_catalog_all_tab: ["view"],
+  accounting_catalog_billing_tab: ["view"],
+  accounting_catalog_expense_tab: ["view"],
+  accounting_financial_statements_income_statement_tab: ["view"],
+  accounting_financial_statements_balance_sheet_tab: ["view"],
+  accounting_financial_statements_cash_flow_tab: ["view"],
+  accounting_journal_all_sources_tab: ["view"],
+  accounting_journal_evoucher_tab: ["view"],
+  accounting_journal_invoice_tab: ["view"],
+  accounting_journal_collection_tab: ["view"],
+  accounting_journal_manual_tab: ["view"],
+  acct_projects_all_tab: ["view"],
+  acct_projects_active_tab: ["view"],
+  acct_projects_completed_tab: ["view"],
+  acct_projects_info_tab: ["view"],
+  acct_projects_quotation_tab: ["view"],
+  acct_projects_bookings_tab: ["view"],
+  acct_projects_expenses_tab: ["view"],
+  acct_projects_billings_tab: ["view"],
+  acct_projects_invoices_tab: ["view"],
+  acct_projects_collections_tab: ["view"],
+  acct_projects_attachments_tab: ["view"],
+  acct_projects_comments_tab: ["view"],
+  acct_contracts_all_tab: ["view"],
+  acct_contracts_active_tab: ["view"],
+  acct_contracts_expiring_tab: ["view"],
+  acct_contracts_financial_overview_tab: ["view"],
+  acct_contracts_quotation_tab: ["view"],
+  acct_contracts_rate_card_tab: ["view"],
+  acct_contracts_bookings_tab: ["view"],
+  acct_contracts_billings_tab: ["view"],
+  acct_contracts_invoices_tab: ["view"],
+  acct_contracts_collections_tab: ["view"],
+  acct_contracts_expenses_tab: ["view"],
+  acct_contracts_attachments_tab: ["view"],
+  acct_contracts_comments_tab: ["view"],
+  acct_contracts_activity_tab: ["view"],
+
+  // ─── HR ─────────────────────────────────────────────────────────────────────
+  hr: ["view", "edit"],
+
+  // ─── Executive / Admin ──────────────────────────────────────────────────────
+  exec_activity_log: ["view", "edit", "delete", "export"],
+  exec_users: ["view", "create", "edit", "delete"],
+  exec_profiling: ["view", "create", "edit", "delete"],
+  exec_memos: ["view", "create"],
+  admin_users_tab: ["view", "create", "edit", "delete"],
+  admin_teams_tab: ["view", "create", "edit", "delete"],
+  admin_access_profiles_tab: ["view", "create", "edit", "delete"],
+
+  // ─── Inbox ──────────────────────────────────────────────────────────────────
+  inbox: ["view", "edit", "delete"],
+  inbox_entity_picker: ["view"],
+  inbox_inbox_tab: ["view"],
+  inbox_queue_tab: ["view"],
+  inbox_sent_tab: ["view"],
+  inbox_drafts_tab: ["view"],
+  inbox_entity_inquiry_tab: ["view"],
+  inbox_entity_quotation_tab: ["view"],
+  inbox_entity_contract_tab: ["view"],
+  inbox_entity_booking_tab: ["view"],
+  inbox_entity_project_tab: ["view"],
+  inbox_entity_invoice_tab: ["view"],
+  inbox_entity_collection_tab: ["view"],
+  inbox_entity_expense_tab: ["view"],
+  inbox_entity_customer_tab: ["view"],
+  inbox_entity_contact_tab: ["view"],
+  inbox_entity_vendor_tab: ["view"],
+  inbox_entity_budget_request_tab: ["view"],
+
+  // ─── Personal ───────────────────────────────────────────────────────────────
+  my_evouchers: ["view", "create", "edit", "approve", "delete"],
+  my_evouchers_all_tab: ["view"],
+  my_evouchers_draft_tab: ["view"],
+  my_evouchers_pending_tab: ["view"],
+  my_evouchers_active_tab: ["view"],
+  my_evouchers_done_tab: ["view"],
+};
+
+/**
+ * Whether `moduleId:action` is wired to anything. Unknown moduleIds (legacy
+ * grant keys like `acct_billings` that live outside the ModuleId union but are
+ * still honored by RLS) are treated as fully applicable — this helper gates
+ * UI affordances, never enforcement.
+ */
+export function isActionApplicable(moduleId: string, action: ActionId): boolean {
+  const actions = (APPLICABLE_ACTIONS as Record<string, readonly ActionId[]>)[moduleId];
+  return !actions || actions.includes(action);
+}
+
+/** Same check for a composed `module:action` grant key. */
+export function isGrantKeyApplicable(key: string): boolean {
+  const separatorIndex = key.lastIndexOf(":");
+  if (separatorIndex <= 0) return true;
+  return isActionApplicable(key.slice(0, separatorIndex), key.slice(separatorIndex + 1) as ActionId);
+}

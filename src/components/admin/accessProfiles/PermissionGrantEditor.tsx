@@ -5,6 +5,7 @@ import {
   type ModuleId, type ActionId,
 } from "../permissionsConfig";
 import { getVisibleAccessMatrixDepartments } from "../../../config/access/accessSchema";
+import { isActionApplicable, isGrantKeyApplicable } from "../../../config/access/actionApplicability";
 import type { ModuleGrants } from "./accessProfileTypes";
 import { resolveCascadedGrants } from "./accessGrantUtils";
 
@@ -769,7 +770,11 @@ export function PermissionGrantEditor({
     if (childIds && childIds.length > 0) {
       const bulk = { ...grants };
       bulk[`${moduleId}:${action}`] = next;
-      for (const childId of childIds) bulk[`${childId}:${action}`] = next;
+      // Skip children whose cell is an inert "—" — bulk-fill must never
+      // fabricate grants on keys nothing consumes.
+      for (const childId of childIds) {
+        if (isActionApplicable(childId, action)) bulk[`${childId}:${action}`] = next;
+      }
       onChange(bulk, { manual: true });
       return;
     }
@@ -870,7 +875,9 @@ export function PermissionGrantEditor({
         </span>
         {PERM_ACTIONS.map(action => {
           const isActive = activeActionFilter === action;
-          const count = Object.keys(grants).filter(k => k.endsWith(`:${action}`)).length;
+          // Applicability filter keeps legacy stored keys on dead knobs (never
+          // rendered, never read) from inflating the chip counts.
+          const count = Object.keys(grants).filter(k => k.endsWith(`:${action}`) && isGrantKeyApplicable(k)).length;
           return (
             <button
               key={action}

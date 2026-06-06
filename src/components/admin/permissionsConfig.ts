@@ -123,6 +123,12 @@ export interface PermModule {
   parentId?: ModuleId;
   /** Product-level children owned by this parent even when technically reused elsewhere. */
   containsModuleIds?: ModuleId[];
+  /**
+   * Actions actually consumed for this moduleId (audited — see
+   * config/access/actionApplicability.ts). The editors render the rest as
+   * inert "—" cells. Enforcement never reads this: it gates affordances only.
+   */
+  applicableActions?: readonly ActionId[];
 }
 
 // ─── PERM_MODULES — derived from canonical schema ────────────────────────────
@@ -131,6 +137,7 @@ export interface PermModule {
 // Tabs carry parentId pointing at their containing module.
 
 import { ACCESS_SCHEMA } from "../../config/access/accessSchema";
+import { APPLICABLE_ACTIONS } from "../../config/access/actionApplicability";
 
 export const PERM_MODULES: PermModule[] = (() => {
   const out: PermModule[] = [];
@@ -142,6 +149,7 @@ export const PERM_MODULES: PermModule[] = (() => {
         group: dept.label,
         dept: dept.label,
         containsModuleIds: mod.containsModuleIds,
+        applicableActions: APPLICABLE_ACTIONS[mod.moduleId],
       });
       for (const t of mod.tabs) {
         out.push({
@@ -153,6 +161,7 @@ export const PERM_MODULES: PermModule[] = (() => {
           group: dept.label,
           dept: dept.label,
           parentId: mod.moduleId,
+          applicableActions: APPLICABLE_ACTIONS[t.moduleId],
         });
       }
     }

@@ -84,9 +84,11 @@ export interface AccessDepartmentNode {
   modules: AccessModuleNode[];
 }
 
-// Tab factory — every node exposes all 6 actions in the matrix; per-module
-// applicability is no longer encoded in the schema. The Access Configuration
-// matrix is the sole control surface for which actions a role may perform.
+// Tab factory — structure only. Which of the 6 actions are actually live per
+// node is owned by config/access/actionApplicability.ts (audited from real
+// can()/RLS consumption, guard-enforced); the editors render the rest as inert
+// "—" cells. The Access Configuration matrix remains the sole control surface
+// for which actions a role may perform.
 
 const tab = (moduleId: ModuleId, label: string): AccessTabNode =>
   ({ kind: "tab", id: moduleId, moduleId, label });

@@ -1,4 +1,6 @@
 import type { AccessProfileSummary, ModuleGrants, VisibilityScope } from "./accessProfileTypes";
+import { isActionApplicable } from "../../../config/access/actionApplicability";
+import type { ActionId } from "../permissionsConfig";
 
 type CascadeModule = {
   id: string;
@@ -73,6 +75,10 @@ export const resolveCascadedGrants = (
       const action = parentKey.slice(separatorIndex + 1);
       const parentValue = explicitGrants[parentKey];
       for (const child of children) {
+        // Never fabricate a grant on a knob nothing consumes (see
+        // config/access/actionApplicability.ts) — keeps cascaded profile
+        // grants and per-user deltas free of dead keys.
+        if (!isActionApplicable(child.id, action as ActionId)) continue;
         const childKey = `${child.id}:${action}`;
         if (hasOwnGrant(explicitGrants, childKey)) continue;
         resolved[childKey] = parentValue;

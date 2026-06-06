@@ -55,7 +55,7 @@ describe("accessGrantUtils", () => {
     });
   });
 
-  it("cascades parent grants to child tabs by default", () => {
+  it("cascades parent grants to child tabs by default, skipping inapplicable actions", () => {
     const resolved = resolveCascadedGrants(
       { "ops_projects:view": true, "ops_projects:create": true },
       [
@@ -68,8 +68,11 @@ describe("accessGrantUtils", () => {
     expect(resolved).toEqual({
       "ops_projects:view": true,
       "ops_projects:create": true,
+      // ops_projects_info_tab is a real moduleId whose only applicable action
+      // is "view" (actionApplicability.ts) — cascade must not fabricate
+      // ops_projects_info_tab:create, a key nothing consumes.
       "ops_projects_info_tab:view": true,
-      "ops_projects_info_tab:create": true,
+      // Unknown/synthetic ids are treated as fully applicable (permissive).
       "ops_projects_accounting_tab:view": true,
       "ops_projects_accounting_tab:create": true,
     });
