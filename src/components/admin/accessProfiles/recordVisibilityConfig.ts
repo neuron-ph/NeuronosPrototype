@@ -31,7 +31,12 @@ export const RECORD_TYPE_GROUPS: { group: string; types: RecordType[] }[] = [
     types: [
       { key: "contacts", label: "Contacts", gatingModules: ["bd_contacts", "pricing_contacts"] },
       { key: "customers", label: "Customers", gatingModules: ["bd_customers", "pricing_customers", "acct_customers"] },
-      { key: "quotations", label: "Quotations & Contracts", gatingModules: ["pricing_quotations", "pricing_contracts", "bd_contracts", "bd_inquiries"] },
+      // Split per the door doctrine: a Quotation (sales draft) and a Contract
+      // (active agreement) are distinct nouns with their own rooms, so each gets
+      // its own dial — even though both live on the `quotations` table. RLS keys
+      // the dial off quotation_type (CASE in quotations_select).
+      { key: "quotations", label: "Quotations", gatingModules: ["pricing_quotations", "bd_inquiries"] },
+      { key: "contracts", label: "Contracts", gatingModules: ["pricing_contracts", "bd_contracts"] },
       { key: "tasks", label: "Tasks", gatingModules: ["bd_tasks"] },
       { key: "activities", label: "Activities", gatingModules: ["bd_activities"] },
       { key: "budget_requests", label: "Budget Requests", gatingModules: ["bd_budget_requests"] },
