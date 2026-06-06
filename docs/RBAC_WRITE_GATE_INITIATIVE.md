@@ -105,12 +105,12 @@ Status: `OPEN` → `GATED` / `EXCEPTION` / `DELETED` / `NON-USER`. Verdict flips
 
 | ID | Surface & writes | Target | Status |
 |---|---|---|---|
-| WG-14 | `CommentsTab` post+attach — 5 surfaces (contacts, customers, contracts, quotations, projects) | `<surface>_comments_tab:create`; applicability flips; seeding per D5 | OPEN |
-| WG-15 | `BookingCommentsTab` — 6 surfaces, not even view-gated; live composer in ProjectBookingReadOnlyView | view gate + `ops_bookings_comments_tab` knob (new) with create | OPEN |
-| WG-16 | `EntityAttachmentsTab` upload+delete — 5 surfaces; quotations tab missing even the ModuleId | `<surface>_attachments_tab:create/delete`; NEW `pricing_quotations_attachments_tab` (schema node + applicability + seeding) | OPEN |
-| WG-17 | `TaskDetailInline` — edit(auto-save)/delete/complete/upload, ungated in BD Tasks view AND CustomerDetail | `bd_tasks:edit/delete` (BD view) and `*_tasks_tab:edit/delete` (entity tabs); thread a `canEdit` prop | OPEN |
-| WG-18 | `ActivityDetailInline` — delete/upload, both paths | `bd_activities:delete/edit`, `*_activities_tab:delete/edit` | OPEN |
-| WG-19 | Inbox compose/reply/Cc/status/approve (identity-only) | Gate (D1): compose/reply/Cc → `inbox:create`; status/approve → `inbox:edit` (identity check kept AND'd); seed mirrors current participation | OPEN |
+| WG-14 | `CommentsTab` post+attach — 5 surfaces | `canPost` prop (default false) threaded as `can(ids.comments,"create")` ×5; seeded view→create | **GATED** (Phase 3 commit) |
+| WG-15 | `BookingCommentsTab` — 6 surfaces, not even view-gated | self-gated on `ops_bookings_comments_tab:create` (knob existed, unconsumed); tab buttons view-gated on all 6 parents | **GATED** (Phase 3 commit) |
+| WG-16 | `EntityAttachmentsTab` upload+delete — 5 surfaces; quotations had no ModuleId | `canUpload`/`canDelete` props (default false) ×5; NEW `pricing_quotations_attachments_tab` (view/create seeded to both lens audiences, delete = nobody); legacy delete holders (10) untouched | **GATED** (Phase 3 commit) |
+| WG-17 | `TaskDetailInline` — auto-save/upload/complete/delete, both paths | `canEdit`/`canDelete` props: `bd_tasks` (BD view), `ids.tasks` (CustomerDetail); seeded view→edit+delete | **GATED** (Phase 3 commit) |
+| WG-18 | `ActivityDetailInline` — delete/upload, both paths | same pattern via `bd_activities` / `ids.activities` | **GATED** (Phase 3 commit) |
+| WG-19 | Inbox compose/reply/Cc/status/approve (identity-only) | D1: compose/reply/Cc → `inbox:create` (button/empty-state/C-hotkey/send backstops); status/approve/reopen/close → `inbox:edit` AND identity; seeded to all 56 inbox:view holders | **GATED** (Phase 3 commit) |
 
 ### Tier 4 — Wrong-knob mismatches (Phase 4)
 
