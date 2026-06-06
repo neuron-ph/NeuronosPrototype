@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "neuron-os",
   "version": "0.1.0",
   "private": true,
@@ -80,6 +80,8 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "sync:dev": "node --env-file=.env.local scripts/clone-prod-to-dev.mjs",
+    "rbac:guard": "node --env-file=.env.local scripts/rbac-guard.mjs"
   }
 }

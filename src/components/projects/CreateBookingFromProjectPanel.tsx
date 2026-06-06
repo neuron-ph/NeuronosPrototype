@@ -11,7 +11,8 @@ import {
   autofillTruckingFromProject,
   autofillMarineInsuranceFromProject,
   autofillOthersFromProject,
-  linkBookingToProject
+  linkBookingToProject,
+  isProjectBookingConflict
 } from "../../utils/projectAutofill";
 import { toast } from "../ui/toast-utils";
 import { supabase } from "../../utils/supabase/client";
@@ -109,6 +110,18 @@ export function CreateBookingFromProjectPanel({
       );
 
       if (!linkResult.success) {
+        // One-booking-per-service-per-project conflict: a booking for this
+        // service already exists on the project. Roll back the row we just
+        // created so we don't leave an unlinked orphan, and tell the user.
+        if (isProjectBookingConflict(linkResult.error)) {
+          await supabase.from("bookings").delete().eq("id", bookingData.id);
+          toast.error(
+            `A ${serviceType} booking already exists for this project`,
+            `Each project allows one ${serviceType} booking. Open the existing one instead.`
+          );
+          onBookingCreated();
+          return;
+        }
         console.warn("Warning: Booking created but linking failed:", linkResult.error);
         toast.error(
           "Booking created but linking failed",
