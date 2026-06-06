@@ -23,12 +23,9 @@ interface RecordVisibilityEditorProps {
   resolvedGrants: Record<string, boolean>;
 }
 
-const DIAL_ACTIVE_COLOR: Record<RecordDial, string> = {
-  own: "var(--neuron-action-primary)",
-  team: "var(--neuron-action-primary)",
-  everything: "var(--neuron-action-primary)",
-};
-
+// Linear-style segmented dial: a quiet hairline track with a raised thumb that
+// slides to the active option. No color fill at rest — the control whispers,
+// so an unusual dial position is what catches the scanning eye.
 function DialControl({
   value,
   disabled,
@@ -38,18 +35,41 @@ function DialControl({
   disabled: boolean;
   onSet: (dial: RecordDial) => void;
 }) {
+  const activeIndex = Math.max(0, RECORD_DIALS.findIndex((d) => d.value === value));
   return (
     <div
       role="radiogroup"
       style={{
-        display: "inline-flex",
+        position: "relative",
+        display: "grid",
+        gridTemplateColumns: `repeat(${RECORD_DIALS.length}, 1fr)`,
+        width: 252,
+        flexShrink: 0,
+        padding: 2,
         borderRadius: 8,
         border: "1px solid var(--neuron-ui-border)",
-        overflow: "hidden",
-        opacity: disabled ? 0.5 : 1,
+        background: "var(--neuron-bg-surface-subtle)",
+        opacity: disabled ? 0.4 : 1,
       }}
     >
-      {RECORD_DIALS.map((d, i) => {
+      {/* Sliding thumb */}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          top: 2,
+          bottom: 2,
+          left: 2,
+          width: `calc((100% - 4px) / ${RECORD_DIALS.length})`,
+          borderRadius: 6,
+          background: "var(--neuron-bg-elevated)",
+          border: "1px solid var(--neuron-ui-border)",
+          boxShadow: disabled ? "none" : "0 1px 2px rgba(0, 0, 0, 0.16)",
+          transform: `translateX(${activeIndex * 100}%)`,
+          transition: "transform 0.14s cubic-bezier(0.25, 1, 0.5, 1)",
+        }}
+      />
+      {RECORD_DIALS.map((d) => {
         const active = value === d.value;
         return (
           <button
@@ -60,16 +80,21 @@ function DialControl({
             disabled={disabled}
             title={d.description}
             onClick={() => !disabled && onSet(d.value)}
+            onMouseEnter={(e) => { if (!disabled && !active) e.currentTarget.style.color = "var(--neuron-ink-primary)"; }}
+            onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = "var(--neuron-ink-muted)"; }}
             style={{
-              padding: "5px 12px",
+              position: "relative",
+              zIndex: 1,
+              padding: "4px 6px",
               fontSize: 12,
               fontWeight: active ? 600 : 500,
               border: "none",
-              borderLeft: i === 0 ? "none" : "1px solid var(--neuron-ui-border)",
-              background: active ? DIAL_ACTIVE_COLOR[d.value] : "var(--neuron-bg-elevated)",
-              color: active ? "var(--neuron-action-primary-text)" : "var(--neuron-ink-muted)",
+              borderRadius: 6,
+              background: "transparent",
+              color: active ? "var(--neuron-ink-primary)" : "var(--neuron-ink-muted)",
               cursor: disabled ? "not-allowed" : "pointer",
-              transition: "background 0.12s, color 0.12s",
+              transition: "color 0.12s",
+              whiteSpace: "nowrap",
             }}
           >
             {d.label}
@@ -80,6 +105,8 @@ function DialControl({
   );
 }
 
+// Bulk setter — same quiet track as the dial, but momentary (no thumb): these
+// are actions, not state. Always captioned so the chips never float unlabeled.
 function SetAllControl({
   label,
   onSet,
@@ -88,27 +115,49 @@ function SetAllControl({
   onSet: (dial: RecordDial) => void;
 }) {
   return (
-    <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-      <span style={{ fontSize: 11, color: "var(--neuron-ink-muted)" }}>{label}</span>
-      {RECORD_DIALS.map((d) => (
-        <button
-          key={d.value}
-          type="button"
-          onClick={() => onSet(d.value)}
-          style={{
-            padding: "2px 8px",
-            fontSize: 11,
-            fontWeight: 500,
-            borderRadius: 6,
-            border: "1px solid var(--neuron-ui-border)",
-            background: "transparent",
-            color: "var(--neuron-ink-muted)",
-            cursor: "pointer",
-          }}
-        >
-          {d.label}
-        </button>
-      ))}
+    <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+      <span style={{ fontSize: 11, color: "var(--neuron-ink-muted)" }}>{label || "Set all"}</span>
+      <div
+        style={{
+          display: "inline-flex",
+          gap: 2,
+          padding: 2,
+          borderRadius: 8,
+          border: "1px solid var(--neuron-ui-border)",
+          background: "var(--neuron-bg-surface-subtle)",
+        }}
+      >
+        {RECORD_DIALS.map((d) => (
+          <button
+            key={d.value}
+            type="button"
+            title={d.description}
+            onClick={() => onSet(d.value)}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "var(--neuron-bg-elevated)";
+              e.currentTarget.style.color = "var(--neuron-ink-primary)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+              e.currentTarget.style.color = "var(--neuron-ink-muted)";
+            }}
+            style={{
+              padding: "2px 8px",
+              fontSize: 11,
+              fontWeight: 500,
+              borderRadius: 6,
+              border: "none",
+              background: "transparent",
+              color: "var(--neuron-ink-muted)",
+              cursor: "pointer",
+              transition: "background 0.12s, color 0.12s",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {d.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
