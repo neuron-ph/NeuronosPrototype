@@ -92,14 +92,14 @@ Status: `OPEN` → `GATED` / `EXCEPTION` / `DELETED` / `NON-USER`. Verdict flips
 
 | ID | Surface & writes | Target | Status |
 |---|---|---|---|
-| WG-06 | `InvoiceBuilder.tsx` — 10 sites: draft create, lines→invoiced, finalize (+JE), delete draft, void (+reversing JE). Also row-click leak on `readOnly` parents | NEU-017-style OR-gate on `UnifiedInvoicesTab` (acct_financials / accounting_financials_invoices_tab / ops_*_invoices_tab create\|edit); finalize/void behind edit-class; thread `readOnly` into view mode | OPEN |
-| WG-07 | Calendar — `useCalendarEvents` insert/update/delete/drag; `isReadOnly` hardcoded false; no ownership filter | NEW `calendar` module (D2): view/create/edit/delete knobs + edit/delete ownership-scoped to creator | OPEN |
-| WG-08 | `invoiceReversal.ts`, `InvoiceGLPostingSheet`, `CollectionGLPostingSheet`, `collectionResolution.ts` via Billing/CollectionDetailsSheet | billings/collections write OR-gates; GL posts additionally `acct_journal:create` | OPEN |
-| WG-09 | Booking list pages ×5 — row-trash hard delete; empty-state create; draft-row resume | `ops_<svc>:delete` / `:create` / `:edit` per service | OPEN |
-| WG-10 | Teams CRUD — `UserManagement` TeamsTab + `OperationsTeamsSection` (teams, team_memberships, team_role_eligibilities — 9 sites) | `admin_teams_tab:create/edit/delete` | OPEN |
-| WG-11 | `AccountingCustomers.tsx` — customers insert/delete | Surface goes read-only (D3): remove Add Customer + Delete affordances and their handlers | OPEN |
-| WG-12 | `useNetworkPartners` save/delete via NetworkPartnersModule + VendorDetail + `vendorRateCards.ts` upsert | `pricing_network_partners_*` write knobs (verify existence; else new) | OPEN |
-| WG-13 | `categoryTemplates.ts` CRUD via CatalogManagementPage Templates tab + builder SaveAsTemplateInline | `acct_catalog:create/edit/delete` | OPEN |
+| WG-06 | `InvoiceBuilder.tsx` — 10 sites: draft create, lines→invoiced, finalize (+JE), delete draft, void (+reversing JE) | Invoice-write OR-gate in builder + UnifiedInvoicesTab; delete-class accounting-only; migration 169 seeded acct invoice-tab create/edit (8-user lockout caught by L3) | **GATED** (`39a17f1`, 2 ops-tab-only Acct viewers stay read-only — curation flag) |
+| WG-07 | Calendar — `useCalendarEvents` insert/update/delete/drag; `isReadOnly` hardcoded false; no ownership filter | NEW `calendar` module; ownership enforced in the write queries (`.eq(created_by)`); sidebar Personal section view-gated; migration 170 seeds all profiles | **GATED** (`dc766ea`, 60/60 seeded) |
+| WG-08 | GL posting / invoice reversal / collection resolution sheets | Post-to-GL: `acct_journal:create\|edit` (matches General Journal); reversal: invoice OR-gate; resolution: collections OR-gate; backstops ×4 | **GATED** (`ac31c58`) |
+| WG-09 | Booking list pages ×5 — row-trash hard delete; empty-state create; draft-row resume | `ops_<svc>:delete` / `:create` / `:create\|edit`; delete keys already curated (10–22 holders/svc) | **GATED** (`4973e2d`) |
+| WG-10 | Teams CRUD — `UserManagement` TeamsTab + `OperationsTeamsSection` | `admin_teams_tab:create/edit/delete` + backstops | **GATED** (`6795498`, 14/14 keep create/edit, delete →10) |
+| WG-11 | `AccountingCustomers.tsx` — customers insert/delete | Read-only per D3 — affordances, handlers, kebab column removed (−136 lines) | **DONE** (`d04da0b`) |
+| WG-12 | Vendors/network partners — `useNetworkPartners`, NetworkPartnersModule, VendorDetail, builder Save & Import | `pricing_network_partners:create/edit/delete` (knob existed); hook-level mutation gates | **GATED** (`406cbe7`, 17/17 writers keep, delete 8→2) |
+| WG-13 | Category templates CRUD — Templates tab + builder SaveAsTemplateInline | `acct_catalog:create/edit/delete` | **GATED** (`56db974`) |
 
 ### Tier 3 — Participation surfaces (Phase 3, ex-NEU-018)
 
