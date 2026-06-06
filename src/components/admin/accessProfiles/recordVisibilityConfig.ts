@@ -34,9 +34,9 @@ export const RECORD_TYPE_GROUPS: { group: string; types: RecordType[] }[] = [
       // Split per the door doctrine: a Quotation (sales draft) and a Contract
       // (active agreement) are distinct nouns with their own rooms, so each gets
       // its own dial — even though both live on the `quotations` table. RLS keys
-      // the dial off quotation_type (CASE in quotations_select).
+      // the dial off quotation_type (CASE in quotations_select). Contracts is its
+      // own group below (a container record type, sibling to Projects).
       { key: "quotations", label: "Quotations", gatingModules: ["pricing_quotations", "bd_inquiries"] },
-      { key: "contracts", label: "Contracts", gatingModules: ["pricing_contracts", "bd_contracts"] },
       { key: "tasks", label: "Tasks", gatingModules: ["bd_tasks"] },
       { key: "activities", label: "Activities", gatingModules: ["bd_activities"] },
       { key: "budget_requests", label: "Budget Requests", gatingModules: ["bd_budget_requests"] },
@@ -47,6 +47,15 @@ export const RECORD_TYPE_GROUPS: { group: string; types: RecordType[] }[] = [
     group: "Projects",
     types: [
       { key: "projects", label: "Projects", gatingModules: ["bd_projects", "pricing_projects", "ops_projects", "acct_projects"] },
+    ],
+  },
+  {
+    group: "Contracts",
+    types: [
+      // Sibling container to Projects; its own dial (RLS keys 'contracts' off
+      // quotation_type). Visibility also flows through the relationship gate
+      // (a contract linked to a booking/project you can see).
+      { key: "contracts", label: "Contracts", gatingModules: ["pricing_contracts", "bd_contracts"] },
     ],
   },
   {
