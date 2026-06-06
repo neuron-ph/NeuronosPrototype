@@ -10,6 +10,7 @@ import { PricingTableHeader } from "../../shared/pricing/PricingTableHeader";
 import { UniversalPricingRow, PricingItemData } from "../../shared/pricing/UniversalPricingRow";
 import { MixedCurrencySubtotal } from "../../shared/pricing/MixedCurrencySubtotal";
 import { NeuronModal } from "../../ui/NeuronModal";
+import { usePermission } from "../../../context/PermissionProvider";
 import {
   calculateSellingItemFromAmountAdded,
   calculateSellingItemFromCostChange,
@@ -43,6 +44,9 @@ export function SellingPriceSection({
   onDeleteCategory,
   viewMode = false
 }: SellingPriceSectionProps) {
+  // NEU-019 WG-13: saving a category as a template writes catalog data
+  const { can } = usePermission();
+  const canCreateTemplates = can("acct_catalog", "create");
 
   const [showPresetDropdown, setShowPresetDropdown] = useState(false);
   const [saveTemplateCategoryId, setSaveTemplateCategoryId] = useState<string | null>(null);
@@ -330,7 +334,7 @@ export function SellingPriceSection({
                   onRename={(newName) => onRenameCategory(category.id, newName)}
                   onDuplicate={() => onDuplicateCategory(category.id)}
                   onDelete={() => setPendingCategoryDelete(category.id)}
-                  onSaveAsTemplate={() => setSaveTemplateCategoryId(category.id)}
+                  onSaveAsTemplate={canCreateTemplates ? () => setSaveTemplateCategoryId(category.id) : undefined}
                   onLoadTemplate={() => setLoadTemplateCategoryId(category.id)}
                   viewMode={viewMode}
                 />

@@ -4,6 +4,7 @@ import type { SellingPriceCategory } from "../../../types/pricing";
 import { sellingCategoryToTemplateItems, createTemplate } from "../../../utils/categoryTemplates";
 import { toast } from "../../ui/toast-utils";
 import { useUser } from "../../../hooks/useUser";
+import { usePermission } from "../../../context/PermissionProvider";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../../../lib/queryKeys";
 
@@ -14,6 +15,10 @@ interface SaveAsTemplateInlineProps {
 
 export function SaveAsTemplateInline({ category, onClose }: SaveAsTemplateInlineProps) {
   const { user } = useUser();
+  // NEU-019 WG-13: templates are catalog data — creating one from the builder
+  // needs the same knob as creating one in Catalog Management.
+  const { can } = usePermission();
+  const canCreateTemplates = can("acct_catalog", "create");
   const queryClient = useQueryClient();
   const [name, setName] = useState(category.category_name);
   const [saving, setSaving] = useState(false);
@@ -21,6 +26,7 @@ export function SaveAsTemplateInline({ category, onClose }: SaveAsTemplateInline
   const catalogItems = category.line_items.filter((i) => i.catalog_item_id);
 
   const handleSave = async () => {
+    if (!canCreateTemplates) return; // WG-13 backstop
     if (!name.trim() || catalogItems.length === 0) return;
     setSaving(true);
     try {

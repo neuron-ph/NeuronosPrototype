@@ -15,11 +15,18 @@ import type { CategoryTemplate, TemplateItemEntry } from "../../../types/categor
 import { toast } from "../../ui/toast-utils";
 import { NeuronModal } from "../../ui/NeuronModal";
 import { useUser } from "../../../hooks/useUser";
+import { usePermission } from "../../../context/PermissionProvider";
 import { supabase } from "../../../utils/supabase/client";
 import { CatalogItemCombobox } from "../../shared/pricing/CatalogItemCombobox";
 
 export function CategoryTemplatesTab() {
   const { user } = useUser();
+  // NEU-019 WG-13: templates are catalog data — same knob family as the rest
+  // of Catalog Management (this was the page's only ungated tab).
+  const { can } = usePermission();
+  const canCreateTemplates = can("acct_catalog", "create");
+  const canEditTemplates = can("acct_catalog", "edit");
+  const canDeleteTemplates = can("acct_catalog", "delete");
   const queryClient = useQueryClient();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -40,7 +47,7 @@ export function CategoryTemplatesTab() {
   );
 
   const handleDelete = async () => {
-    if (!pendingDeleteId) return;
+    if (!pendingDeleteId || !canDeleteTemplates) return; // WG-13 backstop
     try {
       await deleteTemplate(pendingDeleteId);
       queryClient.invalidateQueries({ queryKey: queryKeys.catalog.templates() });
@@ -52,6 +59,7 @@ export function CategoryTemplatesTab() {
   };
 
   const handleSaveEdit = async (template: CategoryTemplate) => {
+    if (!canEditTemplates) return; // WG-13 backstop
     try {
       await updateTemplate(template.id, {
         name: editName.trim(),
@@ -96,7 +104,7 @@ export function CategoryTemplatesTab() {
             }}
           />
         </div>
-        {!showBuilder && (
+        {!showBuilder && canCreateTemplates && (
           <button
             onClick={() => setShowBuilder(true)}
             style={{
@@ -187,8 +195,8 @@ export function CategoryTemplatesTab() {
                         </div>
                         <span style={{ fontSize: "11px", color: "var(--theme-text-muted)", flexShrink: 0 }}>{t.items.length} item{t.items.length !== 1 ? "s" : ""}</span>
                         <div style={{ display: "flex", gap: "4px", flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
-                          <IconBtn icon={<Pencil size={14} />} onClick={() => { setEditingId(t.id); setEditName(t.name); setEditDescription(t.description || ""); }} />
-                          <IconBtn icon={<Trash2 size={14} />} danger onClick={() => setPendingDeleteId(t.id)} />
+                          {canEditTemplates && <IconBtn icon={<Pencil size={14} />} onClick={() => { setEditingId(t.id); setEditName(t.name); setEditDescription(t.description || ""); }} />}
+                          {canDeleteTemplates && <IconBtn icon={<Trash2 size={14} />} danger onClick={() => setPendingDeleteId(t.id)} />}
                         </div>
                       </div>
                       {isExpanded && (
