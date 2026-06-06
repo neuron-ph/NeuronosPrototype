@@ -1240,10 +1240,17 @@ function AppContent() {
           <Route path="/admin/profiling" element={<RouteWrapper page="admin-profiling"><ProfilingModule /></RouteWrapper>} />
         </Route>
 
-        {/* Open to all authenticated users */}
-        <Route path="/calendar" element={<CalendarPage />} />
-        <Route path="/inbox" element={<InboxPageWrapper />} />
-        <Route path="/my-evouchers" element={<MyEVouchersPageWrapper />} />
+        {/* NEU-020 DD-18: personal pages are view-gated like every other module —
+            View OFF = no page, not just a hidden sidebar link */}
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "calendar", action: "view" }} />}>
+          <Route path="/calendar" element={<CalendarPage />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "inbox", action: "view" }} />}>
+          <Route path="/inbox" element={<InboxPageWrapper />} />
+        </Route>
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "my_evouchers", action: "view" }} />}>
+          <Route path="/my-evouchers" element={<MyEVouchersPageWrapper />} />
+        </Route>
         <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_evouchers", action: "view" }} />}>
           <Route path="/evouchers/:id/disburse" element={<RouteWrapper page="acct-evouchers"><DisburseEVoucherPage /></RouteWrapper>} />
         </Route>
