@@ -107,6 +107,7 @@ export type ModuleId =
   | "inbox_entity_collection_tab" | "inbox_entity_expense_tab" | "inbox_entity_customer_tab"
   | "inbox_entity_contact_tab" | "inbox_entity_vendor_tab" | "inbox_entity_budget_request_tab"
   // ─── Personal ────────────────────────────────────────────────────────────────
+  | "calendar"
   | "my_evouchers"
   | "my_evouchers_all_tab" | "my_evouchers_draft_tab" | "my_evouchers_pending_tab"
   | "my_evouchers_active_tab" | "my_evouchers_done_tab";

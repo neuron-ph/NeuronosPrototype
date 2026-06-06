@@ -272,6 +272,7 @@ export const APPLICABLE_ACTIONS: Record<ModuleId, readonly ActionId[]> = {
   inbox_entity_budget_request_tab: ["view"],
 
   // ─── Personal ───────────────────────────────────────────────────────────────
+  calendar: ["view", "create", "edit", "delete"],
   my_evouchers: ["view", "create", "edit", "approve", "delete"],
   my_evouchers_all_tab: ["view"],
   my_evouchers_draft_tab: ["view"],

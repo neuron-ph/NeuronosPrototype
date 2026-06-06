@@ -9,6 +9,7 @@ import { Trash2 } from "lucide-react@0.487.0";
 import { toast } from "sonner@2.0.3";
 import { useUsers } from "../../../hooks/useUsers";
 import { useUser } from "../../../hooks/useUser";
+import { usePermission } from "../../../context/PermissionProvider";
 import {
   useCreateCalendarEvent,
   useUpdateCalendarEvent,
@@ -89,6 +90,10 @@ export function EventSheet({
 }: EventSheetProps) {
   const { user } = useUser();
   const { users: allUsers } = useUsers();
+  const { can } = usePermission();
+  // WG-07: the sheet only opens in edit mode for own events (isReadOnly flag),
+  // so the delete knob is the remaining check here.
+  const canDeleteEvents = can("calendar", "delete");
   const createMutation = useCreateCalendarEvent();
   const updateMutation = useUpdateCalendarEvent();
   const deleteMutation = useDeleteCalendarEvent();
@@ -482,7 +487,7 @@ export function EventSheet({
           style={{ borderTop: "1px solid var(--neuron-ui-border)" }}
         >
           <div>
-            {isEditing && (
+            {isEditing && canDeleteEvents && (
               <button
                 type="button"
                 onClick={handleDelete}

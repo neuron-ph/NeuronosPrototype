@@ -10,7 +10,8 @@ interface CalendarToolbarProps {
   onViewChange: (view: CalendarViewType) => void;
   onNavigate: (direction: "prev" | "next" | "today") => void;
   onDateSelect: (date: Date) => void;
-  onNewEvent: () => void;
+  /** Omitted when the user lacks calendar:create — the button is hidden (WG-07). */
+  onNewEvent?: () => void;
 }
 
 const views: { value: CalendarViewType; label: string }[] = [
@@ -159,6 +160,7 @@ export function CalendarToolbar({
         </div>
 
         {/* New Event Button */}
+        {onNewEvent && (
         <button
           type="button"
           onClick={onNewEvent}
@@ -179,6 +181,7 @@ export function CalendarToolbar({
           <Plus size={14} strokeWidth={2.5} />
           New Event
         </button>
+        )}
       </div>
     </div>
   );

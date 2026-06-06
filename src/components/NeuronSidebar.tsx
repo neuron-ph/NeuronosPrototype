@@ -450,12 +450,13 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
     { id: "hr" as Page, label: "HR", icon: User },
   ];
   
-  // Personal section
+  // Personal section — view-gated like every other section (NEU-019 WG-07:
+  // calendar's view knob lands here; inbox/my-evouchers views now enforced too)
   const personalItems = [
     { id: "calendar" as Page, label: "Calendar", icon: Calendar },
     { id: "inbox" as Page, label: "Inbox", icon: Inbox },
     { id: "my-evouchers" as Page, label: "E-Vouchers", icon: FileText },
-  ];
+  ].filter(item => canViewPage(item.id));
   
 
   const otherItems: { id: Page; label: string; icon: any }[] = [];

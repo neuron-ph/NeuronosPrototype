@@ -628,6 +628,9 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
     id: "personal",
     label: DEPT_LABEL.personal,
     modules: [
+      // NEU-019 WG-07 (D2): calendar gets real knobs; edit/delete are
+      // additionally ownership-scoped in useCalendarEvents (own events only).
+      { kind: "module", id: "calendar", moduleId: "calendar", label: "Calendar", pageId: "calendar", tabs: [] },
       {
         kind: "module", id: "my_evouchers", moduleId: "my_evouchers",
         label: "E-Vouchers", pageId: "my-evouchers",
