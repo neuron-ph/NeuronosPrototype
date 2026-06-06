@@ -168,6 +168,10 @@ export function FinancialsModule() {
   const canInvoices = can("accounting_financials_invoices_tab", "view");
   const canCollections = can("accounting_financials_collections_tab", "view");
   const canExpenses = can("accounting_financials_expenses_tab", "view");
+  // NEU-020 2.6: the Financials room's own write affordances obey the room's
+  // own create cells (DD-12), not the retired acct_financials master key.
+  const canCreateInvoice = can("accounting_financials_invoices_tab", "create");
+  const canCreateCollection = can("accounting_financials_collections_tab", "create");
 
   const firstAllowedTab: FinancialsTab =
     canDashboard ? "dashboard" :
@@ -1600,15 +1604,17 @@ export function FinancialsModule() {
             isLoading={isLoading}
             hideScopeBar
           >
-            <div className="flex items-center justify-end px-4 pt-2">
-              <button
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[13px] font-medium text-white"
-                style={{ backgroundColor: "var(--neuron-brand-green, #0F766E)" }}
-                onClick={handleCreateInvoice}
-              >
-                <FileStack className="w-4 h-4" /> Create Invoice
-              </button>
-            </div>
+            {canCreateInvoice && (
+              <div className="flex items-center justify-end px-4 pt-2">
+                <button
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[13px] font-medium text-white"
+                  style={{ backgroundColor: "var(--neuron-brand-green, #0F766E)" }}
+                  onClick={handleCreateInvoice}
+                >
+                  <FileStack className="w-4 h-4" /> Create Invoice
+                </button>
+              </div>
+            )}
             <GroupingToolbar
               scope={scope}
               onScopeChange={setScope}
@@ -1644,15 +1650,17 @@ export function FinancialsModule() {
             isLoading={isLoading}
             hideScopeBar
           >
-            <div className="flex items-center justify-end px-4 pt-2">
-              <button
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[13px] font-medium text-white"
-                style={{ backgroundColor: "var(--neuron-brand-green, #0F766E)" }}
-                onClick={handleCreateCollection}
-              >
-                <DollarSign className="w-4 h-4" /> Add Collection
-              </button>
-            </div>
+            {canCreateCollection && (
+              <div className="flex items-center justify-end px-4 pt-2">
+                <button
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[13px] font-medium text-white"
+                  style={{ backgroundColor: "var(--neuron-brand-green, #0F766E)" }}
+                  onClick={handleCreateCollection}
+                >
+                  <DollarSign className="w-4 h-4" /> Add Collection
+                </button>
+              </div>
+            )}
             <GroupingToolbar
               scope={scope}
               onScopeChange={setScope}

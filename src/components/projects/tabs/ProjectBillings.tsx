@@ -8,9 +8,11 @@ interface ProjectBillingsProps {
   financials: FinancialData;
   project: Project;
   highlightId?: string | null;
+  /** NEU-020 2.6: project-door billings key (PROJECT_MODULE_IDS[door].billings). */
+  permissionDoor?: string;
 }
 
-export function ProjectBillings({ financials, project, highlightId }: ProjectBillingsProps) {
+export function ProjectBillings({ financials, project, highlightId, permissionDoor }: ProjectBillingsProps) {
   const { billingItems, refresh, isLoading } = financials;
   const { data: liveLinkedBookings = [] } = useQuery({
     queryKey: ["project-billings-linked-bookings", project.id],
@@ -54,6 +56,7 @@ export function ProjectBillings({ financials, project, highlightId }: ProjectBil
           enableGroupByToggle={false}
           linkedBookings={linkedBookings}
           highlightId={highlightId}
+          permissionDoor={permissionDoor}
       />
     </div>
   );

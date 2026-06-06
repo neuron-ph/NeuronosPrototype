@@ -312,10 +312,13 @@ export const APPLICABLE_ACTIONS: Record<ModuleId, readonly ActionId[]> = {
   acct_projects_info_tab: ["view"],
   acct_projects_quotation_tab: ["view"],
   acct_projects_bookings_tab: ["view"],
-  acct_projects_expenses_tab: ["view"],
-  acct_projects_billings_tab: ["view"],
-  acct_projects_invoices_tab: ["view"],
-  acct_projects_collections_tab: ["view"],
+  // NEU-020 2.6 (DD-12): accounting genuinely does money work inside projects
+  // through the Accounting project window — these get their own write cells
+  // (mirroring the bd/pricing/ops project money tabs), seeded from current usage.
+  acct_projects_expenses_tab: ["view", "create", "edit"],
+  acct_projects_billings_tab: ["view", "create", "edit", "delete"],
+  acct_projects_invoices_tab: ["view", "create", "edit"],
+  acct_projects_collections_tab: ["view", "create", "edit"],
   acct_projects_attachments_tab: ["view", "create", "delete"],
   acct_projects_comments_tab: ["view", "create"],
   acct_contracts_all_tab: ["view"],

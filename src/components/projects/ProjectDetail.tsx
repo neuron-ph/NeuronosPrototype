@@ -684,18 +684,18 @@ export function ProjectDetail({
 
         {activeTab === "expenses" && canViewExpensesTab && (
           <div className="max-w-7xl mx-auto">
-            <ProjectExpensesTab project={project} currentUser={currentUser} />
+            <ProjectExpensesTab project={project} currentUser={currentUser} permissionDoor={ids.expenses} />
           </div>
         )}
 
         {activeTab === "billings" && canViewBillingsTab && (
           <div className="max-w-7xl mx-auto">
-            <ProjectBillings financials={financials} project={project} highlightId={highlightId} />
+            <ProjectBillings financials={financials} project={project} highlightId={highlightId} permissionDoor={ids.billings} />
           </div>
         )}
 
         {activeTab === "invoices" && canViewInvoicesTab && (
-          <ProjectInvoices financials={financials} project={project} currentUser={currentUser} highlightId={highlightId} />
+          <ProjectInvoices financials={financials} project={project} currentUser={currentUser} highlightId={highlightId} permissionDoor={ids.invoices} />
         )}
 
         {activeTab === "collections" && canViewCollectionsTab && (
@@ -705,6 +705,7 @@ export function ProjectDetail({
               project={project}
               currentUser={currentUser}
               highlightId={highlightId}
+              permissionDoor={ids.collections}
             />
           </div>
         )}

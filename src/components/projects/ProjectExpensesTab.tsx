@@ -14,9 +14,11 @@ interface ProjectExpensesTabProps {
   } | null;
   title?: string;
   subtitle?: string;
+  /** NEU-020 2.6: project-door expenses key (PROJECT_MODULE_IDS[door].expenses). */
+  permissionDoor?: string;
 }
 
-export function ProjectExpensesTab({ project, currentUser, title, subtitle }: ProjectExpensesTabProps) {
+export function ProjectExpensesTab({ project, currentUser, title, subtitle, permissionDoor }: ProjectExpensesTabProps) {
   const queryClient = useQueryClient();
   const linkedBookings = project.linkedBookings || [];
   const validBookingIds = Array.from(
@@ -127,6 +129,7 @@ export function ProjectExpensesTab({ project, currentUser, title, subtitle }: Pr
         projectNumber={project.project_number}
         title={title}
         subtitle={subtitle}
+        permissionDoor={permissionDoor}
       />
     </div>
   );
