@@ -32,3 +32,8 @@ marketing-showcase/
 # Local junk (do not commit)
 image.png
 UsersMarcus.claudesettings.json
+
+# Playwright
+/test-results/
+/playwright-report/
+/.last-run.json
