@@ -205,9 +205,10 @@ export function ProjectDetail({
   const currentUserDepartment = currentUser?.department || "BD";
 
   const handleSaveQuotation = async (updates: any) => {
-    // NEU-019 re-census fix: this is also the PDF Studio save path, which is
-    // reachable with quotation-tab VIEW alone — the write needs the edit grant.
-    if (!showActions) {
+    // NEU-020 2.10a: amending the project's QUOTATION obeys the Quotation tab's
+    // own Edit cell (ids.quotation), not the Projects module-root edit. This is
+    // also the PDF Studio save path (reachable with quotation-tab VIEW alone).
+    if (!canAmendQuotation) {
       toast.error("You don't have permission to save changes to this quotation.");
       return;
     }
@@ -236,8 +237,12 @@ export function ProjectDetail({
     }
   };
 
-  // NEU-020 2.5: edit authority comes from the door the user entered through.
+  // NEU-020 2.5: project-level edit authority (status, actions menu) comes from
+  // the door the user entered through.
   const showActions = can(ids.root, "edit");
+  // NEU-020 2.10a: amending the QUOTATION obeys the Quotation tab's own Edit
+  // cell — not the project root (the grid's "Quotation → Edit" must govern it).
+  const canAmendQuotation = can(ids.quotation, "edit");
 
   // Define the Tab Structure
   const TAB_STRUCTURE = {
@@ -668,7 +673,7 @@ export function ProjectDetail({
             onUpdate={onUpdate}
             onViewBooking={handleViewBooking}
             onSaveQuotation={handleSaveQuotation}
-            canAmend={showActions} // WG-25: projects edit grant
+            canAmend={canAmendQuotation} // NEU-020 2.10a: Quotation tab's own edit cell
           />
         )}
 

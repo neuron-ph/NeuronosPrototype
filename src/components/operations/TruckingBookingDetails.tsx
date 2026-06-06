@@ -328,6 +328,7 @@ export function TruckingBookingDetails({ booking, onBack, onUpdate, currentUser,
         <div style={{ flex: showTimeline ? "0 0 65%" : "1", overflow: "auto", transition: "flex 0.3s ease" }}>
           {activeTab === "booking-info" && canViewInfo && (
             <BookingInfoTab
+              permissionDoor="ops_trucking_info_tab"
               booking={editedBooking as Record<string, unknown>}
               serviceType="Trucking"
               bookingId={String((editedBooking as any).id || booking.bookingId)}

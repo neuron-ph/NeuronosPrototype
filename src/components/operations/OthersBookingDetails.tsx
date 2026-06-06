@@ -327,6 +327,7 @@ export function OthersBookingDetails({ booking, onBack, onUpdate, currentUser, i
         <div style={{ flex: showTimeline ? "0 0 65%" : "1", overflow: "auto", transition: "flex 0.3s ease" }}>
           {activeTab === "booking-info" && canViewInfo && (
             <BookingInfoTab
+              permissionDoor={ids.detail.info}
               booking={editedBooking as Record<string, unknown>}
               serviceType="Others"
               bookingId={String((editedBooking as any).id || booking.bookingId)}

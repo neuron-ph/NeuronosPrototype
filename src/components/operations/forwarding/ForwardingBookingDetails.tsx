@@ -641,6 +641,7 @@ export function ForwardingBookingDetails({
         }}>
           {activeTab === "booking-info" && canViewInfo && (
             <BookingInfoTab
+              permissionDoor="ops_forwarding_info_tab"
               booking={editedBooking as Record<string, unknown>}
               serviceType="Forwarding"
               bookingId={String((editedBooking as any).id || booking.bookingId)}

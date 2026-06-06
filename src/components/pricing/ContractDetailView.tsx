@@ -130,8 +130,12 @@ export function ContractDetailView({
   const canViewCommentsTab     = can(ids.comments,    "view");
   const canPostComments        = can(ids.comments,    "create"); // WG-14
   const canViewActivityTab     = can(ids.activity,    "view");
-  // NEU-020 2.5: edit authority comes from the door the user entered through.
+  // NEU-020 2.5: contract-record-level edit authority (status, actions menu,
+  // activate) comes from the door the user entered through.
   const canEditContract        = can(ids.root, "edit");
+  // NEU-020 2.10a: amending the contract's QUOTATION obeys the Quotation tab's
+  // own Edit cell — not the contract root (the grid's "Quotation → Edit" governs).
+  const canAmendQuotation      = can(ids.quotation, "edit");
 
   const resolveInitialTab = (): ContractTab => {
     if (initialTab) return initialTab as ContractTab;
@@ -354,9 +358,10 @@ export function ContractDetailView({
   }), [quotation]);
 
   const handleSaveContractQuotation = async (updates: any) => {
-    // NEU-019 re-census fix: also the PDF Studio save path (reachable with
-    // tab view alone) — the contract write needs the edit grant.
-    if (!canEditContract) {
+    // NEU-020 2.10a: amending the contract's QUOTATION obeys the Quotation tab's
+    // own Edit cell (ids.quotation), not the contract root. Also the PDF Studio
+    // save path (reachable with tab view alone).
+    if (!canAmendQuotation) {
       toast.error("You don't have permission to save changes to this contract.");
       return;
     }
@@ -1202,7 +1207,7 @@ export function ContractDetailView({
             project={contractAsProject}
             currentUser={currentUser ? { id: "current-user", ...currentUser } : null}
             onSaveQuotation={handleSaveContractQuotation}
-            canAmend={canEditContract} // WG-25: contract edit grant
+            canAmend={canAmendQuotation} // NEU-020 2.10a: Quotation tab's own edit cell
           />
         )}
         {activeTab === "rate-card" && canViewRateCardTab && (
