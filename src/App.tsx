@@ -247,6 +247,7 @@ function RouteWrapper({ children, page }: { children: React.ReactNode; page: str
     if (path.startsWith("/pricing/projects")) return "pricing-projects";
     if (path.startsWith("/pricing/contracts")) return "pricing-contracts";
     if (path.startsWith("/pricing/vendors")) return "pricing-vendors";
+    if (path.startsWith("/pricing/others")) return "pricing-others"; // NEU-020 DD-2
     if (path.startsWith("/operations/forwarding")) return "ops-forwarding";
     if (path.startsWith("/operations/brokerage")) return "ops-brokerage";
     if (path.startsWith("/operations/trucking")) return "ops-trucking";
@@ -309,6 +310,7 @@ function RouteWrapper({ children, page }: { children: React.ReactNode; page: str
       "ops-trucking": "/operations/trucking",
       "ops-marine-insurance": "/operations/marine-insurance",
       "ops-others": "/operations/others",
+      "pricing-others": "/pricing/others", // NEU-020 DD-2
       "acct-journal": "/accounting/journal",
       "acct-coa": "/accounting/coa",
       "acct-evouchers": "/accounting/evouchers",
@@ -704,13 +706,13 @@ function MarineInsuranceBookingsPage() {
   );
 }
 
-function OthersBookingsPage() {
+function OthersBookingsPage({ door = "ops" }: { door?: "ops" | "pricing" }) {
   const { user } = useUser();
   const [searchParams] = useSearchParams();
   const pendingBookingId = searchParams.get("booking");
   return (
-    <RouteWrapper page="ops-others">
-      <OthersBookings currentUser={user} pendingBookingId={pendingBookingId} />
+    <RouteWrapper page={door === "pricing" ? "pricing-others" : "ops-others"}>
+      <OthersBookings currentUser={user} pendingBookingId={pendingBookingId} door={door} />
     </RouteWrapper>
   );
 }
@@ -1160,6 +1162,10 @@ function AppContent() {
         </Route>
         <Route element={<GuardedLayout requiredPermission={{ moduleId: "ops_others", action: "view" }} />}>
           <Route path="/operations/others" element={<OthersBookingsPage />} />
+        </Route>
+        {/* NEU-020 DD-2: the Pricing door into Others — its own route, its own keys */}
+        <Route element={<GuardedLayout requiredPermission={{ moduleId: "pricing_others", action: "view" }} />}>
+          <Route path="/pricing/others" element={<OthersBookingsPage door="pricing" />} />
         </Route>
         <Route element={<GuardedLayout requiredPredicate={(can) => canActOnBooking(can, "create")} predicateLabel="bookings.create" />}>
           <Route path="/operations/create" element={<CreateBookingPage />} />

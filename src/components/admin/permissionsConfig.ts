@@ -53,6 +53,8 @@ export type ModuleId =
   | "ops_bookings_info_tab" | "ops_bookings_billings_tab"
   | "ops_bookings_invoices_tab" | "ops_bookings_collections_tab"
   | "ops_bookings_expenses_tab" | "ops_bookings_comments_tab" | "ops_bookings_chrono_tab"
+  // NEU-020 DD-2: the Pricing-door Others family (split from ops_others)
+  | "pricing_others" | "pricing_others_all_tab" | "pricing_others_my_tab" | "pricing_others_draft_tab" | "pricing_others_in_progress_tab" | "pricing_others_completed_tab" | "pricing_others_cancelled_tab" | "pricing_others_info_tab" | "pricing_others_billings_tab" | "pricing_others_invoices_tab" | "pricing_others_collections_tab" | "pricing_others_expenses_tab" | "pricing_others_comments_tab" | "pricing_others_chrono_tab"
   // NEU-020 DD-1: per-service booking-detail door keys
   | "ops_forwarding_info_tab" | "ops_forwarding_billings_tab" | "ops_forwarding_invoices_tab" | "ops_forwarding_collections_tab" | "ops_forwarding_expenses_tab" | "ops_forwarding_comments_tab" | "ops_forwarding_chrono_tab"
   | "ops_brokerage_info_tab" | "ops_brokerage_billings_tab" | "ops_brokerage_invoices_tab" | "ops_brokerage_collections_tab" | "ops_brokerage_expenses_tab" | "ops_brokerage_comments_tab" | "ops_brokerage_chrono_tab"

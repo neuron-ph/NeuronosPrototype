@@ -146,7 +146,7 @@ const prefetchOperations = () => void import("./Operations");
 const prefetchAccounting = () => void import("./accounting/FinancialsModule");
 const prefetchInbox      = () => void import("./InboxPage");
 
-type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" |"pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" |"ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" |"operations" | "acct-transactions" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-journal" | "acct-coa" | "acct-reports" | "acct-statements" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "calendar" | "inbox" | "my-evouchers" | "ticket-queue" | "settings" | "admin-users" | "admin-profiling" | "admin" | "ticket-testing" | "activity-log" | "design-system";
+type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" |"pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" | "pricing-others" |"ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" |"operations" | "acct-transactions" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-journal" | "acct-coa" | "acct-reports" | "acct-statements" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "calendar" | "inbox" | "my-evouchers" | "ticket-queue" | "settings" | "admin-users" | "admin-profiling" | "admin" | "ticket-testing" | "activity-log" | "design-system";
 
 // Sidebar permission map — derived from canonical schema for sidebar-backed pages,
 // plus explicit entries for legacy non-sidebar accounting routes that still need
@@ -381,6 +381,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
     "ops-trucking":        Truck,
     "ops-marine-insurance":Ship,
     "ops-others":          FileText,
+    "pricing-others":      FileText,
     "acct-financials":     CreditCard,
     "acct-evouchers":      Receipt,
     "acct-journal":        ScrollText,
@@ -418,10 +419,10 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
   const visibleBdSubItems = bdSubItems.filter((item) => canViewPage(item.id));
   const visiblePricingSubItems = pricingSubItems.filter((item) => {
     if (!canViewPage(item.id)) return false;
-    // "Others" is cross-listed under Operations + Pricing (shared module). For
-    // Operations users it already appears under Operations, so suppress the
-    // redundant Pricing entry.
-    if (item.id === "ops-others" && userDepartment === "Operations") return false;
+    // NEU-020 DD-2: "Others" under Pricing is now its own door (pricing_others)
+    // with its own route — no shared-key cross-listing. Keep the UX de-dup for
+    // Operations users who hold both doors.
+    if (item.id === "pricing-others" && userDepartment === "Operations") return false;
     return true;
   });
   const visibleOperationsSubItems = operationsSubItems.filter((item) => canViewPage(item.id));

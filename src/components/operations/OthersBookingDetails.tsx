@@ -23,6 +23,7 @@ import { usePermission } from "../../context/PermissionProvider";
 import { fireBillingTicketOnCompletion } from "../../utils/workflowTickets";
 import { logStatusChange } from "../../utils/activityLog";
 import { notifyBookingStatusChange } from "../../utils/notifyBookingStatusChange";
+import { OTHERS_DOOR_IDS, type OthersDoor } from "./OthersBookings";
 
 interface OthersBookingDetailsProps {
   booking: OthersBooking;
@@ -31,6 +32,7 @@ interface OthersBookingDetailsProps {
   currentUser?: { name: string; email: string; department: string } | null;
   initialTab?: string | null;
   highlightId?: string | null;
+  door?: OthersDoor;
 }
 
 type DetailTab = "booking-info" | "billings" | "invoices" | "collections" | "expenses" | "comments" | "chrono";
@@ -86,18 +88,19 @@ function ActivityTimeline({ activities }: { activities: ActivityLogEntry[] }) {
   );
 }
 
-export function OthersBookingDetails({ booking, onBack, onUpdate, currentUser, initialTab, highlightId }: OthersBookingDetailsProps) {
+export function OthersBookingDetails({ booking, onBack, onUpdate, currentUser, initialTab, highlightId, door = "ops" }: OthersBookingDetailsProps) {
   const { can } = usePermission();
-  // NEU-020 DD-1: per-service door keys
-  const canViewInfo = can("ops_others_info_tab", "view");
-  const canViewBillings = can("ops_others_billings_tab", "view");
-  const canViewInvoices = can("ops_others_invoices_tab", "view");
-  const canViewCollections = can("ops_others_collections_tab", "view");
-  const canViewExpenses = can("ops_others_expenses_tab", "view");
-  const canViewChrono = can("ops_others_chrono_tab", "view");
-  const canViewCommentsTab = can("ops_others_comments_tab", "view"); // NEU-019 WG-15
-  const canEditBooking = can("ops_others", "edit");
-  const canCancelDeleteBooking = canEditBooking || can("ops_others", "delete");
+  // NEU-020 DD-1/DD-2: per-service door keys, resolved by the door we entered through
+  const ids = OTHERS_DOOR_IDS[door];
+  const canViewInfo = can(ids.detail.info, "view");
+  const canViewBillings = can(ids.detail.billings, "view");
+  const canViewInvoices = can(ids.detail.invoices, "view");
+  const canViewCollections = can(ids.detail.collections, "view");
+  const canViewExpenses = can(ids.detail.expenses, "view");
+  const canViewChrono = can(ids.detail.chrono, "view");
+  const canViewCommentsTab = can(ids.detail.comments, "view"); // NEU-019 WG-15
+  const canEditBooking = can(ids.root, "edit");
+  const canCancelDeleteBooking = canEditBooking || can(ids.root, "delete");
   const firstViewableTab: DetailTab = canViewInfo
     ? "booking-info"
     : canViewBillings
@@ -308,7 +311,7 @@ export function OthersBookingDetails({ booking, onBack, onUpdate, currentUser, i
         currentStatus={editedBooking.status}
         currentUser={currentUser}
         allowCancel={canEditBooking} // NEU-019 WG-21
-        allowDelete={can("ops_others", "delete")} // NEU-019 WG-21
+        allowDelete={can(ids.root, "delete")} // NEU-019 WG-21
         onSuccess={(action) => {
           if (action === "deleted") {
             onBack();
@@ -331,12 +334,12 @@ export function OthersBookingDetails({ booking, onBack, onUpdate, currentUser, i
               currentUser={currentUser}
             />
           )}
-          {activeTab === "billings" && canViewBillings && <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]"><UnifiedBillingsTab items={bookingBillingItems} projectId={booking.projectNumber || ""} bookingId={booking.bookingId} onRefresh={financials.refresh} isLoading={financials.isLoading} pendingBillableCount={pendingBillableCount} extraActions={<BookingRateCardButton booking={booking} serviceType="Others" existingBillingItems={bookingBillingItems} onRefresh={financials.refresh} />} permissionDoor="ops_others_billings_tab" /></div>}
-          {activeTab === "invoices" && canViewInvoices && <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]"><UnifiedInvoicesTab financials={bookingFinancials} project={bookingContainer} currentUser={currentUser ? { ...currentUser, id: user?.id || "" } : null} onRefresh={financials.refresh} highlightId={activeTab === "invoices" ? highlightId : undefined} permissionDoor="ops_others_invoices_tab" /></div>}
-          {activeTab === "collections" && canViewCollections && <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]"><UnifiedCollectionsTab financials={bookingFinancials} project={bookingContainer} currentUser={currentUser ? { ...currentUser, id: user?.id || "" } : null} onRefresh={financials.refresh} highlightId={activeTab === "collections" ? highlightId : undefined} permissionDoor="ops_others_collections_tab" /></div>}
-          {activeTab === "expenses" && canViewExpenses && <ExpensesTab bookingId={booking.bookingId} bookingNumber={(booking as any).booking_number || booking.bookingId} bookingType="others" currentUser={currentUser} highlightId={activeTab === "expenses" ? highlightId : undefined} existingBillingItems={bookingBillingItems} onPendingCountChange={setPendingBillableCount} permissionDoor="ops_others_expenses_tab" />}
-          {activeTab === "comments" && canViewCommentsTab && <BookingCommentsTab bookingId={booking.bookingId} permissionDoor="ops_others_comments_tab" />}
-          {activeTab === "chrono" && canViewChrono && <BookingChronologicalTab bookingId={booking.bookingId} permissionDoor="ops_others_chrono_tab" />}
+          {activeTab === "billings" && canViewBillings && <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]"><UnifiedBillingsTab items={bookingBillingItems} projectId={booking.projectNumber || ""} bookingId={booking.bookingId} onRefresh={financials.refresh} isLoading={financials.isLoading} pendingBillableCount={pendingBillableCount} extraActions={<BookingRateCardButton booking={booking} serviceType="Others" existingBillingItems={bookingBillingItems} onRefresh={financials.refresh} />} permissionDoor={ids.detail.billings} /></div>}
+          {activeTab === "invoices" && canViewInvoices && <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]"><UnifiedInvoicesTab financials={bookingFinancials} project={bookingContainer} currentUser={currentUser ? { ...currentUser, id: user?.id || "" } : null} onRefresh={financials.refresh} highlightId={activeTab === "invoices" ? highlightId : undefined} permissionDoor={ids.detail.invoices} /></div>}
+          {activeTab === "collections" && canViewCollections && <div className="flex flex-col bg-[var(--theme-bg-surface)] p-12 min-h-[600px]"><UnifiedCollectionsTab financials={bookingFinancials} project={bookingContainer} currentUser={currentUser ? { ...currentUser, id: user?.id || "" } : null} onRefresh={financials.refresh} highlightId={activeTab === "collections" ? highlightId : undefined} permissionDoor={ids.detail.collections} /></div>}
+          {activeTab === "expenses" && canViewExpenses && <ExpensesTab bookingId={booking.bookingId} bookingNumber={(booking as any).booking_number || booking.bookingId} bookingType="others" currentUser={currentUser} highlightId={activeTab === "expenses" ? highlightId : undefined} existingBillingItems={bookingBillingItems} onPendingCountChange={setPendingBillableCount} permissionDoor={ids.detail.expenses} />}
+          {activeTab === "comments" && canViewCommentsTab && <BookingCommentsTab bookingId={booking.bookingId} permissionDoor={ids.detail.comments} />}
+          {activeTab === "chrono" && canViewChrono && <BookingChronologicalTab bookingId={booking.bookingId} permissionDoor={ids.detail.chrono} />}
         </div>
         {showTimeline && <div style={{ flex: "0 0 35%", borderLeft: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--neuron-pill-inactive-bg)", overflow: "auto" }}><ActivityTimeline activities={activityLog} /></div>}
       </div>

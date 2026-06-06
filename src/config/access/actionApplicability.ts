@@ -101,6 +101,22 @@ export const APPLICABLE_ACTIONS: Record<ModuleId, readonly ActionId[]> = {
   pricing_network_partners_co_loader_tab: ["view"],
   pricing_network_partners_all_in_tab: ["view"],
 
+  // NEU-020 DD-2: Pricing-door Others family (each grid appearance = its own key)
+  pricing_others: ["view", "create", "edit", "delete"],
+  pricing_others_all_tab: ["view"],
+  pricing_others_my_tab: ["view"],
+  pricing_others_draft_tab: ["view"],
+  pricing_others_in_progress_tab: ["view"],
+  pricing_others_completed_tab: ["view"],
+  pricing_others_cancelled_tab: ["view"],
+  pricing_others_info_tab: ["view"],
+  pricing_others_billings_tab: ["view", "create", "edit", "delete"],
+  pricing_others_invoices_tab: ["view", "create", "edit", "delete", "export"],
+  pricing_others_collections_tab: ["view", "create", "edit"],
+  pricing_others_expenses_tab: ["view", "create", "edit"],
+  pricing_others_comments_tab: ["view", "create"],
+  pricing_others_chrono_tab: ["view", "create", "edit", "delete"],
+
   // ─── Operations ─────────────────────────────────────────────────────────────
   ops_forwarding: ["view", "create", "edit", "delete"],
   ops_brokerage: ["view", "create", "edit", "delete"],
