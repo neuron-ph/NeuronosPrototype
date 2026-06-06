@@ -260,7 +260,12 @@ export const APPLICABLE_ACTIONS: Record<ModuleId, readonly ActionId[]> = {
   // ─── Accounting ─────────────────────────────────────────────────────────────
   acct_evouchers: ["view", "create", "approve", "delete"],
   acct_reports: ["view"],
-  acct_financials: ["view", "create", "edit", "delete"],
+  // NEU-020 2.6-final (DD-11): the acct_financials MASTER KEY is retired. Its
+  // create/edit/delete granted money writes through every door globally; each
+  // door now carries its own write cell and every former master-key holder was
+  // seeded into them (migrations 175/172). Only view survives — it still gates
+  // the Financials route (App.tsx) and record visibility (recordVisibilityConfig).
+  acct_financials: ["view"],
   acct_coa: ["view", "create", "edit", "delete"],
   acct_projects: ["view"],
   acct_contracts: ["view"],

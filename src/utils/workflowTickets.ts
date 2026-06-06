@@ -150,8 +150,9 @@ export async function createWorkflowTicket(
 const RESOLUTION_ACTION_GRANTS: Record<string, Array<[string, string]>> = {
   set_quotation_priced: [["bd_inquiries", "edit"], ["pricing_quotations", "edit"]],
   set_quotation_pricing_in_progress: [["bd_inquiries", "edit"], ["pricing_quotations", "edit"]],
+  // 2.6-final: acct_financials master key retired (holders seeded into
+  // accounting_financials_billings_tab).
   set_booking_billed: [
-    ["acct_financials", "create"], ["acct_financials", "edit"],
     ["accounting_financials_billings_tab", "create"], ["accounting_financials_billings_tab", "edit"],
     ["acct_billings", "create"], ["acct_billings", "edit"], // legacy keys still honored by RLS
     ["ops_bookings_billings_tab", "create"], ["ops_bookings_billings_tab", "edit"],

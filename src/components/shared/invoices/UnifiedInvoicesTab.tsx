@@ -57,10 +57,11 @@ export function UnifiedInvoicesTab({
   // NEU-020 door purity: with a door, only that key governs. Without one
   // (transitional), the NEU-019 OR-gate still applies until every parent
   // threads its door — then the fallback dies.
+  // 2.6-final: acct_financials master key retired (holders seeded into
+  // accounting_financials_invoices_tab). Transitional fallback now master-free.
   const canWriteInvoices = permissionDoor
     ? ["create", "edit"].some(a => canKey(permissionDoor, a))
     : ["create", "edit"].some(a =>
-        canKey("acct_financials", a) ||
         canKey("accounting_financials_invoices_tab", a) ||
         canKey("ops_bookings_invoices_tab", a) ||
         canKey("ops_projects_invoices_tab", a));

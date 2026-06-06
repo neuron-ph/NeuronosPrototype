@@ -32,8 +32,9 @@ export function BillingDetailsSheet({ isOpen, onClose, billingId }: BillingDetai
   // WG-06); Post to GL writes journal entries (same gate as General Journal).
   const { can } = usePermission();
   const canKey = can as unknown as (moduleId: string, action: string) => boolean;
+  // 2.6-final: acct_financials master key retired (record-mirroring write gate,
+  // DD-22 signed); holders seeded into accounting_financials_invoices_tab.
   const canWriteInvoices = ["create", "edit"].some(a =>
-    canKey("acct_financials", a) ||
     canKey("accounting_financials_invoices_tab", a) ||
     canKey("ops_bookings_invoices_tab", a) ||
     canKey("ops_projects_invoices_tab", a));

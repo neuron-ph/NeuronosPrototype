@@ -96,12 +96,13 @@ export function UnifiedBillingsTab({
   const { can } = usePermission();
   const canKey = can as unknown as (moduleId: string, action: string) => boolean;
   // NEU-020 door purity: with a door, only that key governs. Without one
-  // (transitional), the NEU-017 OR-gate still applies until every parent
-  // threads its door — then the fallback dies.
+  // (transitional), a master-free OR-gate still applies until every parent
+  // threads its door — then the fallback dies. (2.6-final: acct_financials
+  // master key retired — holders were seeded into accounting_financials_*.)
   const canWriteBillings = permissionDoor
     ? ["create", "edit"].some(a => canKey(permissionDoor, a))
     : ["create", "edit"].some(a =>
-        canKey("acct_financials", a) || canKey("accounting_financials_billings_tab", a) ||
+        canKey("accounting_financials_billings_tab", a) ||
         canKey("acct_billings", a) || canKey("ops_bookings_billings_tab", a) ||
         canKey("ops_projects_billings_tab", a));
   const readOnly = readOnlyProp || !canWriteBillings;

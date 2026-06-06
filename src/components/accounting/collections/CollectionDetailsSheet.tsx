@@ -28,8 +28,9 @@ export function CollectionDetailsSheet({ isOpen, onClose, collectionId }: Collec
   // writes journal entries (same gate as General Journal).
   const { can } = usePermission();
   const canKey = can as unknown as (moduleId: string, action: string) => boolean;
+  // 2.6-final: acct_financials master key retired (record-mirroring write gate,
+  // DD-22 signed); holders seeded into accounting_financials_collections_tab.
   const canWriteCollections = ["create", "edit"].some(a =>
-    canKey("acct_financials", a) ||
     canKey("accounting_financials_collections_tab", a) ||
     canKey("acct_collections", a) ||
     canKey("ops_bookings_collections_tab", a) ||

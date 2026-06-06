@@ -71,8 +71,9 @@ export function CollectionCreatorPanel({
   // not ride the collections grant that opened this panel.
   const { can } = usePermission();
   const canKey = can as unknown as (moduleId: string, action: string) => boolean;
-  const canDeleteInvoices =
-    canKey("acct_financials", "delete") || canKey("accounting_financials_invoices_tab", "delete");
+  // 2.6-final: acct_financials master key retired (holders seeded into
+  // accounting_financials_invoices_tab).
+  const canDeleteInvoices = canKey("accounting_financials_invoices_tab", "delete");
   const [isSaving, setIsSaving] = useState(false);
   const isReadOnly = mode === 'view';
   const [pendingDeleteInvoice, setPendingDeleteInvoice] = useState<{ id: string; voucherNumber: string } | null>(null);

@@ -93,16 +93,17 @@ export function InvoiceBuilder({
   // NEU-020 door purity: with a door, only that key governs. Without one
   // (transitional), the NEU-019 OR-gate still applies until every parent
   // threads its door — then the fallback dies.
+  // 2.6-final: acct_financials master key retired (holders seeded into
+  // accounting_financials_invoices_tab). Transitional fallback now master-free.
   const canWriteInvoices = permissionDoor
     ? ["create", "edit"].some(a => canKey(permissionDoor, a))
     : ["create", "edit"].some(a =>
-        canKey("acct_financials", a) ||
         canKey("accounting_financials_invoices_tab", a) ||
         canKey("ops_bookings_invoices_tab", a) ||
         canKey("ops_projects_invoices_tab", a));
   const canDeleteInvoices = permissionDoor
     ? canKey(permissionDoor, "delete")
-    : canKey("acct_financials", "delete") || canKey("accounting_financials_invoices_tab", "delete");
+    : canKey("accounting_financials_invoices_tab", "delete");
   // NEU-020 DD-3: PDF/Print are export-class. With a door, the door's export
   // toggle governs. Without one (transitional fallback), exports stay open —
   // current behavior — so unthreaded parents don't lose printing before their batch.

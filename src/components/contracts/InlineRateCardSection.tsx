@@ -87,8 +87,10 @@ export function InlineRateCardSection({
   // "acct_billings" is a legacy grant key absent from the ModuleId union).
   const { can } = usePermission();
   const canKey = can as unknown as (moduleId: string, action: string) => boolean;
+  // 2.6-final: acct_financials master key retired (holders seeded into
+  // accounting_financials_billings_tab).
   const canWriteBillings = ["create", "edit"].some(a =>
-    canKey("acct_financials", a) || canKey("accounting_financials_billings_tab", a) ||
+    canKey("accounting_financials_billings_tab", a) ||
     canKey("acct_billings", a) || canKey("ops_bookings_billings_tab", a) ||
     canKey("ops_projects_billings_tab", a));
   // Collapse the calculator by default once the user has applied rates — they

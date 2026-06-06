@@ -67,10 +67,12 @@ export function UnifiedCollectionsTab({
   // NEU-020 door purity: with a door, only that key governs. Without one
   // (transitional), the NEU-017 OR-gate still applies until every parent
   // threads its door — then the fallback dies.
+  // 2.6-final: acct_financials master key retired (holders seeded into
+  // accounting_financials_collections_tab). Transitional fallback now master-free.
   const canWriteCollections = permissionDoor
     ? ["create", "edit"].some(a => canKey(permissionDoor, a))
     : ["create", "edit"].some(a =>
-        canKey("acct_financials", a) || canKey("accounting_financials_collections_tab", a) ||
+        canKey("accounting_financials_collections_tab", a) ||
         canKey("acct_collections", a) || canKey("ops_bookings_collections_tab", a) ||
         canKey("ops_projects_collections_tab", a));
   const effectiveReadOnly = readOnly || !canWriteCollections;

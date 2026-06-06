@@ -68,10 +68,12 @@ export function UnifiedExpensesTab({
   // NEU-020 door purity: with a door, only that key governs. Without one
   // (transitional), the NEU-017 OR-gate still applies until every parent
   // threads its door — then the fallback dies.
+  // 2.6-final: acct_financials master key retired (holders seeded into
+  // accounting_financials_expenses_tab / acct_expenses). Fallback now master-free.
   const canWriteExpenses = permissionDoor
     ? ["create", "edit"].some(a => canKey(permissionDoor, a))
     : ["create", "edit"].some(a =>
-        canKey("acct_financials", a) || canKey("acct_expenses", a) ||
+        canKey("acct_expenses", a) ||
         canKey("ops_bookings_expenses_tab", a) || canKey("ops_projects_expenses_tab", a));
   const readOnly = readOnlyProp || !canWriteExpenses;
 
