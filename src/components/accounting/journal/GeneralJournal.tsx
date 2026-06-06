@@ -258,6 +258,7 @@ export function GeneralJournal() {
   // ride acct_journal:edit, not the create-inclusive umbrella above (a create-only
   // user must not be able to edit or reverse posted journal entries).
   const canEditJournal = can("acct_journal", "edit");
+  const canExportJournal = can("acct_journal", "export"); // NEU-020 2.10c (#10)
 
   // ── Data state ──
   const [entries, setEntries] = useState<JournalEntry[]>([]);
@@ -504,6 +505,7 @@ export function GeneralJournal() {
               <RefreshCw size={15} className={loadingEntries ? "animate-spin" : ""} />
             </button>
             {/* Export */}
+            {canExportJournal && (
             <button
               onClick={handleExportCSV}
               className="h-10 px-4 flex items-center gap-2 border border-[var(--theme-border-default)] rounded-lg bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-state-hover)] transition-colors font-medium text-[14px]"
@@ -511,6 +513,7 @@ export function GeneralJournal() {
               <Download size={15} />
               Export
             </button>
+            )}
             {/* New Entry */}
             {canCreateJournal && (
               <button

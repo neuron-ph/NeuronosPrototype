@@ -24,6 +24,7 @@ export function CalendarModule() {
   // NEU-019 WG-07 (D2): event creation gates on the calendar knob; edit/drag
   // gating rides the per-event isReadOnly/isDraggable flags (knob + ownership).
   const canCreateEvents = can("calendar", "create");
+  const canEditEvents = can("calendar", "edit"); // NEU-020 2.10c (#11): drag-reschedule is an edit
 
   const {
     currentView,
@@ -157,9 +158,10 @@ export function CalendarModule() {
 
   const handleEventDrop = useCallback(
     (eventId: string, newStart: Date, newEnd: Date) => {
+      if (!canEditEvents) return; // NEU-020 2.10c (#11): reschedule obeys the Calendar Edit cell
       reschedule.mutate({ id: eventId, newStart, newEnd });
     },
-    [reschedule]
+    [reschedule, canEditEvents]
   );
 
   // Keyboard shortcuts

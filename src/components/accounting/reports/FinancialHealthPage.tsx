@@ -4,6 +4,7 @@
 import { useState, useMemo } from "react";
 import { Search, TrendingUp, TrendingDown, DollarSign, Receipt, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { useFinancialHealthReport, type ProjectFinancialRow } from "../../../hooks/useFinancialHealthReport";
+import { usePermission } from "../../../context/PermissionProvider";
 import { DataTable, type ColumnDef } from "../../common/DataTable";
 
 const formatCurrency = (amount: number, currency: string = "PHP") => {
@@ -42,6 +43,8 @@ function shiftMonth(ym: string, delta: number): string {
 }
 
 export function FinancialHealthPage() {
+  const { can } = usePermission();
+  const canExportReports = can("acct_reports", "export"); // NEU-020 2.10c (#10)
   const [monthFilter, setMonthFilter] = useState(getCurrentMonth());
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -308,6 +311,7 @@ export function FinancialHealthPage() {
           )}
 
           {/* Export */}
+          {canExportReports && (
           <button
             onClick={handleExport}
             className="flex items-center gap-2 px-4 py-2 bg-[var(--theme-action-primary-bg)] text-white rounded-lg hover:bg-[var(--neuron-action-primary-hover)] transition-colors font-medium text-[14px]"
@@ -315,6 +319,7 @@ export function FinancialHealthPage() {
             <Download size={16} />
             Export CSV
           </button>
+          )}
         </div>
       </div>
 

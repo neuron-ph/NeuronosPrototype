@@ -262,7 +262,7 @@ export const APPLICABLE_ACTIONS: Record<ModuleId, readonly ActionId[]> = {
 
   // ─── Accounting ─────────────────────────────────────────────────────────────
   acct_evouchers: ["view", "create", "approve", "delete"],
-  acct_reports: ["view"],
+  acct_reports: ["view", "export"],
   // NEU-020 2.6-final (DD-11): the acct_financials MASTER KEY is retired. Its
   // create/edit/delete granted money writes through every door globally; each
   // door now carries its own write cell and every former master-key holder was
@@ -275,8 +275,10 @@ export const APPLICABLE_ACTIONS: Record<ModuleId, readonly ActionId[]> = {
   acct_bookings: ["view"],
   acct_customers: ["view"],
   acct_catalog: ["view", "create", "edit", "delete"],
-  acct_statements: ["view", "create", "edit"],
-  acct_journal: ["view", "create", "edit"],
+  // NEU-020 2.10c (#10): CSV/report exports are export-class — give these
+  // accounting modules a real Export cell instead of an ungated download button.
+  acct_statements: ["view", "create", "edit", "export"],
+  acct_journal: ["view", "create", "edit", "export"],
   accounting_evouchers_pending_disburse_tab: ["view"],
   accounting_evouchers_waiting_on_rep_tab: ["view"],
   accounting_evouchers_pending_verification_tab: ["view"],
