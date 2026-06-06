@@ -52,7 +52,8 @@ function DialControl({
         opacity: disabled ? 0.4 : 1,
       }}
     >
-      {/* Sliding thumb */}
+      {/* Sliding thumb — teal on live rows; colorless on locked rows so the
+          greyed records read as untouchable at a glance */}
       <div
         aria-hidden
         style={{
@@ -62,8 +63,8 @@ function DialControl({
           left: 2,
           width: `calc((100% - 4px) / ${RECORD_DIALS.length})`,
           borderRadius: 6,
-          background: "var(--neuron-bg-elevated)",
-          border: "1px solid var(--neuron-ui-border)",
+          background: disabled ? "var(--neuron-bg-elevated)" : "var(--neuron-action-primary)",
+          border: disabled ? "1px solid var(--neuron-ui-border)" : "none",
           boxShadow: disabled ? "none" : "0 1px 2px rgba(0, 0, 0, 0.16)",
           transform: `translateX(${activeIndex * 100}%)`,
           transition: "transform 0.14s cubic-bezier(0.25, 1, 0.5, 1)",
@@ -91,7 +92,9 @@ function DialControl({
               border: "none",
               borderRadius: 6,
               background: "transparent",
-              color: active ? "var(--neuron-ink-primary)" : "var(--neuron-ink-muted)",
+              color: active
+                ? (disabled ? "var(--neuron-ink-muted)" : "var(--neuron-action-primary-text)")
+                : "var(--neuron-ink-muted)",
               cursor: disabled ? "not-allowed" : "pointer",
               transition: "color 0.12s",
               whiteSpace: "nowrap",
