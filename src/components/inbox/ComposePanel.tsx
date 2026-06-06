@@ -201,6 +201,7 @@ export function ComposePanel({ onClose, onSent, initialEntity, initialSubject, i
   };
 
   const handleSaveDraft = async () => {
+    if (!can("inbox", "create")) return; // NEU-019 re-census fix: drafts write tickets too
     setIsSavingDraft(true);
     try {
       const ticket = await createTicket("draft");

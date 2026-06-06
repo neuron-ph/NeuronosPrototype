@@ -203,6 +203,12 @@ export function ProjectDetail({
   const currentUserDepartment = currentUser?.department || "BD";
 
   const handleSaveQuotation = async (updates: any) => {
+    // NEU-019 re-census fix: this is also the PDF Studio save path, which is
+    // reachable with quotation-tab VIEW alone — the write needs the edit grant.
+    if (!showActions) {
+      toast.error("You don't have permission to save changes to this quotation.");
+      return;
+    }
     try {
       const quotationId = project.quotation_id || project.quotation?.id;
       const payload = buildQuotationUpdatePayload(updates);

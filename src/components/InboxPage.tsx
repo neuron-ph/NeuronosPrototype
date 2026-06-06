@@ -31,7 +31,9 @@ export function InboxPage() {
   const { can } = usePermission();
   const canCompose = can("inbox", "create");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [showCompose, setShowCompose] = useState(() => !!composeState);
+  // Re-census fix: deep links ("message about entity" from App.tsx) open the
+  // composer via router state — that entry point must respect the knob too.
+  const [showCompose, setShowCompose] = useState(() => !!composeState && canCompose);
   const listRef = useRef<string[]>([]);
 
   // Keep a stable ordered list of thread IDs for keyboard navigation

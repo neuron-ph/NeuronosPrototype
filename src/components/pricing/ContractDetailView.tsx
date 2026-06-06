@@ -353,6 +353,12 @@ export function ContractDetailView({
   }), [quotation]);
 
   const handleSaveContractQuotation = async (updates: any) => {
+    // NEU-019 re-census fix: also the PDF Studio save path (reachable with
+    // tab view alone) — the contract write needs the edit grant.
+    if (!canEditContract) {
+      toast.error("You don't have permission to save changes to this contract.");
+      return;
+    }
     try {
       // Allow-list of real top-level columns on `quotations`. Any key the builder
       // emits that isn't here lands inside the `details` JSONB. This is the
