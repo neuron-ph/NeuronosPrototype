@@ -54,6 +54,9 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
   const canViewInquiriesTab   = can(ids.inquiries,   "view");
   const canViewAttachmentsTab = can(ids.attachments, "view");
   const canViewCommentsTab    = can(ids.comments,    "view");
+  const canPostComments       = can(ids.comments,    "create"); // WG-14
+  const canUploadAttachments  = can(ids.attachments, "create"); // WG-16
+  const canDeleteAttachments  = can(ids.attachments, "delete"); // WG-16
   const canViewTeamsTab       = can(ids.teams,       "view");
   const canEditTeamsTab       = can(ids.teams,       "edit");
   const canDeleteContact      = can(ids.root,        "delete");
@@ -2031,6 +2034,8 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                   entityId={contact.id}
                   entityType="contacts"
                   currentUser={user ? { id: user.id, name: user.name || "", email: user.email || "", department: user.department || "" } : null}
+                  canUpload={canUploadAttachments}
+                  canDelete={canDeleteAttachments}
                 />
               )}
 
@@ -2042,6 +2047,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                     currentUserId={user?.id || ""}
                     currentUserName={user?.name || "Unknown"}
                     currentUserDepartment={user?.department || effectiveDepartment || "BD"}
+                    canPost={canPostComments}
                   />
                 </div>
               )}

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { X, Link2, Paperclip, FileText, Send, Save } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { useUser } from "../../hooks/useUser";
+import { usePermission } from "../../context/PermissionProvider";
 import { logCreation } from "../../utils/activityLog";
 import { toast } from "sonner@2.0.3";
 import { RecordBrowser } from "./RecordBrowser";
@@ -40,6 +41,7 @@ const TYPE_OPTIONS: { key: MessageType; label: string }[] = [
 
 export function ComposePanel({ onClose, onSent, initialEntity, initialSubject, initialRecipientDept }: ComposePanelProps) {
   const { user } = useUser();
+  const { can } = usePermission(); // NEU-019 WG-19
   const [subject, setSubject] = useState(initialSubject ?? "");
   const [body, setBody] = useState("");
   const [type, setType] = useState<MessageType>("request");
@@ -180,6 +182,7 @@ export function ComposePanel({ onClose, onSent, initialEntity, initialSubject, i
   };
 
   const handleSend = async () => {
+    if (!can("inbox", "create")) return; // NEU-019 WG-19 backstop (D1)
     setIsSending(true);
     try {
       const ticket = await createTicket("open");

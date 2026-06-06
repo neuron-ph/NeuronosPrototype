@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "react-router";
 import { useInbox } from "../hooks/useInbox";
+import { usePermission } from "../context/PermissionProvider";
 import { ThreadListPanel } from "./inbox/ThreadListPanel";
 import { ThreadDetailPanel } from "./inbox/ThreadDetailPanel";
 import { ComposePanel } from "./inbox/ComposePanel";
@@ -26,6 +27,9 @@ export function InboxPage() {
     bulkClose,
   } = useInbox();
 
+  // NEU-019 WG-19 (D1): composing writes tickets — inbox:create
+  const { can } = usePermission();
+  const canCompose = can("inbox", "create");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCompose, setShowCompose] = useState(() => !!composeState);
   const listRef = useRef<string[]>([]);
@@ -78,10 +82,10 @@ export function InboxPage() {
       // Don't fire shortcuts while typing in an input
       if (isTyping) return;
 
-      // C — compose
+      // C — compose (WG-19: inbox:create)
       if (e.key === "c" || e.key === "C") {
         e.preventDefault();
-        setShowCompose(true);
+        if (canCompose) setShowCompose(true);
         return;
       }
 
@@ -112,7 +116,7 @@ export function InboxPage() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showCompose, selectedId]);
+  }, [showCompose, selectedId, canCompose]);
 
   // When tab changes, clear selection
   useEffect(() => {

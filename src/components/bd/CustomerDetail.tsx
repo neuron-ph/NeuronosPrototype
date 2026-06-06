@@ -46,11 +46,18 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
   const canViewContactsTab    = can(ids.contacts,    "view");
   const canViewActivitiesTab  = can(ids.activities,  "view");
   const canViewTasksTab       = can(ids.tasks,       "view");
+  const canEditTask           = can(ids.tasks,       "edit");   // WG-17
+  const canDeleteTask         = can(ids.tasks,       "delete"); // WG-17
+  const canEditActivity       = can(ids.activities,  "edit");   // WG-18
+  const canDeleteActivity     = can(ids.activities,  "delete"); // WG-18
   const canViewInquiriesTab   = can(ids.inquiries,   "view");
   const canViewProjectsTab    = can(ids.projects,    "view");
   const canViewContractsTab   = can(ids.contracts,   "view");
   const canViewCommentsTab    = can(ids.comments,    "view");
+  const canPostComments       = can(ids.comments,    "create"); // WG-14
   const canViewAttachmentsTab = can(ids.attachments, "view");
+  const canUploadAttachments  = can(ids.attachments, "create"); // WG-16
+  const canDeleteAttachments  = can(ids.attachments, "delete"); // WG-16
   const canViewTeamsTab       = can(ids.teams,       "view");
   const canEditTeamsTab       = can(ids.teams,       "edit");
   const canEditCustomer       = can(ids.root,        "edit");
@@ -1172,6 +1179,8 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                     contactInfo={selectedActivity.contact_id ? contacts.find(c => c.id === selectedActivity.contact_id) : null}
                     customerInfo={customer}
                     userName={selectedActivity.user_id ? users.find(u => u.id === selectedActivity.user_id)?.name : undefined}
+                    canEdit={canEditActivity}
+                    canDelete={canDeleteActivity}
                   />
                 )}
               </div>
@@ -1330,6 +1339,8 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                       }}
                       customers={customer ? [customer] : []}
                       contacts={contacts}
+                      canEdit={canEditTask}
+                      canDelete={canDeleteTask}
                     />
                   ) : null}
                 </div>
@@ -1507,6 +1518,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                   currentUserId={user?.id || ""}
                   currentUserName={user?.name || "Unknown"}
                   currentUserDepartment={user?.department || effectiveDepartment || "BD"}
+                  canPost={canPostComments}
                 />
               </div>
             )}
@@ -1515,6 +1527,8 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                 entityId={customer.id}
                 entityType="customers"
                 currentUser={user ? { id: user.id, name: user.name || "", email: user.email || "", department: user.department || "" } : null}
+                canUpload={canUploadAttachments}
+                canDelete={canDeleteAttachments}
               />
             )}
             </div>

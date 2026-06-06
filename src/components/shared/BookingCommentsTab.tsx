@@ -4,6 +4,7 @@ import { Send, Paperclip, X, Download, FileText } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../utils/supabase/client";
 import { useUser } from "../../hooks/useUser";
+import { usePermission } from "../../context/PermissionProvider";
 import { toast } from "sonner@2.0.3";
 
 interface FileAttachment {
@@ -30,6 +31,10 @@ interface BookingCommentsTabProps {
 
 export function BookingCommentsTab({ bookingId }: BookingCommentsTabProps) {
   const { user, session } = useUser();
+  // NEU-019 WG-15: posting gates on the booking comments knob. Self-gated
+  // (single knob, six parents) rather than prop-threaded.
+  const { can } = usePermission();
+  const canPost = can("ops_bookings_comments_tab", "create");
   const currentUserName =
     user?.name ||
     session?.user?.user_metadata?.name ||
@@ -74,6 +79,7 @@ export function BookingCommentsTab({ bookingId }: BookingCommentsTabProps) {
 
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canPost) return; // WG-15 backstop
 
     if (!newComment.trim() && attachedFiles.length === 0) {
       return;
@@ -347,7 +353,8 @@ export function BookingCommentsTab({ bookingId }: BookingCommentsTabProps) {
         )}
       </div>
 
-      {/* Comment Input Form - Fixed at bottom */}
+      {/* Comment Input Form - Fixed at bottom (hidden without the create knob, WG-15) */}
+      {canPost && (
       <div className="border-t border-[var(--theme-border-default)] bg-[var(--theme-bg-surface)] px-6 py-4">
         {/* Attached Files Preview */}
         {attachedFiles.length > 0 && (
@@ -457,6 +464,7 @@ export function BookingCommentsTab({ bookingId }: BookingCommentsTabProps) {
           </div>
         </form>
       </div>
+      )}
     </div>
   );
 }

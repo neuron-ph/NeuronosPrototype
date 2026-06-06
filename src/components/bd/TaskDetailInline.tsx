@@ -20,6 +20,12 @@ interface TaskDetailInlineProps {
   onDelete?: () => void; // Callback after delete
   customers?: any[]; // Optional customer data
   contacts?: any[]; // Optional contact data
+  /** NEU-019 WG-17: field auto-save / upload / complete need an edit grant
+   *  (bd_tasks:edit or the surface's tasks-tab edit). Defaults to false so a
+   *  parent that forgets the prop renders read-only, never ungated. */
+  canEdit?: boolean;
+  /** WG-17: hard delete needs bd_tasks:delete / `<surface>_tasks_tab:delete`. */
+  canDelete?: boolean;
 }
 
 interface Comment {
@@ -47,7 +53,7 @@ function prependActivity(existing: Activity[] | undefined, activity: Activity) {
   return [activity, ...current.filter((item) => item.id !== activity.id)];
 }
 
-export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, contacts }: TaskDetailInlineProps) {
+export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, contacts, canEdit = false, canDelete = false }: TaskDetailInlineProps) {
   const queryClient = useQueryClient();
   useMarkEntityReadOnMount("task", task.id);
   const [editedTask, setEditedTask] = useState(task);
@@ -96,6 +102,7 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
   }, [task.attachments]);
 
   const handleAttachmentUpload = async (files: FileList | null) => {
+    if (!canEdit) return; // WG-17 backstop
     if (!files || files.length === 0) return;
 
     try {
@@ -182,6 +189,7 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
   };
 
   const handleSave = async () => {
+    if (!canEdit) return; // WG-17 backstop (fields auto-save on change/blur)
     try {
       const { error } = await supabase.from('tasks').update(editedTask).eq('id', task.id);
       if (error) throw error;
@@ -223,6 +231,7 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
   };
 
   const handleDelete = async () => {
+    if (!canDelete) return; // WG-17 backstop
     if (!confirm('Are you sure you want to delete this task? This action cannot be undone.')) {
       return;
     }
@@ -245,6 +254,7 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
   };
 
   const handleMarkAsComplete = async () => {
+    if (!canEdit) return; // WG-17 backstop (writes tasks + inserts an activity)
     if (isCompleting || editedTask.status === "Completed") return;
 
     const previousTask = editedTask;
@@ -368,8 +378,8 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
             Back to Tasks
           </button>
 
-          {/* Mark as Complete CTA - Only show if not already completed */}
-          {editedTask.status !== 'Completed' ? (
+          {/* Mark as Complete CTA - Only show if not already completed (WG-17: edit grant) */}
+          {editedTask.status !== 'Completed' && canEdit ? (
             <button
               onClick={handleMarkAsComplete}
               disabled={isCompleting}
@@ -665,6 +675,7 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
                   e.currentTarget.value = "";
                 }}
               />
+              {canEdit && (
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="px-4 py-2 rounded-lg text-[13px] font-medium transition-colors flex items-center gap-2"
@@ -683,6 +694,7 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
                 <Upload size={14} />
                 Upload
               </button>
+              )}
             </div>
 
             {attachments.length > 0 ? (
@@ -807,7 +819,8 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
           </div>
         </div>
 
-        {/* Delete Section */}
+        {/* Delete Section (WG-17: delete grant) */}
+        {canDelete && (
         <div className="mb-8">
           <div 
             className="rounded-lg p-6"
@@ -845,6 +858,7 @@ export function TaskDetailInline({ task, onBack, onUpdate, onDelete, customers, 
             </div>
           </div>
         </div>
+        )}
         </div>
         {showTopScrollFade && (
           <div

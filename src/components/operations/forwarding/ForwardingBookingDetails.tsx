@@ -81,6 +81,7 @@ export function ForwardingBookingDetails({
   const canViewInvoices = can("ops_bookings_invoices_tab", "view") || can("accounting_bookings_invoices_tab", "view");
   const canViewCollections = can("ops_bookings_collections_tab", "view") || can("accounting_bookings_collections_tab", "view");
   const canViewChrono = can("ops_bookings_chrono_tab", "view");
+  const canViewCommentsTab = can("ops_bookings_comments_tab", "view"); // NEU-019 WG-15
   const canEditBooking = can("ops_forwarding", "edit");
   const canCancelDeleteBooking = canEditBooking || can("ops_forwarding", "delete");
   const [activeTab, setActiveTab] = useState<DetailTab>(
@@ -457,31 +458,33 @@ export function ForwardingBookingDetails({
           >
             Expenses
           </button>
-          <button
-            onClick={() => setActiveTab("comments")}
-            style={{
-              padding: "0 4px",
-              fontSize: "14px",
-              fontWeight: 500,
-              color: activeTab === "comments" ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-muted)",
-              background: "none",
-              borderTop: "none",
-              borderLeft: "none",
-              borderRight: "none",
-              borderBottom: activeTab === "comments" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
-              cursor: "pointer",
-              transition: "all 0.2s",
-              height: "100%"
-            }}
-            onMouseEnter={(e) => {
-              if (activeTab !== "comments") e.currentTarget.style.color = "var(--neuron-ink-secondary)";
-            }}
-            onMouseLeave={(e) => {
-              if (activeTab !== "comments") e.currentTarget.style.color = "var(--neuron-ink-muted)";
-            }}
-          >
-            Comments
-          </button>
+          {canViewCommentsTab && (
+            <button
+              onClick={() => setActiveTab("comments")}
+              style={{
+                padding: "0 4px",
+                fontSize: "14px",
+                fontWeight: 500,
+                color: activeTab === "comments" ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-muted)",
+                background: "none",
+                borderTop: "none",
+                borderLeft: "none",
+                borderRight: "none",
+                borderBottom: activeTab === "comments" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
+                cursor: "pointer",
+                transition: "all 0.2s",
+                height: "100%"
+              }}
+              onMouseEnter={(e) => {
+                if (activeTab !== "comments") e.currentTarget.style.color = "var(--neuron-ink-secondary)";
+              }}
+              onMouseLeave={(e) => {
+                if (activeTab !== "comments") e.currentTarget.style.color = "var(--neuron-ink-muted)";
+              }}
+            >
+              Comments
+            </button>
+          )}
           {canViewChrono && (
             <button
               onClick={() => setActiveTab("chrono")}
@@ -589,6 +592,8 @@ export function ForwardingBookingDetails({
         bookingLabel={(booking as any).name || (booking as any).booking_number || "Unnamed Booking"}
         currentStatus={editedBooking.status}
         currentUser={currentUser}
+        allowCancel={canEditBooking} // NEU-019 WG-21
+        allowDelete={can("ops_forwarding", "delete")} // NEU-019 WG-21
         onSuccess={(action) => {
           if (action === "deleted") {
             onBack();
@@ -668,7 +673,7 @@ export function ForwardingBookingDetails({
               onPendingCountChange={setPendingBillableCount}
             />
           )}
-          {activeTab === "comments" && (
+          {activeTab === "comments" && canViewCommentsTab && (
             <BookingCommentsTab bookingId={booking.bookingId} />
           )}
           {activeTab === "chrono" && canViewChrono && (

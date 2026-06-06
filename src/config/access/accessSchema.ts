@@ -235,6 +235,8 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
         tabs: [
           tab("pricing_quotations_details_tab",  "Details"),
           tab("pricing_quotations_comments_tab", "Comments"),
+          // NEU-019 WG-16: the quotation Attachments tab had no knob at all
+          tab("pricing_quotations_attachments_tab", "Attachments"),
         ],
       },
       {

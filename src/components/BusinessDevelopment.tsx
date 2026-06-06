@@ -5,6 +5,7 @@ import { recordNotificationEvent, fetchDeptManagerIds } from '../utils/notificat
 import { trackRecent } from '../lib/recents';
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useUrlSelection } from "../hooks/useUrlSelection";
+import { usePermission } from "../context/PermissionProvider";
 import { ContactsListWithFilters } from "./crm/ContactsListWithFilters";
 import { CustomersListWithFilters } from "./crm/CustomersListWithFilters";
 import { CustomerDetail } from "./bd/CustomerDetail";
@@ -49,6 +50,13 @@ interface BusinessDevelopmentProps {
 // API_URL removed — using supabase.from() (Phase 3)
 
 export function BusinessDevelopment({ view: initialView = "contacts", onCreateInquiry, onViewInquiry, customerData, inquiryId, contactId, currentUser, onCreateTicket }: BusinessDevelopmentProps) {
+  // NEU-019 WG-17/18: the inline task/activity detail panels write tasks and
+  // crm_activities — gates ride the standalone BD module knobs in this path.
+  const { can } = usePermission();
+  const canEditTask = can("bd_tasks", "edit");
+  const canDeleteTask = can("bd_tasks", "delete");
+  const canEditActivity = can("bd_activities", "edit");
+  const canDeleteActivity = can("bd_activities", "delete");
   const [view, setView] = useState<BDView>(initialView);
   const [subView, setSubView] = useState<SubView>("list");
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
@@ -817,11 +825,13 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
             )}
             {subView === "detail" && selectedTask && (
               <div className="h-full" style={{ padding: "32px 48px", background: "var(--theme-bg-surface)" }}>
-                <TaskDetailInline 
-                  task={selectedTask} 
+                <TaskDetailInline
+                  task={selectedTask}
                   onBack={handleBackFromTask}
                   customers={taskCustomers}
                   contacts={taskContacts}
+                  canEdit={canEditTask}
+                  canDelete={canDeleteTask}
                 />
               </div>
             )}
@@ -848,6 +858,8 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
                   contactInfo={activityContactInfo}
                   customerInfo={activityCustomerInfo}
                   userName={activityUserName}
+                  canEdit={canEditActivity}
+                  canDelete={canDeleteActivity}
                 />
               </div>
             )}

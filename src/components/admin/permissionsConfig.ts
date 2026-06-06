@@ -28,6 +28,7 @@ export type ModuleId =
   | "pricing_customers_inquiries_tab" | "pricing_customers_projects_tab" | "pricing_customers_contracts_tab"
   | "pricing_customers_comments_tab" | "pricing_customers_attachments_tab" | "pricing_customers_teams_tab"
   | "pricing_quotations_details_tab" | "pricing_quotations_comments_tab"
+  | "pricing_quotations_attachments_tab"
   | "pricing_contracts_all_tab" | "pricing_contracts_active_tab" | "pricing_contracts_expiring_tab"
   | "pricing_contracts_financial_overview_tab" | "pricing_contracts_quotation_tab" | "pricing_contracts_rate_card_tab"
   | "pricing_contracts_bookings_tab" | "pricing_contracts_billings_tab"

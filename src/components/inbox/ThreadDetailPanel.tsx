@@ -126,14 +126,18 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
       toast.warning("Ticket completed — the linked record was left unchanged because you don't have permission to update it.");
     }
   };
-  const canAdvanceStatus = isRecipient && !["done", "returned", "archived", "draft"].includes(thread.status);
-  const isApprovalPending = thread.type === "approval" && thread.approval_result === null && isRecipient;
+  // NEU-019 WG-19 (D1): status changes and approvals are inbox:edit AND
+  // identity — the knob makes them revocable, identity keeps them scoped to
+  // the ticket's actual participants.
+  const canActOnInbox = can("inbox", "edit");
+  const canAdvanceStatus = canActOnInbox && isRecipient && !["done", "returned", "archived", "draft"].includes(thread.status);
+  const isApprovalPending = thread.type === "approval" && thread.approval_result === null && isRecipient && canActOnInbox;
   const isDone = thread.status === "done";
   const isReturned = thread.status === "returned";
 
   // Close / dismiss (FYI = per-person dismiss, request/approval = shared archive)
   const isClosed = isClosedView || thread.status === "archived";
-  const canCloseTicket = !!onCloseTicket && (isRecipient || isSender || canAssign);
+  const canCloseTicket = !!onCloseTicket && canActOnInbox && (isRecipient || isSender || canAssign);
 
   const handleCloseTicket = async () => {
     if (!onCloseTicket) return;
@@ -385,7 +389,7 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
   };
 
   const handleReopen = async () => {
-    if (!isSender) return;
+    if (!isSender || !canActOnInbox) return; // WG-19
     setIsUpdatingStatus(true);
     const oldStatus = thread.status;
     await supabase
@@ -503,15 +507,15 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
           );
         })()}
 
-        {isSender && thread.status === "in_progress" && (
+        {isSender && canActOnInbox && thread.status === "in_progress" && (
           <ActionButton onClick={advanceStatus} disabled={isUpdatingStatus} variant="success" icon={<CheckCircle size={12} />} label="Mark Done" />
         )}
 
-        {isSender && (isDone || isReturned) && (
+        {isSender && canActOnInbox && (isDone || isReturned) && (
           <ActionButton onClick={handleReopen} disabled={isUpdatingStatus} variant="ghost" label="Reopen" />
         )}
 
-        {isClosed && onReopenTicket && (isRecipient || isSender || canAssign) && (
+        {isClosed && onReopenTicket && canActOnInbox && (isRecipient || isSender || canAssign) && (
           <ActionButton onClick={handleReopenTicket} disabled={isUpdatingStatus} variant="ghost" icon={<CornerUpLeft size={12} />} label="Reopen" />
         )}
 
@@ -700,8 +704,8 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
           )
         )}
 
-        {/* ── Reply pill ── */}
-        {!showCompose && !["done", "returned", "archived", "draft"].includes(thread.status) && (
+        {/* ── Reply pill (WG-19/D1: replying writes messages — inbox:create) ── */}
+        {!showCompose && can("inbox", "create") && !["done", "returned", "archived", "draft"].includes(thread.status) && (
           <div style={{ padding: "16px 24px 20px" }}>
             <button
               onClick={() => setShowCompose(true)}
@@ -749,7 +753,7 @@ export function ThreadDetailPanel({ ticketId, onThreadUpdated, threadIds, onNavi
         )}
 
         {/* ── Closed / reopen footer ── */}
-        {(isDone || isReturned) && isSender && (
+        {(isDone || isReturned) && isSender && canActOnInbox && (
           <div style={{ textAlign: "center", padding: "12px 24px 20px" }}>
             <button
               onClick={handleReopen}

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Send, Paperclip, Link2, X, FileText } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { useUser } from "../../hooks/useUser";
+import { usePermission } from "../../context/PermissionProvider";
 import { toast } from "sonner@2.0.3";
 import { RecordBrowser } from "./RecordBrowser";
 import type { LinkedEntity } from "./RecordBrowser";
@@ -41,6 +42,7 @@ function sanitizeHtml(html: string): string {
 
 export function ComposeBox({ ticketId, toChips = [], onSent, onClose }: ComposeBoxProps) {
   const { user } = useUser();
+  const { can } = usePermission(); // NEU-019 WG-19
   const [isSending, setIsSending] = useState(false);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [showEntityPicker, setShowEntityPicker] = useState(false);
@@ -145,6 +147,7 @@ export function ComposeBox({ ticketId, toChips = [], onSent, onClose }: ComposeB
   // ── Send ───────────────────────────────────────────────────────────────────
 
   const handleSend = async () => {
+    if (!can("inbox", "create")) return; // NEU-019 WG-19 backstop (D1)
     const bodyHtml = sanitizeHtml(editorRef.current?.innerHTML ?? "");
     const bodyText = editorRef.current?.innerText.trim() ?? "";
     if (!bodyText || !user) return;
