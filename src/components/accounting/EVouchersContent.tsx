@@ -80,6 +80,9 @@ export function EVouchersContent() {
           </div>
           <div className="flex items-center gap-3">
             <NeuronRefreshButton onRefresh={async () => refresh()} label="Refresh e-vouchers" />
+            {/* NEU-019 WG-30: the one ungated EV entry point — siblings
+                (MyEVouchers, expenses tab, budget requests) were already gated */}
+            {(can("acct_evouchers", "create") || can("my_evouchers", "create")) && (
             <button
               onClick={() => setShowCreateModal(true)}
               className="flex items-center gap-2 px-4 py-2 bg-[var(--theme-action-primary-bg)] text-white rounded-lg hover:bg-[var(--theme-action-primary-border)] transition-colors font-medium text-[14px]"
@@ -87,6 +90,7 @@ export function EVouchersContent() {
               <Plus size={16} />
               New E-Voucher
             </button>
+            )}
           </div>
         </div>
 

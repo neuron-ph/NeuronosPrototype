@@ -107,6 +107,12 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
   const canCreateProject = can("bd_projects", "create") || can("pricing_projects", "create");
   const canActivateContract = can("pricing_contracts", "edit");
   const canCreateBookings = canActOnBooking(can, "create");
+  // NEU-019 WG-14/16: comment posting + attachment writes get their own knobs
+  // (seeded to both pricing- and BD-lens audiences in migration 171).
+  const canPostComments = can("pricing_quotations_comments_tab", "create");
+  const canViewAttachmentsTab = can("pricing_quotations_attachments_tab", "view");
+  const canUploadAttachments = can("pricing_quotations_attachments_tab", "create");
+  const canDeleteAttachments = can("pricing_quotations_attachments_tab", "delete");
 
   // Fetch all Pricing users for the assignment dropdown, filter out managers/above in JS
   // No 'enabled' guard — query always runs; the UI is already gated by canAssign
@@ -767,6 +773,12 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
   // Handle saving PDF document settings — persists all signatory, validity, payment and notes
   // fields directly as explicit DB columns (migration 028 added them all).
   const handlePDFSave = async (data: any) => {
+    // NEU-019 WG-24: PDF Studio is opened via the export knob, but saving its
+    // settings WRITES the quotation — that's edit-class.
+    if (!canEditQuotation) {
+      toast.error("You don't have permission to save changes to this quotation.");
+      return;
+    }
     try {
       const updatedDetails = {
         ...((quotation as any).details || {}),
@@ -1003,6 +1015,8 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
               Comments
             </button>
           )}
+          {/* WG-16: attachments finally has a knob — was the only ungated tab */}
+          {canViewAttachmentsTab && (
           <button
             role="tab"
             aria-selected={activeTab === "attachments"}
@@ -1026,6 +1040,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
           >
             Attachments
           </button>
+          )}
         </div>
 
         {/* Action Controls - Right Side */}
@@ -1377,7 +1392,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
                   toast.success("Quotation updated");
                 }
               }}
-              onAmend={onEdit}
+              onAmend={canEditQuotation ? onEdit : undefined} // WG-25
             />
           </div>
         ) : activeTab === "comments" && canViewCommentsTab ? (
@@ -1388,14 +1403,17 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
               currentUserId={currentUserId}
               currentUserName={currentUserName}
               currentUserDepartment={currentUserDepartment}
+              canPost={canPostComments}
             />
           </div>
-        ) : activeTab === "attachments" ? (
+        ) : activeTab === "attachments" && canViewAttachmentsTab ? (
           <div style={{ flex: 1 }}>
             <EntityAttachmentsTab
               entityId={quotation.id}
               entityType="quotations"
               currentUser={currentUser}
+              canUpload={canUploadAttachments}
+              canDelete={canDeleteAttachments}
             />
           </div>
         ) : null}

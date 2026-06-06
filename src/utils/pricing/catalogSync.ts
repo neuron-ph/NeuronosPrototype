@@ -24,6 +24,9 @@ export interface CatalogSyncClient {
 
 export interface CatalogSyncOptions {
   side: CatalogSide;
+  /** NEU-019 WG-29: when false, sync is match-only — existing catalog rows are
+   *  linked but nothing is created (caller lacks acct_catalog:create). */
+  allowCreate?: boolean;
 }
 
 function makeId(prefix: string): string {
@@ -117,11 +120,10 @@ export async function syncChargeCategoriesToCatalog(
 
     if (!catalogCategoryId && categoryName) {
       const existingCategory = await client.findCategoryByName(categoryName, options.side);
-      const catalogCategory = existingCategory ?? await client.createCategory({
-        name: categoryName,
-        side: options.side,
-      });
-      catalogCategoryId = catalogCategory.id;
+      const catalogCategory = existingCategory ?? (options.allowCreate === false
+        ? null // WG-29: match-only
+        : await client.createCategory({ name: categoryName, side: options.side }));
+      catalogCategoryId = catalogCategory?.id;
     }
 
     const lineItems = [];
@@ -131,11 +133,10 @@ export async function syncChargeCategoriesToCatalog(
 
       if (!catalogItemId && itemName) {
         const existingItem = await client.findItemByName(itemName, catalogCategoryId);
-        const catalogItem = existingItem ?? await client.createItem({
-          name: itemName,
-          category_id: catalogCategoryId ?? null,
-        });
-        catalogItemId = catalogItem.id;
+        const catalogItem = existingItem ?? (options.allowCreate === false
+          ? null // WG-29: match-only
+          : await client.createItem({ name: itemName, category_id: catalogCategoryId ?? null }));
+        catalogItemId = catalogItem?.id;
       }
 
       lineItems.push({

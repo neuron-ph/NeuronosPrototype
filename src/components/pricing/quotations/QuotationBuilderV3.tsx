@@ -57,6 +57,7 @@ import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUser } from "../../../hooks/useUser";
 import { supabase } from "../../../utils/supabase/client";
+import { usePermission } from "../../../context/PermissionProvider";
 import { queryKeys } from "../../../lib/queryKeys";
 import { toast } from "sonner@2.0.3";
 import { X, Save, FileText, Handshake } from "lucide-react";
@@ -249,6 +250,10 @@ interface QuotationBuilderV3Props {
 }
 
 export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "create", customerData, contactData, builderMode = "quotation", viewMode = false, hideHeader = false, isAmendment = false, onAmend, initialQuotationType }: QuotationBuilderV3Props) {
+  // NEU-019 WG-29: the builder's background catalog backfill writes
+  // catalog_categories — same knob the CategoryDropdown path already enforces.
+  const { can: canPerm } = usePermission();
+  const canCreateCatalogCategories = canPerm("acct_catalog", "create");
   const { user } = useUser();
   const queryClient = useQueryClient();
   // Check if quotation is locked (converted to project)
@@ -1101,6 +1106,9 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
         let catalogCategoryId: string | undefined;
         if (existing) {
           catalogCategoryId = existing.id;
+        } else if (!canCreateCatalogCategories) {
+          // WG-29: no acct_catalog:create — match-only, never backfill the catalog
+          console.warn(`Catalog category "${finalCategoryName}" not created (no acct_catalog:create grant)`);
         } else {
           const newId = `cat-${Date.now()}`;
           const { data: created } = await supabase

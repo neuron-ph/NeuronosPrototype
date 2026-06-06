@@ -319,7 +319,7 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
         let dataToImport = data;
 
         if (isChargeCategoryData(data)) {
-          dataToImport = await syncChargeCategoriesToCatalog(data, createSupabaseCatalogSyncClient(), { side: "revenue" });
+          dataToImport = await syncChargeCategoriesToCatalog(data, createSupabaseCatalogSyncClient(), { side: "revenue", allowCreate: can("acct_catalog", "create") }); // WG-29
           setVendorRatesCache(prev => new Map(prev).set(vendorId, dataToImport as QuotationChargeCategory[]));
         }
 
@@ -353,7 +353,7 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
       const syncedRates = await syncChargeCategoriesToCatalog(
         cachedRates,
         createSupabaseCatalogSyncClient(),
-        { side: "revenue" }
+        { side: "revenue", allowCreate: can("acct_catalog", "create") } // WG-29
       );
 
       // Step 1: Save to backend on the unified service provider record

@@ -570,7 +570,7 @@ export function AddRequestForPaymentPanel({
   };
 
   const handleAutoApprove = async () => {
-    if (isViewMode) return;
+    if (isViewMode || !canAutoApprove) return; // WG-30 backstop
 
     if (!ensureFxRateValid()) return;
 
@@ -681,6 +681,9 @@ export function AddRequestForPaymentPanel({
 
   // Context-aware labels
   const isAccounting = context === "accounting";
+  // NEU-019 WG-30: auto-approve creates a PRE-APPROVED voucher — that's an
+  // approve-class write, not just create. Context alone no longer suffices.
+  const canAutoApprove = isAccounting && (can("acct_evouchers", "approve") || can("my_evouchers", "approve"));
   const isOperations = context === "operations";
   const isBD = context === "bd";
   const isCollection = context === "collection";
@@ -1658,7 +1661,7 @@ export function AddRequestForPaymentPanel({
               {isUploading ? "Uploading…" : "Save Draft"}
             </button>
             
-            {isAccounting && (
+            {canAutoApprove && (
               <button
                 type="button"
                 onClick={handleAutoApprove}

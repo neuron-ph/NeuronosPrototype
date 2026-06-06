@@ -80,8 +80,9 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment, 
   const getAvailableActions = () => {
     const actions = [];
 
-    // Contract lifecycle: Mark as Expired — available when contract is Active or Expiring
-    if (normalizedStatus === "Converted to Contract" && (quotation.contract_status === "Active" || quotation.contract_status === "Expiring")) {
+    // Contract lifecycle: Mark as Expired — available when contract is Active or Expiring.
+    // NEU-019 WG-28: was the only status action with no can() check.
+    if (normalizedStatus === "Converted to Contract" && (canActAsBD || canActAsPricing) && (quotation.contract_status === "Active" || quotation.contract_status === "Expiring")) {
       actions.push({
         label: "Mark as Expired",
         sublabel: "End this contract's active period",

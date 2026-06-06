@@ -94,8 +94,8 @@ function ProfileCard({
   items:            AssignmentProfileItem[];
   isFaded:          boolean;
   isPendingDelete:  boolean;
-  onEdit:           () => void;
-  onDeleteRequest:  () => void;
+  onEdit?:          () => void;
+  onDeleteRequest?: () => void;
 }) {
   const subtitle = profile.service_type
     ? `${profile.department} · ${profile.service_type}`
@@ -146,8 +146,9 @@ function ProfileCard({
         )}
       </div>
 
-      {/* Actions (hover-revealed) */}
-      {!isPendingDelete && (
+      {/* Actions (hover-revealed; WG-31: same gate as Add Profile — undefined
+          handlers mean the viewer lacks the teams-tab edit grant) */}
+      {!isPendingDelete && onEdit && onDeleteRequest && (
         <div className="flex items-center gap-0.5 px-2 shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-150">
           <button
             onClick={onEdit}
@@ -510,8 +511,8 @@ export function CustomerAssignmentProfilesSection({
                           items={items}
                           isFaded={!!editingId && editingId !== profile.id}
                           isPendingDelete={deletingId === profile.id}
-                          onEdit={() => { setEditingId(profile.id); setIsAdding(false); }}
-                          onDeleteRequest={() => setConfirmDeleteId(profile.id)}
+                          onEdit={canEdit ? () => { setEditingId(profile.id); setIsAdding(false); } : undefined}
+                          onDeleteRequest={canEdit ? () => setConfirmDeleteId(profile.id) : undefined}
                         />
                       </motion.div>
                     )}

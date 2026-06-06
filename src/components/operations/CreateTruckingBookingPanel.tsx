@@ -30,6 +30,7 @@ import { generateBookingNumber, peekNextBookingNumber } from "../../utils/bookin
 import { getSelectedCustomer } from "../../utils/bookings/selectedCustomer";
 import { useCustomerAccountOwnerAutofill } from "./shared/useCustomerAccountOwnerAutofill";
 import { saveBookingDraft } from "./shared/saveBookingDraft";
+import { usePermission } from "../../context/PermissionProvider";
 
 interface CreateTruckingBookingPanelProps {
   isOpen: boolean;
@@ -57,6 +58,7 @@ export function CreateTruckingBookingPanel({
   draftBookingId,
   draftData,
 }: CreateTruckingBookingPanelProps) {
+  const { can } = usePermission(); // NEU-019 WG-32
   const [loading, setLoading] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(draftBookingId ?? null);
@@ -125,6 +127,7 @@ export function CreateTruckingBookingPanel({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!can("ops_trucking", "create") && !can("ops_trucking", "edit")) return; // NEU-019 WG-32 backstop
 
     if (!detectedContractId) {
       toast.error("A contract is required to create a booking. Save as draft if no contract is available.");
@@ -224,6 +227,7 @@ export function CreateTruckingBookingPanel({
   };
 
   const handleSaveDraft = async () => {
+    if (!can("ops_trucking", "create") && !can("ops_trucking", "edit")) return; // NEU-019 WG-32 backstop
     setSavingDraft(true);
     try {
       const result = await saveBookingDraft(formState, "Trucking", {

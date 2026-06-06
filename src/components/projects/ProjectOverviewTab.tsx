@@ -23,9 +23,12 @@ interface ProjectOverviewTabProps {
   onUpdate?: () => void;
   onViewBooking?: (bookingId: string, serviceType: string) => void;
   onSaveQuotation?: (data: any) => Promise<void>;
+  /** NEU-019 WG-25: the Amend button enters full edit mode and saves the
+   *  quotation — needs the record's edit grant. Defaults to false (fail closed). */
+  canAmend?: boolean;
 }
 
-export function ProjectOverviewTab({ project, currentUser, onUpdate, onViewBooking, onSaveQuotation }: ProjectOverviewTabProps) {
+export function ProjectOverviewTab({ project, currentUser, onUpdate, onViewBooking, onSaveQuotation, canAmend = false }: ProjectOverviewTabProps) {
   const [isPDFStudioOpen, setIsPDFStudioOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   // ✨ Optimistic UI: Local state to show updates immediately while background fetch happens
@@ -179,7 +182,7 @@ export function ProjectOverviewTab({ project, currentUser, onUpdate, onViewBooki
       <QuotationFormView
         project={displayProject}
         onSave={onSaveQuotation}
-        onAmend={() => setIsEditing(true)}
+        onAmend={canAmend ? () => setIsEditing(true) : undefined}
       />
 
       <PDFStudioOverlay

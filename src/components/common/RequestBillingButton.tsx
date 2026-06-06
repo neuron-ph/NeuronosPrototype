@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Receipt } from "lucide-react";
 import { useUser } from "../../hooks/useUser";
+import { usePermission } from "../../context/PermissionProvider";
 import { createWorkflowTicket, getOpenWorkflowTicket } from "../../utils/workflowTickets";
 import { toast } from "sonner@2.0.3";
 
@@ -12,10 +13,15 @@ interface RequestBillingButtonProps {
 
 export function RequestBillingButton({ bookingId, bookingNumber, currentUser }: RequestBillingButtonProps) {
   const { user } = useUser();
+  // NEU-019 WG-31: requesting billing creates a workflow ticket — that's an
+  // inbox write (D1: ticket creation = inbox:create).
+  const { can } = usePermission();
+  const canRequest = can("inbox", "create");
   const [isLoading, setIsLoading] = useState(false);
   const [requested, setRequested] = useState(false);
 
   const handleRequestBilling = async () => {
+    if (!canRequest) return; // WG-31 backstop
     const userId = user?.id;
     const userName = currentUser?.name || user?.name || "Operations";
     const userDept = currentUser?.department || user?.department || "Operations";
@@ -58,6 +64,8 @@ export function RequestBillingButton({ bookingId, bookingNumber, currentUser }: 
       setIsLoading(false);
     }
   };
+
+  if (!canRequest) return null; // WG-31: no inbox:create, no request affordance
 
   if (requested) {
     return (

@@ -1162,6 +1162,7 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
   };
 
   const canWriteMemos = can("exec_memos", "create");
+  const canDeleteMemos = can("exec_memos", "delete"); // NEU-019 WG-22
 
   const [memoOpen, setMemoOpen] = useState(false);
   const [latestMemo, setLatestMemo] = useState<{ id: string; title: string; created_at: string } | null>(null);
@@ -1211,6 +1212,7 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
         onClose={() => setMemoOpen(false)}
         userId={userId}
         canWrite={canWriteMemos}
+        canDelete={canDeleteMemos}
       />
     );
   }

@@ -28,6 +28,7 @@ import { generateBookingNumber, peekNextBookingNumber } from "../../utils/bookin
 import { getSelectedCustomer } from "../../utils/bookings/selectedCustomer";
 import { useCustomerAccountOwnerAutofill } from "./shared/useCustomerAccountOwnerAutofill";
 import { saveBookingDraft } from "./shared/saveBookingDraft";
+import { usePermission } from "../../context/PermissionProvider";
 
 interface CreateMarineInsuranceBookingPanelProps {
   isOpen: boolean;
@@ -55,6 +56,7 @@ export function CreateMarineInsuranceBookingPanel({
   draftBookingId,
   draftData,
 }: CreateMarineInsuranceBookingPanelProps) {
+  const { can } = usePermission(); // NEU-019 WG-32
   const [loading, setLoading] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(draftBookingId ?? null);
@@ -102,6 +104,7 @@ export function CreateMarineInsuranceBookingPanel({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!can("ops_marine_insurance", "create") && !can("ops_marine_insurance", "edit")) return; // NEU-019 WG-32 backstop
 
     if (!detectedContractId) {
       toast.error("A contract is required to create a booking. Save as draft if no contract is available.");
@@ -201,6 +204,7 @@ export function CreateMarineInsuranceBookingPanel({
   };
 
   const handleSaveDraft = async () => {
+    if (!can("ops_marine_insurance", "create") && !can("ops_marine_insurance", "edit")) return; // NEU-019 WG-32 backstop
     setSavingDraft(true);
     try {
       const result = await saveBookingDraft(formState, "Marine Insurance", {

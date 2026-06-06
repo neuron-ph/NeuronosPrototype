@@ -6,6 +6,8 @@ import { CreateTruckingBookingPanel } from "./CreateTruckingBookingPanel";
 import { CreateMarineInsuranceBookingPanel } from "./CreateMarineInsuranceBookingPanel";
 import { CreateOthersBookingPanel } from "./CreateOthersBookingPanel";
 import { useUser } from "../../hooks/useUser";
+import { usePermission } from "../../context/PermissionProvider";
+import { opsModuleForService } from "../../utils/bookings/opsModuleForService";
 
 interface CreateBookingProps {
   onBack: () => void;
@@ -14,6 +16,7 @@ interface CreateBookingProps {
 
 export function CreateBooking({ onBack, onSubmit }: CreateBookingProps) {
   const { user } = useUser();
+  const { can } = usePermission(); // NEU-019 WG-32
   const [activeService, setActiveService] = useState<string | null>(null);
 
   const handleClose = () => setActiveService(null);
@@ -66,6 +69,11 @@ export function CreateBooking({ onBack, onSubmit }: CreateBookingProps) {
     }
   ];
 
+  // NEU-019 WG-32: only offer services the user can actually create bookings for
+  const visibleServices = services.filter((service) =>
+    can(opsModuleForService(service.id), "create")
+  );
+
   return (
     <div className="h-full flex flex-col bg-[var(--neuron-bg-page)]">
       {/* Header */}
@@ -85,7 +93,7 @@ export function CreateBooking({ onBack, onSubmit }: CreateBookingProps) {
       {/* Content */}
       <div className="flex-1 p-8 overflow-y-auto">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
-          {services.map((service) => (
+          {visibleServices.map((service) => (
             <button
               key={service.id}
               onClick={() => setActiveService(service.id)}

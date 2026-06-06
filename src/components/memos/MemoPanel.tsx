@@ -35,6 +35,8 @@ export interface MemoPanelProps {
   onClose: () => void;
   userId: string;
   canWrite: boolean;
+  /** NEU-019 WG-22: deleting a memo is delete-class, not create-class. */
+  canDelete?: boolean;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -475,7 +477,7 @@ function ComposeView({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function MemoPanel({ isOpen, onClose, userId, canWrite }: MemoPanelProps) {
+export function MemoPanel({ isOpen, onClose, userId, canWrite, canDelete = false }: MemoPanelProps) {
   const [memos, setMemos]       = useState<Memo[]>([]);
   const [loading, setLoading]   = useState(false);
   const [view, setView]         = useState<"list" | "compose" | "preview">("list");
@@ -681,7 +683,7 @@ export function MemoPanel({ isOpen, onClose, userId, canWrite }: MemoPanelProps)
                       <section style={{ marginBottom: "32px" }}>
                         <h2 style={{ fontSize: "16px", fontWeight: 600, color: "var(--neuron-ink-primary)", marginBottom: "12px" }}>Featured</h2>
                         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                          {featured.map(m => <ReleaseCard key={m.id} memo={m} featured onDelete={canWrite ? () => handleDelete(m.id) : undefined} />)}
+                          {featured.map(m => <ReleaseCard key={m.id} memo={m} featured onDelete={canDelete ? () => handleDelete(m.id) : undefined} />)}
                         </div>
                       </section>
                     )}
@@ -703,7 +705,7 @@ export function MemoPanel({ isOpen, onClose, userId, canWrite }: MemoPanelProps)
                                         <TypeBadge type={m.memo_type} />
                                         <span style={{ fontSize: "11px", color: "var(--neuron-ink-muted)" }}>{formatDate(m.created_at)}{m.created_by_name && ` · ${m.created_by_name}`}</span>
                                       </div>
-                                      {canWrite && <DeleteButton onDelete={() => handleDelete(m.id)} />}
+                                      {canDelete && <DeleteButton onDelete={() => handleDelete(m.id)} />}
                                     </div>
                                   </div>
                                 ))}

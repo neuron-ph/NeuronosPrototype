@@ -159,7 +159,10 @@ export function ProjectDetail({
   const canViewInvoicesTab    = can(ids.invoices,    "view");
   const canViewCollectionsTab = can(ids.collections, "view");
   const canViewAttachmentsTab = can(ids.attachments, "view");
+  const canUploadAttachments  = can(ids.attachments, "create"); // WG-16
+  const canDeleteAttachments  = can(ids.attachments, "delete"); // WG-16
   const canViewCommentsTab    = can(ids.comments,    "view");
+  const canPostComments       = can(ids.comments,    "create"); // WG-14
 
   const defaultTab: ProjectTab = (() => {
     if (initialTab) return initialTab as ProjectTab;
@@ -274,6 +277,7 @@ export function ProjectDetail({
   };
 
   const handleUpdateProjectStatus = async (newStatus: ProjectStatus) => {
+    if (!showActions) return; // NEU-019 WG-27 backstop (projects edit grant)
     // 1. Optimistic Update: Update local state immediately
     const previousStatus = optimisticStatus;
     setOptimisticStatus(newStatus);
@@ -403,6 +407,7 @@ export function ProjectDetail({
             <ProjectStatusSelector
               status={optimisticStatus}
               onUpdateStatus={handleUpdateProjectStatus}
+              readOnly={!showActions} // WG-27: prop existed, was never passed
               className="mr-2"
             />
 
@@ -654,6 +659,7 @@ export function ProjectDetail({
             onUpdate={onUpdate}
             onViewBooking={handleViewBooking}
             onSaveQuotation={handleSaveQuotation}
+            canAmend={showActions} // WG-25: projects edit grant
           />
         )}
 
@@ -698,6 +704,8 @@ export function ProjectDetail({
           <ProjectAttachmentsTab
             project={project}
             currentUser={currentUser}
+            canUpload={canUploadAttachments}
+            canDelete={canDeleteAttachments}
           />
         )}
 
@@ -708,6 +716,7 @@ export function ProjectDetail({
             currentUserId={currentUserId}
             currentUserName={currentUserName}
             currentUserDepartment={currentUserDepartment}
+            canPost={canPostComments}
           />
         )}
       </div>
