@@ -886,7 +886,9 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
               <QuotationDetail
                 quotation={selectedQuotation}
                 onBack={handleBackFromInquiry}
-                userDepartment={currentUser?.department === "Pricing" ? "Pricing" : "Business Development"}
+                // NEU-020 2.8: the door is the ROUTE, not the user's department.
+                // This is the BD Inquiries surface → always the bd_inquiries lens.
+                userDepartment="Business Development"
                 currentUser={currentUser as any}
                 onUpdate={handleUpdateQuotation}
                 onSaveQuotation={handleSaveInquiry}

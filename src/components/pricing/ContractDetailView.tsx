@@ -706,6 +706,7 @@ export function ContractDetailView({
         subtitle={`Read-only aggregate across ${linkedBookingIds.length} linked booking${linkedBookingIds.length !== 1 ? "s" : ""} — ${quotation.quote_number} · ${quotation.customer_name}`}
         enableGroupByToggle={true}
         linkedBookings={linkedBookings}
+        permissionDoor={ids.billings}
       />
     </div>
   );
@@ -722,6 +723,7 @@ export function ContractDetailView({
         title="Contract Invoices"
         subtitle={`Generate, track, and manage official invoices — ${quotation.quote_number} · ${quotation.customer_name}`}
         highlightId={activeTab === "invoices" ? highlightId : undefined}
+        permissionDoor={ids.invoices}
       />
     );
   };
@@ -738,6 +740,7 @@ export function ContractDetailView({
           title="Contract Collections"
           subtitle={`Track payments received from ${quotation.customer_name} — ${quotation.quote_number}`}
           highlightId={activeTab === "collections" ? highlightId : undefined}
+          permissionDoor={ids.collections}
         />
       </div>
     );
