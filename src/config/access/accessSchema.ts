@@ -751,10 +751,16 @@ export function getVisibleAccessMatrixDepartments(): Array<{
   dept: AccessDepartmentNode;
   modules: AccessModuleNode[];
 }> {
-  return ACCESS_SCHEMA.map(dept => ({
-    dept,
-    modules: getVisibleAccessMatrixModules(dept),
-  })).filter(entry => entry.modules.length > 0);
+  // NEU-020 2.9 (DD-8): HR isn't shipped to clients yet — hide its access-grid
+  // row in any deployed (production) build, mirroring the sidebar nav hide
+  // (NeuronSidebar: showHR = !import.meta.env.PROD). Visible in local dev only.
+  const hideHR = import.meta.env.PROD;
+  return ACCESS_SCHEMA
+    .filter(dept => !(hideHR && dept.id === "hr"))
+    .map(dept => ({
+      dept,
+      modules: getVisibleAccessMatrixModules(dept),
+    })).filter(entry => entry.modules.length > 0);
 }
 
 export function getAccessModuleByModuleId(
