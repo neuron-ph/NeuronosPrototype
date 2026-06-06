@@ -309,6 +309,7 @@ export function UserDetailPage() {
 
   const handleStatusChange = async (newStatus: UserStatus) => {
     if (!user) return;
+    if (!canEditUsers) return; // WG-05 backstop: suspend/deactivate is an edit-class write
     setActionLoading(newStatus);
     try {
       await callAdminAction("updateStatus", { userId: user.id, status: newStatus });
@@ -647,7 +648,8 @@ export function UserDetailPage() {
               <div style={{ marginBottom: 20 }}>
                 <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: "0 0 8px" }}>Status</p>
                 <div style={{ display: "flex", gap: 6 }}>
-                  {STATUS_ACTIONS.map(({ value, icon: Icon, label }) => {
+                  {/* WG-05: without an edit grant the row is a read-only status display */}
+                  {STATUS_ACTIONS.filter(({ value }) => canEditUsers || status === value).map(({ value, icon: Icon, label }) => {
                     const isCurrent = status === value;
                     const c = STATUS_COLORS[value];
                     return (
