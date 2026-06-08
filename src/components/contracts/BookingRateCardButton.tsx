@@ -29,6 +29,8 @@ interface BookingRateCardButtonProps {
   existingBillingItems: BillingItem[];
   /** Called after items are saved to refresh the billing items list */
   onRefresh: () => void;
+  /** Billing-write permission door for the host tab (NEU-020 door purity). */
+  permissionDoor?: string;
 }
 
 export function BookingRateCardButton({
@@ -36,6 +38,7 @@ export function BookingRateCardButton({
   serviceType,
   existingBillingItems,
   onRefresh,
+  permissionDoor,
 }: BookingRateCardButtonProps) {
   const contractId = booking.contract_id || booking.contractId;
   const rateVersionId = booking.rate_version_id || booking.rateVersionId;
@@ -112,6 +115,7 @@ export function BookingRateCardButton({
       appliedTotal={appliedTotal}
       appliedRateCardItems={appliedRateCardItems}
       rateVersionNumber={rateCard.rateVersionNumber}
+      permissionDoor={permissionDoor}
     />
   );
 }
