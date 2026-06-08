@@ -58,6 +58,8 @@ interface InlineRateCardSectionProps {
   }>;
   /** Pinned rate version number (undefined if using live contract rates) */
   rateVersionNumber?: number;
+  /** Billing-write permission door for the host tab (NEU-020 door purity). */
+  permissionDoor?: string;
 }
 
 export function InlineRateCardSection({
@@ -79,20 +81,28 @@ export function InlineRateCardSection({
   appliedTotal = 0,
   appliedRateCardItems = [],
   rateVersionNumber,
+  permissionDoor,
 }: InlineRateCardSectionProps) {
   const [quantities, setQuantities] = useState<BookingQuantities>({ ...initialQuantities });
   const [isSaving, setIsSaving] = useState(false);
   // NEU-017: applying a rate card inserts billing_line_items — hide the button
-  // without a billing write grant (same OR-list as the billing_line_items RLS;
-  // "acct_billings" is a legacy grant key absent from the ModuleId union).
+  // without a billing write grant.
   const { can } = usePermission();
   const canKey = can as unknown as (moduleId: string, action: string) => boolean;
+  // NEU-020 door purity: when the host tab passes its door, only that key
+  // governs — matching UnifiedBillingsTab. Without one (transitional), fall back
+  // to the legacy OR-list. The legacy list omitted the per-service booking doors
+  // (ops_<service>_billings_tab) that the billing_line_items RLS already honors,
+  // so brokerage/forwarding/trucking/marine/others billers had the apply button
+  // hidden despite being authorized to insert.
   // 2.6-final: acct_financials master key retired (holders seeded into
   // accounting_financials_billings_tab).
-  const canWriteBillings = ["create", "edit"].some(a =>
-    canKey("accounting_financials_billings_tab", a) ||
-    canKey("acct_billings", a) || canKey("ops_bookings_billings_tab", a) ||
-    canKey("ops_projects_billings_tab", a));
+  const canWriteBillings = permissionDoor
+    ? ["create", "edit"].some(a => canKey(permissionDoor, a))
+    : ["create", "edit"].some(a =>
+        canKey("accounting_financials_billings_tab", a) ||
+        canKey("acct_billings", a) || canKey("ops_bookings_billings_tab", a) ||
+        canKey("ops_projects_billings_tab", a));
   // Collapse the calculator by default once the user has applied rates — they
   // can still expand to recalculate or apply additional rounds.
   const [collapsed, setCollapsed] = useState(alreadyApplied);
