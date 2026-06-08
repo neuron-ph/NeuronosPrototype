@@ -35,7 +35,12 @@ export function PermissionProvider({ children }: { children: ReactNode }) {
   const { data, isLoading } = useQuery<{ moduleGrants: ModuleGrants }>({
     queryKey: ['permission_profile_grants', user?.id ?? ''],
     enabled: !!user,
-    staleTime: 5 * 60 * 1000,
+    // Permission edits are admin-driven and rare, but an open session caches
+    // grants and won't notice a change until they go stale. Keep a short TTL and
+    // refetch when the user refocuses the tab so access changes surface within
+    // ~1 min (usually instantly on focus) without polling — cheap at SME scale.
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: true,
     queryFn: async () => {
       if (!user) return { moduleGrants: {} };
 
