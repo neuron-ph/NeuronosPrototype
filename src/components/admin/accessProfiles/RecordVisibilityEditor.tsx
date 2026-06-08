@@ -53,7 +53,9 @@ function DialControl({
         position: "relative",
         display: "grid",
         gridTemplateColumns: `repeat(${RECORD_DIALS.length}, 1fr)`,
-        width: 252,
+        // Equal columns keep the sliding-thumb math exact, so the track must
+        // fit the widest label ("Department") × 4. 252 was the 3-dial width.
+        width: 356,
         flexShrink: 0,
         padding: 2,
         borderRadius: 8,
