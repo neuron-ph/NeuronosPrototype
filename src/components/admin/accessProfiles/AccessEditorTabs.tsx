@@ -28,6 +28,9 @@ interface AccessEditorTabsProps {
   onVisibilityChange: (next: RecordVisibilityMap) => void;
   /** Resolved (cascaded) view grants — drives which record-type rows are live. */
   resolvedViewGrants: Record<string, boolean>;
+  /** Per-user host only: the assigned profile's dials, for override provenance
+   *  badges + reset (Crew Visibility Phase 1.3). Profile editor omits it. */
+  visibilityBaseline?: RecordVisibilityMap;
 }
 
 export function AccessEditorTabs({
@@ -42,6 +45,7 @@ export function AccessEditorTabs({
   visibilityScopes,
   onVisibilityChange,
   resolvedViewGrants,
+  visibilityBaseline,
 }: AccessEditorTabsProps) {
   const [activeTab, setActiveTab] = useState<"access" | "visibility">("access");
 
@@ -91,6 +95,7 @@ export function AccessEditorTabs({
           scopes={visibilityScopes}
           onChange={readOnly ? () => {} : onVisibilityChange}
           resolvedGrants={resolvedViewGrants}
+          baseline={visibilityBaseline}
         />
       )}
     </div>

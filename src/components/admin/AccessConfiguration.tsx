@@ -752,6 +752,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
             resolvedViewGrants={resolvedViewGrants}
             visibilityScopes={visibilityScopes}
             onVisibilityChange={setVisibilityScopes}
+            visibilityBaseline={appliedProfile?.visibility_scopes ?? {}}
           />
         </div>
       </div>
