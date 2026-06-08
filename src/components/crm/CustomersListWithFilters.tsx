@@ -36,7 +36,9 @@ export function CustomersListWithFilters({ userDepartment, moduleId, onViewCusto
 
   const { user } = useUser();
 
-  const { scope, isLoaded } = useDataScope('customers');
+  // Visibility is enforced by RLS (crew-based, migration 189) — the hook only
+  // gates the fetch until auth context is ready. No client-side scope filter.
+  const { isLoaded } = useDataScope('customers');
 
   // Permissions — explicit, driven by moduleId. No dept-string fallbacks.
   const { can } = usePermission();
@@ -51,10 +53,7 @@ export function CustomersListWithFilters({ userDepartment, moduleId, onViewCusto
   // Direct Supabase query for BD users (replaces Edge Function fetch)
   const { users } = useUsers({ department: 'Business Development' });
 
-  // Pricing (and other non-BD departments) need to see all customers — scope
-  // filtering is only for BD's own CRM view (staff see their accounts, etc.)
   const { customers: allCustomers, isLoading, invalidate: invalidateCustomers } = useCustomers({
-    scope: userDepartment === "Business Development" ? scope : undefined,
     enabled: isLoaded,
   });
   const { contacts: allContacts, invalidate: invalidateContacts } = useContacts();
