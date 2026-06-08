@@ -55,4 +55,31 @@ sight of the record.
   CUST-1779437508818, CUST-1780539923140, CUST-1780638263187), all owned by
   "In-House Account" — which is Mark's own login (markjavier219@). Recommend
   merging/cleanup after the fix.
-- His "except" request is tracked separately (Q1, awaiting his answer).
+
+## Deferred & dropped (rulings 2026-06-08, Marcus)
+
+**Dropped — decided against, revisit only with new evidence:**
+- **"Except" exclusion lists** ("Team except BD Officer 1") — not building.
+  If Mark raises it again, check first whether a per-user override (now
+  visible via the provenance chips) already covers his case.
+- **Altitude/rank axis** ("staff can never see executive-owned records") —
+  nobody asked; was a chat-era mental model. Bolt-on later as a separate
+  filter if ever genuinely needed (plan D4).
+- **Per-profile "+ linked work" checkbox** — superseded: participation is
+  folded into the definition of Own/Team/Department itself.
+- **Quotations as crew-forming work** (plan Q4) — excluded; the preparer
+  already reaches the customer via the quotations dial. One EXISTS arm to add
+  if a real workflow breaks.
+- **Customer snapshot on bookings** (Ops never reads customers) — the purist
+  end-state architecture; explicitly out of scope, future direction only.
+
+**Deferred — parked at Marcus's gates:**
+- **Release to prod ON HOLD** — prod still has this bug live; migrations
+  186–190 + the purge replay when Marcus clears it.
+- **Department dial adoption** — the 4th button exists but no profile uses it
+  (seeded nowhere by design, plan D5). Mark dials profiles up deliberately
+  post-release — same conversation as "should Import Supervisors be on Team
+  instead of All records?"
+- **`users.team_id` column drop** — dead column, no longer read anywhere;
+  cosmetic, low priority.
+- **Focus Global duplicate-row cleanup** — Mark's call after release.

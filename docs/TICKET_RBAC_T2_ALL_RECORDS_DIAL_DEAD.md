@@ -40,10 +40,36 @@ is fine; this is purely the visibility dial being shadowed.
 
 ## Acceptance
 
-- [ ] All 4 supervisors see the full customer list under profile `everything`.
-- [ ] Editing the profile dial changes behavior for all profile users with no
-      personal override, immediately (staleTime aside).
-- [ ] Admin UI on any user shows where each effective dial comes from
-      (profile vs personal override), with a clear-override action.
-- [ ] Zero override `visibility_scopes` keys remain that match the migration-157
-      seed pattern; a human-set override demonstrably survives the purge.
+- [x] Supervisors see the full customer list under profile `everything` —
+      verified live on prod-synced dev (crew-visibility.spec.ts T2,
+      jr.supervisor02). NB: Cueno's stamp was already `everything`, so "all 4"
+      was really 3 broken.
+- [x] Editing the profile dial governs all profile users with no personal
+      override (override-first resolution, stamps purged).
+- [x] Admin UI shows dial provenance per record type — amber
+      "override · profile: X" chip + per-row reset + "reset all to profile".
+- [~] Bucket A (30 provable seed stamps, users WITH profiles) purged on dev;
+      see deferred items below for Buckets B/C. A human-set override survives
+      by construction (purge criterion = uniform full map, which the UI cannot
+      produce — it writes sparse deltas only).
+
+## Deferred & dropped (rulings 2026-06-08, Marcus)
+
+**Deferred — parked, with reasons:**
+- **Bucket B purge — 24 no-profile users (incl. all 6 Executives).** Their
+  seeded override is their ONLY access; purging now would lock them out.
+  Prerequisite: assign each an access profile (plan Phase 1.5.4 — needs
+  Mark/Marcus to decide who gets what). Purge their residue after.
+- **Bucket C — 6 uniform-but-mismatched stamps**, incl. 4 junior Pricing
+  officers (Baylon, Flores, Borcelas, Sison) effectively seeing EVERYTHING.
+  Marcus: leave untouched for now; the "should these juniors see everything?"
+  question to Mark was NOT sent. Revisit at/after release.
+- **Carolina misassignment smell** — accountingoffice@ carries the BD MANAGER
+  profile with an override hand-patching BD grants off (bd_projects:view=false).
+  Likely a missed case of the migration-156 cleanup. Noted, untouched.
+- **Release to prod ON HOLD** — the purge (and migrations 186–190) reach prod
+  only when Marcus clears the release; until then this bug is still live there.
+
+**Dropped:**
+- **Purge "no-op key stripping" sub-step** — no sparse override rows exist in
+  the data; full uniform maps were the only residue shape.
