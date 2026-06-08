@@ -7,16 +7,21 @@
 // the row is greyed — you grant access in Feature Access first. This keeps the
 // two tabs in lockstep, exactly like the locked design.
 
-export type RecordDial = "own" | "team" | "everything";
+export type RecordDial = "own" | "team" | "department" | "everything";
 export type RecordVisibilityMap = Partial<Record<string, RecordDial>>;
 
+// CREW wording (PLAN_CREW_VISIBILITY_2026-06.md, D2/D6): a record's crew is its
+// owner plus everyone assigned to work attached to it (linked bookings/projects).
+// Each dial is a radius around the crew — the descriptions must state this in
+// full, on-screen, so the rule is explicit, never implicit.
 export const RECORD_DIALS: { value: RecordDial; label: string; description: string }[] = [
-  { value: "own", label: "Own", description: "Records they created or are directly assigned to." },
-  { value: "team", label: "Team", description: "Their own records plus their teammates'." },
+  { value: "own", label: "Own", description: "Records they own, are assigned to, or that belong to work they're part of." },
+  { value: "team", label: "Team", description: "Own, plus records owned by or worked on by their teammates." },
+  { value: "department", label: "Department", description: "Own, plus records owned by or worked on by anyone in their department." },
   { value: "everything", label: "All records", description: "Every record of this type, across all departments." },
 ];
 
-export const DIAL_RANK: Record<RecordDial, number> = { own: 0, team: 1, everything: 2 };
+export const DIAL_RANK: Record<RecordDial, number> = { own: 0, team: 1, department: 2, everything: 3 };
 
 export interface RecordType {
   key: string;
@@ -144,5 +149,5 @@ export function legacyScopeFromMap(map: RecordVisibilityMap): "own" | "team" | "
     const d = dialFor(map, rt.key);
     if (DIAL_RANK[d] > DIAL_RANK[best]) best = d;
   }
-  return best === "everything" ? "department" : best;
+  return best === "everything" || best === "department" ? "department" : best;
 }

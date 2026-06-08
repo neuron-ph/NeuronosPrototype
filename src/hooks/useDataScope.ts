@@ -4,19 +4,22 @@ import { useUser } from './useUser';
 import { queryKeys } from '../lib/queryKeys';
 
 // NEU-012 Contract #6 — record visibility (Layer 2). This hook is the CLIENT
-// mirror of the DB resolver in migrations 157-159. It must agree with
+// mirror of the DB resolver in migrations 157-159 + 186. It must agree with
 // public.current_user_visibility_dial / current_user_can_view_record:
 //   effective dial = per-user override map[key]  (if present)
 //                    else assigned-profile map[key]  (if present)
 //                    else 'own'                       (strict fail-closed)
-// No role fallback, no department concept, no team_memberships table — teams
-// are users sharing users.team_id, exactly like current_user_team_ids().
+// No role fallback. Teams resolve via team_memberships (active rows, union
+// across my teams), exactly like current_user_team_ids() after migration 186 —
+// legacy users.team_id is dead (never written by the Teams UI; see
+// PLAN_CREW_VISIBILITY_2026-06.md F2/D8). 'department' (migration 190) resolves
+// to everyone sharing my users.department, like current_user_department_user_ids().
 // RLS is the real boundary; this only pre-filters the UI so it never over-hides.
 
-type Dial = 'own' | 'team' | 'everything';
+type Dial = 'own' | 'team' | 'department' | 'everything';
 type DialMap = Partial<Record<string, Dial>>;
 
-const DIAL_RANK: Record<Dial, number> = { own: 0, team: 1, everything: 2 };
+const DIAL_RANK: Record<Dial, number> = { own: 0, team: 1, department: 2, everything: 3 };
 
 // Canonical record-type keys (must match the seed in migration 157).
 const BOOKING_KEYS = [
@@ -85,7 +88,7 @@ export function useDataScope(resource?: string): DataScopeResult {
             .maybeSingle(),
           supabase
             .from('users')
-            .select('team_id, access_profile:access_profile_id(visibility_scopes)')
+            .select('access_profile:access_profile_id(visibility_scopes)')
             .eq('id', user.id)
             .maybeSingle(),
         ]);
@@ -106,20 +109,48 @@ export function useDataScope(resource?: string): DataScopeResult {
       if (dial === 'everything') return { type: 'all' };
       if (dial === 'own') return { type: 'own', userId: user.id };
 
-      // team — everyone sharing my team_id (incl. me), mirroring current_user_team_ids().
-      const teamId = (userRow as { team_id?: string | null } | null)?.team_id ?? null;
-      if (!teamId) return { type: 'own', userId: user.id };
+      // department — everyone sharing my users.department (incl. me),
+      // mirroring current_user_department_user_ids() (migration 190).
+      if (dial === 'department') {
+        const dept = user.department ?? null;
+        if (!dept) return { type: 'own', userId: user.id };
+        const { data: deptUsers, error: deptError } = await supabase
+          .from('users')
+          .select('id')
+          .eq('department', dept);
+        if (deptError) {
+          console.warn('[DataScope] department fetch failed:', deptError.message);
+          return { type: 'own', userId: user.id };
+        }
+        const ids = Array.from(new Set([user.id, ...(deptUsers ?? []).map((r) => r.id)]));
+        return { type: 'userIds', ids };
+      }
+
+      // team — me + every active member of every team I'm an active member of,
+      // mirroring current_user_team_ids() (migration 186, team_memberships-based).
+      const { data: myTeams, error: myTeamsError } = await supabase
+        .from('team_memberships')
+        .select('team_id')
+        .eq('user_id', user.id)
+        .eq('is_active', true);
+      if (myTeamsError) {
+        console.warn('[DataScope] team fetch failed:', myTeamsError.message);
+        return { type: 'own', userId: user.id };
+      }
+      const teamIds = (myTeams ?? []).map((r) => r.team_id);
+      if (teamIds.length === 0) return { type: 'own', userId: user.id };
 
       const { data: teammates, error: teammatesError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('team_id', teamId);
+        .from('team_memberships')
+        .select('user_id')
+        .in('team_id', teamIds)
+        .eq('is_active', true);
       if (teammatesError) {
-        console.warn('[DataScope] team fetch failed:', teammatesError.message);
+        console.warn('[DataScope] teammates fetch failed:', teammatesError.message);
         return { type: 'own', userId: user.id };
       }
 
-      const ids = Array.from(new Set([user.id, ...(teammates ?? []).map((r) => r.id)]));
+      const ids = Array.from(new Set([user.id, ...(teammates ?? []).map((r) => r.user_id)]));
       return { type: 'userIds', ids };
     },
   });

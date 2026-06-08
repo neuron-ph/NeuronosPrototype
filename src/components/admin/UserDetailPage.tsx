@@ -278,6 +278,37 @@ export function UserDetailPage() {
     if (!user) return;
     setSavingProfile(true);
     try {
+      // Crew visibility Phase 4 (PLAN_CREW_VISIBILITY_2026-06.md): record
+      // visibility follows the owner's CURRENT position, and the Team dial
+      // reads team_memberships — so moving a user between departments must
+      // resolve their memberships in the same save, or their records stay
+      // visible to the old department's teams.
+      const u = user as unknown as { id: string; name?: string; department?: string };
+      if (editDept !== u.department) {
+        const { data: memberships, error: tmError } = await supabase
+          .from("team_memberships")
+          .select("id, teams(name, department)")
+          .eq("user_id", u.id)
+          .eq("is_active", true);
+        if (tmError) throw new Error(tmError.message);
+        const stale = ((memberships ?? []) as unknown as Array<{
+          id: string;
+          teams: { name: string; department: string } | null;
+        }>).filter((m) => m.teams && m.teams.department !== editDept);
+        if (stale.length > 0) {
+          const names = stale.map((m) => m.teams!.name).join(", ");
+          const ok = confirm(
+            `Moving ${u.name ?? "this user"} to ${editDept} removes them from ${stale.length === 1 ? "this team" : "these teams"}: ${names}.\n\nRecords they own or work on will stop being visible to those teams. Continue?`,
+          );
+          if (!ok) return;
+          const { error: deactError } = await supabase
+            .from("team_memberships")
+            .update({ is_active: false })
+            .in("id", stale.map((m) => m.id));
+          if (deactError) throw new Error(deactError.message);
+        }
+      }
+
       const { error } = await supabase
         .from("users")
         .update({
@@ -291,6 +322,7 @@ export function UserDetailPage() {
       setEditing(false);
       queryClient.invalidateQueries({ queryKey: ["users", "detail", userId] });
       queryClient.invalidateQueries({ queryKey: ["users", "list"] });
+      queryClient.invalidateQueries({ queryKey: ["team_memberships"] });
     } catch (err: any) {
       toast.error(err.message || "Failed to save changes");
     } finally {

@@ -1,24 +1,27 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../utils/supabase/client";
 import { queryKeys } from "../lib/queryKeys";
-import type { DataScope } from "./useDataScope";
 import { useRealtimeSync } from "./useRealtimeSync";
 
 interface UseCustomersOptions {
-  scope?: DataScope;
   enabled?: boolean;
 }
 
-export function useCustomers({ scope, enabled = true }: UseCustomersOptions = {}) {
+// Customer visibility is CREW-based and enforced by RLS (migration 189):
+// owner OR participant of linked bookings/projects, within the user's dial.
+// No client-side owner_id scope filter — it would over-hide crew-visible rows
+// (e.g. an ops user's customers-via-bookings, whose owner is a BD user).
+// RLS is the boundary; the rows that arrive ARE the user's world.
+export function useCustomers({ enabled = true }: UseCustomersOptions = {}) {
   const queryClient = useQueryClient();
 
   const { data: customers = [], isLoading } = useQuery({
-    queryKey: [...queryKeys.customers.list(), { scope }],
+    queryKey: queryKeys.customers.list(),
     queryFn: async () => {
-      let query = supabase.from("customers").select("*").order("created_at", { ascending: false });
-      if (scope?.type === "userIds") query = query.in("owner_id", scope.ids);
-      else if (scope?.type === "own") query = query.eq("owner_id", scope.userId);
-      const { data, error } = await query;
+      const { data, error } = await supabase
+        .from("customers")
+        .select("*")
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
     },

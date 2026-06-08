@@ -1,26 +1,36 @@
 import { useMemo } from "react";
-import { Eye, Lock } from "lucide-react";
+import { Eye, Lock, RotateCcw } from "lucide-react";
 import {
   RECORD_DIALS,
   RECORD_TYPE_GROUPS,
   ALL_RECORD_TYPES,
   isRecordTypeAccessible,
   dialFor,
+  mergeVisibility,
   type RecordDial,
   type RecordType,
   type RecordVisibilityMap,
 } from "./recordVisibilityConfig";
 
 // NEU-012 Contract #6 Slice 3 — the Record Visibility tab. One row per record
-// type, a 3-way dial (Own / Team / Everything). Rows the profile can't open
-// (no view on any gating module in Feature Access) are greyed — set in lockstep
-// with the Feature Access tab. Save writes an explicit dial on every live row.
+// type with a dial (Own / Team / Department / All records). Rows the profile
+// can't open (no view on any gating module in Feature Access) are greyed — set
+// in lockstep with the Feature Access tab. Save writes an explicit dial on
+// every live row.
+//
+// Crew Visibility Phase 1.3 (provenance): when `baseline` is provided (the
+// per-user Access Configuration screen passes the assigned profile's dials),
+// any row deviating from it is labeled as a personal override with a one-click
+// reset — overrides must be visible and deliberate, never silent residue.
 
 interface RecordVisibilityEditorProps {
   scopes: RecordVisibilityMap;
   onChange: (next: RecordVisibilityMap) => void;
   /** Resolved (cascaded) feature-access grants, used to grey inaccessible rows. */
   resolvedGrants: Record<string, boolean>;
+  /** Per-user context only: the assigned profile's dials. Enables override
+   *  provenance badges + reset affordances. Omit on the profile editor. */
+  baseline?: RecordVisibilityMap;
 }
 
 // Linear-style segmented dial: a quiet hairline track with a raised thumb that
@@ -43,7 +53,9 @@ function DialControl({
         position: "relative",
         display: "grid",
         gridTemplateColumns: `repeat(${RECORD_DIALS.length}, 1fr)`,
-        width: 252,
+        // Equal columns keep the sliding-thumb math exact, so the track must
+        // fit the widest label ("Department") × 4. 252 was the 3-dial width.
+        width: 356,
         flexShrink: 0,
         padding: 2,
         borderRadius: 8,
@@ -165,7 +177,7 @@ function SetAllControl({
   );
 }
 
-export function RecordVisibilityEditor({ scopes, onChange, resolvedGrants }: RecordVisibilityEditorProps) {
+export function RecordVisibilityEditor({ scopes, onChange, resolvedGrants, baseline }: RecordVisibilityEditorProps) {
   const accessibleByKey = useMemo(() => {
     const map: Record<string, boolean> = {};
     for (const rt of ALL_RECORD_TYPES) map[rt.key] = isRecordTypeAccessible(rt, resolvedGrants);
@@ -176,6 +188,16 @@ export function RecordVisibilityEditor({ scopes, onChange, resolvedGrants }: Rec
     () => ALL_RECORD_TYPES.filter((rt) => accessibleByKey[rt.key]).length,
     [accessibleByKey],
   );
+
+  // Provenance (per-user context): which rows deviate from the assigned profile.
+  const overriddenKeys = useMemo(() => {
+    if (!baseline) return new Set<string>();
+    return new Set(
+      ALL_RECORD_TYPES.filter((rt) => dialFor(scopes, rt.key) !== dialFor(baseline, rt.key)).map(
+        (rt) => rt.key,
+      ),
+    );
+  }, [baseline, scopes]);
 
   const setOne = (key: string, dial: RecordDial) => {
     onChange({ ...scopes, [key]: dial });
@@ -214,9 +236,29 @@ export function RecordVisibilityEditor({ scopes, onChange, resolvedGrants }: Rec
             <strong style={{ color: "var(--neuron-ink-primary)" }}>Feature Access</strong> are editable here.
           </p>
         </div>
-        {accessibleCount > 0 && (
-          <SetAllControl label="Set all to" onSet={(d) => setMany(ALL_RECORD_TYPES, d)} />
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+          {baseline && overriddenKeys.size > 0 && (
+            <button
+              type="button"
+              onClick={() => onChange(mergeVisibility(baseline, {}))}
+              title="Remove all personal overrides — every dial returns to the assigned profile's value"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 5,
+                padding: "4px 10px", fontSize: 11, fontWeight: 600,
+                borderRadius: 7, cursor: "pointer",
+                border: "1px solid var(--neuron-warning-border, #F0C674)",
+                background: "var(--neuron-warning-bg, #FFF8E6)",
+                color: "var(--neuron-warning-ink, #8A6D1A)",
+              }}
+            >
+              <RotateCcw size={11} />
+              {overriddenKeys.size} personal {overriddenKeys.size === 1 ? "override" : "overrides"} — reset all to profile
+            </button>
+          )}
+          {accessibleCount > 0 && (
+            <SetAllControl label="Set all to" onSet={(d) => setMany(ALL_RECORD_TYPES, d)} />
+          )}
+        </div>
       </div>
 
       {/* Groups */}
@@ -261,6 +303,11 @@ export function RecordVisibilityEditor({ scopes, onChange, resolvedGrants }: Rec
               >
                 {types.map((rt, i) => {
                   const accessible = accessibleByKey[rt.key];
+                  const isOverridden = overriddenKeys.has(rt.key);
+                  const baselineDial = baseline ? dialFor(baseline, rt.key) : null;
+                  const baselineLabel = baselineDial
+                    ? RECORD_DIALS.find((d) => d.value === baselineDial)?.label ?? baselineDial
+                    : null;
                   return (
                     <div
                       key={rt.key}
@@ -288,6 +335,33 @@ export function RecordVisibilityEditor({ scopes, onChange, resolvedGrants }: Rec
                         {!accessible && (
                           <span style={{ fontSize: 11, color: "var(--neuron-ink-muted)", fontStyle: "italic" }}>
                             turn on in Feature Access to use
+                          </span>
+                        )}
+                        {isOverridden && (
+                          <span
+                            title={`The assigned profile says "${baselineLabel}" — this user has a personal override. Click the arrow to reset.`}
+                            style={{
+                              display: "inline-flex", alignItems: "center", gap: 4,
+                              padding: "1px 7px", fontSize: 10.5, fontWeight: 600,
+                              borderRadius: 99, whiteSpace: "nowrap",
+                              border: "1px solid var(--neuron-warning-border, #F0C674)",
+                              background: "var(--neuron-warning-bg, #FFF8E6)",
+                              color: "var(--neuron-warning-ink, #8A6D1A)",
+                            }}
+                          >
+                            override · profile: {baselineLabel}
+                            <button
+                              type="button"
+                              onClick={() => setOne(rt.key, baselineDial as RecordDial)}
+                              title={`Reset to profile (${baselineLabel})`}
+                              style={{
+                                display: "inline-flex", alignItems: "center",
+                                border: "none", background: "transparent", padding: 0,
+                                cursor: "pointer", color: "inherit",
+                              }}
+                            >
+                              <RotateCcw size={10} />
+                            </button>
                           </span>
                         )}
                       </div>
