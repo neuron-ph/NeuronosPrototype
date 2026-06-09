@@ -957,7 +957,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                       value={editedContact.owner_id || ""}
                       options={[
                         { value: "", label: "Unassigned" },
-                        ...users.filter(u => u.department === "Business Development" || u.department === "Pricing").map(u => ({ value: u.id, label: u.name }))
+                        ...users.filter(u => u.is_active).map(u => ({ value: u.id, label: u.name }))
                       ]}
                       onChange={(value) => setEditedContact({ ...editedContact, owner_id: value || undefined })}
                     />

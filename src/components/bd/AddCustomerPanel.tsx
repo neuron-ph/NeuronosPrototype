@@ -33,8 +33,8 @@ export function AddCustomerPanel({ isOpen, onClose, onSave }: AddCustomerPanelPr
     notes: "",
   });
 
-  // Direct Supabase query for BD users (replaces Edge Function fetch)
-  const { users } = useUsers({ department: 'Business Development', enabled: isOpen });
+  // Any active user can be an account owner (incl. In-House Account) — no department filter
+  const { users } = useUsers({ enabled: isOpen });
   const { industries, leadSources } = useCustomerProfileOptions();
 
   const handleSubmit = (e: React.FormEvent) => {
