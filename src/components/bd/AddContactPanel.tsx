@@ -46,7 +46,8 @@ export function AddContactPanel({
   });
 
   // Direct Supabase query for BD users
-  const { users: bdUsers } = useUsers({ department: 'Business Development', enabled: isOpen });
+  // Any active user can be a contact owner (incl. In-House Account) — no department filter
+  const { users: bdUsers } = useUsers({ enabled: isOpen });
   const { customers } = useCustomers({ enabled: isOpen });
   const { contacts: allContacts, isLoading: isLoadingContacts } = useContacts({
     enabled: isOpen && allowLinkExisting,
