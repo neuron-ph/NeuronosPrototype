@@ -115,7 +115,10 @@ export function EVoucherWorkflowPanel({
   const holdsManagerGate = can("my_evouchers", "approve");
   const holdsAccountingGate = can("acct_evouchers", "approve");
 
-  const canSubmit = isOwner && currentStatus === "draft";
+  // Audit #19: submitting is an edit — DB requires my_evouchers:edit. Gate the
+  // button on it so view-only roles (TL/Sup/Mgr with V/VX) don't see a button
+  // that silently bounces at RLS.
+  const canSubmit = isOwner && currentStatus === "draft" && can("my_evouchers", "edit");
   const canCancel = isOwner && (currentStatus === "draft" || currentStatus === "rejected");
 
   const canApproveAsTL   = holdsManagerGate && currentStatus === "pending_manager";
@@ -155,11 +158,21 @@ export function EVoucherWorkflowPanel({
   };
 
   const transition = async (newStatus: string, action: string, notes?: string) => {
-    const { error } = await supabase
+    // Audit #4/#8: an RLS-blocked UPDATE affects 0 rows WITHOUT throwing, so the
+    // caller would otherwise report success while nothing changed. .select() lets
+    // us detect the no-op (visibility-dial / department-scope mismatch) and turn
+    // a silent false-success into an honest, actionable error.
+    const { data, error } = await supabase
       .from("evouchers")
       .update({ status: newStatus, updated_at: new Date().toISOString() })
-      .eq("id", evoucherId);
+      .eq("id", evoucherId)
+      .select("id");
     if (error) throw error;
+    if (!data || data.length === 0) {
+      throw new Error(
+        "You don't have permission to perform this action on this E-Voucher (it may belong to another department, or its status changed). Refresh and try again.",
+      );
+    }
     await writeHistory(action, currentStatus, newStatus, notes);
   };
 
@@ -204,8 +217,8 @@ export function EVoucherWorkflowPanel({
       }
       toast.success("E-Voucher submitted for approval");
       onStatusChange?.();
-    } catch {
-      toast.error("Failed to submit E-Voucher");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to submit E-Voucher");
     } finally {
       setIsSubmitting(false);
     }
@@ -239,8 +252,8 @@ export function EVoucherWorkflowPanel({
         });
       }
       onStatusChange?.();
-    } catch {
-      toast.error("Failed to approve");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to approve");
     } finally {
       setIsSubmitting(false);
     }
@@ -269,8 +282,8 @@ export function EVoucherWorkflowPanel({
         });
       }
       onStatusChange?.();
-    } catch {
-      toast.error("Failed to approve");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to approve");
     } finally {
       setIsSubmitting(false);
     }
@@ -378,8 +391,8 @@ export function EVoucherWorkflowPanel({
       setShowReject(false);
       setRejectionReason("");
       onStatusChange?.();
-    } catch {
-      toast.error("Failed to reject E-Voucher");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to reject E-Voucher");
     } finally {
       setIsSubmitting(false);
     }
@@ -392,8 +405,8 @@ export function EVoucherWorkflowPanel({
       await transition("cancelled", "Cancelled by Requestor");
       toast.success("E-Voucher cancelled");
       onStatusChange?.();
-    } catch {
-      toast.error("Failed to cancel E-Voucher");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to cancel E-Voucher");
     } finally {
       setIsSubmitting(false);
     }
@@ -432,8 +445,8 @@ export function EVoucherWorkflowPanel({
       });
       toast.success("E-Voucher verified and posted to ledger");
       onStatusChange?.();
-    } catch {
-      toast.error("Failed to close liquidation");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to close liquidation");
     } finally {
       setIsSubmitting(false);
     }
