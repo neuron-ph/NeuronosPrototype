@@ -36,6 +36,29 @@ interface Breakdown {
   byCurrency: Record<string, number>;
 }
 
+/**
+ * Decide which currency to show PRIMARY for a group of lines.
+ *
+ * The quotation's document-level `currency` field is often left at the PHP
+ * default even when the user sets the per-line "Curr" to USD — so we key off the
+ * LINE currencies, not the document field: if every line shares one foreign
+ * currency (e.g. all USD) that's the display currency. Genuinely mixed lines, or
+ * any PHP line, fall back to PHP base. An explicit foreign `documentCurrency` is
+ * honoured as a tiebreaker.
+ */
+export function resolveDisplayCurrency(
+  lineCurrencies: Array<string | null | undefined>,
+  documentCurrency?: string,
+): string {
+  const normalized = lineCurrencies.map((c) => normalizeCurrency(c, FUNCTIONAL_CURRENCY));
+  const foreign = [...new Set(normalized.filter((c) => c !== FUNCTIONAL_CURRENCY))];
+  const hasPHP = normalized.includes(FUNCTIONAL_CURRENCY);
+  if (foreign.length === 1 && !hasPHP) return foreign[0];
+  const docCur = normalizeCurrency(documentCurrency, FUNCTIONAL_CURRENCY);
+  if (documentCurrency && docCur !== FUNCTIONAL_CURRENCY) return docCur;
+  return FUNCTIONAL_CURRENCY;
+}
+
 function summarize(items: SubtotalLineItem[], phpOverride?: number): Breakdown {
   const byCurrency: Record<string, number> = {};
   let phpTotal = 0;
@@ -77,10 +100,10 @@ export function MixedCurrencySubtotal({
 }: MixedCurrencySubtotalProps) {
   const { phpTotal: total, byCurrency } = summarize(items, phpTotal);
 
-  // Document-currency-primary mode: a foreign-currency quotation (e.g. USD) shows
-  // its own currency first, with the PHP base as the "≈ ₱" conversion underneath.
-  const docCur = normalizeCurrency(documentCurrency, FUNCTIONAL_CURRENCY);
-  if (documentCurrency && docCur !== FUNCTIONAL_CURRENCY) {
+  // Foreign-currency mode: when the lines are a single foreign currency (e.g. all
+  // USD) show that currency first, with the PHP base as the "≈ ₱" conversion.
+  const docCur = resolveDisplayCurrency(items.map((i) => i.currency), documentCurrency);
+  if (docCur !== FUNCTIONAL_CURRENCY) {
     const docOriginal = byCurrency[docCur] || 0;
     const otherForeign = Object.entries(byCurrency).filter(
       ([code, amt]) => code !== docCur && code !== FUNCTIONAL_CURRENCY && amt > 0,

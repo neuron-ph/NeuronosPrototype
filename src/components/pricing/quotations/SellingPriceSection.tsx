@@ -17,6 +17,7 @@ import {
   calculateSellingItemFromPercentage,
 } from "../../../utils/pricing/quotationSignedPricing";
 import { formatMoney, normalizeCurrency, FUNCTIONAL_CURRENCY } from "../../../utils/accountingCurrency";
+import { resolveDisplayCurrency } from "../../shared/pricing/MixedCurrencySubtotal";
 
 interface SellingPriceSectionProps {
   categories: SellingPriceCategory[];
@@ -430,7 +431,10 @@ export function SellingPriceSection({
           foreign-currency quotation the document currency is shown primary with the
           PHP base as the "≈ ₱" conversion. */}
       {categories.length > 0 && (() => {
-        const docCur = normalizeCurrency(currency, FUNCTIONAL_CURRENCY);
+        // Display currency comes from the line items (not the often-stale document
+        // `currency` field): all-USD lines → USD primary, ≈ ₱ secondary.
+        const allLineCurrencies = categories.flatMap((cat) => cat.line_items.map((i: any) => i.currency));
+        const docCur = resolveDisplayCurrency(allLineCurrencies, currency);
         const isForeignDoc = docCur !== FUNCTIONAL_CURRENCY;
         // PHP-base totals (functional currency) — the source of truth, summed the
         // same way as the per-line `amount` and the category subtotals.
