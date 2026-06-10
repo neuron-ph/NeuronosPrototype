@@ -123,6 +123,25 @@ const CURRENCY_LOCALES: Record<AccountingCurrency, string> = {
   USD: "en-US",
 };
 
+/**
+ * Presentation-only currency glyph for UI labels/prefixes. This does NOT touch
+ * `normalizeCurrency` or any posting math — the accounting engine still only
+ * *supports* PHP/USD (see SUPPORTED_ACCOUNTING_CURRENCIES). Pricing offers
+ * PHP/USD/EUR/CNY, so the UI needs a sign for all four; unknown codes fall back
+ * to the code itself.
+ */
+export const CURRENCY_GLYPHS: Record<string, string> = {
+  PHP: "₱",
+  USD: "$",
+  EUR: "€",
+  CNY: "¥",
+};
+
+export function currencyGlyph(code: string | null | undefined): string {
+  const c = (code ?? "").trim().toUpperCase();
+  return CURRENCY_GLYPHS[c] ?? c;
+}
+
 export function formatMoney(
   amount: number,
   currency: AccountingCurrency | string = FUNCTIONAL_CURRENCY,

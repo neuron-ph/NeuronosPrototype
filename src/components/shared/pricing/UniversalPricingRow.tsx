@@ -5,6 +5,7 @@ import { CustomDropdown } from "../../bd/CustomDropdown";
 import { FormattedNumberInput } from "./FormattedNumberInput";
 import { CatalogItemCombobox } from "./CatalogItemCombobox";
 import { DualCurrencyAmount } from "./DualCurrencyAmount";
+import { currencyGlyph } from "../../../utils/accountingCurrency";
 
 export interface PricingItemData {
   id: string;
@@ -260,7 +261,7 @@ export function UniversalPricingRow({
               color: "var(--theme-text-muted)",
               fontWeight: 500
             }}>
-              {data.currency} {data.base_cost.toFixed(2)}
+              {currencyGlyph(data.currency)} {data.base_cost.toFixed(2)}
             </div>
           ) : (
             <input
@@ -392,11 +393,12 @@ export function UniversalPricingRow({
               value={data.currency || "USD"}
               onChange={(value) => handleFieldChange('currency', value)}
               options={[
-                // NEU-009: selling side now matches buying (PHP/USD/EUR/CNY).
-                { value: "PHP", label: "PHP" },
-                { value: "USD", label: "USD" },
-                { value: "EUR", label: "EUR" },
-                { value: "CNY", label: "CNY" },
+                // NEU-009: selling side now matches buying (PHP/USD/EUR/CNY),
+                // each shown with its currency sign.
+                { value: "PHP", label: "₱ PHP" },
+                { value: "USD", label: "$ USD" },
+                { value: "EUR", label: "€ EUR" },
+                { value: "CNY", label: "¥ CNY" },
               ]}
               placeholder="USD"
               size="sm"
@@ -468,7 +470,7 @@ export function UniversalPricingRow({
                         color: "var(--neuron-semantic-info)",
                         pointerEvents: "none",
                       }}>
-                        {data.currency}
+                        {currencyGlyph(data.currency)}
                       </span>
                     )}
                     <input
