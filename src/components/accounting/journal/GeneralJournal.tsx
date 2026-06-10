@@ -12,6 +12,7 @@ import { toast } from "sonner@2.0.3";
 import { NewJournalEntryScreen } from "./NewJournalEntryScreen";
 import { JournalEntryDetailPanel } from "./JournalEntryDetailPanel";
 import { useCurrencies } from "../../../hooks/useCurrencies";
+import { FxRevaluationPanel } from "../period-close/FxRevaluationPanel";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -290,6 +291,7 @@ export function GeneralJournal() {
   const [viewMode, setViewMode] = useState<"list" | "new-entry">("list");
   const [voidTarget, setVoidTarget] = useState<JournalEntry | null>(null);
   const [isVoiding, setIsVoiding] = useState(false);
+  const [showReval, setShowReval] = useState(false); // NEU-027: period-end FX revaluation
 
   // ── Load accounts once ──
   useEffect(() => {
@@ -516,6 +518,17 @@ export function GeneralJournal() {
               <Download size={15} />
               Export
             </button>
+            )}
+            {/* Period-End FX Revaluation (NEU-027) — posts journal entries, so
+                gated on the same journal write grant as New Entry. */}
+            {canCreateJournal && (
+              <button
+                onClick={() => setShowReval(true)}
+                className="h-10 px-4 flex items-center gap-2 border border-[var(--theme-border-default)] rounded-lg bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-state-hover)] transition-colors font-medium text-[14px]"
+              >
+                <RotateCcw size={15} />
+                FX Revaluation
+              </button>
             )}
             {/* New Entry */}
             {canCreateJournal && (
@@ -860,6 +873,13 @@ export function GeneralJournal() {
           )}
         </div>
       </div>
+
+      {/* ── Period-End FX Revaluation (NEU-027) ──────────────────────────────── */}
+      <FxRevaluationPanel
+        isOpen={showReval}
+        onClose={() => setShowReval(false)}
+        onPosted={handleEntryCreated}
+      />
 
       {/* ── Void Confirmation ────────────────────────────────────────────────── */}
       {voidTarget && (
