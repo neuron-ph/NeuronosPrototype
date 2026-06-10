@@ -28,7 +28,11 @@ function splitPrefill(prefill: FormState): { persisted: FormState; constraints: 
   return { persisted, constraints };
 }
 
-export function useBookingFormState(serviceType: string, seed?: FormState) {
+export function useBookingFormState(
+  serviceType: string,
+  seed?: FormState,
+  options?: { fallbackCustomerId?: string | null },
+) {
   const { persisted: seedPersisted, constraints: seedConstraints } = splitPrefill(seed ?? {});
   const [formState, setFormState] = useState<FormState>({
     service_type: serviceType,
@@ -120,7 +124,10 @@ export function useBookingFormState(serviceType: string, seed?: FormState) {
   // ProfileSelectionValue (object), not a plain string. Resolve both id and
   // display name once, then expose them on the context so per-customer
   // lookups (like the consignee picker) can scope correctly.
-  const selectedCustomer = getSelectedCustomer(formState);
+  // NEU-016: pass the panel's known customer id (e.g. project.customer_id) as a
+  // fallback so the consignee picker enables when launched from a project,
+  // where formState only carries the customer name as a plain string.
+  const selectedCustomer = getSelectedCustomer(formState, options?.fallbackCustomerId ?? null);
 
   const polOptions = Array.isArray(constraints.pol_options) ? (constraints.pol_options as string[]) : undefined;
   const podOptions = Array.isArray(constraints.pod_options) ? (constraints.pod_options as string[]) : undefined;

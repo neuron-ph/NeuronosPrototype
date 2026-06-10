@@ -163,6 +163,14 @@ export function CreateBookingFromProjectPanel({
 
   const prefillData = getPrefillData();
 
+  // NEU-015: the originating project, pre-selected as the booking's container
+  // in the unified Project/Contract picker.
+  const projectContext = {
+    id: project.id,
+    project_number: project.project_number,
+    name: project.quotation_name ?? "",
+  };
+
   switch (serviceType) {
     case "Forwarding":
       return (
@@ -175,6 +183,7 @@ export function CreateBookingFromProjectPanel({
           customerId={project.customer_id}
           serviceType="Forwarding"
           currentUser={currentUser as any}
+          projectContext={projectContext}
         />
       );
 
@@ -189,6 +198,7 @@ export function CreateBookingFromProjectPanel({
           customerId={project.customer_id}
           serviceType="Brokerage"
           currentUser={currentUser as any}
+          projectContext={projectContext}
         />
       );
 
@@ -203,6 +213,7 @@ export function CreateBookingFromProjectPanel({
           customerId={project.customer_id}
           serviceType="Trucking"
           currentUser={currentUser as any}
+          projectContext={projectContext}
         />
       );
 
@@ -217,6 +228,7 @@ export function CreateBookingFromProjectPanel({
           customerId={project.customer_id}
           serviceType="Marine Insurance"
           currentUser={currentUser as any}
+          projectContext={projectContext}
         />
       );
 
@@ -231,6 +243,7 @@ export function CreateBookingFromProjectPanel({
           customerId={project.customer_id}
           serviceType="Others"
           currentUser={currentUser as any}
+          projectContext={projectContext}
         />
       );
 
