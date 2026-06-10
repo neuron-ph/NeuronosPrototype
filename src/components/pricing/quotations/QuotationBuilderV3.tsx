@@ -312,7 +312,10 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
     const n = parseInt(raw, 10);
     return isNaN(n) ? "" : String(n);
   });
-  const [vendors, setVendors] = useState<Vendor[]>([]);
+  // NEU-010/011: vendors (incl. per-vendor currency + type) persist with the
+  // quotation and rehydrate on reopen — previously this started empty and was
+  // never saved/restored, so currency fell back to USD and type to the default.
+  const [vendors, setVendors] = useState<Vendor[]>(initialData?.vendors || []);
   
   // ✨ NEW: Movement State (Import/Export)
   const [movement, setMovement] = useState<"IMPORT" | "EXPORT">((initialData?.movement as "IMPORT" | "EXPORT") || "IMPORT");
@@ -466,6 +469,7 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
       if (initialData.services) setSelectedServices(initialData.services);
       if (initialData.buying_price) setBuyingPrice(initialData.buying_price);
       if (initialData.selling_price) setSellingPrice(initialData.selling_price);
+      if (initialData.vendors) setVendors(initialData.vendors); // NEU-010/011
       if (initialData.services_metadata) {
         setBrokerageData(loadServiceData("Brokerage", { brokerageType: "" }));
         setForwardingData(loadServiceData("Forwarding", {}));
@@ -2264,6 +2268,10 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
       // ✨ NEW: Dual-Section Pricing (Buying vs Selling) — only for project quotations
       buying_price: isContractMode ? [] : buyingPrice,
       selling_price: isContractMode ? [] : sellingPrice,
+
+      // NEU-010/011: persist the vendors array (incl. per-vendor currency + type)
+      // so the selection survives a save → reopen roundtrip.
+      vendors,
       
       // ✨ PHASE 2: Contract Rate Bridge — link to source contract if rates were applied
       ...(sourceContractId && {

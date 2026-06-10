@@ -497,6 +497,7 @@ export function BusinessDevelopment({ view: initialView = "contacts", onCreateIn
           financial_summary: data.financial_summary || {},
           buying_price: data.buying_price || [],
           selling_price: data.selling_price || [],
+          vendors: data.vendors || [], // NEU-010/011: persist quotation vendors
           credit_terms: data.credit_terms,
           validity_period: data.validity_period,
           source_contract_id: data.source_contract_id || null,

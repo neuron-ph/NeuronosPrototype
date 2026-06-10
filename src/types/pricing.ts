@@ -55,6 +55,7 @@ export interface Vendor {
   service_tag?: ServiceType;           // Which service this vendor provides
   vendor_id?: string;                  // Backend ID (e.g., "np-001") - Links to NETWORK_PARTNERS and KV store
   territory?: string;
+  currency?: string;                   // NEU-010: per-vendor currency, persisted with the quotation
 
   // Rate card data (copied from NETWORK_PARTNERS on add, or loaded from backend)
   charge_categories?: QuotationChargeCategory[];  // NEW format: Category-based rates
@@ -290,6 +291,7 @@ export interface QuotationNew {
   // ✨ NEW: Dual-Section Pricing (Buying vs Selling)
   buying_price?: BuyingPriceCategory[];   // What you pay vendors (costs)
   selling_price?: SellingPriceCategory[]; // What client pays you (revenue with margins)
+  vendors?: Vendor[];                     // NEU-010/011: vendors added in the builder (persisted)
   
   // Financial Summary
   currency: string;              // "USD", "PHP"

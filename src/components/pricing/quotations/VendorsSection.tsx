@@ -105,6 +105,16 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
   
   // ✨ PHASE 3: Inline Rate Card Display
   const [vendorCurrencies, setVendorCurrencies] = useState<Map<string, string>>(new Map());
+
+  // NEU-010: per-vendor currency now persists on the vendor object. The Map is
+  // the in-session override; reads fall back to the saved `vendor.currency` so
+  // reopening a quotation restores the chosen currency instead of defaulting USD.
+  const getVendorCurrency = (vendor: Vendor) =>
+    vendorCurrencies.get(vendor.id) ?? vendor.currency ?? "USD";
+  const setVendorCurrency = (vendorId: string, value: string) => {
+    setVendorCurrencies(prev => new Map(prev).set(vendorId, value));
+    setVendors(vendors.map(v => (v.id === vendorId ? { ...v, currency: value } : v)));
+  };
   
   // ✨ PHASE 4: Inline Editing Functionality
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<Map<string, boolean>>(new Map());
@@ -717,9 +727,9 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
                     <>
                       {/* Currency Selector */}
                       <select
-                        value={vendorCurrencies.get(vendor.id) || "USD"}
+                        value={getVendorCurrency(vendor)}
                         onChange={(e) => {
-                          setVendorCurrencies(prev => new Map(prev).set(vendor.id, e.target.value));
+                          setVendorCurrency(vendor.id, e.target.value);
                         }}
                         onClick={(e) => e.stopPropagation()}
                         style={{
@@ -984,10 +994,9 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
                           console.log("✅ Changes reverted to original for vendor:", vendor.name);
                         }
                       }}
-                      currency={vendorCurrencies.get(vendor.id) || "USD"}
+                      currency={getVendorCurrency(vendor)}
                       onCurrencyChange={(newCurrency) => {
-                        console.log("💱 Currency changed for vendor:", vendor.name, newCurrency);
-                        setVendorCurrencies(prev => new Map(prev).set(vendor.id, newCurrency));
+                        setVendorCurrency(vendor.id, newCurrency);
                       }}
                       mode="simplified"
                       showQuantityField={false}
