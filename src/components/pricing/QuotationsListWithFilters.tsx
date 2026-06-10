@@ -70,6 +70,31 @@ interface QuotationTableRowProps {
   unread?: boolean;
 }
 
+/**
+ * Resolve a group of line items to a single { currency, total } for table display.
+ * Shows the line currency (e.g. USD) when all lines share one foreign currency at
+ * a uniform rate; otherwise the PHP base. Mirrors the builder's display logic.
+ */
+function deriveLineDisplay(lineItems: any[], documentCurrency: string | undefined): { currency: string; total: number } {
+  const phpTotal = lineItems.reduce((s, li) => {
+    const amt = Number(li.amount);
+    if (Number.isFinite(amt) && amt !== 0) return s + amt;
+    const unit = Number(li.final_price ?? li.price ?? 0);
+    const qty = Number(li.quantity ?? 1);
+    const rate = Number(li.forex_rate) || 1;
+    return s + unit * qty * rate;
+  }, 0);
+  const cur = resolveDisplayCurrency(lineItems.map((li) => li.currency), documentCurrency);
+  if (cur !== FUNCTIONAL_CURRENCY) {
+    const rates = lineItems
+      .filter((li) => normalizeCurrency(li.currency, FUNCTIONAL_CURRENCY) === cur)
+      .map((li) => Number(li.forex_rate) || 1);
+    const uniform = rates.length > 0 && rates.every((r) => r === rates[0]);
+    if (uniform) return { currency: cur, total: phpTotal / (rates[0] || 1) };
+  }
+  return { currency: documentCurrency || FUNCTIONAL_CURRENCY, total: phpTotal };
+}
+
 function QuotationTableRow({ item, index, totalItems, onItemClick, gridTemplateColumns, showStatus, showAssignee, assigneeName, accountOwnerName, unread }: QuotationTableRowProps) {
   const [showTooltip, setShowTooltip] = useState(false);
   const [showNameTooltip, setShowNameTooltip] = useState(false);
@@ -137,6 +162,9 @@ function QuotationTableRow({ item, index, totalItems, onItemClick, gridTemplateC
     }
     return { displayCurrency: item.currency, displayTotal: total };
   })();
+
+  // NEU-023: buying (vendor cost) total, shown alongside the selling total.
+  const buying = deriveLineDisplay((item.buying_price || []).flatMap((cat: any) => cat.line_items || []), item.currency);
 
   return (
     <div
@@ -251,12 +279,22 @@ function QuotationTableRow({ item, index, totalItems, onItemClick, gridTemplateC
             }
           </span>
         ) : (
-          <span style={{
-            fontSize: "13px",
-            color: total > 0 ? "var(--theme-text-primary)" : "var(--theme-text-muted)"
-          }}>
-            {displayCurrency} {displayTotal > 0 ? displayTotal.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "0"}
-          </span>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", lineHeight: 1.2 }}>
+            <span style={{
+              fontSize: "13px",
+              color: total > 0 ? "var(--theme-text-primary)" : "var(--theme-text-muted)"
+            }}>
+              {displayCurrency} {displayTotal > 0 ? displayTotal.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "0"}
+            </span>
+            {buying.total > 0 && (
+              <span
+                style={{ fontSize: "11px", color: "var(--theme-text-muted)", fontWeight: 500, marginTop: "2px" }}
+                title="Total buying cost (vendor)"
+              >
+                Buy: {buying.currency} {buying.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              </span>
+            )}
+          </div>
         )}
       </div>
 
