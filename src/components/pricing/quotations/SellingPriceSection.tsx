@@ -422,8 +422,8 @@ export function SellingPriceSection({
         </div>
       )}
       
-      {/* NEU-029: Profit Margin summary — total profit (₱) from markups, plus
-          markup% (profit ÷ cost) and margin% (profit ÷ selling). Amounts are the
+      {/* NEU-029: Profit Margin summary — a clean vertical list: total profit (₱),
+          total markup % (profit ÷ cost), and total selling price. Amounts are the
           PHP-converted totals so they match the per-line PHP rollup. */}
       {categories.length > 0 && (() => {
         let totalCost = 0;
@@ -438,8 +438,9 @@ export function SellingPriceSection({
         });
         const profit = totalSell - totalCost;
         const markupPct = totalCost > 0 ? (profit / totalCost) * 100 : 0;
-        const marginPct = totalSell > 0 ? (profit / totalSell) * 100 : 0;
         const fmt = (n: number) => `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const rowStyle: React.CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "center" };
+        const labelStyle: React.CSSProperties = { fontSize: "13px", fontWeight: 600, color: "var(--theme-text-muted)" };
         return (
           <div style={{
             marginTop: "16px",
@@ -448,23 +449,25 @@ export function SellingPriceSection({
             backgroundColor: "var(--theme-bg-surface-tint)",
             border: "1px solid var(--neuron-brand-teal)",
             display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "16px",
-            flexWrap: "wrap"
+            flexDirection: "column",
+            gap: "8px"
           }}>
-            <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--neuron-brand-green)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-              Profit Margin
-            </span>
-            <div style={{ display: "flex", alignItems: "baseline", gap: "16px", flexWrap: "wrap", justifyContent: "flex-end" }}>
-              <span style={{ fontSize: "12px", color: "var(--theme-text-muted)" }}>
-                Cost {fmt(totalCost)} · Sell {fmt(totalSell)}
-              </span>
-              <span style={{ fontSize: "17px", fontWeight: 700, color: profit >= 0 ? "var(--neuron-brand-green)" : "var(--theme-status-danger-fg)" }}>
+            <div style={rowStyle}>
+              <span style={labelStyle}>Total Profit Margin</span>
+              <span style={{ fontSize: "16px", fontWeight: 700, color: profit >= 0 ? "var(--neuron-brand-green)" : "var(--theme-status-danger-fg)" }}>
                 {fmt(profit)}
               </span>
-              <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-text-muted)" }}>
-                {markupPct.toFixed(1)}% markup · {marginPct.toFixed(1)}% margin
+            </div>
+            <div style={rowStyle}>
+              <span style={labelStyle}>Total Markup %</span>
+              <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
+                {markupPct.toFixed(1)}%
+              </span>
+            </div>
+            <div style={rowStyle}>
+              <span style={labelStyle}>Total Selling Price</span>
+              <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
+                {fmt(totalSell)}
               </span>
             </div>
           </div>
