@@ -20,6 +20,7 @@ interface BuyingPriceSectionProps {
   onRenameCategory: (categoryId: string, newName: string) => void;
   onDuplicateCategory: (categoryId: string) => void;
   onDeleteCategory: (categoryId: string) => void;
+  onCopyToSelling?: () => void; // NEU-028: pull buying charges into selling
   vendors?: Array<{ id: string; name: string; type: string; country?: string; service_tag?: string; vendor_id?: string }>; // Vendor lookup
   viewMode?: boolean;
 }
@@ -68,6 +69,7 @@ export function BuyingPriceSectionV2({
   onRenameCategory,
   onDuplicateCategory,
   onDeleteCategory,
+  onCopyToSelling,
   vendors,
   viewMode = false
 }: BuyingPriceSectionProps) {
@@ -1023,6 +1025,38 @@ export function BuyingPriceSectionV2({
               </div>
             </div>
           </div>
+
+          {/* NEU-028: Import buying charges into the Selling section (0% markup) */}
+          {!viewMode && onCopyToSelling && (
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px" }}>
+              <button
+                onClick={onCopyToSelling}
+                title="Import these buying charges into Selling Price at 0% markup (existing markups are kept)"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "10px 16px",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  color: "var(--neuron-brand-green)",
+                  backgroundColor: "var(--theme-bg-surface)",
+                  border: "1px solid var(--neuron-brand-green)",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease"
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
+                }}
+              >
+                Import to Selling →
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -1733,6 +1733,32 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
   };
 
   /**
+   * NEU-028: "Copy Buying → Selling" — pull manually-entered Buying charges into
+   * the Selling section as cost rows (base_cost = buying price, 0 markup). Dedups
+   * by line id so repeat clicks are safe and any markups already set on existing
+   * selling lines are preserved (only buying lines not yet in selling are copied).
+   */
+  const handleCopyBuyingToSelling = () => {
+    const existingSellingIds = new Set(sellingPrice.flatMap(c => c.line_items.map(li => li.id)));
+    const toCopy = buyingPrice
+      .map(cat => ({ ...cat, line_items: cat.line_items.filter(li => !existingSellingIds.has(li.id)) }))
+      .filter(cat => cat.line_items.length > 0);
+    if (toCopy.length === 0) {
+      toast.info("Selling Price already has all Buying charges.");
+      return;
+    }
+    const converted = convertBuyingToSelling(toCopy);
+    const merged = mergeSellingPriceCategories(sellingPrice, converted);
+    setSellingPrice(merged);
+    converted.forEach(newCat => {
+      const normalizedName = newCat.category_name.toLowerCase().trim();
+      const inResult = merged.find(c => c.category_name.toLowerCase().trim() === normalizedName);
+      if (inResult) setExpandedSellingCategories(prev => new Set(prev).add(inResult.id));
+    });
+    toast.success("Buying charges imported to Selling Price (0% markup).");
+  };
+
+  /**
    * 📥 VENDOR IMPORT HANDLER: Imports vendor charges into dual-pricing system.
    * 
    * This is the entry point for vendor charge imports. It populates BOTH:
@@ -2735,6 +2761,7 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
                 onRenameCategory={handleRenameBuyingCategory}
                 onDuplicateCategory={handleDuplicateBuyingCategory}
                 onDeleteCategory={handleDeleteBuyingCategory}
+                onCopyToSelling={handleCopyBuyingToSelling}
                 vendors={vendors}
                 viewMode={viewMode}
               />

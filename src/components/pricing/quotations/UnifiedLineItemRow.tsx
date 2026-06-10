@@ -127,10 +127,15 @@ export function UnifiedLineItemRow({
           ref={qtyRef}
           type="number"
           value={item.quantity}
-          onChange={(e) => handleFieldChange("quantity", parseFloat(e.target.value) || 1)}
+          onChange={(e) => {
+            // NEU-024: a real 0 (or a cleared field) must stay 0, not silently
+            // become 1 — otherwise a zero-qty line still charges for one unit.
+            const v = parseFloat(e.target.value);
+            handleFieldChange("quantity", Number.isNaN(v) ? 0 : v);
+          }}
           onKeyDown={(e) => handleKeyDown(e, forexRef)}
           step="1"
-          min="1"
+          min="0"
           style={{
             width: "100%",
             padding: "8px 10px",

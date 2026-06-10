@@ -11,6 +11,8 @@ import { useUrlSelection } from "../../../hooks/useUrlSelection";
 import { toast } from "sonner@2.0.3";
 import { NewJournalEntryScreen } from "./NewJournalEntryScreen";
 import { JournalEntryDetailPanel } from "./JournalEntryDetailPanel";
+import { useCurrencies } from "../../../hooks/useCurrencies";
+import { FxRevaluationPanel } from "../period-close/FxRevaluationPanel";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -47,10 +49,10 @@ export interface JournalEntry {
   created_by: string | null;
   created_by_name: string | null;
   created_at: string;
-  // FX header (PHP-only entries report PHP/1).
-  transaction_currency?: "PHP" | "USD";
+  // FX header (PHP-only entries report PHP/1). NEU-027: any currency code.
+  transaction_currency?: string;
   exchange_rate?: number;
-  base_currency?: "PHP" | "USD";
+  base_currency?: string;
   source_amount?: number;
   base_amount?: number;
   exchange_rate_date?: string | null;
@@ -59,7 +61,8 @@ export interface JournalEntry {
 type SourceType = "all" | "evoucher" | "invoice" | "collection" | "manual";
 type StatusFilter = "all" | "draft" | "posted" | "void";
 
-type CurrencyFilter = "all" | "PHP" | "USD";
+// "all" or any active currency code (NEU-027 — currencies are data-driven).
+type CurrencyFilter = string;
 
 interface Filters {
   dateFrom: string;
@@ -246,6 +249,7 @@ function SourceChip({ entry }: { entry: JournalEntry }) {
 export function GeneralJournal() {
   const { user } = useUser();
   const { can } = usePermission();
+  const { currencies } = useCurrencies();
   const canAllSources = can("accounting_journal_all_sources_tab", "view");
   const canEvoucher = can("accounting_journal_evoucher_tab", "view");
   const canInvoice = can("accounting_journal_invoice_tab", "view");
@@ -287,6 +291,7 @@ export function GeneralJournal() {
   const [viewMode, setViewMode] = useState<"list" | "new-entry">("list");
   const [voidTarget, setVoidTarget] = useState<JournalEntry | null>(null);
   const [isVoiding, setIsVoiding] = useState(false);
+  const [showReval, setShowReval] = useState(false); // NEU-027: period-end FX revaluation
 
   // ── Load accounts once ──
   useEffect(() => {
@@ -514,6 +519,17 @@ export function GeneralJournal() {
               Export
             </button>
             )}
+            {/* Period-End FX Revaluation (NEU-027) — posts journal entries, so
+                gated on the same journal write grant as New Entry. */}
+            {canCreateJournal && (
+              <button
+                onClick={() => setShowReval(true)}
+                className="h-10 px-4 flex items-center gap-2 border border-[var(--theme-border-default)] rounded-lg bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-state-hover)] transition-colors font-medium text-[14px]"
+              >
+                <RotateCcw size={15} />
+                FX Revaluation
+              </button>
+            )}
             {/* New Entry */}
             {canCreateJournal && (
               <button
@@ -584,8 +600,9 @@ export function GeneralJournal() {
             className="h-9 px-3 border border-[var(--theme-border-default)] rounded-lg text-[13px] text-[var(--theme-text-primary)] bg-[var(--theme-bg-page)] outline-none focus:ring-2 focus:ring-[var(--theme-state-focus-ring)] cursor-pointer"
           >
             <option value="all">All Currencies</option>
-            <option value="PHP">PHP only</option>
-            <option value="USD">USD only</option>
+            {currencies.map((c) => (
+              <option key={c.code} value={c.code}>{c.code} only</option>
+            ))}
           </select>
         </div>
 
@@ -857,6 +874,13 @@ export function GeneralJournal() {
         </div>
       </div>
 
+      {/* ── Period-End FX Revaluation (NEU-027) ──────────────────────────────── */}
+      <FxRevaluationPanel
+        isOpen={showReval}
+        onClose={() => setShowReval(false)}
+        onPosted={handleEntryCreated}
+      />
+
       {/* ── Void Confirmation ────────────────────────────────────────────────── */}
       {voidTarget && (
         <div style={{
@@ -927,8 +951,8 @@ function applyFiltersToQuery(query: any, f: Filters) {
   if (f.currency === "PHP") {
     // PHP-only: include legacy rows where transaction_currency is null.
     query = query.or("transaction_currency.eq.PHP,transaction_currency.is.null");
-  } else if (f.currency === "USD") {
-    query = query.eq("transaction_currency", "USD");
+  } else if (f.currency !== "all") {
+    query = query.eq("transaction_currency", f.currency);
   }
   if (f.accountId) query = query.contains("lines", [{ account_id: f.accountId }]);
   if (f.search.trim()) {

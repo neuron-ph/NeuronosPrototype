@@ -4,7 +4,8 @@ import { toast } from "sonner@2.0.3";
 import { motion, AnimatePresence } from "motion/react";
 import { saveAccount, deleteAccount, getAccounts } from "../../../utils/accounting-api";
 import type { Account, AccountType } from "../../../types/accounting-core";
-import { formatMoney } from "../../../utils/accountingCurrency";
+import { formatMoney, currencyGlyph, FUNCTIONAL_CURRENCY } from "../../../utils/accountingCurrency";
+import { useCurrencies } from "../../../hooks/useCurrencies";
 import { usePermission } from "../../../context/PermissionProvider";
 
 interface AccountSidePanelProps {
@@ -15,7 +16,6 @@ interface AccountSidePanelProps {
 }
 
 const ACCOUNT_TYPES: AccountType[] = ["Asset", "Liability", "Equity", "Income", "Expense"];
-const CURRENCIES = ["PHP", "USD"] as const;
 // Only monetary leaf accounts (cash, bank, AR, AP) may hold a non-PHP balance.
 // P&L and equity accounts stay in the GL functional currency (PHP).
 //
@@ -28,6 +28,7 @@ function allowsForeignCurrency(type: unknown): boolean {
 }
 
 export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSidePanelProps) {
+  const { currencies } = useCurrencies();
   // NEU-017: row-click opens this panel for any viewer — hide Save/Delete
   // without the matching acct_coa grant (mirrors the accounts RLS).
   const { can } = usePermission();
@@ -264,7 +265,7 @@ export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSi
                   </label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[var(--theme-text-muted)] font-medium select-none">
-                      {formData.currency === "PHP" ? "₱" : "$"}
+                      {currencyGlyph(formData.currency)}
                     </span>
                     <input
                       type="number"
@@ -280,7 +281,7 @@ export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSi
                     <p className="text-xs text-[var(--theme-text-muted)]">
                       Editing the starting amount updates the opening balance. Current balance is{" "}
                       <span className="font-mono font-medium text-[var(--theme-text-secondary)]">
-                        {formatMoney(formData.balance ?? 0, (formData.currency === "USD" ? "USD" : "PHP") as any)}
+                        {formatMoney(formData.balance ?? 0, formData.currency ?? FUNCTIONAL_CURRENCY)}
                       </span>
                       .
                     </p>
@@ -292,7 +293,8 @@ export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSi
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-[var(--theme-text-primary)]">Currency</label>
                 <div className="flex gap-4">
-                  {CURRENCIES.map(curr => {
+                  {currencies.map(c => {
+                    const curr = c.code;
                     const allowsForeign = allowsForeignCurrency(formData.type);
                     const disabled = curr !== "PHP" && !allowsForeign;
                     return (

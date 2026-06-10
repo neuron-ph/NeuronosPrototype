@@ -61,9 +61,9 @@ export function FxRevaluationPanel({
       <div className="flex h-full flex-col">
         <div className="border-b border-[var(--theme-border-default)] px-6 py-5">
           <p className="mb-3 text-[12px] leading-relaxed text-[var(--theme-text-muted)]">
-            Marks open USD receivables and advance balances to the period-end
-            spot rate. Posts unrealized gain/loss to accounts 4530/7030 with an
-            auto-reversing entry on day 1 of the next period.
+            Marks open foreign-currency receivables and advance balances to the
+            period-end spot rate. Posts unrealized gain/loss to accounts 4530/7030
+            with an auto-reversing entry on day 1 of the next period.
           </p>
 
           <div className="flex items-end gap-3">
@@ -122,7 +122,7 @@ export function FxRevaluationPanel({
                 <thead>
                   <tr className="border-b border-[var(--theme-border-default)] text-[10px] uppercase text-[var(--theme-text-muted)]">
                     <th className="py-2 text-left">Position</th>
-                    <th className="py-2 text-right">USD</th>
+                    <th className="py-2 text-right">Foreign</th>
                     <th className="py-2 text-right">Old Rate</th>
                     <th className="py-2 text-right">New Rate</th>
                     <th className="py-2 text-right">Delta PHP</th>
@@ -141,7 +141,7 @@ export function FxRevaluationPanel({
                         </div>
                       </td>
                       <td className="py-2 text-right font-mono">
-                        ${line.position.originalAmount.toLocaleString()}
+                        {formatMoney(line.position.originalAmount, line.position.currency)}
                       </td>
                       <td className="py-2 text-right font-mono">
                         {line.position.carryingRate}

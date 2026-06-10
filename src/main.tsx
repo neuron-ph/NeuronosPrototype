@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import App from "./App.tsx";
+import "@fontsource-variable/inter"; // self-host Inter (the design font; was referenced but never loaded)
 import "./styles/globals.css";
 import { bootstrapTheme } from "./theme/themeBootstrap";
 import { startKeepalive } from "./utils/supabase/keepalive";

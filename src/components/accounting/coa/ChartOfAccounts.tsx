@@ -206,7 +206,7 @@ export function ChartOfAccounts() {
   };
 
   // Helper: Currency Formatter
-  const formatCurrency = (amount: number, currency: "PHP" | "USD") => {
+  const formatCurrency = (amount: number, currency: string) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currency,

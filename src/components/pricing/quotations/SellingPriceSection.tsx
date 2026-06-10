@@ -422,6 +422,58 @@ export function SellingPriceSection({
         </div>
       )}
       
+      {/* NEU-029: Profit Margin summary — a clean vertical list: total profit (₱),
+          total markup % (profit ÷ cost), and total selling price. Amounts are the
+          PHP-converted totals so they match the per-line PHP rollup. */}
+      {categories.length > 0 && (() => {
+        let totalCost = 0;
+        let totalSell = 0;
+        categories.forEach((cat) => {
+          cat.line_items.forEach((item: any) => {
+            const qty = Number(item.quantity) || 1;
+            const fx = Number(item.forex_rate) || 1;
+            totalCost += (Number(item.base_cost) || 0) * qty * fx;
+            totalSell += (Number(item.final_price) || 0) * qty * fx;
+          });
+        });
+        const profit = totalSell - totalCost;
+        const markupPct = totalCost > 0 ? (profit / totalCost) * 100 : 0;
+        const fmt = (n: number) => `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const rowStyle: React.CSSProperties = { display: "flex", justifyContent: "flex-end", alignItems: "baseline", gap: "12px" };
+        const labelStyle: React.CSSProperties = { fontSize: "13px", fontWeight: 600, color: "var(--theme-text-muted)" };
+        return (
+          <div style={{
+            marginTop: "16px",
+            padding: "16px 20px",
+            borderRadius: "10px",
+            backgroundColor: "var(--theme-bg-surface-tint)",
+            border: "1px solid var(--neuron-brand-teal)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "8px"
+          }}>
+            <div style={rowStyle}>
+              <span style={labelStyle}>Total Profit Margin</span>
+              <span style={{ fontSize: "16px", fontWeight: 700, color: "var(--theme-text-primary)" }}>
+                {fmt(profit)}
+              </span>
+            </div>
+            <div style={rowStyle}>
+              <span style={labelStyle}>Total Markup %</span>
+              <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
+                {markupPct.toFixed(1)}%
+              </span>
+            </div>
+            <div style={rowStyle}>
+              <span style={labelStyle}>Total Selling Price</span>
+              <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--neuron-brand-green)" }}>
+                {fmt(totalSell)}
+              </span>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Delete Line Item Confirmation */}
       <NeuronModal
         isOpen={pendingDelete !== null}
