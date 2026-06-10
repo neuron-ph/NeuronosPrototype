@@ -55,6 +55,7 @@ export interface Vendor {
   service_tag?: ServiceType;           // Which service this vendor provides
   vendor_id?: string;                  // Backend ID (e.g., "np-001") - Links to NETWORK_PARTNERS and KV store
   territory?: string;
+  currency?: string;                   // NEU-010: per-vendor currency, persisted with the quotation
 
   // Rate card data (copied from NETWORK_PARTNERS on add, or loaded from backend)
   charge_categories?: QuotationChargeCategory[];  // NEW format: Category-based rates
@@ -209,8 +210,13 @@ export interface FinancialSummary {
   tax_rate: number;              // e.g., 0.12 for 12% VAT
   tax_amount: number;            // subtotal_taxed × tax_rate
   other_charges: number;         // Any additional charges
-  grand_total: number;           // sum of all + tax
+  grand_total: number;           // sum of all + tax (PHP base / functional currency)
   usd_reference_rate?: number;   // Manual PHP/USD reference rate for approximate USD total
+  // When the lines are a single foreign currency (e.g. all USD), the builder
+  // stores the display currency + the grand total IN that currency, so the list,
+  // detail and PDF can show "USD X" instead of the PHP base. Absent → show PHP.
+  display_currency?: string;
+  grand_total_display?: number;
 }
 
 /**
@@ -290,6 +296,7 @@ export interface QuotationNew {
   // ✨ NEW: Dual-Section Pricing (Buying vs Selling)
   buying_price?: BuyingPriceCategory[];   // What you pay vendors (costs)
   selling_price?: SellingPriceCategory[]; // What client pays you (revenue with margins)
+  vendors?: Vendor[];                     // NEU-010/011: vendors added in the builder (persisted)
   
   // Financial Summary
   currency: string;              // "USD", "PHP"

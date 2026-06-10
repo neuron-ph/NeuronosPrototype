@@ -20,6 +20,7 @@ import {
 import { NeuronModal } from "../../ui/NeuronModal";
 import { useNetworkPartners } from "../../../hooks/useNetworkPartners";
 import { usePermission } from "../../../context/PermissionProvider";
+import { useCurrencies } from "../../../hooks/useCurrencies";
 
 /**
  * 🎯 VENDORS SECTION - INLINE RATE MANAGEMENT
@@ -83,6 +84,7 @@ interface VendorsSectionProps {
 
 export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode = false }: VendorsSectionProps) {
   const { partners } = useNetworkPartners();
+  const { currencies } = useCurrencies(); // NEU-008: data-driven currency options
   // NEU-019 WG-12: "Save & Import" writes the vendor's master rate card
   // (service_providers) — needs the partners edit knob, not just builder access.
   const { can } = usePermission();
@@ -103,6 +105,16 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
   
   // ✨ PHASE 3: Inline Rate Card Display
   const [vendorCurrencies, setVendorCurrencies] = useState<Map<string, string>>(new Map());
+
+  // NEU-010: per-vendor currency now persists on the vendor object. The Map is
+  // the in-session override; reads fall back to the saved `vendor.currency` so
+  // reopening a quotation restores the chosen currency instead of defaulting USD.
+  const getVendorCurrency = (vendor: Vendor) =>
+    vendorCurrencies.get(vendor.id) ?? vendor.currency ?? "USD";
+  const setVendorCurrency = (vendorId: string, value: string) => {
+    setVendorCurrencies(prev => new Map(prev).set(vendorId, value));
+    setVendors(vendors.map(v => (v.id === vendorId ? { ...v, currency: value } : v)));
+  };
   
   // ✨ PHASE 4: Inline Editing Functionality
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<Map<string, boolean>>(new Map());
@@ -715,9 +727,9 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
                     <>
                       {/* Currency Selector */}
                       <select
-                        value={vendorCurrencies.get(vendor.id) || "USD"}
+                        value={getVendorCurrency(vendor)}
                         onChange={(e) => {
-                          setVendorCurrencies(prev => new Map(prev).set(vendor.id, e.target.value));
+                          setVendorCurrency(vendor.id, e.target.value);
                         }}
                         onClick={(e) => e.stopPropagation()}
                         style={{
@@ -732,10 +744,9 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
                           outline: "none"
                         }}
                       >
-                        <option value="USD">USD</option>
-                        <option value="PHP">PHP</option>
-                        <option value="EUR">EUR</option>
-                        <option value="CNY">CNY</option>
+                        {currencies.map((c) => (
+                          <option key={c.code} value={c.code}>{c.code}</option>
+                        ))}
                       </select>
                       
                       {/* Unsaved Changes Indicator */}
@@ -983,10 +994,9 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
                           console.log("✅ Changes reverted to original for vendor:", vendor.name);
                         }
                       }}
-                      currency={vendorCurrencies.get(vendor.id) || "USD"}
+                      currency={getVendorCurrency(vendor)}
                       onCurrencyChange={(newCurrency) => {
-                        console.log("💱 Currency changed for vendor:", vendor.name, newCurrency);
-                        setVendorCurrencies(prev => new Map(prev).set(vendor.id, newCurrency));
+                        setVendorCurrency(vendor.id, newCurrency);
                       }}
                       mode="simplified"
                       showQuantityField={false}

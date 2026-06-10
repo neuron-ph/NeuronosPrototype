@@ -17,13 +17,13 @@ import { usePermission } from "../../context/PermissionProvider";
 import { toast } from "sonner@2.0.3";
 import {
   FUNCTIONAL_CURRENCY,
-  SUPPORTED_ACCOUNTING_CURRENCIES,
   formatMoney,
   currencyGlyph,
   type AccountingCurrency,
 } from "../../utils/accountingCurrency";
 import { resolveExchangeRate } from "../../utils/exchangeRates";
 import { uploadCrmAttachments, formatAttachmentSize, type CrmAttachment } from "../../utils/crmAttachments";
+import { useCurrencies } from "../../hooks/useCurrencies";
 
 interface LineItem {
   id: string;
@@ -107,7 +107,7 @@ export function AddRequestForPaymentPanel({
 
   // Get current user for requestor name
   const { user } = useUser();
-  
+
   const currentActor = user
     ? {
         id: user.id,
@@ -1820,6 +1820,7 @@ interface CurrencyPillProps {
 }
 
 function CurrencyPill({ currency, rate, rateDate, rateAuto, disabled, onCurrencyChange, onRateChange }: CurrencyPillProps) {
+  const { currencies } = useCurrencies(); // NEU-008: data-driven currency options
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(null);
@@ -1939,7 +1940,7 @@ function CurrencyPill({ currency, rate, rateDate, rateAuto, disabled, onCurrency
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: hasRate || !isFunctional ? "16px" : "4px" }}>
-            {SUPPORTED_ACCOUNTING_CURRENCIES.map((c) => {
+            {currencies.map(({ code: c }) => {
               const selected = c === currency;
               const symbol = currencyGlyph(c);
               return (

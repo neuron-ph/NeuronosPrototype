@@ -35,46 +35,35 @@ export async function fetchActiveContractsForCustomer(
   }
 
   try {
-    const { data, error } = await supabase
-      .from('quotations')
-      .select('*')
-      .eq('quotation_type', 'contract')
-      .in('contract_status', ['Active', 'Expiring'])
-      .ilike('customer_name', `%${customerName.trim()}%`);
+    // NEU-007: go through the scoped SECURITY DEFINER RPC instead of a direct
+    // `quotations` select. Pre-booking detection has no booking↔contract link yet,
+    // so migration 185's relationship-gate RLS returned [] for cross-department ops
+    // users (e.g. Brokerage). The RPC is customer-scoped, returns header fields only
+    // (no rate matrices), and requires a real contract/booking view capability —
+    // so detection works again without reopening the list-scan leak 185 closed.
+    const { data, error } = await supabase.rpc('detect_active_contracts_for_customer', {
+      p_customer_name: customerName.trim(),
+    });
 
     if (error) {
       console.error(`[contractLookup] Failed to fetch contracts:`, error.message);
       return [];
     }
 
-    return (data || []).map((q: any) => {
-      const cgd = q?.details?.contract_general_details ?? {};
-      // POD priority: per-service Brokerage `pods` array (the multi-select the user
-      // fills on the Brokerage scope section) → contract-level `port_of_entry`
-      // (the separate ContractGeneralDetailsSection field). The service-level
-      // picker wins because that's the canonical input today; port_of_entry is
-      // only the fallback so legacy / backfilled contracts still have a list.
-      const cgdPod: string[] = Array.isArray(cgd.port_of_entry) ? cgd.port_of_entry.filter(Boolean) : [];
-      const cgdPol: string[] = Array.isArray(cgd.port_of_loading) ? cgd.port_of_loading.filter(Boolean) : [];
-      const brokerageMeta = Array.isArray(q?.services_metadata)
-        ? q.services_metadata.find((s: any) => String(s?.service_type).toLowerCase() === 'brokerage')
-        : null;
-      const servicePods: string[] = Array.isArray(brokerageMeta?.service_details?.pods)
-        ? brokerageMeta.service_details.pods.filter(Boolean)
-        : [];
-      return {
-        id: q.id,
-        quote_number: q.quote_number,
-        quotation_name: q.quotation_name,
-        customer_name: q.customer_name,
-        contract_status: q.contract_status,
-        contract_validity_start: q.contract_validity_start,
-        contract_validity_end: q.contract_validity_end,
-        services: Array.isArray(q.services) ? q.services : [],
-        pol_options: cgdPol,
-        pod_options: servicePods.length > 0 ? servicePods : cgdPod,
-      };
-    }) as ContractSummary[];
+    // The RPC already computes pol_options/pod_options (brokerage per-service pods
+    // win, else contract-level port_of_entry) — mirrors the prior client logic.
+    return (data || []).map((q: any) => ({
+      id: q.id,
+      quote_number: q.quote_number,
+      quotation_name: q.quotation_name,
+      customer_name: q.customer_name,
+      contract_status: q.contract_status,
+      contract_validity_start: q.contract_validity_start,
+      contract_validity_end: q.contract_validity_end,
+      services: Array.isArray(q.services) ? q.services : [],
+      pol_options: Array.isArray(q.pol_options) ? q.pol_options : [],
+      pod_options: Array.isArray(q.pod_options) ? q.pod_options : [],
+    })) as ContractSummary[];
   } catch (err) {
     console.error("[contractLookup] Error fetching active contracts:", err);
     return [];
@@ -154,18 +143,18 @@ export async function fetchFullContract(
   if (!contractId) return null;
 
   try {
-    const { data, error } = await supabase
-      .from('quotations')
-      .select('*')
-      .eq('id', contractId)
-      .maybeSingle();
+    // NEU-007: by-id fetch through the same scoped RPC so the rate matrices load
+    // for the contract the user just picked, before the booking link exists.
+    const { data, error } = await supabase.rpc('get_contract_for_booking', {
+      p_contract_id: contractId,
+    });
 
     if (error) {
       console.error(`[contractLookup] Failed to fetch contract ${contractId}:`, error.message);
       return null;
     }
 
-    const quotation = data;
+    const quotation = data as any;
     if (!quotation) return null;
 
     if (quotation.quotation_type !== "contract") {

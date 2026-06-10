@@ -8,6 +8,7 @@ import {
 } from "../../../utils/quotationCalculations";
 import { CategoryDropdown } from "../quotations/CategoryDropdown";
 import { CategorySection } from "./CategorySection";
+import { useCurrencies } from "../../../hooks/useCurrencies";
 
 export type ChargeCategoriesMode = "full" | "simplified";
 
@@ -58,6 +59,7 @@ export function ChargeCategoriesManager({
     remarks: showRemarksField
   };
 
+  const { currencies } = useCurrencies(); // NEU-008: data-driven currency options
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [showAddCategory, setShowAddCategory] = useState(false);
 
@@ -233,10 +235,9 @@ export function ChargeCategoriesManager({
                   opacity: readOnly ? 0.6 : 1
                 }}
               >
-                <option value="USD">USD</option>
-                <option value="PHP">PHP</option>
-                <option value="EUR">EUR</option>
-                <option value="CNY">CNY</option>
+                {currencies.map((c) => (
+                  <option key={c.code} value={c.code}>{c.code}</option>
+                ))}
               </select>
             )}
 

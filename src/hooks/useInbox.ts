@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../utils/supabase/client";
 import { useUser } from "./useUser";
@@ -270,6 +270,35 @@ export function useInbox() {
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: queryKeys.inbox.all() });
   };
+
+  // ── realtime subscription ────────────────────────────────────────────────
+  // Mirrors useNotifications: the sidebar badge was instant but the inbox list
+  // only refreshed on manual actions because the ticket tables weren't watched.
+  // Subscribe to the ticket tables (published in migration 195) and invalidate
+  // the inbox queries on any change so routed/assigned items appear live.
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const invalidate = () =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.inbox.all() });
+
+    const channel = supabase.channel(`inbox_user_${user.id}`);
+    for (const table of ["tickets", "ticket_participants", "ticket_messages", "ticket_read_receipts"]) {
+      channel.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table },
+        invalidate
+      );
+    }
+    channel.subscribe();
+
+    channelRef.current = channel;
+    return () => {
+      supabase.removeChannel(channel);
+      channelRef.current = null;
+    };
+  }, [user?.id, queryClient]);
 
   // ── Close / reopen ──────────────────────────────────────────────────────
   // FYI → per-person dismiss (ticket_read_receipts.dismissed_at).

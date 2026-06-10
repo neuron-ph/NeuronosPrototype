@@ -4,14 +4,17 @@ import { Shield } from 'lucide-react';
 import { profileRegistry } from '../../../config/profiles/profileRegistry';
 import { ProfileSection } from './ProfileSection';
 import { ProfilingGovernanceTab } from './ProfilingGovernanceTab';
+import { CurrenciesTab } from './CurrenciesTab';
 
 const GOVERNANCE_KEY = 'governance';
+const CURRENCIES_KEY = 'currencies';
 
 type SidebarItem = {
   key: string;
   label: string;
   description: string;
   isGovernance?: boolean;
+  isCurrencies?: boolean;
   group: 'profiles' | 'vendors' | 'system';
 };
 
@@ -43,6 +46,13 @@ export function ProfilingModule() {
     return [
       ...profileSections,
       ...vendorSections,
+      {
+        key: CURRENCIES_KEY,
+        label: 'Currencies',
+        description: 'Currencies available in pricing & accounting dropdowns.',
+        isCurrencies: true,
+        group: 'system',
+      },
       {
         key: GOVERNANCE_KEY,
         label: 'Governance',
@@ -103,6 +113,8 @@ export function ProfilingModule() {
           <div style={contentStyle}>
             {selectedItem?.isGovernance ? (
               <ProfilingGovernanceTab />
+            ) : selectedItem?.isCurrencies ? (
+              <CurrenciesTab />
             ) : (
               <ProfileSection key={selected} profileType={selected} initialQuery={urlQuery} />
             )}

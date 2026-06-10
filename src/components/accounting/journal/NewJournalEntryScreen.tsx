@@ -9,7 +9,6 @@ import { logCreation } from "../../../utils/activityLog";
 import { toast } from "sonner@2.0.3";
 import {
   FUNCTIONAL_CURRENCY,
-  SUPPORTED_ACCOUNTING_CURRENCIES,
   formatMoney,
   resolvePostingRate,
   roundMoney,
@@ -17,6 +16,7 @@ import {
   type AccountingCurrency,
 } from "../../../utils/accountingCurrency";
 import { resolveExchangeRate } from "../../../utils/exchangeRates";
+import { useCurrencies } from "../../../hooks/useCurrencies";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -110,6 +110,7 @@ function AccountSelect({
 
 export function NewJournalEntryScreen({ onBack, onCreated }: NewJournalEntryScreenProps) {
   const { user } = useUser();
+  const { currencies } = useCurrencies(); // NEU-008: data-driven currency options
 
   const [entryDate, setEntryDate] = useState<string>(today());
   const [memo, setMemo] = useState<string>("");
@@ -403,8 +404,8 @@ export function NewJournalEntryScreen({ onBack, onCreated }: NewJournalEntryScre
               }}
               className="h-10 px-3 border border-[var(--theme-border-default)] rounded-lg text-[13px] text-[var(--theme-text-primary)] bg-[var(--theme-bg-surface)] outline-none focus:ring-2 focus:ring-[var(--theme-state-focus-ring)]"
             >
-              {SUPPORTED_ACCOUNTING_CURRENCIES.map((c) => (
-                <option key={c} value={c}>{c}</option>
+              {currencies.map((c) => (
+                <option key={c.code} value={c.code}>{c.code}</option>
               ))}
             </select>
           </div>

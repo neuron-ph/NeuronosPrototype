@@ -45,7 +45,10 @@ export function FinancialSummaryPanel({
     return () => { cancelled = true; };
   }, [autoLoadUsdReferenceRate, readOnly, setUsdReferenceRate]);
 
-  const formatAmount = (amount: number) => formatMoney(amount, "PHP");
+  // NEU-020: the document currency drives the on-screen totals so they match
+  // the printed PDF (which reads quotation.currency). Was hardcoded to PHP.
+  const docCurrency = currency || "PHP";
+  const formatAmount = (amount: number) => formatMoney(amount, docCurrency);
   const formatUSD = (amount: number) => formatMoney(amount, "USD");
 
   const calculateApproxUSD = () => {
@@ -78,24 +81,9 @@ export function FinancialSummaryPanel({
               color: "var(--neuron-ink-primary)",
               margin: 0
             }}>
-              FINANCIAL SUMMARY (PHP)
+              FINANCIAL SUMMARY ({docCurrency})
             </h3>
           </div>
-          {isForeignSource && (
-            <span title={`Source lines may be in ${currency}; aggregated to PHP base`} style={{
-              fontSize: "9px",
-              fontWeight: 700,
-              padding: "2px 6px",
-              borderRadius: "3px",
-              backgroundColor: "var(--theme-bg-surface)",
-              border: "1px solid var(--theme-border-default)",
-              color: "var(--theme-text-muted)",
-              letterSpacing: "0.06em",
-              textTransform: "uppercase",
-            }}>
-              ↻ {currency} → PHP
-            </span>
-          )}
         </div>
       </div>
 
@@ -224,7 +212,7 @@ export function FinancialSummaryPanel({
               textTransform: "uppercase",
               letterSpacing: "0.5px"
             }}>
-              Other Charges (PHP)
+              Other Charges ({docCurrency})
             </label>
             <input
               type="number"
@@ -269,7 +257,7 @@ export function FinancialSummaryPanel({
               textTransform: "uppercase",
               letterSpacing: "0.5px"
             }}>
-              TOTAL (PHP)
+              TOTAL ({docCurrency})
             </div>
             <div style={{
               fontSize: "28px",
@@ -281,10 +269,12 @@ export function FinancialSummaryPanel({
             </div>
           </div>
 
-          {/* Approx USD Total */}
+          {/* Approx USD reference — only for PHP documents (NEU-020). A foreign-
+              currency doc already shows its own currency, so this is hidden. */}
+          {!isForeignSource && (
           <div style={{
             padding: "12px 16px",
-            backgroundColor: "var(--theme-bg-surface)", 
+            backgroundColor: "var(--theme-bg-surface)",
             border: "1px solid var(--theme-border-default)", // Subtle grey
             borderRadius: "6px"
           }}>
@@ -334,6 +324,7 @@ export function FinancialSummaryPanel({
               * Reference only based on manual rate
             </div>
           </div>
+          )}
 
         </div>
       </div>

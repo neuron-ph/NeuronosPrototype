@@ -16,6 +16,8 @@ import {
   calculateSellingItemFromCostChange,
   calculateSellingItemFromPercentage,
 } from "../../../utils/pricing/quotationSignedPricing";
+import { formatMoney, normalizeCurrency, FUNCTIONAL_CURRENCY } from "../../../utils/accountingCurrency";
+import { resolveDisplayCurrency } from "../../shared/pricing/MixedCurrencySubtotal";
 
 interface SellingPriceSectionProps {
   categories: SellingPriceCategory[];
@@ -409,6 +411,7 @@ export function SellingPriceSection({
                             <MixedCurrencySubtotal
                               items={category.line_items as any}
                               phpTotal={category.subtotal}
+                              documentCurrency={currency}
                             />
                           </div>
                         </div>
@@ -422,25 +425,56 @@ export function SellingPriceSection({
         </div>
       )}
       
-      {/* NEU-029: Profit Margin summary — a clean vertical list: total profit (₱),
-          total markup % (profit ÷ cost), and total selling price. Amounts are the
-          PHP-converted totals so they match the per-line PHP rollup. */}
+      {/* NEU-029: Profit Margin summary — total profit, total markup % (profit ÷
+          cost), and total selling price. Derives from the SAME per-line amounts the
+          subtotals use, so it can never contradict them (a qty-0 line stays 0). For a
+          foreign-currency quotation the document currency is shown primary with the
+          PHP base as the "≈ ₱" conversion. */}
       {categories.length > 0 && (() => {
-        let totalCost = 0;
-        let totalSell = 0;
+        // Display currency comes from the line items (not the often-stale document
+        // `currency` field): all-USD lines → USD primary, ≈ ₱ secondary.
+        const allLineCurrencies = categories.flatMap((cat) => cat.line_items.map((i: any) => i.currency));
+        const docCur = resolveDisplayCurrency(allLineCurrencies, currency);
+        const isForeignDoc = docCur !== FUNCTIONAL_CURRENCY;
+        // PHP-base totals (functional currency) — the source of truth, summed the
+        // same way as the per-line `amount` and the category subtotals.
+        let costPHP = 0, sellPHP = 0;
+        // Document-currency originals (for the primary display in a foreign quote).
+        let costDoc = 0, sellDoc = 0;
         categories.forEach((cat) => {
           cat.line_items.forEach((item: any) => {
-            const qty = Number(item.quantity) || 1;
+            const qty = Number(item.quantity ?? 1); // qty 0 stays 0 — matches subtotals
             const fx = Number(item.forex_rate) || 1;
-            totalCost += (Number(item.base_cost) || 0) * qty * fx;
-            totalSell += (Number(item.final_price) || 0) * qty * fx;
+            const lineCur = normalizeCurrency(item.currency, FUNCTIONAL_CURRENCY);
+            const costOrig = (Number(item.base_cost) || 0) * qty;
+            const sellOrig = (Number(item.final_price) || 0) * qty;
+            costPHP += costOrig * fx;
+            sellPHP += sellOrig * fx;
+            if (lineCur === docCur) { costDoc += costOrig; sellDoc += sellOrig; }
           });
         });
-        const profit = totalSell - totalCost;
-        const markupPct = totalCost > 0 ? (profit / totalCost) * 100 : 0;
-        const fmt = (n: number) => `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const profitPHP = sellPHP - costPHP;
+        const profitDoc = sellDoc - costDoc;
+        // Markup on cost. Undefined when cost is 0 (pure markup) — shown as "—",
+        // not a misleading 0.0%.
+        const markupPct = costPHP > 0 ? (profitPHP / costPHP) * 100 : null;
+
         const rowStyle: React.CSSProperties = { display: "flex", justifyContent: "flex-end", alignItems: "baseline", gap: "12px" };
         const labelStyle: React.CSSProperties = { fontSize: "13px", fontWeight: 600, color: "var(--theme-text-muted)" };
+
+        // Render a value with the document currency primary + PHP conversion secondary.
+        const dualValue = (origAmount: number, phpAmount: number, color: string, size: string) =>
+          isForeignDoc ? (
+            <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", lineHeight: 1.15 }}>
+              <span style={{ fontSize: size, fontWeight: 700, color }}>{formatMoney(origAmount, docCur)}</span>
+              <span style={{ fontSize: "11px", fontWeight: 500, color: "var(--theme-text-muted)", marginTop: "2px" }}>
+                ≈ {formatMoney(phpAmount, FUNCTIONAL_CURRENCY)}
+              </span>
+            </span>
+          ) : (
+            <span style={{ fontSize: size, fontWeight: 700, color }}>{formatMoney(phpAmount, FUNCTIONAL_CURRENCY)}</span>
+          );
+
         return (
           <div style={{
             marginTop: "16px",
@@ -454,21 +488,17 @@ export function SellingPriceSection({
           }}>
             <div style={rowStyle}>
               <span style={labelStyle}>Total Profit Margin</span>
-              <span style={{ fontSize: "16px", fontWeight: 700, color: "var(--theme-text-primary)" }}>
-                {fmt(profit)}
-              </span>
+              {dualValue(profitDoc, profitPHP, "var(--theme-text-primary)", "16px")}
             </div>
             <div style={rowStyle}>
               <span style={labelStyle}>Total Markup %</span>
               <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
-                {markupPct.toFixed(1)}%
+                {markupPct === null ? "—" : `${markupPct.toFixed(1)}%`}
               </span>
             </div>
             <div style={rowStyle}>
               <span style={labelStyle}>Total Selling Price</span>
-              <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--neuron-brand-green)" }}>
-                {fmt(totalSell)}
-              </span>
+              {dualValue(sellDoc, sellPHP, "var(--neuron-brand-green)", "14px")}
             </div>
           </div>
         );

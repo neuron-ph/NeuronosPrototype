@@ -245,6 +245,7 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
       'incoterm', 'carrier', 'transit_days', 'commodity',
       'pol_aol', 'pod_aod', 'charge_categories', 'currency',
       'credit_terms', 'validity_period',
+      'vendors', // NEU-010/011: persist quotation vendors (currency + type)
     ];
     for (const key of PRICING_KEYS) {
       if (d[key] !== undefined) pricingFields[key] = d[key];

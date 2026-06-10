@@ -3,6 +3,7 @@
 // at build time but TypeScript cannot resolve without these declarations.
 
 declare module 'sonner@2.0.3' { export * from 'sonner'; export { default } from 'sonner'; }
+declare module '@fontsource-variable/inter'; // side-effect CSS import (self-hosted font)
 declare module 'lucide-react@0.487.0' { export * from 'lucide-react'; export { default } from 'lucide-react'; }
 declare module 'class-variance-authority@0.7.1' { export * from 'class-variance-authority'; export { default } from 'class-variance-authority'; }
 declare module 'cmdk@1.1.1' { export * from 'cmdk'; export { default } from 'cmdk'; }

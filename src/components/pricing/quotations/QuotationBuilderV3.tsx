@@ -75,6 +75,8 @@ import { FinancialSummaryPanel } from "./FinancialSummaryPanel";
 import type { QuotationNew, QuotationChargeCategory, QuotationLineItemNew, InquiryService, QuotationStatus, BuyingPriceCategory, SellingPriceCategory, SellingPriceLineItem, Vendor, VendorType, ServiceType } from "../../../types/pricing";
 import type { VendorLineItem } from "../../../data/networkPartners"; // ⚠️ DEPRECATED - kept for backward compatibility
 import { calculateFinancialSummary, generateLineItemId, generateCategoryId } from "../../../utils/quotationCalculations";
+import { normalizeCurrency, FUNCTIONAL_CURRENCY } from "../../../utils/accountingCurrency";
+import { resolveDisplayCurrency } from "../../shared/pricing/MixedCurrencySubtotal";
 import { ContractRateCardV2, createEmptyMatrixV2 } from "./ContractRateCardV2";
 import { ContractServiceRateGroup } from "./ContractServiceRateGroup";
 import type { ContractRateMatrix, QuotationType, ContractSummary } from "../../../types/pricing";
@@ -312,7 +314,10 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
     const n = parseInt(raw, 10);
     return isNaN(n) ? "" : String(n);
   });
-  const [vendors, setVendors] = useState<Vendor[]>([]);
+  // NEU-010/011: vendors (incl. per-vendor currency + type) persist with the
+  // quotation and rehydrate on reopen — previously this started empty and was
+  // never saved/restored, so currency fell back to USD and type to the default.
+  const [vendors, setVendors] = useState<Vendor[]>(initialData?.vendors || []);
   
   // ✨ NEW: Movement State (Import/Export)
   const [movement, setMovement] = useState<"IMPORT" | "EXPORT">((initialData?.movement as "IMPORT" | "EXPORT") || "IMPORT");
@@ -466,6 +471,7 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
       if (initialData.services) setSelectedServices(initialData.services);
       if (initialData.buying_price) setBuyingPrice(initialData.buying_price);
       if (initialData.selling_price) setSellingPrice(initialData.selling_price);
+      if (initialData.vendors) setVendors(initialData.vendors); // NEU-010/011
       if (initialData.services_metadata) {
         setBrokerageData(loadServiceData("Brokerage", { brokerageType: "" }));
         setForwardingData(loadServiceData("Forwarding", {}));
@@ -1620,14 +1626,34 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
 
   // Calculate financial summary
   // ✨ UPDATED: Now uses selling price instead of charge categories
-  const financialSummary = {
-    ...calculateFinancialSummary(
-      sellingPrice.length > 0 ? sellingPrice : chargeCategories,
-      taxRate,
-      otherCharges
-    ),
-    usd_reference_rate: usdReferenceRate,
-  };
+  const financialSummary = (() => {
+    const base = {
+      ...calculateFinancialSummary(
+        sellingPrice.length > 0 ? sellingPrice : chargeCategories,
+        taxRate,
+        otherCharges
+      ),
+      usd_reference_rate: usdReferenceRate,
+    };
+    // Persist the display currency + the grand total in that currency so the list,
+    // detail and PDF can show "USD X" when the lines are USD. Only when the lines
+    // are a single foreign currency at a uniform rate; otherwise leave it to the
+    // PHP base (mixed-rate / mixed-currency can't collapse to one figure).
+    const lineSource = sellingPrice.length > 0 ? sellingPrice : chargeCategories;
+    const lineItems = lineSource.flatMap((cat: any) => cat.line_items || []);
+    const displayCur = resolveDisplayCurrency(lineItems.map((li: any) => li.currency), currency);
+    if (displayCur !== FUNCTIONAL_CURRENCY) {
+      const rates = lineItems
+        .filter((li: any) => normalizeCurrency(li.currency, FUNCTIONAL_CURRENCY) === displayCur)
+        .map((li: any) => Number(li.forex_rate) || 1);
+      const uniform = rates.length > 0 && rates.every((r: number) => r === rates[0]);
+      if (uniform) {
+        const r = rates[0] || 1;
+        return { ...base, display_currency: displayCur, grand_total_display: base.grand_total / r };
+      }
+    }
+    return base;
+  })();
   
   /**
    * Converts Buying Price categories to Selling Price categories with zero markup.
@@ -2264,6 +2290,10 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
       // ✨ NEW: Dual-Section Pricing (Buying vs Selling) — only for project quotations
       buying_price: isContractMode ? [] : buyingPrice,
       selling_price: isContractMode ? [] : sellingPrice,
+
+      // NEU-010/011: persist the vendors array (incl. per-vendor currency + type)
+      // so the selection survives a save → reopen roundtrip.
+      vendors,
       
       // ✨ PHASE 2: Contract Rate Bridge — link to source contract if rates were applied
       ...(sourceContractId && {
