@@ -28,10 +28,12 @@ export function useFxRevaluation() {
     setError(null);
 
     try {
+      // NEU-027: revalue ALL open foreign-currency positions, not just USD.
+      // `original_currency != 'PHP'` also excludes NULL (legacy PHP) rows.
       const { data: invoices } = await supabase
         .from("invoices")
         .select("*")
-        .eq("original_currency", "USD")
+        .neq("original_currency", "PHP")
         .neq("status", "paid")
         .neq("status", "void");
 
@@ -42,7 +44,7 @@ export function useFxRevaluation() {
       const { data: evouchers } = await supabase
         .from("evouchers")
         .select("*")
-        .eq("original_currency", "USD")
+        .neq("original_currency", "PHP")
         .in("transaction_type", ["cash_advance", "budget_request"])
         .in("status", ["disbursed", "pending_liquidation", "pending_verification"]);
 
@@ -93,7 +95,7 @@ export function useFxRevaluation() {
           accountId: arAcct.id,
           accountCode: arAcct.code,
           accountName: arAcct.name,
-          currency: "USD",
+          currency: String((invoice as any).original_currency),
           originalAmount: remaining,
           carryingRate: rate,
           carryingBase: roundMoney(Number((invoice as any).base_amount) || remaining * rate),
@@ -114,23 +116,39 @@ export function useFxRevaluation() {
           accountId: advanceAcct.id,
           accountCode: advanceAcct.code,
           accountName: advanceAcct.name,
-          currency: "USD",
+          currency: String((evoucher as any).original_currency),
           originalAmount: remaining,
           carryingRate: rate,
           carryingBase: roundMoney(Number((evoucher as any).base_amount) || remaining * rate),
         });
       }
 
-      const rateRow = await resolveExchangeRate({
-        fromCurrency: "USD",
-        toCurrency: "PHP",
-        rateDate: asOfDate,
-      });
+      // NEU-027: resolve a period-end rate per DISTINCT foreign currency present
+      // (not a single hardcoded USD pair). Rates are maintained manually (per the
+      // rate-entry decision), so a missing one is a legible hard stop, never a
+      // silent rate-1.
+      const ratesByCurrency = new Map<string, number>();
+      for (const code of new Set(positions.map((p) => p.currency))) {
+        try {
+          const row = await resolveExchangeRate({ fromCurrency: code, toCurrency: "PHP", rateDate: asOfDate });
+          ratesByCurrency.set(code, row.rate);
+        } catch {
+          throw new Error(
+            `No period-end exchange rate on file for ${code} → PHP on or before ${asOfDate}. Add it before revaluing.`,
+          );
+        }
+      }
 
       const result = computeRevaluation({
         asOfDate,
         positions,
-        spotRate: () => rateRow.rate,
+        spotRate: (currency) => {
+          const rate = ratesByCurrency.get(currency);
+          if (rate == null) {
+            throw new Error(`No period-end exchange rate resolved for ${currency} on ${asOfDate}.`);
+          }
+          return rate;
+        },
       });
 
       setSummary(result);

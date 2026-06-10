@@ -21,7 +21,7 @@ export interface OpenForeignPosition {
   accountId: string;
   accountCode: string;
   accountName: string;
-  currency: "USD";
+  currency: string; // NEU-027: any foreign currency, not just USD
   originalAmount: number;
   carryingRate: number;
   carryingBase: number;
