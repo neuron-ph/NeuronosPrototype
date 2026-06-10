@@ -4,6 +4,8 @@ import { useState, useRef, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../../utils/supabase/client";
 import type { QuotationNew, QuotationType } from "../../types/pricing";
+import { normalizeCurrency, FUNCTIONAL_CURRENCY } from "../../utils/accountingCurrency";
+import { resolveDisplayCurrency } from "../shared/pricing/MixedCurrencySubtotal";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { CustomDatePicker } from "../common/CustomDatePicker";
 import { CreateQuotationMenu } from "./CreateQuotationMenu";
@@ -113,6 +115,27 @@ function QuotationTableRow({ item, index, totalItems, onItemClick, gridTemplateC
       }, 0) || 0;
       return sum + categoryTotal;
     }, 0) || 0;
+  })();
+
+  // Show the document currency + total when the quotation is a foreign currency
+  // (e.g. USD). Prefer the values the builder stored; for quotations saved before
+  // that, derive the same way from the line items so they still read correctly.
+  const { displayCurrency, displayTotal } = (() => {
+    const fs = item.financial_summary;
+    if (fs?.display_currency && fs?.grand_total_display != null) {
+      return { displayCurrency: fs.display_currency, displayTotal: fs.grand_total_display };
+    }
+    const lineItems = ((item.selling_price?.length ? item.selling_price : item.charge_categories) || [])
+      .flatMap((cat: any) => cat.line_items || []);
+    const displayCur = resolveDisplayCurrency(lineItems.map((li: any) => li.currency), item.currency);
+    if (displayCur !== FUNCTIONAL_CURRENCY) {
+      const rates = lineItems
+        .filter((li: any) => normalizeCurrency(li.currency, FUNCTIONAL_CURRENCY) === displayCur)
+        .map((li: any) => Number(li.forex_rate) || 1);
+      const uniform = rates.length > 0 && rates.every((r: number) => r === rates[0]);
+      if (uniform) return { displayCurrency: displayCur, displayTotal: total / (rates[0] || 1) };
+    }
+    return { displayCurrency: item.currency, displayTotal: total };
   })();
 
   return (
@@ -232,7 +255,7 @@ function QuotationTableRow({ item, index, totalItems, onItemClick, gridTemplateC
             fontSize: "13px",
             color: total > 0 ? "var(--theme-text-primary)" : "var(--theme-text-muted)"
           }}>
-            {item.currency} {total > 0 ? total.toLocaleString() : "0"}
+            {displayCurrency} {displayTotal > 0 ? displayTotal.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "0"}
           </span>
         )}
       </div>
