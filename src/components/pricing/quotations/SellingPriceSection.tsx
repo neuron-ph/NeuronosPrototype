@@ -439,7 +439,7 @@ export function SellingPriceSection({
         const profit = totalSell - totalCost;
         const markupPct = totalCost > 0 ? (profit / totalCost) * 100 : 0;
         const fmt = (n: number) => `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-        const rowStyle: React.CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "center" };
+        const rowStyle: React.CSSProperties = { display: "flex", justifyContent: "flex-end", alignItems: "baseline", gap: "12px" };
         const labelStyle: React.CSSProperties = { fontSize: "13px", fontWeight: 600, color: "var(--theme-text-muted)" };
         return (
           <div style={{
@@ -466,7 +466,7 @@ export function SellingPriceSection({
             </div>
             <div style={rowStyle}>
               <span style={labelStyle}>Total Selling Price</span>
-              <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
+              <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--neuron-brand-green)" }}>
                 {fmt(totalSell)}
               </span>
             </div>
