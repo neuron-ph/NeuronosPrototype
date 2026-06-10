@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Package, Users, AlertTriangle } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { Package, Users } from "lucide-react";
 import { supabase } from "../../../utils/supabase/client";
 import { toast } from "../../ui/toast-utils";
 import {
@@ -19,10 +19,8 @@ import {
   legacyProjectionFromAssignment,
   persistAssignmentsForNewBooking,
 } from "../../../utils/assignments/applyAssignmentToBookingPayload";
-import { ContractDetectionBanner } from "../shared/ContractDetectionBanner";
-import { autofillForwardingFromProject, linkBookingToProject, isProjectBookingConflict } from "../../../utils/projectAutofill";
-import type { Project } from "../../../types/pricing";
-import { fetchProjectsWithQuotation } from "../../../utils/projectHydration";
+import { ProjectContractPicker, type ContainerSelection } from "../shared/ProjectContractPicker";
+import { autofillForwardingFromProject, fetchProjectByNumber, isProjectBookingConflict } from "../../../utils/projectAutofill";
 import { fetchFullContract } from "../../../utils/contractLookup";
 import { extractDeliveryChargeOptions } from "../../../utils/contractQuantityExtractor";
 import { logCreation } from "../../../utils/activityLog";
@@ -32,8 +30,6 @@ import { getSelectedCustomer } from "../../../utils/bookings/selectedCustomer";
 import { useCustomerAccountOwnerAutofill } from "../shared/useCustomerAccountOwnerAutofill";
 import { saveBookingDraft } from "../shared/saveBookingDraft";
 import { usePermission } from "../../../context/PermissionProvider";
-import { CustomDropdown } from "../../bd/CustomDropdown";
-
 // Translates the bookings_unique_mbl_mawb unique-violation (migration 124) into a
 // readable message; returns null for any other error so the caller falls back.
 function duplicateMblMawbMessage(err: unknown, formState: Record<string, unknown>): string | null {
@@ -56,6 +52,8 @@ interface CreateForwardingBookingPanelProps {
   serviceType?: string;
   draftBookingId?: string;
   draftData?: Record<string, unknown>;
+  /** NEU-015: when launched from a project, the originating project as the pre-selected container. */
+  projectContext?: { id: string; project_number: string; name?: string } | null;
 }
 
 export function CreateForwardingBookingPanel({
@@ -68,6 +66,7 @@ export function CreateForwardingBookingPanel({
   customerId,
   draftBookingId,
   draftData,
+  projectContext,
 }: CreateForwardingBookingPanelProps) {
   const { can } = usePermission(); // NEU-019 WG-32
   const [loading, setLoading] = useState(false);
@@ -75,67 +74,63 @@ export function CreateForwardingBookingPanel({
   const [editingId, setEditingId] = useState<string | null>(draftBookingId ?? null);
   const [assignmentPayload, setAssignmentPayload] = useState<ServiceRoleAssignmentPayload | null>(null);
   const [detectedContractId, setDetectedContractId] = useState<string | null>(null);
-  const [fetchedProject, setFetchedProject] = useState<Project | null>(null);
-  const [projectsList, setProjectsList] = useState<Project[]>([]);
-  const [loadingProjects, setLoadingProjects] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(projectContext?.id ?? null);
   const [submitErrors, setSubmitErrors] = useState<Record<string, string>>({});
   const hasHydratedDraft = useRef(false);
 
-  const { formState, setField, initFromPrefill, initFromRecord, context, setConstraint } = useBookingFormState("Forwarding", {
-    status: "Draft",
-    movement_type: "Import",
-    mode: "FCL",
-  });
+  const { formState, setField, initFromPrefill, initFromRecord, context, setConstraint } = useBookingFormState(
+    "Forwarding",
+    { status: "Draft", movement_type: "Import", mode: "FCL" },
+    { fallbackCustomerId: customerId ?? null },
+  );
   const selectedCustomer = getSelectedCustomer(formState, customerId ?? null);
   useCustomerAccountOwnerAutofill(selectedCustomer.customerId, setField);
   const customerName = selectedCustomer.customerName;
 
-  useEffect(() => {
-    if (!isOpen || !customerName || customerName.trim().length < 3) {
-      setProjectsList([]);
-      setFetchedProject(null);
+  // NEU-015: unified Project/Contract container selection.
+  const containerValue = detectedContractId
+    ? ({ kind: "contract", id: detectedContractId } as const)
+    : selectedProjectId
+    ? ({ kind: "project", id: selectedProjectId } as const)
+    : null;
+
+  const handleContainerChange = (sel: ContainerSelection | null) => {
+    if (!sel) {
+      setSelectedProjectId(null);
+      setDetectedContractId(null);
+      setField("project_number", "");
+      setConstraint("delivery_container_types", null);
+      setConstraint("delivery_destinations", null);
       return;
     }
-
-    let cancelled = false;
-    setLoadingProjects(true);
-    fetchProjectsWithQuotation()
-      .then((projects) => {
-        if (cancelled) return;
-        const normalizedName = customerName.trim().toLowerCase();
-        const normalizedCustomerId = selectedCustomer.customerId?.trim();
-        const customerProjects = projects.filter((project) => {
-          const matchesCustomerId =
-            normalizedCustomerId &&
-            String((project as any).customer_id ?? "").trim() === normalizedCustomerId;
-          const matchesCustomerName = String(project.customer_name ?? "").trim().toLowerCase() === normalizedName;
-          return project.status !== "Completed" && (matchesCustomerId || matchesCustomerName);
-        });
-        setProjectsList(customerProjects);
-      })
-      .catch((err) => {
-        console.error("CreateForwardingBookingPanel projects:", err);
-        setProjectsList([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingProjects(false);
+    setField("project_number", sel.number);
+    if (sel.kind === "contract") {
+      setSelectedProjectId(null);
+      setDetectedContractId(sel.id);
+      fetchFullContract(sel.id).then((full) => {
+        if (full?.rate_matrices) {
+          const { containerTypes, deliveryDestinations } = extractDeliveryChargeOptions(full.rate_matrices);
+          setConstraint("delivery_container_types", containerTypes.length > 0 ? containerTypes : null);
+          setConstraint("delivery_destinations", deliveryDestinations.length > 0 ? deliveryDestinations : null);
+        } else {
+          setConstraint("delivery_container_types", null);
+          setConstraint("delivery_destinations", null);
+        }
       });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, customerName, selectedCustomer.customerId]);
-
-  const projectOptions = useMemo(
-    () =>
-      projectsList.map((project) => ({
-        value: project.id,
-        label: project.quotation_name
-          ? `${project.project_number} - ${project.quotation_name}`
-          : project.project_number ?? "(unnamed project)",
-      })),
-    [projectsList],
-  );
+    } else {
+      setDetectedContractId(null);
+      setSelectedProjectId(sel.id);
+      setConstraint("delivery_container_types", null);
+      setConstraint("delivery_destinations", null);
+      // Preserve the Ops convenience: picking a project autofills the form from it.
+      fetchProjectByNumber(sel.number).then((res) => {
+        if (res.success && res.data) {
+          initFromPrefill(autofillForwardingFromProject(res.data) as Record<string, unknown>);
+          setField("project_number", res.data.project_number ?? sel.number);
+        }
+      });
+    }
+  };
 
   useEffect(() => {
     if (!isOpen) {
@@ -167,28 +162,12 @@ export function CreateForwardingBookingPanel({
     };
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Project autofill: when a project is selected, pre-fill form from project data
-  function handleProjectAutofill(project: Project) {
-    setFetchedProject(project);
-    const autofillData = autofillForwardingFromProject(project);
-    initFromPrefill(autofillData as Record<string, unknown>);
-  }
-
-  function handleProjectSelect(projectId: string) {
-    const picked = projectsList.find((project) => project.id === projectId);
-    if (!picked) return;
-    handleProjectAutofill(picked);
-    setField("project_number", picked.project_number ?? "");
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!can("ops_forwarding", "create") && !can("ops_forwarding", "edit")) return; // NEU-019 WG-32 backstop
 
-    const hasProjectLink =
-      Boolean(fetchedProject) || String(formState.project_number ?? "").trim() !== "";
-    if (!hasProjectLink) {
-      toast.error("A project is required to create a booking. Save as draft if no project is available.");
+    if (!detectedContractId && !selectedProjectId) {
+      toast.error("A project or contract is required as the booking's container.");
       return;
     }
 
@@ -214,7 +193,7 @@ export function CreateForwardingBookingPanel({
           status: "Created",
           booking_number: bookingNumber,
           ...(detectedContractId ? { contract_id: detectedContractId } : {}),
-          ...(fetchedProject ? { project_id: fetchedProject.id } : {}),
+          ...(selectedProjectId ? { project_id: selectedProjectId } : {}),
           ...legacyProjectionFromAssignment(assignmentPayload),
         },
         details,
@@ -241,17 +220,6 @@ export function CreateForwardingBookingPanel({
       if (!assignRes.ok) {
         await supabase.from("bookings").delete().eq("id", data.id);
         throw new Error(assignRes.error);
-      }
-
-      // Link to project if autofilled from one
-      if (fetchedProject) {
-        await linkBookingToProject(
-          fetchedProject.id,
-          data.id,
-          data.booking_number ?? data.id,
-          "Forwarding",
-          String(formState.status ?? "Draft"),
-        ).catch(console.error);
       }
 
       logCreation("booking", data.id, data.booking_number ?? data.id, {
@@ -315,7 +283,7 @@ export function CreateForwardingBookingPanel({
           ? { id: currentUser.id ?? "", name: currentUser.name, department: currentUser.department }
           : null,
         detectedContractId,
-        projectId: fetchedProject?.id ?? null,
+        projectId: selectedProjectId,
       });
       if (!result) return;
       setEditingId(result.id);
@@ -334,9 +302,10 @@ export function CreateForwardingBookingPanel({
 
   const isEditingDraft = editingId !== null;
   const bookingName = String(formState.booking_name ?? "");
-  const hasProjectLink =
-    Boolean(fetchedProject) || String(formState.project_number ?? "").trim() !== "";
-  const isFormValid = customerName.trim() !== "" && bookingName.trim() !== "" && hasProjectLink;
+  const isFormValid =
+    customerName.trim() !== "" &&
+    bookingName.trim() !== "" &&
+    (detectedContractId !== null || selectedProjectId !== null);
 
   return (
     <BookingCreationPanel
@@ -368,62 +337,24 @@ export function CreateForwardingBookingPanel({
         errors={submitErrors}
         requiredFieldKeys={getMinimalCreateRequiredFields("Forwarding")}
         fieldOverrides={{
-          project_number:
-            source === "operations" && customerName ? (
-              projectsList.length > 0 ? (
-                <CustomDropdown
-                  label=""
-                  value={fetchedProject?.id ?? ""}
-                  onChange={handleProjectSelect}
-                  options={projectOptions}
-                  placeholder={loadingProjects ? "Loading projects..." : "Select project..."}
-                  fullWidth
-                  portalZIndex={1125}
-                  dropdownMaxWidth={640}
-                />
-              ) : (
-                <div style={{ padding: "10px 12px", borderRadius: "6px", fontSize: "13px", color: "var(--theme-text-muted)", backgroundColor: "var(--theme-bg-surface-subtle)", border: "1px solid var(--theme-border-default)", minHeight: "40px" }}>
-                  {loadingProjects ? "Loading projects..." : "No active projects found for this client"}
-                </div>
-              )
-            ) : undefined,
+          // NEU-015: unified Project/Contract container picker (searches both).
+          project_number: (
+            <ProjectContractPicker
+              customerId={selectedCustomer.customerId}
+              customerName={customerName}
+              serviceType="Forwarding"
+              value={containerValue}
+              onChange={handleContainerChange}
+              lockedProject={
+                projectContext
+                  ? { id: projectContext.id, number: projectContext.project_number, name: projectContext.name ?? "" }
+                  : null
+              }
+              portalZIndex={1125}
+            />
+          ),
         }}
       />
-
-      {customerName && (
-        <ContractDetectionBanner
-          customerName={customerName}
-          serviceType="Forwarding"
-          onContractDetected={setDetectedContractId}
-          onContractInfo={(contract) => {
-            if (contract?.id) {
-              fetchFullContract(contract.id).then(full => {
-                if (full?.rate_matrices) {
-                  const { containerTypes, deliveryDestinations } = extractDeliveryChargeOptions(full.rate_matrices);
-                  setConstraint("delivery_container_types", containerTypes.length > 0 ? containerTypes : null);
-                  setConstraint("delivery_destinations", deliveryDestinations.length > 0 ? deliveryDestinations : null);
-                } else {
-                  setConstraint("delivery_container_types", null);
-                  setConstraint("delivery_destinations", null);
-                }
-              });
-            } else {
-              setConstraint("delivery_container_types", null);
-              setConstraint("delivery_destinations", null);
-            }
-          }}
-        />
-      )}
-
-      {customerName && !hasProjectLink && (
-        <div style={{ display: "flex", alignItems: "flex-start", gap: "6px", marginTop: "6px", paddingLeft: "2px" }}>
-          <AlertTriangle size={12} style={{ color: "#B45309", flexShrink: 0, marginTop: "2px" }} />
-          <span style={{ fontSize: "12px", color: "var(--theme-text-muted)", lineHeight: 1.4 }}>
-            Link a project to create this booking. Forwarding bookings are created from project
-            specifications - select a project above, or save as draft if none is available yet.
-          </span>
-        </div>
-      )}
 
       {customerName && (
         <div style={{ marginBottom: "32px" }}>

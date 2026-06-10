@@ -19,11 +19,10 @@ import {
   legacyProjectionFromAssignment,
   persistAssignmentsForNewBooking,
 } from "../../utils/assignments/applyAssignmentToBookingPayload";
-import { ContractDetectionBanner } from "./shared/ContractDetectionBanner";
-import { CustomDropdown } from "../bd/CustomDropdown";
-import type { ContractSummary } from "../../types/pricing";
+import { ProjectContractPicker, type ContainerSelection } from "./shared/ProjectContractPicker";
 import { extractContractDestinations } from "../../utils/contractQuantityExtractor";
 import { fetchFullContract } from "../../utils/contractLookup";
+import { isProjectBookingConflict } from "../../utils/projectAutofill";
 import { logCreation } from "../../utils/activityLog";
 import { fireBookingAssignmentTickets } from "../../utils/workflowTickets";
 import { generateBookingNumber, peekNextBookingNumber } from "../../utils/bookingNumberUtils";
@@ -44,6 +43,8 @@ interface CreateTruckingBookingPanelProps {
   currentUser?: { id?: string; name?: string; department?: string } | null;
   draftBookingId?: string;
   draftData?: Record<string, unknown>;
+  /** NEU-015: when launched from a project, the originating project as the pre-selected container. */
+  projectContext?: { id: string; project_number: string; name?: string } | null;
 }
 
 export function CreateTruckingBookingPanel({
@@ -57,6 +58,7 @@ export function CreateTruckingBookingPanel({
   currentUser,
   draftBookingId,
   draftData,
+  projectContext,
 }: CreateTruckingBookingPanelProps) {
   const { can } = usePermission(); // NEU-019 WG-32
   const [loading, setLoading] = useState(false);
@@ -64,17 +66,46 @@ export function CreateTruckingBookingPanel({
   const [editingId, setEditingId] = useState<string | null>(draftBookingId ?? null);
   const [assignmentPayload, setAssignmentPayload] = useState<ServiceRoleAssignmentPayload | null>(null);
   const [detectedContractId, setDetectedContractId] = useState<string | null>(null);
-  const [contractsList, setContractsList] = useState<ContractSummary[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(projectContext?.id ?? null);
   const [submitErrors, setSubmitErrors] = useState<Record<string, string>>({});
   const hasHydratedDraft = useRef(false);
 
-  const { formState, setField, setFields, initFromPrefill, initFromRecord, context } = useBookingFormState("Trucking", {
-    status: "Draft",
-    movement_type: "Import",
-    // Seed one empty destination row so the repeater shows the right columns immediately
-    trucking_line_items: [{ destination: "", truck_type: "", quantity: "1" }],
-  });
+  const { formState, setField, setFields, initFromPrefill, initFromRecord, context } = useBookingFormState(
+    "Trucking",
+    {
+      status: "Draft",
+      movement_type: "Import",
+      // Seed one empty destination row so the repeater shows the right columns immediately
+      trucking_line_items: [{ destination: "", truck_type: "", quantity: "1" }],
+    },
+    { fallbackCustomerId: customerId ?? null },
+  );
   const selectedCustomer = getSelectedCustomer(formState, customerId ?? null);
+
+  // NEU-015: unified Project/Contract container selection. When a contract is
+  // picked, the destinations effect below pre-fills from its rate matrices.
+  const containerValue = detectedContractId
+    ? ({ kind: "contract", id: detectedContractId } as const)
+    : selectedProjectId
+    ? ({ kind: "project", id: selectedProjectId } as const)
+    : null;
+
+  const handleContainerChange = (sel: ContainerSelection | null) => {
+    if (!sel) {
+      setSelectedProjectId(null);
+      setDetectedContractId(null);
+      setField("project_number", "");
+      return;
+    }
+    setField("project_number", sel.number);
+    if (sel.kind === "contract") {
+      setSelectedProjectId(null);
+      setDetectedContractId(sel.id);
+    } else {
+      setDetectedContractId(null);
+      setSelectedProjectId(sel.id);
+    }
+  };
   useCustomerAccountOwnerAutofill(selectedCustomer.customerId, setField);
 
   useEffect(() => {
@@ -129,8 +160,8 @@ export function CreateTruckingBookingPanel({
     e.preventDefault();
     if (!can("ops_trucking", "create") && !can("ops_trucking", "edit")) return; // NEU-019 WG-32 backstop
 
-    if (!detectedContractId) {
-      toast.error("A contract is required to create a booking. Save as draft if no contract is available.");
+    if (!detectedContractId && !selectedProjectId) {
+      toast.error("A project or contract is required as the booking's container.");
       return;
     }
 
@@ -156,6 +187,7 @@ export function CreateTruckingBookingPanel({
           status: "Created",
           booking_number: bookingNumber,
           ...(detectedContractId ? { contract_id: detectedContractId } : {}),
+          ...(selectedProjectId ? { project_id: selectedProjectId } : {}),
           ...legacyProjectionFromAssignment(assignmentPayload),
         },
         details,
@@ -220,7 +252,10 @@ export function CreateTruckingBookingPanel({
       onClose();
     } catch (err) {
       console.error("CreateTruckingBookingPanel:", err);
-      toast.error("Failed to create booking. Please try again.");
+      const conflictMsg = isProjectBookingConflict((err as { message?: string })?.message)
+        ? "A Trucking booking already exists for this project. Each project allows one booking per service type."
+        : null;
+      toast.error(conflictMsg ?? "Failed to create booking. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -234,6 +269,7 @@ export function CreateTruckingBookingPanel({
         bookingId: editingId,
         currentUser,
         detectedContractId,
+        projectId: selectedProjectId,
       });
       if (!result) return;
       setEditingId(result.id);
@@ -254,7 +290,10 @@ export function CreateTruckingBookingPanel({
   const isEditingDraft = editingId !== null;
   const customerName = selectedCustomer.customerName;
   const bookingName = String(formState.booking_name ?? "");
-  const isFormValid = customerName.trim() !== "" && bookingName.trim() !== "" && detectedContractId !== null;
+  const isFormValid =
+    customerName.trim() !== "" &&
+    bookingName.trim() !== "" &&
+    (detectedContractId !== null || selectedProjectId !== null);
 
   return (
     <BookingCreationPanel
@@ -286,46 +325,24 @@ export function CreateTruckingBookingPanel({
         errors={submitErrors}
         requiredFieldKeys={getMinimalCreateRequiredFields("Trucking")}
         fieldOverrides={{
-          project_number: contractsList.length > 0 ? (
-            <CustomDropdown
-              label=""
-              value={detectedContractId ?? ""}
-              onChange={(id) => {
-                const picked = contractsList.find((c) => c.id === id);
-                if (!picked) return;
-                setDetectedContractId(picked.id);
-                setField("project_number", picked.quote_number ?? "");
-              }}
-              options={contractsList.map((c) => ({
-                value: c.id,
-                label: c.quotation_name
-                  ? `${c.quote_number} — ${c.quotation_name}`
-                  : c.quote_number ?? "(unnamed contract)",
-              }))}
-              placeholder="Select contract..."
-              fullWidth
+          // NEU-015: unified Project/Contract container picker (searches both).
+          project_number: (
+            <ProjectContractPicker
+              customerId={selectedCustomer.customerId}
+              customerName={customerName}
+              serviceType="Trucking"
+              value={containerValue}
+              onChange={handleContainerChange}
+              lockedProject={
+                projectContext
+                  ? { id: projectContext.id, number: projectContext.project_number, name: projectContext.name ?? "" }
+                  : null
+              }
               portalZIndex={1125}
-              dropdownMaxWidth={640}
             />
-          ) : customerName ? (
-            <div style={{ padding: "10px 12px", borderRadius: "6px", fontSize: "13px", color: "var(--theme-text-muted)", backgroundColor: "var(--theme-bg-surface-subtle)", border: "1px solid var(--theme-border-default)", minHeight: "40px" }}>
-              No active contracts found for this client
-            </div>
-          ) : undefined,
+          ),
         }}
       />
-
-      {customerName && (
-        <ContractDetectionBanner
-          customerName={customerName}
-          serviceType="Trucking"
-          onContractDetected={setDetectedContractId}
-          onContractsList={setContractsList}
-          selectedContractId={detectedContractId}
-          requireContract
-          requireContractLabel="Trucking"
-        />
-      )}
 
       {customerName && (
         <div style={{ marginBottom: "32px" }}>

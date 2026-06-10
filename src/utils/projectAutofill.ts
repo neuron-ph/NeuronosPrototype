@@ -1,6 +1,6 @@
 import type { Project } from "../types/pricing";
 import type { BillingChargeCategory, ExpenseChargeCategory } from "../types/operations";
-import { fetchProjectByNumberWithQuotation } from "./projectHydration";
+import { fetchProjectByNumberWithQuotation, fetchProjectsWithQuotation } from "./projectHydration";
 import {
   applyMapping,
   FORWARDING_MAPPING,
@@ -27,6 +27,32 @@ export async function fetchProjectByNumber(
   } catch (error) {
     return { success: false, error: String(error) };
   }
+}
+
+// ==================== Fetch Projects for a Customer ====================
+
+/**
+ * Active projects for a customer, used by the unified Project/Contract booking
+ * picker (NEU-015). Matches on customer_id (preferred) or customer_name, and
+ * excludes Completed projects. Mirrors the filter the Forwarding panel used
+ * inline before the picker was unified across all services.
+ */
+export async function fetchProjectsForCustomer(
+  customerId?: string | null,
+  customerName?: string | null,
+): Promise<Project[]> {
+  const normId = customerId?.trim();
+  const normName = customerName?.trim().toLowerCase();
+  if (!normId && !normName) return [];
+
+  const projects = await fetchProjectsWithQuotation();
+  return projects.filter((project) => {
+    const matchesId =
+      !!normId && String((project as any).customer_id ?? "").trim() === normId;
+    const matchesName =
+      !!normName && String(project.customer_name ?? "").trim().toLowerCase() === normName;
+    return project.status !== "Completed" && (matchesId || matchesName);
+  });
 }
 
 // ==================== Extract Service Details ====================

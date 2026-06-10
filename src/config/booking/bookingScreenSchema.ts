@@ -102,8 +102,10 @@ const SHARED_GENERAL_INFORMATION: SectionDef = {
     // ---------------------------------------------------------------------------
     {
       // Matrix: Consignee = Yes for all five services in Booking GI.
+      // NEU-019: one shared field serves consignee (import) / shipper (export);
+      // label reflects both. Data key stays `consignee`.
       key: 'consignee',
-      label: 'Consignee',
+      label: 'Consignee/Shipper',
       control: 'profile-lookup',
       profileType: 'consignee',
       required: 'yes',
