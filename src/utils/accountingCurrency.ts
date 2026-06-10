@@ -13,10 +13,16 @@
 
 export const FUNCTIONAL_CURRENCY = "PHP" as const;
 
-export const SUPPORTED_ACCOUNTING_CURRENCIES = ["PHP", "USD"] as const;
+// NEU-027: static default/fallback set. The AUTHORITATIVE list now lives in the
+// `currencies` master table + FK constraints (migration 194) — adding a currency
+// is a data change (insert a row), not a code change. This array is only the
+// synchronous fallback used before the table loads.
+export const SUPPORTED_ACCOUNTING_CURRENCIES = ["PHP", "USD", "EUR", "CNY"] as const;
 
-export type AccountingCurrency =
-  (typeof SUPPORTED_ACCOUNTING_CURRENCIES)[number];
+// Currency codes are free-form ISO-4217 strings; the DB FK to `currencies` is
+// the gate, so the type stays open to let new currencies flow without a code
+// change. (The functional/base currency is still always PHP.)
+export type AccountingCurrency = string;
 
 export const DEFAULT_BASE_CURRENCY: AccountingCurrency = FUNCTIONAL_CURRENCY;
 
@@ -29,23 +35,28 @@ export const FX_REALIZED_LOSS_CODE = "7010";
 export const FX_UNREALIZED_GAIN_CODE = "4530";
 export const FX_UNREALIZED_LOSS_CODE = "7030";
 
-export function isSupportedCurrency(
-  value: unknown,
-): value is AccountingCurrency {
+/** True when the code is in the static default set. The DB `currencies` table is
+ *  the real authority; this is a synchronous convenience check only. */
+export function isSupportedCurrency(value: unknown): boolean {
   return (
     typeof value === "string" &&
-    (SUPPORTED_ACCOUNTING_CURRENCIES as readonly string[]).includes(value)
+    (SUPPORTED_ACCOUNTING_CURRENCIES as readonly string[]).includes(value.trim().toUpperCase())
   );
 }
 
+/**
+ * Normalize a currency code to its canonical uppercase form. Accepts any
+ * ISO-4217-shaped code (the DB FK to `currencies` is the gate); only empty or
+ * malformed values fall back to the functional currency. NEU-027: no longer
+ * coerces EUR/CNY/etc. to PHP.
+ */
 export function normalizeCurrency(
   value: unknown,
   fallback: AccountingCurrency = FUNCTIONAL_CURRENCY,
 ): AccountingCurrency {
-  if (isSupportedCurrency(value)) return value;
   if (typeof value === "string") {
     const upper = value.trim().toUpperCase();
-    if (isSupportedCurrency(upper)) return upper;
+    if (/^[A-Z]{3}$/.test(upper)) return upper;
   }
   return fallback;
 }
@@ -118,17 +129,10 @@ export function resolvePostingRate(
   return numeric;
 }
 
-const CURRENCY_LOCALES: Record<AccountingCurrency, string> = {
-  PHP: "en-PH",
-  USD: "en-US",
-};
-
 /**
- * Presentation-only currency glyph for UI labels/prefixes. This does NOT touch
- * `normalizeCurrency` or any posting math — the accounting engine still only
- * *supports* PHP/USD (see SUPPORTED_ACCOUNTING_CURRENCIES). Pricing offers
- * PHP/USD/EUR/CNY, so the UI needs a sign for all four; unknown codes fall back
- * to the code itself.
+ * Presentation-only currency glyph for UI labels/prefixes and the formatMoney
+ * fallback. Seeds the common signs; the DB `currencies` table carries the
+ * authoritative symbol, and unknown codes fall back to the code itself.
  */
 export const CURRENCY_GLYPHS: Record<string, string> = {
   PHP: "₱",
@@ -147,11 +151,19 @@ export function formatMoney(
   currency: AccountingCurrency | string = FUNCTIONAL_CURRENCY,
 ): string {
   const normalized = normalizeCurrency(currency, FUNCTIONAL_CURRENCY);
-  return new Intl.NumberFormat(CURRENCY_LOCALES[normalized], {
-    style: "currency",
-    currency: normalized,
-    minimumFractionDigits: 2,
-  }).format(Number(amount) || 0);
+  const n = Number(amount) || 0;
+  try {
+    // narrowSymbol renders the clean glyph for any ISO currency: ₱ $ € ¥ …
+    return new Intl.NumberFormat("en-PH", {
+      style: "currency",
+      currency: normalized,
+      currencyDisplay: "narrowSymbol",
+      minimumFractionDigits: 2,
+    }).format(n);
+  } catch {
+    // Non-ISO / unknown code — fall back to glyph + grouped number.
+    return `${currencyGlyph(normalized)} ${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
 }
 
 /**

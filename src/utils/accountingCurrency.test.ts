@@ -20,25 +20,27 @@ describe("accountingCurrency constants", () => {
     expect(isFunctionalCurrency("USD")).toBe(false);
   });
 
-  it("only accepts PHP and USD as supported currencies", () => {
+  it("recognises the configured default currencies (PHP/USD/EUR/CNY)", () => {
     expect(isSupportedCurrency("PHP")).toBe(true);
     expect(isSupportedCurrency("USD")).toBe(true);
-    expect(isSupportedCurrency("EUR")).toBe(false);
+    expect(isSupportedCurrency("EUR")).toBe(true);
+    expect(isSupportedCurrency("CNY")).toBe(true);
+    expect(isSupportedCurrency("ZZZ")).toBe(false);
     expect(isSupportedCurrency(undefined)).toBe(false);
   });
 });
 
 describe("normalizeCurrency", () => {
-  it("returns the input when already supported", () => {
+  it("returns the canonical uppercase code for any ISO-shaped value (NEU-027)", () => {
     expect(normalizeCurrency("USD")).toBe("USD");
     expect(normalizeCurrency("PHP")).toBe("PHP");
+    expect(normalizeCurrency("EUR")).toBe("EUR");
+    expect(normalizeCurrency(" cny ")).toBe("CNY");
   });
-  it("uppercases and trims when possible", () => {
-    expect(normalizeCurrency(" usd ")).toBe("USD");
-  });
-  it("falls back to functional currency for invalid input", () => {
+  it("falls back to functional currency for empty/malformed input", () => {
     expect(normalizeCurrency(null)).toBe("PHP");
-    expect(normalizeCurrency("EUR")).toBe("PHP");
+    expect(normalizeCurrency("")).toBe("PHP");
+    expect(normalizeCurrency("US")).toBe("PHP");
     expect(normalizeCurrency(123 as any)).toBe("PHP");
   });
 });
