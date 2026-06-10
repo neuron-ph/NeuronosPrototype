@@ -1,5 +1,7 @@
 // Core Accounting Types (QuickBooks Style)
 
+import type { AccountingCurrency } from "../utils/accountingCurrency";
+
 export type AccountType = "Asset" | "Liability" | "Equity" | "Income" | "Expense";
 
 export interface Account {
@@ -25,7 +27,7 @@ export interface Account {
   // Neuron Hierarchical Fields
   is_folder?: boolean;
   depth?: number;
-  currency?: "PHP" | "USD";
+  currency?: AccountingCurrency;
   parent_id?: string | null; // Alias for parent_account_id if inconsistent
 }
 
@@ -42,14 +44,14 @@ export interface JournalLine {
   /** PHP base amount used for GL balancing. */
   credit: number;
   /** Line-level currency. Equals base_currency for PHP-only lines. */
-  currency?: "PHP" | "USD";
+  currency?: AccountingCurrency;
   /** Original-currency debit for USD-origin lines (informational). */
   foreign_debit?: number;
   /** Original-currency credit for USD-origin lines (informational). */
   foreign_credit?: number;
   /** Locked rate used to compute base debit/credit. 1 for PHP-only lines. */
   exchange_rate?: number;
-  base_currency?: "PHP" | "USD";
+  base_currency?: AccountingCurrency;
 }
 
 export interface JournalEntry {
@@ -77,9 +79,9 @@ export interface JournalEntry {
   updated_at: string;
 
   // FX header. PHP-only entries lock rate=1 and source=base.
-  transaction_currency?: "PHP" | "USD";
+  transaction_currency?: AccountingCurrency;
   exchange_rate?: number;
-  base_currency?: "PHP" | "USD";
+  base_currency?: AccountingCurrency;
   source_amount?: number;
   base_amount?: number;
   exchange_rate_date?: string | null;

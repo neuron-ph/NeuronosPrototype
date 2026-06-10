@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import { Account } from '../../../types/accounting-core';
 import { supabase } from '../../../utils/supabase/client';
 import { DataTable, ColumnDef } from '../../common/DataTable';
+import { FUNCTIONAL_CURRENCY } from '../../../utils/accountingCurrency';
 
 interface AccountLedgerProps {
   account: Account;
@@ -79,7 +80,7 @@ export function AccountLedger({ account, onBack }: AccountLedgerProps) {
         if (error) throw error;
         if (cancelled) return;
 
-        const useForeign = account.currency === "USD";
+        const useForeign = account.currency !== FUNCTIONAL_CURRENCY;
         const isDebitNormal = ['Asset', 'Expense'].includes(account.type);
 
         let balance = account.starting_amount ?? 0;
@@ -241,7 +242,7 @@ export function AccountLedger({ account, onBack }: AccountLedgerProps) {
              <span className="text-3xl font-bold text-[var(--theme-text-primary)] tracking-tight font-mono">
                 {formatCurrency(account.balance)}
              </span>
-             {account.currency === "USD" && transactions.length > 0 && transactions[0].running_balance_base != null && (
+             {account.currency !== FUNCTIONAL_CURRENCY && transactions.length > 0 && transactions[0].running_balance_base != null && (
                <span className="text-xs text-[var(--theme-text-muted)] font-mono mt-1">
                  ≈ {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(transactions[0].running_balance_base ?? 0)}
                </span>

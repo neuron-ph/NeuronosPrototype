@@ -17,6 +17,7 @@ import {
   type AccountingCurrency,
 } from "../../../utils/accountingCurrency";
 import { resolveExchangeRate } from "../../../utils/exchangeRates";
+import { useCurrencies } from "../../../hooks/useCurrencies";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -157,6 +158,7 @@ export function InvoiceGLPostingSheet({
 }: InvoiceGLPostingSheetProps) {
   const { user } = useUser();
   const { can } = usePermission();
+  const { currencies } = useCurrencies();
 
   // Invoice data
   const [invoice, setInvoice] = useState<InvoiceRecord | null>(null);
@@ -830,8 +832,9 @@ export function InvoiceGLPostingSheet({
                     onChange={(e) => setInvoiceCurrency(e.target.value as AccountingCurrency)}
                     style={{ width: "100%", height: "36px", border: "1px solid var(--neuron-ui-border)", borderRadius: "6px", padding: "0 10px", fontSize: "13px", backgroundColor: isAlreadyPosted ? "var(--theme-bg-surface-subtle)" : "var(--theme-bg-surface)", color: "var(--theme-text-primary)" }}
                   >
-                    <option value="PHP">PHP</option>
-                    <option value="USD">USD</option>
+                    {currencies.map((c) => (
+                      <option key={c.code} value={c.code}>{c.code}</option>
+                    ))}
                   </select>
                 </div>
                 {!isPhpInvoice && (

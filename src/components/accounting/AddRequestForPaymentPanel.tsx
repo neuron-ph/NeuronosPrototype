@@ -19,6 +19,7 @@ import {
   FUNCTIONAL_CURRENCY,
   SUPPORTED_ACCOUNTING_CURRENCIES,
   formatMoney,
+  currencyGlyph,
   type AccountingCurrency,
 } from "../../utils/accountingCurrency";
 import { resolveExchangeRate } from "../../utils/exchangeRates";
@@ -1940,7 +1941,7 @@ function CurrencyPill({ currency, rate, rateDate, rateAuto, disabled, onCurrency
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: hasRate || !isFunctional ? "16px" : "4px" }}>
             {SUPPORTED_ACCOUNTING_CURRENCIES.map((c) => {
               const selected = c === currency;
-              const symbol = c === "PHP" ? "₱" : "$";
+              const symbol = currencyGlyph(c);
               return (
                 <button
                   key={c}
