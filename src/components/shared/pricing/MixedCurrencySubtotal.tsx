@@ -22,6 +22,13 @@ export interface MixedCurrencySubtotalProps {
   primarySize?: number;
   /** Right-align the numbers (default true). */
   align?: "left" | "right";
+  /**
+   * The document currency. When it's a foreign currency (e.g. a USD quotation),
+   * the subtotal shows that currency as PRIMARY with the PHP base as the
+   * secondary "≈ ₱" conversion — matching the per-line rows. When omitted or PHP,
+   * the original PHP-primary behaviour is kept.
+   */
+  documentCurrency?: string;
 }
 
 interface Breakdown {
@@ -66,8 +73,42 @@ export function MixedCurrencySubtotal({
   phpTotal,
   primarySize,
   align = "right",
+  documentCurrency,
 }: MixedCurrencySubtotalProps) {
   const { phpTotal: total, byCurrency } = summarize(items, phpTotal);
+
+  // Document-currency-primary mode: a foreign-currency quotation (e.g. USD) shows
+  // its own currency first, with the PHP base as the "≈ ₱" conversion underneath.
+  const docCur = normalizeCurrency(documentCurrency, FUNCTIONAL_CURRENCY);
+  if (documentCurrency && docCur !== FUNCTIONAL_CURRENCY) {
+    const docOriginal = byCurrency[docCur] || 0;
+    const otherForeign = Object.entries(byCurrency).filter(
+      ([code, amt]) => code !== docCur && code !== FUNCTIONAL_CURRENCY && amt > 0,
+    );
+    const incl =
+      otherForeign.length > 0
+        ? " · incl. " + otherForeign.map(([code, amt]) => formatMoney(amt, code)).join(" · ")
+        : "";
+    return (
+      <span
+        style={{
+          display: "inline-flex",
+          flexDirection: "column",
+          alignItems: align === "right" ? "flex-end" : "flex-start",
+          lineHeight: 1.15,
+          whiteSpace: "nowrap",
+        }}
+        title={`${formatMoney(docOriginal, docCur)} · PHP base ${formatMoney(total, FUNCTIONAL_CURRENCY)}`}
+      >
+        <span style={{ fontSize: primarySize ? `${primarySize}px` : undefined }}>
+          {formatMoney(docOriginal, docCur)}
+        </span>
+        <span style={{ fontSize: "11px", color: "var(--theme-text-muted)", fontWeight: 500, marginTop: "2px" }}>
+          ≈ {formatMoney(total, FUNCTIONAL_CURRENCY)}{incl}
+        </span>
+      </span>
+    );
+  }
 
   const foreignEntries = Object.entries(byCurrency).filter(
     ([code, amt]) => code !== FUNCTIONAL_CURRENCY && amt > 0,

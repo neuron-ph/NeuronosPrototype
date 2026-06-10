@@ -495,6 +495,7 @@ export function BuyingPriceSectionV2({
                     <MixedCurrencySubtotal
                       items={vendorGroup.categories.flatMap((c) => c.line_items) as any}
                       phpTotal={vendorGroup.subtotal}
+                      documentCurrency={currency}
                     />
                   </div>
                 </button>
@@ -578,6 +579,7 @@ export function BuyingPriceSectionV2({
                               <MixedCurrencySubtotal
                                 items={categoryGroup.line_items as any}
                                 phpTotal={categoryGroup.subtotal}
+                                documentCurrency={currency}
                               />
                             </div>
                           </button>
