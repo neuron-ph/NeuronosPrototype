@@ -326,37 +326,6 @@ export function BuyingPriceSectionV2({
 
         {/* Action Buttons */}
         <div style={{ display: "flex", gap: "8px" }}>
-          {/* NEU-028: Copy Buying charges into the Selling section (0% markup) */}
-          {!viewMode && onCopyToSelling && categories.length > 0 && (
-            <button
-              onClick={onCopyToSelling}
-              title="Copy these buying charges into Selling Price at 0% markup (existing markups are kept)"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "8px 14px",
-                fontSize: "13px",
-                fontWeight: 600,
-                color: "var(--theme-text-muted)",
-                backgroundColor: "var(--theme-bg-surface)",
-                border: "1px solid var(--neuron-ui-border)",
-                borderRadius: "8px",
-                cursor: "pointer",
-                transition: "all 0.2s ease"
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)";
-                e.currentTarget.style.borderColor = "var(--neuron-brand-green)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
-                e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
-              }}
-            >
-              Copy to Selling →
-            </button>
-          )}
           {/* Add Category Button - Hidden in View Mode */}
           {!viewMode && (
           <button
@@ -1056,6 +1025,38 @@ export function BuyingPriceSectionV2({
               </div>
             </div>
           </div>
+
+          {/* NEU-028: Import buying charges into the Selling section (0% markup) */}
+          {!viewMode && onCopyToSelling && (
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px" }}>
+              <button
+                onClick={onCopyToSelling}
+                title="Import these buying charges into Selling Price at 0% markup (existing markups are kept)"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "10px 16px",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  color: "var(--neuron-brand-green)",
+                  backgroundColor: "var(--theme-bg-surface)",
+                  border: "1px solid var(--neuron-brand-green)",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease"
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
+                }}
+              >
+                Import to Selling →
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

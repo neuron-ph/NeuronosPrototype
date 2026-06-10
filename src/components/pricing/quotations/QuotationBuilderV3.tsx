@@ -1755,7 +1755,7 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
       const inResult = merged.find(c => c.category_name.toLowerCase().trim() === normalizedName);
       if (inResult) setExpandedSellingCategories(prev => new Set(prev).add(inResult.id));
     });
-    toast.success("Buying charges copied to Selling Price (0% markup).");
+    toast.success("Buying charges imported to Selling Price (0% markup).");
   };
 
   /**
