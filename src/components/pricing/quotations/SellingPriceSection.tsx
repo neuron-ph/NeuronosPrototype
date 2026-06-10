@@ -454,7 +454,7 @@ export function SellingPriceSection({
           }}>
             <div style={rowStyle}>
               <span style={labelStyle}>Total Profit Margin</span>
-              <span style={{ fontSize: "16px", fontWeight: 700, color: profit >= 0 ? "var(--neuron-brand-green)" : "var(--theme-status-danger-fg)" }}>
+              <span style={{ fontSize: "16px", fontWeight: 700, color: "var(--theme-text-primary)" }}>
                 {fmt(profit)}
               </span>
             </div>
