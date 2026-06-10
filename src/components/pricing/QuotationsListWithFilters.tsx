@@ -28,6 +28,7 @@ const DEFAULT_COLUMN_WIDTHS = {
   accountOwner: 150,
   services: 120,
   total: 100,
+  buying: 110,
   date: 95,
   status: 115,
   assignee: 130
@@ -41,6 +42,7 @@ const MIN_COLUMN_WIDTHS = {
   accountOwner: 100,
   services: 90,
   total: 80,
+  buying: 80,
   date: 80,
   status: 90,
   assignee: 90
@@ -279,23 +281,25 @@ function QuotationTableRow({ item, index, totalItems, onItemClick, gridTemplateC
             }
           </span>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", lineHeight: 1.2 }}>
-            <span style={{
-              fontSize: "13px",
-              color: total > 0 ? "var(--theme-text-primary)" : "var(--theme-text-muted)"
-            }}>
-              {displayCurrency} {displayTotal > 0 ? displayTotal.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "0"}
-            </span>
-            {buying.total > 0 && (
-              <span
-                style={{ fontSize: "11px", color: "var(--theme-text-muted)", fontWeight: 500, marginTop: "2px" }}
-                title="Total buying cost (vendor)"
-              >
-                Buy: {buying.currency} {buying.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-              </span>
-            )}
-          </div>
+          <span style={{
+            fontSize: "13px",
+            color: total > 0 ? "var(--theme-text-primary)" : "var(--theme-text-muted)"
+          }}>
+            {displayCurrency} {displayTotal > 0 ? displayTotal.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "0"}
+          </span>
         )}
+      </div>
+
+      {/* Buying total (vendor cost) — its own column (NEU-023) */}
+      <div style={{ display: "flex", alignItems: "center" }}>
+        <span
+          style={{ fontSize: "13px", color: "var(--theme-text-muted)" }}
+          title={!isContract && buying.total > 0 ? "Total buying cost (vendor)" : undefined}
+        >
+          {!isContract && buying.total > 0
+            ? `${buying.currency} ${buying.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+            : "—"}
+        </span>
       </div>
 
       {/* Date */}
@@ -451,10 +455,10 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
   const showStatus = userDepartment === "Business Development";
   const showAssigneeCol = userDepartment === "Pricing" && workflowTab === "Inquiries";
   const gridTemplateColumns = showStatus
-    ? `${columnWidths.icon}px ${columnWidths.name}px ${columnWidths.customer}px ${columnWidths.accountOwner}px ${columnWidths.services}px ${columnWidths.total}px ${columnWidths.date}px ${columnWidths.status}px`
+    ? `${columnWidths.icon}px ${columnWidths.name}px ${columnWidths.customer}px ${columnWidths.accountOwner}px ${columnWidths.services}px ${columnWidths.total}px ${columnWidths.buying}px ${columnWidths.date}px ${columnWidths.status}px`
     : showAssigneeCol
-      ? `${columnWidths.icon}px ${columnWidths.name}px ${columnWidths.customer}px ${columnWidths.accountOwner}px ${columnWidths.services}px ${columnWidths.total}px ${columnWidths.date}px ${columnWidths.assignee}px`
-      : `${columnWidths.icon}px ${columnWidths.name}px ${columnWidths.customer}px ${columnWidths.accountOwner}px ${columnWidths.services}px ${columnWidths.total}px ${columnWidths.date}px`;
+      ? `${columnWidths.icon}px ${columnWidths.name}px ${columnWidths.customer}px ${columnWidths.accountOwner}px ${columnWidths.services}px ${columnWidths.total}px ${columnWidths.buying}px ${columnWidths.date}px ${columnWidths.assignee}px`
+      : `${columnWidths.icon}px ${columnWidths.name}px ${columnWidths.customer}px ${columnWidths.accountOwner}px ${columnWidths.services}px ${columnWidths.total}px ${columnWidths.buying}px ${columnWidths.date}px`;
 
   // Get unique customers and services for filters
   const uniqueCustomers = useMemo(() => {
@@ -1153,6 +1157,9 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
                     backgroundColor: resizingColumn === 'total' ? "var(--theme-action-primary-bg)" : "var(--theme-border-default)"
                   }} />
                 </div>
+              </div>
+              <div style={{ padding: "10px 0", display: "flex", alignItems: "center" }}>
+                BUYING
               </div>
               <div style={{ padding: "10px 0", display: "flex", alignItems: "center" }}>
                 DATE
