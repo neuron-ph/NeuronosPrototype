@@ -184,7 +184,12 @@ export function generateRateCardBillingItems(
 
   // 4. Convert AppliedRate[] → BillingItem[]
   const now = new Date().toISOString();
-  const currency = ctx.currency || "PHP";
+  // NEU-027 P3: the rate matrix carries its own denomination + locked PHP rate.
+  // Carry BOTH into the billing item so a non-PHP contract's lines convert
+  // correctly downstream — previously the currency came from ctx and the rate
+  // was hardcoded to 1, silently treating EUR/USD rates as pesos in the GL base.
+  const currency = matrix.currency || ctx.currency || "PHP";
+  const forexRate = matrix.exchange_rate ?? 1;
 
   const items: BillingItem[] = appliedRates.map((rate, idx) => {
     // Category from the contract rate matrix carries through to the billing item
@@ -232,7 +237,7 @@ export function generateRateCardBillingItems(
 
     // Extended fields for UniversalPricingRow editing
     quantity: rate.quantity,
-    forex_rate: 1,
+    forex_rate: forexRate,
     is_taxed: false,
     amount_added: 0,
     percentage_added: 0,
