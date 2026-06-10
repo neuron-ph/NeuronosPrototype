@@ -392,8 +392,11 @@ export function UniversalPricingRow({
               value={data.currency || "USD"}
               onChange={(value) => handleFieldChange('currency', value)}
               options={[
+                // NEU-009: selling side now matches buying (PHP/USD/EUR/CNY).
                 { value: "PHP", label: "PHP" },
                 { value: "USD", label: "USD" },
+                { value: "EUR", label: "EUR" },
+                { value: "CNY", label: "CNY" },
               ]}
               placeholder="USD"
               size="sm"

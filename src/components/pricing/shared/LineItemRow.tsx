@@ -75,7 +75,9 @@ export function LineItemRow({
     }
   };
 
-  const calculatedAmount = item.price * (item.quantity || 1) * (item.forex_rate || 1);
+  // NEU-024: keep an explicit 0 quantity at 0 (?? only defaults null/undefined, not 0),
+  // so a zero-qty line reads ₱0 instead of silently charging for one unit.
+  const calculatedAmount = item.price * (item.quantity ?? 1) * (item.forex_rate || 1);
 
   // Input style for consistent design
   const inputStyle = {
