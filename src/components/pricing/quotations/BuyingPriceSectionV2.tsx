@@ -8,6 +8,7 @@ import { CustomCheckbox } from "../../bd/CustomCheckbox";
 import { NaturalNumberInput } from "../../shared/pricing/NaturalNumberInput";
 import { DualCurrencyAmount } from "../../shared/pricing/DualCurrencyAmount";
 import { MixedCurrencySubtotal } from "../../shared/pricing/MixedCurrencySubtotal";
+import { useCurrencies } from "../../../hooks/useCurrencies";
 
 interface BuyingPriceSectionProps {
   categories: BuyingPriceCategory[];
@@ -76,6 +77,8 @@ export function BuyingPriceSectionV2({
   
   const [showPresetDropdown, setShowPresetDropdown] = useState(false);
   const addCategoryButtonRef = useRef<HTMLButtonElement>(null);
+  const { currencies } = useCurrencies(); // NEU-008: data-driven currency options
+  const currencyOptions = currencies.map((c) => ({ value: c.code, label: c.code }));
   
   // State for expanded vendors
   const [expandedVendors, setExpandedVendors] = useState<Set<string>>(
@@ -743,12 +746,7 @@ export function BuyingPriceSectionV2({
                                           <CustomDropdown
                                             value={item.currency || "USD"}
                                             onChange={(value) => handleFieldChange(item._categoryId, item.id, 'currency', value)}
-                                            options={[
-                                              { value: "USD", label: "USD" },
-                                              { value: "PHP", label: "PHP" },
-                                              { value: "EUR", label: "EUR" },
-                                              { value: "CNY", label: "CNY" }
-                                            ]}
+                                            options={currencyOptions}
                                             placeholder="USD"
                                             size="sm"
                                             disabled={viewMode}

@@ -20,6 +20,7 @@ import {
 import { NeuronModal } from "../../ui/NeuronModal";
 import { useNetworkPartners } from "../../../hooks/useNetworkPartners";
 import { usePermission } from "../../../context/PermissionProvider";
+import { useCurrencies } from "../../../hooks/useCurrencies";
 
 /**
  * 🎯 VENDORS SECTION - INLINE RATE MANAGEMENT
@@ -83,6 +84,7 @@ interface VendorsSectionProps {
 
 export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode = false }: VendorsSectionProps) {
   const { partners } = useNetworkPartners();
+  const { currencies } = useCurrencies(); // NEU-008: data-driven currency options
   // NEU-019 WG-12: "Save & Import" writes the vendor's master rate card
   // (service_providers) — needs the partners edit knob, not just builder access.
   const { can } = usePermission();
@@ -732,10 +734,9 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
                           outline: "none"
                         }}
                       >
-                        <option value="USD">USD</option>
-                        <option value="PHP">PHP</option>
-                        <option value="EUR">EUR</option>
-                        <option value="CNY">CNY</option>
+                        {currencies.map((c) => (
+                          <option key={c.code} value={c.code}>{c.code}</option>
+                        ))}
                       </select>
                       
                       {/* Unsaved Changes Indicator */}

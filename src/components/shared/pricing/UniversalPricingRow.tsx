@@ -6,6 +6,7 @@ import { FormattedNumberInput } from "./FormattedNumberInput";
 import { CatalogItemCombobox } from "./CatalogItemCombobox";
 import { DualCurrencyAmount } from "./DualCurrencyAmount";
 import { currencyGlyph } from "../../../utils/accountingCurrency";
+import { useCurrencies } from "../../../hooks/useCurrencies";
 
 export interface PricingItemData {
   id: string;
@@ -76,6 +77,7 @@ export function UniversalPricingRow({
   categoryId,
 }: UniversalPricingRowProps) {
   const { simpleMode, showCost, showMarkup, showTax, showForex, priceEditable, showPHPConversion } = config;
+  const { currencies } = useCurrencies();
   const isViewMode = mode === "view";
   const percentageMarkupDisabled = data.base_cost < 0;
 
@@ -392,14 +394,11 @@ export function UniversalPricingRow({
             <CustomDropdown
               value={data.currency || "USD"}
               onChange={(value) => handleFieldChange('currency', value)}
-              options={[
-                // NEU-009: selling side now matches buying (PHP/USD/EUR/CNY),
-                // each shown with its currency sign.
-                { value: "PHP", label: "₱ PHP" },
-                { value: "USD", label: "$ USD" },
-                { value: "EUR", label: "€ EUR" },
-                { value: "CNY", label: "¥ CNY" },
-              ]}
+              options={currencies.map((c) => ({
+                // NEU-008: data-driven from the currencies master table (Profiling).
+                value: c.code,
+                label: `${c.symbol || currencyGlyph(c.code)} ${c.code}`,
+              }))}
               placeholder="USD"
               size="sm"
               disabled={isViewMode}

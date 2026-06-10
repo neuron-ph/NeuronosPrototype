@@ -17,7 +17,6 @@ import { REVERSED_INVOICE_STATUS } from "../../../utils/invoiceReversal";
 import { NeuronModal } from "../../ui/NeuronModal";
 import {
   FUNCTIONAL_CURRENCY,
-  SUPPORTED_ACCOUNTING_CURRENCIES,
   formatMoney,
   normalizeCurrency,
   resolvePostingRate,
@@ -27,6 +26,7 @@ import {
 } from "../../../utils/accountingCurrency";
 import { resolveExchangeRate } from "../../../utils/exchangeRates";
 import { recordNotificationEvent } from "../../../utils/notifications";
+import { useCurrencies } from "../../../hooks/useCurrencies";
 
 interface CollectionCreatorPanelProps {
   isOpen: boolean;
@@ -67,6 +67,7 @@ export function CollectionCreatorPanel({
   mode = 'create' 
 }: CollectionCreatorPanelProps) {
   const { user } = useUser();
+  const { currencies } = useCurrencies(); // NEU-008: data-driven currency options
   // NEU-019 WG-23: deleting a (reversed) invoice is an INVOICE write — it must
   // not ride the collections grant that opened this panel.
   const { can } = usePermission();
@@ -632,7 +633,7 @@ export function CollectionCreatorPanel({
                       <CustomDropdown
                         value={collectionCurrency}
                         onChange={(v) => setCollectionCurrency(v as AccountingCurrency)}
-                        options={SUPPORTED_ACCOUNTING_CURRENCIES.map((c) => ({ value: c, label: c }))}
+                        options={currencies.map((c) => ({ value: c.code, label: c.code }))}
                         fullWidth
                       />
                    </div>
