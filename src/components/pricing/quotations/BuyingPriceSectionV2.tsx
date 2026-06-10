@@ -20,6 +20,7 @@ interface BuyingPriceSectionProps {
   onRenameCategory: (categoryId: string, newName: string) => void;
   onDuplicateCategory: (categoryId: string) => void;
   onDeleteCategory: (categoryId: string) => void;
+  onCopyToSelling?: () => void; // NEU-028: pull buying charges into selling
   vendors?: Array<{ id: string; name: string; type: string; country?: string; service_tag?: string; vendor_id?: string }>; // Vendor lookup
   viewMode?: boolean;
 }
@@ -68,6 +69,7 @@ export function BuyingPriceSectionV2({
   onRenameCategory,
   onDuplicateCategory,
   onDeleteCategory,
+  onCopyToSelling,
   vendors,
   viewMode = false
 }: BuyingPriceSectionProps) {
@@ -324,6 +326,37 @@ export function BuyingPriceSectionV2({
 
         {/* Action Buttons */}
         <div style={{ display: "flex", gap: "8px" }}>
+          {/* NEU-028: Copy Buying charges into the Selling section (0% markup) */}
+          {!viewMode && onCopyToSelling && categories.length > 0 && (
+            <button
+              onClick={onCopyToSelling}
+              title="Copy these buying charges into Selling Price at 0% markup (existing markups are kept)"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "8px 14px",
+                fontSize: "13px",
+                fontWeight: 600,
+                color: "var(--theme-text-muted)",
+                backgroundColor: "var(--theme-bg-surface)",
+                border: "1px solid var(--neuron-ui-border)",
+                borderRadius: "8px",
+                cursor: "pointer",
+                transition: "all 0.2s ease"
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-tint)";
+                e.currentTarget.style.borderColor = "var(--neuron-brand-green)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
+                e.currentTarget.style.borderColor = "var(--neuron-ui-border)";
+              }}
+            >
+              Copy to Selling →
+            </button>
+          )}
           {/* Add Category Button - Hidden in View Mode */}
           {!viewMode && (
           <button
