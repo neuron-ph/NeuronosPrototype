@@ -10,6 +10,7 @@
 | `main` | Production | `ubspbukgcxmzegnomlgi` (prod) |
 
 - Always develop on `dev`. Never commit directly to `main`.
+- **Never ship to prod without explicit permission.** No prod write — migrations, Edge Function deploys, data changes, schema changes against the prod Supabase project (`ubspbukgcxmzegnomlgi`) or the `main` branch — may be applied unless Marcus says so in that turn. Approval of a plan or approach is NOT approval to apply it to prod; wait for an explicit "apply to prod" / "ship it" each time. Apply to dev, verify, surface the change, then ask.
 
 ### "Release dev to prod" — Full Checklist
 
