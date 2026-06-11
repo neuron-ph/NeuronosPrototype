@@ -112,6 +112,10 @@ interface PricingCurrencySummary {
   tax_amount: number;
   other_charges: number;
   grand_total: number;
+  // Grand total expressed in the functional currency (PHP) using converted
+  // line amounts. Used for the single bottom conversion line on foreign-currency
+  // documents.
+  converted_grand_total: number;
 }
 
 function summarizePricingCurrency(
@@ -158,6 +162,9 @@ function summarizePricingCurrency(
   const subtotal_taxed = useOriginalAmounts ? originalTaxable : baseTaxable;
   const subtotal_non_taxed = useOriginalAmounts ? originalNonTaxable : baseNonTaxable;
   const tax_amount = subtotal_taxed * taxRate;
+  // PHP-equivalent grand total always uses the converted (base) amounts.
+  const converted_grand_total =
+    baseNonTaxable + baseTaxable + baseTaxable * taxRate + otherCharges;
 
   return {
     currency,
@@ -168,6 +175,7 @@ function summarizePricingCurrency(
     tax_amount,
     other_charges: otherCharges,
     grand_total: subtotal_non_taxed + subtotal_taxed + tax_amount + otherCharges,
+    converted_grand_total,
   };
 }
 
@@ -761,7 +769,6 @@ function buildChargeTable(
     const groupId = cat.id || `cat-${catIdx}`;
     let subtotal = 0;
     let originalSubtotal = 0;
-    const catCurrencies = new Set<string>();
     (cat.line_items || []).forEach((item: any, itemIdx: number) => {
       const itemCurrency = normalizeCurrency(item.currency, FUNCTIONAL_CURRENCY);
       const displayPrice = item.final_price ?? item.price ?? 0;
@@ -770,7 +777,6 @@ function buildChargeTable(
       const originalAmt = Number(displayPrice) * Number(item.quantity || 1);
       subtotal += convertedAmt;
       originalSubtotal += originalAmt;
-      if (Math.abs(originalAmt) > 0) catCurrencies.add(itemCurrency);
       // Prefer the user-typed remark; only fall back to the unit code when no
       // remark exists, since unit codes ("per_container") are less informative.
       const subtext = (item.remarks && String(item.remarks).trim()) || (item.unit && String(item.unit).trim()) || "";
@@ -786,7 +792,6 @@ function buildChargeTable(
           forex: itemRate && itemRate !== 1 ? itemRate : "",
           taxed: options.showTax && item.is_taxed ? "✓" : "",
           amount: originalAmt,
-          _convertedAmount: itemCurrency !== FUNCTIONAL_CURRENCY && itemRate !== 1 ? convertedAmt : "",
         },
         subtext: subtext || undefined,
       });
@@ -797,13 +802,9 @@ function buildChargeTable(
     // inside a mixed/PHP document must still total in PHP using the converted
     // amounts — matching the grand total. Only when the whole document is a
     // single foreign currency do we show originals in that currency.
+    // Subtotal currency: a single-currency document shows its own currency and
+    // original amounts; a mixed document totals in PHP using converted amounts.
     const useOriginalForSubtotal = currency !== FUNCTIONAL_CURRENCY;
-    // When the PHP subtotal is shown but the whole category is a single foreign
-    // currency, surface its original total as a tiny muted hint (mirrors the
-    // per-line "≈ ₱" conversion, reversed).
-    const onlyCurrency = catCurrencies.size === 1 ? [...catCurrencies][0] : undefined;
-    const showForeignHint =
-      !useOriginalForSubtotal && !!onlyCurrency && onlyCurrency !== FUNCTIONAL_CURRENCY;
     const subtotalRow: PrintableTableRow = {
       id: `${groupId}-subtotal`,
       groupId,
@@ -812,8 +813,6 @@ function buildChargeTable(
         description: "Subtotal",
         amount: useOriginalForSubtotal ? originalSubtotal : subtotal,
         currency,
-        _foreignSubtotal: showForeignHint ? originalSubtotal : "",
-        _foreignCurrency: showForeignHint ? onlyCurrency! : "",
       },
     };
     groups.push({
@@ -954,7 +953,12 @@ function buildContractRateMatrixTables(matrices?: ContractRateMatrix[]): Printab
   });
 }
 
-function buildTotals(summary: FinancialSummary, currency: string, showTax: boolean): PrintableTotals {
+function buildTotals(
+  summary: FinancialSummary,
+  currency: string,
+  showTax: boolean,
+  convertedTotal?: { value: number; currency: string },
+): PrintableTotals {
   const rows: PrintableTotalRow[] = [];
   const subtotal = (summary.subtotal_non_taxed || 0) + (summary.subtotal_taxed || 0);
   rows.push({
@@ -1005,7 +1009,7 @@ function buildTotals(summary: FinancialSummary, currency: string, showTax: boole
     format: "money",
     emphasis: "grand",
   };
-  return { rows, grandTotal };
+  return { rows, grandTotal, convertedTotal };
 }
 
 // ─── Public resolver ────────────────────────────────────────────────────────
@@ -1269,7 +1273,15 @@ export function resolveQuotationPrintableDocument(
   const hasChargeRows = categories.some((cat) => Array.isArray(cat.line_items) && cat.line_items.length > 0);
   const hasNonZeroTotal = Number(printSummary.grand_total || baseSummary.grand_total || 0) > 0;
   const totals = !isContract && (hasChargeRows || hasNonZeroTotal)
-    ? buildTotals(printSummary, printSummary.currency, settings.display.showTaxSummary)
+    ? buildTotals(
+        printSummary,
+        printSummary.currency,
+        settings.display.showTaxSummary,
+        // Foreign-currency documents show their PHP equivalent once, under the total.
+        printSummary.currency !== FUNCTIONAL_CURRENCY
+          ? { value: printSummary.converted_grand_total, currency: FUNCTIONAL_CURRENCY }
+          : undefined,
+      )
     : undefined;
 
   const pageFooterText = joinNonEmpty([

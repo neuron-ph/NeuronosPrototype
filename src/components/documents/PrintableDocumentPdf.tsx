@@ -473,22 +473,14 @@ function TableBlock({ table }: { table: PrintableTable }) {
                 const cellCurrency = c.format === "money" ? String(row.cells["currency"] || "") || undefined : undefined;
                 const formatted = formatPrintableValue(raw, c.format, cellCurrency);
                 const showSubtext = ci === 0 && row.subtext && row.emphasis !== "subtotal";
-                const showConvertedHint = c.id === "amount" && row.cells["_convertedAmount"];
-                return showSubtext || showConvertedHint ? (
+                return showSubtext ? (
                   <View key={c.id} style={colStyle(c)}>
                     <Text style={[s.tdText, row.emphasis === "subtotal" ? s.tdTextEmphasis : null]}>
                       {formatted}
                     </Text>
-                    {showConvertedHint ? (
-                      <Text style={{ fontSize: 6.5, color: "#667085", marginTop: 1, textAlign: "right" }}>
-                        {"≈ " + formatPrintableValue(row.cells["_convertedAmount"], "money", "PHP")}
-                      </Text>
-                    ) : null}
-                    {showSubtext ? (
-                      <Text style={{ fontSize: 7, color: "#667085", fontStyle: "italic", marginTop: 1 }}>
-                        {row.subtext}
-                      </Text>
-                    ) : null}
+                    <Text style={{ fontSize: 7, color: "#667085", fontStyle: "italic", marginTop: 1 }}>
+                      {row.subtext}
+                    </Text>
                   </View>
                 ) : (
                   <Text
@@ -510,11 +502,6 @@ function TableBlock({ table }: { table: PrintableTable }) {
                 <Text style={[s.subtotalVal, s.tdText]}>
                   {formatPrintableValue(group.subtotal.cells["amount"], "money", String(group.subtotal.cells["currency"] || "") || undefined)}
                 </Text>
-                {group.subtotal.cells["_foreignSubtotal"] ? (
-                  <Text style={{ fontSize: 6.5, color: "#667085", marginTop: 1, textAlign: "right" }}>
-                    {"≈ " + formatPrintableValue(group.subtotal.cells["_foreignSubtotal"], "money", String(group.subtotal.cells["_foreignCurrency"] || "") || undefined)}
-                  </Text>
-                ) : null}
               </View>
             </View>
           ) : null}
@@ -544,6 +531,11 @@ function TotalsBlock({ totals }: { totals?: PrintableTotals }) {
             {formatPrintableValue(totals.grandTotal.value, totals.grandTotal.format || "money", totals.grandTotal.currency)}
           </Text>
         </View>
+      ) : null}
+      {totals.convertedTotal ? (
+        <Text style={{ fontSize: 8, color: "#667085", marginTop: 2, textAlign: "right" }}>
+          {"≈ " + formatPrintableValue(totals.convertedTotal.value, "money", totals.convertedTotal.currency)}
+        </Text>
       ) : null}
     </View>
   );

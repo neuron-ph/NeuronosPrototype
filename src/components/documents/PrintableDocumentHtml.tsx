@@ -163,11 +163,6 @@ function TableBlock({ table }: { table: PrintableTable }) {
                     return (
                       <td key={c.id} style={{ textAlign: c.align || "left" }}>
                         {formatted}
-                        {c.id === "amount" && row.cells["_convertedAmount"] ? (
-                          <div style={{ fontSize: "9px", color: "#667085", marginTop: 1 }}>
-                            ≈ {formatPrintableValue(row.cells["_convertedAmount"], "money", "PHP")}
-                          </div>
-                        ) : null}
                         {showSubtext ? (
                           <div style={{ fontSize: "9px", color: "#667085", fontStyle: "italic", marginTop: 1 }}>
                             {row.subtext}
@@ -192,11 +187,6 @@ function TableBlock({ table }: { table: PrintableTable }) {
                   </td>
                   <td className="p-subtotal-val">
                     {formatPrintableValue(subAmount, "money", String(group.subtotal.cells["currency"] || "") || undefined)}
-                    {group.subtotal.cells["_foreignSubtotal"] ? (
-                      <div style={{ fontSize: "7pt", color: "#667085", fontWeight: 400, marginTop: "1px" }}>
-                        ≈ {formatPrintableValue(group.subtotal.cells["_foreignSubtotal"], "money", String(group.subtotal.cells["_foreignCurrency"] || "") || undefined)}
-                      </div>
-                    ) : null}
                   </td>
                 </tr>,
               );
@@ -234,6 +224,11 @@ function TotalsBlock({ doc }: { doc: PrintableDocument }) {
               totals.grandTotal.currency,
             )}
           </span>
+        </div>
+      ) : null}
+      {totals.convertedTotal ? (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "2px", fontSize: "8pt", color: "#667085" }}>
+          ≈ {formatPrintableValue(totals.convertedTotal.value, "money", totals.convertedTotal.currency)}
         </div>
       ) : null}
     </div>
