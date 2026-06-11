@@ -107,6 +107,10 @@ export interface PrintableTotalRow {
 export interface PrintableTotals {
   rows: PrintableTotalRow[];
   grandTotal?: PrintableTotalRow;
+  /** Single converted-equivalent line shown under the grand total, used when the
+   *  document totals in a foreign currency (e.g. an all-USD quote shows its PHP
+   *  equivalent once at the very bottom). */
+  convertedTotal?: { value: number; currency: string };
 }
 
 export interface PrintableSignatory {

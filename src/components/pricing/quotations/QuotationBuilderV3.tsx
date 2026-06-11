@@ -1441,6 +1441,16 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
    * @updates sellingPrice state with recalculated base costs and final prices
    */
   useEffect(() => {
+    // Never auto-sync in the read-only detail view, and never during the initial
+    // hydration of a saved quotation. On load, `buyingPrice` is still the exact
+    // loaded reference (from useState/the viewMode sync); syncing then would
+    // overwrite the saved Selling Price (e.g. real USD lines) with the buying
+    // values (often empty/PHP) — the bug where a priced quote showed ₱0.00 while
+    // the PDF was correct. Only sync after a genuine user edit to buying (which
+    // replaces the reference).
+    if (viewMode) return;
+    if (buyingPrice === initialData?.buying_price) return;
+
     // Only sync if both exist and we're not in the initial load
     if (buyingPrice.length > 0 && sellingPrice.length > 0) {
       console.log('🔄 SYNC: Buying Price → Selling Price');
