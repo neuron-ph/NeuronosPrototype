@@ -2,9 +2,55 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../utils/supabase/client";
 import { queryKeys } from "../lib/queryKeys";
 import { useRealtimeSync } from "./useRealtimeSync";
+import { usePaginatedList } from "./usePaginatedList";
+import { sanitizeSearch } from "../utils/pagination";
 
 interface UseCustomersOptions {
   enabled?: boolean;
+}
+
+interface UseCustomersPaginatedOptions {
+  page: number;
+  search?: string;
+  industry?: string;
+  status?: string;
+  /** owner_id filter ("All" = no filter). */
+  owner?: string;
+  enabled?: boolean;
+}
+
+/**
+ * Server-paginated customers. Visibility stays RLS/crew-based (no owner scope) —
+ * the `owner` arg here is the optional UI owner filter, not a security boundary.
+ * Search covers name + company_name.
+ */
+export function useCustomersPaginated({
+  page,
+  search = "",
+  industry = "All",
+  status = "All",
+  owner = "All",
+  enabled = true,
+}: UseCustomersPaginatedOptions) {
+  const result = usePaginatedList<any>({
+    table: "customers",
+    queryKey: [...queryKeys.customers.list(), "paginated", { search, industry, status, owner }, page],
+    page,
+    enabled,
+    buildQuery: (q) => {
+      let b = q.order("created_at", { ascending: false }).order("id");
+      if (industry && industry !== "All") b = b.eq("industry", industry);
+      if (status && status !== "All") b = b.eq("status", status);
+      if (owner && owner !== "All") b = b.eq("owner_id", owner);
+      const s = sanitizeSearch(search);
+      if (s) b = b.or(`name.ilike.%${s}%,company_name.ilike.%${s}%`);
+      return b;
+    },
+  });
+
+  useRealtimeSync({ table: "customers", queryKey: queryKeys.customers.all(), enabled });
+
+  return result;
 }
 
 // Customer visibility is CREW-based and enforced by RLS (migration 189):

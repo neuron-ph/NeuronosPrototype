@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, Users as UsersIcon, MoreHorizontal, Building2, Target, Briefcase, TrendingUp, Trash2 } from "lucide-react";
 import { NeuronKPICard } from "../ui/NeuronKPICard";
 import { supabase } from "../../utils/supabase/client";
@@ -7,9 +8,10 @@ import { useUser } from "../../hooks/useUser";
 import { logCreation, logDeletion } from "../../utils/activityLog";
 import { recordNotificationEvent, fetchDeptManagerIds } from "../../utils/notifications";
 import { useUnreadEntityIds } from "../../hooks/useNotifications";
-import { useCustomers } from "../../hooks/useCustomers";
-import { useContacts } from "../../hooks/useContacts";
+import { useCustomersPaginated } from "../../hooks/useCustomers";
 import { useCRMActivities } from "../../hooks/useCRMActivities";
+import { useDebounce } from "../../hooks/useDebounce";
+import { TablePagination } from "../shared/TablePagination";
 import type { Customer, Industry, CustomerStatus } from "../../types/bd";
 import { useDataScope } from "../../hooks/useDataScope";
 import { CustomDropdown } from "../bd/CustomDropdown";
@@ -32,9 +34,12 @@ export function CustomersListWithFilters({ userDepartment, moduleId, onViewCusto
   const [ownerFilter, setOwnerFilter] = useState<string>("All");
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const debouncedSearch = useDebounce(searchQuery, 300);
 
   const { user } = useUser();
+  const queryClient = useQueryClient();
 
   // Visibility is enforced by RLS (crew-based, migration 189) — the hook only
   // gates the fetch until auth context is ready. No client-side scope filter.
@@ -53,26 +58,85 @@ export function CustomersListWithFilters({ userDepartment, moduleId, onViewCusto
   // Direct Supabase query for BD users (replaces Edge Function fetch)
   const { users } = useUsers({ department: 'Business Development' });
 
-  const { customers: allCustomers, isLoading, invalidate: invalidateCustomers } = useCustomers({
+  // Reset to first page whenever a filter or search changes
+  useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch, industryFilter, statusFilter, ownerFilter]);
+
+  // Server-paginated customers (search + industry + status + owner pushed to the DB)
+  const {
+    rows: filteredCustomers,
+    total,
+    totalPages,
+    pageSize,
+    isLoading,
+    isFetching,
+  } = useCustomersPaginated({
+    page,
+    search: debouncedSearch,
+    industry: industryFilter,
+    status: statusFilter,
+    owner: ownerFilter,
     enabled: isLoaded,
   });
-  const { contacts: allContacts, invalidate: invalidateContacts } = useContacts();
+
+  const invalidateCustomers = () => queryClient.invalidateQueries({ queryKey: ["customers"] });
+  const invalidateContacts = () => queryClient.invalidateQueries({ queryKey: ["contacts"] });
+
   const { activities } = useCRMActivities();
   const { industries } = useCustomerProfileOptions({
-    industryValuesFromRecords: allCustomers.map(customer => customer.industry),
+    industryValuesFromRecords: filteredCustomers.map((customer: any) => customer.industry),
   });
 
-  // Client-side filtering for search, industry, status (replaces server-side filtering)
-  const customers = allCustomers.filter(customer => {
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      const matchesSearch = (customer.name || '').toLowerCase().includes(q) ||
-        (customer.company_name || '').toLowerCase().includes(q);
-      if (!matchesSearch) return false;
-    }
-    if (industryFilter && industryFilter !== "All" && customer.industry !== industryFilter) return false;
-    if (statusFilter && statusFilter !== "All" && customer.status !== statusFilter) return false;
-    return true;
+  // Per-row contact counts for the visible page only (bounded by ~pageSize customers)
+  const visibleCustomerIds = filteredCustomers.map((c: any) => c.id);
+  const { data: contactCountMap = {} } = useQuery({
+    queryKey: ["customers", "contact-counts", visibleCustomerIds],
+    enabled: isLoaded && visibleCustomerIds.length > 0,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("contacts")
+        .select("customer_id")
+        .in("customer_id", visibleCustomerIds);
+      if (error) throw error;
+      const map: Record<string, number> = {};
+      for (const row of data ?? []) {
+        const id = (row as any).customer_id;
+        if (id) map[id] = (map[id] ?? 0) + 1;
+      }
+      return map;
+    },
+  });
+
+  // KPI counts run as dedicated queries (the list is paginated; full counts reflect
+  // the user's RLS-visible customer set, independent of the search/filter inputs).
+  const kpiMonth = new Date();
+  const kpiMonthStart = new Date(kpiMonth.getFullYear(), kpiMonth.getMonth(), 1).toISOString();
+  const kpiNextMonthStart = new Date(kpiMonth.getFullYear(), kpiMonth.getMonth() + 1, 1).toISOString();
+  const { data: kpiCounts = { total: 0, active: 0, prospect: 0, newThisMonth: 0 } } = useQuery({
+    queryKey: ["customers", "kpi-counts"],
+    enabled: isLoaded,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const head = (apply?: (q: any) => any) => {
+        let q = supabase.from("customers").select("id", { count: "exact", head: true });
+        if (apply) q = apply(q);
+        return q;
+      };
+      const [all, active, prospect, fresh] = await Promise.all([
+        head(),
+        head((q) => q.eq("status", "Active")),
+        head((q) => q.eq("status", "Prospect")),
+        head((q) => q.gte("created_at", kpiMonthStart).lt("created_at", kpiNextMonthStart)),
+      ]);
+      return {
+        total: all.count ?? 0,
+        active: active.count ?? 0,
+        prospect: prospect.count ?? 0,
+        newThisMonth: fresh.count ?? 0,
+      };
+    },
   });
 
   // Close dropdown when clicking outside
@@ -147,17 +211,8 @@ export function CustomersListWithFilters({ userDepartment, moduleId, onViewCusto
     }
   };
 
-  // Get contact count for each customer (using backend contacts)
-  const getContactCount = (customerId: string, customerName: string): number => {
-    const count = allContacts.filter(c => 
-      c.customer_id === customerId // ✅ Contacts now correctly use customer_id field
-    ).length;
-    if (customerId === 'CUST-001') {
-      console.log(`[DEBUG] Contact count for ${customerId} (${customerName}):`, count);
-      console.log(`[DEBUG] All contacts:`, allContacts.map(c => ({ id: c.id, name: c.name, customer_id: c.customer_id })));
-    }
-    return count;
-  };
+  // Get contact count for each customer (counts fetched for the visible page only)
+  const getContactCount = (customerId: string): number => contactCountMap[customerId] ?? 0;
 
   // Get latest activity date for each customer - now from backend
   const getLastActivityDate = (customerId: string): string | null => {
@@ -168,13 +223,7 @@ export function CustomersListWithFilters({ userDepartment, moduleId, onViewCusto
     return customerActivities.length > 0 ? customerActivities[0].date : null;
   };
 
-  // Filter customers (now for owner only, since backend handles search, industry, status)
-  const filteredCustomers = customers.filter(customer => {
-    const matchesOwner = ownerFilter === "All" || customer.owner_id === ownerFilter;
-    return matchesOwner;
-  });
-
-  const unreadCustomerIds = useUnreadEntityIds("customer", filteredCustomers.map((c) => c.id));
+  const unreadCustomerIds = useUnreadEntityIds("customer", filteredCustomers.map((c: any) => c.id));
 
   const getOwnerName = (ownerId: string) => {
     const owner = users.find(u => u.id === ownerId);
@@ -220,20 +269,9 @@ export function CustomersListWithFilters({ userDepartment, moduleId, onViewCusto
     return colors[index];
   };
 
-  // Calculate KPIs with Quotas - now from backend data
-  const currentMonth = new Date().getMonth();
-  const currentYear = new Date().getFullYear();
-  
-  // Total Customers - from backend
-  const totalCustomers = customers.length;
-  const activeCustomers = customers.filter(c => c.status === "Active").length;
-  const prospectCustomers = customers.filter(c => c.status === "Prospect").length;
-  
-  // New Customers Added this month - from backend
-  const newCustomersAdded = customers.filter(customer => {
-    const createdDate = new Date(customer.created_at);
-    return createdDate.getMonth() === currentMonth && createdDate.getFullYear() === currentYear;
-  }).length;
+  // KPIs from dedicated count queries (full RLS-visible set, not just the current page)
+  const activeCustomers = kpiCounts.active;
+  const newCustomersAdded = kpiCounts.newThisMonth;
   const newCustomersQuota = 10;
   const newCustomersProgress = (newCustomersAdded / newCustomersQuota) * 100;
   const newCustomersTrend = 20; // +20% vs last month (mock data)
@@ -478,7 +516,7 @@ export function CustomersListWithFilters({ userDepartment, moduleId, onViewCusto
           ) : (
             filteredCustomers.map(customer => {
               const lastActivityDate = getLastActivityDate(customer.id);
-              const contactCount = getContactCount(customer.id, customer.name || customer.company_name || '');
+              const contactCount = getContactCount(customer.id);
               const logoColor = getCompanyLogoColor(customer.name || customer.company_name || '');
               
               return (
@@ -616,6 +654,16 @@ export function CustomersListWithFilters({ userDepartment, moduleId, onViewCusto
             })
           )}
         </div>
+        {!isLoading && (
+          <TablePagination
+            page={page}
+            totalPages={totalPages}
+            total={total}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            isFetching={isFetching}
+          />
+        )}
       </div>
       </div>
 

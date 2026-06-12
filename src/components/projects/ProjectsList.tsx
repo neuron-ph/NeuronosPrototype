@@ -9,6 +9,8 @@ import { SkeletonTable, SkeletonControlBar } from "../shared/NeuronSkeleton";
 import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
 import { usePermission } from "../../context/PermissionProvider";
 import { useUnreadEntityIds } from "../../hooks/useNotifications";
+import { useClientPagination } from "../../hooks/useClientPagination";
+import { TablePagination } from "../shared/TablePagination";
 import { PROJECT_MODULE_IDS, type ProjectDept } from "../../config/access/accessSchema";
 
 interface ProjectsListProps {
@@ -143,7 +145,21 @@ export function ProjectsList({
     return true;
   });
 
-  const unreadProjectIds = useUnreadEntityIds("project", filteredProjects.map((p) => p.id));
+  // Paginate the filtered list client-side (parent loads the full set; margin/profit
+  // filters above are computed, so filtering stays client-side).
+  const {
+    page,
+    setPage,
+    pageItems: pagedProjects,
+    total: filteredTotal,
+    totalPages,
+    pageSize,
+  } = useClientPagination(
+    filteredProjects,
+    JSON.stringify({ activeTab, searchQuery, dateFrom, dateTo, customerFilter, marginFilter, profitFilter, statusFilter, ownerFilter }),
+  );
+
+  const unreadProjectIds = useUnreadEntityIds("project", pagedProjects.map((p) => p.id));
 
   // Calculate counts
   const allCount = projects.length;
@@ -500,16 +516,16 @@ export function ProjectsList({
             </div>
 
             {/* Table Body */}
-            {filteredProjects.map((project, index) => {
+            {pagedProjects.map((project, index) => {
               const stats = financialsMap[project.project_number] || { income: 0, costs: 0, grossProfit: 0, margin: 0 };
-              
+
               return (
                 <div
                   key={project.id}
                   className="grid gap-4 px-6 py-4 transition-colors cursor-pointer"
-                  style={{ 
+                  style={{
                     gridTemplateColumns: GRID_COLS,
-                    borderBottom: index < filteredProjects.length - 1 ? "1px solid var(--theme-border-default)" : "none",
+                    borderBottom: index < pagedProjects.length - 1 ? "1px solid var(--theme-border-default)" : "none",
                   }}
                   onClick={() => onSelectProject(project)}
                   onMouseEnter={(e) => {
@@ -613,6 +629,13 @@ export function ProjectsList({
                 </div>
               );
             })}
+            <TablePagination
+              page={page}
+              totalPages={totalPages}
+              total={filteredTotal}
+              pageSize={pageSize}
+              onPageChange={setPage}
+            />
           </div>
         )}
       </div>

@@ -19,6 +19,8 @@ import { SkeletonTable, SkeletonControlBar } from "../shared/NeuronSkeleton";
 import { NeuronRefreshButton } from "../shared/NeuronRefreshButton";
 import { getNormalizedContractStatus } from "../../utils/quotationStatus";
 import { useUnreadEntityIds } from "../../hooks/useNotifications";
+import { useClientPagination } from "../../hooks/useClientPagination";
+import { TablePagination } from "../shared/TablePagination";
 import { CONTRACT_MODULE_IDS, type ContractDept } from "../../config/access/accessSchema";
 
 interface ContractsListProps {
@@ -137,7 +139,21 @@ export function ContractsList({
     return true;
   });
 
-  const unreadContractIds = useUnreadEntityIds("contract", filteredContracts.map((c) => c.id));
+  // Paginate the filtered list client-side (parent loads the full set; status is a
+  // normalized/computed value, so filtering stays client-side).
+  const {
+    page,
+    setPage,
+    pageItems: pagedContracts,
+    total: filteredTotal,
+    totalPages,
+    pageSize,
+  } = useClientPagination(
+    filteredContracts,
+    JSON.stringify({ activeTab, searchQuery, dateFrom, dateTo, statusFilter, customerFilter, ownerFilter }),
+  );
+
+  const unreadContractIds = useUnreadEntityIds("contract", pagedContracts.map((c) => c.id));
 
   // Calculate counts
   const allCount = contracts.length;
@@ -455,17 +471,17 @@ export function ContractsList({
             </div>
 
             {/* Table Body */}
-            {filteredContracts.map((contract, index) => {
+            {pagedContracts.map((contract, index) => {
               const contractStatus = getContractStatus(contract);
               const daysRemaining = getDaysRemaining(contract.contract_validity_end);
-              
+
               return (
                 <div
                   key={contract.id}
                   className="grid gap-4 px-6 py-4 transition-colors cursor-pointer"
-                  style={{ 
+                  style={{
                     gridTemplateColumns: GRID_COLS,
-                    borderBottom: index < filteredContracts.length - 1 ? "1px solid var(--theme-border-default)" : "none",
+                    borderBottom: index < pagedContracts.length - 1 ? "1px solid var(--theme-border-default)" : "none",
                   }}
                   onClick={() => onSelectContract(contract)}
                   onMouseEnter={(e) => {
@@ -596,6 +612,13 @@ export function ContractsList({
                 </div>
               );
             })}
+            <TablePagination
+              page={page}
+              totalPages={totalPages}
+              total={filteredTotal}
+              pageSize={pageSize}
+              onPageChange={setPage}
+            />
           </div>
         )}
       </div>

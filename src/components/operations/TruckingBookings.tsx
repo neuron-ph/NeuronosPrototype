@@ -6,11 +6,10 @@ import { CreateTruckingBookingPanel } from "./CreateTruckingBookingPanel";
 import { TruckingBookingDetails } from "./TruckingBookingDetails";
 import { NeuronStatusPill } from "../NeuronStatusPill";
 import { toast } from "../ui/toast-utils";
-import { useQuery } from "@tanstack/react-query";
-import { queryKeys } from "../../lib/queryKeys";
+import { useQueryClient } from "@tanstack/react-query";
 import { useDataScope } from "../../hooks/useDataScope";
 import { useBookingAssignmentVisibility } from "../../hooks/useBookingAssignmentVisibility";
-import { filterBookingsByScope } from "../../utils/assignments/applyAssignmentVisibility";
+import { useBookingsPaginated, useBookingTabCounts, useBookingFilterOptions } from "../../hooks/useBookingsPaginated";
 import { SkeletonTable } from "../shared/NeuronSkeleton";
 import { usePermission } from "../../context/PermissionProvider";
 import { logDeletion } from "../../utils/activityLog";
@@ -21,6 +20,7 @@ import { NeuronModal } from "../ui/NeuronModal";
 import { useUnreadEntityIds } from "../../hooks/useNotifications";
 import { useUrlSelection } from "../../hooks/useUrlSelection";
 import { useRealtimeSync } from "../../hooks/useRealtimeSync";
+import { TablePagination } from "../shared/TablePagination";
 
 interface TruckingBooking {
   bookingId: string;
@@ -80,46 +80,72 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
     userIds: scope.type === 'userIds' ? scope.ids : null,
   });
 
-  // ── Bookings fetch ────────────────────────────────────────
-  const { data: rawBookings = [], isLoading, refetch } = useQuery<TruckingBooking[]>({
-    queryKey: queryKeys.bookings.list("trucking"),
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('bookings')
-        .select('*')
-        .eq('service_type', 'Trucking')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return (data || []).map((row) => {
-        const d = normalizeDetails(row.details || {}, "Trucking");
-        return {
-          ...d,
-          ...row,
-          bookingId: row.id,
-          booking_number: row.booking_number,
-          customerName: row.customer_name,
-          projectNumber: row.project_id,
-          accountOwner: row.manager_name,
-          accountHandler: row.handler_name,
-          status: row.status,
-          createdAt: row.created_at,
-          updatedAt: row.updated_at || row.created_at,
-          truckType: d.truck_type,
-          deliveryAddress: d.delivery_address,
-          preferredDeliveryDate: d.preferred_delivery_date,
-        } as TruckingBooking;
-      });
-    },
-    // Inherits 5-minute staleTime from global QueryClient config
+  // ── Bookings fetch (server-side: filters/tab/scope run in the DB) ──────────
+  const queryClient = useQueryClient();
+  const [page, setPage] = useState(0);
+  const dataReady = scopeLoaded && assignmentIndexLoaded;
+
+  const filterKey = JSON.stringify({
+    activeTab, searchTerm, statusFilter, movementFilter, timePeriodFilter, ownerFilter, handlerFilter, truckTypeFilter,
   });
-  const fetchBookings = () => { refetch(); };
+  useEffect(() => { setPage(0); }, [filterKey]);
 
-  useRealtimeSync({ table: "bookings", queryKey: queryKeys.bookings.list("trucking") });
+  const mapTruckingRow = (row: any): TruckingBooking => {
+    const d = normalizeDetails(row.details || {}, "Trucking");
+    return {
+      ...d,
+      ...row,
+      bookingId: row.id,
+      booking_number: row.booking_number,
+      customerName: row.customer_name,
+      projectNumber: row.project_id,
+      accountOwner: row.manager_name,
+      accountHandler: row.handler_name,
+      status: row.status,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at || row.created_at,
+      truckType: d.truck_type,
+      deliveryAddress: d.delivery_address,
+      preferredDeliveryDate: d.preferred_delivery_date,
+    } as TruckingBooking;
+  };
 
-  const bookings = useMemo(() => {
-    if (!scopeLoaded || !assignmentIndexLoaded) return [];
-    return filterBookingsByScope(rawBookings, scope, assignmentIndex);
-  }, [rawBookings, scope, scopeLoaded, assignmentIndex, assignmentIndexLoaded]);
+  const {
+    rows: rawPage,
+    total,
+    totalPages,
+    pageSize,
+    isLoading,
+    isFetching,
+  } = useBookingsPaginated({
+    serviceType: "Trucking",
+    page,
+    enabled: dataReady,
+    scope,
+    assignmentIndex,
+    currentUserName: currentUser?.name,
+    tab: activeTab,
+    search: searchTerm,
+    status: statusFilter,
+    owner: ownerFilter,
+    handler: handlerFilter,
+    timePeriod: timePeriodFilter,
+    movementField: { value: movementFilter, kind: "json", name: "movement_type" },
+    typeField: { value: truckTypeFilter, kind: "json", name: "truck_type" },
+  });
+
+  const bookings = useMemo(() => rawPage.map(mapTruckingRow), [rawPage]);
+  const pagedBookings = bookings;
+  const fetchBookings = () => { queryClient.invalidateQueries({ queryKey: ["bookings"] }); };
+
+  useRealtimeSync({ table: "bookings", queryKey: ["bookings"] });
+
+  const { data: tabCounts } = useBookingTabCounts({
+    serviceType: "Trucking", scope, assignmentIndex, currentUserName: currentUser?.name, enabled: dataReady,
+  });
+  const { data: bookingOptions } = useBookingFilterOptions({
+    serviceType: "Trucking", typeField: { kind: "json", name: "truck_type" }, enabled: dataReady,
+  });
 
   // Deep-link: auto-select booking from URL param or pendingBookingId
   const deepLinkId = urlBookingId ?? pendingBookingId;
@@ -219,90 +245,22 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
     }
   };
 
-  // Get unique values for filters
-  const uniqueOwners = Array.from(new Set(bookings.map(b => b.accountOwner).filter(Boolean)));
-  const uniqueHandlers = Array.from(new Set(bookings.map(b => b.accountHandler).filter(Boolean)));
-  const uniqueTruckTypes = Array.from(new Set(bookings.map(b => b.truckType).filter(Boolean)));
-
-  // Filter bookings by tab first
-  const getFilteredByTab = () => {
-    let filtered = bookings;
-
-    if (activeTab === "my") {
-      filtered = bookings.filter(b => 
-        b.accountOwner === currentUser?.name || 
-        b.accountHandler === currentUser?.name
-      );
-    } else if (activeTab === "draft") {
-      filtered = bookings.filter(b => b.status === "Draft");
-    } else if (activeTab === "in-progress") {
-      filtered = bookings.filter(b => b.status === "In Progress");
-    } else if (activeTab === "completed") {
-      filtered = bookings.filter(b => b.status === "Completed");
-    } else if (activeTab === "cancelled") {
-      filtered = bookings.filter(b => ["Cancelled", "Closed", "Paid"].includes(b.status));
-    }
-
-    return filtered;
-  };
-
-  // Apply all filters
-  const filteredBookings = getFilteredByTab().filter(booking => {
-    // Search filter
-    const matchesSearch =
-      ((booking as any).booking_number || booking.bookingId).toLowerCase().includes(searchTerm.toLowerCase()) ||
-      booking.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (booking.deliveryAddress && booking.deliveryAddress.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (booking.projectNumber && booking.projectNumber.toLowerCase().includes(searchTerm.toLowerCase()));
-    
-    if (!matchesSearch) return false;
-
-    // Time period filter
-    if (timePeriodFilter !== "all") {
-      const bookingDate = new Date(booking.createdAt);
-      const now = new Date();
-      const daysDiff = Math.floor((now.getTime() - bookingDate.getTime()) / (1000 * 60 * 60 * 24));
-      
-      if (timePeriodFilter === "7days" && daysDiff > 7) return false;
-      if (timePeriodFilter === "30days" && daysDiff > 30) return false;
-      if (timePeriodFilter === "90days" && daysDiff > 90) return false;
-    }
-
-    // Status filter
-    const matchesStatus = statusFilter === "all" || booking.status === statusFilter;
-    if (!matchesStatus) return false;
-
-    // Movement filter
-    const matchesMovement = movementFilter === "all" || (booking.movement || "IMPORT") === movementFilter;
-    if (!matchesMovement) return false;
-
-    // Owner filter
-    if (ownerFilter !== "all" && booking.accountOwner !== ownerFilter) return false;
-
-    // Handler filter
-    if (handlerFilter === "unassigned" && booking.accountHandler) return false;
-    if (handlerFilter !== "all" && handlerFilter !== "unassigned" && booking.accountHandler !== handlerFilter) return false;
-
-    // Truck Type filter
-    if (truckTypeFilter !== "all" && booking.truckType !== truckTypeFilter) return false;
-
-    return true;
-  });
+  // Filter dropdown options + tab counts come from dedicated scoped queries
+  const uniqueOwners = bookingOptions?.owners ?? [];
+  const uniqueHandlers = bookingOptions?.handlers ?? [];
+  const uniqueTruckTypes = bookingOptions?.types ?? [];
 
   const unreadBookingIds = useUnreadEntityIds(
     "booking",
-    filteredBookings.map((b) => b.bookingId),
+    pagedBookings.map((b) => b.bookingId),
   );
 
-  // Calculate counts for tabs
-  const allCount = bookings.length;
-  const myCount = bookings.filter(b => 
-    b.accountOwner === currentUser?.name || b.accountHandler === currentUser?.name
-  ).length;
-  const draftCount = bookings.filter(b => b.status === "Draft").length;
-  const inProgressCount = bookings.filter(b => b.status === "In Progress").length;
-  const completedCount = bookings.filter(b => b.status === "Completed").length;
-  const cancelledCount = bookings.filter(b => ["Cancelled", "Closed", "Paid"].includes(b.status)).length;
+  const allCount = tabCounts?.all ?? 0;
+  const myCount = tabCounts?.my ?? 0;
+  const draftCount = tabCounts?.draft ?? 0;
+  const inProgressCount = tabCounts?.inProgress ?? 0;
+  const completedCount = tabCounts?.completed ?? 0;
+  const cancelledCount = tabCounts?.cancelled ?? 0;
 
   if (selectedBooking) {
     return (
@@ -613,7 +571,7 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
             <div className="mt-2">
               <SkeletonTable rows={10} cols={6} />
             </div>
-          ) : filteredBookings.length === 0 ? (
+          ) : total === 0 ? (
             <div className="flex flex-col items-center justify-center h-64">
               <div className="text-[var(--theme-text-primary)]/60 mb-2">
                 {searchTerm || statusFilter !== "all" 
@@ -669,7 +627,7 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredBookings.map((booking) => (
+                  {pagedBookings.map((booking) => (
                     <tr
                       key={booking.bookingId}
                       className="border-b border-[var(--theme-text-primary)]/5 hover:bg-[var(--theme-action-primary-bg)]/5 transition-colors cursor-pointer"
@@ -803,6 +761,14 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
                   ))}
                 </tbody>
               </table>
+              <TablePagination
+                page={page}
+                totalPages={totalPages}
+                total={total}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                isFetching={isFetching}
+              />
             </div>
           )}
         </div>
@@ -822,7 +788,7 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
           onClose={() => setResumeDraft(null)}
           onBookingCreated={() => {
             setResumeDraft(null);
-            refetch();
+            fetchBookings();
           }}
           currentUser={currentUser as any}
           draftBookingId={String(resumeDraft.id)}

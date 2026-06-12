@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "motion/react";
 import { Search, Plus, Building2, Users, UserCheck, MoreHorizontal, Phone, Mail, SlidersHorizontal, X, Check } from "lucide-react";
 import { NeuronKPICard } from "../ui/NeuronKPICard";
@@ -8,8 +9,10 @@ import { useUser } from "../../hooks/useUser";
 import { logCreation } from "../../utils/activityLog";
 import { recordNotificationEvent, fetchDeptManagerIds } from "../../utils/notifications";
 import { useUnreadEntityIds } from "../../hooks/useNotifications";
-import { useContacts } from "../../hooks/useContacts";
+import { useContactsPaginated } from "../../hooks/useContacts";
 import { useCRMActivities } from "../../hooks/useCRMActivities";
+import { useDebounce } from "../../hooks/useDebounce";
+import { TablePagination } from "../shared/TablePagination";
 import { usePermission } from "../../context/PermissionProvider";
 import { AddContactPanel } from "../bd/AddContactPanel";
 import { CustomDropdown } from "../bd/CustomDropdown";
@@ -56,33 +59,47 @@ export function ContactsListWithFilters({ userDepartment, moduleId, onViewContac
   const [ownerFilter, setOwnerFilter] = useState<string>("All");
   const [isAddContactOpen, setIsAddContactOpen] = useState(false);
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
+  const [page, setPage] = useState(0);
+  const debouncedSearch = useDebounce(searchQuery, 300);
 
   const { user } = useUser();
   const { can } = usePermission();
   const { scope, isLoaded } = useDataScope('contacts');
   const { isMobile, isTablet } = useBreakpoint();
+  const queryClient = useQueryClient();
 
   const { users: bdUsers } = useUsers({ department: 'Business Development' });
-  const { contacts: allContacts, isLoading, invalidate: invalidateContacts } = useContacts({ enabled: isLoaded });
   const { activities } = useCRMActivities();
 
   const canViewModule = can(moduleId, "view");
   const showAdvancedFilters = userDepartment === "Business Development" && canViewModule;
+  const applyScope = userDepartment === "Business Development";
 
-  // Apply scope + search client-side
-  const contacts = allContacts.filter((contact: BackendContact) => {
-    if (userDepartment === "Business Development") {
-      if (scope.type === 'userIds' && contact.owner_id && !scope.ids.includes(contact.owner_id)) return false;
-      if (scope.type === 'own' && contact.owner_id !== scope.userId) return false;
-    }
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      const matchesSearch = (contact.name || '').toLowerCase().includes(q) ||
-        (contact.email || '').toLowerCase().includes(q);
-      if (!matchesSearch) return false;
-    }
-    return true;
+  // Reset to first page whenever a filter or search changes
+  const scopeKey = JSON.stringify(scope);
+  useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch, lifecycleFilter, statusFilter, ownerFilter, scopeKey]);
+
+  // Server-paginated contacts (search + scope + lifecycle pushed to the DB)
+  const {
+    rows: filteredContacts,
+    total,
+    totalPages,
+    pageSize,
+    isLoading,
+    isFetching,
+  } = useContactsPaginated({
+    page,
+    search: debouncedSearch,
+    lifecycle: lifecycleFilter,
+    applyScope,
+    scope: scope as any,
+    enabled: isLoaded,
   });
+
+  const invalidateContacts = () =>
+    queryClient.invalidateQueries({ queryKey: ["contacts"] });
 
   const permissions = {
     canCreate: can(moduleId, "create"),
@@ -153,11 +170,6 @@ export function ContactsListWithFilters({ userDepartment, moduleId, onViewContac
     }
   };
 
-  const filteredContacts = contacts.filter(contact => {
-    const lifecycle = mapStatusToLifecycle(contact.status || "");
-    return lifecycleFilter === "All" || lifecycle === lifecycleFilter;
-  });
-
   const unreadContactIds = useUnreadEntityIds("user", filteredContacts.map((c) => c.id));
 
   const formatDate = (dateString: string) => {
@@ -189,14 +201,37 @@ export function ContactsListWithFilters({ userDepartment, moduleId, onViewContac
     return Math.round(((current - previous) / previous) * 100);
   };
 
-  const newContactsAdded = contacts.filter(c => {
-    const d = new Date(c.created_date || c.created_at || "");
-    return !isNaN(d.getTime()) && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-  }).length;
-  const prevNewContactsAdded = contacts.filter(c => {
-    const d = new Date(c.created_date || c.created_at || "");
-    return !isNaN(d.getTime()) && d.getMonth() === prevMonth && d.getFullYear() === prevYear;
-  }).length;
+  // New-contacts KPI runs as dedicated count queries (the list is now paginated,
+  // so it no longer holds the full dataset to count over).
+  const monthStart = new Date(currentYear, currentMonth, 1).toISOString();
+  const nextMonthStart = new Date(currentYear, currentMonth + 1, 1).toISOString();
+  const prevMonthStart = new Date(prevYear, prevMonth, 1).toISOString();
+  const { data: newContactsCounts = { current: 0, prev: 0 } } = useQuery({
+    queryKey: ["contacts", "kpi-new", { applyScope, scope }],
+    enabled: isLoaded,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const scoped = (from: string, to: string) => {
+        let q = supabase
+          .from("contacts")
+          .select("id", { count: "exact", head: true })
+          .gte("created_at", from)
+          .lt("created_at", to);
+        if (applyScope) {
+          if (scope.type === "userIds" && scope.ids.length) q = q.in("owner_id", scope.ids);
+          else if (scope.type === "own" && scope.userId) q = q.eq("owner_id", scope.userId);
+        }
+        return q;
+      };
+      const [cur, prev] = await Promise.all([
+        scoped(monthStart, nextMonthStart),
+        scoped(prevMonthStart, monthStart),
+      ]);
+      return { current: cur.count ?? 0, prev: prev.count ?? 0 };
+    },
+  });
+  const newContactsAdded = newContactsCounts.current;
+  const prevNewContactsAdded = newContactsCounts.prev;
   const newContactsQuota    = 25;
   const newContactsProgress = (newContactsAdded / newContactsQuota) * 100;
   const newContactsTrend    = computeTrend(newContactsAdded, prevNewContactsAdded);
@@ -867,6 +902,16 @@ export function ContactsListWithFilters({ userDepartment, moduleId, onViewContac
                 })}
               </tbody>
             </table>
+          )}
+          {!isLoading && (
+            <TablePagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              isFetching={isFetching}
+            />
           )}
         </div>
       </div>
