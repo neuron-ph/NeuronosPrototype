@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { usePermission } from "../../context/PermissionProvider";
 import { Search, Plus, Calendar, Flag, Phone, Mail, Send, Users, MessageSquare, MessageCircle, Linkedin, ListTodo, CheckCircle2 } from "lucide-react";
 import { supabase } from '../../utils/supabase/client';
@@ -11,10 +12,13 @@ import { useDataScope } from '../../hooks/useDataScope';
 import type { Task, TaskPriority, TaskStatus, TaskType } from "../../types/bd";
 import { CustomDropdown } from "./CustomDropdown";
 import { AddTaskPanel } from "./AddTaskPanel";
-import { useTasks } from "../../hooks/useTasks";
 import { useCustomers } from "../../hooks/useCustomers";
 import { useContacts } from "../../hooks/useContacts";
 import { useUsers } from "../../hooks/useUsers";
+import { useLoadMoreList } from "../../hooks/useLoadMoreList";
+import { useDebounce } from "../../hooks/useDebounce";
+import { LoadMoreFooter } from "../shared/LoadMoreFooter";
+import { sanitizeSearch } from "../../utils/pagination";
 
 interface TasksListProps {
   onViewTask: (task: Task) => void;
@@ -33,13 +37,36 @@ export function TasksList({ onViewTask }: TasksListProps) {
   const canAssignToOthers = can("bd_tasks", "edit");
 
   const { scope, isLoaded } = useDataScope('tasks');
+  const queryClient = useQueryClient();
+  const debouncedSearch = useDebounce(searchQuery, 300);
 
-  // Build scope-aware filters for useTasks
-  // 'all' → no extra filter (RLS handles it)
-  // 'userIds' → filter owner_id IN (ids) for manager/TL views
-  // 'own' → no extra filter (RLS already restricts staff to their own records)
-  const scopeFilter = isLoaded && scope.type === 'userIds' ? { ownerIds: scope.ids } : {};
-  const { tasks, isLoading, invalidate: invalidateTasks } = useTasks({ ...scopeFilter, enabled: isLoaded });
+  // Server-side fetch with "Load more". Search/type/status/priority + scope run in the DB;
+  // completed tasks are excluded (they live in Activities). Rows are grouped by priority below.
+  const scopeIds = scope.type === "userIds" ? scope.ids : null;
+  const {
+    rows: tasks,
+    total,
+    loaded,
+    hasMore,
+    loadMore,
+    isLoading,
+    isFetchingNextPage,
+  } = useLoadMoreList<Task>({
+    table: "tasks",
+    queryKey: ["tasks", "loadmore", { search: debouncedSearch, typeFilter, statusFilter, priorityFilter, scopeIds }],
+    enabled: isLoaded,
+    buildQuery: (q) => {
+      let b = q.neq("status", "Completed").order("due_date", { ascending: true }).order("id");
+      if (scopeIds && scopeIds.length) b = b.in("owner_id", scopeIds);
+      if (typeFilter !== "All") b = b.eq("type", typeFilter);
+      if (statusFilter !== "All") b = b.eq("status", statusFilter);
+      if (priorityFilter !== "All") b = b.eq("priority", priorityFilter);
+      const s = sanitizeSearch(debouncedSearch);
+      if (s) b = b.or(`title.ilike.%${s}%,remarks.ilike.%${s}%`);
+      return b;
+    },
+  });
+  const invalidateTasks = () => queryClient.invalidateQueries({ queryKey: ["tasks"] });
   const { customers } = useCustomers();
   const { contacts } = useContacts();
   const { users } = useUsers();
@@ -78,26 +105,8 @@ export function TasksList({ onViewTask }: TasksListProps) {
     }
   };
 
-  // Filter tasks
-  const filteredTasks = tasks.filter(task => {
-    // Exclude completed tasks - they should only appear in Activities
-    if (task.status === "Completed") return false;
-    
-    const matchesSearch = 
-      task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (task.remarks && task.remarks.toLowerCase().includes(searchQuery.toLowerCase()));
-    
-    const matchesType = typeFilter === "All" || task.type === typeFilter;
-    const matchesStatus = statusFilter === "All" || task.status === statusFilter;
-    const matchesPriority = priorityFilter === "All" || task.priority === priorityFilter;
-
-    return matchesSearch && matchesType && matchesStatus && matchesPriority;
-  });
-
-  // Sort by due date
-  const sortedTasks = [...filteredTasks].sort((a, b) => {
-    return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
-  });
+  // Filtering, completed-exclusion and due-date ordering now happen server-side.
+  const sortedTasks = tasks;
 
   // Group tasks by priority
   const tasksByPriority = {
@@ -589,6 +598,15 @@ export function TasksList({ onViewTask }: TasksListProps) {
               </div>
             )}
           </div>
+        )}
+        {!isLoading && (
+          <LoadMoreFooter
+            loaded={loaded}
+            total={total}
+            hasMore={hasMore}
+            onLoadMore={loadMore}
+            isFetching={isFetchingNextPage}
+          />
         )}
       </div>
 

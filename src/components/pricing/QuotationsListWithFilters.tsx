@@ -19,6 +19,8 @@ import {
 import { useUnreadEntityIds } from "../../hooks/useNotifications";
 import { usePermission } from "../../context/PermissionProvider";
 import { canUseQuotationLens } from "../../utils/quotationAccess";
+import { useClientPagination } from "../../hooks/useClientPagination";
+import { TablePagination } from "../shared/TablePagination";
 
 // Default column widths
 const DEFAULT_COLUMN_WIDTHS = {
@@ -543,7 +545,22 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
     return filtered;
   }, [quotations, searchQuery, dateFrom, dateTo, statusFilter, serviceFilter, customerFilter, workflowTab, typeFilter, userRole, currentUserId]);
 
-  const filteredQuotationIds = useMemo(() => filteredQuotations.map((q) => q.id), [filteredQuotations]);
+  // Paginate the filtered list client-side. Quotation status is a context-dependent
+  // normalized value (depends on project_id / contract_status), so filtering stays
+  // client-side rather than risking a fragile SQL reverse-map.
+  const {
+    page,
+    setPage,
+    pageItems: pagedQuotations,
+    total: filteredTotal,
+    totalPages,
+    pageSize,
+  } = useClientPagination(
+    filteredQuotations,
+    JSON.stringify({ searchQuery, dateFrom, dateTo, statusFilter, serviceFilter, customerFilter, workflowTab, typeFilter }),
+  );
+
+  const filteredQuotationIds = useMemo(() => pagedQuotations.map((q) => q.id), [pagedQuotations]);
   const unreadQuotationIds = useUnreadEntityIds("quotation", filteredQuotationIds);
   const unreadInquiryIds = useUnreadEntityIds("inquiry", filteredQuotationIds);
   const unreadContractIds = useUnreadEntityIds("contract", filteredQuotationIds);
@@ -1177,12 +1194,12 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
             </div>
 
             {/* Table Rows */}
-            {filteredQuotations.map((item, index) => (
+            {pagedQuotations.map((item, index) => (
               <QuotationTableRow
                 key={item.id}
                 item={item}
                 index={index}
-                totalItems={filteredQuotations.length}
+                totalItems={pagedQuotations.length}
                 onItemClick={onViewItem}
                 gridTemplateColumns={gridTemplateColumns}
                 showStatus={showStatus}
@@ -1192,6 +1209,13 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
                 unread={unreadQuotationIds.has(item.id) || unreadInquiryIds.has(item.id) || unreadContractIds.has(item.id)}
               />
             ))}
+            <TablePagination
+              page={page}
+              totalPages={totalPages}
+              total={filteredTotal}
+              pageSize={pageSize}
+              onPageChange={setPage}
+            />
           </div>
         )}
       </div>

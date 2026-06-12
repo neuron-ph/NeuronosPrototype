@@ -6,10 +6,15 @@ import { toast } from "../ui/toast-utils";
 import type { Activity, ActivityType } from "../../types/bd";
 import { CustomDropdown } from "./CustomDropdown";
 import { AddActivityPanel } from "./AddActivityPanel";
-import { useCRMActivities } from "../../hooks/useCRMActivities";
 import { useCustomers } from "../../hooks/useCustomers";
 import { useContacts } from "../../hooks/useContacts";
 import { useUsers } from "../../hooks/useUsers";
+import { useLoadMoreList } from "../../hooks/useLoadMoreList";
+import { useDebounce } from "../../hooks/useDebounce";
+import { LoadMoreFooter } from "../shared/LoadMoreFooter";
+import { sanitizeSearch } from "../../utils/pagination";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "../../lib/queryKeys";
 
 interface ActivitiesListProps {
   onViewActivity?: (activity: Activity) => void;
@@ -23,7 +28,51 @@ export function ActivitiesList({ onViewActivity }: ActivitiesListProps) {
   const [ownerFilter, setOwnerFilter] = useState<string>("All");
   const [isAddActivityOpen, setIsAddActivityOpen] = useState(false);
 
-  const { activities, isLoading, invalidate: invalidateActivities } = useCRMActivities();
+  const queryClient = useQueryClient();
+  const debouncedSearch = useDebounce(searchQuery, 300);
+
+  // Date-range filter → a lower bound on the `date` column (computed once per render).
+  const dateLowerBound = (() => {
+    const now = new Date();
+    if (dateRangeFilter === "Today") {
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    }
+    if (dateRangeFilter === "This Week") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      return d.toISOString();
+    }
+    if (dateRangeFilter === "This Month") {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - 1);
+      return d.toISOString();
+    }
+    return null; // All Time
+  })();
+
+  // Server-side fetch with "Load more"; rows are grouped by date below.
+  const {
+    rows: sortedActivities,
+    total,
+    loaded,
+    hasMore,
+    loadMore,
+    isLoading,
+    isFetchingNextPage,
+  } = useLoadMoreList<Activity>({
+    table: "crm_activities",
+    queryKey: [...queryKeys.crmActivities.list(), "loadmore", { search: debouncedSearch, typeFilter, ownerFilter, dateRangeFilter }],
+    buildQuery: (q) => {
+      let b = q.order("date", { ascending: false }).order("id");
+      if (typeFilter !== "All") b = b.eq("type", typeFilter);
+      if (ownerFilter !== "All") b = b.eq("user_id", ownerFilter);
+      if (dateLowerBound) b = b.gte("date", dateLowerBound);
+      const s = sanitizeSearch(debouncedSearch);
+      if (s) b = b.ilike("description", `%${s}%`);
+      return b;
+    },
+  });
+  const invalidateActivities = () => queryClient.invalidateQueries({ queryKey: queryKeys.crmActivities.all() });
   const { customers } = useCustomers();
   const { contacts } = useContacts();
   const { users } = useUsers();
@@ -44,39 +93,6 @@ export function ActivitiesList({ onViewActivity }: ActivitiesListProps) {
       toast.error('Unable to create activity. Please try again.');
     }
   };
-
-  // Filter activities
-  const filteredActivities = activities.filter(activity => {
-    const matchesSearch = 
-      activity.description.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesType = typeFilter === "All" || activity.type === typeFilter;
-    const matchesOwner = ownerFilter === "All" || activity.user_id === ownerFilter;
-
-    // Date range filtering
-    let matchesDateRange = true;
-    const activityDate = new Date(activity.date);
-    const now = new Date();
-    
-    if (dateRangeFilter === "Today") {
-      matchesDateRange = activityDate.toDateString() === now.toDateString();
-    } else if (dateRangeFilter === "This Week") {
-      const weekAgo = new Date(now);
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      matchesDateRange = activityDate >= weekAgo;
-    } else if (dateRangeFilter === "This Month") {
-      const monthAgo = new Date(now);
-      monthAgo.setMonth(monthAgo.getMonth() - 1);
-      matchesDateRange = activityDate >= monthAgo;
-    }
-
-    return matchesSearch && matchesType && matchesOwner && matchesDateRange;
-  });
-
-  // Sort by date (most recent first)
-  const sortedActivities = [...filteredActivities].sort((a, b) => {
-    return new Date(b.date).getTime() - new Date(a.date).getTime();
-  });
 
   const getContactName = (contactId: string | null) => {
     if (!contactId) return null;
@@ -376,6 +392,15 @@ export function ActivitiesList({ onViewActivity }: ActivitiesListProps) {
               </div>
             ))}
           </div>
+        )}
+        {!isLoading && (
+          <LoadMoreFooter
+            loaded={loaded}
+            total={total}
+            hasMore={hasMore}
+            onLoadMore={loadMore}
+            isFetching={isFetchingNextPage}
+          />
         )}
       </div>
 

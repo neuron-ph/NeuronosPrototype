@@ -9,11 +9,10 @@ import { assessBookingFinancialState, canHardDeleteBooking, getBookingCancellati
 import { toast } from "../../ui/toast-utils";
 import { NeuronStatusPill } from "../../NeuronStatusPill";
 import { SkeletonTable } from "../../shared/NeuronSkeleton";
-import { useQuery } from "@tanstack/react-query";
-import { queryKeys } from "../../../lib/queryKeys";
+import { useQueryClient } from "@tanstack/react-query";
 import { useDataScope } from "../../../hooks/useDataScope";
 import { useBookingAssignmentVisibility } from "../../../hooks/useBookingAssignmentVisibility";
-import { filterBookingsByScope } from "../../../utils/assignments/applyAssignmentVisibility";
+import { useBookingsPaginated, useBookingTabCounts, useBookingFilterOptions } from "../../../hooks/useBookingsPaginated";
 import { usePermission } from "../../../context/PermissionProvider";
 import { logDeletion } from "../../../utils/activityLog";
 import { NeuronModal } from "../../ui/NeuronModal";
@@ -21,6 +20,7 @@ import { useUnreadEntityIds } from "../../../hooks/useNotifications";
 import { normalizeDetails } from "../../../utils/bookings/bookingDetailsCompat";
 import { getStatusOptions } from "../../../config/booking/bookingFieldOptions";
 import { useRealtimeSync } from "../../../hooks/useRealtimeSync";
+import { TablePagination } from "../../shared/TablePagination";
 
 interface ForwardingBookingsProps {
   /** Optional notification when a booking is opened (e.g. to record a recent). */
@@ -115,28 +115,52 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
     userIds: scope.type === 'userIds' ? scope.ids : null,
   });
 
-  // ── Bookings fetch ────────────────────────────────────────
-  const { data: rawBookings = [], isLoading, refetch } = useQuery<ForwardingBooking[]>({
-    queryKey: queryKeys.bookings.list("forwarding"),
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('bookings')
-        .select('*')
-        .eq('service_type', 'Forwarding')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return (data || []).map(mapToForwardingBooking);
-    },
-    // Inherits 5-minute staleTime from global QueryClient config
+  // ── Bookings fetch (server-side: filters/tab/scope run in the DB) ──────────
+  const queryClient = useQueryClient();
+  const [page, setPage] = useState(0);
+  const dataReady = scopeLoaded && assignmentIndexLoaded;
+
+  const filterKey = JSON.stringify({
+    activeTab, searchTerm, statusFilter, movementFilter, timePeriodFilter, ownerFilter, handlerFilter, modeFilter,
   });
-  const fetchBookings = () => { refetch(); };
+  useEffect(() => { setPage(0); }, [filterKey]);
 
-  useRealtimeSync({ table: "bookings", queryKey: queryKeys.bookings.list("forwarding") });
+  const {
+    rows: rawPage,
+    total,
+    totalPages,
+    pageSize,
+    isLoading,
+    isFetching,
+  } = useBookingsPaginated({
+    serviceType: "Forwarding",
+    page,
+    enabled: dataReady,
+    scope,
+    assignmentIndex,
+    currentUserName: currentUser?.name,
+    tab: activeTab,
+    search: searchTerm,
+    status: statusFilter,
+    owner: ownerFilter,
+    handler: handlerFilter,
+    timePeriod: timePeriodFilter,
+    movementField: { value: movementFilter, kind: "column", name: "movement_type" },
+    typeField: { value: modeFilter, kind: "column", name: "mode" },
+  });
 
-  const bookings = useMemo(() => {
-    if (!scopeLoaded || !assignmentIndexLoaded) return [];
-    return filterBookingsByScope(rawBookings, scope, assignmentIndex);
-  }, [rawBookings, scope, scopeLoaded, assignmentIndex, assignmentIndexLoaded]);
+  const bookings = useMemo(() => rawPage.map(mapToForwardingBooking), [rawPage]);
+  const pagedBookings = bookings;
+  const fetchBookings = () => { queryClient.invalidateQueries({ queryKey: ["bookings"] }); };
+
+  useRealtimeSync({ table: "bookings", queryKey: ["bookings"] });
+
+  const { data: tabCounts } = useBookingTabCounts({
+    serviceType: "Forwarding", scope, assignmentIndex, currentUserName: currentUser?.name, enabled: dataReady,
+  });
+  const { data: bookingOptions } = useBookingFilterOptions({
+    serviceType: "Forwarding", typeField: { kind: "column", name: "mode" }, enabled: dataReady,
+  });
 
   // Keep the open detail in sync with the latest bookings data after a refetch
   useEffect(() => {
@@ -208,89 +232,22 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
     }
   };
 
-  // Get unique values for filters
-  const uniqueOwners = Array.from(new Set(bookings.map(b => b.accountOwner).filter(Boolean)));
-  const uniqueHandlers = Array.from(new Set(bookings.map(b => b.accountHandler).filter(Boolean)));
-  const uniqueModes = Array.from(new Set(bookings.map(b => b.mode).filter(Boolean)));
-
-  // Filter bookings by tab first
-  const getFilteredByTab = () => {
-    let filtered = bookings;
-
-    if (activeTab === "my") {
-      filtered = bookings.filter(b => 
-        b.accountOwner === currentUser?.name || 
-        b.accountHandler === currentUser?.name
-      );
-    } else if (activeTab === "draft") {
-      filtered = bookings.filter(b => b.status === "Draft");
-    } else if (activeTab === "in-progress") {
-      filtered = bookings.filter(b => b.status === "In Progress");
-    } else if (activeTab === "completed") {
-      filtered = bookings.filter(b => b.status === "Completed");
-    } else if (activeTab === "cancelled") {
-      filtered = bookings.filter(b => ["Cancelled", "Closed", "Paid"].includes(b.status));
-    }
-
-    return filtered;
-  };
-
-  // Apply all filters
-  const filteredBookings = getFilteredByTab().filter(booking => {
-    // Search filter
-    const matchesSearch =
-      ((booking as any).booking_number || booking.bookingId).toLowerCase().includes(searchTerm.toLowerCase()) ||
-      booking.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (booking.projectNumber && booking.projectNumber.toLowerCase().includes(searchTerm.toLowerCase()));
-    
-    if (!matchesSearch) return false;
-
-    // Time period filter
-    if (timePeriodFilter !== "all") {
-      const bookingDate = new Date(booking.createdAt);
-      const now = new Date();
-      const daysDiff = Math.floor((now.getTime() - bookingDate.getTime()) / (1000 * 60 * 60 * 24));
-      
-      if (timePeriodFilter === "7days" && daysDiff > 7) return false;
-      if (timePeriodFilter === "30days" && daysDiff > 30) return false;
-      if (timePeriodFilter === "90days" && daysDiff > 90) return false;
-    }
-
-    // Status filter
-    const matchesStatus = statusFilter === "all" || booking.status === statusFilter;
-    if (!matchesStatus) return false;
-
-    // Movement filter
-    const matchesMovement = movementFilter === "all" || (booking.movement || "IMPORT") === movementFilter;
-    if (!matchesMovement) return false;
-
-    // Owner filter
-    if (ownerFilter !== "all" && booking.accountOwner !== ownerFilter) return false;
-
-    // Handler filter
-    if (handlerFilter === "unassigned" && booking.accountHandler) return false;
-    if (handlerFilter !== "all" && handlerFilter !== "unassigned" && booking.accountHandler !== handlerFilter) return false;
-
-    // Mode filter
-    if (modeFilter !== "all" && booking.mode !== modeFilter) return false;
-
-    return true;
-  });
+  // Filter dropdown options + tab counts come from dedicated scoped queries
+  const uniqueOwners = bookingOptions?.owners ?? [];
+  const uniqueHandlers = bookingOptions?.handlers ?? [];
+  const uniqueModes = bookingOptions?.types ?? [];
 
   const unreadBookingIds = useUnreadEntityIds(
     "booking",
-    filteredBookings.map((b) => b.bookingId),
+    pagedBookings.map((b) => b.bookingId),
   );
 
-  // Calculate counts for tabs
-  const allCount = bookings.length;
-  const myCount = bookings.filter(b => 
-    b.accountOwner === currentUser?.name || b.accountHandler === currentUser?.name
-  ).length;
-  const draftCount = bookings.filter(b => b.status === "Draft").length;
-  const inProgressCount = bookings.filter(b => b.status === "In Progress").length;
-  const completedCount = bookings.filter(b => b.status === "Completed").length;
-  const cancelledCount = bookings.filter(b => ["Cancelled", "Closed", "Paid"].includes(b.status)).length;
+  const allCount = tabCounts?.all ?? 0;
+  const myCount = tabCounts?.my ?? 0;
+  const draftCount = tabCounts?.draft ?? 0;
+  const inProgressCount = tabCounts?.inProgress ?? 0;
+  const completedCount = tabCounts?.completed ?? 0;
+  const cancelledCount = tabCounts?.cancelled ?? 0;
 
   if (selectedBooking) {
     return (
@@ -602,7 +559,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
             <div className="mt-2">
               <SkeletonTable rows={10} cols={6} />
             </div>
-          ) : filteredBookings.length === 0 ? (
+          ) : total === 0 ? (
             <div className="flex flex-col items-center justify-center h-64">
               <div className="text-[var(--theme-text-primary)]/60 mb-2">
                 {searchTerm || statusFilter !== "all" 
@@ -661,7 +618,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredBookings.map((booking, index) => (
+                  {pagedBookings.map((booking, index) => (
                     <tr
                       key={`${booking.bookingId}-${index}`}
                       className="border-b border-[var(--theme-text-primary)]/5 hover:bg-[var(--theme-action-primary-bg)]/5 transition-colors cursor-pointer"
@@ -820,6 +777,14 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
                   ))}
                 </tbody>
               </table>
+              <TablePagination
+                page={page}
+                totalPages={totalPages}
+                total={total}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                isFetching={isFetching}
+              />
             </div>
           )}
         </div>
@@ -839,7 +804,7 @@ export function ForwardingBookings({ onSelectBooking, currentUser, pendingBookin
           onClose={() => setResumeDraft(null)}
           onBookingCreated={() => {
             setResumeDraft(null);
-            refetch();
+            fetchBookings();
           }}
           currentUser={currentUser}
           draftBookingId={String(resumeDraft.id)}

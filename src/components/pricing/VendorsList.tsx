@@ -4,6 +4,10 @@ import { useSearchParams } from "react-router";
 import { Plus, Search, Globe, MapPin, Building2 } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "../ui/toast-utils";
+import { useDebounce } from "../../hooks/useDebounce";
+import { usePaginatedList } from "../../hooks/usePaginatedList";
+import { TablePagination } from "../shared/TablePagination";
+import { sanitizeSearch } from "../../utils/pagination";
 
 type NetworkVendorType = "Overseas Agent" | "Local Agent" | "Subcontractor";
 
@@ -24,41 +28,58 @@ export function VendorsList() {
   const querySeed = searchParams.get("q") ?? "";
   const [searchQuery, setSearchQuery] = useState(querySeed);
   const [typeFilter, setTypeFilter] = useState<NetworkVendorType | "All">("All");
+  const [page, setPage] = useState(0);
+  const debouncedSearch = useDebounce(searchQuery, 300);
 
   useEffect(() => {
     setSearchQuery(querySeed);
   }, [querySeed]);
 
-  const { data: vendors = [], isLoading } = useQuery({
-    queryKey: ["network_partners"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('network_partners').select('*').order('company_name');
-      if (!error && data) return data as NetworkVendor[];
-      toast.error('Error loading vendors');
-      return [] as NetworkVendor[];
-    },
-    staleTime: 30_000,
-  });
+  // Reset to first page whenever a filter or search changes
+  useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch, typeFilter]);
 
-  // Filter vendors
-  const filteredVendors = vendors.filter(vendor => {
-    const matchesSearch = 
-      vendor.company_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      vendor.country.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (vendor.territory && vendor.territory.toLowerCase().includes(searchQuery.toLowerCase()));
-    
-    const matchesType = typeFilter === "All" || vendor.type === typeFilter;
+  const { rows: filteredVendors, total, totalPages, pageSize, isLoading, isFetching } =
+    usePaginatedList<NetworkVendor>({
+      table: "network_partners",
+      queryKey: ["network_partners", "paginated", { search: debouncedSearch, typeFilter }, page],
+      page,
+      buildQuery: (q) => {
+        let b = q.order("company_name").order("id");
+        if (typeFilter !== "All") b = b.eq("type", typeFilter);
+        const s = sanitizeSearch(debouncedSearch);
+        if (s) b = b.or(`company_name.ilike.%${s}%,country.ilike.%${s}%,territory.ilike.%${s}%`);
+        return b;
+      },
+    });
 
-    return matchesSearch && matchesType;
-  });
-
-  // Count by type
-  const typeCounts = {
-    All: vendors.length,
-    "Overseas Agent": vendors.filter(v => v.type === "Overseas Agent").length,
-    "Local Agent": vendors.filter(v => v.type === "Local Agent").length,
-    Subcontractor: vendors.filter(v => v.type === "Subcontractor").length,
-  };
+  // Type counts (whole dataset, independent of the current page)
+  const { data: typeCounts = { All: 0, "Overseas Agent": 0, "Local Agent": 0, Subcontractor: 0 } } =
+    useQuery({
+      queryKey: ["network_partners", "type-counts"],
+      staleTime: 30_000,
+      queryFn: async () => {
+        const head = (type?: NetworkVendorType) => {
+          let q = supabase.from("network_partners").select("id", { count: "exact", head: true });
+          if (type) q = q.eq("type", type);
+          return q;
+        };
+        const [all, overseas, local, sub] = await Promise.all([
+          head(),
+          head("Overseas Agent"),
+          head("Local Agent"),
+          head("Subcontractor"),
+        ]);
+        if (all.error) toast.error("Error loading vendors");
+        return {
+          All: all.count ?? 0,
+          "Overseas Agent": overseas.count ?? 0,
+          "Local Agent": local.count ?? 0,
+          Subcontractor: sub.count ?? 0,
+        };
+      },
+    });
 
   const getTypeBadgeColor = (type: NetworkVendorType) => {
     switch (type) {
@@ -490,6 +511,14 @@ export function VendorsList() {
                 })}
               </tbody>
             </table>
+            <TablePagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              isFetching={isFetching}
+            />
           </div>
         )}
       </div>

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { usePermission } from "../../context/PermissionProvider";
 import { Search, Plus, Calendar, ArrowUpDown, X, SlidersHorizontal, Users, Package, Briefcase, FileText } from "lucide-react";
 import { supabase } from '../../utils/supabase/client';
@@ -6,6 +6,11 @@ import { toast } from "../ui/toast-utils";
 import type { EVoucher } from "../../types/evoucher";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../../lib/queryKeys";
+import { useUser } from "../../hooks/useUser";
+import { usePaginatedList } from "../../hooks/usePaginatedList";
+import { useDebounce } from "../../hooks/useDebounce";
+import { TablePagination } from "../shared/TablePagination";
+import { sanitizeSearch } from "../../utils/pagination";
 import { CustomDropdown } from "./CustomDropdown";
 import { MultiSelectDropdown } from "./MultiSelectDropdown";
 import { AddRequestForPaymentPanel } from "../accounting/AddRequestForPaymentPanel";
@@ -16,6 +21,74 @@ import { SkeletonTable } from "../shared/NeuronSkeleton";
 type QuickFilterTab = "all" | "my-requests";
 type DateRangeFilter = "all" | "today" | "this-week" | "this-month" | "this-quarter" | "last-30-days";
 type SortOption = "date-newest" | "date-oldest" | "amount-highest" | "amount-lowest" | "status" | "requestor";
+
+// Backend status (lowercase or capitalized) → frontend display status.
+const BUDGET_STATUS_DISPLAY: Record<string, string> = {
+  draft: "Draft",
+  pending: "Submitted",
+  posted: "Approved",
+  rejected: "Rejected",
+  cancelled: "Cancelled",
+  Draft: "Draft",
+  Submitted: "Submitted",
+  "Under Review": "Under Review",
+  Approved: "Approved",
+  Rejected: "Rejected",
+};
+
+function normalizeBudgetStatus(status: string): string {
+  return BUDGET_STATUS_DISPLAY[status] || status;
+}
+
+// Display status → the raw status values that normalize to it (for server-side `.in()`).
+const BUDGET_STATUS_RAW: Record<string, string[]> = {
+  Draft: ["draft", "Draft"],
+  Submitted: ["pending", "Submitted"],
+  "Under Review": ["Under Review"],
+  Approved: ["posted", "Approved"],
+  Rejected: ["rejected", "Rejected"],
+  Cancelled: ["cancelled", "Cancelled"],
+};
+
+function rawStatusesFor(displayValues: string[]): string[] {
+  return Array.from(new Set(displayValues.flatMap((v) => BUDGET_STATUS_RAW[v] ?? [v])));
+}
+
+/** Lower bound (ISO) on request_date for a date-range filter, relative to now. */
+function budgetDateLowerBound(range: string): string | null {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  switch (range) {
+    case "today":
+      return startOfToday.toISOString();
+    case "this-week": {
+      const d = new Date(startOfToday);
+      d.setDate(d.getDate() - d.getDay());
+      return d.toISOString();
+    }
+    case "this-month":
+      return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    case "this-quarter":
+      return new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1).toISOString();
+    case "last-30-days": {
+      const d = new Date(startOfToday);
+      d.setDate(d.getDate() - 30);
+      return d.toISOString();
+    }
+    default:
+      return null;
+  }
+}
+
+// Maps a sort option to a [column, ascending] order spec.
+const BUDGET_SORT: Record<string, [string, boolean]> = {
+  "date-newest": ["created_at", false],
+  "date-oldest": ["created_at", true],
+  "amount-highest": ["amount", false],
+  "amount-lowest": ["amount", true],
+  status: ["status", true],
+  requestor: ["requestor_name", true],
+};
 
 export function BudgetRequestList() {
   const { can } = usePermission();
@@ -41,149 +114,97 @@ export function BudgetRequestList() {
   const [showDetailPanel, setShowDetailPanel] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
-  // Current user (in real app, get from auth context)
-  const currentUserId = "user001";
+  const { user } = useUser();
+  const currentUserId = user?.id ?? "";
 
   const queryClient = useQueryClient();
+  const [page, setPage] = useState(0);
+  const debouncedSearch = useDebounce(searchQuery, 300);
 
-  const { data: budgetRequests = [], isLoading } = useQuery({
-    queryKey: queryKeys.evouchers.list("bd"),
+  // Reset to the first page whenever a filter, search, sort, or tab changes
+  const filterKey = JSON.stringify({
+    debouncedSearch, quickFilterTab, dateRangeFilter, categoryFilter,
+    customerFilter, requestorFilter, vendorFilter, statusFilter, sortOption,
+  });
+  useEffect(() => { setPage(0); }, [filterKey]);
+
+  // Filter dropdown options come from a light distinct-projection query over the
+  // whole table (4 columns only) so the dropdowns stay complete under pagination.
+  const { data: filterOptions = { categories: [], customers: [], requestors: [], vendors: [] } } = useQuery({
+    queryKey: [...queryKeys.evouchers.list("bd"), "filter-options"],
+    staleTime: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('evouchers')
-        .select('*')
-        .eq('source_module', 'bd')
-        .eq('transaction_type', 'budget_request')
-        .order('created_at', { ascending: false });
+        .from("evouchers")
+        .select("gl_sub_category, customer_name, requestor_name, vendor_name")
+        .eq("source_module", "bd")
+        .eq("transaction_type", "budget_request");
       if (error) throw error;
-      return ((data || []).map((ev: any) => ({
-        ...ev,
-        status: normalizeStatus(ev.status),
-        amount: ev.amount ?? ev.total_amount ?? 0,
-        request_date: ev.request_date || ev.created_at,
-        requestor_name: ev.requestor_name || 'Unknown',
-        description: ev.description || ev.purpose || 'No description',
-        purpose: ev.purpose || ev.description || 'No purpose',
-      }))) as EVoucher[];
+      const uniq = (vals: any[]) => Array.from(new Set(vals.filter(Boolean))) as string[];
+      return {
+        categories: uniq((data ?? []).map((r: any) => r.gl_sub_category)),
+        customers: uniq((data ?? []).map((r: any) => r.customer_name)),
+        requestors: uniq((data ?? []).map((r: any) => r.requestor_name)),
+        vendors: uniq((data ?? []).map((r: any) => r.vendor_name)),
+      };
     },
-    staleTime: 30_000,
+  });
+  const categories = filterOptions.categories;
+  const customers = filterOptions.customers;
+  const requestors = filterOptions.requestors;
+  const vendors = filterOptions.vendors;
+
+  // Server-paginated list — all filters/sort run in the DB.
+  const [sortColumn, sortAsc] = BUDGET_SORT[sortOption] ?? BUDGET_SORT["date-newest"];
+  const dateLowerBound = budgetDateLowerBound(dateRangeFilter);
+  const {
+    rows: rawRequests,
+    total,
+    totalPages,
+    pageSize,
+    isLoading,
+    isFetching,
+  } = usePaginatedList<any>({
+    table: "evouchers",
+    queryKey: [...queryKeys.evouchers.list("bd"), "paginated", filterKey, currentUserId, page],
+    page,
+    buildQuery: (q) => {
+      let b = q
+        .eq("source_module", "bd")
+        .eq("transaction_type", "budget_request")
+        .order(sortColumn, { ascending: sortAsc })
+        .order("id");
+      if (quickFilterTab === "my-requests") b = b.eq("requestor_id", currentUserId);
+      if (dateLowerBound) b = b.gte("request_date", dateLowerBound);
+      if (categoryFilter.length) b = b.in("gl_sub_category", categoryFilter);
+      if (customerFilter.length) b = b.in("customer_name", customerFilter);
+      if (requestorFilter.length) b = b.in("requestor_name", requestorFilter);
+      if (vendorFilter.length) b = b.in("vendor_name", vendorFilter);
+      if (statusFilter.length) b = b.in("status", rawStatusesFor(statusFilter));
+      const s = sanitizeSearch(debouncedSearch);
+      if (s) {
+        b = b.or(
+          `description.ilike.%${s}%,voucher_number.ilike.%${s}%,requestor_name.ilike.%${s}%,customer_name.ilike.%${s}%`,
+        );
+      }
+      return b;
+    },
   });
 
-  // Extract unique values for filters
-  const categories = useMemo(() => 
-    Array.from(new Set(budgetRequests.map(r => r.gl_sub_category).filter(Boolean)))
-  , [budgetRequests]);
-
-  const customers = useMemo(() => 
-    Array.from(new Set(budgetRequests.map(r => r.customer_name).filter(Boolean)))
-  , [budgetRequests]);
-
-  const requestors = useMemo(() => 
-    Array.from(new Set(budgetRequests.map(r => r.requestor_name)))
-  , [budgetRequests]);
-
-  const vendors = useMemo(() => 
-    Array.from(new Set(budgetRequests.map(r => r.vendor_name).filter(Boolean)))
-  , [budgetRequests]);
-
-  // Date filtering helper
-  const isWithinDateRange = (dateStr: string, range: DateRangeFilter): boolean => {
-    const date = new Date(dateStr);
-    const today = new Date("2024-12-12"); // Using your current date
-    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
-    switch (range) {
-      case "all":
-        return true;
-      case "today":
-        return date >= startOfToday;
-      case "this-week": {
-        const startOfWeek = new Date(today);
-        startOfWeek.setDate(today.getDate() - today.getDay());
-        startOfWeek.setHours(0, 0, 0, 0);
-        return date >= startOfWeek;
-      }
-      case "this-month": {
-        const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-        return date >= startOfMonth;
-      }
-      case "this-quarter": {
-        const currentQuarter = Math.floor(today.getMonth() / 3);
-        const startOfQuarter = new Date(today.getFullYear(), currentQuarter * 3, 1);
-        return date >= startOfQuarter;
-      }
-      case "last-30-days": {
-        const thirtyDaysAgo = new Date(today);
-        thirtyDaysAgo.setDate(today.getDate() - 30);
-        return date >= thirtyDaysAgo;
-      }
-      default:
-        return true;
-    }
-  };
-
-  // Filter and sort logic
-  const filteredAndSortedRequests = useMemo(() => {
-    let filtered = budgetRequests.filter(request => {
-      // Search filter
-      const matchesSearch = searchQuery === "" || 
-        (request.description || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-        request.voucher_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        request.requestor_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (request.customer_name && request.customer_name.toLowerCase().includes(searchQuery.toLowerCase()));
-
-      // Quick filter tabs
-      let matchesQuickFilter = true;
-      switch (quickFilterTab) {
-        case "my-requests":
-          matchesQuickFilter = request.requestor_id === currentUserId;
-          break;
-      }
-
-      // Date range filter
-      const matchesDateRange = dateRangeFilter === "all" || isWithinDateRange(request.request_date, dateRangeFilter);
-
-      // Category filter
-      const matchesCategory = categoryFilter.length === 0 || (request.gl_sub_category && categoryFilter.includes(request.gl_sub_category));
-
-      // Customer filter
-      const matchesCustomer = customerFilter.length === 0 || (request.customer_name && customerFilter.includes(request.customer_name));
-
-      // Requestor filter
-      const matchesRequestor = requestorFilter.length === 0 || requestorFilter.includes(request.requestor_name);
-
-      // Vendor filter
-      const matchesVendor = vendorFilter.length === 0 || (request.vendor_name && vendorFilter.includes(request.vendor_name));
-
-      // Status filter
-      const matchesStatus = statusFilter.length === 0 || statusFilter.includes(request.status);
-
-      return matchesSearch && matchesQuickFilter && matchesDateRange && matchesCategory && 
-             matchesCustomer && matchesRequestor && matchesVendor && matchesStatus;
-    });
-
-    // Sort
-    filtered.sort((a, b) => {
-      switch (sortOption) {
-        case "date-newest":
-          return new Date(b.request_date).getTime() - new Date(a.request_date).getTime();
-        case "date-oldest":
-          return new Date(a.request_date).getTime() - new Date(b.request_date).getTime();
-        case "amount-highest":
-          return b.amount - a.amount;
-        case "amount-lowest":
-          return a.amount - b.amount;
-        case "status":
-          return a.status.localeCompare(b.status);
-        case "requestor":
-          return a.requestor_name.localeCompare(b.requestor_name);
-        default:
-          return 0;
-      }
-    });
-
-    return filtered;
-  }, [budgetRequests, searchQuery, quickFilterTab, dateRangeFilter, categoryFilter, customerFilter, requestorFilter, vendorFilter, statusFilter, sortOption, currentUserId]);
+  // Normalize the current page's rows (status mapping + field fallbacks).
+  const filteredAndSortedRequests = useMemo(
+    () =>
+      rawRequests.map((ev: any) => ({
+        ...ev,
+        status: normalizeBudgetStatus(ev.status),
+        amount: ev.amount ?? ev.total_amount ?? 0,
+        request_date: ev.request_date || ev.created_at,
+        requestor_name: ev.requestor_name || "Unknown",
+        description: ev.description || ev.purpose || "No description",
+        purpose: ev.purpose || ev.description || "No purpose",
+      })) as EVoucher[],
+    [rawRequests],
+  );
 
   // Group requests by status
   const groupedRequests = useMemo(() => {
@@ -281,25 +302,6 @@ export function BudgetRequestList() {
     if (statusFilter.length > 0) count++;
     return count;
   }, [quickFilterTab, dateRangeFilter, categoryFilter, customerFilter, requestorFilter, vendorFilter, statusFilter]);
-
-  // Helper function to normalize backend status to frontend display status
-  const normalizeStatus = (status: string): string => {
-    const statusMap: Record<string, string> = {
-      'draft': 'Draft',
-      'pending': 'Submitted',
-      'posted': 'Approved',
-      'rejected': 'Rejected',
-      'cancelled': 'Cancelled',
-      // Keep capitalized versions as-is
-      'Draft': 'Draft',
-      'Submitted': 'Submitted',
-      'Under Review': 'Under Review',
-      'Approved': 'Approved',
-      'Rejected': 'Rejected',
-    };
-    
-    return statusMap[status] || status;
-  };
 
   return (
     <div 
@@ -728,6 +730,14 @@ export function BudgetRequestList() {
                 </div>
               ))}
             </div>
+            <TablePagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              isFetching={isFetching}
+            />
           </div>
         )}
       </div>
