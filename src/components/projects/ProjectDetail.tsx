@@ -208,7 +208,7 @@ export function ProjectDetail({
     // NEU-020 2.10a: amending the project's QUOTATION obeys the Quotation tab's
     // own Edit cell (ids.quotation), not the Projects module-root edit. This is
     // also the PDF Studio save path (reachable with quotation-tab VIEW alone).
-    if (!canAmendQuotation) {
+    if (!canAmendQuotation && !canAmendRates) {
       toast.error("You don't have permission to save changes to this quotation.");
       return;
     }
@@ -243,6 +243,10 @@ export function ProjectDetail({
   // NEU-020 2.10a: amending the QUOTATION obeys the Quotation tab's own Edit
   // cell — not the project root (the grid's "Quotation → Edit" must govern it).
   const canAmendQuotation = can(ids.quotation, "edit");
+  // NEU-022: re-editing a converted project quote's RATES is a manager capability
+  // (pricing_quotations:approve), distinct from the Quotation-tab Edit cell above
+  // (which also governs PDF Studio saves). Either authority may persist the write.
+  const canAmendRates = can("pricing_quotations", "amend");
 
   // Define the Tab Structure
   const TAB_STRUCTURE = {
@@ -673,7 +677,7 @@ export function ProjectDetail({
             onUpdate={onUpdate}
             onViewBooking={handleViewBooking}
             onSaveQuotation={handleSaveQuotation}
-            canAmend={canAmendQuotation} // NEU-020 2.10a: Quotation tab's own edit cell
+            canAmend={canAmendRates} // NEU-022: rate amendment = manager grant (pricing_quotations:approve)
             canExport={can(ids.quotation, "export")} // NEU-020 2.11 (WT4): Print PDF = export cell
           />
         )}
@@ -736,6 +740,33 @@ export function ProjectDetail({
             canPost={canPostComments}
           />
         )}
+
+        {/* NEU-030: honest empty-state — a denied tab says so instead of rendering blank */}
+        {(() => {
+          const tabAllowed: Record<string, boolean> = {
+            financial_overview: canViewInfoTab,
+            quotation: canViewQuotationTab,
+            bookings: canViewBookingsTab,
+            expenses: canViewExpensesTab,
+            billings: canViewBillingsTab,
+            invoices: canViewInvoicesTab,
+            collections: canViewCollectionsTab,
+            attachments: canViewAttachmentsTab,
+            comments: canViewCommentsTab,
+          };
+          if (tabAllowed[activeTab] !== false) return null;
+          return (
+            <div className="max-w-7xl mx-auto" style={{ textAlign: "center", padding: "80px 24px" }}>
+              <div style={{ fontSize: "32px", marginBottom: "12px" }}>🔒</div>
+              <div style={{ fontSize: "15px", fontWeight: 600, color: "var(--theme-text-primary)", marginBottom: "6px" }}>
+                You don't have access to this tab
+              </div>
+              <div style={{ fontSize: "13px", color: "var(--theme-text-muted)" }}>
+                Ask your admin to grant it in your Access Profile.
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

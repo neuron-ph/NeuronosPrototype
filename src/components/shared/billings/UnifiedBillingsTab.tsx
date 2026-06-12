@@ -31,6 +31,9 @@ export interface BillingItem {
   source_id?: string;
   source_quotation_item_id?: string; // Matching backend field for imported items
   source_type?: 'quotation_item' | 'billable_expense' | 'manual' | 'contract_rate' | 'rate_card';
+  // NEU-022: true once a human overrode this line's amount/unit_price away from
+  // its source rate. Contract amendments skip these on live re-rate + show a badge.
+  is_manually_adjusted?: boolean;
   is_virtual?: boolean;
   catalog_item_id?: string; // Catalog linkage (Item Master reference)
   [key: string]: any;
@@ -191,7 +194,10 @@ export function UnifiedBillingsTab({
                     // When saved, this new value becomes the persistent one.
                     const existingItem = combined[existingIndex];
                     
-                    if (existingItem.status === 'unbilled') {
+                    // NEU-022: a manually-adjusted line keeps its hand-entered value —
+                    // the quotation does NOT overwrite it (and an amendment leaves it
+                    // alone). Only auto-reflecting, untouched lines mirror the quote.
+                    if (existingItem.status === 'unbilled' && !existingItem.is_manually_adjusted) {
                         combined[existingIndex] = {
                             ...existingItem,
                             // Reflective fields (Overwrite DB with Quote)
@@ -466,9 +472,23 @@ export function UnifiedBillingsTab({
       if (item.id === id) {
         // If editing a virtual item, it's technically still virtual until saved,
         // but for the UI it behaves like a normal item being edited.
-        // We might want to clear 'is_virtual' flag here? 
+        // We might want to clear 'is_virtual' flag here?
         // No, keep it until save so backend knows to create new.
-        return { ...item, [backendField]: value };
+        const next = { ...item, [backendField]: value };
+        // NEU-022: hand-editing a line's monetary value marks it manually adjusted.
+        // For project (quotation-derived) lines this PROTECTS the edit from the
+        // reflective overwrite below — the quotation no longer clobbers it, and an
+        // amendment leaves it alone. For contract lines it's an informational marker.
+        // Both surface a "Manually adjusted" badge. Only flags lines that derive from
+        // a source (contract rate or quotation line) — a freshly hand-added line is
+        // an original entry, not an adjustment.
+        const derivesFromSource = item.source_type === 'contract_rate'
+          || item.source_type === 'quotation_item'
+          || !!item.source_quotation_item_id;
+        if ((backendField === 'amount' || backendField === 'unit_price') && derivesFromSource) {
+          next.is_manually_adjusted = true;
+        }
+        return next;
       }
       return item;
     }));
@@ -590,6 +610,7 @@ export function UnifiedBillingsTab({
             is_taxed: item.is_taxed || false,
             source_quotation_item_id: item.source_quotation_item_id || null,
             source_type: item.source_type || (item.source_quotation_item_id ? "quotation_item" : "manual"),
+            is_manually_adjusted: item.is_manually_adjusted ?? false,
             catalog_item_id: item.catalog_item_id || null,
             // Snapshot: preserve catalog metadata at creation time so renames
             // don't alter historical billing line descriptions.

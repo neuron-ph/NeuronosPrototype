@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { QuotationNew, Project } from "../../types/pricing";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { QuotationActionMenu } from "./QuotationActionMenu";
+import { UnlockAmendButton } from "./UnlockAmendButton";
 import { StatusChangeButton } from "./StatusChangeButton";
 import { CreateProjectModal } from "../bd/CreateProjectModal";
 import { CreateBookingsFromProjectModal } from "./CreateBookingsFromProjectModal";
@@ -103,6 +104,12 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
   const canAssign = can("pricing_quotations", "edit");
   const canEditPricing = can("pricing_quotations", "edit");
   const canEditQuotation = canUseQuotationLens(can, userDepartment, "edit");
+  // NEU-022: amend a converted/locked quotation — a manager capability distinct
+  // from the normal edit lens. Project-quote amendment ships now; contract
+  // amendment (rate versioning + live re-rate) ships in a later phase.
+  const canAmendRates = quotation.quotation_type === "contract"
+    ? can("pricing_contracts", "amend")
+    : can("pricing_quotations", "amend");
   const canCreateQuotation = canUseQuotationLens(can, userDepartment, "create");
   const canDeleteQuotation = canUseQuotationLens(can, userDepartment, "delete");
   const canExportQuotation = canUseQuotationLens(can, userDepartment, "export");
@@ -911,24 +918,32 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
             userDepartment={userDepartment}
             userRole={currentUser?.role}
           />
+          {/* NEU-022: the Locked badge IS the unlock control — same button. For a
+              manager with the amend grant (project quotes for now; contracts in a
+              later phase) it's an interactive lock→unlock toggle; otherwise it's a
+              passive status badge. */}
           {isLocked && (
-            <span style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "8px",
-              height: "36px",
-              padding: "0 14px",
-              backgroundColor: "var(--theme-bg-surface)",
-              border: "1px solid var(--theme-border-default)",
-              borderRadius: "6px",
-              fontSize: "13px",
-              fontWeight: 600,
-              color: "var(--theme-status-warning-fg)",
-              whiteSpace: "nowrap",
-            }}>
-              <Lock size={14} />
-              Locked
-            </span>
+            canAmendRates && quotation.quotation_type !== "contract" ? (
+              <UnlockAmendButton onUnlock={onEdit} />
+            ) : (
+              <span style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                height: "36px",
+                padding: "0 14px",
+                backgroundColor: "var(--theme-bg-surface)",
+                border: "1px solid var(--theme-border-default)",
+                borderRadius: "6px",
+                fontSize: "13px",
+                fontWeight: 600,
+                color: "var(--theme-status-warning-fg)",
+                whiteSpace: "nowrap",
+              }}>
+                <Lock size={14} />
+                Locked
+              </span>
+            )
           )}
 
           {/* Assign to — Pricing Manager only */}
@@ -1394,7 +1409,9 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
                   toast.success("Quotation updated");
                 }
               }}
-              onAmend={canEditQuotation ? onEdit : undefined} // WG-25
+              // NEU-022: on a LOCKED quote the top-bar Unlock is the single amend
+              // entry; keep the in-body amend only for un-locked edit (pre-conversion).
+              onAmend={!isLocked && canEditQuotation ? onEdit : undefined} // WG-25
             />
           </div>
         ) : activeTab === "comments" && canViewCommentsTab ? (

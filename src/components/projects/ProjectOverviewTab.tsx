@@ -11,6 +11,7 @@ import {
 import { PDFStudioOverlay } from "./quotation/screen/PDFStudioOverlay";
 import { QuotationFormView } from "./quotation/QuotationFormView";
 import { QuotationBuilderV3 } from "../pricing/quotations/QuotationBuilderV3";
+import { UnlockAmendButton } from "../pricing/UnlockAmendButton";
 
 interface ProjectOverviewTabProps {
   project: Project;
@@ -171,24 +172,38 @@ export function ProjectOverviewTab({ project, currentUser, onUpdate, onViewBooki
       margin: "0 auto"
     }}>
       
-      {/* Open PDF Studio — publishing surface lives in a full-screen overlay, not a peer view */}
-      {/* NEU-020 2.11 (WT4): Print PDF obeys the Quotation tab's Export cell. */}
-      {canExport && (
-      <div className="flex items-center justify-end mb-6">
-        <button
-          onClick={() => setIsPDFStudioOpen(true)}
-          className="inline-flex items-center gap-2 h-9 px-4 rounded-lg text-sm font-semibold text-white bg-[var(--theme-action-primary-bg)] hover:opacity-90 transition-all shadow-sm"
-        >
-          <Printer size={15} />
-          Print PDF
-        </button>
+      {/* Top action row. NEU-022: a converted project quote is locked — a manager
+          with the amend grant unlocks it here (prominent, deliberate gesture).
+          NEU-020 2.11 (WT4): Print PDF obeys the Quotation tab's Export cell. */}
+      {(canExport || canAmend) && (
+      <div className="flex items-center justify-end gap-3 mb-6">
+        {canAmend && (
+          <UnlockAmendButton
+            onUnlock={() => setIsEditing(true)}
+            note={
+              (project as any).quotation?.quotation_type === "contract"
+                ? "New rates apply to future calculations. Existing bills unchanged."
+                : undefined
+            }
+          />
+        )}
+        {canExport && (
+          <button
+            onClick={() => setIsPDFStudioOpen(true)}
+            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg text-sm font-semibold text-white bg-[var(--theme-action-primary-bg)] hover:opacity-90 transition-all shadow-sm"
+          >
+            <Printer size={15} />
+            Print PDF
+          </button>
+        )}
       </div>
       )}
 
       <QuotationFormView
         project={displayProject}
         onSave={onSaveQuotation}
-        onAmend={canAmend ? () => setIsEditing(true) : undefined}
+        // NEU-022: amend entry is the top-bar Unlock above, not an in-form button.
+        onAmend={undefined}
       />
 
       <PDFStudioOverlay

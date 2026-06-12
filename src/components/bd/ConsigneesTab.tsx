@@ -103,7 +103,7 @@ export function ConsigneesTab({ customerId }: ConsigneesTabProps) {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
-          Consignees
+          Consignees / Shippers
         </h3>
         <button
           onClick={openAddForm}
@@ -113,7 +113,7 @@ export function ConsigneesTab({ customerId }: ConsigneesTabProps) {
           onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)"; }}
         >
           <Plus className="w-4 h-4" />
-          Add Consignee
+          Add Consignee/Shipper
         </button>
       </div>
 
@@ -125,7 +125,7 @@ export function ConsigneesTab({ customerId }: ConsigneesTabProps) {
         >
           <div className="flex items-center justify-between mb-4">
             <h4 style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)" }}>
-              {editingId ? "Edit Consignee" : "New Consignee"}
+              {editingId ? "Edit Consignee/Shipper" : "New Consignee/Shipper"}
             </h4>
             <button onClick={closeForm} className="p-1 rounded hover:bg-[var(--theme-bg-surface-tint)] transition-colors">
               <X className="w-4 h-4" style={{ color: "var(--theme-text-muted)" }} />
@@ -136,7 +136,7 @@ export function ConsigneesTab({ customerId }: ConsigneesTabProps) {
             {/* Name */}
             <div>
               <label className="block text-[12px] font-medium mb-1.5" style={{ color: "var(--theme-text-muted)" }}>
-                Consignee Name *
+                Consignee/Shipper Name *
               </label>
               <div className="relative">
                 <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "var(--theme-text-muted)" }} />
@@ -271,7 +271,7 @@ export function ConsigneesTab({ customerId }: ConsigneesTabProps) {
               onMouseEnter={(e) => { if (!isSaving) e.currentTarget.style.backgroundColor = "var(--theme-action-primary-border)"; }}
               onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "var(--theme-action-primary-bg)"; }}
             >
-              {isSaving ? "Saving..." : editingId ? "Update" : "Add Consignee"}
+              {isSaving ? "Saving..." : editingId ? "Update" : "Add Consignee/Shipper"}
             </button>
           </div>
         </div>
@@ -289,7 +289,7 @@ export function ConsigneesTab({ customerId }: ConsigneesTabProps) {
         <div className="text-center py-16 rounded-lg" style={{ border: "1px dashed var(--theme-border-default)" }}>
           <Building2 className="w-10 h-10 mx-auto mb-3" style={{ color: "var(--neuron-ui-muted)" }} />
           <p className="text-[14px] mb-1" style={{ color: "var(--theme-text-muted)" }}>
-            No consignees yet
+            No consignees / shippers yet
           </p>
           <p className="text-[12px] mb-4" style={{ color: "var(--theme-text-muted)" }}>
             Add the receivers/importers this customer ships to
@@ -299,7 +299,7 @@ export function ConsigneesTab({ customerId }: ConsigneesTabProps) {
             className="px-4 py-2 rounded-lg text-[13px] font-medium transition-colors"
             style={{ backgroundColor: "var(--theme-action-primary-bg)", color: "#FFFFFF" }}
           >
-            Add First Consignee
+            Add First Consignee/Shipper
           </button>
         </div>
       )}

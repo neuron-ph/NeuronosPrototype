@@ -294,7 +294,7 @@ export function resolveInvoicePrintableDocument(args: ResolveInvoiceArgs): Print
     layout: "grid",
     fields: [
       { id: "bl_number", label: "B/L No.", value: invoice.bl_number || zoneA.bl_number },
-      { id: "consignee", label: "Consignee", value: invoice.consignee || zoneA.consignee, width: "wide" },
+      { id: "consignee", label: "Consignee/Shipper", value: invoice.consignee || zoneA.consignee, width: "wide" },
       {
         id: "commodity",
         label: "Commodity",

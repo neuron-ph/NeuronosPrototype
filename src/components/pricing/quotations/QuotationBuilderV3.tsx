@@ -258,8 +258,22 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
   const canCreateCatalogCategories = canPerm("acct_catalog", "create");
   const { user } = useUser();
   const queryClient = useQueryClient();
-  // Check if quotation is locked (converted to project)
-  const isLocked = mode === "edit" && !!initialData?.project_id;
+  // Check if quotation is locked (converted to project).
+  // NEU-022: a converted quote unlocks for editing when opened as an explicit
+  // amendment, OR for a manager who holds the amend grant for this record kind
+  // (project quotes → pricing_quotations:approve, contracts → pricing_contracts:approve).
+  // Entry points only surface an "Amend" affordance to those grantees, so the
+  // builder trusting the grant here keeps both surfaces (project tab + inquiry
+  // view) working without threading an isAmendment flag through every parent.
+  const isContractDoc = initialData?.quotation_type === "contract";
+  const canAmendThisDoc = isContractDoc
+    ? canPerm("pricing_contracts", "amend")
+    : canPerm("pricing_quotations", "amend");
+  const isConvertedDoc = mode === "edit" && !!initialData?.project_id;
+  // Editable-as-amendment only in an actual edit session (never in viewMode, which
+  // must stay read-only even for a grantee just looking at the converted doc).
+  const isAmendingConverted = isConvertedDoc && !viewMode && (isAmendment || canAmendThisDoc);
+  const isLocked = isConvertedDoc && !isAmendingConverted;
   
   // Generate quotation number (CQ prefix for contracts, QUO prefix for projects)
   const generateQuoteNumber = (type?: QuotationType) => {
@@ -2508,10 +2522,25 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
       )}
 
       {/* Main Content Area */}
-      <div style={{ 
+      <div style={{
         flex: 1,
         overflow: "auto"
       }}>
+        {/* NEU-022: amendment guardrail — converted quote being edited by a grantee */}
+        {isAmendingConverted && (
+          <div style={{
+            backgroundColor: "var(--theme-status-warning-bg)",
+            border: "1px solid var(--theme-status-warning-border)",
+            borderRadius: "8px",
+            padding: "12px 16px",
+            margin: "24px 48px 0",
+            fontSize: "13px",
+            lineHeight: 1.5,
+            color: "var(--neuron-ink-secondary)",
+          }}>
+            You're amending a converted quotation. Changes apply to charges not yet invoiced — already-invoiced charges keep their amounts.
+          </div>
+        )}
         {/* Locked Warning Banner */}
         {isLocked && (
           <div style={{
