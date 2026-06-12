@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Edit, Inbox, Send, FileText, Layers, Search, X, CheckSquare } from "lucide-react";
+import { Edit, Inbox, Send, FileText, Layers, Search, X, CheckSquare, List } from "lucide-react";
 import type { InboxTab, ThreadSummary } from "../../hooks/useInbox";
 import { ThreadListItem } from "./ThreadListItem";
 import { usePermission } from "../../context/PermissionProvider";
@@ -44,6 +44,7 @@ function ThreadListSkeleton() {
 
 function EmptyState({ tab, onCompose }: { tab: InboxTab; onCompose?: () => void }) {
   const messages: Record<InboxTab, string> = {
+    all: "No tickets yet",
     inbox: "Your inbox is empty",
     queue: "No pending requests in the queue",
     sent: "No sent tickets yet",
@@ -53,7 +54,7 @@ function EmptyState({ tab, onCompose }: { tab: InboxTab; onCompose?: () => void 
     <div className="flex flex-col items-center justify-center h-full text-center" style={{ padding: 32, minHeight: 240 }}>
       <Inbox size={32} style={{ color: "var(--theme-border-default)", marginBottom: 12 }} />
       <p style={{ fontSize: 13, color: "var(--theme-text-muted)", marginBottom: 8 }}>{messages[tab]}</p>
-      {tab === "inbox" && onCompose && (
+      {(tab === "all" || tab === "inbox") && onCompose && (
         <button
           onClick={onCompose}
           style={{ fontSize: 12, color: "var(--theme-action-primary-bg)", fontWeight: 500, background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}
@@ -91,7 +92,7 @@ export function ThreadListPanel({
   // The Open/Closed filter and bulk-select only apply to inbox & queue.
   // NEU-020 2.7 (DD-5): closing/archiving a ticket is a delete-class power
   // (take it down) — inbox:delete; composing writes tickets — inbox:create.
-  const supportsClose = (activeTab === "inbox" || activeTab === "queue") && can("inbox", "delete");
+  const supportsClose = (activeTab === "all" || activeTab === "inbox" || activeTab === "queue") && can("inbox", "delete");
   const canCompose = can("inbox", "create");
 
   // Reset selection when the view changes underneath it
@@ -135,6 +136,7 @@ export function ThreadListPanel({
   };
 
   const tabs: { key: InboxTab; label: string; icon: React.ReactNode; count?: number }[] = [
+    { key: "all" as InboxTab, label: "All", icon: <List size={13} />, count: unreadCount || undefined },
     ...(can("inbox_inbox_tab", "view") ? [{ key: "inbox" as InboxTab, label: "Inbox", icon: <Inbox size={13} />, count: unreadCount || undefined }] : []),
     ...(can("inbox_queue_tab", "view") ? [{ key: "queue" as InboxTab, label: "Queue", icon: <Layers size={13} />, count: queueCount || undefined }] : []),
     ...(can("inbox_sent_tab", "view") ? [{ key: "sent" as InboxTab, label: "Sent", icon: <Send size={13} /> }] : []),
