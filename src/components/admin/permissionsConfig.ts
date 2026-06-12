@@ -123,9 +123,13 @@ export type ModuleId =
   | "my_evouchers_all_tab" | "my_evouchers_draft_tab" | "my_evouchers_pending_tab"
   | "my_evouchers_active_tab" | "my_evouchers_done_tab";
 
-export type ActionId = "view" | "create" | "edit" | "approve" | "delete" | "export";
+// NEU-022: `amend` is a distinct elevated capability (re-edit a CONVERTED quote /
+// active contract after it's locked), kept separate from `approve` so a real
+// quotation-approval gate can use `approve` later. Applicable only on Pricing's
+// Quotations + Contracts (see actionApplicability) — inert "—" elsewhere, like export.
+export type ActionId = "view" | "create" | "edit" | "approve" | "delete" | "export" | "amend";
 
-export const PERM_ACTIONS: ActionId[] = ["view", "create", "edit", "approve", "delete", "export"];
+export const PERM_ACTIONS: ActionId[] = ["view", "create", "edit", "approve", "delete", "export", "amend"];
 
 export interface PermModule {
   id: ModuleId;

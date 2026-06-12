@@ -38,6 +38,7 @@ const ACTION_LABELS: Record<ActionId, string> = {
   approve: "Approve",
   delete: "Delete",
   export: "Export",
+  amend: "Amend",
 };
 
 function PermCell({

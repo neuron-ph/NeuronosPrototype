@@ -145,7 +145,7 @@ export function ConsigneeInlineSection({ customerId, isEditing = false }: Consig
             className="text-[11px] font-medium uppercase tracking-wide"
             style={{ color: "var(--neuron-ink-muted)" }}
           >
-            Consignees
+            Consignees / Shippers
           </label>
         </div>
       ) : (
@@ -153,7 +153,7 @@ export function ConsigneeInlineSection({ customerId, isEditing = false }: Consig
           className="block text-[11px] font-medium uppercase tracking-wide mb-1.5"
           style={{ color: "var(--neuron-ink-muted)" }}
         >
-          Consignees
+          Consignees / Shippers
         </label>
       )}
 
@@ -325,7 +325,7 @@ export function ConsigneeInlineSection({ customerId, isEditing = false }: Consig
                   className="text-[13px] italic opacity-40"
                   style={{ color: "var(--neuron-ink-muted)" }}
                 >
-                  Add consignee...
+                  Add consignee/shipper...
                 </span>
               </div>
             )}

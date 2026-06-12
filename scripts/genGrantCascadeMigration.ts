@@ -21,7 +21,7 @@ import { ALL_MODULE_NODES } from "../src/config/access/accessSchema";
 import { isActionApplicable } from "../src/config/access/actionApplicability";
 import type { ActionId } from "../src/components/admin/permissionsConfig";
 
-const ACTIONS: ActionId[] = ["view", "create", "edit", "approve", "delete", "export"];
+const ACTIONS: ActionId[] = ["view", "create", "edit", "approve", "delete", "export", "amend"];
 
 function buildEdges(): Array<[string, string]> {
   const seen = new Set<string>();

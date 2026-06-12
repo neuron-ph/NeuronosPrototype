@@ -38,6 +38,7 @@ const ACTION_LABELS: Record<ActionId, string> = {
   approve: "Approve",
   delete:  "Delete",
   export:  "Export",
+  amend:   "Amend",
 };
 
 const GROUP_ORDER = [
@@ -51,7 +52,7 @@ const GROUP_ORDER = [
   "Personal",
 ];
 
-export const GRID_COLS = "1fr 68px 68px 68px 72px 68px 68px";
+export const GRID_COLS = "1fr 68px 68px 68px 72px 68px 68px 68px";
 
 // Visual zones: read (view) | write (create, edit) | sensitive (approve, delete, export).
 // A faint divider is drawn before the first column of each new zone.
@@ -310,7 +311,7 @@ function ModuleRow({
               granted={granted}
               inherited={inherited}
               onChange={(next) => onToggle(mod.id as ModuleId, action, next, cascadeParentId)}
-              needsConfirm={action === "approve" && !granted}
+              needsConfirm={(action === "approve" || action === "amend") && !granted}
             />
           </div>
         );
@@ -636,7 +637,7 @@ function GroupAccordion({
                               granted={granted}
                               inherited={inherited}
                               onChange={(next) => onToggle(seg.parent.id as ModuleId, action, next)}
-                              needsConfirm={action === "approve" && !granted}
+                              needsConfirm={(action === "approve" || action === "amend") && !granted}
                             />
                           </div>
                         );

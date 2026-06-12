@@ -37,8 +37,11 @@ export function useEVouchers(view: EVoucherView, userId?: string, department?: s
     } else if (view === "pending-ceo") {
       query = query.eq('status', 'pending_ceo');
     } else if (view === "dept-pending-manager") {
+      // Approval queue is keyed on the materialized approver (set by the routing
+      // engine at submit, defaulted to the requestor's department), NOT on the
+      // requestor's department — so routed vouchers surface to the right manager.
       query = query.eq('status', 'pending_manager');
-      if (department) query = query.eq('details->>requestor_department', department);
+      if (department) query = query.eq('pending_approver_department', department);
     } else if (view === "dept-all") {
       if (department) query = query.eq('details->>requestor_department', department);
       // no status filter — returns all statuses for the department

@@ -42,7 +42,7 @@ export function ConsigneePicker({
   onConsigneeIdChange,
   customerName,
   customerId: directCustomerId,
-  placeholder = "Select consignee...",
+  placeholder = "Select consignee/shipper...",
   style,
   className,
 }: ConsigneePickerProps) {
@@ -55,13 +55,13 @@ export function ConsigneePicker({
     queryKey: [queryKeys.customers.list()[0], "resolve_by_name", customerName ?? "", directCustomerId ?? ""],
     queryFn: async () => {
       if (directCustomerId) return directCustomerId;
-      if (!customerName?.trim()) return undefined;
+      if (!customerName?.trim()) return null;
       const { data } = await supabase.from('customers').select('id, name, company_name').ilike('company_name', customerName.trim());
       const customers = data || [];
       const match = customers.find(
         (c: any) => (c.name || c.company_name || "").toLowerCase() === customerName.trim().toLowerCase()
       );
-      return match?.id || undefined;
+      return match?.id ?? null;
     },
     enabled: !!directCustomerId || !!customerName?.trim(),
     staleTime: 5 * 60 * 1000,

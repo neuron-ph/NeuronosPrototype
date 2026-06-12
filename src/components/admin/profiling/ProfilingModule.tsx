@@ -5,9 +5,11 @@ import { profileRegistry } from '../../../config/profiles/profileRegistry';
 import { ProfileSection } from './ProfileSection';
 import { ProfilingGovernanceTab } from './ProfilingGovernanceTab';
 import { CurrenciesTab } from './CurrenciesTab';
+import { RoutingRulesTab } from './RoutingRulesTab';
 
 const GOVERNANCE_KEY = 'governance';
 const CURRENCIES_KEY = 'currencies';
+const ROUTING_KEY = 'routing_rules';
 
 type SidebarItem = {
   key: string;
@@ -15,6 +17,7 @@ type SidebarItem = {
   description: string;
   isGovernance?: boolean;
   isCurrencies?: boolean;
+  isRouting?: boolean;
   group: 'profiles' | 'vendors' | 'system';
 };
 
@@ -58,6 +61,13 @@ export function ProfilingModule() {
         label: 'Governance',
         description: 'Manual-entry risk and strictness rules.',
         isGovernance: true,
+        group: 'system',
+      },
+      {
+        key: ROUTING_KEY,
+        label: 'Routing Rules',
+        description: 'Route approvals & assignments to the right authority by rule.',
+        isRouting: true,
         group: 'system',
       },
     ];
@@ -115,6 +125,8 @@ export function ProfilingModule() {
               <ProfilingGovernanceTab />
             ) : selectedItem?.isCurrencies ? (
               <CurrenciesTab />
+            ) : selectedItem?.isRouting ? (
+              <RoutingRulesTab />
             ) : (
               <ProfileSection key={selected} profileType={selected} initialQuery={urlQuery} />
             )}

@@ -11,6 +11,7 @@ import {
 } from "../utils/activityLog";
 import { determineSubmittedEVoucherStatus } from "../utils/evoucherApproval";
 import { recordNotificationEvent } from "../utils/notifications";
+import { resolveRouting, type Authority } from "../utils/routing/resolveRouting";
 import {
   FUNCTIONAL_CURRENCY,
   normalizeCurrency,
@@ -155,7 +156,11 @@ export function useEVoucherSubmit(
     line_items: data.lineItems || [],
   });
 
-  const buildVoucherInsert = (data: EVoucherData, status: string) => {
+  const buildVoucherInsert = (
+    data: EVoucherData,
+    status: string,
+    routing?: Authority | null,
+  ) => {
     const now = new Date().toISOString();
     const descriptionPrefix = data.isBillable ? "[BILLABLE] " : "";
 
@@ -197,9 +202,39 @@ export function useEVoucherSubmit(
       created_by_name: actor?.name || data.requestor || null,
       attachments: data.attachments || [],
       details: buildVoucherDetails(data),
+      // Approver materialized at write time by the routing engine. When no rule
+      // matches (routing == null), the DB trigger defaults the department to the
+      // requestor's own — preserving today's behavior.
+      pending_approver_department: routing?.department ?? null,
+      pending_approver_role: routing?.role ?? null,
       created_at: now,
       updated_at: now,
     };
+  };
+
+  // Resolve the approving authority for a voucher from the configurable routing
+  // engine. The signal for "this is a forwarding-job expense" lives on the
+  // linked booking's service_type, so we fetch it when a booking is attached.
+  const resolveVoucherRouting = async (
+    data: EVoucherData,
+  ): Promise<Authority | null> => {
+    let bookingServiceType: string | null = null;
+    if (data.bookingId) {
+      const { data: bk } = await supabase
+        .from("bookings")
+        .select("service_type")
+        .eq("id", data.bookingId)
+        .maybeSingle();
+      bookingServiceType = (bk?.service_type as string | undefined) ?? null;
+    }
+    return resolveRouting("evoucher", {
+      transaction_type: getTransactionType(data),
+      source_module: getSourceModule(),
+      requestor_department: actor?.department ?? context,
+      is_billable: data.isBillable ?? false,
+      has_booking: !!data.bookingId,
+      booking_service_type: bookingServiceType,
+    });
   };
 
   const normalizeCreatedVoucher = (created: CreatedVoucher) => {
@@ -371,7 +406,8 @@ export function useEVoucherSubmit(
         throw new Error("Vendor is required");
       }
 
-      const payload = buildVoucherInsert(data, "draft");
+      const routing = await resolveVoucherRouting(data);
+      const payload = buildVoucherInsert(data, "draft", routing);
 
       console.log(
         "Creating E-Voucher for submission:",
@@ -436,14 +472,20 @@ export function useEVoucherSubmit(
       // it skipped review). Best-effort, never blocks the submission.
       try {
         let recipientIds: string[] = [];
-        if (submittedStatus === "pending_manager" && actor?.department) {
-          const { data } = await supabase
+        // Notify the routed authority's approvers (falls back to the requestor's
+        // own department managers when no routing rule redirected the voucher).
+        const approverDept = routing?.department ?? actor?.department;
+        if (submittedStatus === "pending_manager" && approverDept) {
+          let approverQuery = supabase
             .from("users")
             .select("id")
-            .eq("department", actor.department)
-            .in("role", ["manager", "team_leader", "supervisor"])
+            .eq("department", approverDept)
             .eq("is_active", true);
-          recipientIds = (data || []).map((u) => u.id);
+          approverQuery = routing?.role
+            ? approverQuery.eq("role", routing.role)
+            : approverQuery.in("role", ["manager", "team_leader", "supervisor"]);
+          const { data: approvers } = await approverQuery;
+          recipientIds = (approvers || []).map((u) => u.id);
         } else if (submittedStatus === "pending_accounting") {
           const { data } = await supabase
             .from("users")

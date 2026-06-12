@@ -104,15 +104,28 @@ const billingStatusStyles: Record<string, { bg: string; text: string; border: st
 function BreakdownSubRow({ item }: { item: BillingTableItem }) {
   const rule = item.originalData?.rule_applied;
   const condition = item.originalData?.condition_label;
-  if (!rule) return null;
+  // NEU-022: surface lines a human overrode — these keep their hand-entered value
+  // (the quotation / a contract amendment will not overwrite them).
+  const manual = item.originalData?.is_manually_adjusted;
+  if (!rule && !manual) return null;
   return (
     <div style={{ padding: "2px 16px 6px 44px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-      <span style={{ fontSize: "11px", color: "var(--theme-action-primary-bg)", backgroundColor: "var(--theme-bg-surface-tint)", padding: "1px 8px", borderRadius: "4px", display: "inline-block" }}>
-        {rule}
-      </span>
+      {rule && (
+        <span style={{ fontSize: "11px", color: "var(--theme-action-primary-bg)", backgroundColor: "var(--theme-bg-surface-tint)", padding: "1px 8px", borderRadius: "4px", display: "inline-block" }}>
+          {rule}
+        </span>
+      )}
       {condition && (
         <span style={{ fontSize: "10px", color: "var(--theme-text-muted)", fontStyle: "italic" }}>
           {condition}
+        </span>
+      )}
+      {manual && (
+        <span
+          title="Hand-edited — keeps its manual value; the quotation won't overwrite it."
+          style={{ fontSize: "10px", fontWeight: 600, color: "var(--theme-status-warning-fg)", backgroundColor: "var(--theme-status-warning-bg)", border: "1px solid var(--theme-status-warning-border)", padding: "1px 8px", borderRadius: "4px", display: "inline-block" }}
+        >
+          Manually adjusted
         </span>
       )}
     </div>

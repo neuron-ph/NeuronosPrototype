@@ -136,6 +136,10 @@ export function ContractDetailView({
   // NEU-020 2.10a: amending the contract's QUOTATION obeys the Quotation tab's
   // own Edit cell — not the contract root (the grid's "Quotation → Edit" governs).
   const canAmendQuotation      = can(ids.quotation, "edit");
+  // NEU-022: amending a contract's RATES (new rate version + re-points live
+  // bookings' rate calculators to it) is a manager capability, distinct from the
+  // Quotation-tab Edit cell above (which also governs PDF Studio saves).
+  const canAmendRates          = can("pricing_contracts", "amend");
 
   const resolveInitialTab = (): ContractTab => {
     if (initialTab) return initialTab as ContractTab;
@@ -361,7 +365,7 @@ export function ContractDetailView({
     // NEU-020 2.10a: amending the contract's QUOTATION obeys the Quotation tab's
     // own Edit cell (ids.quotation), not the contract root. Also the PDF Studio
     // save path (reachable with tab view alone).
-    if (!canAmendQuotation) {
+    if (!canAmendQuotation && !canAmendRates) {
       toast.error("You don't have permission to save changes to this contract.");
       return;
     }
@@ -447,7 +451,22 @@ export function ContractDetailView({
           "Rate card updated"
         );
         if (version) {
-          toast.success(`Contract updated — rate card v${version.version_number} created`);
+          // NEU-022: re-point every LIVE booking on this contract to the new
+          // version so its rate calculator produces the amended rates going
+          // forward. Existing billings are deliberately left untouched.
+          let repointed = 0;
+          try {
+            const { data } = await supabase.rpc("repoint_live_bookings_to_rate_version", {
+              p_contract_id: quotation.id,
+              p_version_id: version.id,
+            });
+            repointed = (data as number) ?? 0;
+          } catch (e) {
+            console.error("[NEU-022] re-point live bookings failed:", e);
+          }
+          toast.success(
+            `Contract updated — rate card v${version.version_number}. ${repointed} live booking${repointed === 1 ? "" : "s"} now use the new rates.`
+          );
         } else {
           toast.success("Contract updated (rate version save failed — rates still updated)");
         }
@@ -1210,7 +1229,7 @@ export function ContractDetailView({
             project={contractAsProject}
             currentUser={currentUser ? { id: "current-user", ...currentUser } : null}
             onSaveQuotation={handleSaveContractQuotation}
-            canAmend={canAmendQuotation} // NEU-020 2.10a: Quotation tab's own edit cell
+            canAmend={canAmendRates} // NEU-022: rate amendment = manager grant (pricing_contracts:amend)
             canExport={can(ids.quotation, "export")} // NEU-020 2.11 (WT4): Print PDF = export cell
           />
         )}
