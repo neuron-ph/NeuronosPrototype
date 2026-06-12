@@ -24,6 +24,7 @@ import { extractContractDestinations } from "../../utils/contractQuantityExtract
 import { fetchFullContract } from "../../utils/contractLookup";
 import { isProjectBookingConflict } from "../../utils/projectAutofill";
 import { logCreation } from "../../utils/activityLog";
+import { canCreateOrEditBooking } from "../../utils/bookings/bookingCapability";
 import { fireBookingAssignmentTickets } from "../../utils/workflowTickets";
 import { generateBookingNumber, peekNextBookingNumber } from "../../utils/bookingNumberUtils";
 import { getSelectedCustomer } from "../../utils/bookings/selectedCustomer";
@@ -158,7 +159,7 @@ export function CreateTruckingBookingPanel({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!can("ops_trucking", "create") && !can("ops_trucking", "edit")) return; // NEU-019 WG-32 backstop
+    if (!canCreateOrEditBooking(can)) return; // NEU-006/NEU-019: capability gate mirrors DB current_user_can_act_on_booking (per-action across all services, not per-service)
 
     if (!detectedContractId && !selectedProjectId) {
       toast.error("A project or contract is required as the booking's container.");
@@ -262,7 +263,7 @@ export function CreateTruckingBookingPanel({
   };
 
   const handleSaveDraft = async () => {
-    if (!can("ops_trucking", "create") && !can("ops_trucking", "edit")) return; // NEU-019 WG-32 backstop
+    if (!canCreateOrEditBooking(can)) return; // NEU-006/NEU-019: capability gate mirrors DB current_user_can_act_on_booking (per-action across all services, not per-service)
     setSavingDraft(true);
     try {
       const result = await saveBookingDraft(formState, "Trucking", {
