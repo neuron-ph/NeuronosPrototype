@@ -41,7 +41,7 @@ export interface ParticipantSummary {
   user_avatar_url?: string | null;
 }
 
-export type InboxTab = "inbox" | "queue" | "sent" | "drafts";
+export type InboxTab = "all" | "inbox" | "queue" | "sent" | "drafts";
 
 /** Minimal shape needed to close/reopen a ticket (ThreadSummary satisfies it). */
 export type CloseableThread = { id: string; type: TicketType; status: string; subject?: string };
@@ -56,7 +56,7 @@ export function useInbox() {
   const { user, effectiveDepartment, effectiveRole } = useUser();
   const { can } = usePermission();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<InboxTab>("inbox");
+  const [activeTab, setActiveTab] = useState<InboxTab>("all");
   // Open/Closed filter for the inbox & queue tabs (the "door to reopen")
   const [closedView, setClosedView] = useState(false);
 
@@ -96,6 +96,25 @@ export function useInbox() {
         } else {
           ticketIds = rpcThreads.map((t: { id: string }) => t.id);
         }
+      } else if (activeTab === "all") {
+        // Unified view: everything you're part of — threads addressed to you
+        // (received, via the RLS-correct RPC) unioned with threads you created
+        // (sent). Respects the Open/Closed toggle on both halves. Drafts stay
+        // out (they're unsent) and live in their own tab.
+        const [{ data: rpcThreads }, { data: sentData }] = await Promise.all([
+          supabase.rpc(closedView ? "get_closed_threads" : "get_inbox_threads", {
+            p_user_id: user.id,
+            p_dept: effectiveDepartment || "",
+            p_role: effectiveRole || "staff",
+          }),
+          closedView
+            ? supabase.from("tickets").select("id").eq("created_by", user.id).eq("status", "archived")
+            : supabase.from("tickets").select("id").eq("created_by", user.id).neq("status", "draft").neq("status", "archived"),
+        ]);
+        const idSet = new Set<string>();
+        (rpcThreads || []).forEach((t: { id: string }) => idSet.add(t.id));
+        (sentData || []).forEach((t: { id: string }) => idSet.add(t.id));
+        ticketIds = [...idSet];
       } else if (activeTab === "sent") {
         const { data } = await supabase
           .from("tickets")
@@ -198,7 +217,8 @@ export function useInbox() {
         const lastReadAt = readMap[t.id];
         const isUnread =
           !closedView &&
-          (activeTab === "inbox" || activeTab === "queue") &&
+          // In "all", sent threads (created by me) are never "unread".
+          (activeTab === "inbox" || activeTab === "queue" || (activeTab === "all" && t.created_by !== user.id)) &&
           (!lastReadAt || new Date(t.last_message_at) > new Date(lastReadAt));
 
         return {
