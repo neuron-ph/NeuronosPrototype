@@ -19,6 +19,7 @@ import { RequestBillingButton } from "../common/RequestBillingButton";
 import { loadBookingActivityLog, appendBookingActivity } from "../../utils/bookingActivityLog";
 import { BookingInfoTab } from "./shared/BookingInfoTab";
 import { useUser } from "../../hooks/useUser";
+import { useMarkEntityReadOnMount } from "../../hooks/useNotifications";
 import { usePermission } from "../../context/PermissionProvider";
 import { fireBillingTicketOnCompletion } from "../../utils/workflowTickets";
 import { logStatusChange } from "../../utils/activityLog";
