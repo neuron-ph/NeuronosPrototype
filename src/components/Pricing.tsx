@@ -84,6 +84,26 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
         if (!m.contract_validity_end && m.contract_end_date) m.contract_validity_end = m.contract_end_date;
         return m;
       });
+      // NEU-034: the Account Owner column reads the denormalized created_by_name,
+      // which is empty on most rows (never written on save). Backfill it from the
+      // users table for any row that has created_by but no name.
+      const missingOwnerIds = Array.from(new Set(
+        merged
+          .filter((m: any) => m.created_by && !m.created_by_name)
+          .map((m: any) => m.created_by)
+      ));
+      if (missingOwnerIds.length > 0) {
+        const { data: owners } = await supabase
+          .from('users')
+          .select('id, name')
+          .in('id', missingOwnerIds);
+        const ownerMap = Object.fromEntries((owners || []).map((u: any) => [u.id, u.name]));
+        merged.forEach((m: any) => {
+          if (m.created_by && !m.created_by_name && ownerMap[m.created_by]) {
+            m.created_by_name = ownerMap[m.created_by];
+          }
+        });
+      }
       console.log(`Fetched ${merged.length} quotations for Pricing module`);
       return merged as QuotationNew[];
     },

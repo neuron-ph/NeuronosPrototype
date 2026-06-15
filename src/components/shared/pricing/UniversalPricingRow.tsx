@@ -452,8 +452,6 @@ export function UniversalPricingRow({
           {priceEditable && !isViewMode ? (
             (() => {
               const isForeign = data.currency && data.currency !== "PHP";
-              const rate = Number(data.forex_rate) || 1;
-              const phpEquivalent = (Number(data.final_price) || 0) * (Number(data.quantity) || 1) * rate;
               return (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", width: "100%" }}>
                   <div style={{ position: "relative", width: "100%" }}>
@@ -491,27 +489,13 @@ export function UniversalPricingRow({
                       }}
                     />
                   </div>
-                  {isForeign && rate !== 1 && (
-                    <span
-                      style={{
-                        marginTop: "2px",
-                        fontSize: "11px",
-                        fontWeight: 500,
-                        color: "var(--theme-text-muted)",
-                        whiteSpace: "nowrap",
-                      }}
-                      title={`Locked at ${rate} ${data.currency}/PHP${data.forex_rate_date ? ` on ${data.forex_rate_date}` : ""}`}
-                    >
-                      ≈ ₱{phpEquivalent.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  )}
                 </div>
               );
             })()
           ) : simpleMode && isViewMode ? (
             // Billing view — single amount, dual-currency aware
             <DualCurrencyAmount
-              originalAmount={(data.final_price || 0) * (data.quantity || 1)}
+              originalAmount={(data.final_price || 0) * (data.quantity ?? 1)}
               currency={data.currency}
               forexRate={data.forex_rate || 1}
               baseAmount={data.amount}
@@ -520,7 +504,7 @@ export function UniversalPricingRow({
           ) : showPHPConversion ? (
             // Selling Price total — Pattern A: USD primary, PHP equivalent secondary (USD-origin only)
             <DualCurrencyAmount
-              originalAmount={(data.final_price || 0) * (data.quantity || 1)}
+              originalAmount={(data.final_price || 0) * (data.quantity ?? 1)}
               currency={data.currency}
               forexRate={data.forex_rate || 1}
               baseAmount={data.amount}
