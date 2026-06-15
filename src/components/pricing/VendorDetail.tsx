@@ -498,9 +498,8 @@ export function VendorDetail({ vendor: initialVendor, onBack, onSave }: VendorDe
                       value={isEditing ? editedVendor.partner_type : currentVendor.partner_type}
                       onChange={(val) => setEditedVendor({ ...editedVendor, partner_type: val })}
                       options={[
-                        { value: "international", label: "International Partner" },
-                        { value: "co-loader", label: "Co-Loader" },
-                        { value: "all-in", label: "All-In Partner" }
+                        { value: "international", label: "International Partners" },
+                        { value: "local", label: "Local Partners" }
                       ]}
                       readOnly={!isEditing}
                       fullWidth

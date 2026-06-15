@@ -3,7 +3,7 @@
 
 import type { QuotationChargeCategory, QuotationLineItemNew } from "../types/pricing";
 
-export type PartnerType = "international" | "co-loader" | "all-in";
+export type PartnerType = "international" | "local";
 
 // ⚠️ DEPRECATED: Use QuotationChargeCategory[] instead
 // Kept for backward compatibility during migration
@@ -1574,7 +1574,7 @@ export const NETWORK_PARTNERS: NetworkPartner[] = [
     country: "Philippines",
     is_wca_conference: false,
     services: ["Ocean Freight", "Air Freight"],
-    partner_type: "co-loader",
+    partner_type: "local",
     phone: "+63 2 83968880 128",
     mobile: "+63 9178359465",
     website: "www.shipco.com",
@@ -1591,7 +1591,7 @@ export const NETWORK_PARTNERS: NetworkPartner[] = [
     country: "Philippines",
     is_wca_conference: false,
     services: ["Ocean Freight", "Air Freight"],
-    partner_type: "co-loader",
+    partner_type: "local",
     phone: "09-17112-0329",
     website: "www.charter-link.com.hk",
     address: "Unit 504, One Corporate Plaza Condominium Bldg., 845 A. Arnaiz Avenue, San Lorenzo 1223, Makati",
@@ -1607,7 +1607,7 @@ export const NETWORK_PARTNERS: NetworkPartner[] = [
     country: "Philippines",
     is_wca_conference: false,
     services: ["Ocean Freight"],
-    partner_type: "co-loader",
+    partner_type: "local",
     phone: "+632 8860-9702 local 4102",
     mobile: "0917.859.8556 / 0998.598.2569",
     website: "www.gatewaycontainerline.com.ph",
@@ -1624,7 +1624,7 @@ export const NETWORK_PARTNERS: NetworkPartner[] = [
     country: "Philippines",
     is_wca_conference: false,
     services: ["Ocean Freight", "Air Freight"],
-    partner_type: "co-loader",
+    partner_type: "local",
     phone: "+63908885415 / 02899091301",
     website: "www.rtfjmovers.com.ph",
     address: "RTFJ Building L12, B10 Road, Lot 2 and Rd Lot 1, BF Homes Martinville, Brgy. Manuyo 2, Las Pinas City 1742",
@@ -1640,7 +1640,7 @@ export const NETWORK_PARTNERS: NetworkPartner[] = [
     country: "Philippines",
     is_wca_conference: false,
     services: ["Ocean Freight", "Air Freight"],
-    partner_type: "co-loader",
+    partner_type: "local",
     mobile: "09563085844",
     address: "PK Building Pascor Drive, Brgy. Sto Nino, Paranaque City",
     notes: "Sales Executive"
@@ -1657,7 +1657,7 @@ export const NETWORK_PARTNERS: NetworkPartner[] = [
     country: "Philippines",
     is_wca_conference: false,
     services: ["Customs Brokerage"],
-    partner_type: "all-in",
+    partner_type: "local",
     phone: "(02) 7211 9300 / (02) 8254 5024",
     mobile: "+63 9270799121",
     address: "Rm. 311, 352 Peterson Bldg. T. Pinpin, Binondo, 1006 Metro Manila",
@@ -1673,7 +1673,7 @@ export const NETWORK_PARTNERS: NetworkPartner[] = [
     country: "Philippines",
     is_wca_conference: false,
     services: ["Customs Brokerage"],
-    partner_type: "all-in",
+    partner_type: "local",
     mobile: "+63 9076669989 / +63 9453615720",
     website: "www.cargonector.ph",
     address: "Unit 203, Intramuros Corporate Plaza Bldg. Recoletos St. Manila, Philippines 1002",
@@ -1689,7 +1689,7 @@ export const NETWORK_PARTNERS: NetworkPartner[] = [
     country: "Philippines",
     is_wca_conference: false,
     services: ["Consumer Goods Trading"],
-    partner_type: "all-in",
+    partner_type: "local",
     mobile: "+639 669838467",
     address: "120 2nd flr unit 3 Giv Alejo Santos Rd. San Jose Purok Camia Plaridel Bulacan",
     notes: "Fax: 028-247-0379"
@@ -1705,7 +1705,7 @@ export const NETWORK_PARTNERS: NetworkPartner[] = [
     territory: "Davao City",
     is_wca_conference: false,
     services: ["Customs Brokerage"],
-    partner_type: "all-in",
+    partner_type: "local",
     phone: "(082) 236 3747",
     mobile: "+639 9275524497",
     notes: "Licensed Customs Broker"
@@ -1721,7 +1721,7 @@ export const NETWORK_PARTNERS: NetworkPartner[] = [
     territory: "Cebu City",
     is_wca_conference: false,
     services: ["Consumer Goods Trading"],
-    partner_type: "all-in",
+    partner_type: "local",
     mobile: "+639 177004493",
     address: "Room 302 WDC Bldg Osmeña Blvd San Roque Cebu City"
   },
@@ -1736,7 +1736,7 @@ export const NETWORK_PARTNERS: NetworkPartner[] = [
     territory: "Muntinlupa City",
     is_wca_conference: false,
     services: ["Wholesale Trading"],
-    partner_type: "all-in",
+    partner_type: "local",
     mobile: "+639 088806976",
     address: "710-A ML Quezon St. Cupang, Muntinlupa City, 1773, Philippines"
   },

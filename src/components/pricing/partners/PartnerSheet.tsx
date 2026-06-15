@@ -16,7 +16,7 @@ interface PartnerSheetProps {
 
 type PartnerFormData = {
   company_name: string;
-  partner_type: "international" | "co-loader" | "all-in";
+  partner_type: "international" | "local";
   wca_id: string;
   country: string;
   territory: string;
@@ -309,9 +309,8 @@ export function PartnerSheet({ isOpen, onClose, initialData, onSave }: PartnerSh
                             value={field.value}
                             onChange={field.onChange}
                             options={[
-                              { value: "international", label: "International Partner" },
-                              { value: "co-loader", label: "Co-Loader" },
-                              { value: "all-in", label: "All-In Partner" }
+                              { value: "international", label: "International Partners" },
+                              { value: "local", label: "Local Partners" }
                             ]}
                             fullWidth
                           />
