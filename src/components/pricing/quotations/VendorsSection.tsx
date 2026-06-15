@@ -63,7 +63,7 @@ type VendorSelectOption = {
   value: string;
   label: string;
   country: string;
-  partner_type: "international" | "co-loader" | "all-in";
+  partner_type: "international" | "local";
   charge_categories?: QuotationChargeCategory[];
   line_items: VendorLineItem[];
   services_offered?: string[];
@@ -247,10 +247,8 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
       if (newVendorCountry) {
         filtered = filtered.filter(v => v.country === newVendorCountry);
       }
-    } else if (newVendorType === "Co-Loader Partners") {
-      filtered = filtered.filter(v => v.partner_type === "co-loader");
-    } else if (newVendorType === "All-In Partners") {
-      filtered = filtered.filter(v => v.partner_type === "all-in");
+    } else if (newVendorType === "Local Partners") {
+      filtered = filtered.filter(v => v.partner_type === "local");
     }
     
     return filtered;
@@ -499,8 +497,7 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
                   onChange={handleTypeChange}
                   options={[
                     { value: "International Partners", label: "International Partners" },
-                    { value: "Co-Loader Partners", label: "Co-Loader Partners" },
-                    { value: "All-In Partners", label: "All-In Partners" }
+                    { value: "Local Partners", label: "Local Partners" }
                   ]}
                   placeholder="Select type..."
                 />

@@ -15,7 +15,7 @@ import { useNetworkPartners } from "../../hooks/useNetworkPartners";
 import React from "react";
 
 type StatusFilter = "all" | "active" | "expiring" | "expired" | "wca";
-type Tab = "international" | "co-loader" | "all-in";
+type Tab = "international" | "local";
 
 // Get service icon component
 const getServiceIcon = (service: string) => {
@@ -68,14 +68,13 @@ export function NetworkPartnersModule({
 
   const { can } = usePermission();
   const canViewInternationalTab = can("pricing_network_partners_international_tab", "view");
-  const canViewCoLoaderTab = can("pricing_network_partners_co_loader_tab", "view");
-  const canViewAllInTab = can("pricing_network_partners_all_in_tab", "view");
+  const canViewLocalTab = can("pricing_network_partners_co_loader_tab", "view") || can("pricing_network_partners_all_in_tab", "view");
 
   const [searchQuery, setSearchQuery] = useState("");
   const [countryFilter, setCountryFilter] = useState<string>("All");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [activeTab, setActiveTab] = useState<Tab>(
-    canViewInternationalTab ? "international" : canViewCoLoaderTab ? "co-loader" : canViewAllInTab ? "all-in" : "international"
+    canViewInternationalTab ? "international" : canViewLocalTab ? "local" : "international"
   );
   const [isPartnerSheetOpen, setIsPartnerSheetOpen] = useState(false);
   
@@ -131,8 +130,7 @@ export function NetworkPartnersModule({
   // Calculate counts for each tab
   const tabCounts = useMemo(() => ({
     international: partners.filter(p => !p.partner_type || p.partner_type === "international").length,
-    "co-loader": partners.filter(p => p.partner_type === "co-loader").length,
-    "all-in": partners.filter(p => p.partner_type === "all-in").length
+    local: partners.filter(p => p.partner_type === "local").length
   }), [partners]);
 
   // Toggle country collapse
@@ -152,8 +150,7 @@ export function NetworkPartnersModule({
       // 1. Tab Filter (Primary)
       const isInternational = !partner.partner_type || partner.partner_type === "international";
       if (activeTab === "international" && !isInternational) return false;
-      if (activeTab === "co-loader" && partner.partner_type !== "co-loader") return false;
-      if (activeTab === "all-in" && partner.partner_type !== "all-in") return false;
+      if (activeTab === "local" && partner.partner_type !== "local") return false;
 
       // 2. Search Filter
       const matchesSearch = 
@@ -506,15 +503,15 @@ export function NetworkPartnersModule({
                 </span>
               </button>
             )}
-            {canViewCoLoaderTab && (
+            {canViewLocalTab && (
               <button
-                onClick={() => setActiveTab("co-loader")}
+                onClick={() => setActiveTab("local")}
                 style={{
                   padding: "0 0 16px 0",
                   fontSize: "14px",
                   fontWeight: 600,
-                  color: activeTab === "co-loader" ? "var(--theme-action-primary-bg)" : "var(--neuron-pill-inactive-text)",
-                  borderBottom: activeTab === "co-loader" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
+                  color: activeTab === "local" ? "var(--theme-action-primary-bg)" : "var(--neuron-pill-inactive-text)",
+                  borderBottom: activeTab === "local" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
                   cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
@@ -522,43 +519,15 @@ export function NetworkPartnersModule({
                   transition: "all 0.2s"
                 }}
               >
-                Co-Loader Partners
+                Local Partners
                 <span style={{
-                  backgroundColor: activeTab === "co-loader" ? "var(--theme-status-success-bg)" : "var(--neuron-pill-inactive-bg)",
-                  color: activeTab === "co-loader" ? "var(--theme-action-primary-bg)" : "var(--neuron-pill-inactive-text)",
+                  backgroundColor: activeTab === "local" ? "var(--theme-status-success-bg)" : "var(--neuron-pill-inactive-bg)",
+                  color: activeTab === "local" ? "var(--theme-action-primary-bg)" : "var(--neuron-pill-inactive-text)",
                   fontSize: "12px",
                   padding: "2px 8px",
                   borderRadius: "12px"
                 }}>
-                  {tabCounts["co-loader"]}
-                </span>
-              </button>
-            )}
-            {canViewAllInTab && (
-              <button
-                onClick={() => setActiveTab("all-in")}
-                style={{
-                  padding: "0 0 16px 0",
-                  fontSize: "14px",
-                  fontWeight: 600,
-                  color: activeTab === "all-in" ? "var(--theme-action-primary-bg)" : "var(--neuron-pill-inactive-text)",
-                  borderBottom: activeTab === "all-in" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  transition: "all 0.2s"
-                }}
-              >
-                All-In Partners
-                <span style={{
-                  backgroundColor: activeTab === "all-in" ? "var(--theme-status-success-bg)" : "var(--neuron-pill-inactive-bg)",
-                  color: activeTab === "all-in" ? "var(--theme-action-primary-bg)" : "var(--neuron-pill-inactive-text)",
-                  fontSize: "12px",
-                  padding: "2px 8px",
-                  borderRadius: "12px"
-                }}>
-                  {tabCounts["all-in"]}
+                  {tabCounts.local}
                 </span>
               </button>
             )}
