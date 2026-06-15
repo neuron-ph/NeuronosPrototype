@@ -18,6 +18,7 @@ import type {
   PrintableTotalRow,
 } from "../../utils/documents/printableDocument";
 import { formatPrintableValue } from "../../utils/documents/printableDocumentFormat";
+import { FUNCTIONAL_CURRENCY } from "../../utils/accountingCurrency";
 import { isPrintableValue } from "../../utils/documents/printableDocumentNormalize";
 
 interface PrintableDocumentHtmlProps {
@@ -157,7 +158,10 @@ function TableBlock({ table }: { table: PrintableTable }) {
                 <tr key={row.id} className={`p-rate-row ${row.emphasis === "subtotal" ? "p-rate-row-emphasis" : ""}`}>
                   {table.columns.map((c, ci) => {
                     const raw = row.cells[c.id];
-                    const cellCurrency = c.format === "money" ? String(row.cells["currency"] || "") || undefined : undefined;
+                    // NEU-032 (Option B): per-line money cells show the number only — the
+                    // currency lives in the "Cur" column and the symbol appears at the
+                    // subtotal/grand total, not on every line.
+                    const cellCurrency = undefined;
                     const formatted = formatPrintableValue(raw, c.format, cellCurrency);
                     const showSubtext = ci === 0 && row.subtext && row.emphasis !== "subtotal";
                     return (
@@ -231,6 +235,11 @@ function TotalsBlock({ doc }: { doc: PrintableDocument }) {
           ≈ {formatPrintableValue(totals.convertedTotal.value, "money", totals.convertedTotal.currency)}
         </div>
       ) : null}
+      {(totals.conversions || []).map((c) => (
+        <div key={c.currency} style={{ display: "flex", justifyContent: "flex-end", marginTop: "2px", fontSize: "8pt", color: "#667085" }}>
+          incl. {c.currency} {formatPrintableValue(c.originalAmount, "money")} ≈ {formatPrintableValue(c.phpAmount, "money", FUNCTIONAL_CURRENCY)} @ {formatPrintableValue(c.rate, "money", FUNCTIONAL_CURRENCY)}
+        </div>
+      ))}
     </div>
   );
 }

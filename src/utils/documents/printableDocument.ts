@@ -104,6 +104,16 @@ export interface PrintableTotalRow {
   format?: "money" | "percent" | "number";
 }
 
+/** One per-currency conversion line shown under the grand total of a MIXED-currency
+ *  document (e.g. "incl. USD 1,203.00 ≈ ₱58,947.00 @ ₱49.00"). originalAmount is in
+ *  `currency`; phpAmount is its functional-currency equivalent; rate = php / original. */
+export interface PrintableConversionLine {
+  currency: string;
+  originalAmount: number;
+  phpAmount: number;
+  rate: number;
+}
+
 export interface PrintableTotals {
   rows: PrintableTotalRow[];
   grandTotal?: PrintableTotalRow;
@@ -111,6 +121,9 @@ export interface PrintableTotals {
    *  document totals in a foreign currency (e.g. an all-USD quote shows its PHP
    *  equivalent once at the very bottom). */
   convertedTotal?: { value: number; currency: string };
+  /** Per-currency conversion breakdown for a mixed-currency document, shown under
+   *  the (PHP) grand total — one line per foreign currency present. */
+  conversions?: PrintableConversionLine[];
 }
 
 export interface PrintableSignatory {
