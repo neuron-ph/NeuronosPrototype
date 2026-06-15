@@ -179,8 +179,10 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment, 
       });
     }
 
-    // Mark as Approved - BD ONLY (client accepted)
-    if (normalizedStatus === "Sent to Client" && canActAsBD) {
+    // Mark as Approved (client accepted) — NEU-031: gated on quotation-edit access
+    // on EITHER side (bd_inquiries OR pricing_quotations), not BD-department only,
+    // so a Pricing manager with quotation access can confirm client acceptance.
+    if (normalizedStatus === "Sent to Client" && (canActAsBD || canActAsPricing)) {
       actions.push({
         label: "Mark as Approved",
         sublabel: "Client accepted quotation",
