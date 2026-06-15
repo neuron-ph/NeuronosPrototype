@@ -138,6 +138,12 @@ export function AddRequestForPaymentPanel({
   
   const [requestName, setRequestName] = useState("");
   const [projectNumber, setProjectNumber] = useState("");
+  // Optional structured booking link for the personal/accounting "New Request"
+  // path. Picking a real booking sets booking_id, which lets the routing engine
+  // classify the expense by the booking's service_type (e.g. Forwarding ->
+  // Pricing Manager). Left empty for genuine direct expenses (no booking).
+  const [selectedBookingId, setSelectedBookingId] = useState("");
+  const [bookingOptions, setBookingOptions] = useState<{ value: string; label: string; number: string }[]>([]);
   const [categorySections, setCategorySections] = useState<CategorySection[]>([]);
   const [showAddCategoryDropdown, setShowAddCategoryDropdown] = useState(false);
   const [preferredPayment, setPreferredPayment] = useState<PaymentMethod>("Bank Transfer");
@@ -302,6 +308,39 @@ export function AddRequestForPaymentPanel({
 
     }
   }, [bookingId, bookingType, lockedProjectNumber, transactionType]);
+
+  // Load selectable bookings for the optional Project/Booking picker. Only when
+  // the reference is user-editable (not view mode, not a booking passed in by an
+  // Operations flow). RLS scopes the list to what the user may see.
+  useEffect(() => {
+    if (isViewMode || bookingId) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("bookings")
+        .select("id, booking_number, name, service_type")
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (cancelled || error || !data) return;
+      setBookingOptions(
+        data.map((b: any) => {
+          const number = b.booking_number || b.name || b.id;
+          // Keep the label compact: the booking name can be a long cargo
+          // description, so truncate it before the dropdown's own ellipsis.
+          const rawName = b.name && b.name !== number ? String(b.name) : "";
+          const shortName =
+            rawName.length > 28 ? rawName.slice(0, 28).trimEnd() + "…" : rawName;
+          const parts = [number];
+          if (b.service_type) parts.push(b.service_type);
+          if (shortName) parts.push(shortName);
+          return { value: b.id as string, label: parts.join(" · "), number: number as string };
+        }),
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isViewMode, bookingId]);
   
   // Fetch Open Statements when in Collection Mode
   useEffect(() => {
@@ -497,7 +536,7 @@ export function AddRequestForPaymentPanel({
         notes,
         attachments,
         requestor: defaultRequestor || user?.name || "Current User",
-        bookingId,
+        bookingId: bookingId || selectedBookingId || undefined,
         isBillable: transactionSubtype === "billable_expense",
         linkedBillings: isCollectionMode ? linkedBillings : undefined,
         sourceAccountId: sourceAccountId || undefined,
@@ -548,7 +587,7 @@ export function AddRequestForPaymentPanel({
         notes,
         attachments,
         requestor: defaultRequestor || user?.name || "Current User",
-        bookingId,
+        bookingId: bookingId || selectedBookingId || undefined,
         isBillable: transactionSubtype === "billable_expense",
         linkedBillings: isCollectionMode ? linkedBillings : undefined,
         sourceAccountId: sourceAccountId || undefined,
@@ -594,7 +633,7 @@ export function AddRequestForPaymentPanel({
         notes,
         attachments,
         requestor: defaultRequestor || user?.name || "Current User",
-        bookingId,
+        bookingId: bookingId || selectedBookingId || undefined,
         isBillable: transactionSubtype === "billable_expense",
         linkedBillings: isCollectionMode ? linkedBillings : undefined,
         sourceAccountId: sourceAccountId || undefined,
@@ -1156,24 +1195,43 @@ export function AddRequestForPaymentPanel({
                     }}>
                       {isDirectExpense ? "Reference (Optional)" : "Project / Booking Ref (Optional)"}
                     </label>
-                    <input
-                      type="text"
-                      readOnly={isViewMode || !!bookingId || isCollectionMode} // Read only if view mode OR passed as prop OR collection mode
-                      value={projectNumber}
-                      onChange={(e) => !isViewMode && setProjectNumber(e.target.value)}
-                      placeholder="e.g., BN-2025-001"
-                      style={{
-                        width: "100%",
-                        padding: "10px 14px",
-                        fontSize: "14px",
-                        border: "1px solid var(--theme-border-default)",
-                        borderRadius: "6px",
-                        outline: "none",
-                        transition: "all 0.2s",
-                        backgroundColor: (isViewMode || bookingId || isCollectionMode) ? "var(--neuron-pill-inactive-bg)" : "var(--theme-bg-surface)",
-                        color: "var(--theme-text-secondary)"
-                      }}
-                    />
+                    {(isViewMode || !!bookingId || isCollectionMode) ? (
+                      // Locked / view: reference is fixed (Operations-linked booking or read-only display).
+                      <input
+                        type="text"
+                        readOnly
+                        value={projectNumber}
+                        placeholder="e.g., BN-2025-001"
+                        style={{
+                          width: "100%",
+                          padding: "10px 14px",
+                          fontSize: "14px",
+                          border: "1px solid var(--theme-border-default)",
+                          borderRadius: "6px",
+                          outline: "none",
+                          transition: "all 0.2s",
+                          backgroundColor: "var(--neuron-pill-inactive-bg)",
+                          color: "var(--theme-text-secondary)"
+                        }}
+                      />
+                    ) : (
+                      // Editable: optional structured booking link. Selecting a real
+                      // booking sets booking_id so routing can classify by service_type.
+                      <CustomDropdown
+                        fullWidth
+                        searchable
+                        searchPlaceholder="Search bookings…"
+                        placeholder="Link a booking (optional)"
+                        triggerAriaLabel="Project or booking reference"
+                        value={selectedBookingId}
+                        options={[{ value: "", label: "None (direct expense)" }, ...bookingOptions]}
+                        onChange={(val) => {
+                          setSelectedBookingId(val);
+                          const opt = bookingOptions.find((o) => o.value === val);
+                          setProjectNumber(opt?.number || "");
+                        }}
+                      />
+                    )}
                   </div>
                   
                   {/* Vendor / Counterparty */}
