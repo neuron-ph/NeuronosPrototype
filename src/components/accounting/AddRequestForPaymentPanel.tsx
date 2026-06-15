@@ -325,9 +325,14 @@ export function AddRequestForPaymentPanel({
       setBookingOptions(
         data.map((b: any) => {
           const number = b.booking_number || b.name || b.id;
+          // Keep the label compact: the booking name can be a long cargo
+          // description, so truncate it before the dropdown's own ellipsis.
+          const rawName = b.name && b.name !== number ? String(b.name) : "";
+          const shortName =
+            rawName.length > 28 ? rawName.slice(0, 28).trimEnd() + "…" : rawName;
           const parts = [number];
           if (b.service_type) parts.push(b.service_type);
-          if (b.name && b.name !== number) parts.push(b.name);
+          if (shortName) parts.push(shortName);
           return { value: b.id as string, label: parts.join(" · "), number: number as string };
         }),
       );
