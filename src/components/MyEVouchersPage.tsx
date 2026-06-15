@@ -81,7 +81,11 @@ export function MyEVouchersPage() {
   const showScopeFilter = canApproveMgrGate || isExecutive;
 
   // ── UI state ────────────────────────────────────────────────────────────
-  const [scope, setScope] = useState<"mine" | "dept">("mine");
+  // NEU-035: approvers (managers/execs) rarely file their own EVs, so a "mine"
+  // default renders empty tabs + "No expense requests yet" right under a populated
+  // approval panel — looks broken. Default them to the dept view (populated); they
+  // can still switch to "My EVs". Pure requestors keep the "mine" default.
+  const [scope, setScope] = useState<"mine" | "dept">(showScopeFilter ? "dept" : "mine");
   const [activeTab, setActiveTab] = useState<ActiveTab>(defaultEVTab);
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFrom, setDateFrom] = useState("");

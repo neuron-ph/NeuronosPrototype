@@ -4,6 +4,7 @@ import { createWorkflowTicket } from '../utils/workflowTickets';
 import { logActivity, logCreation, logDeletion } from '../utils/activityLog';
 import { trackRecent } from '../lib/recents';
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router";
 import { useUrlSelection } from "../hooks/useUrlSelection";
 import { useUser } from "../hooks/useUser";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -41,6 +42,7 @@ interface PricingProps {
 // API_URL removed — using supabase.from() wrapper (Phase 3)
 
 export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUser, onCreateTicket }: PricingProps) {
+  const navigate = useNavigate();
   const [subView, setSubView] = useState<SubView>("list");
   const [selectedQuotation, setSelectedQuotation] = useState<QuotationNew | null>(null);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
@@ -621,8 +623,8 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
                   onDuplicate={handleDuplicateQuotation}
                   onCreateTicket={onCreateTicket}
                   onConvertToProject={(projectId) => {
-                    // PD users cannot convert to project directly
-                    console.log("Project conversion not available for PD users");
+                    // Redirect to the created project's file in the Pricing Projects module.
+                    navigate(`/pricing/projects?project=${encodeURIComponent(projectId)}`);
                   }}
                   onConvertToContract={() => {
                     // Contract activated — return to list

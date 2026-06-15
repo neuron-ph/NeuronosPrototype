@@ -9,7 +9,6 @@ import { QuotationActionMenu } from "./QuotationActionMenu";
 import { UnlockAmendButton } from "./UnlockAmendButton";
 import { StatusChangeButton } from "./StatusChangeButton";
 import { CreateProjectModal } from "../bd/CreateProjectModal";
-import { CreateBookingsFromProjectModal } from "./CreateBookingsFromProjectModal";
 import { toast } from "../ui/toast-utils";
 import { CommentsTab } from "../shared/CommentsTab";
 import { EntityAttachmentsTab } from "../shared/EntityAttachmentsTab";
@@ -23,9 +22,8 @@ import { createWorkflowTicket, getOpenWorkflowTicket } from "../../utils/workflo
 import { recordNotificationEvent, fetchDeptManagerIds } from "../../utils/notifications";
 import { useMarkEntityReadOnMount } from "../../hooks/useNotifications";
 import { logActivity, logCreation, logStatusChange } from "../../utils/activityLog";
-import { buildProjectInsertFromQuotation, normalizeProjectRow } from "../../utils/projectHydration";
+import { buildProjectInsertFromQuotation } from "../../utils/projectHydration";
 import { canUseQuotationLens, canViewQuotationComments, canViewQuotationFile } from "../../utils/quotationAccess";
-import { canActOnBooking } from "../../utils/bookingPermissions";
 import {
   getNormalizedContractStatus,
   getNormalizedQuotationStatus,
@@ -72,8 +70,6 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
   const [isPDFStudioOpen, setIsPDFStudioOpen] = useState(false);
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
-  const [showCreateBookingsModal, setShowCreateBookingsModal] = useState(false);
-  const [createdProject, setCreatedProject] = useState<Project | null>(null);
   const [isActivatingContract, setIsActivatingContract] = useState(false);
   const [assignedToId, setAssignedToId] = useState<string>((quotation as any).assigned_to || "");
   const [isAssigning, setIsAssigning] = useState(false);
@@ -115,7 +111,6 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
   const canExportQuotation = canUseQuotationLens(can, userDepartment, "export");
   const canCreateProject = can("bd_projects", "create") || can("pricing_projects", "create");
   const canActivateContract = can("pricing_contracts", "edit");
-  const canCreateBookings = canActOnBooking(can, "create");
   // NEU-019 WG-14/16: comment posting + attachment writes get their own knobs
   // (seeded to both pricing- and BD-lens audiences in migration 171).
   const canPostComments = can("pricing_quotations_comments_tab", "create");
@@ -660,11 +655,9 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
 
       toast.success(`✓ Project ${project.project_number} created successfully!`);
 
-      setCreatedProject(normalizeProjectRow(project));
-
-      if (canCreateBookings) {
-        setShowCreateBookingsModal(true);
-      } else if (onConvertToProject) {
+      // Redirect straight to the created project file — no "Create Bookings"
+      // modal. Bookings can be added later from the project's Bookings tab.
+      if (onConvertToProject) {
         onConvertToProject(project.id);
       }
 
@@ -1455,25 +1448,6 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
           onClose={() => setShowCreateProjectModal(false)}
           onSuccess={handleProjectCreationSuccess}
           currentUser={currentUser}
-        />
-      )}
-
-      {/* Create Bookings Modal */}
-      {showCreateBookingsModal && createdProject && currentUser && (
-        <CreateBookingsFromProjectModal
-          isOpen={showCreateBookingsModal}
-          onClose={() => {
-            setShowCreateBookingsModal(false);
-            setCreatedProject(null);
-          }}
-          project={createdProject}
-          currentUser={currentUser}
-          onSuccess={() => {
-            setShowCreateBookingsModal(false);
-            setCreatedProject(null);
-            // Optionally refresh quotation view
-            onUpdate(quotation);
-          }}
         />
       )}
     </div>
