@@ -90,12 +90,12 @@ function effectiveItemAmount(item: any): number {
     return Number(item.amount);
   }
   const unitPrice = item.final_price ?? item.price ?? 0;
-  return Number(unitPrice) * Number(item.quantity || 1) * Number(item.forex_rate || 1);
+  return Number(unitPrice) * Number(item.quantity ?? 1) * Number(item.forex_rate || 1);
 }
 
 function originalItemAmount(item: any): number {
   const unitPrice = item.final_price ?? item.price ?? 0;
-  const original = Number(unitPrice) * Number(item.quantity || 1);
+  const original = Number(unitPrice) * Number(item.quantity ?? 1);
   if (original !== 0) return original;
   const amount = Number(item.amount);
   if (!Number.isFinite(amount) || amount === 0) return original;
@@ -774,7 +774,7 @@ function buildChargeTable(
       const displayPrice = item.final_price ?? item.price ?? 0;
       const itemRate = Number(item.forex_rate) || 1;
       const convertedAmt = effectiveItemAmount(item);
-      const originalAmt = Number(displayPrice) * Number(item.quantity || 1);
+      const originalAmt = Number(displayPrice) * Number(item.quantity ?? 1);
       subtotal += convertedAmt;
       originalSubtotal += originalAmt;
       // Prefer the user-typed remark; only fall back to the unit code when no
