@@ -796,7 +796,7 @@ export function BuyingPriceSectionV2({
                                           justifyContent: "center"
                                         }}>
                                           <DualCurrencyAmount
-                                            originalAmount={(item.price || 0) * (item.quantity || 1)}
+                                            originalAmount={(item.price || 0) * (item.quantity ?? 1)}
                                             currency={item.currency}
                                             forexRate={item.forex_rate || 1}
                                             baseAmount={item.amount}
