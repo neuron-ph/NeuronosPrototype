@@ -11,6 +11,9 @@
 > prod release on explicit "ship it". (Phase 6 department-retirement folded into
 > Phase 3 remap.) DEV-ONLY so far — nothing in prod.** · Created 2026-06-15 · Owner: Marcus
 >
+> **✅ SHIPPED TO PROD 2026-06-16** (tag `stable/2026-06-16`). All phases complete on
+> dev and prod; behavior-neutral until a record is flagged confidential.
+>
 > **This document is the contract.** Before writing any code in a phase, re-read
 > that phase. After completing any step, tick it and update the Status line. If
 > implementation needs to deviate from the Model or the Invariants, **STOP** —
@@ -342,11 +345,21 @@ txns) across all 5 types and real users — all green:
       on cross-dept visibility, restricted records, edit-gating, and aggregates.
 - [ ] **Verify:** all scenarios green; capture results here.
 
-### Phase 8 — Release to prod (ONLY on explicit "ship it")
-- [ ] Follow the **"Release dev to prod" checklist** (CLAUDE.md): Edge Functions
-      diff/redeploy, migrations 209–212 surfaced then applied, merge dev→main,
-      tag `stable/YYYY-MM-DD`.
-- [ ] **Verify:** prod truth-table spot check; affected users hard-refresh.
+### Phase 8 — Release to prod ✅ DONE 2026-06-16 (Marcus: "GO")
+- [x] dev committed + pushed (738abae); merged dev→main (02a7101), Vercel prod Ready.
+- [x] No Edge Function changes (none differed).
+- [x] Migrations applied to prod in safe order: **209+210 before** the frontend
+      deploy (behavior-neutral), **211–214 after** the deploy was Ready (no
+      over-hide window). Pre-flight confirmed prod matched dev (all dials
+      `everything`; 6 execs all had overrides; schema/functions/policies present).
+- [x] Prod remap verified: 54 non-exec → `org_wide`, 6 exec → `everything`,
+      `role='executive'` → 0.
+- [x] **Verify (prod, auth-sim RLS):** viewer sees non-confidential ✅; hidden when
+      confidential ✅; owner keeps it ✅; exec sees it ✅; non-exec flip blocked ✅;
+      0 confidential rows + 0 audit residue. 4 v2 SELECT policies, 10 conf triggers.
+- [x] Tagged `stable/2026-06-16` and pushed.
+- Remind affected users to hard-refresh. Per PF6, two prod execs lack module
+  edit grants on some types and can't use the toggle there until granted (not a blocker).
 
 ---
 
