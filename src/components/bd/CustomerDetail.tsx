@@ -28,6 +28,7 @@ import { useMarkEntityReadOnMount } from "../../hooks/useNotifications";
 import { usePermission } from "../../context/PermissionProvider";
 import { CUSTOMER_MODULE_IDS, type CustomerDept } from "../../config/access/accessSchema";
 import { useCustomerProfileOptions } from "../../hooks/useCustomerProfileOptions";
+import { ConfidentialToggle } from "../shared/ConfidentialToggle";
 
 interface CustomerDetailProps {
   customer: Customer;
@@ -352,7 +353,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
       }}
     >
       {/* Back Button - Top Left */}
-      <div style={{ padding: "32px 48px 24px 48px" }}>
+      <div style={{ padding: "32px 48px 24px 48px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <button
           onClick={onBack}
           className="flex items-center gap-2 text-[13px] transition-colors"
@@ -559,6 +560,19 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                   {/* Consignees â€” inline section */}
                   {variant === "bd" && (
                     <ConsigneeInlineSection customerId={customer.id} isEditing={false} />
+                  )}
+
+                  {/* Confidential â€” exec-only, full-width block at the bottom of the card */}
+                  {effectiveDepartment === "Executive" && (
+                    <div className="mt-6 pt-6" style={{ borderTop: "1px solid var(--neuron-ui-divider)" }}>
+                      <ConfidentialToggle
+                        fullWidth
+                        table="customers"
+                        recordId={customer.id}
+                        confidential={customer.confidential ?? false}
+                        onChanged={() => queryClient.invalidateQueries({ queryKey: queryKeys.customers.all() })}
+                      />
+                    </div>
                   )}
                 </div>
               ) : (

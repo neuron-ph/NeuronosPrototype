@@ -4,6 +4,7 @@ import { ArrowLeft, MoreVertical, Clock, ChevronRight } from "lucide-react";
 import { ExpensesTab } from "./shared/ExpensesTab";
 import { useProjectFinancials } from "../../hooks/useProjectFinancials";
 import { StatusSelector } from "../StatusSelector";
+import { useConfidentialAction } from "../../hooks/useConfidentialAction";
 import type { MarineInsuranceBooking, ExecutionStatus } from "../../types/operations";
 import { UnifiedBillingsTab } from "../shared/billings/UnifiedBillingsTab";
 import { UnifiedInvoicesTab } from "../shared/invoices/UnifiedInvoicesTab";
@@ -233,6 +234,13 @@ export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, curre
     borderBottom: activeTab === tab ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
     cursor: "pointer" as const, transition: "all 0.2s", height: "100%"
   });
+  const confidentialAction = useConfidentialAction({
+    table: "bookings",
+    recordId: (booking as any).id || booking.bookingId,
+    confidential: booking.confidential ?? false,
+    onChanged: () => onUpdate(),
+  });
+  const showBookingActionsMenu = canCancelDeleteBooking || confidentialAction.isExecutive;
 
   return (
     <div style={{ backgroundColor: "var(--theme-bg-surface)", display: "flex", flexDirection: "column", height: "100vh" }}>
@@ -279,7 +287,7 @@ export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, curre
           <button onClick={() => setShowTimeline(!showTimeline)} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", backgroundColor: showTimeline ? "var(--theme-bg-surface-tint)" : "var(--theme-bg-surface)", border: `1px solid ${showTimeline ? "var(--theme-action-primary-bg)" : "var(--neuron-ui-border)"}`, borderRadius: "6px", fontSize: "13px", fontWeight: 500, color: showTimeline ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-secondary)", cursor: "pointer" }}>
             <Clock size={16} /> Activity
           </button>
-          {canCancelDeleteBooking && <div style={{ position: "relative" }} ref={moreMenuRef}>
+          {showBookingActionsMenu && <div style={{ position: "relative" }} ref={moreMenuRef}>
             <button
               onClick={() => setShowMoreMenu(v => !v)}
               style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "36px", height: "36px", backgroundColor: "var(--theme-bg-surface)", border: "1px solid var(--neuron-ui-border)", borderRadius: "6px", cursor: "pointer" }}
@@ -288,19 +296,35 @@ export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, curre
             </button>
             {showMoreMenu && (
               <div style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", width: "200px", backgroundColor: "var(--theme-bg-surface)", border: "1px solid var(--theme-border-default)", borderRadius: "8px", boxShadow: "var(--elevation-2)", zIndex: 100, overflow: "hidden" }}>
-                <button
-                  onClick={() => { setShowMoreMenu(false); setShowCancelDeletePanel(true); }}
-                  style={{ width: "100%", display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", backgroundColor: "transparent", border: "none", cursor: "pointer", fontSize: "13px", color: "var(--theme-text-secondary)", textAlign: "left" }}
-                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--theme-bg-page)")}
-                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
-                >
-                  Cancel / Delete Booking
-                </button>
+                {canCancelDeleteBooking && (
+                  <button
+                    onClick={() => { setShowMoreMenu(false); setShowCancelDeletePanel(true); }}
+                    style={{ width: "100%", display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", backgroundColor: "transparent", border: "none", cursor: "pointer", fontSize: "13px", color: "var(--theme-text-secondary)", textAlign: "left" }}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--theme-bg-page)")}
+                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
+                  >
+                    Cancel / Delete Booking
+                  </button>
+                )}
+                {confidentialAction.isExecutive && (
+                  <button
+                    onClick={() => { setShowMoreMenu(false); confidentialAction.openDialog(); }}
+                    style={{ width: "100%", display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", backgroundColor: "transparent", border: "none", borderTop: canCancelDeleteBooking ? "1px solid var(--theme-border-default)" : "none", cursor: "pointer", fontSize: "13px", color: "var(--theme-text-secondary)", textAlign: "left" }}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--theme-bg-page)")}
+                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
+                  >
+                    <confidentialAction.Icon size={15} />
+                    {confidentialAction.label}
+                  </button>
+                )}
               </div>
             )}
           </div>}
         </div>
       </div>
+
+      {/* Confidential — exec-only, full-width block below the header (self-hides for non-execs) */}
+      {confidentialAction.dialog}
 
       <BookingCancelDeletePanel
         isOpen={showCancelDeletePanel}

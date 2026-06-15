@@ -65,6 +65,7 @@ export interface Contact {
   lead_status?: LeadStatus; // For frontend compatibility
   owner_id?: string; // For frontend compatibility
   notes: string | null;
+  confidential?: boolean;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -85,6 +86,7 @@ export interface Customer {
   phone?: string;
   email?: string;
   notes?: string | null;
+  confidential?: boolean;
   created_by?: string;
   created_at: string;
   updated_at: string;

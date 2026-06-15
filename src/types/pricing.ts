@@ -336,6 +336,7 @@ export interface QuotationNew {
   created_at: string;            // Server-stamped ISO timestamp (set on creation)
   updated_at: string;
   notes?: string;
+  confidential?: boolean;
 
   // JSONB overflow column on quotations. Stores profile_refs (linked profile metadata
   // for service-specific lookups) and other overflow used by Pricing/BD save paths.
@@ -454,7 +455,8 @@ export interface Project {
   created_at: string;
   updated_at: string;
   completed_at?: string | null;
-  
+  confidential?: boolean;
+
   // Derived/Joined fields
   quotation?: QuotationNew;
 }

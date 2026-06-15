@@ -16,10 +16,14 @@ import { queryKeys } from '../lib/queryKeys';
 // to everyone sharing my users.department, like current_user_department_user_ids().
 // RLS is the real boundary; this only pre-filters the UI so it never over-hides.
 
-type Dial = 'own' | 'team' | 'department' | 'everything';
+type Dial = 'own' | 'team' | 'department' | 'org_wide' | 'everything';
 type DialMap = Partial<Record<string, Dial>>;
 
-const DIAL_RANK: Record<Dial, number> = { own: 0, team: 1, department: 2, everything: 3 };
+// Record Visibility V2 (migrations 209-212): 'org_wide' = all NON-restricted +
+// my closure. The client CANNOT replicate the per-record confidential/closure cut,
+// so it must NOT pre-filter org_wide types by owner — it returns {type:'all'} and
+// lets RLS do the real cut (never over-hide; see the v2 spec, Inv. 7).
+const DIAL_RANK: Record<Dial, number> = { own: 0, team: 1, department: 2, org_wide: 3, everything: 4 };
 
 // Canonical record-type keys (must match the seed in migration 157).
 const BOOKING_KEYS = [
@@ -106,7 +110,10 @@ export function useDataScope(resource?: string): DataScopeResult {
 
       const dial = effectiveDial(resource, override, profile);
 
-      if (dial === 'everything') return { type: 'all' };
+      // 'everything' (all-records) and 'org_wide' both mean "don't pre-filter by
+      // owner" — RLS performs the real cut (org_wide hides restricted; everything
+      // does not). Either way the client must not over-hide (v2 spec, Inv. 7).
+      if (dial === 'everything' || dial === 'org_wide') return { type: 'all' };
       if (dial === 'own') return { type: 'own', userId: user.id };
 
       // department — everyone sharing my users.department (incl. me),

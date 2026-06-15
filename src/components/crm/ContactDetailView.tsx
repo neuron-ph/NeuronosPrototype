@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { Contact } from "../../types/contact";
 import { useBreakpoint } from "../../hooks/useBreakpoint";
 import { usePermission } from "../../context/PermissionProvider";
+import { ConfidentialToggle } from "../shared/ConfidentialToggle";
 
 interface ContactDetailViewProps {
   contact: Contact;
@@ -306,6 +307,18 @@ export function ContactDetailView({ contact, onBack, onUpdate, onViewQuotation, 
             )}
           </div>
         </div>
+
+        {/* Confidential â€” exec-only, full-width block (self-hides for non-execs) */}
+        {!isEditing && (
+          <div style={{ marginBottom: isMobile ? "20px" : "24px" }}>
+            <ConfidentialToggle
+              fullWidth
+              table="contacts"
+              recordId={contact.id}
+              confidential={contact.confidential ?? false}
+            />
+          </div>
+        )}
 
         {/* Tabs */}
         <div style={{

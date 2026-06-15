@@ -19,6 +19,7 @@ import { ProjectInvoices } from "./tabs/ProjectInvoices";
 import { ProjectCollectionsTab } from "./ProjectCollectionsTab";
 import { ProjectAttachmentsTab } from "./ProjectAttachmentsTab";
 import { CommentsTab } from "../shared/CommentsTab";
+import { useConfidentialAction } from "../../hooks/useConfidentialAction";
 
 const PhilippinePeso = ({ size = 24, ...props }: any) => (
   <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -363,6 +364,14 @@ export function ProjectDetail({
 
 
 
+  const confidentialAction = useConfidentialAction({
+    table: "projects",
+    recordId: project.id,
+    confidential: project.confidential ?? false,
+    onChanged: () => onUpdate(),
+  });
+  const showProjectActionsMenu = showActions || confidentialAction.isExecutive;
+
   return (
     <div style={{ 
       backgroundColor: "var(--theme-bg-surface)",
@@ -430,7 +439,7 @@ export function ProjectDetail({
             />
 
             {/* Actions Menu - Only for BD & PD */}
-            {showActions && (
+            {showProjectActionsMenu && (
             <div style={{ position: "relative" }}>
             <button
               onClick={() => setShowActionsMenu(!showActionsMenu)}
@@ -482,6 +491,8 @@ export function ProjectDetail({
                     overflow: "hidden"
                   }}
                 >
+                  {showActions && (
+                  <>
                   <button
                     onClick={() => {
                       handleEdit();
@@ -578,6 +589,37 @@ export function ProjectDetail({
                     <Trash2 size={16} style={{ display: "inline", marginRight: "8px", verticalAlign: "middle" }} />
                     Delete Project
                   </button>
+                  </>
+                  )}
+                  {confidentialAction.isExecutive && (
+                    <button
+                      onClick={() => {
+                        setShowActionsMenu(false);
+                        confidentialAction.openDialog();
+                      }}
+                      style={{
+                        width: "100%",
+                        padding: "10px 16px",
+                        textAlign: "left",
+                        border: "none",
+                        borderTop: showActions ? "1px solid var(--theme-border-default)" : "none",
+                        background: "none",
+                        fontSize: "14px",
+                        color: "var(--theme-text-primary)",
+                        cursor: "pointer",
+                        transition: "background-color 0.2s ease",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = "transparent";
+                      }}
+                    >
+                      <confidentialAction.Icon size={16} style={{ display: "inline", marginRight: "8px", verticalAlign: "middle", color: "var(--theme-text-muted)" }} />
+                      {confidentialAction.label}
+                    </button>
+                  )}
                 </div>
               </>
             )}
@@ -585,6 +627,9 @@ export function ProjectDetail({
             )}
         </div>
       </div>
+
+      {/* Confidential — exec-only, full-width block below the header (self-hides for non-execs) */}
+      {confidentialAction.dialog}
 
       {/* Tabs Tier 1: Categories */}
       <div className="px-12 bg-[var(--theme-bg-surface)] flex gap-8 border-b border-[var(--theme-border-default)]">
