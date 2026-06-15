@@ -18,6 +18,7 @@ import type {
   PrintableTotals,
 } from "../../utils/documents/printableDocument";
 import { formatPrintableValue } from "../../utils/documents/printableDocumentFormat";
+import { FUNCTIONAL_CURRENCY } from "../../utils/accountingCurrency";
 import { isPrintableValue } from "../../utils/documents/printableDocumentNormalize";
 
 const s = StyleSheet.create({
@@ -540,6 +541,11 @@ function TotalsBlock({ totals }: { totals?: PrintableTotals }) {
           {"≈ " + formatPrintableValue(totals.convertedTotal.value, "money", totals.convertedTotal.currency)}
         </Text>
       ) : null}
+      {(totals.conversions || []).map((c) => (
+        <Text key={c.currency} style={{ fontSize: 8, color: "#667085", marginTop: 2, textAlign: "right" }}>
+          {`incl. ${c.currency} ${formatPrintableValue(c.originalAmount, "money")} ≈ ${formatPrintableValue(c.phpAmount, "money", FUNCTIONAL_CURRENCY)} @ ${formatPrintableValue(c.rate, "money", FUNCTIONAL_CURRENCY)}`}
+        </Text>
+      ))}
     </View>
   );
 }

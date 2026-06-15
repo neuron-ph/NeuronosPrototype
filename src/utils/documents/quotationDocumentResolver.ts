@@ -28,6 +28,7 @@ import {
   type PrintableTableRow,
   type PrintableTotalRow,
   type PrintableTotals,
+  type PrintableConversionLine,
   type PrintableValue,
 } from "./printableDocument";
 import { isPrintableValue, normalizePrintableDocument } from "./printableDocumentNormalize";
@@ -116,6 +117,9 @@ interface PricingCurrencySummary {
   // line amounts. Used for the single bottom conversion line on foreign-currency
   // documents.
   converted_grand_total: number;
+  // Per-currency conversion breakdown for a MIXED-currency document — one entry
+  // per foreign currency present. Empty for single-currency documents.
+  conversions: PrintableConversionLine[];
 }
 
 function summarizePricingCurrency(
@@ -124,6 +128,8 @@ function summarizePricingCurrency(
   existing?: FinancialSummary,
 ): PricingCurrencySummary {
   const nonZeroCurrencies = new Set<string>();
+  // Per-currency original + PHP-equivalent sums, for the mixed-doc breakdown.
+  const byCurrency = new Map<string, { original: number; php: number }>();
   let originalTaxable = 0;
   let originalNonTaxable = 0;
   let baseTaxable = 0;
@@ -137,6 +143,10 @@ function summarizePricingCurrency(
 
       if (Math.abs(originalAmt) > 0) {
         nonZeroCurrencies.add(itemCurrency);
+        const acc = byCurrency.get(itemCurrency) || { original: 0, php: 0 };
+        acc.original += originalAmt;
+        acc.php += baseAmt;
+        byCurrency.set(itemCurrency, acc);
       }
 
       if (item.is_taxed) {
@@ -166,9 +176,23 @@ function summarizePricingCurrency(
   const converted_grand_total =
     baseNonTaxable + baseTaxable + baseTaxable * taxRate + otherCharges;
 
+  // Mixed-currency documents total in PHP; surface each foreign currency's
+  // subtotal and its PHP equivalent so the conversion is legible at the totals.
+  const isMixed = nonZeroCurrencies.size > 1;
+  const conversions: PrintableConversionLine[] = isMixed
+    ? [...byCurrency.entries()]
+        .filter(([cur, sums]) => cur !== FUNCTIONAL_CURRENCY && Math.abs(sums.original) > 0)
+        .map(([cur, sums]) => ({
+          currency: cur,
+          originalAmount: sums.original,
+          phpAmount: sums.php,
+          rate: sums.original !== 0 ? sums.php / sums.original : 1,
+        }))
+    : [];
+
   return {
     currency,
-    isMixed: nonZeroCurrencies.size > 1,
+    isMixed,
     subtotal_non_taxed,
     subtotal_taxed,
     tax_rate: taxRate,
@@ -176,6 +200,7 @@ function summarizePricingCurrency(
     other_charges: otherCharges,
     grand_total: subtotal_non_taxed + subtotal_taxed + tax_amount + otherCharges,
     converted_grand_total,
+    conversions,
   };
 }
 
@@ -1283,6 +1308,11 @@ export function resolveQuotationPrintableDocument(
           : undefined,
       )
     : undefined;
+  // Mixed-currency quote: show a per-currency conversion breakdown under the (PHP)
+  // grand total instead of the single "≈ ₱" line.
+  if (totals && printSummary.conversions.length > 0) {
+    totals.conversions = printSummary.conversions;
+  }
 
   const pageFooterText = joinNonEmpty([
     quotation.quote_number || (quotation as any).quotation_number,

@@ -18,6 +18,7 @@ import type {
   PrintableTotalRow,
 } from "../../utils/documents/printableDocument";
 import { formatPrintableValue } from "../../utils/documents/printableDocumentFormat";
+import { FUNCTIONAL_CURRENCY } from "../../utils/accountingCurrency";
 import { isPrintableValue } from "../../utils/documents/printableDocumentNormalize";
 
 interface PrintableDocumentHtmlProps {
@@ -234,6 +235,11 @@ function TotalsBlock({ doc }: { doc: PrintableDocument }) {
           ≈ {formatPrintableValue(totals.convertedTotal.value, "money", totals.convertedTotal.currency)}
         </div>
       ) : null}
+      {(totals.conversions || []).map((c) => (
+        <div key={c.currency} style={{ display: "flex", justifyContent: "flex-end", marginTop: "2px", fontSize: "8pt", color: "#667085" }}>
+          incl. {c.currency} {formatPrintableValue(c.originalAmount, "money")} ≈ {formatPrintableValue(c.phpAmount, "money", FUNCTIONAL_CURRENCY)} @ {formatPrintableValue(c.rate, "money", FUNCTIONAL_CURRENCY)}
+        </div>
+      ))}
     </div>
   );
 }
