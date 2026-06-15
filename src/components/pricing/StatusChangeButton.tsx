@@ -95,8 +95,11 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment, 
       });
     }
 
-    // BD WORKFLOW: Submit for Pricing - BD ONLY (when status = "Draft")
-    if (normalizedStatus === "Draft" && canActAsBD) {
+    // Submit for Pricing (Draft → Pending Pricing) — NEU-036: gated on quotation-edit
+    // access on EITHER side, not BD-department only, so a Pricing user who created/owns
+    // a Draft (e.g. a project quotation) can push it forward instead of being stuck
+    // with only Disapprove/Cancel.
+    if (normalizedStatus === "Draft" && (canActAsBD || canActAsPricing)) {
       actions.push({
         label: "Submit for Pricing",
         sublabel: "Send to Pricing department for review",
