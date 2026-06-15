@@ -22,6 +22,7 @@ import { ContactTeamsTab } from "./ContactTeamsTab";
 import { CommentsTab } from "../shared/CommentsTab";
 import { EntityAttachmentsTab } from "../shared/EntityAttachmentsTab";
 import { CONTACT_MODULE_IDS, type ContactDept } from "../../config/access/accessSchema";
+import { ConfidentialToggle } from "../shared/ConfidentialToggle";
 
 // Local attachment shape for in-memory task/activity proof uploads (not persisted)
 interface Attachment {
@@ -478,7 +479,7 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
       }}
     >
       {/* Back Button - Top Left */}
-      <div style={{ padding: "32px 48px 24px 48px" }}>
+      <div style={{ padding: "32px 48px 24px 48px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <button
           onClick={onBack}
           className="flex items-center gap-2 text-[13px] transition-colors"
@@ -1009,33 +1010,42 @@ export function ContactDetail({ contact, onBack, onCreateInquiry, variant = "bd"
                 </div>
               </div>
 
-              {/* Delete Button at Bottom */}
-              {!isEditing && canDeleteContact && (
-                <div className="mt-6 pt-6" style={{ borderTop: "1px solid var(--neuron-ui-divider)" }}>
-                  <button
-                    type="button"
-                    onClick={handleDeleteContact}
-                    disabled={isDeleting}
-                    className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg transition-colors text-[13px]"
-                    style={{
-                      border: "1px solid var(--theme-status-danger-border)",
-                      backgroundColor: "var(--theme-bg-surface)",
-                      color: "var(--theme-status-danger-fg)",
-                      cursor: isDeleting ? "not-allowed" : "pointer",
-                      opacity: isDeleting ? 0.65 : 1
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isDeleting) {
-                        e.currentTarget.style.backgroundColor = "var(--theme-status-danger-bg)";
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
-                    }}
-                  >
-                    <Trash2 size={14} />
-                    {isDeleting ? "Deleting..." : "Delete Contact"}
-                  </button>
+              {/* Confidential + Delete — sibling actions at the bottom */}
+              {!isEditing && (effectiveDepartment === "Executive" || canDeleteContact) && (
+                <div className="mt-6 pt-6 space-y-3" style={{ borderTop: "1px solid var(--neuron-ui-divider)" }}>
+                  <ConfidentialToggle
+                    fullWidth
+                    table="contacts"
+                    recordId={contact.id}
+                    confidential={contact.confidential ?? false}
+                    onChanged={() => queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all() })}
+                  />
+                  {canDeleteContact && (
+                    <button
+                      type="button"
+                      onClick={handleDeleteContact}
+                      disabled={isDeleting}
+                      className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg transition-colors text-[13px]"
+                      style={{
+                        border: "1px solid var(--theme-status-danger-border)",
+                        backgroundColor: "var(--theme-bg-surface)",
+                        color: "var(--theme-status-danger-fg)",
+                        cursor: isDeleting ? "not-allowed" : "pointer",
+                        opacity: isDeleting ? 0.65 : 1
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isDeleting) {
+                          e.currentTarget.style.backgroundColor = "var(--theme-status-danger-bg)";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)";
+                      }}
+                    >
+                      <Trash2 size={14} />
+                      {isDeleting ? "Deleting..." : "Delete Contact"}
+                    </button>
+                  )}
                 </div>
               )}
             </div>

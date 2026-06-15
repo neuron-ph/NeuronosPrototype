@@ -6,6 +6,7 @@ import {
   ALL_RECORD_TYPES,
   isRecordTypeAccessible,
   dialFor,
+  dialsForType,
   mergeVisibility,
   type RecordDial,
   type RecordType,
@@ -40,22 +41,24 @@ function DialControl({
   value,
   disabled,
   onSet,
+  dials,
 }: {
   value: RecordDial;
   disabled: boolean;
   onSet: (dial: RecordDial) => void;
+  dials: typeof RECORD_DIALS;
 }) {
-  const activeIndex = Math.max(0, RECORD_DIALS.findIndex((d) => d.value === value));
+  const activeIndex = Math.max(0, dials.findIndex((d) => d.value === value));
   return (
     <div
       role="radiogroup"
       style={{
         position: "relative",
         display: "grid",
-        gridTemplateColumns: `repeat(${RECORD_DIALS.length}, 1fr)`,
-        // Equal columns keep the sliding-thumb math exact, so the track must
-        // fit the widest label ("Department") × 4. 252 was the 3-dial width.
-        width: 356,
+        gridTemplateColumns: `repeat(${dials.length}, 1fr)`,
+        // Equal columns keep the sliding-thumb math exact; ~89px/cell preserves
+        // the prior per-label width as the dial count varies per record type.
+        width: dials.length * 89,
         flexShrink: 0,
         padding: 2,
         borderRadius: 8,
@@ -73,7 +76,7 @@ function DialControl({
           top: 2,
           bottom: 2,
           left: 2,
-          width: `calc((100% - 4px) / ${RECORD_DIALS.length})`,
+          width: `calc((100% - 4px) / ${dials.length})`,
           borderRadius: 6,
           background: disabled ? "var(--neuron-bg-elevated)" : "var(--neuron-action-primary)",
           border: disabled ? "1px solid var(--neuron-ui-border)" : "none",
@@ -82,7 +85,7 @@ function DialControl({
           transition: "transform 0.14s cubic-bezier(0.25, 1, 0.5, 1)",
         }}
       />
-      {RECORD_DIALS.map((d) => {
+      {dials.map((d) => {
         const active = value === d.value;
         return (
           <button
@@ -203,11 +206,15 @@ export function RecordVisibilityEditor({ scopes, onChange, resolvedGrants, basel
     onChange({ ...scopes, [key]: dial });
   };
 
-  // Bulk setters only touch ACCESSIBLE (live) rows — greyed rows keep their value.
+  // Bulk setters only touch ACCESSIBLE (live) rows that actually SUPPORT the
+  // chosen dial — greyed rows, and rows where the dial is invalid for that type
+  // (e.g. 'org_wide' on financials, 'department' on a v2 type), keep their value.
   const setMany = (types: RecordType[], dial: RecordDial) => {
     const next: RecordVisibilityMap = { ...scopes };
     for (const rt of types) {
-      if (accessibleByKey[rt.key]) next[rt.key] = dial;
+      if (accessibleByKey[rt.key] && dialsForType(rt.key).some((d) => d.value === dial)) {
+        next[rt.key] = dial;
+      }
     }
     onChange(next);
   };
@@ -369,6 +376,7 @@ export function RecordVisibilityEditor({ scopes, onChange, resolvedGrants, basel
                         value={dialFor(scopes, rt.key)}
                         disabled={!accessible}
                         onSet={(d) => setOne(rt.key, d)}
+                        dials={dialsForType(rt.key)}
                       />
                     </div>
                   );

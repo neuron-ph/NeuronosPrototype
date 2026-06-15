@@ -41,6 +41,7 @@ import { ProjectBookingReadOnlyView } from "../projects/ProjectBookingReadOnlyVi
 import type { Project } from "../../types/pricing";
 import { EntityAttachmentsTab } from "../shared/EntityAttachmentsTab";
 import { CommentsTab } from "../shared/CommentsTab";
+import { useConfidentialAction } from "../../hooks/useConfidentialAction";
 import { ContractStatusSelector } from "../contracts/ContractStatusSelector";
 import { getServiceIcon as getServiceIconShared, formatShortDate } from "../../utils/quotation-helpers";
 import { BookingsTable } from "../shared/BookingsTable";
@@ -914,6 +915,14 @@ export function ContractDetailView({
     setActiveTab(firstTab);
   };
 
+  const confidentialAction = useConfidentialAction({
+    table: "quotations",
+    recordId: quotation.id,
+    confidential: quotation.confidential ?? false,
+    onChanged: (next) => onUpdate?.({ ...quotation, confidential: next }),
+  });
+  const showContractActionsMenu = canEditContract || confidentialAction.isExecutive;
+
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", backgroundColor: "var(--theme-bg-surface)" }}>
       {/* Header Bar — matches ProjectDetail pattern */}
@@ -1025,7 +1034,7 @@ export function ContractDetailView({
             />
 
             {/* Actions Menu (⋮) — Edit, Renew, etc. */}
-            {canEditContract && (
+            {showContractActionsMenu && (
             <div style={{ position: "relative" }}>
               <button
                 onClick={() => setShowActionsMenu(!showActionsMenu)}
@@ -1077,6 +1086,8 @@ export function ContractDetailView({
                       overflow: "hidden"
                     }}
                   >
+                    {canEditContract && (
+                    <>
                     <button
                       onClick={() => {
                         onEdit();
@@ -1131,6 +1142,37 @@ export function ContractDetailView({
                         Renew Contract
                       </button>
                     )}
+                    </>
+                    )}
+                    {confidentialAction.isExecutive && (
+                      <button
+                        onClick={() => {
+                          setShowActionsMenu(false);
+                          confidentialAction.openDialog();
+                        }}
+                        style={{
+                          width: "100%",
+                          padding: "10px 16px",
+                          textAlign: "left",
+                          border: "none",
+                          borderTop: canEditContract ? "1px solid var(--theme-border-default)" : "none",
+                          background: "none",
+                          fontSize: "14px",
+                          color: "var(--theme-text-primary)",
+                          cursor: "pointer",
+                          transition: "background-color 0.2s ease",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = "var(--theme-bg-page)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = "transparent";
+                        }}
+                      >
+                        <confidentialAction.Icon size={16} style={{ display: "inline", marginRight: "8px", verticalAlign: "middle", color: "var(--theme-text-muted)" }} />
+                        {confidentialAction.label}
+                      </button>
+                    )}
                   </div>
                 </>
               )}
@@ -1138,6 +1180,9 @@ export function ContractDetailView({
             )}
         </div>
       </div>
+
+      {/* Confidential — exec-only, full-width block below the header (self-hides for non-execs) */}
+      {confidentialAction.dialog}
 
       {/* Tabs Tier 1: Categories */}
       <div className="px-12 bg-[var(--theme-bg-surface)] flex gap-8 border-b border-[var(--theme-border-default)]">

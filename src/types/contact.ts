@@ -17,6 +17,7 @@ export interface Contact {
   created_at?: string;
   updated_at: string;
   notes?: string;
+  confidential?: boolean;
   quotations?: any[]; // For detail view
 }
 

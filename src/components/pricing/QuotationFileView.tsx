@@ -1364,6 +1364,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
               onDuplicate={handleDuplicate}
               onDelete={handleDelete}
               onCreateTicket={onCreateTicket ? handleCreateTicket : undefined}
+              onConfidentialChanged={(next) => onUpdate({ ...quotation, confidential: next })}
               canDuplicate={canCreateQuotation}
               canDelete={canDeleteQuotation}
             />
@@ -1371,6 +1372,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
         </div>
       </div>
 
+      {/* Confidential — exec-only, full-width block below the header (self-hides for non-execs) */}
       {/* Main Content Area — Form View is canonical; PDF Studio opens as overlay from header button */}
       <div
         ref={contentPanelRef}

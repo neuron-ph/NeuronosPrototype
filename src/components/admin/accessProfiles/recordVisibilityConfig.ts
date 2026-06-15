@@ -7,21 +7,44 @@
 // the row is greyed — you grant access in Feature Access first. This keeps the
 // two tabs in lockstep, exactly like the locked design.
 
-export type RecordDial = "own" | "team" | "department" | "everything";
+export type RecordDial = "own" | "team" | "department" | "org_wide" | "everything";
 export type RecordVisibilityMap = Partial<Record<string, RecordDial>>;
 
 // CREW wording (PLAN_CREW_VISIBILITY_2026-06.md, D2/D6): a record's crew is its
 // owner plus everyone assigned to work attached to it (linked bookings/projects).
 // Each dial is a radius around the crew — the descriptions must state this in
 // full, on-screen, so the rule is explicit, never implicit.
+//
+// Record Visibility V2 (docs/PLAN_RECORD_VISIBILITY_V2_2026-06.md): 'org_wide' =
+// every non-confidential record of this type, org-wide, plus my closure;
+// 'everything' (All records) is the absolute tier that ALSO sees confidential.
+// Which dials are valid for a given type is curated by dialsForType() below.
 export const RECORD_DIALS: { value: RecordDial; label: string; description: string }[] = [
   { value: "own", label: "Own", description: "Records they own, are assigned to, or that belong to work they're part of." },
   { value: "team", label: "Team", description: "Own, plus records owned by or worked on by their teammates." },
   { value: "department", label: "Department", description: "Own, plus records owned by or worked on by anyone in their department." },
-  { value: "everything", label: "All records", description: "Every record of this type, across all departments." },
+  { value: "org_wide", label: "Org-wide", description: "Every record of this type across all departments — except those marked confidential (plus any confidential ones they're directly on)." },
+  { value: "everything", label: "All records", description: "Every record of this type, across all departments, INCLUDING confidential ones." },
 ];
 
-export const DIAL_RANK: Record<RecordDial, number> = { own: 0, team: 1, department: 2, everything: 3 };
+export const DIAL_RANK: Record<RecordDial, number> = { own: 0, team: 1, department: 2, org_wide: 3, everything: 4 };
+
+// V2 cross-departmental types: governed by current_user_can_view_record_v2; their
+// dials are own / team / org_wide / All records (the 'department' rung is retired
+// for these — org_wide replaces it). Bookings additionally still support
+// 'department' and now 'org_wide'. Every other type (financials, tasks, …) keeps
+// the legacy own/team/department/All-records set (their RLS does NOT honor org_wide).
+const V2_TYPES = new Set(["contacts", "customers", "quotations", "contracts", "projects"]);
+
+export function dialsForType(key: string): { value: RecordDial; label: string; description: string }[] {
+  if (V2_TYPES.has(key)) {
+    return RECORD_DIALS.filter((d) => d.value !== "department");
+  }
+  if (key.startsWith("bookings")) {
+    return RECORD_DIALS; // own/team/department/org_wide/All records
+  }
+  return RECORD_DIALS.filter((d) => d.value !== "org_wide");
+}
 
 export interface RecordType {
   key: string;
@@ -154,5 +177,6 @@ export function legacyScopeFromMap(map: RecordVisibilityMap): "own" | "team" | "
     const d = dialFor(map, rt.key);
     if (DIAL_RANK[d] > DIAL_RANK[best]) best = d;
   }
-  return best === "everything" || best === "department" ? "department" : best;
+  // Legacy column only knows own/team/department; anything broader collapses to department.
+  return best === "everything" || best === "org_wide" || best === "department" ? "department" : best;
 }

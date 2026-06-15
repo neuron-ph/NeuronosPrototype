@@ -188,6 +188,7 @@ export interface ForwardingBooking {
 
   // DB/legacy fields
   id?: string;
+  confidential?: boolean;
   booking_number?: string;
   portOfLoading?: string;
   portOfDischarge?: string;
@@ -197,6 +198,7 @@ export interface ForwardingBooking {
 
 export interface BrokerageBooking {
   bookingId: string;
+  confidential?: boolean;
   booking_number?: string;
   projectNumber?: string; // Optional reference for autofill
   createdAt: string;
@@ -271,6 +273,7 @@ export interface BrokerageBooking {
 
 export interface TruckingBooking {
   bookingId: string;
+  confidential?: boolean;
   booking_number?: string;
   projectNumber?: string;
   createdAt: string;
@@ -332,6 +335,7 @@ export interface TruckingBooking {
 
 export interface MarineInsuranceBooking {
   bookingId: string;
+  confidential?: boolean;
   booking_number?: string;
   projectNumber?: string;
   createdAt: string;
@@ -394,6 +398,7 @@ export interface MarineInsuranceBooking {
 
 export interface OthersBooking {
   bookingId: string;
+  confidential?: boolean;
   booking_number?: string;
   projectNumber?: string;
   createdAt: string;
