@@ -239,8 +239,10 @@ export function RecordVisibilityEditor({ scopes, onChange, resolvedGrants, basel
         <div style={{ display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
           <Eye size={15} style={{ color: "var(--neuron-action-primary)", marginTop: 2, flexShrink: 0 }} />
           <p style={{ margin: 0, fontSize: 12, color: "var(--neuron-ink-muted)", lineHeight: 1.5 }}>
-            For each record type, choose which rows this profile sees. Only types it can open in{" "}
-            <strong style={{ color: "var(--neuron-ink-primary)" }}>Feature Access</strong> are editable here.
+            For each record type, choose which rows this profile sees — this applies on its own, even
+            when the record's page isn't enabled in{" "}
+            <strong style={{ color: "var(--neuron-ink-primary)" }}>Feature Access</strong>. Greyed types
+            still need their module turned on there first.
           </p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>

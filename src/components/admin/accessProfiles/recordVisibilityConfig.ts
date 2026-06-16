@@ -47,20 +47,31 @@ export interface RecordType {
   label: string;
   /** view on ANY of these feature-access modules makes the type reachable. */
   gatingModules: string[];
+  /**
+   * Migration 217 — reads of this type are governed by the visibility dial
+   * ALONE (current_user_can_view_record_v2), independent of any feature-access
+   * module. The module now gates only the PAGE (RouteGuard), not row reads. So
+   * the dial here is authoritative and must stay editable even when the profile
+   * holds none of the gating modules — otherwise the editor lies about a dial
+   * that is already in force. Set only on the types whose SELECT policy 217
+   * actually decoupled: contacts, customers, quotations, contracts, projects.
+   * (Bookings + legacy types still AND the module gate, so they stay locked.)
+   */
+  readsDecoupled?: boolean;
 }
 
 export const RECORD_TYPE_GROUPS: { group: string; types: RecordType[] }[] = [
   {
     group: "Business Development & CRM",
     types: [
-      { key: "contacts", label: "Contacts", gatingModules: ["bd_contacts", "pricing_contacts"] },
-      { key: "customers", label: "Customers", gatingModules: ["bd_customers", "pricing_customers", "acct_customers"] },
+      { key: "contacts", label: "Contacts", gatingModules: ["bd_contacts", "pricing_contacts"], readsDecoupled: true },
+      { key: "customers", label: "Customers", gatingModules: ["bd_customers", "pricing_customers", "acct_customers"], readsDecoupled: true },
       // Split per the door doctrine: a Quotation (sales draft) and a Contract
       // (active agreement) are distinct nouns with their own rooms, so each gets
       // its own dial — even though both live on the `quotations` table. RLS keys
       // the dial off quotation_type (CASE in quotations_select). Contracts is its
       // own group below (a container record type, sibling to Projects).
-      { key: "quotations", label: "Quotations", gatingModules: ["pricing_quotations", "bd_inquiries"] },
+      { key: "quotations", label: "Quotations", gatingModules: ["pricing_quotations", "bd_inquiries"], readsDecoupled: true },
       { key: "tasks", label: "Tasks", gatingModules: ["bd_tasks"] },
       { key: "activities", label: "Activities", gatingModules: ["bd_activities"] },
       { key: "budget_requests", label: "Budget Requests", gatingModules: ["bd_budget_requests"] },
@@ -70,7 +81,7 @@ export const RECORD_TYPE_GROUPS: { group: string; types: RecordType[] }[] = [
   {
     group: "Projects",
     types: [
-      { key: "projects", label: "Projects", gatingModules: ["bd_projects", "pricing_projects", "ops_projects", "acct_projects"] },
+      { key: "projects", label: "Projects", gatingModules: ["bd_projects", "pricing_projects", "ops_projects", "acct_projects"], readsDecoupled: true },
     ],
   },
   {
@@ -79,7 +90,7 @@ export const RECORD_TYPE_GROUPS: { group: string; types: RecordType[] }[] = [
       // Sibling container to Projects; its own dial (RLS keys 'contracts' off
       // quotation_type). Visibility also flows through the relationship gate
       // (a contract linked to a booking/project you can see).
-      { key: "contracts", label: "Contracts", gatingModules: ["pricing_contracts", "bd_contracts"] },
+      { key: "contracts", label: "Contracts", gatingModules: ["pricing_contracts", "bd_contracts"], readsDecoupled: true },
     ],
   },
   {
@@ -123,12 +134,16 @@ export const RECORD_TYPE_GROUPS: { group: string; types: RecordType[] }[] = [
 
 export const ALL_RECORD_TYPES: RecordType[] = RECORD_TYPE_GROUPS.flatMap((g) => g.types);
 
-/** A type is reachable when the profile has `view` on any of its gating modules.
- *  Types with NO gating module (e.g. Tickets) are always reachable. */
+/** A type is editable in the Record Visibility tab when:
+ *  - its reads are decoupled from modules (migration 217) — the dial is the
+ *    sole record lock, so it stays editable regardless of feature access; OR
+ *  - it has NO gating module (e.g. Tickets); OR
+ *  - the profile has `view` on any of its gating modules. */
 export function isRecordTypeAccessible(
   rt: RecordType,
   resolvedGrants: Record<string, boolean>,
 ): boolean {
+  if (rt.readsDecoupled) return true;
   if (rt.gatingModules.length === 0) return true;
   return rt.gatingModules.some((m) => resolvedGrants[`${m}:view`] === true);
 }
