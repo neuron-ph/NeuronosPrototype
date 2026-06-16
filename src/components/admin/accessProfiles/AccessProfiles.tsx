@@ -282,6 +282,7 @@ function ApplyProfileContent({
             ? (profile.visibility_departments ?? [])
             : null,
           module_grants: {},
+          visibility_scopes: {},
           applied_profile_id: profile.id,
           granted_by: currentUser?.id ?? null,
           notes: `Applied access profile: ${profile.name}`,
@@ -290,22 +291,33 @@ function ApplyProfileContent({
       );
       if (error) {
         failed++;
-      } else {
-        queryClient.invalidateQueries({ queryKey: ["permission_overrides", "module_grants", u.id] });
-        try {
-          await (supabase as any).from("permission_audit_log").insert({
-            target_user_id: u.id,
-            changed_by: currentUser?.name || currentUser?.email || "unknown",
-            changes: {
-              action: "access_profile_applied",
-              profile_id: profile.id,
-              profile_name: profile.name,
-              changed_keys: Object.keys(profile.module_grants),
-            },
-          });
-        } catch { console.warn("[AccessProfiles] audit log failed") }
-        onApplied(u.id);
+        continue;
       }
+      // NEU-012 (strict): enforcement reads users.access_profile_id as the base,
+      // not permission_overrides.applied_profile_id (legacy/inert). The assignment
+      // must land there too, or the applied profile's grants never reach the user.
+      const { error: uErr } = await supabase
+        .from("users")
+        .update({ access_profile_id: profile.id })
+        .eq("id", u.id);
+      if (uErr) {
+        failed++;
+        continue;
+      }
+      queryClient.invalidateQueries({ queryKey: ["permission_overrides", "module_grants", u.id] });
+      try {
+        await (supabase as any).from("permission_audit_log").insert({
+          target_user_id: u.id,
+          changed_by: currentUser?.name || currentUser?.email || "unknown",
+          changes: {
+            action: "access_profile_applied",
+            profile_id: profile.id,
+            profile_name: profile.name,
+            changed_keys: Object.keys(profile.module_grants),
+          },
+        });
+      } catch { console.warn("[AccessProfiles] audit log failed") }
+      onApplied(u.id);
     }
 
     setApplying(false);
