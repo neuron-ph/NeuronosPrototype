@@ -1,10 +1,21 @@
 import type { ActionId, ModuleId } from "../components/admin/permissionsConfig";
+import { QUOTATION_MODULE_IDS, type QuotationDept } from "../config/access/accessSchema";
 
 type QuotationDepartment = "Business Development" | "Pricing" | undefined;
 type CanCheck = (moduleId: ModuleId, action: ActionId) => boolean;
 
 const BD_INQUIRIES: ModuleId = "bd_inquiries";
 const PRICING_QUOTATIONS: ModuleId = "pricing_quotations";
+
+/** Which door (and therefore which tab family) the file is opened through. */
+export function getQuotationVariant(userDepartment: QuotationDepartment): QuotationDept {
+  return userDepartment === "Business Development" ? "bd" : "pricing";
+}
+
+/** The tab moduleId family (details/comments/attachments) for the open door. */
+export function quotationTabModules(userDepartment: QuotationDepartment) {
+  return QUOTATION_MODULE_IDS[getQuotationVariant(userDepartment)];
+}
 
 export function getQuotationLensModule(userDepartment: QuotationDepartment): ModuleId {
   return userDepartment === "Business Development" ? BD_INQUIRIES : PRICING_QUOTATIONS;
@@ -26,12 +37,15 @@ export function canViewQuotationFile(
 ): boolean {
   if (canUseQuotationLens(can, userDepartment, "view")) return true;
 
-  if (userDepartment === "Pricing") {
-    return can("pricing_quotations_details_tab", "view")
-      || can("pricing_quotations_comments_tab", "view");
+  // Fall back to the door's own Details/Comments tab knobs.
+  const tabs = quotationTabModules(userDepartment);
+  if (userDepartment === undefined) {
+    return can(QUOTATION_MODULE_IDS.bd.details, "view")
+      || can(QUOTATION_MODULE_IDS.bd.comments, "view")
+      || can(QUOTATION_MODULE_IDS.pricing.details, "view")
+      || can(QUOTATION_MODULE_IDS.pricing.comments, "view");
   }
-
-  return false;
+  return can(tabs.details, "view") || can(tabs.comments, "view");
 }
 
 export function canViewQuotationComments(
@@ -39,5 +53,10 @@ export function canViewQuotationComments(
   userDepartment: QuotationDepartment,
 ): boolean {
   if (canUseQuotationLens(can, userDepartment, "view")) return true;
-  return userDepartment === "Pricing" && can("pricing_quotations_comments_tab", "view");
+  const tabs = quotationTabModules(userDepartment);
+  if (userDepartment === undefined) {
+    return can(QUOTATION_MODULE_IDS.bd.comments, "view")
+      || can(QUOTATION_MODULE_IDS.pricing.comments, "view");
+  }
+  return can(tabs.comments, "view");
 }

@@ -11,6 +11,7 @@ export type ModuleId =
   // ─── Business Development ────────────────────────────────────────────────────
   | "bd_contacts" | "bd_customers" | "bd_inquiries" | "bd_projects" | "bd_contracts"
   | "bd_tasks" | "bd_activities" | "bd_budget_requests"
+  | "bd_inquiries_details_tab" | "bd_inquiries_comments_tab" | "bd_inquiries_attachments_tab"
   | "bd_contacts_activities_tab" | "bd_contacts_tasks_tab" | "bd_contacts_inquiries_tab"
   | "bd_contacts_attachments_tab" | "bd_contacts_comments_tab"
   | "bd_customers_contacts_tab" | "bd_customers_activities_tab" | "bd_customers_tasks_tab"

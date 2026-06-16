@@ -12,6 +12,7 @@ import {
   CUSTOMER_MODULE_IDS,
   PROJECT_MODULE_IDS,
   CONTRACT_MODULE_IDS,
+  QUOTATION_MODULE_IDS,
   getVisibleAccessMatrixModules,
   getVisibleAccessMatrixDepartments,
 } from "./accessSchema";
@@ -194,6 +195,7 @@ describe("dept-scoped moduleId families", () => {
       CUSTOMER_MODULE_IDS,
       PROJECT_MODULE_IDS,
       CONTRACT_MODULE_IDS,
+      QUOTATION_MODULE_IDS,
     ] as unknown as Record<string, Record<string, string>>[];
     const missing: string[] = [];
     for (const family of allFamilies) {
@@ -215,6 +217,7 @@ describe("dept-scoped moduleId families", () => {
       { file: "components/projects/ProjectDetail.tsx",           symbol: "PROJECT_MODULE_IDS" },
       { file: "components/contracts/ContractsList.tsx",          symbol: "CONTRACT_MODULE_IDS" },
       { file: "components/pricing/ContractDetailView.tsx",       symbol: "CONTRACT_MODULE_IDS" },
+      { file: "utils/quotationAccess.ts",                        symbol: "QUOTATION_MODULE_IDS" },
     ];
     const failures: string[] = [];
     for (const c of cases) {
