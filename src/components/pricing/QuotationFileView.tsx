@@ -23,7 +23,7 @@ import { recordNotificationEvent, fetchDeptManagerIds } from "../../utils/notifi
 import { useMarkEntityReadOnMount } from "../../hooks/useNotifications";
 import { logActivity, logCreation, logStatusChange } from "../../utils/activityLog";
 import { buildProjectInsertFromQuotation } from "../../utils/projectHydration";
-import { canUseQuotationLens, canViewQuotationComments, canViewQuotationFile } from "../../utils/quotationAccess";
+import { canUseQuotationLens, canViewQuotationComments, canViewQuotationFile, quotationTabModules } from "../../utils/quotationAccess";
 import {
   getNormalizedContractStatus,
   getNormalizedQuotationStatus,
@@ -111,12 +111,14 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
   const canExportQuotation = canUseQuotationLens(can, userDepartment, "export");
   const canCreateProject = can("bd_projects", "create") || can("pricing_projects", "create");
   const canActivateContract = can("pricing_contracts", "edit");
-  // NEU-019 WG-14/16: comment posting + attachment writes get their own knobs
-  // (seeded to both pricing- and BD-lens audiences in migration 171).
-  const canPostComments = can("pricing_quotations_comments_tab", "create");
-  const canViewAttachmentsTab = can("pricing_quotations_attachments_tab", "view");
-  const canUploadAttachments = can("pricing_quotations_attachments_tab", "create");
-  const canDeleteAttachments = can("pricing_quotations_attachments_tab", "delete");
+  // NEU-019 WG-14/16: comment posting + attachment writes get their own knobs.
+  // Resolved per door — BD opens read bd_inquiries_*_tab, Pricing opens read
+  // pricing_quotations_*_tab (the inquiry/quotation mirror, like Projects).
+  const quotationTabs = quotationTabModules(userDepartment);
+  const canPostComments = can(quotationTabs.comments, "create");
+  const canViewAttachmentsTab = can(quotationTabs.attachments, "view");
+  const canUploadAttachments = can(quotationTabs.attachments, "create");
+  const canDeleteAttachments = can(quotationTabs.attachments, "delete");
 
   // Fetch all Pricing users for the assignment dropdown, filter out managers/above in JS
   // No 'enabled' guard — query always runs; the UI is already gated by canAssign

@@ -38,6 +38,10 @@ export const APPLICABLE_ACTIONS: Record<ModuleId, readonly ActionId[]> = {
   // PDF / Quick Download buttons (QuotationFileView) ride :export, so the door
   // needs an Export cell instead of riding a column that didn't exist.
   bd_inquiries: ["view", "create", "edit", "delete", "export"],
+  // Mirror of pricing_quotations_*_tab — the inquiry file's own door knobs.
+  bd_inquiries_details_tab: ["view"],
+  bd_inquiries_comments_tab: ["view", "create"],
+  bd_inquiries_attachments_tab: ["view", "create", "delete"],
   bd_projects: ["view", "create", "edit"],
   bd_contracts: ["view", "edit"],
   bd_tasks: ["view", "create", "edit", "delete"],

@@ -5,6 +5,7 @@ import {
   canViewQuotationComments,
   canViewQuotationFile,
   getQuotationLensModule,
+  quotationTabModules,
 } from "./quotationAccess";
 
 const makeCan = (enabled: string[]) =>
@@ -33,5 +34,25 @@ describe("quotationAccess", () => {
   it("preserves legacy Pricing quotation tab grants", () => {
     expect(canViewQuotationFile(makeCan(["pricing_quotations_details_tab:view"]), "Pricing")).toBe(true);
     expect(canViewQuotationComments(makeCan(["pricing_quotations_comments_tab:view"]), "Pricing")).toBe(true);
+  });
+
+  it("resolves the per-door tab family (BD inquiries vs Pricing quotations)", () => {
+    expect(quotationTabModules("Business Development")).toEqual({
+      root: "bd_inquiries",
+      details: "bd_inquiries_details_tab",
+      comments: "bd_inquiries_comments_tab",
+      attachments: "bd_inquiries_attachments_tab",
+    });
+    expect(quotationTabModules("Pricing")).toEqual({
+      root: "pricing_quotations",
+      details: "pricing_quotations_details_tab",
+      comments: "pricing_quotations_comments_tab",
+      attachments: "pricing_quotations_attachments_tab",
+    });
+  });
+
+  it("opens the inquiry file via the BD door's own Details/Comments tab knobs", () => {
+    expect(canViewQuotationFile(makeCan(["bd_inquiries_details_tab:view"]), "Business Development")).toBe(true);
+    expect(canViewQuotationComments(makeCan(["bd_inquiries_comments_tab:view"]), "Business Development")).toBe(true);
   });
 });

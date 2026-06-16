@@ -135,8 +135,16 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
         ],
       },
       {
+        // NEU-020 mirror: Inquiries is the BD door onto the quotations table
+        // (Pricing calls it "Quotations"). It carries the same file tabs as
+        // pricing_quotations so the door can grant Comments/Attachments locally.
         kind: "module", id: "bd_inquiries", moduleId: "bd_inquiries",
-        label: "Inquiries", pageId: "bd-inquiries", tabs: [],
+        label: "Inquiries", pageId: "bd-inquiries",
+        tabs: [
+          tab("bd_inquiries_details_tab",     "Details"),
+          tab("bd_inquiries_comments_tab",    "Comments"),
+          tab("bd_inquiries_attachments_tab", "Attachments"),
+        ],
       },
       {
         kind: "module", id: "bd_projects", moduleId: "bd_projects",
@@ -786,8 +794,9 @@ export function getAccessModuleByModuleId(
 // keyed by an explicit `dept` prop. Hierarchy and naming live here, never
 // inferred at the call site.
 
-export type ContactDept  = "bd" | "pricing";
-export type CustomerDept = "bd" | "pricing";
+export type ContactDept   = "bd" | "pricing";
+export type CustomerDept  = "bd" | "pricing";
+export type QuotationDept = "bd" | "pricing";
 // NEU-020 2.5: the project/contract door is the ROUTE the user entered through
 // (/bd/* , /pricing/* , /accounting/* — and the legacy unprefixed route → ops),
 // never the user's own department. "ops" survives only as the legacy/deep-link
@@ -816,6 +825,13 @@ export interface CustomerModuleIds {
   comments: ModuleId;
   attachments: ModuleId;
   teams: ModuleId;
+}
+
+export interface QuotationModuleIds {
+  root: ModuleId;
+  details: ModuleId;
+  comments: ModuleId;
+  attachments: ModuleId;
 }
 
 export interface ProjectModuleIds {
@@ -897,6 +913,23 @@ export const CUSTOMER_MODULE_IDS: Record<CustomerDept, CustomerModuleIds> = {
     comments:    "pricing_customers_comments_tab",
     attachments: "pricing_customers_attachments_tab",
     teams:       "pricing_customers_teams_tab",
+  },
+};
+
+// The quotations table viewed through two doors: Pricing ("Quotations") and
+// BD ("Inquiries"). Same file, same tabs — the door decides which knob to read.
+export const QUOTATION_MODULE_IDS: Record<QuotationDept, QuotationModuleIds> = {
+  bd: {
+    root:        "bd_inquiries",
+    details:     "bd_inquiries_details_tab",
+    comments:    "bd_inquiries_comments_tab",
+    attachments: "bd_inquiries_attachments_tab",
+  },
+  pricing: {
+    root:        "pricing_quotations",
+    details:     "pricing_quotations_details_tab",
+    comments:    "pricing_quotations_comments_tab",
+    attachments: "pricing_quotations_attachments_tab",
   },
 };
 
