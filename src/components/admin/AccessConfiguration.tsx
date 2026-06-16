@@ -11,18 +11,15 @@ import type { ModuleGrants, AccessProfileSummary } from "./accessProfiles/access
 import {
   chooseRoleDefaultProfile,
   cloneGrants,
-  deriveGrantOverrides,
   hasGrantOverrides,
   mergeGrantLayers,
   normalizeProfileName,
   resolveCascadedGrants,
-  resolvePerUserOverride,
 } from "./accessProfiles/accessGrantUtils";
 import {
   type RecordVisibilityMap,
   legacyScopeFromMap,
   mergeVisibility,
-  deriveVisibilityOverride,
 } from "./accessProfiles/recordVisibilityConfig";
 import { PERM_MODULES } from "./permissionsConfig";
 import { NeuronModal } from "../ui/NeuronModal";
@@ -272,12 +269,21 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
           .maybeSingle(),
       ]);
       if (!cancelled) {
-        const grants = cloneGrants((data?.module_grants ?? {}) as ModuleGrants);
+        const storedGrants = cloneGrants((data?.module_grants ?? {}) as ModuleGrants);
         const fallbackProfile = chooseRoleDefaultProfile(profiles, user.role, user.department);
         const baseProfileId = (urow as { access_profile_id: string | null } | null)?.access_profile_id ?? null;
         const baselineProfile = profiles.find((p) => p.id === baseProfileId) ?? fallbackProfile;
         const pid = baselineProfile?.id ?? null;
         const pname = baselineProfile?.name ?? null;
+        // Grants are MATERIALIZED: the profile is only a template, so
+        // permission_overrides.module_grants is meant to hold the absolute,
+        // self-contained set. Overlay the template baseline before resolving so
+        // legacy rows (which stored only a delta) and current rows (absolute)
+        // both converge to the same effective set.
+        const effectiveGrants = resolveCascadedGrants(
+          mergeGrantLayers(baselineProfile?.module_grants ?? {}, storedGrants),
+          PERM_MODULES,
+        );
         // Effective per-type dials = profile baseline overlaid with the per-user
         // override, mirroring the DB resolver current_user_visibility_dial.
         const effective = mergeVisibility(
@@ -290,8 +296,8 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
         setSavedAppliedProfileName(pname);
         setVisibilityScopes(effective);
         setSavedVisibilityScopes(effective);
-        setOverrides(grants);
-        setSavedOverrides(grants);
+        setOverrides(effectiveGrants);
+        setSavedOverrides(effectiveGrants);
         setLoading(false);
       }
     }
@@ -321,7 +327,8 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
   const showProfileBadge = !!(appliedProfileId && appliedProfileName);
 
   const handleGrantChange = (nextGrants: ModuleGrants) => {
-    setOverrides(deriveGrantOverrides(nextGrants, baselineGrants));
+    // Materialized model: hold the absolute (cascade-resolved) set, not a delta.
+    setOverrides(resolveCascadedGrants(nextGrants, PERM_MODULES));
   };
 
   const handleReset = () => {
@@ -332,10 +339,12 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
   };
 
   const handleApplyProfile = (profile: AccessProfileSummary) => {
-    setOverrides({});
+    // Materialize the template onto this user: copy the profile's full grant set
+    // and dials. The profile is only a template — these per-user grants carry the
+    // weight, so enforcement no longer depends on the profile link.
+    setOverrides(resolveCascadedGrants(profile.module_grants ?? {}, PERM_MODULES));
     setAppliedProfileId(profile.id);
     setAppliedProfileName(profile.name);
-    // Applying a profile clears per-user overrides → dials become the profile's.
     setVisibilityScopes(mergeVisibility(profile.visibility_scopes ?? {}, {}));
     setShowApplyProfileMenu(false);
     toast.success(`Profile "${profile.name}" selected — save to confirm`);
@@ -351,14 +360,15 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
       .maybeSingle();
 
     const nextAppliedProfileId = appliedProfileId;
-    // Cascade is UX-only: persist the explicit delta (incl. borrowed/contained
-    // child tab grants) so enforcement's exact-key lookup matches what's shown.
-    const finalGrants = resolvePerUserOverride(baselineGrants, overrides, PERM_MODULES);
-    // Record-visibility: store only the per-type dials that differ from the
-    // assigned profile, so profile changes still propagate to the rest. The
-    // DB resolver reads permission_overrides.visibility_scopes (scope column is
-    // legacy/inert, kept coherent via legacyScopeFromMap).
-    const visibilityDelta = deriveVisibilityOverride(visibilityScopes, appliedProfile?.visibility_scopes ?? {});
+    // Materialized model: persist the ABSOLUTE grant set. The profile is a
+    // template only, so the per-user grants are self-contained and enforcement
+    // no longer depends on the assigned profile (exact-key lookup matches what's
+    // shown, incl. cascaded child-tab grants).
+    const finalGrants = resolveCascadedGrants(overrides, PERM_MODULES);
+    // Record-visibility: store the absolute per-type dials for the same reason.
+    // The DB resolver reads permission_overrides.visibility_scopes (scope column
+    // is legacy/inert, kept coherent via legacyScopeFromMap).
+    const visibilityFinal = visibilityScopes;
 
     let error: any;
     if (existing) {
@@ -367,7 +377,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
         .update({
           module_grants: finalGrants,
           applied_profile_id: nextAppliedProfileId,
-          visibility_scopes: visibilityDelta,
+          visibility_scopes: visibilityFinal,
           scope: legacyScopeFromMap(visibilityScopes),
           departments: null,
         })
@@ -377,7 +387,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
         .from("permission_overrides")
         .insert({
           user_id: user.id,
-          visibility_scopes: visibilityDelta,
+          visibility_scopes: visibilityFinal,
           scope: legacyScopeFromMap(visibilityScopes),
           departments: null,
           module_grants: finalGrants,

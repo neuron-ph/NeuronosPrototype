@@ -273,6 +273,11 @@ function ApplyProfileContent({
     setApplying(true);
     let failed = 0;
 
+    // Materialize: an access profile is only a TEMPLATE. Applying it stamps the
+    // profile's full, self-contained grant set + dials onto the user's own access
+    // config (permission_overrides) — that per-user row is what enforcement reads,
+    // so the grants actually take effect regardless of the profile link.
+    const fullGrants = resolveCascadedGrants(profile.module_grants ?? {}, PERM_MODULES);
     for (const u of selected) {
       const { error } = await supabase.from("permission_overrides").upsert(
         {
@@ -281,8 +286,8 @@ function ApplyProfileContent({
           departments: profile.visibility_scope === "selected_departments"
             ? (profile.visibility_departments ?? [])
             : null,
-          module_grants: {},
-          visibility_scopes: {},
+          module_grants: fullGrants,
+          visibility_scopes: profile.visibility_scopes ?? {},
           applied_profile_id: profile.id,
           granted_by: currentUser?.id ?? null,
           notes: `Applied access profile: ${profile.name}`,
@@ -293,17 +298,11 @@ function ApplyProfileContent({
         failed++;
         continue;
       }
-      // NEU-012 (strict): enforcement reads users.access_profile_id as the base,
-      // not permission_overrides.applied_profile_id (legacy/inert). The assignment
-      // must land there too, or the applied profile's grants never reach the user.
-      const { error: uErr } = await supabase
-        .from("users")
-        .update({ access_profile_id: profile.id })
-        .eq("id", u.id);
-      if (uErr) {
-        failed++;
-        continue;
-      }
+      // Best-effort: keep users.access_profile_id (the "Based on" label + absent-key
+      // fallback) aligned. NOT load-bearing — the materialized grants above are
+      // authoritative — and an RLS-blocked update returns 0 rows with no error, so
+      // never let it fail the apply.
+      await supabase.from("users").update({ access_profile_id: profile.id }).eq("id", u.id);
       queryClient.invalidateQueries({ queryKey: ["permission_overrides", "module_grants", u.id] });
       try {
         await (supabase as any).from("permission_audit_log").insert({
