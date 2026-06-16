@@ -29,21 +29,17 @@ export const RECORD_DIALS: { value: RecordDial; label: string; description: stri
 
 export const DIAL_RANK: Record<RecordDial, number> = { own: 0, team: 1, department: 2, org_wide: 3, everything: 4 };
 
-// V2 cross-departmental types: governed by current_user_can_view_record_v2; their
-// dials are own / team / org_wide / All records (the 'department' rung is retired
-// for these — org_wide replaces it). Bookings additionally still support
-// 'department' and now 'org_wide'. Every other type (financials, tasks, …) keeps
-// the legacy own/team/department/All-records set (their RLS does NOT honor org_wide).
-const V2_TYPES = new Set(["contacts", "customers", "quotations", "contracts", "projects"]);
-
-export function dialsForType(key: string): { value: RecordDial; label: string; description: string }[] {
-  if (V2_TYPES.has(key)) {
-    return RECORD_DIALS.filter((d) => d.value !== "department");
-  }
-  if (key.startsWith("bookings")) {
-    return RECORD_DIALS; // own/team/department/org_wide/All records
-  }
-  return RECORD_DIALS.filter((d) => d.value !== "org_wide");
+// Every record type is cross-departmental: the dial is own / team / org_wide /
+// All records. The 'department' rung is retired — org_wide replaces it. This now
+// holds for ALL types, not just the V2 set:
+//   • V2 types (contacts/customers/quotations/projects/contracts) + bookings —
+//     org_wide honored by current_user_can_view_record_v2 / _booking (confidential-aware).
+//   • Legacy types (financials, tasks, activities, budget_requests, evouchers, …)
+//     — org_wide honored by current_user_can_view_record as of migration 215; those
+//     tables carry no confidential flag, so org_wide = visible to anyone with the
+//     gating module grant (the module grant is the gate, not row ownership).
+export function dialsForType(_key: string): { value: RecordDial; label: string; description: string }[] {
+  return RECORD_DIALS.filter((d) => d.value !== "department");
 }
 
 export interface RecordType {
