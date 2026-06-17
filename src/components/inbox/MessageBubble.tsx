@@ -147,21 +147,35 @@ export function MessageBubble({ message, onRetract, variant = "default" }: Messa
     else { toast.success("Message retracted"); onRetract(); }
   };
 
-  const openFile = async (filePath: string, fileName: string) => {
-    const { data } = await supabase.storage.from("ticket-files").createSignedUrl(filePath, 3600);
-    if (data?.signedUrl) {
-      const a = document.createElement("a");
-      a.href = data.signedUrl;
-      a.download = fileName;
-      a.click();
-    } else {
-      toast.error("Could not generate download link");
-    }
+  // Fetch the bytes through the authenticated client and serve them as a
+  // same-origin blob: URL, so the Supabase storage link (domain, path, signed
+  // token) is never exposed in the address bar — for viewing or downloading.
+  const viewFile = async (filePath: string) => {
+    // Open the tab synchronously (within the click gesture) so it isn't popup-
+    // blocked, then point it at a same-origin blob: URL once the bytes arrive.
+    const win = window.open("about:blank", "_blank");
+    const { data, error } = await supabase.storage.from("ticket-files").download(filePath);
+    if (error || !data) { win?.close(); toast.error("Could not open file"); return; }
+    const url = URL.createObjectURL(data);
+    if (win) { win.opener = null; win.location.href = url; }
+    else window.open(url, "_blank", "noopener,noreferrer"); // fallback if blocked
+    // Not revoked: the viewing tab holds the blob; it's freed on page unload.
+  };
+
+  const downloadFile = async (filePath: string, fileName: string) => {
+    const { data, error } = await supabase.storage.from("ticket-files").download(filePath);
+    if (error || !data) { toast.error("Could not download file"); return; }
+    const url = URL.createObjectURL(data);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
   };
 
   const handleDownloadAll = async (files: ThreadAttachment[]) => {
     for (const att of files) {
-      if (att.file_path && att.file_name) await openFile(att.file_path, att.file_name);
+      if (att.file_path && att.file_name) await downloadFile(att.file_path, att.file_name);
     }
   };
 
@@ -241,7 +255,7 @@ export function MessageBubble({ message, onRetract, variant = "default" }: Messa
                 return (
                   <button
                     key={att.id}
-                    onClick={() => att.file_path && att.file_name && openFile(att.file_path, att.file_name)}
+                    onClick={() => att.file_path && viewFile(att.file_path)}
                     style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 8, border: "1px solid var(--theme-border-default)", backgroundColor: "var(--theme-bg-page)", cursor: "pointer", minWidth: 170, maxWidth: 240, textAlign: "left" }}
                     onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--theme-text-muted)"; e.currentTarget.style.backgroundColor = "var(--theme-bg-surface-subtle)"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--theme-border-default)"; e.currentTarget.style.backgroundColor = "var(--theme-bg-page)"; }}
@@ -472,9 +486,7 @@ export function MessageBubble({ message, onRetract, variant = "default" }: Messa
               return (
                 <button
                   key={att.id}
-                  onClick={() =>
-                    att.file_path && att.file_name && openFile(att.file_path, att.file_name)
-                  }
+                  onClick={() => att.file_path && viewFile(att.file_path)}
                   style={{
                     display: "flex",
                     alignItems: "center",

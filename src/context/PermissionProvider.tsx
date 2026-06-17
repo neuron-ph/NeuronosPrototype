@@ -8,11 +8,13 @@ import type { ModuleGrants } from '../components/admin/accessProfiles/accessProf
 interface PermissionContextType {
   /**
    * Check whether the current user has access to a module+action.
-   * NEU-012 (strict, corrected 2026-06-05): access is the assigned Access Profile
-   * (users.access_profile_id) with a VISIBLE per-user customization layer on top:
-   *   effective(key) = override[key] if present else profile[key] else false.
-   * Explicit, no parent→child cascade at read, no role fallback — read identically
-   * here and by the DB resolver (current_user_effective_module_grant).
+   * "The matrix is king" (migrations 220/221): access is the user's single flat,
+   * explicit matrix — permission_overrides.module_grants — read VERBATIM:
+   *   effective(key) = grants[key] === true, absent => denied.
+   * No profile fallback, no parent→child cascade, no role default. Reads
+   * identically to the DB resolver (current_user_effective_module_grant). The
+   * assigned profile is a UI template only (used to fill the matrix), with zero
+   * read-weight.
    */
   can: (moduleId: ModuleId, action: ActionId) => boolean;
   /**
@@ -44,42 +46,16 @@ export function PermissionProvider({ children }: { children: ReactNode }) {
     queryFn: async () => {
       if (!user) return { moduleGrants: {} };
 
-      // Base: the assigned Access Profile (access_profiles is world-readable to
-      // authenticated users via access_profiles_select).
-      const { data: urow, error: uErr } = await supabase
-        .from('users')
-        .select('access_profile_id')
-        .eq('id', user.id)
-        .maybeSingle();
-      if (uErr) console.warn('[PermissionProvider] user fetch failed:', uErr.message);
-
-      const profileId = (urow as { access_profile_id: string | null } | null)?.access_profile_id ?? null;
-
-      let profileGrants: ModuleGrants = {};
-      if (profileId) {
-        const { data: prof, error: pErr } = await supabase
-          .from('access_profiles')
-          .select('module_grants, is_active')
-          .eq('id', profileId)
-          .maybeSingle();
-        if (pErr) console.warn('[PermissionProvider] profile fetch failed:', pErr.message);
-        const row = prof as { module_grants: ModuleGrants | null; is_active: boolean } | null;
-        profileGrants = (row?.is_active ? row.module_grants : null) ?? {};
-      }
-
-      // Overlay: the visible per-user customization (permission_overrides). RLS
-      // (overrides_select) lets a user read its own row.
+      // The user's flat matrix is the sole source of truth (permission_overrides).
+      // RLS (overrides_select) lets a user read its own row. No profile, no merge.
       const { data: ovr, error: oErr } = await supabase
         .from('permission_overrides')
         .select('module_grants')
         .eq('user_id', user.id)
         .maybeSingle();
-      if (oErr) console.warn('[PermissionProvider] override fetch failed:', oErr.message);
-      const overrideGrants = ((ovr as { module_grants: ModuleGrants | null } | null)?.module_grants ?? {}) as ModuleGrants;
-
-      // effective(key) = override[key] if present else profile[key] else false.
-      const moduleGrants = { ...profileGrants, ...overrideGrants };
-      return { moduleGrants: moduleGrants as ModuleGrants };
+      if (oErr) console.warn('[PermissionProvider] matrix fetch failed:', oErr.message);
+      const moduleGrants = ((ovr as { module_grants: ModuleGrants | null } | null)?.module_grants ?? {}) as ModuleGrants;
+      return { moduleGrants };
     },
   });
 

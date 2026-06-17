@@ -48,6 +48,15 @@ function keysForResource(resource?: string): string[] {
   return ALL_KEYS;
 }
 
+// A booking is the only record that BELONGS to a single team (bookings.team_id).
+// So for booking resources, 'team' scope is keyed off the booking's own team
+// stamp — NOT off teammate user-ids — mirroring current_user_can_view_booking
+// after migration 218. (Shared records keep the people-based team scope below.)
+function isBookingOnlyResource(resource?: string): boolean {
+  const keys = keysForResource(resource);
+  return keys.length > 0 && keys.every((k) => BOOKING_KEYS.includes(k));
+}
+
 function dialForKey(key: string, override: DialMap, profile: DialMap): Dial {
   if (override[key] !== undefined) return override[key] as Dial;
   if (profile[key] !== undefined) return profile[key] as Dial;
@@ -66,6 +75,7 @@ function effectiveDial(resource: string | undefined, override: DialMap, profile:
 export type DataScope =
   | { type: 'all' }
   | { type: 'userIds'; ids: string[] }
+  | { type: 'bookingTeams'; teamIds: string[]; userId: string }
   | { type: 'own'; userId: string };
 
 export interface DataScopeResult {
@@ -146,6 +156,14 @@ export function useDataScope(resource?: string): DataScopeResult {
       }
       const teamIds = (myTeams ?? []).map((r) => r.team_id);
       if (teamIds.length === 0) return { type: 'own', userId: user.id };
+
+      // Bookings are team-OWNED: a booking is visible at team breadth when its own
+      // team stamp is one of mine — never because a (possibly multi-team) teammate
+      // is attached to it. This is the client mirror of migration 218; it stops a
+      // teammate who sits in another team from dragging that team's bookings in.
+      if (isBookingOnlyResource(resource)) {
+        return { type: 'bookingTeams', teamIds, userId: user.id };
+      }
 
       const { data: teammates, error: teammatesError } = await supabase
         .from('team_memberships')

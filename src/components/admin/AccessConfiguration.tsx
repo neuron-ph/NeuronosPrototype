@@ -12,16 +12,13 @@ import {
   chooseRoleDefaultProfile,
   cloneGrants,
   hasGrantOverrides,
-  mergeGrantLayers,
   normalizeProfileName,
-  resolveCascadedGrants,
 } from "./accessProfiles/accessGrantUtils";
 import {
   type RecordVisibilityMap,
   legacyScopeFromMap,
   mergeVisibility,
 } from "./accessProfiles/recordVisibilityConfig";
-import { PERM_MODULES } from "./permissionsConfig";
 import { NeuronModal } from "../ui/NeuronModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -237,15 +234,9 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
     () => cloneGrants(baselineProfile?.module_grants),
     [baselineProfile],
   );
-  const resolvedGrants = useMemo(
-    () => mergeGrantLayers(baselineGrants, overrides),
-    [baselineGrants, overrides],
-  );
-  // Cascaded view grants drive which record-type rows are reachable (greying).
-  const resolvedViewGrants = useMemo(
-    () => resolveCascadedGrants(resolvedGrants, PERM_MODULES) as Record<string, boolean>,
-    [resolvedGrants],
-  );
+  // Matrix is king: the user's own grid drives record-type reachability (greying),
+  // verbatim — no cascade, no profile baseline.
+  const resolvedViewGrants = overrides as Record<string, boolean>;
 
   useEffect(() => {
     if (profilesLoading) return;
@@ -280,10 +271,8 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
         // self-contained set. Overlay the template baseline before resolving so
         // legacy rows (which stored only a delta) and current rows (absolute)
         // both converge to the same effective set.
-        const effectiveGrants = resolveCascadedGrants(
-          mergeGrantLayers(baselineProfile?.module_grants ?? {}, storedGrants),
-          PERM_MODULES,
-        );
+        // Matrix is king: the user's stored grid IS the truth — show it verbatim.
+        const effectiveGrants = storedGrants;
         // Effective per-type dials = profile baseline overlaid with the per-user
         // override, mirroring the DB resolver current_user_visibility_dial.
         const effective = mergeVisibility(
@@ -327,8 +316,8 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
   const showProfileBadge = !!(appliedProfileId && appliedProfileName);
 
   const handleGrantChange = (nextGrants: ModuleGrants) => {
-    // Materialized model: hold the absolute (cascade-resolved) set, not a delta.
-    setOverrides(resolveCascadedGrants(nextGrants, PERM_MODULES));
+    // Matrix is king: store exactly what the grid holds. No cascade.
+    setOverrides(nextGrants);
   };
 
   const handleReset = () => {
@@ -339,10 +328,10 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
   };
 
   const handleApplyProfile = (profile: AccessProfileSummary) => {
-    // Materialize the template onto this user: copy the profile's full grant set
-    // and dials. The profile is only a template — these per-user grants carry the
-    // weight, so enforcement no longer depends on the profile link.
-    setOverrides(resolveCascadedGrants(profile.module_grants ?? {}, PERM_MODULES));
+    // Fill the matrix from the template: copy the profile's grant set + dials
+    // verbatim into this user's grid. The template is a fill source only — once
+    // copied, the per-user matrix is the sole truth (no link, no re-apply).
+    setOverrides({ ...(profile.module_grants ?? {}) });
     setAppliedProfileId(profile.id);
     setAppliedProfileName(profile.name);
     setVisibilityScopes(mergeVisibility(profile.visibility_scopes ?? {}, {}));
@@ -364,7 +353,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
     // template only, so the per-user grants are self-contained and enforcement
     // no longer depends on the assigned profile (exact-key lookup matches what's
     // shown, incl. cascaded child-tab grants).
-    const finalGrants = resolveCascadedGrants(overrides, PERM_MODULES);
+    const finalGrants = overrides;
     // Record-visibility: store the absolute per-type dials for the same reason.
     // The DB resolver reads permission_overrides.visibility_scopes (scope column
     // is legacy/inert, kept coherent via legacyScopeFromMap).
@@ -621,7 +610,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
                     </button>
                     {showSaveAsProfile && (
                       <SaveAsProfileForm
-                        grants={resolvedGrants}
+                        grants={overrides}
                         visibilityScopes={visibilityScopes}
                         onSaved={() => {}}
                         onClose={() => setShowSaveAsProfile(false)}
@@ -755,7 +744,7 @@ export function AccessConfiguration({ user, onBack }: AccessConfigurationProps) 
             grants={overrides}
             onGrantsChange={(nextGrants) => handleGrantChange(nextGrants)}
             baselineGrants={baselineGrants}
-            showInheritedBaseline={true}
+            showInheritedBaseline={false}
             readOnly={!canEditAccess}
             othersPrimaryGroup={user.department === "Pricing" ? "Pricing" : "Operations"}
             loading={loading}

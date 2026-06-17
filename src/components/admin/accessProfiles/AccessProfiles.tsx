@@ -18,11 +18,9 @@ import {
   countGrantOverrides,
   normalizeProfileName,
   resolveProfileVisibilityScope,
-  resolveCascadedGrants,
 } from "./accessGrantUtils";
 import type { ConfigUser } from "../AccessConfiguration";
 import { SidePanel } from "../../common/SidePanel";
-import { PERM_MODULES } from "../permissionsConfig";
 import { AccessEditorTabs } from "./AccessEditorTabs";
 import { legacyScopeFromMap, type RecordVisibilityMap } from "./recordVisibilityConfig";
 
@@ -273,11 +271,10 @@ function ApplyProfileContent({
     setApplying(true);
     let failed = 0;
 
-    // Materialize: an access profile is only a TEMPLATE. Applying it stamps the
-    // profile's full, self-contained grant set + dials onto the user's own access
-    // config (permission_overrides) — that per-user row is what enforcement reads,
-    // so the grants actually take effect regardless of the profile link.
-    const fullGrants = resolveCascadedGrants(profile.module_grants ?? {}, PERM_MODULES);
+    // An access profile is only a TEMPLATE. Applying it stamps the profile's
+    // grant set + dials VERBATIM onto the user's own matrix (permission_overrides)
+    // — that per-user row is the sole truth enforcement reads. No cascade.
+    const fullGrants = profile.module_grants ?? {};
     for (const u of selected) {
       const { error } = await supabase.from("permission_overrides").upsert(
         {
@@ -745,12 +742,9 @@ export function ProfileEditor({
   );
   const canShowBaseline = !!baselineProfile;
   const grantCount = countGrantOverrides(grants);
-  // Resolved (cascaded) feature-access grants — drives which record types are
-  // reachable, so the Record Visibility tab greys what Feature Access can't open.
-  const resolvedGrants = useMemo(
-    () => resolveCascadedGrants(grants, PERM_MODULES) as Record<string, boolean>,
-    [grants],
-  );
+  // Matrix is king: the grid drives which record types are reachable verbatim
+  // (greys what Feature Access can't open). No cascade.
+  const resolvedGrants = grants as Record<string, boolean>;
 
   // Deliberate autofill: the admin presses "Autofill from baseline" to copy the
   // matching baseline seed's ticks + visibility into the form. Unlike a reactive
@@ -795,11 +789,10 @@ export function ProfileEditor({
     setSaving(true);
 
     const now = new Date().toISOString();
-    // NEU-012 (strict): cascade is a UX convenience — persist the fully RESOLVED
-    // (explicit) grant set so what's stored == what the editor showed == what the
-    // resolver enforces (which no longer cascades at read). Materializes every
-    // parent→child grant into explicit keys.
-    const finalGrants = resolveCascadedGrants(grants, PERM_MODULES);
+    // Matrix is king: store the template's grid VERBATIM — what's stored == what the
+    // editor showed. No cascade. (The template is a fill source; applying it copies
+    // these exact keys onto a user's matrix, which is the sole enforced truth.)
+    const finalGrants = grants;
     let error: any;
 
     if (isNew) {

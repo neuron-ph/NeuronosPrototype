@@ -43,6 +43,24 @@ function scopeOrClause(userIds: string[], bookingIds: string[]): string {
   return parts.join(",");
 }
 
+/**
+ * Team scope for bookings — keyed off the booking's own team stamp, not people.
+ * Mirrors current_user_can_view_booking's team branch (migration 218): a booking
+ * is in-scope when its team_id is one of mine, OR I'm personally on it
+ * (creator/manager/supervisor/handler), OR I'm directly assigned to it.
+ */
+function bookingTeamsOrClause(teamIds: string[], userId: string, bookingIds: string[]): string {
+  const parts = [
+    `team_id.in.(${teamIds.join(",")})`,
+    `created_by.eq.${userId}`,
+    `manager_id.eq.${userId}`,
+    `supervisor_id.eq.${userId}`,
+    `handler_id.eq.${userId}`,
+  ];
+  if (bookingIds.length) parts.push(`id.in.(${bookingIds.join(",")})`);
+  return parts.join(",");
+}
+
 /** Quote a value for use inside an `or=` clause (names contain spaces / periods). */
 function q(v: string): string {
   return `"${v.replace(/"/g, "")}"`;
@@ -91,6 +109,8 @@ function applyBookingFilters(b: any, p: BookingsQueryParams): any {
   // Scope refinement (RLS still enforces security underneath)
   if (p.scope.type === "own") {
     b = b.or(scopeOrClause([p.scope.userId], assignedBookingIds(p.assignmentIndex, [p.scope.userId])));
+  } else if (p.scope.type === "bookingTeams" && p.scope.teamIds.length) {
+    b = b.or(bookingTeamsOrClause(p.scope.teamIds, p.scope.userId, assignedBookingIds(p.assignmentIndex, [p.scope.userId])));
   } else if (p.scope.type === "userIds" && p.scope.ids.length) {
     b = b.or(scopeOrClause(p.scope.ids, assignedBookingIds(p.assignmentIndex, p.scope.ids)));
   }
@@ -186,6 +206,8 @@ export function useBookingTabCounts(params: {
         let b = supabase.from("bookings").select("id", { count: "exact", head: true }).eq("service_type", serviceType);
         if (scope.type === "own") {
           b = b.or(scopeOrClause([scope.userId], assignedBookingIds(assignmentIndex, [scope.userId])));
+        } else if (scope.type === "bookingTeams" && scope.teamIds.length) {
+          b = b.or(bookingTeamsOrClause(scope.teamIds, scope.userId, assignedBookingIds(assignmentIndex, [scope.userId])));
         } else if (scope.type === "userIds" && scope.ids.length) {
           b = b.or(scopeOrClause(scope.ids, assignedBookingIds(assignmentIndex, scope.ids)));
         }
