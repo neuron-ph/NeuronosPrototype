@@ -203,10 +203,10 @@ serve(async (req) => {
     const resolvedStatus = status || "active";
 
     // Update the trigger-created users row with all fields atomically.
-    // NEU-012 (strict): enforcement reads users.access_profile_id as the base, so the
-    // new user must land on their profile here — applied_profile_id on the override
-    // row (below) is no longer read by the resolver. Without this the user has no base
-    // and therefore no access.
+    // Matrix is king (migrations 220/221): users.access_profile_id is just a LABEL of
+    // which template was applied; enforcement reads the user's own
+    // permission_overrides.module_grants matrix, which we seed verbatim from the chosen
+    // template below. A new user with an empty matrix would have zero access.
     const updatePayload = {
       name,
       department,
@@ -257,7 +257,8 @@ serve(async (req) => {
         user_id: newUserId,
         scope: effectiveScope,
         departments: effectiveDepartments,
-        module_grants: {},
+        // Seed the matrix verbatim from the chosen template — the sole enforced truth.
+        module_grants: (profileData?.module_grants ?? {}) as Record<string, boolean>,
         applied_profile_id: profileData?.id ?? null,
         granted_by: callerProfile.id,
         notes: profileData

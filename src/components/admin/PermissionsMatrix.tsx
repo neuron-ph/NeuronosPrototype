@@ -12,8 +12,6 @@ import {
 import {
   chooseRoleDefaultProfile,
   cloneGrants,
-  deriveGrantOverrides,
-  mergeGrantLayers,
 } from "./accessProfiles/accessGrantUtils";
 import type {
   AccessProfileSummary,
@@ -181,16 +179,17 @@ export function PermissionsMatrix({
   const baselineProfile =
     (dbRow?.profile as AccessProfileSummary | null | undefined)
     ?? chooseRoleDefaultProfile(activeProfiles, userRole, userDepartment);
+  // Matrix is king: the user's stored grid IS the matrix — shown and edited
+  // verbatim. The role template is kept only to mark cells that diverge from it.
   const baselineGrants = cloneGrants(baselineProfile?.module_grants);
-  const explicitGrants = pendingGrants ?? cloneGrants(dbRow?.module_grants as ModuleGrants | null | undefined);
-  const resolvedGrants = mergeGrantLayers(baselineGrants, explicitGrants);
+  const grid = pendingGrants ?? cloneGrants(dbRow?.module_grants as ModuleGrants | null | undefined);
 
   function toggleCell(moduleId: ModuleId, action: ActionId) {
     if (readonly) return;
     const key = `${moduleId}:${action}`;
-    const currentGranted = resolvedGrants[key] === true;
-    const nextResolved = { ...resolvedGrants, [key]: !currentGranted };
-    setPendingGrants(deriveGrantOverrides(nextResolved, baselineGrants));
+    // Store the full grid explicitly. No delta, no cascade — what you click is
+    // what's stored is what's enforced.
+    setPendingGrants({ ...grid, [key]: grid[key] !== true });
   }
 
   async function handleSave() {
@@ -215,13 +214,18 @@ export function PermissionsMatrix({
   async function handleReset() {
     setSaving(true);
     try {
+      // Matrix is king: "reset" re-stamps the role template onto the user's matrix
+      // (a full, explicit grid) — never an empty {} that would deny everything.
       const { error } = await supabase
         .from("permission_overrides")
-        .upsert({ user_id: userId, module_grants: {} }, { onConflict: "user_id" });
+        .upsert(
+          { user_id: userId, module_grants: cloneGrants(baselineProfile?.module_grants) },
+          { onConflict: "user_id" },
+        );
       if (error) throw error;
       await queryClient.invalidateQueries({ queryKey: ["permission_overrides", userId] });
       setPendingGrants(null);
-      toast.success("Permissions reset to defaults.");
+      toast.success("Reset to role template.");
       onSaved?.();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to reset permissions.");
@@ -295,8 +299,8 @@ export function PermissionsMatrix({
                           );
                         }
                         const key = `${mod.id}:${action}`;
-                        const granted = resolvedGrants[key] === true;
-                        const isCustom = key in explicitGrants;
+                        const granted = grid[key] === true;
+                        const isCustom = (baselineGrants[key] === true) !== granted;
                         return (
                           <PermCell
                             key={action}

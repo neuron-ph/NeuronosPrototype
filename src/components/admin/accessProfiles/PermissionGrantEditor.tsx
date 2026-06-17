@@ -7,7 +7,6 @@ import {
 import { getVisibleAccessMatrixDepartments } from "../../../config/access/accessSchema";
 import { isActionApplicable, isGrantKeyApplicable } from "../../../config/access/actionApplicability";
 import type { ModuleGrants } from "./accessProfileTypes";
-import { resolveCascadedGrants } from "./accessGrantUtils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -298,7 +297,7 @@ function ModuleRow({
           );
         }
         const inherited = showInheritedBaseline ? baselineGrants[cellKey] : undefined;
-        const granted = cellKey in grants ? grants[cellKey] : (inherited ?? false);
+        const granted = grants[cellKey] === true;
         return (
           <div key={action} style={{
             display: "flex", justifyContent: "center", alignItems: "center", height: 28,
@@ -565,11 +564,7 @@ function GroupAccordion({
               // an all-borrowed host (Projects/Contracts, whose children are ALL
               // contained) whose grant lives in the assigned profile, not the
               // per-user override, would expand to zero rows.
-              const parentGranted = PERM_ACTIONS.some(a => {
-                const k = `${seg.parent.id}:${a}`;
-                if (k in grants) return grants[k] === true;
-                return showInheritedBaseline ? baselineGrants[k] === true : false;
-              });
+              const parentGranted = PERM_ACTIONS.some(a => grants[`${seg.parent.id}:${a}`] === true);
               const baseChildren = searching ? seg.children.filter(c => matchedIds.has(c.id)) : seg.children;
               const visibleChildren = parentGranted ? baseChildren : baseChildren.filter(c => !c.contained);
 
@@ -624,7 +619,7 @@ function GroupAccordion({
                           );
                         }
                         const inherited = showInheritedBaseline ? baselineGrants[cellKey] : undefined;
-                        const granted = cellKey in grants ? grants[cellKey] : (inherited ?? false);
+                        const granted = grants[cellKey] === true;
                         return (
                           <div key={action} style={{
                             display: "flex", justifyContent: "center", alignItems: "center", height: 38,
@@ -692,18 +687,12 @@ export function PermissionGrantEditor({
 }: PermissionGrantEditorProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeActionFilter, setActiveActionFilter] = useState<ActionId | null>(null);
-  const resolvedGrants = useMemo(() => resolveCascadedGrants(grants, PERM_MODULES), [grants]);
-  const resolvedBaselineGrants = useMemo(
-    () => resolveCascadedGrants(baselineGrants, PERM_MODULES),
-    [baselineGrants],
-  );
-  const parentByModuleId = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const mod of PERM_MODULES) {
-      if (mod.parentId) map.set(mod.id, mod.parentId);
-    }
-    return map;
-  }, []);
+  // Matrix is king: display and write are VERBATIM. No cascade sits between the
+  // stored grid and what's shown/saved. A child is granted iff its own key is
+  // stored true. Parent-row click and +View/+All stay as explicit fill helpers
+  // (they write child keys directly, visibly).
+  const resolvedGrants = grants;
+  const resolvedBaselineGrants = baselineGrants;
 
   // Parent → its child rows (own tabs via parentId + borrowed/contained tabs).
   // Used to make a parent checkbox a true bulk-fill (Model B): one click sets the
@@ -759,20 +748,19 @@ export function PermissionGrantEditor({
     return keys;
   }, [activeActionFilter, resolvedGrants]);
 
-  const handleToggle = (moduleId: ModuleId, action: ActionId, next: boolean, cascadeParentId?: ModuleId) => {
+  const handleToggle = (moduleId: ModuleId, action: ActionId, next: boolean) => {
     if (disabled) return;
 
-    // Model B (NEU-012 Contract #4): a parent-row checkbox is a bulk-fill /
-    // select-all for its column. One click force-sets the parent AND every child
-    // explicitly to `next` — so re-clicking a parent re-fills children you'd
-    // manually flipped (the child cell reads its explicit value, no cascade).
-    // Child rows fall through to the single-cell logic below.
+    // Parent-row checkbox = visible bulk-fill: one click sets the parent AND every
+    // applicable child explicitly to `next`. This is the only "cascade" left, and
+    // it's a write helper that produces explicit, visible checks — not a read-time
+    // inference. Child rows fall through to the single-cell write below.
     const childIds = childrenByModuleId.get(moduleId);
     if (childIds && childIds.length > 0) {
       const bulk = { ...grants };
       bulk[`${moduleId}:${action}`] = next;
-      // Skip children whose cell is an inert "—" — bulk-fill must never
-      // fabricate grants on keys nothing consumes.
+      // Skip children whose cell is an inert "—" — never fabricate a grant on a
+      // key nothing consumes.
       for (const childId of childIds) {
         if (isActionApplicable(childId, action)) bulk[`${childId}:${action}`] = next;
       }
@@ -780,44 +768,9 @@ export function PermissionGrantEditor({
       return;
     }
 
-    const key = `${moduleId}:${action}`;
-    const newGrants = { ...grants };
-    const parentId = cascadeParentId ?? parentByModuleId.get(moduleId);
-    const parentKey = parentId ? `${parentId}:${action}` : null;
-    const parentGrantsAction = parentKey ? resolvedGrants[parentKey] === true : false;
-
-    if (showInheritedBaseline) {
-      const inherited = resolvedBaselineGrants[key] ?? false;
-      const cascadedOverride = resolvedGrants[key];
-      const hasCascadeConflict = cascadedOverride !== undefined && cascadedOverride !== next;
-
-      if (parentGrantsAction && next === true) {
-        if (hasCascadeConflict) {
-          newGrants[key] = next;
-        } else {
-          delete newGrants[key];
-        }
-      } else if (parentGrantsAction && next === false) {
-        newGrants[key] = false;
-      } else if (next === inherited) {
-        if (hasCascadeConflict) {
-          newGrants[key] = next;
-        } else {
-          delete newGrants[key];
-        }
-      } else {
-        newGrants[key] = next;
-      }
-    } else {
-      if (parentGrantsAction && next === true) {
-        delete newGrants[key];
-      } else {
-        // Profile mode persists both explicit allows and explicit denies.
-        newGrants[key] = next;
-      }
-    }
-
-    onChange(newGrants, { manual: true });
+    // Single cell = set that exact key explicitly. Matrix is king: what you click
+    // is what's stored is what's enforced. No baseline delta, no parent inference.
+    onChange({ ...grants, [`${moduleId}:${action}`]: next }, { manual: true });
   };
 
   if (loading) return <SkeletonLoader />;

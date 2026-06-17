@@ -25,16 +25,25 @@ Being allowed into the "Customers" room doesn't automatically mean you can see
 
 ## Gate 1 — Permissions: *what you can do*
 
-- Every person has an **Access Profile** — basically a job-shaped keycard
-  (e.g. "Pricing Staff", "Operations Manager").
-- The profile spells out, module by module, the actions they're allowed:
-  **view, create, edit, delete.**
-- We say it as a plain sentence:
-  > "While in **Contacts**, you can **view** and **edit** contacts."
-- A person can also have **individual tweaks** on top of their profile (give one
-  person an extra ability, or take one away) without changing everyone else.
+**The matrix is king.** Every person has **one** permission matrix — a grid of
+modules/tabs × actions (view, create, edit, delete, …). What a box shows in that
+grid is **exactly** what's enforced. Checked = allowed. Unchecked = denied. There
+is nothing hidden behind it.
 
-This gate decides whether the buttons, tabs, and pages even appear for you.
+- We read a granted cell as a plain sentence:
+  > "While in **Contacts**, you can **view** and **edit** contacts."
+- **Access Profiles are templates, not law.** A profile (e.g. "Pricing Staff") is a
+  convenient starting point you can *stamp* onto a person's matrix to fill it fast.
+  Once stamped, the person's own matrix is the only thing that counts — editing it
+  takes effect immediately, and you never "re-apply" a profile to make a change
+  stick. Editing a template does **not** silently change people who already have it.
+- **No inheritance, no cascade, no fallback.** A tab is visible only if its **own**
+  box is checked. Granting a parent module does not secretly switch its tabs on —
+  if you want a tab, you check it (the parent-row click and "+View" buttons are just
+  fill helpers that tick the boxes *visibly* for you).
+
+This gate decides whether the buttons, tabs, and pages even appear for you — and
+it decides it the same way the screen shows it. If you see it denied, it's denied.
 
 ---
 
