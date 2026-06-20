@@ -33,6 +33,9 @@ marketing-showcase/
 image.png
 UsersMarcus.claudesettings.json
 
+# CRM analysis — contains real customer data, keep local
+analysis/
+
 # Playwright
 /test-results/
 /playwright-report/
