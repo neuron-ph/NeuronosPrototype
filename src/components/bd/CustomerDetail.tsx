@@ -1,5 +1,5 @@
 ﻿import { ArrowLeft, Building2, MapPin, Briefcase, Edit, Users, Mail, Phone, User, CheckCircle, Clock, AlertCircle, Calendar, MessageSquare, FileText } from "lucide-react";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../../lib/queryKeys";
@@ -15,7 +15,7 @@ import { AddContactPanel } from "./AddContactPanel";
 import { CustomerProjectsTab } from "./CustomerProjectsTab";
 import { CustomerInquiriesTab } from "./CustomerInquiriesTab";
 import { CustomerAssignmentProfilesSection } from "./CustomerAssignmentProfilesSection";
-import { ConsigneeInlineSection } from "./ConsigneeInlineSection";
+import { ConsigneeInlineSection, type ConsigneeInlineSectionHandle } from "./ConsigneeInlineSection";
 import { CommentsTab } from "../shared/CommentsTab";
 import { EntityAttachmentsTab } from "../shared/EntityAttachmentsTab";
 import { supabase } from "../../utils/supabase/client";
@@ -90,6 +90,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
   const [localCustomer, setLocalCustomer] = useState(customer);
   const [editedCustomer, setEditedCustomer] = useState(customer);
   const [isSavingCustomer, setIsSavingCustomer] = useState(false);
+  const consigneeSectionRef = useRef<ConsigneeInlineSectionHandle>(null);
   const [isLoggingActivity, setIsLoggingActivity] = useState(false);
   const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
@@ -273,6 +274,10 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
   const handleSave = async () => {
     setIsSavingCustomer(true);
     try {
+      // Commit any consignee typed inline but not yet confirmed with the ✓,
+      // so "Save" persists it instead of silently discarding it.
+      await consigneeSectionRef.current?.flushPendingAdd();
+
       const updatePayload = {
         name: editedCustomer.name || editedCustomer.company_name,
         client_type: editedCustomer.client_type,
@@ -719,7 +724,7 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
 
                   {/* Consignees â€” inline section (edit mode) */}
                   {variant === "bd" && (
-                    <ConsigneeInlineSection customerId={customer.id} isEditing={true} />
+                    <ConsigneeInlineSection ref={consigneeSectionRef} customerId={customer.id} isEditing={true} />
                   )}
 
                   {/* Save/Cancel Buttons */}

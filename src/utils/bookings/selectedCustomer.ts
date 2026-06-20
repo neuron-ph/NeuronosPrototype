@@ -24,17 +24,19 @@ export function getSelectedCustomer(
   const rawCustomer = formState.customer_name;
   const customerName = profileValueToLabel(rawCustomer).trim();
 
-  if (isProfileSelectionValue(rawCustomer)) {
-    return {
-      customerId: rawCustomer.id ?? fallbackCustomerId ?? null,
-      customerName,
-    };
-  }
-
+  // Top-level customer_id column — the source of truth when the customer_name
+  // profile object carries no id (e.g. handoff bookings hydrated as 'manual').
   const topLevelCustomerId =
     typeof formState.customer_id === 'string' && formState.customer_id.trim().length > 0
       ? formState.customer_id
       : null;
+
+  if (isProfileSelectionValue(rawCustomer)) {
+    return {
+      customerId: rawCustomer.id ?? topLevelCustomerId ?? fallbackCustomerId ?? null,
+      customerName,
+    };
+  }
 
   return {
     customerId: topLevelCustomerId ?? fallbackCustomerId ?? null,
