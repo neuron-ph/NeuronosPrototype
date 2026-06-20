@@ -22,7 +22,7 @@ interface UseCustomersPaginatedOptions {
 /**
  * Server-paginated customers. Visibility stays RLS/crew-based (no owner scope) —
  * the `owner` arg here is the optional UI owner filter, not a security boundary.
- * Search covers name + company_name.
+ * Search covers name (the customers table has no company_name column).
  */
 export function useCustomersPaginated({
   page,
@@ -43,7 +43,7 @@ export function useCustomersPaginated({
       if (status && status !== "All") b = b.eq("status", status);
       if (owner && owner !== "All") b = b.eq("owner_id", owner);
       const s = sanitizeSearch(search);
-      if (s) b = b.or(`name.ilike.%${s}%,company_name.ilike.%${s}%`);
+      if (s) b = b.ilike("name", `%${s}%`);
       return b;
     },
   });

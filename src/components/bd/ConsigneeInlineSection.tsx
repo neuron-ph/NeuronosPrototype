@@ -5,7 +5,7 @@
  * Edit mode: hover actions, ghost "Add consignee..." row, inline inputs
  */
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
 import { Building2, User, Check, X, Pencil, Trash2 } from "lucide-react";
 import { useConsignees } from "../../hooks/useConsignees";
 import { toast } from "../ui/toast-utils";
@@ -15,7 +15,20 @@ interface ConsigneeInlineSectionProps {
   isEditing?: boolean;
 }
 
-export function ConsigneeInlineSection({ customerId, isEditing = false }: ConsigneeInlineSectionProps) {
+/**
+ * Imperative handle so a parent's Save button can commit a consignee the user
+ * typed but didn't confirm with the per-row ✓ — otherwise the pending text is
+ * silently discarded when edit mode closes.
+ */
+export interface ConsigneeInlineSectionHandle {
+  /** Persist any pending inline add/edit. Rejects if the write fails. */
+  flushPendingAdd: () => Promise<void>;
+}
+
+export const ConsigneeInlineSection = forwardRef<
+  ConsigneeInlineSectionHandle,
+  ConsigneeInlineSectionProps
+>(function ConsigneeInlineSection({ customerId, isEditing = false }, ref) {
   const {
     consignees,
     isLoading,
@@ -105,6 +118,30 @@ export function ConsigneeInlineSection({ customerId, isEditing = false }: Consig
       setSaving(false);
     }
   };
+
+  // ---- Flush pending input (called by the customer-level Save button) ----
+  // Commits any consignee the user typed but didn't confirm with the ✓, so
+  // "Save" persists it instead of discarding it on edit-mode close.
+  const flushPendingAdd = async () => {
+    const pendingEdit = editingId ? editValue.trim() : "";
+    if (editingId && pendingEdit) {
+      await updateConsignee(editingId, { name: pendingEdit });
+      setEditingId(null);
+      setEditValue("");
+    }
+    const pendingAdd = addValue.trim();
+    if (pendingAdd) {
+      await createConsignee({ name: pendingAdd });
+      setIsAdding(false);
+      setAddValue("");
+    }
+  };
+
+  useImperativeHandle(ref, () => ({ flushPendingAdd }), [
+    editingId,
+    editValue,
+    addValue,
+  ]);
 
   // ---- Delete handler ----
   const handleDelete = async (id: string) => {
@@ -334,4 +371,4 @@ export function ConsigneeInlineSection({ customerId, isEditing = false }: Consig
       </div>
     </div>
   );
-}
+});

@@ -56,10 +56,10 @@ export function ConsigneePicker({
     queryFn: async () => {
       if (directCustomerId) return directCustomerId;
       if (!customerName?.trim()) return null;
-      const { data } = await supabase.from('customers').select('id, name, company_name').ilike('company_name', customerName.trim());
+      const { data } = await supabase.from('customers').select('id, name').ilike('name', customerName.trim());
       const customers = data || [];
       const match = customers.find(
-        (c: any) => (c.name || c.company_name || "").toLowerCase() === customerName.trim().toLowerCase()
+        (c: any) => (c.name || "").toLowerCase() === customerName.trim().toLowerCase()
       );
       return match?.id ?? null;
     },

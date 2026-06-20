@@ -76,7 +76,7 @@ export function AccountingCustomers() {
     queryFn: async () => {
       let query = supabase.from("customers").select("*");
       if (searchQuery) {
-        query = query.or(`name.ilike.%${searchQuery}%,company_name.ilike.%${searchQuery}%`);
+        query = query.ilike("name", `%${searchQuery}%`);
       }
       if (industryFilter !== "All") query = query.eq("industry", industryFilter);
       if (statusFilter !== "All")   query = query.eq("status", statusFilter);
