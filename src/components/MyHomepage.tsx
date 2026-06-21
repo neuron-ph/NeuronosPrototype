@@ -787,7 +787,7 @@ function MyWorkPanel({
               dotColor={ticketDotColor(t.type, t.priority)}
               urgent={t.priority === "urgent"}
               label={t.subject}
-              sub={`${t.type} · ${t.linked_record_type.replace(/_/g, " ")}`}
+              sub={`${t.type}${t.linked_record_type ? ` · ${t.linked_record_type.replace(/_/g, " ")}` : ""}`}
               meta={timeAgo(t.created_at)}
               onClick={() => onTicket(t.id)}
             />
@@ -1036,10 +1036,10 @@ function DeptQueuePanel({
                     dotColor={t.priority === "urgent" ? "red" : "green"}
                     urgent={t.priority === "urgent"}
                     label={t.subject}
-                    sub={t.linked_record_type.replace(/_/g, " ")}
+                    sub={(t.linked_record_type || "").replace(/_/g, " ")}
                     meta={timeAgo(t.created_at)}
                     onClick={() => {
-                      if (user?.id) trackRecent({ label: t.subject, sub: t.linked_record_type.replace(/_/g, " "), path: "/inbox", type: "ticket", time: new Date().toISOString() }, user.id);
+                      if (user?.id) trackRecent({ label: t.subject, sub: (t.linked_record_type || "").replace(/_/g, " "), path: "/inbox", type: "ticket", time: new Date().toISOString() }, user.id);
                       onTicket(t.id);
                     }}
                   />

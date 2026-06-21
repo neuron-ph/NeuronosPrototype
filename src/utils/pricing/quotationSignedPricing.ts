@@ -91,6 +91,10 @@ export const calculateSellingItemFromBuyingPrice = (
     currency: buyingItem.currency,
     forex_rate: asFiniteNumber(buyingItem.forex_rate, 1),
     percentage_added: percentageFromAmount(baseCost, asFiniteNumber(sellingItem.amount_added)),
+    // P8: remarks entered in the buying section mirror into selling. Buying is the
+    // sole source (the selling section has no remarks editor), so this stays in
+    // sync on every buying edit — not just at the initial copy.
+    remarks: buyingItem.remarks ?? sellingItem.remarks,
   });
 };
 

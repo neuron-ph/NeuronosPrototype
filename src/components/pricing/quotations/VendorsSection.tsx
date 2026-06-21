@@ -79,10 +79,15 @@ interface VendorsSectionProps {
   setVendors: (vendors: Vendor[]) => void;
   // Updated to accept both old and new formats
   onImportCharges?: (vendorId: string, vendorName: string, data: VendorLineItem[] | QuotationChargeCategory[], vendorServiceTag?: string) => void;
+  // NEU-010 fix: when a vendor's currency changes, cascade it to that vendor's
+  // already-imported buying-price line items (the line currency is the source of
+  // truth and the only one that persists). Keyed by vendor_id (falls back to the
+  // card id) to match how import stamps `vendor_id` onto each line.
+  onVendorCurrencyChange?: (vendorKey: string, currency: string) => void;
   viewMode?: boolean; // When true, hides action buttons and renders read-only
 }
 
-export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode = false }: VendorsSectionProps) {
+export function VendorsSection({ vendors, setVendors, onImportCharges, onVendorCurrencyChange, viewMode = false }: VendorsSectionProps) {
   const { partners } = useNetworkPartners();
   const { currencies } = useCurrencies(); // NEU-008: data-driven currency options
   // NEU-019 WG-12: "Save & Import" writes the vendor's master rate card
@@ -107,13 +112,38 @@ export function VendorsSection({ vendors, setVendors, onImportCharges, viewMode 
   const [vendorCurrencies, setVendorCurrencies] = useState<Map<string, string>>(new Map());
 
   // NEU-010: per-vendor currency now persists on the vendor object. The Map is
-  // the in-session override; reads fall back to the saved `vendor.currency` so
-  // reopening a quotation restores the chosen currency instead of defaulting USD.
+  // the in-session override; reads fall back to the saved `vendor.currency`, then
+  // to the currency on the vendor's own rate lines, and finally PHP (local-first
+  // default) — never a hardcoded USD that masks local vendors.
+  const deriveCurrencyFromRates = (vendorId: string): string | undefined => {
+    const cats = vendorRatesCache.get(vendorId);
+    if (!cats) return undefined;
+    for (const cat of cats) {
+      for (const li of cat.line_items || []) {
+        if (li.currency) return li.currency;
+      }
+    }
+    return undefined;
+  };
   const getVendorCurrency = (vendor: Vendor) =>
-    vendorCurrencies.get(vendor.id) ?? vendor.currency ?? "USD";
+    vendorCurrencies.get(vendor.id) ?? vendor.currency ?? deriveCurrencyFromRates(vendor.id) ?? "PHP";
   const setVendorCurrency = (vendorId: string, value: string) => {
     setVendorCurrencies(prev => new Map(prev).set(vendorId, value));
     setVendors(vendors.map(v => (v.id === vendorId ? { ...v, currency: value } : v)));
+    // Cascade the choice onto this vendor's cached rate lines so the rate card,
+    // a re-import, and the totals all agree on the same currency.
+    setVendorRatesCache(prev => {
+      const cats = prev.get(vendorId);
+      if (!cats) return prev;
+      const updated = cats.map(cat => ({
+        ...cat,
+        line_items: (cat.line_items || []).map(li => ({ ...li, currency: value, charge_currency: value })),
+      }));
+      return new Map(prev).set(vendorId, updated);
+    });
+    // Cascade onto already-imported buying-price lines for this vendor.
+    const vendor = vendors.find(v => v.id === vendorId);
+    onVendorCurrencyChange?.(vendor?.vendor_id || vendorId, value);
   };
   
   // ✨ PHASE 4: Inline Editing Functionality

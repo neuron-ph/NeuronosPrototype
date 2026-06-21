@@ -54,6 +54,15 @@ describe("quotation signed pricing", () => {
     expect(result.percentage_added).toBe(0);
   });
 
+  it("mirrors the buying-section remark into the selling item (P8)", () => {
+    const result = calculateSellingItemFromBuyingPrice(
+      makeSellingItem({ remarks: "stale selling note" }),
+      makeBuyingItem({ remarks: "PER BL" })
+    );
+
+    expect(result.remarks).toBe("PER BL");
+  });
+
   it("preserves amount-added markup when a selling cost becomes negative", () => {
     const result = calculateSellingItemFromCostChange(
       makeSellingItem({ amount_added: 300, percentage_added: 20 }),

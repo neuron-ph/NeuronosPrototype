@@ -23,7 +23,11 @@ describe("normalizeCompanySettings", () => {
     expect(settings.address_line1).toBe(DEFAULT_COMPANY_SETTINGS.address_line1);
     expect(settings.phone_numbers).toEqual(DEFAULT_COMPANY_SETTINGS.phone_numbers);
     expect(settings.email).toBe(DEFAULT_COMPANY_SETTINGS.email);
-    expect(settings.bank_account_name).toBe("Neuron Logistics Inc.");
+    // P9: bank fields do NOT fall back to mockup defaults — blank stays blank so
+    // the print's bank section only fills from a company's real configured bank.
+    expect(settings.bank_name).toBeNull();
+    expect(settings.bank_account_name).toBeNull();
+    expect(settings.bank_account_number).toBeNull();
   });
 
   it("preserves explicitly configured non-empty values", () => {

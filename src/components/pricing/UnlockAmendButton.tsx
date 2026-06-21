@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Lock, Unlock, ChevronDown } from "lucide-react";
+import { Unlock, ChevronDown } from "lucide-react";
 
 /**
  * NEU-022: the lock/unlock control for a LOCKED (converted) quotation.
@@ -30,7 +30,7 @@ export function UnlockAmendButton({ onUnlock, note }: { onUnlock: () => void; no
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="Locked. Click to unlock for amendment."
+        aria-label="Unlock this quotation to edit."
         style={{
           display: "flex",
           alignItems: "center",
@@ -49,8 +49,8 @@ export function UnlockAmendButton({ onUnlock, note }: { onUnlock: () => void; no
         onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--theme-bg-page)"; }}
         onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "var(--theme-bg-surface)"; }}
       >
-        <Lock size={14} />
-        Locked
+        <Unlock size={14} />
+        Unlock to edit
         <ChevronDown size={14} style={{ color: "var(--theme-status-warning-fg)" }} />
       </button>
 

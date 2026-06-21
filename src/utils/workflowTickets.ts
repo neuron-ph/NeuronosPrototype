@@ -17,6 +17,7 @@ export interface WorkflowTicketParams {
   priority?: "normal" | "urgent";
   recipientDept?: string;       // department recipient (use when targeting a whole dept)
   recipientUserId?: string;     // individual user recipient (use for assignment notifications)
+  ccUserIds?: string[];         // extra user recipients copied on the ticket (role 'cc')
   linkedRecordType: WorkflowRecordType;
   linkedRecordId: string;
   linkedRecordLabel?: string;
@@ -42,6 +43,7 @@ export async function createWorkflowTicket(
     priority = "normal",
     recipientDept,
     recipientUserId,
+    ccUserIds,
     linkedRecordType,
     linkedRecordId,
     resolutionAction,
@@ -109,6 +111,24 @@ export async function createWorkflowTicket(
       role: "to",
       added_by: createdBy,
     });
+  }
+
+  // 3b. Add CC participants (extra individual recipients), de-duped and excluding
+  // the sender and the primary recipient so nobody is added twice.
+  const ccIds = [...new Set((ccUserIds ?? []).filter(Boolean))].filter(
+    (id) => id !== createdBy && id !== recipientUserId
+  );
+  if (ccIds.length > 0) {
+    await supabase.from("ticket_participants").insert(
+      ccIds.map((id) => ({
+        ticket_id: ticketId,
+        participant_type: "user",
+        participant_user_id: id,
+        participant_dept: null,
+        role: "cc",
+        added_by: createdBy,
+      }))
+    );
   }
 
   // 4. Insert opening message

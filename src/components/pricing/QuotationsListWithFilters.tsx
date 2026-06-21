@@ -261,6 +261,35 @@ function QuotationTableRow({ item, index, totalItems, onItemClick, gridTemplateC
         </span>
       </div>
 
+      {/* Assignee — sits next to Account Owner */}
+      {showAssignee && (
+        <div style={{ display: "flex", alignItems: "center" }}>
+          {assigneeName ? (
+            <span style={{
+              fontSize: "12px",
+              fontWeight: 500,
+              color: "var(--neuron-brand-green)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}>
+              {assigneeName}
+            </span>
+          ) : (
+            <span style={{
+              fontSize: "12px",
+              fontWeight: 500,
+              color: "var(--theme-status-warning-fg)",
+              backgroundColor: "var(--theme-status-warning-bg)",
+              padding: "2px 8px",
+              borderRadius: "4px",
+            }}>
+              Unassigned
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Service Types */}
       <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
         {item.services.map((service, idx) => (
@@ -326,35 +355,6 @@ function QuotationTableRow({ item, index, totalItems, onItemClick, gridTemplateC
           >
             {normalizedStatus}
           </span>
-        </div>
-      )}
-
-      {/* Assignee */}
-      {showAssignee && (
-        <div style={{ display: "flex", alignItems: "center" }}>
-          {assigneeName ? (
-            <span style={{
-              fontSize: "12px",
-              fontWeight: 500,
-              color: "var(--neuron-brand-green)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}>
-              {assigneeName}
-            </span>
-          ) : (
-            <span style={{
-              fontSize: "12px",
-              fontWeight: 500,
-              color: "var(--theme-status-warning-fg)",
-              backgroundColor: "var(--theme-status-warning-bg)",
-              padding: "2px 8px",
-              borderRadius: "4px",
-            }}>
-              Unassigned
-            </span>
-          )}
         </div>
       )}
     </div>
@@ -455,11 +455,13 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
 
   // Build grid template columns string
   const showStatus = userDepartment === "Business Development";
-  const showAssigneeCol = userDepartment === "Pricing" && workflowTab === "Inquiries";
+  // P7: the Assignee column (who is working the quote) shows on every Pricing
+  // tab now — was previously restricted to the Inquiries tab.
+  const showAssigneeCol = userDepartment === "Pricing";
   const gridTemplateColumns = showStatus
     ? `${columnWidths.icon}px ${columnWidths.name}px ${columnWidths.customer}px ${columnWidths.accountOwner}px ${columnWidths.services}px ${columnWidths.total}px ${columnWidths.buying}px ${columnWidths.date}px ${columnWidths.status}px`
     : showAssigneeCol
-      ? `${columnWidths.icon}px ${columnWidths.name}px ${columnWidths.customer}px ${columnWidths.accountOwner}px ${columnWidths.services}px ${columnWidths.total}px ${columnWidths.buying}px ${columnWidths.date}px ${columnWidths.assignee}px`
+      ? `${columnWidths.icon}px ${columnWidths.name}px ${columnWidths.customer}px ${columnWidths.accountOwner}px ${columnWidths.assignee}px ${columnWidths.services}px ${columnWidths.total}px ${columnWidths.buying}px ${columnWidths.date}px`
       : `${columnWidths.icon}px ${columnWidths.name}px ${columnWidths.customer}px ${columnWidths.accountOwner}px ${columnWidths.services}px ${columnWidths.total}px ${columnWidths.buying}px ${columnWidths.date}px`;
 
   // Get unique customers and services for filters
@@ -1105,6 +1107,11 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
                   }} />
                 </div>
               </div>
+              {showAssigneeCol && (
+                <div style={{ padding: "10px 0", display: "flex", alignItems: "center" }}>
+                  ASSIGNEE
+                </div>
+              )}
               <div style={{ padding: "10px 0", display: "flex", alignItems: "center", position: "relative" }}>
                 SERVICE TYPES
                 <div
@@ -1186,11 +1193,6 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
                   STATUS
                 </div>
               )}
-              {showAssigneeCol && (
-                <div style={{ padding: "10px 0", display: "flex", alignItems: "center" }}>
-                  ASSIGNEE
-                </div>
-              )}
             </div>
 
             {/* Table Rows */}
@@ -1205,7 +1207,7 @@ export function QuotationsListWithFilters({ onViewItem, onCreateQuotation, quota
                 showStatus={showStatus}
                 showAssignee={showAssigneeCol}
                 assigneeName={pricingUserMap[(item as any).assigned_to] || ""}
-                accountOwnerName={(item as any).created_by_name || ""}
+                accountOwnerName={(item as any).account_owner_name || ""}
                 unread={unreadQuotationIds.has(item.id) || unreadInquiryIds.has(item.id) || unreadContractIds.has(item.id)}
               />
             ))}

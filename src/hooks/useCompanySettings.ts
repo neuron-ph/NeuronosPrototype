@@ -27,9 +27,11 @@ export const DEFAULT_COMPANY_SETTINGS: CompanySettings = {
   country: "Philippines",
   phone_numbers: ["+63 (2) 5310 4083", "+63 (2) 7004 7583", "+63 935 981 6652"],
   email: "inquiries@neuron-os.com",
-  bank_name: "BDO Unibank",
-  bank_account_name: "Neuron Logistics Inc.",
-  bank_account_number: "0012-3456-7890",
+  // P9: no mockup bank details — the bank section fills only from a company's
+  // real configured bank info (company_settings). Unset → section is absent.
+  bank_name: null,
+  bank_account_name: null,
+  bank_account_number: null,
   logo_url: null,
   updated_at: new Date().toISOString(),
 };

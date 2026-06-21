@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { toast } from "sonner@2.0.3";
 import {
   Home,
   Users,
@@ -31,7 +32,11 @@ import {
   BookOpen,
   ScrollText,
   TrendingUp,
-  Database
+  Database,
+  CheckCircle2,
+  AlertTriangle,
+  Info,
+  Bell
 } from "lucide-react";
 import { NeuronLogo } from "./NeuronLogo";
 import { usePermission } from "../context/PermissionProvider";
@@ -81,6 +86,69 @@ const PAGE_TO_NOTIF: Record<string, { module: NotifModule; sub: NotifSubSection 
 // counts + the Inbox unread badge). Set to true to re-enable. Counts are still
 // fetched in the background; this only controls whether the badges render.
 const SHOW_SIDEBAR_BADGES = false;
+
+// Inbox ping: a red dot on the Inbox item + a toast when a new inbox message
+// arrives. Independent of SHOW_SIDEBAR_BADGES (the numeric counts are off, but
+// the inbox ping is wanted). Realtime-driven; RLS limits events to tickets the
+// user can see (incl. dept-routed/assigned via migration 223).
+const SHOW_INBOX_PING = true;
+
+// ── Inbox ping toast ────────────────────────────────────────────────────────
+// Uses sonner's STANDARD slots (title / description / type-icon / action) — the
+// app already styles those in index.css, so this is a single, correctly-laid-out
+// card. Built from the ticket SUBJECT, which leads with the event ("Approved:",
+// "Ready to Send:", "New Inquiry:", …) and carries the reference.
+// Title = the event; description = the entity + reference; the toast variant
+// (success/warning/info) supplies a colour-coded status icon; action = "View <record>".
+const PING_TITLE: Record<string, string> = {
+  "Approved": "Quotation approved by client",
+  "Ready to Send": "Pricing complete, ready to send",
+  "Price This": "New quotation to price",
+  "New Inquiry": "New inquiry routed to you",
+  "Assigned to You": "Assigned to you",
+  "Reassigned": "Assignment updated",
+  "Pricing Started": "Pricing started",
+  "Needs Revision": "Quotation needs revision",
+};
+const PING_VARIANT: Record<string, "success" | "warning" | "info"> = {
+  "Approved": "success",
+  "Ready to Send": "info",
+  "Pricing Started": "info",
+  "Price This": "info",
+  "New Inquiry": "info",
+  "Assigned to You": "info",
+  "Needs Revision": "warning",
+  "Reassigned": "warning",
+};
+const RECORD_NOUN: Record<string, string> = {
+  quotation: "quotation", booking: "booking", project: "project",
+  invoice: "invoice", collection: "collection", expense: "expense",
+  budget_request: "request",
+};
+
+function showInboxPing(subject: string, linkedType: string | null | undefined, open: () => void) {
+  const idx = subject.indexOf(": ");
+  const event = idx > -1 ? subject.slice(0, idx).trim() : "";
+  const entity = (idx > -1 ? subject.slice(idx + 2) : subject).trim();
+  const title = PING_TITLE[event] || event || "New inbox message";
+  const noun = linkedType ? RECORD_NOUN[linkedType] : undefined;
+  const variant = PING_VARIANT[event];
+  const icon =
+    variant === "success" ? <CheckCircle2 size={18} strokeWidth={2.25} /> :
+    variant === "warning" ? <AlertTriangle size={18} strokeWidth={2.25} /> :
+    variant === "info"    ? <Info size={18} strokeWidth={2.25} /> :
+                            <Bell size={18} strokeWidth={2.25} />;
+  const opts = {
+    description: entity || undefined,
+    action: { label: noun ? `View ${noun}` : "Open", onClick: open },
+    duration: 6000,
+    icon,
+  };
+  if (variant === "success") toast.success(title, opts);
+  else if (variant === "warning") toast.warning(title, opts);
+  else if (variant === "info") toast.info(title, opts);
+  else toast(title, opts);
+}
 
 interface SidebarBadgeProps {
   count: number;
@@ -347,6 +415,53 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
     const interval = setInterval(fetchUnreadCount, 60_000);
     return () => clearInterval(interval);
   }, [fetchUnreadCount]);
+
+  // Inbox ping — realtime toast + instant red-dot refresh. Lives here (always
+  // mounted) so the ping fires on any page, not just the inbox. Supabase realtime
+  // RLS only delivers events for tickets this user can see, so a toast = a real
+  // inbound item addressed to them (incl. dept-routed/assigned via migration 223).
+  const pingedMsgIds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!SHOW_INBOX_PING || !user?.id) return;
+    const channel = supabase.channel(`sidebar_inbox_ping_${user.id}`);
+    channel.on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "ticket_messages" },
+      async (payload) => {
+        const m = payload.new as {
+          id?: string; ticket_id?: string; sender_id?: string; is_system?: boolean;
+        };
+        fetchUnreadCount(); // keep the red dot in sync
+        // Toast only for genuinely new, inbound, human messages (not mine, not system).
+        if (!m?.id || pingedMsgIds.current.has(m.id)) return;
+        pingedMsgIds.current.add(m.id);
+        if (m.is_system || !m.sender_id || m.sender_id === user.id || !m.ticket_id) return;
+        // The ticket subject already leads with the event + reference, which reads
+        // far faster than the raw message body — drive the toast from it.
+        const { data: t } = await supabase
+          .from("tickets")
+          .select("subject, linked_record_type")
+          .eq("id", m.ticket_id)
+          .maybeSingle();
+        if (!t?.subject) return;
+        showInboxPing(t.subject, t.linked_record_type, () => onNavigate("inbox" as Page));
+      }
+    );
+    // New participant rows (e.g. a fresh dept route) and read-receipts (the user
+    // opening a thread) both move the unread count — keep the red dot in sync.
+    channel.on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "ticket_participants" },
+      () => fetchUnreadCount()
+    );
+    channel.on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "ticket_read_receipts" },
+      () => fetchUnreadCount()
+    );
+    channel.subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id, fetchUnreadCount, onNavigate]);
 
   
   // Determine what modules to show based on effective department
@@ -1164,6 +1279,21 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
                     >
                       {inboxUnreadCount > 99 ? "99+" : inboxUnreadCount}
                     </span>
+                  )}
+                  {/* Inbox ping red dot — simple unread indicator, no count */}
+                  {SHOW_INBOX_PING && !SHOW_SIDEBAR_BADGES && inboxUnreadCount > 0 && (
+                    <span
+                      style={{
+                        position: "absolute",
+                        top: -2,
+                        right: -2,
+                        width: 9,
+                        height: 9,
+                        borderRadius: 5,
+                        backgroundColor: "var(--theme-status-danger-fg)",
+                        boxShadow: "0 0 0 2px var(--neuron-bg-base, #0b0f0e)",
+                      }}
+                    />
                   )}
                 </div>
                 <AnimatePresence initial={false}>
