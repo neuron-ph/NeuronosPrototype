@@ -754,16 +754,20 @@ table th,
   gap: 12px !important;
   background: var(--theme-bg-surface) !important;
   border: 1px solid var(--theme-border-default) !important;
-  border-radius: 7px !important;
-  padding: 12px 14px !important;
-  box-shadow: var(--elevation-2), 0 4px 16px rgba(0, 0, 0, 0.07) !important;
+  border-radius: 12px !important;
+  padding: 14px 16px !important;
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.04),
+    0 10px 28px -8px rgba(16, 24, 40, 0.18),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.02) !important;
 }
 
 [data-sonner-toast] [data-title] {
   font-size: 13px !important;
   font-weight: 600 !important;
   color: var(--theme-text-primary) !important;
-  line-height: 1.4 !important;
+  line-height: 1.45 !important;
+  letter-spacing: -0.01em !important;
   margin: 0 !important;
 }
 
@@ -771,27 +775,43 @@ table th,
   font-size: 12px !important;
   font-weight: 400 !important;
   color: var(--theme-text-muted) !important;
-  line-height: 1.4 !important;
-  margin: 0 !important;
-  margin-top: 2px !important;
+  line-height: 1.45 !important;
+  letter-spacing: -0.005em !important;
+  margin: 3px 0 0 !important;
 }
 
+/* Action button — brand pill, top-aligned beside the title */
 [data-sonner-toast] [data-button],
 [data-sonner-toast] [data-cancel-button] {
+  align-self: flex-start !important;
   background: var(--neuron-brand-green) !important;
   color: var(--theme-text-inverse) !important;
   border: none !important;
   border-radius: 8px !important;
   padding: 6px 12px !important;
   font-size: 12px !important;
-  font-weight: 500 !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.005em !important;
+  white-space: nowrap !important;
   cursor: pointer !important;
-  transition: background-color 0.2s ease !important;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.10) !important;
+  transition: background-color 0.15s ease, transform 0.1s ease !important;
 }
 
 [data-sonner-toast] [data-button]:hover,
 [data-sonner-toast] [data-cancel-button]:hover {
   background: var(--neuron-brand-green-600) !important;
+}
+
+[data-sonner-toast] [data-button]:active,
+[data-sonner-toast] [data-cancel-button]:active {
+  transform: scale(0.97) !important;
+}
+
+[data-sonner-toast] [data-button]:focus-visible,
+[data-sonner-toast] [data-cancel-button]:focus-visible {
+  outline: 2px solid var(--neuron-brand-green) !important;
+  outline-offset: 2px !important;
 }
 
 [data-sonner-toast] [data-close-button] {
@@ -807,25 +827,39 @@ table th,
   background: transparent !important;
 }
 
-/* Toast icon area */
+/* Status icon → bare Lucide glyph, colored per toast type */
 [data-sonner-toast] [data-icon] {
-  width: 16px !important;
-  height: 16px !important;
+  width: 20px !important;
+  height: 20px !important;
   flex-shrink: 0 !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  margin-top: 1px !important;
+  margin: 1px 0 0 !important;
+  color: var(--theme-text-muted) !important;
 }
 
-/* Defer icon coloring to toast-utils inline styles */
-[data-sonner-toast] [data-icon] > svg,
-[data-sonner-toast][data-type="success"] [data-icon] > svg,
-[data-sonner-toast][data-type="error"] [data-icon] > svg,
-[data-sonner-toast][data-type="info"] [data-icon] > svg,
-[data-sonner-toast][data-type="warning"] [data-icon] > svg {
+[data-sonner-toast] [data-icon] > svg {
+  width: 18px !important;
+  height: 18px !important;
   color: inherit !important;
   stroke: currentColor !important;
+}
+
+[data-sonner-toast][data-type="success"] [data-icon] {
+  color: var(--theme-status-success-fg) !important;
+}
+
+[data-sonner-toast][data-type="warning"] [data-icon] {
+  color: var(--theme-status-warning-fg) !important;
+}
+
+[data-sonner-toast][data-type="error"] [data-icon] {
+  color: var(--theme-status-danger-fg) !important;
+}
+
+[data-sonner-toast][data-type="info"] [data-icon] {
+  color: var(--neuron-brand-green) !important;
 }
 
 /* Sonner container positioning */
@@ -839,11 +873,33 @@ table th,
 }
 
 [data-sonner-toast][data-mounted="true"] {
-  animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  animation: toastIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
 [data-sonner-toast][data-removed="true"] {
-  animation: slideOut 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  animation: toastOut 0.18s cubic-bezier(0.4, 0, 1, 1) !important;
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateX(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes toastOut {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(24px) scale(0.97);
+  }
 }
 
 @keyframes slideIn {

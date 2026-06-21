@@ -787,6 +787,28 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
     return () => { cancelled = true; };
   }, [buyingPrice, vendors]);
 
+  // Keep each vendor's currency in sync with its buying line items. The line
+  // currency is the source of truth and the only one that persists reliably;
+  // without this, `vendor.currency` saves as null and the vendor card falls back
+  // to USD on reload even when its charges are PHP (NEU-010 bug). Also self-heals
+  // legacy rows whose vendors were saved with no currency.
+  useEffect(() => {
+    if (vendors.length === 0) return;
+    const currencyByVendor = new Map<string, string>();
+    buyingPrice.forEach(cat => cat.line_items.forEach(li => {
+      if (li.vendor_id && li.currency && !currencyByVendor.has(li.vendor_id)) {
+        currencyByVendor.set(li.vendor_id, li.currency);
+      }
+    }));
+    let changed = false;
+    const next = vendors.map(v => {
+      const derived = v.vendor_id ? currencyByVendor.get(v.vendor_id) : undefined;
+      if (derived && v.currency !== derived) { changed = true; return { ...v, currency: derived }; }
+      return v;
+    });
+    if (changed) setVendors(next);
+  }, [buyingPrice, vendors]);
+
   // ✨ GENERALIZED: Which selected services are covered by the detected contract?
   const contractCoveredServices = (() => {
     if (!detectedContract) return [] as string[];
@@ -1843,9 +1865,21 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
    * @see mergeSellingPriceCategories() - Core merge algorithm
    * @see convertBuyingToSelling() - Buying → Selling conversion
    */
+  // NEU-010 fix: cascade a vendor's currency change onto its already-imported
+  // buying-price line items so changing the vendor currency actually re-prices
+  // its charges (not just the rate card). vendorKey matches the line `vendor_id`.
+  const handleVendorCurrencyChange = (vendorKey: string, newCurrency: string) => {
+    setBuyingPrice(prev => prev.map(cat => ({
+      ...cat,
+      line_items: cat.line_items.map(li =>
+        li.vendor_id === vendorKey ? { ...li, currency: newCurrency } : li
+      ),
+    })));
+  };
+
   const handleImportVendorCharges = (
-    vendorId: string, 
-    vendorName: string, 
+    vendorId: string,
+    vendorName: string,
     data: VendorLineItem[] | QuotationChargeCategory[],
     vendorServiceTag?: string
   ) => {
@@ -2812,6 +2846,7 @@ export function QuotationBuilderV3({ onClose, onSave, initialData, mode = "creat
               vendors={vendors}
               setVendors={setVendors}
               onImportCharges={handleImportVendorCharges}
+              onVendorCurrencyChange={handleVendorCurrencyChange}
               viewMode={viewMode}
             />
           )}

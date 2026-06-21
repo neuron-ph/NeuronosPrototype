@@ -21,7 +21,6 @@ import { getThemeModePreference, setThemeModePreference } from "./theme/themeMod
 import { resolveThemeMode } from "./theme/themeBootstrap";
 import { Moon, Sun, Eye, EyeOff } from "lucide-react";
 import { useReferenceDataPrefetch } from "./hooks/useReferenceDataPrefetch";
-import { BetaWelcomeScreen } from "./components/onboarding/BetaWelcomeScreen";
 import { ErrorPage } from "./components/ErrorPage";
 import { FeedbackButton } from "./components/feedback/FeedbackButton";
 import { FeedbackPositionProvider } from "./contexts/FeedbackPositionContext";
@@ -1050,13 +1049,6 @@ function AppContent() {
   useWorkspaceTheme();
   useReferenceDataPrefetch();
 
-  const [showWelcome, setShowWelcome] = useState(false);
-  useEffect(() => {
-    if (!user?.id) return;
-    const acked = localStorage.getItem(`neuron_beta_acked_${user.id}`);
-    if (!acked) setShowWelcome(true);
-  }, [user?.id]);
-
   // Show loading state while checking auth
   if (isLoading) {
     return <RouteLoadingState />;
@@ -1083,9 +1075,6 @@ function AppContent() {
     <FeedbackButton />
 <>
       <RouteTracker />
-      {showWelcome && user && (
-        <BetaWelcomeScreen userId={user.id} onDone={() => setShowWelcome(false)} />
-      )}
       <Toaster />
       <Suspense fallback={<RouteLoadingState />}>
       <Routes>

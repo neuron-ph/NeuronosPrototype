@@ -106,6 +106,39 @@ export function Pricing({ view = "contacts", onViewInquiry, inquiryId, currentUs
           }
         });
       }
+      // P7: the Account Owner column shows the CUSTOMER's account owner
+      // (customers.owner_id), NOT the quotation's creator. Resolve each row's
+      // customer_id → customer.owner_id → user name and denormalize onto the row
+      // as account_owner_name. Two batched lookups (customers, then users).
+      const customerIds = Array.from(new Set(
+        merged.map((m: any) => m.customer_id).filter(Boolean)
+      ));
+      if (customerIds.length > 0) {
+        const { data: custs } = await supabase
+          .from('customers')
+          .select('id, owner_id')
+          .in('id', customerIds);
+        const custOwnerId = Object.fromEntries(
+          (custs || []).map((c: any) => [c.id, c.owner_id])
+        );
+        const ownerIds = Array.from(new Set(
+          Object.values(custOwnerId).filter(Boolean)
+        )) as string[];
+        let ownerNameMap: Record<string, string> = {};
+        if (ownerIds.length > 0) {
+          const { data: ownerUsers } = await supabase
+            .from('users')
+            .select('id, name')
+            .in('id', ownerIds);
+          ownerNameMap = Object.fromEntries(
+            (ownerUsers || []).map((u: any) => [u.id, u.name])
+          );
+        }
+        merged.forEach((m: any) => {
+          const ownerId = m.customer_id ? custOwnerId[m.customer_id] : undefined;
+          m.account_owner_name = ownerId ? (ownerNameMap[ownerId] || "") : "";
+        });
+      }
       console.log(`Fetched ${merged.length} quotations for Pricing module`);
       return merged as QuotationNew[];
     },

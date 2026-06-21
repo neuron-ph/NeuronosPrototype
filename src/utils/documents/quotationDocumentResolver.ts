@@ -790,6 +790,14 @@ function buildChargeTable(
   const rows: PrintableTableRow[] = [];
   const groups: PrintableTableGroup[] = [];
 
+  // Currency basis for the document, decided once (it's document-level, not
+  // per-category). A single foreign-currency document shows its own currency and
+  // original amounts; a PHP/mixed document totals in PHP using converted amounts.
+  // P6: this same decision now drives the per-LINE Amount too — not just the
+  // category subtotal — so each line is converted by its indicated currency and
+  // the line amounts visibly sum to the subtotal (and on to the grand total).
+  const useOriginalAmounts = currency !== FUNCTIONAL_CURRENCY;
+
   categories.forEach((cat, catIdx) => {
     const groupId = cat.id || `cat-${catIdx}`;
     let subtotal = 0;
@@ -816,27 +824,25 @@ function buildChargeTable(
           // Only show forex when not 1
           forex: itemRate && itemRate !== 1 ? itemRate : "",
           taxed: options.showTax && item.is_taxed ? "✓" : "",
-          amount: originalAmt,
+          // P6: converted by the line's indicated currency for a PHP/mixed doc;
+          // original for a single foreign-currency doc (mirrors the subtotal).
+          amount: useOriginalAmounts ? originalAmt : convertedAmt,
         },
         subtext: subtext || undefined,
       });
     });
-    // Subtotal row follows the document-level currency decision (made in
-    // summarizePricingCurrency), not the category's own currency. A
-    // single-currency foreign category (e.g. all-USD destination charges)
-    // inside a mixed/PHP document must still total in PHP using the converted
-    // amounts — matching the grand total. Only when the whole document is a
-    // single foreign currency do we show originals in that currency.
-    // Subtotal currency: a single-currency document shows its own currency and
-    // original amounts; a mixed document totals in PHP using converted amounts.
-    const useOriginalForSubtotal = currency !== FUNCTIONAL_CURRENCY;
+    // Subtotal follows the same document-level currency decision as the lines
+    // above (`useOriginalAmounts`): a single-currency foreign category inside a
+    // mixed/PHP document still totals in PHP using converted amounts, matching
+    // the grand total; only a wholly single-foreign-currency document shows
+    // originals in that currency.
     const subtotalRow: PrintableTableRow = {
       id: `${groupId}-subtotal`,
       groupId,
       emphasis: "subtotal",
       cells: {
         description: "Subtotal",
-        amount: useOriginalForSubtotal ? originalSubtotal : subtotal,
+        amount: useOriginalAmounts ? originalSubtotal : subtotal,
         currency,
       },
     };
@@ -1267,7 +1273,9 @@ export function resolveQuotationPrintableDocument(
     },
   ];
 
-  // Bank — sidebar override wins over company defaults
+  // Bank — sidebar override wins over company defaults. (P9: the mockup bank
+  // defaults were removed from DEFAULT_COMPANY_SETTINGS, so this only resolves to
+  // a bank block when a real bank is configured — otherwise the section is absent.)
   const bankOverride = settings.bankOverride;
   const hasBankOverride = bankOverride && (bankOverride.bankName || bankOverride.accountName || bankOverride.accountNumber);
   const bank = hasBankOverride
@@ -1297,22 +1305,17 @@ export function resolveQuotationPrintableDocument(
 
   const hasChargeRows = categories.some((cat) => Array.isArray(cat.line_items) && cat.line_items.length > 0);
   const hasNonZeroTotal = Number(printSummary.grand_total || baseSummary.grand_total || 0) > 0;
+  // P5: the printed quotation/summary shows the grand total in the document
+  // currency only — no PHP-equivalent conversion line beneath it (neither the
+  // single "≈ ₱" total for a foreign-currency doc nor the per-currency
+  // breakdown for a mixed-currency doc).
   const totals = !isContract && (hasChargeRows || hasNonZeroTotal)
     ? buildTotals(
         printSummary,
         printSummary.currency,
         settings.display.showTaxSummary,
-        // Foreign-currency documents show their PHP equivalent once, under the total.
-        printSummary.currency !== FUNCTIONAL_CURRENCY
-          ? { value: printSummary.converted_grand_total, currency: FUNCTIONAL_CURRENCY }
-          : undefined,
       )
     : undefined;
-  // Mixed-currency quote: show a per-currency conversion breakdown under the (PHP)
-  // grand total instead of the single "≈ ₱" line.
-  if (totals && printSummary.conversions.length > 0) {
-    totals.conversions = printSummary.conversions;
-  }
 
   const pageFooterText = joinNonEmpty([
     quotation.quote_number || (quotation as any).quotation_number,

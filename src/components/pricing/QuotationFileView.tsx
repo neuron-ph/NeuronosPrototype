@@ -90,6 +90,16 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
   const normalizedContractStatus = getNormalizedContractStatus(quotation);
   const isLocked = isQuotationLocked(quotation);
 
+  // "Pricing has been entered" — any priced line item (legacy charge_categories or
+  // the dual buying/selling format) or a computed grand total. Used to relabel the
+  // pricing CTA: a quote that's priced but still sitting in "Pending Pricing"
+  // (saved as draft, never submitted) reads "Review & Submit Pricing", not the
+  // misleading "Add Pricing".
+  const hasPricingEntered =
+    [quotation.charge_categories, (quotation as any).selling_price, (quotation as any).buying_price]
+      .some((cats: any) => Array.isArray(cats) && cats.some((c: any) => (c?.line_items?.length ?? 0) > 0))
+    || ((quotation.financial_summary?.grand_total ?? 0) > 0);
+
   // TODO: Replace with actual user data from context/auth
   const currentUserId = currentUser?.id || "user-123";
   const currentUserName = currentUser?.name || "John Doe";
@@ -512,6 +522,53 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
       });
     }
 
+    // Accepted by Client (approved) → notify Pricing so they see the quote won and
+    // can convert it to a project. P3: this transition previously fired NO inbox
+    // ticket and NO bell — the approval never reflected in the inbox.
+    if (normalizeQuotationStatus(newStatus, quotation) === "Accepted by Client" && currentUser) {
+      const assignedPricingId = (quotation as any).assigned_to as string | undefined;
+      const bdRepId = (quotation as any).created_by as string | undefined;
+      const { data: pricingManagers } = await supabase
+        .from('users')
+        .select('id')
+        .eq('department', 'Pricing')
+        .in('role', ['manager', 'executive']);
+      const managerIds = (pricingManagers || []).map((u: any) => u.id as string);
+
+      // Inbox ticket → assigned pricer (else the Pricing dept), with Pricing managers
+      // CC'd so the approval lands in both the pricer's and the managers' inboxes.
+      await createWorkflowTicket({
+        subject: `Approved: ${quotation.quotation_name}${quotation.quote_number ? ` (${quotation.quote_number})` : ""}`,
+        body: `Quotation approved by client — ready to convert to project.\n\nCustomer: ${quotation.customer_name}`,
+        type: "fyi",
+        priority: "normal",
+        ...(assignedPricingId ? { recipientUserId: assignedPricingId } : { recipientDept: "Pricing" }),
+        ccUserIds: managerIds,
+        linkedRecordType: "quotation",
+        linkedRecordId: quotation.id,
+        createdBy: currentUser.id,
+        createdByName: currentUser.name,
+        createdByDept: currentUser.department,
+        autoCreated: true,
+      });
+
+      // Red-dot/bell ping: assigned pricer + Pricing managers + BD creator.
+      void recordNotificationEvent({
+        actorUserId: currentUser.id,
+        module: 'pricing',
+        subSection: 'quotations',
+        entityType: 'quotation',
+        entityId: quotation.id,
+        kind: 'approved',
+        summary: {
+          label: `Quotation approved by client — ready to convert to project`,
+          reference: quotation.quote_number ?? undefined,
+          customer_name: quotation.customer_name,
+        },
+        recipientIds: [assignedPricingId, ...managerIds, bdRepId].filter((id): id is string => !!id),
+      });
+    }
+
     // Revision request → notify BD creator
     if (normalizeQuotationStatus(newStatus, quotation) === "Needs Revision" && currentUser) {
       const bdRepId = (quotation as any).created_by as string | undefined;
@@ -921,22 +978,30 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
             canAmendRates && quotation.quotation_type !== "contract" ? (
               <UnlockAmendButton onUnlock={onEdit} />
             ) : (
-              <span style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "8px",
-                height: "36px",
-                padding: "0 14px",
-                backgroundColor: "var(--theme-bg-surface)",
-                border: "1px solid var(--theme-border-default)",
-                borderRadius: "6px",
-                fontSize: "13px",
-                fontWeight: 600,
-                color: "var(--theme-status-warning-fg)",
-                whiteSpace: "nowrap",
-              }}>
+              // P4 (UX): a locked quote the viewer can't unlock shows WHY it's
+              // locked and what to do — unlocking stays a manager capability, so
+              // the badge points them there instead of looking like a dead end.
+              <span
+                title={quotation.quotation_type === "contract"
+                  ? "This contract is locked because it's active. Contract amendment isn't available yet."
+                  : "This quotation is locked because it's been completed. Ask a Pricing manager to unlock it for editing."}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  height: "36px",
+                  padding: "0 14px",
+                  backgroundColor: "var(--theme-bg-surface)",
+                  border: "1px solid var(--theme-border-default)",
+                  borderRadius: "6px",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  color: "var(--theme-status-warning-fg)",
+                  whiteSpace: "nowrap",
+                  cursor: "help",
+                }}>
                 <Lock size={14} />
-                Locked
+                {quotation.quotation_type === "contract" ? "Locked" : "Locked — manager unlock to edit"}
               </span>
             )
           )}
@@ -1214,7 +1279,7 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
               }}
             >
               <Edit3 size={14} />
-              Add Pricing
+              {hasPricingEntered ? "Review & Submit Pricing" : "Add Pricing"}
             </button>
           )}
 

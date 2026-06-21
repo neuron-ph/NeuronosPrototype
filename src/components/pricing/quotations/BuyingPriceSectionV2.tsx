@@ -746,10 +746,10 @@ export function BuyingPriceSectionV2({
                                         {/* Currency */}
                                         <div style={{ fontSize: "12px" }}>
                                           <CustomDropdown
-                                            value={item.currency || "USD"}
+                                            value={item.currency || currency || "PHP"}
                                             onChange={(value) => handleFieldChange(item._categoryId, item.id, 'currency', value)}
                                             options={currencyOptions}
-                                            placeholder="USD"
+                                            placeholder={currency || "PHP"}
                                             size="sm"
                                             disabled={viewMode}
                                           />
