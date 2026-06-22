@@ -6,6 +6,11 @@ import { supabase } from "../utils/supabase/client";
 
 const APPROX_COUNT = "planned" as any;
 
+// Max ticket rows previewed on the dashboard "My Work / Inbox" card. The card is
+// a preview — the full list lives on the Inbox page behind the "All →" link — so
+// this caps the card's height instead of letting it grow unbounded.
+const INBOX_CARD_LIMIT = 8;
+
 // ─── Shared types ─────────────────────────────────────────────────────────────
 
 export interface TicketItem {
@@ -71,6 +76,8 @@ export interface DeptQueueData {
 
 export async function fetchMyWork(
   dept: string,
+  userId: string,
+  role: string,
   gates: { holdsManagerGate: boolean; holdsAccountingGate: boolean },
 ): Promise<MyWorkData> {
   // NEU-012 Phase 5b: approval queues come from EV grants, not role strings —
@@ -89,20 +96,33 @@ export async function fetchMyWork(
         .limit(5)
     : Promise.resolve({ data: [] as EVoucherItem[] });
 
+  // Inbox card mirrors the real Inbox (Open view): use the canonical audience RPC
+  // so it picks up tickets addressed to the user individually, assigned to them,
+  // dept-routed to a dept they manage, or their own threads with replies — NOT
+  // just dept-routed 'to' tickets (which a staff user can't even read).
   const [{ data: ticketRows }, { data: evRows }] = await Promise.all([
-    supabase
-      .from("tickets")
-      .select("id, subject, type, priority, linked_record_type, created_at, ticket_participants!inner(participant_dept, role)")
-      .eq("status", "open")
-      .eq("ticket_participants.participant_dept", dept)
-      .eq("ticket_participants.role", "to")
-      .order("created_at", { ascending: false })
-      .limit(8),
+    supabase.rpc("get_inbox_threads", {
+      p_user_id: userId,
+      p_dept: dept || "",
+      p_role: role || "staff",
+    }),
     evQuery,
   ]);
 
+  // get_inbox_threads returns newest-activity first; cap to the preview length.
+  const tickets = ((ticketRows ?? []) as Array<Record<string, any>>)
+    .slice(0, INBOX_CARD_LIMIT)
+    .map((t) => ({
+      id: t.id,
+      subject: t.subject,
+      type: t.type,
+      priority: t.priority ?? "normal",
+      linked_record_type: t.linked_record_type,
+      created_at: t.created_at,
+    })) as TicketItem[];
+
   return {
-    tickets: (ticketRows ?? []) as TicketItem[],
+    tickets,
     approvals: (evRows ?? []) as EVoucherItem[],
   };
 }

@@ -417,9 +417,11 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
   }, [fetchUnreadCount]);
 
   // Inbox ping — realtime toast + instant red-dot refresh. Lives here (always
-  // mounted) so the ping fires on any page, not just the inbox. Supabase realtime
-  // RLS only delivers events for tickets this user can see, so a toast = a real
-  // inbound item addressed to them (incl. dept-routed/assigned via migration 223).
+  // mounted) so the ping fires on any page, not just the inbox. Realtime delivers
+  // events for any ticket the user can READ — but readability is broad (the
+  // visibility dial lets Executives/managers see every ticket), which is NOT the
+  // same as "addressed to me". So the toast is gated on inbox AUDIENCE membership
+  // (current_user_is_ticket_audience, migration 225), mirroring get_inbox_threads.
   const pingedMsgIds = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!SHOW_INBOX_PING || !user?.id) return;
@@ -436,6 +438,15 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
         if (!m?.id || pingedMsgIds.current.has(m.id)) return;
         pingedMsgIds.current.add(m.id);
         if (m.is_system || !m.sender_id || m.sender_id === user.id || !m.ticket_id) return;
+        // Only ping for tickets actually addressed to this user (to/cc participant,
+        // assignee, dept-manager, or creator) — NOT merely readable. Broad-visibility
+        // roles can SELECT every ticket, so a plain readability check would toast for
+        // company-wide traffic that never lands in their inbox.
+        const { data: isAudience } = await supabase.rpc(
+          "current_user_is_ticket_audience",
+          { p_ticket_id: m.ticket_id }
+        );
+        if (!isAudience) return;
         // The ticket subject already leads with the event + reference, which reads
         // far faster than the raw message body — drive the toast from it.
         const { data: t } = await supabase
