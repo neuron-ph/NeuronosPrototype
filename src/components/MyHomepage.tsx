@@ -382,6 +382,70 @@ function PanelHeader({ title, action }: { title: string; action?: React.ReactNod
   );
 }
 
+// ─── ScrollFade ───────────────────────────────────────────────────────────────
+// Scrollable region that mirrors the dashboard's scroll affordance: hidden
+// scrollbar + top/bottom fade overlays that appear only when there's more content
+// to scroll toward. Fades use the panel's elevated background so they blend in.
+// Pass `maxHeight` to cap a content-sized list, or `fill` to fill a flex parent.
+function ScrollFade({
+  children,
+  className = "",
+  maxHeight,
+  fill = false,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  maxHeight?: number | string;
+  fill?: boolean;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [atTop, setAtTop] = useState(true);
+  const [atBottom, setAtBottom] = useState(true);
+
+  const update = () => {
+    const el = ref.current;
+    if (!el) return;
+    setAtTop(el.scrollTop <= 0);
+    setAtBottom(Math.ceil(el.scrollTop + el.clientHeight) >= el.scrollHeight);
+  };
+
+  // Recompute after every render so adding/removing rows re-evaluates the fades.
+  useEffect(() => { update(); });
+  useEffect(() => {
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
+  return (
+    <div className={`relative min-h-0 ${fill ? "flex-1" : ""} ${className}`}>
+      <div
+        className="absolute top-0 left-0 right-0 z-10 pointer-events-none transition-opacity duration-200"
+        style={{
+          height: 24,
+          background: "linear-gradient(to bottom, var(--neuron-bg-elevated), transparent)",
+          opacity: atTop ? 0 : 1,
+        }}
+      />
+      <div
+        className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none transition-opacity duration-200"
+        style={{
+          height: 28,
+          background: "linear-gradient(to top, var(--neuron-bg-elevated), transparent)",
+          opacity: atBottom ? 0 : 1,
+        }}
+      />
+      <div
+        ref={ref}
+        onScroll={update}
+        className={`overflow-y-auto scrollbar-hide ${fill ? "h-full" : ""}`}
+        style={maxHeight != null ? { maxHeight } : undefined}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 // ─── Todo Panel ───────────────────────────────────────────────────────────────
 
 function TodoPanel({ userId }: { userId: string }) {
@@ -544,7 +608,7 @@ function TodoPanel({ userId }: { userId: string }) {
         )}
       </AnimatePresence>
 
-      <div className="overflow-y-auto flex-1" style={{ minHeight: 0 }}>
+      <ScrollFade fill maxHeight="80vh">
         {loading ? (
           <><SkeletonRow /><SkeletonRow /><SkeletonRow /></>
         ) : open.length === 0 && done.length === 0 ? (
@@ -581,7 +645,7 @@ function TodoPanel({ userId }: { userId: string }) {
             )}
           </>
         )}
-      </div>
+      </ScrollFade>
     </Panel>
   );
 }
@@ -700,7 +764,8 @@ function JumpBackIn({ onNavigate }: { onNavigate: (path: string) => void }) {
           icon={<Clock className="w-5 h-5" />}
         />
       ) : (
-        <div className="py-1">
+        <ScrollFade maxHeight={264}>
+          <div className="py-1">
           {recents.map((r, i) => (
             <button
               key={i}
@@ -735,7 +800,8 @@ function JumpBackIn({ onNavigate }: { onNavigate: (path: string) => void }) {
               </div>
             </button>
           ))}
-        </div>
+          </div>
+        </ScrollFade>
       )}
     </Panel>
   );
@@ -775,7 +841,7 @@ function MyWorkPanel({
           <><SkeletonRow /><SkeletonRow /></>
         ) : tickets.length === 0 ? (
           <EmptyRow
-            message="Inbox is clear — no items waiting."
+            message="Nothing needs your attention."
             icon={<Inbox className="w-5 h-5" />}
             cta="Go to inbox"
             onCta={onViewInbox}
@@ -934,7 +1000,7 @@ function DeptQueuePanel({
       {loading ? (
         <div><SkeletonRow /><SkeletonRow /><SkeletonRow /></div>
       ) : (
-        <div>
+        <ScrollFade maxHeight={360}>
           {/* BD */}
           {dept === "Business Development" && activeTab === "inquiries" && (
             openInquiries.length === 0
@@ -1096,7 +1162,7 @@ function DeptQueuePanel({
               ))}
             </div>
           )}
-        </div>
+        </ScrollFade>
       )}
     </Panel>
   );
@@ -1134,9 +1200,9 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
   const holdsManagerGate = can("my_evouchers", "approve");
   const holdsAccountingGate = can("acct_evouchers", "approve");
   const { data: myWorkData, isLoading: loadingMyWork } = useQuery({
-    queryKey: ["myWork", dept, holdsManagerGate, holdsAccountingGate],
-    queryFn:  () => fetchMyWork(dept, { holdsManagerGate, holdsAccountingGate }),
-    enabled:  !!dept,
+    queryKey: ["myWork", dept, userId, role, holdsManagerGate, holdsAccountingGate],
+    queryFn:  () => fetchMyWork(dept, userId, role, { holdsManagerGate, holdsAccountingGate }),
+    enabled:  !!dept && !!userId,
     staleTime: 2 * 60 * 1000,
   });
 
@@ -1390,10 +1456,15 @@ export function MyHomepage({ currentUser }: MyHomepageProps) {
               variants={panelVariants}
               initial="hidden"
               animate="visible"
-              className="flex flex-col min-h-0 md:col-start-2 md:row-start-1 md:row-span-2"
-              style={{ height: "100%" }}
+              className="relative min-h-0 md:col-start-2 md:row-start-1 md:row-span-2"
             >
-              {authUid && <TodoPanel userId={authUid} />}
+              {/* Absolute on desktop so My Tasks fills (and is bounded by) the left
+                  column's height instead of forcing the grid rows to grow with its
+                  own content. On mobile it flows normally; ScrollFade's maxHeight
+                  keeps it capped. */}
+              <div className="flex flex-col h-full md:absolute md:inset-0">
+                {authUid && <TodoPanel userId={authUid} />}
+              </div>
             </motion.div>
 
             {/* Continue Work — col 1, row 2 */}
