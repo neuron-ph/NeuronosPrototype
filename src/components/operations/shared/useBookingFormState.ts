@@ -96,7 +96,23 @@ export function useBookingFormState(
           if (field.control === 'multi-profile-lookup') {
             merged[field.key] = hydrateProfileValueArray(rawVal, details, field.key, field.profileType ?? '');
           } else {
-            merged[field.key] = hydrateProfileValue(rawVal, details, field.key, field.profileType ?? '');
+            const hydrated = hydrateProfileValue(rawVal, details, field.key, field.profileType ?? '');
+            // The customer's linked id lives in its own top-level column
+            // (bookings.customer_id), not always in the profile snapshot. When the
+            // snapshot carries no id (legacy/manual/plain-string records), recover
+            // it from the column so the round-trip save doesn't null out customer_id
+            // (buildBookingPayload derives customer_id from customer_name.id).
+            if (field.key === 'customer_name' && !hydrated.id) {
+              const colId =
+                typeof merged.customer_id === 'string' && merged.customer_id.trim().length > 0
+                  ? merged.customer_id.trim()
+                  : null;
+              if (colId) {
+                hydrated.id = colId;
+                hydrated.source = 'linked';
+              }
+            }
+            merged[field.key] = hydrated;
           }
           // Also write to storageKey if different so top-level fields resolve correctly
           if (field.storageKey && field.storageKey !== field.key) {
