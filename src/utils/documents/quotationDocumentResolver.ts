@@ -517,8 +517,8 @@ function filterKeysByMode(keys: ServiceDetailKey[], mode: unknown): ServiceDetai
 }
 
 const TRUCKING_KEYS: ServiceDetailKey[] = [
-  { key: "pull_out", label: "Pull-Out Location" },
-  { key: "delivery_address", label: "Delivery Address", width: "wide" },
+  { key: "pull_out", label: "Pull-Out Location", width: "wide" },
+  { key: "delivery_address", label: "Delivery Address", width: "full" },
   { key: "truck_type", label: "Truck Type" },
   { key: "qty", label: "Quantity" },
   { key: "aol_pol", label: "AOL / POL" },
@@ -702,7 +702,7 @@ function buildQuotationDetailsSection(
     title: "Quotation Details",
     layout: "grid",
     fields: [
-      { id: "quotation_title", label: "Quotation Title", value: quote.quotation_name, width: "wide" },
+      { id: "quotation_title", label: "Quotation Title", value: quote.quotation_name, width: "full" },
       { id: "reference", label: "Reference No.", value: args.quoteReference },
       { id: "date_issued", label: "Date Issued", value: quote.created_date || quote.created_at, format: "date" },
       { id: "valid_until", label: "Valid Until", value: args.validUntil, format: "date" },
@@ -711,6 +711,7 @@ function buildQuotationDetailsSection(
         id: "services",
         label: "Services",
         value: Array.isArray(quote.services) && quote.services.length > 0 ? quote.services : undefined,
+        width: "wide",
       },
     ],
   };
@@ -1103,24 +1104,10 @@ export function resolveQuotationPrintableDocument(
       quoteReference,
       projectNumber: project?.project_number,
     }));
-    const shipmentSection = buildShipmentSection(quotation, project);
-    sections.push(shipmentSection);
-
-    // Seed seen-values from shipment fields so service sections skip duplicates.
-    // The map is also mutated by buildServiceSection as it processes each service,
-    // so later services (e.g. Forwarding) also skip values already shown by
-    // earlier services (e.g. Brokerage).
-    const seenValues = new Map<string, string>();
-    for (const f of shipmentSection.fields) {
-      const concept = SHIPMENT_ID_TO_CONCEPT[f.id];
-      if (!concept) continue;
-      const v = normalizeForComparison(
-        Array.isArray(f.value) ? f.value.join(", ") : f.value,
-      );
-      if (v) seenValues.set(concept, v);
-    }
-
-    sections.push(...buildServiceSections(quotation, seenValues));
+    sections.push(buildShipmentSection(quotation, project));
+    // Service-specific detail sections (Brokerage/Forwarding/Trucking/etc.) are
+    // intentionally excluded from the printed spot quotation — only Quotation
+    // Details and Shipment Details are shown (client requirement).
   } else {
     const serviceNames = Array.isArray(quotation.services) && quotation.services.length > 0
       ? quotation.services
