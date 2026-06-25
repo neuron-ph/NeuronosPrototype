@@ -35,10 +35,14 @@ function widthClass(width?: PrintableField["width"]): string {
 function FieldCell({ field }: { field: PrintableField }) {
   const formatted = formatPrintableValue(field.value, field.format, field.currency);
   if (!formatted) return null;
+  // All-caps values read as "shouting"; track them out (caps need air) to calm
+  // them down without altering the client-required casing. Mixed-case values are
+  // left untouched.
+  const isAllCaps = /[A-Za-z]/.test(formatted) && formatted === formatted.toUpperCase();
   return (
     <div className={`p-kv-cell ${widthClass(field.width)}`}>
-      <span className="p-kv-label">{field.label}:</span>
-      <span className="p-kv-value">{formatted}</span>
+      <span className="p-kv-label">{field.label}</span>
+      <span className={`p-kv-value ${isAllCaps ? "p-kv-value--caps" : ""}`}>{formatted}</span>
     </div>
   );
 }
@@ -329,6 +333,7 @@ export const PrintableDocumentHtml = React.forwardRef<HTMLDivElement, PrintableD
               flex-direction: column !important;
               font-size: 8.5pt;
               line-height: 1.25;
+              font-variant-numeric: tabular-nums lining-nums;
           }
           .p-header-top {
               display: flex !important;
@@ -348,19 +353,20 @@ export const PrintableDocumentHtml = React.forwardRef<HTMLDivElement, PrintableD
           .p-ref-item { min-width: 52px !important; text-align: right !important; display: flex !important; flex-direction: column !important; align-items: flex-end !important; }
           .p-ref-label { font-size: 6pt !important; color: #6B7280 !important; text-transform: uppercase !important; font-weight: 700 !important; display: block !important; margin-bottom: 2px !important; line-height: 1.1 !important; }
           .p-ref-value { font-size: 8pt !important; color: #111827 !important; font-weight: 700 !important; line-height: 1.15 !important; }
-          .p-section { margin-top: 6px !important; }
+          .p-section { margin-top: 7px !important; }
           .p-customer-header { font-size: 8pt !important; font-weight: 800 !important; color: #172A4D !important; text-transform: uppercase !important; letter-spacing: 0.05em !important; margin-bottom: 4px !important; }
           .p-customer-grid { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 4px 16px !important; margin-bottom: 6px !important; padding-bottom: 6px !important; border-bottom: 1px dashed #E5E7EB !important; }
           .p-cust-row { display: flex !important; align-items: baseline !important; }
           .p-cust-label { width: 90px !important; flex-shrink: 0 !important; font-size: 7pt !important; color: #6B7280 !important; font-weight: 600 !important; text-transform: uppercase !important; }
           .p-cust-val { font-size: 9pt !important; font-weight: 600 !important; color: #111827 !important; }
-          .p-section-header { font-size: 8pt !important; font-weight: 800 !important; color: #172A4D !important; text-transform: uppercase !important; letter-spacing: 0.04em !important; margin-bottom: 4px !important; padding-bottom: 0 !important; border-bottom: none !important; }
-          .p-kv-grid { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 2px 18px !important; margin-bottom: 5px !important; }
-          .p-kv-cell { display: flex !important; align-items: baseline !important; gap: 6px !important; padding: 1px 0 !important; }
-          .p-kv-wide { grid-column: span 1 !important; }
-          .p-kv-full { grid-column: span 2 !important; }
-          .p-kv-label { font-size: 7pt !important; color: #6B7280 !important; font-weight: 600 !important; text-transform: uppercase !important; white-space: nowrap !important; flex-shrink: 0 !important; }
-          .p-kv-value { font-size: 8pt !important; font-weight: 600 !important; color: #111827 !important; line-height: 1.3 !important; }
+          .p-section-header { font-size: 8pt !important; font-weight: 800 !important; color: #172A4D !important; text-transform: uppercase !important; letter-spacing: 0.06em !important; margin-bottom: 4px !important; padding-bottom: 2px !important; border-bottom: 1px solid #E5E9F0 !important; }
+          .p-kv-grid { display: grid !important; grid-template-columns: repeat(3, 1fr) !important; gap: 4px 18px !important; margin-bottom: 4px !important; align-items: start !important; }
+          .p-kv-cell { display: flex !important; flex-direction: row !important; align-items: baseline !important; gap: 6px !important; padding: 0 !important; min-width: 0 !important; }
+          .p-kv-wide { grid-column: span 2 !important; }
+          .p-kv-full { grid-column: span 3 !important; }
+          .p-kv-label { width: 88px !important; font-size: 6pt !important; color: #475467 !important; font-weight: 700 !important; text-transform: uppercase !important; letter-spacing: 0.03em !important; line-height: 1.1 !important; flex-shrink: 0 !important; }
+          .p-kv-value { font-size: 8pt !important; font-weight: 400 !important; color: #111827 !important; line-height: 1.24 !important; min-width: 0 !important; word-break: break-word !important; }
+          .p-kv-value--caps { letter-spacing: 0.05em !important; }
           .p-table-container { margin: 6px 0 !important; break-inside: auto !important; }
           .p-table-title { font-size: 9pt !important; font-weight: 800 !important; color: #172A4D !important; text-transform: uppercase !important; letter-spacing: 0.05em !important; border-bottom: 1px solid #E5E9F0 !important; padding-bottom: 3px !important; margin-bottom: 5px !important; margin-top: 8px !important; }
           .p-rate-table { width: 100% !important; border-collapse: collapse !important; }

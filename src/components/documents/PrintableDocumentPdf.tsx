@@ -91,16 +91,20 @@ const s = StyleSheet.create({
     fontFamily: "Helvetica-Bold",
     color: "#172A4D",
     textTransform: "uppercase",
-    letterSpacing: 0.4,
+    letterSpacing: 0.6,
     marginBottom: 4,
-    marginTop: 6,
+    marginTop: 7,
+    paddingBottom: 2,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E9F0",
   },
-  gridWrap: { flexDirection: "row", flexWrap: "wrap", marginBottom: 5 },
-  cell: { width: "50%", marginBottom: 2, paddingRight: 8, flexDirection: "row", alignItems: "baseline" },
-  cellWide: { width: "50%", marginBottom: 2, paddingRight: 8, flexDirection: "row", alignItems: "baseline" },
-  cellFull: { width: "100%", marginBottom: 2, flexDirection: "row", alignItems: "baseline" },
-  cellLabel: { fontSize: 7, color: "#6B7280", textTransform: "uppercase", fontFamily: "Helvetica-Bold" },
-  cellValue: { fontSize: 8, fontFamily: "Helvetica-Bold", color: "#111827", marginLeft: 4, flex: 1 },
+  gridWrap: { flexDirection: "row", flexWrap: "wrap", marginBottom: 4 },
+  cell: { width: "33.33%", marginBottom: 3, paddingRight: 8, flexDirection: "row", alignItems: "baseline" },
+  cellWide: { width: "66.66%", marginBottom: 3, paddingRight: 8, flexDirection: "row", alignItems: "baseline" },
+  cellFull: { width: "100%", marginBottom: 3, flexDirection: "row", alignItems: "baseline" },
+  cellLabel: { width: 88, fontSize: 6, color: "#475467", textTransform: "uppercase", fontFamily: "Helvetica-Bold", letterSpacing: 0.2, flexShrink: 0 },
+  cellValue: { fontSize: 8, fontFamily: "Helvetica", color: "#111827", marginLeft: 6, flex: 1, lineHeight: 1.24 },
+  cellValueCaps: { letterSpacing: 0.4 },
 
   table: { marginBottom: 6 },
   tableTitle: {
@@ -358,10 +362,11 @@ function GridSection({ section }: { section: PrintableSection }) {
         {section.fields.map((f) => {
           const formatted = formatPrintableValue(f.value, f.format, f.currency);
           if (!formatted) return null;
+          const isAllCaps = /[A-Za-z]/.test(formatted) && formatted === formatted.toUpperCase();
           return (
             <View style={widthStyle(f.width)} key={f.id}>
-              <Text style={s.cellLabel}>{f.label}: </Text>
-              <Text style={s.cellValue}>{formatted}</Text>
+              <Text style={s.cellLabel}>{f.label}</Text>
+              <Text style={isAllCaps ? [s.cellValue, s.cellValueCaps] : s.cellValue}>{formatted}</Text>
             </View>
           );
         })}
