@@ -14,6 +14,7 @@ import { supabase } from "../../utils/supabase/client";
 import { toast } from "sonner@2.0.3";
 import { BookingCommentsTab } from "../shared/BookingCommentsTab";
 import { BookingChronologicalTab } from "../shared/BookingChronologicalTab";
+import { EntityAttachmentsTab } from "../shared/EntityAttachmentsTab";
 import { assessBookingFinancialState, canTransitionBookingToCancelled, getBookingCancellationStatusMessage } from "../../utils/bookingCancellation";
 import { BookingCancelDeletePanel } from "./shared/BookingCancelDeletePanel";
 import { RequestBillingButton } from "../common/RequestBillingButton";
@@ -36,7 +37,7 @@ interface MarineInsuranceBookingDetailsProps {
   highlightId?: string | null;
 }
 
-type DetailTab = "booking-info" | "billings" | "invoices" | "collections" | "expenses" | "comments" | "chrono";
+type DetailTab = "booking-info" | "billings" | "invoices" | "collections" | "expenses" | "comments" | "chrono" | "attachments";
 
 interface ActivityLogEntry {
   id: string;
@@ -99,6 +100,9 @@ export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, curre
   const canViewExpenses = can("ops_marine_insurance_expenses_tab", "view");
   const canViewChrono = can("ops_marine_insurance_chrono_tab", "view");
   const canViewCommentsTab = can("ops_marine_insurance_comments_tab", "view"); // NEU-019 WG-15
+  const canViewAttachments = can("ops_marine_insurance_attachments_tab", "view");
+  const canUploadAttachments = can("ops_marine_insurance_attachments_tab", "create");
+  const canDeleteAttachments = can("ops_marine_insurance_attachments_tab", "delete");
   const canEditBooking = can("ops_marine_insurance", "edit");
   const canCancelDeleteBooking = canEditBooking || can("ops_marine_insurance", "delete");
   const firstViewableTab: DetailTab = canViewInfo
@@ -113,7 +117,9 @@ export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, curre
             ? "expenses"
             : canViewCommentsTab
               ? "comments"
-              : "chrono";
+              : canViewAttachments
+                ? "attachments"
+                : "chrono";
   const [activeTab, setActiveTab] = useState<DetailTab>(
     (initialTab === "booking-info" && !canViewInfo) || (initialTab === "billings" && !canViewBillings) || (initialTab === "invoices" && !canViewInvoices) || (initialTab === "collections" && !canViewCollections) || (initialTab === "expenses" && !canViewExpenses)
       ? firstViewableTab
@@ -282,6 +288,7 @@ export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, curre
           {canViewExpenses && <button onClick={() => setActiveTab("expenses")} style={tabStyle("expenses")}>Expenses</button>}
           {canViewCommentsTab && <button onClick={() => setActiveTab("comments")} style={tabStyle("comments")}>Comments</button>}
           {canViewChrono && <button onClick={() => setActiveTab("chrono")} style={tabStyle("chrono")}>Chrono</button>}
+          {canViewAttachments && <button onClick={() => setActiveTab("attachments")} style={tabStyle("attachments")}>Attachments</button>}
         </div>
         <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
           <button onClick={() => setShowTimeline(!showTimeline)} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", backgroundColor: showTimeline ? "var(--theme-bg-surface-tint)" : "var(--theme-bg-surface)", border: `1px solid ${showTimeline ? "var(--theme-action-primary-bg)" : "var(--neuron-ui-border)"}`, borderRadius: "6px", fontSize: "13px", fontWeight: 500, color: showTimeline ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-secondary)", cursor: "pointer" }}>
@@ -364,6 +371,7 @@ export function MarineInsuranceBookingDetails({ booking, onBack, onUpdate, curre
           {activeTab === "expenses" && canViewExpenses && <ExpensesTab bookingId={booking.bookingId} bookingNumber={(booking as any).booking_number || booking.bookingId} bookingType="marine-insurance" currentUser={currentUser} highlightId={activeTab === "expenses" ? highlightId : undefined} existingBillingItems={bookingBillingItems} onPendingCountChange={setPendingBillableCount} permissionDoor="ops_marine_insurance_expenses_tab" />}
           {activeTab === "comments" && canViewCommentsTab && <BookingCommentsTab bookingId={booking.bookingId} permissionDoor="ops_marine_insurance_comments_tab" />}
           {activeTab === "chrono" && canViewChrono && <BookingChronologicalTab bookingId={booking.bookingId} permissionDoor="ops_marine_insurance_chrono_tab" />}
+          {activeTab === "attachments" && canViewAttachments && <EntityAttachmentsTab entityId={booking.bookingId} entityType="bookings" currentUser={user ? { id: user.id, name: user.name || "", email: user.email || "", department: user.department || "" } : null} canUpload={canUploadAttachments} canDelete={canDeleteAttachments} />}
         </div>
         {showTimeline && <div style={{ flex: "0 0 35%", borderLeft: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--neuron-pill-inactive-bg)", overflow: "auto" }}><ActivityTimeline activities={activityLog} /></div>}
       </div>

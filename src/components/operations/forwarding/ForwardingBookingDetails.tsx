@@ -10,6 +10,7 @@ import { UnifiedCollectionsTab } from "../../shared/collections/UnifiedCollectio
 import { ExpensesTab } from "../shared/ExpensesTab";
 import { BookingCommentsTab } from "../../shared/BookingCommentsTab";
 import { BookingChronologicalTab } from "../../shared/BookingChronologicalTab";
+import { EntityAttachmentsTab } from "../../shared/EntityAttachmentsTab";
 import { useProjectFinancials } from "../../../hooks/useProjectFinancials";
 import { StatusSelector } from "../../StatusSelector";
 import { useConfidentialAction } from "../../../hooks/useConfidentialAction";
@@ -35,7 +36,7 @@ interface ForwardingBookingDetailsProps {
   highlightId?: string | null;
 }
 
-type DetailTab = "booking-info" | "billings" | "invoices" | "collections" | "expenses" | "comments" | "chrono";
+type DetailTab = "booking-info" | "billings" | "invoices" | "collections" | "expenses" | "comments" | "chrono" | "attachments";
 
 
 // Activity Timeline Data Structure
@@ -86,6 +87,9 @@ export function ForwardingBookingDetails({
   const canViewExpenses = can("ops_forwarding_expenses_tab", "view");
   const canViewChrono = can("ops_forwarding_chrono_tab", "view");
   const canViewCommentsTab = can("ops_forwarding_comments_tab", "view"); // NEU-019 WG-15
+  const canViewAttachments = can("ops_forwarding_attachments_tab", "view");
+  const canUploadAttachments = can("ops_forwarding_attachments_tab", "create");
+  const canDeleteAttachments = can("ops_forwarding_attachments_tab", "delete");
   const canEditBooking = can("ops_forwarding", "edit");
   const canCancelDeleteBooking = canEditBooking || can("ops_forwarding", "delete");
   const firstViewableTab: DetailTab = canViewInfo
@@ -100,7 +104,9 @@ export function ForwardingBookingDetails({
             ? "expenses"
             : canViewCommentsTab
               ? "comments"
-              : "chrono";
+              : canViewAttachments
+                ? "attachments"
+                : "chrono";
   const [activeTab, setActiveTab] = useState<DetailTab>(
     (initialTab === "booking-info" && !canViewInfo) || (initialTab === "billings" && !canViewBillings) || (initialTab === "invoices" && !canViewInvoices) || (initialTab === "collections" && !canViewCollections) || (initialTab === "expenses" && !canViewExpenses)
       ? firstViewableTab
@@ -541,6 +547,33 @@ export function ForwardingBookingDetails({
               Chrono
             </button>
           )}
+          {canViewAttachments && (
+            <button
+              onClick={() => setActiveTab("attachments")}
+              style={{
+                padding: "0 4px",
+                fontSize: "14px",
+                fontWeight: 500,
+                color: activeTab === "attachments" ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-muted)",
+                background: "none",
+                borderTop: "none",
+                borderLeft: "none",
+                borderRight: "none",
+                borderBottom: activeTab === "attachments" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
+                cursor: "pointer",
+                transition: "all 0.2s",
+                height: "100%"
+              }}
+              onMouseEnter={(e) => {
+                if (activeTab !== "attachments") e.currentTarget.style.color = "var(--neuron-ink-secondary)";
+              }}
+              onMouseLeave={(e) => {
+                if (activeTab !== "attachments") e.currentTarget.style.color = "var(--neuron-ink-muted)";
+              }}
+            >
+              Attachments
+            </button>
+          )}
         </div>
 
         {/* Action Buttons - Right Side */}
@@ -728,6 +761,15 @@ export function ForwardingBookingDetails({
           )}
           {activeTab === "chrono" && canViewChrono && (
             <BookingChronologicalTab bookingId={booking.bookingId} permissionDoor="ops_forwarding_chrono_tab" />
+          )}
+          {activeTab === "attachments" && canViewAttachments && (
+            <EntityAttachmentsTab
+              entityId={booking.bookingId}
+              entityType="bookings"
+              currentUser={user ? { id: user.id, name: user.name || "", email: user.email || "", department: user.department || "" } : null}
+              canUpload={canUploadAttachments}
+              canDelete={canDeleteAttachments}
+            />
           )}
         </div>
 
