@@ -30,19 +30,19 @@ export type OthersDoor = "ops" | "pricing";
 interface OthersDoorIds {
   root: ModuleId;
   tabs: { all: ModuleId; my: ModuleId; draft: ModuleId; inProgress: ModuleId; completed: ModuleId; cancelled: ModuleId };
-  detail: { info: ModuleId; billings: ModuleId; invoices: ModuleId; collections: ModuleId; expenses: ModuleId; comments: ModuleId; chrono: ModuleId };
+  detail: { info: ModuleId; billings: ModuleId; invoices: ModuleId; collections: ModuleId; expenses: ModuleId; comments: ModuleId; chrono: ModuleId; attachments: ModuleId };
 }
 
 export const OTHERS_DOOR_IDS: Record<OthersDoor, OthersDoorIds> = {
   ops: {
     root: "ops_others",
     tabs: { all: "ops_others_all_tab", my: "ops_others_my_tab", draft: "ops_others_draft_tab", inProgress: "ops_others_in_progress_tab", completed: "ops_others_completed_tab", cancelled: "ops_others_cancelled_tab" },
-    detail: { info: "ops_others_info_tab", billings: "ops_others_billings_tab", invoices: "ops_others_invoices_tab", collections: "ops_others_collections_tab", expenses: "ops_others_expenses_tab", comments: "ops_others_comments_tab", chrono: "ops_others_chrono_tab" },
+    detail: { info: "ops_others_info_tab", billings: "ops_others_billings_tab", invoices: "ops_others_invoices_tab", collections: "ops_others_collections_tab", expenses: "ops_others_expenses_tab", comments: "ops_others_comments_tab", chrono: "ops_others_chrono_tab", attachments: "ops_others_attachments_tab" },
   },
   pricing: {
     root: "pricing_others",
     tabs: { all: "pricing_others_all_tab", my: "pricing_others_my_tab", draft: "pricing_others_draft_tab", inProgress: "pricing_others_in_progress_tab", completed: "pricing_others_completed_tab", cancelled: "pricing_others_cancelled_tab" },
-    detail: { info: "pricing_others_info_tab", billings: "pricing_others_billings_tab", invoices: "pricing_others_invoices_tab", collections: "pricing_others_collections_tab", expenses: "pricing_others_expenses_tab", comments: "pricing_others_comments_tab", chrono: "pricing_others_chrono_tab" },
+    detail: { info: "pricing_others_info_tab", billings: "pricing_others_billings_tab", invoices: "pricing_others_invoices_tab", collections: "pricing_others_collections_tab", expenses: "pricing_others_expenses_tab", comments: "pricing_others_comments_tab", chrono: "pricing_others_chrono_tab", attachments: "pricing_others_attachments_tab" },
   },
 };
 

@@ -23,6 +23,7 @@ import { logStatusChange } from "../../utils/activityLog";
 import { notifyBookingStatusChange } from "../../utils/notifyBookingStatusChange";
 import { BookingCommentsTab } from "../shared/BookingCommentsTab";
 import { BookingChronologicalTab } from "../shared/BookingChronologicalTab";
+import { EntityAttachmentsTab } from "../shared/EntityAttachmentsTab";
 import { useQuery } from "@tanstack/react-query";
 import { BookingInfoTab } from "./shared/BookingInfoTab";
 
@@ -35,7 +36,7 @@ interface BrokerageBookingDetailsProps {
   highlightId?: string | null;
 }
 
-type DetailTab = "booking-info" | "billings" | "invoices" | "collections" | "expenses" | "comments" | "chrono";
+type DetailTab = "booking-info" | "billings" | "invoices" | "collections" | "expenses" | "comments" | "chrono" | "attachments";
 
 interface ActivityLogEntry {
   id: string;
@@ -117,6 +118,9 @@ export function BrokerageBookingDetails({ booking, onBack, onUpdate, currentUser
   const canViewExpenses = can("ops_brokerage_expenses_tab", "view");
   const canViewChrono = can("ops_brokerage_chrono_tab", "view");
   const canViewCommentsTab = can("ops_brokerage_comments_tab", "view"); // NEU-019 WG-15
+  const canViewAttachments = can("ops_brokerage_attachments_tab", "view");
+  const canUploadAttachments = can("ops_brokerage_attachments_tab", "create");
+  const canDeleteAttachments = can("ops_brokerage_attachments_tab", "delete");
   const canEditBooking = can("ops_brokerage", "edit");
   const canCancelDeleteBooking = canEditBooking || can("ops_brokerage", "delete");
   const firstViewableTab: DetailTab = canViewInfo
@@ -131,7 +135,9 @@ export function BrokerageBookingDetails({ booking, onBack, onUpdate, currentUser
             ? "expenses"
             : canViewCommentsTab
               ? "comments"
-              : "chrono";
+              : canViewAttachments
+                ? "attachments"
+                : "chrono";
   const [activeTab, setActiveTab] = useState<DetailTab>(
     (initialTab === "booking-info" && !canViewInfo) || (initialTab === "billings" && !canViewBillings) || (initialTab === "invoices" && !canViewInvoices) || (initialTab === "collections" && !canViewCollections) || (initialTab === "expenses" && !canViewExpenses)
       ? firstViewableTab
@@ -303,6 +309,7 @@ export function BrokerageBookingDetails({ booking, onBack, onUpdate, currentUser
           {canViewExpenses && <button onClick={() => setActiveTab("expenses")} style={tabStyle("expenses")}>Expenses</button>}
           {canViewCommentsTab && <button onClick={() => setActiveTab("comments")} style={tabStyle("comments")}>Comments</button>}
           {canViewChrono && <button onClick={() => setActiveTab("chrono")} style={tabStyle("chrono")}>Chrono</button>}
+          {canViewAttachments && <button onClick={() => setActiveTab("attachments")} style={tabStyle("attachments")}>Attachments</button>}
         </div>
         <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
           <button onClick={() => setShowTimeline(!showTimeline)} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", backgroundColor: showTimeline ? "var(--theme-bg-surface-tint)" : "var(--theme-bg-surface)", border: `1px solid ${showTimeline ? "var(--theme-action-primary-bg)" : "var(--neuron-ui-border)"}`, borderRadius: "6px", fontSize: "13px", fontWeight: 500, color: showTimeline ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-secondary)", cursor: "pointer", transition: "all 0.2s ease" }}>
@@ -389,6 +396,7 @@ export function BrokerageBookingDetails({ booking, onBack, onUpdate, currentUser
           {activeTab === "expenses" && canViewExpenses && <ExpensesTab bookingId={booking.bookingId} bookingNumber={(booking as any).booking_number || booking.bookingId} bookingType="brokerage" currentUser={currentUser} highlightId={activeTab === "expenses" ? highlightId : undefined} existingBillingItems={bookingBillingItems} onPendingCountChange={setPendingBillableCount} permissionDoor="ops_brokerage_expenses_tab" />}
           {activeTab === "comments" && canViewCommentsTab && <BookingCommentsTab bookingId={booking.bookingId} permissionDoor="ops_brokerage_comments_tab" />}
           {activeTab === "chrono" && canViewChrono && <BookingChronologicalTab bookingId={booking.bookingId} permissionDoor="ops_brokerage_chrono_tab" />}
+          {activeTab === "attachments" && canViewAttachments && <EntityAttachmentsTab entityId={booking.bookingId} entityType="bookings" currentUser={user ? { id: user.id, name: user.name || "", email: user.email || "", department: user.department || "" } : null} canUpload={canUploadAttachments} canDelete={canDeleteAttachments} />}
         </div>
         {showTimeline && <div style={{ flex: "0 0 35%", borderLeft: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--neuron-pill-inactive-bg)", overflow: "auto" }}><ActivityTimeline activities={activityLog} /></div>}
       </div>

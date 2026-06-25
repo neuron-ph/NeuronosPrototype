@@ -247,6 +247,13 @@ export const APPLICABLE_ACTIONS: Record<ModuleId, readonly ActionId[]> = {
   ops_others_expenses_tab: ["view", "create", "edit"],
   ops_others_comments_tab: ["view", "create"],
   ops_others_chrono_tab: ["view", "create", "edit", "delete"],
+  // NEU: per-service booking attachments tab (view/create/delete, matching every other *_attachments_tab)
+  ops_forwarding_attachments_tab: ["view", "create", "delete"],
+  ops_brokerage_attachments_tab: ["view", "create", "delete"],
+  ops_trucking_attachments_tab: ["view", "create", "delete"],
+  ops_marine_insurance_attachments_tab: ["view", "create", "delete"],
+  ops_others_attachments_tab: ["view", "create", "delete"],
+  pricing_others_attachments_tab: ["view", "create", "delete"],
   ops_projects_all_tab: ["view"],
   ops_projects_active_tab: ["view"],
   ops_projects_completed_tab: ["view"],
