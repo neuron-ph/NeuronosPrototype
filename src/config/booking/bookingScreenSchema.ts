@@ -149,7 +149,7 @@ const SHARED_GENERAL_INFORMATION: SectionDef = {
       label: 'Local Agent',
       control: 'profile-lookup',
       profileType: 'local_agent',
-      required: 'yes',
+      required: 'no',
       storage: 'details',
       showWhen: [{ field: 'service_type', op: 'eq', value: 'Forwarding' }],
     },
@@ -487,7 +487,7 @@ const BROKERAGE_FCL_DETAILS: SectionDef = {
       label: 'Location of Goods',
       control: 'profile-lookup',
       profileType: 'warehouse',
-      required: 'yes',
+      required: 'no',
       storage: 'details',
     },
     {
@@ -587,7 +587,7 @@ const BROKERAGE_LCL_DETAILS: SectionDef = {
       label: 'Location of Goods',
       control: 'profile-lookup',
       profileType: 'warehouse',
-      required: 'yes',
+      required: 'no',
       storage: 'details',
     },
     {
@@ -619,7 +619,7 @@ const BROKERAGE_AIR_DETAILS: SectionDef = {
       label: 'Location of Goods',
       control: 'profile-lookup',
       profileType: 'warehouse',
-      required: 'yes',
+      required: 'no',
       storage: 'details',
     },
     {
@@ -1015,15 +1015,6 @@ const FORWARDING_FCL_DETAILS: SectionDef = {
       storage: 'details',
     },
     {
-      // Spec: Location of Goods — Forwarding FCL Y.
-      key: 'location_of_goods',
-      label: 'Location of Goods',
-      control: 'profile-lookup',
-      profileType: 'warehouse',
-      required: 'yes',
-      storage: 'details',
-    },
-    {
       key: 'cut_off_time',
       label: 'Cut Off Time',
       control: 'datetime',
@@ -1075,14 +1066,6 @@ const FORWARDING_LCL_DETAILS: SectionDef = {
       control: 'profile-lookup',
       profileType: 'warehouse',
       required: 'conditional',
-      storage: 'details',
-    },
-    {
-      key: 'location_of_goods',
-      label: 'Location of Goods',
-      control: 'profile-lookup',
-      profileType: 'warehouse',
-      required: 'yes',
       storage: 'details',
     },
     {
@@ -1145,14 +1128,6 @@ const FORWARDING_AIR_DETAILS: SectionDef = {
       control: 'profile-lookup',
       profileType: 'warehouse',
       required: 'conditional',
-      storage: 'details',
-    },
-    {
-      key: 'location_of_goods',
-      label: 'Location of Goods',
-      control: 'profile-lookup',
-      profileType: 'warehouse',
-      required: 'yes',
       storage: 'details',
     },
     {
