@@ -321,11 +321,11 @@ describe('Shared General Information', () => {
     expect(errors.customs_entry_procedure).toBeDefined();
   });
 
-  it('treats matrix-Yes GI agent fields as required for Forwarding', () => {
+  it('treats overseas_agent as required for Forwarding (local_agent is optional)', () => {
     const context = ctx({ service_type: 'Forwarding' });
     const errors = validateBookingForm({ service_type: 'Forwarding', status: 'Draft' }, 'Forwarding', context);
     expect(errors.overseas_agent).toBeDefined();
-    expect(errors.local_agent).toBeDefined();
+    expect(errors.local_agent).toBeUndefined();
   });
 
   it('Forwarding Forwarder uses profileType: forwarder (not agent)', () => {
