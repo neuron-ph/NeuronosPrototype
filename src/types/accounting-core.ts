@@ -11,6 +11,7 @@ export interface Account {
   type: AccountType | "asset" | "liability" | "equity" | "income" | "expense" | "revenue" | "cost";
   subtype: string; // e.g. "Accounts Receivable"
   sub_type?: string;
+  detail_type?: string; // Neuron cash-flow classification (Operating/Investing/Financing driver). See docs/ACCOUNTING_REFACTOR_PLAN.md
   category?: string | null;
   sub_category?: string | null;
   normal_balance?: "debit" | "credit";

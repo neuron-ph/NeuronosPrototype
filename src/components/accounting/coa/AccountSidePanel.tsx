@@ -4,6 +4,7 @@ import { toast } from "sonner@2.0.3";
 import { motion, AnimatePresence } from "motion/react";
 import { saveAccount, deleteAccount, getAccounts } from "../../../utils/accounting-api";
 import type { Account, AccountType } from "../../../types/accounting-core";
+import { detailTypeGroups, activityLabel, isValidDetailType } from "../../../utils/accountingDetailTypes";
 import { formatMoney, currencyGlyph, FUNCTIONAL_CURRENCY } from "../../../utils/accountingCurrency";
 import { useCurrencies } from "../../../hooks/useCurrencies";
 import { usePermission } from "../../../context/PermissionProvider";
@@ -99,6 +100,11 @@ export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSi
       return;
     }
 
+    if (!formData.is_folder && !formData.detail_type) {
+      toast.error("Please select a detail type");
+      return;
+    }
+
     try {
       setLoading(true);
       
@@ -120,6 +126,7 @@ export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSi
         starting_amount: startingAmount,
         balance,
         subtype: formData.subtype || "",
+        detail_type: formData.detail_type || "",
         is_system: account?.is_system || false,
         is_active: true
       };
@@ -207,7 +214,11 @@ export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSi
                     <button
                       key={type}
                       type="button"
-                      onClick={() => setFormData(prev => ({ ...prev, type }))}
+                      onClick={() => setFormData(prev => ({
+                        ...prev,
+                        type,
+                        detail_type: isValidDetailType(type, prev.detail_type) ? prev.detail_type : "",
+                      }))}
                       className={`px-3 py-2 rounded-lg text-sm font-medium border transition-all capitalize ${
                         formData.type === type
                           ? "bg-[var(--theme-action-primary-bg)]/10 border-[var(--theme-action-primary-bg)] text-[var(--theme-action-primary-bg)]"
@@ -245,17 +256,31 @@ export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSi
                  </div>
               </div>
 
-              {/* Detail Type / Subtype */}
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-[var(--theme-text-primary)]">Detail Type (Subtype)</label>
-                <input
-                  type="text"
-                  value={formData.subtype || ""}
-                  onChange={e => setFormData(prev => ({ ...prev, subtype: e.target.value }))}
-                  className="w-full px-3 py-2.5 rounded-lg border border-[var(--theme-border-default)] focus:outline-none focus:border-[var(--theme-action-primary-bg)] text-sm"
-                  placeholder="e.g. Bank, Accounts Receivable, etc."
-                />
-              </div>
+              {/* Detail Type — drives Cash-Flow classification (grouped by activity) */}
+              {!formData.is_folder && (
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-[var(--theme-text-primary)]">
+                    Detail Type <span className="text-[var(--theme-status-danger-fg)]">*</span>
+                  </label>
+                  <select
+                    value={formData.detail_type || ""}
+                    onChange={e => setFormData(prev => ({ ...prev, detail_type: e.target.value }))}
+                    className="w-full px-3 py-2.5 rounded-lg border border-[var(--theme-border-default)] focus:outline-none focus:border-[var(--theme-action-primary-bg)] text-sm bg-[var(--theme-bg-surface)]"
+                  >
+                    <option value="">Select a detail type…</option>
+                    {detailTypeGroups(formData.type).map(group => (
+                      <optgroup key={group.activity} label={activityLabel(group.activity)}>
+                        {group.items.map(dt => (
+                          <option key={dt.name} value={dt.name}>{dt.name}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                  <p className="text-xs text-[var(--theme-text-muted)]">
+                    Grouped by cash-flow activity — this drives where the account appears on the Statement of Cash Flows.
+                  </p>
+                </div>
+              )}
 
               {/* Starting Amount — leaf accounts only */}
               {!formData.is_folder && (
