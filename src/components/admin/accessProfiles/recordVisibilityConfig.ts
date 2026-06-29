@@ -134,18 +134,16 @@ export const RECORD_TYPE_GROUPS: { group: string; types: RecordType[] }[] = [
 
 export const ALL_RECORD_TYPES: RecordType[] = RECORD_TYPE_GROUPS.flatMap((g) => g.types);
 
-/** A type is editable in the Record Visibility tab when:
- *  - its reads are decoupled from modules (migration 217) — the dial is the
- *    sole record lock, so it stays editable regardless of feature access; OR
- *  - it has NO gating module (e.g. Tickets); OR
- *  - the profile has `view` on any of its gating modules. */
+/** Every record type's reads are now decoupled from feature access (migration
+ *  224 completed the 217 doctrine: module grant = PAGE access, the visibility
+ *  dial = the SOLE lock on reading a row). So every dial is always editable —
+ *  no row is greyed by Feature Access. Records are cross-module, so the dial may
+ *  not hinge on any single module's grant. */
 export function isRecordTypeAccessible(
-  rt: RecordType,
-  resolvedGrants: Record<string, boolean>,
+  _rt: RecordType,
+  _resolvedGrants: Record<string, boolean>,
 ): boolean {
-  if (rt.readsDecoupled) return true;
-  if (rt.gatingModules.length === 0) return true;
-  return rt.gatingModules.some((m) => resolvedGrants[`${m}:view`] === true);
+  return true;
 }
 
 export function dialFor(map: RecordVisibilityMap, key: string): RecordDial {
