@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, createContext, useContext } from "react";
 import { supabase } from "../../utils/supabase/client";
-import { normalizeAccountType, statementSection } from "../../utils/accountingDetailTypes";
+import { normalizeAccountType, statementSection, fetchDetailTypeCatalog, type DetailTypeRow } from "../../utils/accountingDetailTypes";
 import { buildCashFlow, type CashFlowResult, type CashFlowSource } from "../../utils/cashFlow";
 import { motion } from "motion/react";
 import { useUser } from "../../hooks/useUser";
@@ -162,7 +162,8 @@ function classifyByCode(code: string): {
 async function fetchBalances(
   from: string,
   to: string,
-  cumulative: boolean
+  cumulative: boolean,
+  catalog: DetailTypeRow[]
 ): Promise<AccountBalance[]> {
   // Aggregate balances server-side (the DB does the math) — one row per account,
   // instead of pulling every posted journal entry into the browser and summing
@@ -190,7 +191,7 @@ async function fetchBalances(
     let sub_type: string;
     if (acct?.type) {
       type = normalizeAccountType(acct.type);
-      sub_type = statementSection(acct.type, acct.detail_type ?? null);
+      sub_type = statementSection(catalog, acct.type, acct.detail_type ?? null);
     } else {
       const guessed = classifyByCode(row.account_code);
       type = guessed.type;
@@ -214,7 +215,7 @@ async function fetchBalances(
   });
 }
 
-async function fetchCashFlowData(from: string, to: string): Promise<CashFlowResult> {
+async function fetchCashFlowData(from: string, to: string, catalog: DetailTypeRow[]): Promise<CashFlowResult> {
   const [entriesRes, accountsRes] = await Promise.all([
     supabase.from("journal_entries")
       .select("entry_date, description, reference, invoice_id, collection_id, evoucher_id, booking_id, lines")
@@ -223,7 +224,7 @@ async function fetchCashFlowData(from: string, to: string): Promise<CashFlowResu
     supabase.from("accounts").select("id, type, detail_type"),
   ]);
   if (entriesRes.error) throw new Error(entriesRes.error.message);
-  return buildCashFlow((entriesRes.data ?? []) as any, (accountsRes.data ?? []) as any);
+  return buildCashFlow((entriesRes.data ?? []) as any, (accountsRes.data ?? []) as any, catalog);
 }
 
 async function fetchFiling(
@@ -1409,12 +1410,13 @@ export function FinancialStatementsPage() {
     setFetchError(null);
     try {
       const isCumulative = tab === "balance_sheet";
+      const catalog = await fetchDetailTypeCatalog();
       const [period, prior, begin, fil, cf] = await Promise.all([
-        fetchBalances(periodFrom, periodTo, isCumulative),
-        showPrior ? fetchBalances(priorFrom, priorTo, isCumulative) : Promise.resolve([]),
-        tab === "cash_flow" ? fetchBalances(periodFrom, beginTo, true) : Promise.resolve([]),
+        fetchBalances(periodFrom, periodTo, isCumulative, catalog),
+        showPrior ? fetchBalances(priorFrom, priorTo, isCumulative, catalog) : Promise.resolve([]),
+        tab === "cash_flow" ? fetchBalances(periodFrom, beginTo, true, catalog) : Promise.resolve([]),
         fetchFiling(tab, year, month),
-        tab === "cash_flow" ? fetchCashFlowData(periodFrom, periodTo) : Promise.resolve(null),
+        tab === "cash_flow" ? fetchCashFlowData(periodFrom, periodTo, catalog) : Promise.resolve(null),
       ]);
       setBalances(period);
       setPriorBals(prior);

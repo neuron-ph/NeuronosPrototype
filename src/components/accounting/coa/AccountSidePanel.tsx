@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { saveAccount, deleteAccount, getAccounts } from "../../../utils/accounting-api";
 import type { Account, AccountType } from "../../../types/accounting-core";
 import { detailTypeGroups, activityLabel, isValidDetailType } from "../../../utils/accountingDetailTypes";
+import { useAccountDetailTypes } from "../../../hooks/useAccountDetailTypes";
 import { formatMoney, currencyGlyph, FUNCTIONAL_CURRENCY } from "../../../utils/accountingCurrency";
 import { useCurrencies } from "../../../hooks/useCurrencies";
 import { usePermission } from "../../../context/PermissionProvider";
@@ -30,6 +31,7 @@ function allowsForeignCurrency(type: unknown): boolean {
 
 export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSidePanelProps) {
   const { currencies } = useCurrencies();
+  const { catalog } = useAccountDetailTypes();
   // NEU-017: row-click opens this panel for any viewer — hide Save/Delete
   // without the matching acct_coa grant (mirrors the accounts RLS).
   const { can } = usePermission();
@@ -217,7 +219,7 @@ export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSi
                       onClick={() => setFormData(prev => ({
                         ...prev,
                         type,
-                        detail_type: isValidDetailType(type, prev.detail_type) ? prev.detail_type : "",
+                        detail_type: isValidDetailType(catalog, type, prev.detail_type) ? prev.detail_type : "",
                       }))}
                       className={`px-3 py-2 rounded-lg text-sm font-medium border transition-all capitalize ${
                         formData.type === type
@@ -268,7 +270,7 @@ export function AccountSidePanel({ isOpen, onClose, onSave, account }: AccountSi
                     className="w-full px-3 py-2.5 rounded-lg border border-[var(--theme-border-default)] focus:outline-none focus:border-[var(--theme-action-primary-bg)] text-sm bg-[var(--theme-bg-surface)]"
                   >
                     <option value="">Select a detail type…</option>
-                    {detailTypeGroups(formData.type).map(group => (
+                    {detailTypeGroups(catalog, formData.type).map(group => (
                       <optgroup key={group.activity} label={activityLabel(group.activity)}>
                         {group.items.map(dt => (
                           <option key={dt.name} value={dt.name}>{dt.name}</option>

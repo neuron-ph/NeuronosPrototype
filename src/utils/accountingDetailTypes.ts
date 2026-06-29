@@ -1,13 +1,15 @@
-// Detail Type catalog — the finer account label that drives Cash-Flow activity.
+// Detail Type catalog — the finer account label that drives Cash-Flow activity
+// and statement sectioning.
 //
-// Single source of truth for BOTH the account-creation picker (grouped by
-// activity) and (Phase 2) the Cash Flow Statement engine. The per-account
-// classification lives as data on `accounts.detail_type`; this catalog maps
-// each Detail Type → its Cash-Flow activity (universal accounting, ~24 rows).
-// See docs/ACCOUNTING_REFACTOR_PLAN.md
+// The catalog is now DATA: it lives in the `account_detail_types` table and is
+// fetched via fetchDetailTypeCatalog() / the useAccountDetailTypes() hook. The
+// BUILTIN list below is the seed and a guaranteed fallback, so the statements
+// always work even if the table is empty or unreachable.
 //
-// Account Type (the broad 5: Asset/Liability/Equity/Income/Expense) drives
-// statement placement. Detail Type drives Operating/Investing/Financing.
+// Account Type (the broad 5) drives statement placement; Detail Type drives
+// Operating/Investing/Financing. See docs/ACCOUNTING_REFACTOR_PLAN.md
+
+import { supabase } from "./supabase/client";
 
 export type CashFlowActivity =
   | "Cash"
@@ -17,62 +19,55 @@ export type CashFlowActivity =
   | "Financing"
   | "None";
 
-export interface DetailTypeDef {
+export interface DetailTypeRow {
   name: string;
   /** Broad Account Types this Detail Type is valid under (lowercased for matching). */
   accountTypes: string[];
   activity: CashFlowActivity;
+  /** Income Statement / Balance Sheet section this rolls into. */
+  statementSection: string;
 }
 
-export const DETAIL_TYPES: DetailTypeDef[] = [
-  // Cash — the reconciliation target (not an activity)
-  { name: "Cash and Cash Equivalents", accountTypes: ["asset"], activity: "Cash" },
-
-  // Operating — working capital (assets)
-  { name: "Accounts Receivable", accountTypes: ["asset"], activity: "Operating" },
-  { name: "Inventory", accountTypes: ["asset"], activity: "Operating" },
-  { name: "Prepaid Expenses", accountTypes: ["asset"], activity: "Operating" },
-  { name: "Other Current Assets", accountTypes: ["asset"], activity: "Operating" },
-
-  // Operating — working capital (liabilities)
-  { name: "Accounts Payable", accountTypes: ["liability"], activity: "Operating" },
-  { name: "Accrued Expenses", accountTypes: ["liability"], activity: "Operating" },
-  { name: "Taxes Payable", accountTypes: ["liability"], activity: "Operating" },
-  { name: "Deferred Revenue", accountTypes: ["liability"], activity: "Operating" },
-  { name: "Other Current Liabilities", accountTypes: ["liability"], activity: "Operating" },
-
-  // Operating — P&L (feeds net profit)
-  { name: "Revenue", accountTypes: ["income", "revenue"], activity: "Operating" },
-  { name: "Other Income", accountTypes: ["income", "revenue"], activity: "Operating" },
-  { name: "Cost of Services", accountTypes: ["expense", "cost"], activity: "Operating" },
-  { name: "Operating Expense", accountTypes: ["expense"], activity: "Operating" },
-  { name: "Tax Expense", accountTypes: ["expense"], activity: "Operating" },
-  { name: "Interest", accountTypes: ["expense"], activity: "Operating" }, // policy toggle default = Operating
-
-  // Operating — non-cash adjustments (added back / reversed out)
-  { name: "Depreciation & Amortization", accountTypes: ["expense"], activity: "Operating (non-cash adjustments)" },
-  { name: "Loss/Gain on Disposal", accountTypes: ["expense", "income"], activity: "Operating (non-cash adjustments)" },
-  { name: "Unrealized FX Gain/Loss", accountTypes: ["expense", "income", "revenue"], activity: "Operating (non-cash adjustments)" },
-
-  // Investing — long-term assets
-  { name: "Fixed Assets", accountTypes: ["asset"], activity: "Investing" },
-  { name: "Other Non-Current Assets", accountTypes: ["asset"], activity: "Investing" },
-  { name: "Long-term Investments", accountTypes: ["asset"], activity: "Investing" },
-
-  // Financing — long-term debt + equity
-  { name: "Loans / Long-term Debt", accountTypes: ["liability"], activity: "Financing" },
-  { name: "Capital / Contributions", accountTypes: ["equity"], activity: "Financing" },
-  { name: "Dividends / Drawings", accountTypes: ["equity"], activity: "Financing" },
-  { name: "Retained Earnings", accountTypes: ["equity"], activity: "None" }, // carry-over, not a cash flow
+/** Seed + fallback. The live catalog comes from the account_detail_types table. */
+export const BUILTIN_DETAIL_TYPES: DetailTypeRow[] = [
+  { name: "Cash and Cash Equivalents", accountTypes: ["asset"], activity: "Cash", statementSection: "Current Assets" },
+  { name: "Accounts Receivable", accountTypes: ["asset"], activity: "Operating", statementSection: "Current Assets" },
+  { name: "Inventory", accountTypes: ["asset"], activity: "Operating", statementSection: "Current Assets" },
+  { name: "Prepaid Expenses", accountTypes: ["asset"], activity: "Operating", statementSection: "Current Assets" },
+  { name: "Other Current Assets", accountTypes: ["asset"], activity: "Operating", statementSection: "Current Assets" },
+  { name: "Accounts Payable", accountTypes: ["liability"], activity: "Operating", statementSection: "Current Liabilities" },
+  { name: "Accrued Expenses", accountTypes: ["liability"], activity: "Operating", statementSection: "Current Liabilities" },
+  { name: "Taxes Payable", accountTypes: ["liability"], activity: "Operating", statementSection: "Current Liabilities" },
+  { name: "Deferred Revenue", accountTypes: ["liability"], activity: "Operating", statementSection: "Current Liabilities" },
+  { name: "Other Current Liabilities", accountTypes: ["liability"], activity: "Operating", statementSection: "Current Liabilities" },
+  { name: "Revenue", accountTypes: ["income", "revenue"], activity: "Operating", statementSection: "Service Revenue" },
+  { name: "Other Income", accountTypes: ["income", "revenue"], activity: "Operating", statementSection: "Other Income" },
+  { name: "Cost of Services", accountTypes: ["expense", "cost"], activity: "Operating", statementSection: "Cost of Services" },
+  { name: "Operating Expense", accountTypes: ["expense"], activity: "Operating", statementSection: "Operating Expenses" },
+  { name: "Tax Expense", accountTypes: ["expense"], activity: "Operating", statementSection: "Income Tax" },
+  { name: "Interest", accountTypes: ["expense"], activity: "Operating", statementSection: "Other Expenses" },
+  { name: "Depreciation & Amortization", accountTypes: ["expense"], activity: "Operating (non-cash adjustments)", statementSection: "Operating Expenses" },
+  { name: "Loss/Gain on Disposal", accountTypes: ["expense", "income"], activity: "Operating (non-cash adjustments)", statementSection: "Other Expenses" },
+  { name: "Unrealized FX Gain/Loss", accountTypes: ["expense", "income", "revenue"], activity: "Operating (non-cash adjustments)", statementSection: "Other Expenses" },
+  { name: "Fixed Assets", accountTypes: ["asset"], activity: "Investing", statementSection: "Non-Current Assets" },
+  { name: "Other Non-Current Assets", accountTypes: ["asset"], activity: "Investing", statementSection: "Non-Current Assets" },
+  { name: "Long-term Investments", accountTypes: ["asset"], activity: "Investing", statementSection: "Non-Current Assets" },
+  { name: "Loans / Long-term Debt", accountTypes: ["liability"], activity: "Financing", statementSection: "Non-Current Liabilities" },
+  { name: "Capital / Contributions", accountTypes: ["equity"], activity: "Financing", statementSection: "Equity" },
+  { name: "Dividends / Drawings", accountTypes: ["equity"], activity: "Financing", statementSection: "Equity" },
+  { name: "Retained Earnings", accountTypes: ["equity"], activity: "None", statementSection: "Equity" },
 ];
 
-const ACTIVITY_ORDER: CashFlowActivity[] = [
-  "Cash",
-  "Operating",
-  "Operating (non-cash adjustments)",
-  "Investing",
-  "Financing",
-  "None",
+export const CASH_FLOW_ACTIVITIES: CashFlowActivity[] = [
+  "Cash", "Operating", "Operating (non-cash adjustments)", "Investing", "Financing", "None",
+];
+
+/** Section labels a Detail Type can roll into (for the admin picker). */
+export const STATEMENT_SECTIONS: string[] = [
+  "Current Assets", "Non-Current Assets",
+  "Current Liabilities", "Non-Current Liabilities", "Equity",
+  "Service Revenue", "Other Income",
+  "Cost of Services", "Operating Expenses", "Other Expenses", "Income Tax",
 ];
 
 export function activityLabel(a: CashFlowActivity): string {
@@ -86,41 +81,7 @@ export function activityLabel(a: CashFlowActivity): string {
   }
 }
 
-function normalizeType(accountType: string | undefined | null): string {
-  return (accountType ?? "").trim().toLowerCase();
-}
-
-export function detailTypesForAccountType(accountType: string | undefined | null): DetailTypeDef[] {
-  const t = normalizeType(accountType);
-  return DETAIL_TYPES.filter((d) => d.accountTypes.includes(t));
-}
-
-export interface DetailTypeGroup {
-  activity: CashFlowActivity;
-  items: DetailTypeDef[];
-}
-
-/** Detail Types valid for the given Account Type, grouped by Cash-Flow activity (for the picker). */
-export function detailTypeGroups(accountType: string | undefined | null): DetailTypeGroup[] {
-  const items = detailTypesForAccountType(accountType);
-  return ACTIVITY_ORDER
-    .map((activity) => ({ activity, items: items.filter((d) => d.activity === activity) }))
-    .filter((g) => g.items.length > 0);
-}
-
-export function activityForDetailType(name: string | undefined | null): CashFlowActivity | null {
-  if (!name) return null;
-  return DETAIL_TYPES.find((d) => d.name === name)?.activity ?? null;
-}
-
-export function isValidDetailType(accountType: string | undefined | null, name: string | undefined | null): boolean {
-  if (!name) return false;
-  return detailTypesForAccountType(accountType).some((d) => d.name === name);
-}
-
-// ── Statement classification (Phase 1) ───────────────────────────────────────
-// The statements engine reads these from each account's stored labels instead
-// of guessing from the account number.
+// ── Account-type normalization ───────────────────────────────────────────────
 
 export type CanonicalAccountType = "asset" | "liability" | "equity" | "revenue" | "expense";
 
@@ -133,38 +94,84 @@ export function normalizeAccountType(raw: string | undefined | null): CanonicalA
   return "expense";
 }
 
+function lc(accountType: string | undefined | null): string {
+  return (accountType ?? "").trim().toLowerCase();
+}
+
+// ── Catalog lookups (operate on a fetched catalog) ───────────────────────────
+
+export function detailTypesForAccountType(catalog: DetailTypeRow[], accountType: string | undefined | null): DetailTypeRow[] {
+  const t = lc(accountType);
+  // Match income/revenue and expense/cost interchangeably so a Detail Type stays
+  // valid whichever naming an account uses.
+  const syn = t === "income" ? "revenue" : t === "revenue" ? "income"
+    : t === "expense" ? "cost" : t === "cost" ? "expense" : t;
+  return catalog.filter((d) => d.accountTypes.includes(t) || d.accountTypes.includes(syn));
+}
+
+export interface DetailTypeGroup {
+  activity: CashFlowActivity;
+  items: DetailTypeRow[];
+}
+
+/** Detail Types valid for the given Account Type, grouped by Cash-Flow activity (for the picker). */
+export function detailTypeGroups(catalog: DetailTypeRow[], accountType: string | undefined | null): DetailTypeGroup[] {
+  const items = detailTypesForAccountType(catalog, accountType);
+  return CASH_FLOW_ACTIVITIES
+    .map((activity) => ({ activity, items: items.filter((d) => d.activity === activity) }))
+    .filter((g) => g.items.length > 0);
+}
+
+export function activityForDetailType(catalog: DetailTypeRow[], name: string | undefined | null): CashFlowActivity | null {
+  if (!name) return null;
+  return catalog.find((d) => d.name === name)?.activity ?? null;
+}
+
+export function isValidDetailType(catalog: DetailTypeRow[], accountType: string | undefined | null, name: string | undefined | null): boolean {
+  if (!name) return false;
+  return detailTypesForAccountType(catalog, accountType).some((d) => d.name === name);
+}
+
 /**
- * Map an account's stored labels (Account Type + Detail Type) to the section
- * the Income Statement / Balance Sheet group by. The account number is never used.
+ * The statement section (Income Statement / Balance Sheet) an account rolls into,
+ * from its Detail Type. Account number is never used. Falls back by Account Type
+ * for unknown/unlabelled accounts.
  */
 export function statementSection(
+  catalog: DetailTypeRow[],
   accountType: string | undefined | null,
-  detailType: string | undefined | null,
+  name: string | undefined | null,
 ): string {
   const t = normalizeAccountType(accountType);
-  const d = (detailType ?? "").trim();
-
-  if (t === "asset") {
-    return ["Fixed Assets", "Other Non-Current Assets", "Long-term Investments"].includes(d)
-      ? "Non-Current Assets"
-      : "Current Assets";
+  const row = name ? catalog.find((d) => d.name === name) : undefined;
+  if (row) {
+    let section = row.statementSection;
+    // Dual-natured detail types (e.g. Unrealized FX, gain/loss on disposal): on the
+    // income side they belong in Other Income, not Other Expenses.
+    if (t === "revenue" && section === "Other Expenses") section = "Other Income";
+    return section;
   }
-  if (t === "liability") {
-    return d === "Loans / Long-term Debt" ? "Non-Current Liabilities" : "Current Liabilities";
-  }
+  if (t === "asset") return "Current Assets";
+  if (t === "liability") return "Current Liabilities";
   if (t === "equity") return "Equity";
-  if (t === "revenue") {
-    return d === "Revenue" ? "Service Revenue" : "Other Income";
-  }
-  // expense
-  switch (d) {
-    case "Cost of Services": return "Cost of Services";
-    case "Tax Expense": return "Income Tax";
-    case "Interest":
-    case "Loss/Gain on Disposal":
-    case "Unrealized FX Gain/Loss": return "Other Expenses";
-    case "Operating Expense":
-    case "Depreciation & Amortization": return "Operating Expenses";
-    default: return "Operating Expenses";
-  }
+  if (t === "revenue") return "Other Income";
+  return "Operating Expenses";
+}
+
+// ── Fetching the live catalog ────────────────────────────────────────────────
+
+/** Loads the catalog from the DB, falling back to the built-in list if empty/unreachable. */
+export async function fetchDetailTypeCatalog(): Promise<DetailTypeRow[]> {
+  const { data, error } = await supabase
+    .from("account_detail_types")
+    .select("name, account_types, activity, statement_section, sort_order")
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true });
+  if (error || !data || data.length === 0) return BUILTIN_DETAIL_TYPES;
+  return data.map((r: any) => ({
+    name: r.name as string,
+    accountTypes: (r.account_types ?? []) as string[],
+    activity: r.activity as CashFlowActivity,
+    statementSection: r.statement_section as string,
+  }));
 }

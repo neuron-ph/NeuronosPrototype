@@ -10,7 +10,7 @@
 // Every line also carries the journal entries that produced it (`sources`), so the
 // statement can drill down to show its work. See docs/ACCOUNTING_REFACTOR_PLAN.md
 
-import { activityForDetailType, normalizeAccountType, type CashFlowActivity } from "./accountingDetailTypes";
+import { activityForDetailType, normalizeAccountType, type CashFlowActivity, type DetailTypeRow } from "./accountingDetailTypes";
 
 interface RawLine { account_id?: string; debit?: number | string; credit?: number | string; }
 interface RawEntry {
@@ -52,14 +52,14 @@ const sourceLabel = (e: RawEntry): string | null =>
 
 type Group = Map<string, { total: number; sources: CashFlowSource[] }>;
 
-export function buildCashFlow(entries: RawEntry[], accounts: RawAccount[]): CashFlowResult {
+export function buildCashFlow(entries: RawEntry[], accounts: RawAccount[], catalog: DetailTypeRow[]): CashFlowResult {
   interface Meta { type: string; detail: string; activity: CashFlowActivity | null; }
   const meta = new Map<string, Meta>();
   for (const a of accounts) {
     meta.set(a.id, {
       type: normalizeAccountType(a.type),
       detail: a.detail_type ?? "",
-      activity: activityForDetailType(a.detail_type),
+      activity: activityForDetailType(catalog, a.detail_type),
     });
   }
   const M = (id: string | undefined): Meta | undefined => (id ? meta.get(id) : undefined);
