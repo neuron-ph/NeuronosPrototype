@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { usePermission } from "../../../context/PermissionProvider";
-import { Plus, Search, Filter, ChevronDown, ChevronRight, Folder, FileText, MoreHorizontal } from "lucide-react";
+import { Plus, Search, Filter, ChevronDown, ChevronRight, Folder, FileText, MoreHorizontal, Tags } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { getAccounts, seedInitialAccounts } from "../../../utils/accounting-api";
 import { supabase } from "../../../utils/supabase/client";
@@ -10,6 +10,7 @@ import { DataTable, ColumnDef } from "../../common/DataTable";
 import { useUrlSelection } from "../../../hooks/useUrlSelection";
 
 import { AccountLedger } from "./AccountLedger";
+import { DetailTypesTab } from "./DetailTypesTab";
 
 // Extended type for flattened tree
 type FlatAccount = Account & { level: number };
@@ -30,6 +31,7 @@ export function ChartOfAccounts() {
   const canAllTab             = can("accounting_coa_all_tab", "view");
   const canBalanceSheetTab    = can("accounting_coa_balance_sheet_tab", "view");
   const canIncomeStatementTab = can("accounting_coa_income_statement_tab", "view");
+  const canManageDetailTypes  = can("acct_coa", "edit") || can("acct_coa", "create");
 
   const defaultCOATab: "All" | "BalanceSheet" | "IncomeStatement" =
     canAllTab             ? "All" :
@@ -44,7 +46,7 @@ export function ChartOfAccounts() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<"All" | "BalanceSheet" | "IncomeStatement">(defaultCOATab);
+  const [activeTab, setActiveTab] = useState<"All" | "BalanceSheet" | "IncomeStatement" | "DetailTypes">(defaultCOATab);
 
   // Ledger View State
   const [viewMode, setViewMode] = useState<"list" | "ledger">("list");
@@ -392,7 +394,7 @@ export function ChartOfAccounts() {
           
           <div className="flex gap-3">
              {/* NEU-020 DD-17: dead Export button (no onClick) deleted */}
-             {can("acct_coa", "create") && <button
+             {activeTab !== "DetailTypes" && can("acct_coa", "create") && <button
                onClick={handleAddAccount}
                style={{
                   display: "flex",
@@ -421,7 +423,8 @@ export function ChartOfAccounts() {
           </div>
         </div>
 
-        {/* Search Bar - Full Width */}
+        {/* Search Bar — accounts tabs only */}
+        {activeTab !== "DetailTypes" && (
         <div style={{ position: "relative", marginBottom: "20px" }}>
           <Search
             size={18}
@@ -450,19 +453,21 @@ export function ChartOfAccounts() {
             }}
           />
         </div>
+        )}
 
         {/* Tabs */}
         <div style={{ 
           display: "flex", 
           gap: "24px"
         }}>
-          {(["All", "BalanceSheet", "IncomeStatement"] as const).filter((tab) => {
+          {(["All", "BalanceSheet", "IncomeStatement", "DetailTypes"] as const).filter((tab) => {
             if (tab === "All")             return canAllTab;
             if (tab === "BalanceSheet")    return canBalanceSheetTab;
             if (tab === "IncomeStatement") return canIncomeStatementTab;
+            if (tab === "DetailTypes")     return canManageDetailTypes;
             return true;
           }).map((tab) => {
-             const label = tab === "All" ? "All Accounts" : tab === "BalanceSheet" ? "Balance Sheet" : "Income Statement";
+             const label = tab === "All" ? "All Accounts" : tab === "BalanceSheet" ? "Balance Sheet" : tab === "IncomeStatement" ? "Income Statement" : "Detail Types";
              return (
                <button
                  key={tab}
@@ -496,8 +501,9 @@ export function ChartOfAccounts() {
                  {tab === "All" && <FileText size={16} />}
                  {tab === "BalanceSheet" && <Folder size={16} />}
                  {tab === "IncomeStatement" && <FileText size={16} />}
+                 {tab === "DetailTypes" && <Tags size={16} />}
                  {label}
-                 <span
+                 {tab !== "DetailTypes" && <span
                    style={{
                      display: "inline-flex",
                      alignItems: "center",
@@ -510,15 +516,20 @@ export function ChartOfAccounts() {
                      color: activeTab === tab ? "#0F766E" : "#667085"
                    }}
                  >
-                   {tabCounts[tab]}
-                 </span>
+                   {tabCounts[tab as "All" | "BalanceSheet" | "IncomeStatement"]}
+                 </span>}
                </button>
              );
           })}
         </div>
       </div>
 
-      {/* DataTable */}
+      {/* Body */}
+      {activeTab === "DetailTypes" ? (
+        <div className="flex-1 overflow-auto bg-[var(--theme-bg-surface)] p-6">
+          <DetailTypesTab />
+        </div>
+      ) : (
       <div className="flex-1 overflow-auto bg-[var(--theme-bg-surface)] p-6">
         <DataTable
           data={flatAccounts}
@@ -536,6 +547,7 @@ export function ChartOfAccounts() {
           ]}
         />
       </div>
+      )}
 
       {/* Side Panel */}
       <AccountSidePanel

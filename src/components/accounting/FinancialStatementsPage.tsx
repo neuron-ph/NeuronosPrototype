@@ -1,5 +1,8 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, createContext, useContext } from "react";
 import { supabase } from "../../utils/supabase/client";
+import { normalizeAccountType, statementSection, fetchDetailTypeCatalog, type DetailTypeRow } from "../../utils/accountingDetailTypes";
+import { buildCashFlow, type CashFlowResult, type CashFlowSource } from "../../utils/cashFlow";
+import { motion } from "motion/react";
 import { useUser } from "../../hooks/useUser";
 import { usePermission } from "../../context/PermissionProvider";
 import {
@@ -159,56 +162,69 @@ function classifyByCode(code: string): {
 async function fetchBalances(
   from: string,
   to: string,
-  cumulative: boolean
+  cumulative: boolean,
+  catalog: DetailTypeRow[]
 ): Promise<AccountBalance[]> {
-  let q = supabase
-    .from("journal_entries")
-    .select("lines")
-    .eq("status", "posted");
+  // Aggregate balances server-side (the DB does the math) — one row per account,
+  // instead of pulling every posted journal entry into the browser and summing
+  // JSONB lines in JS. The cumulative Balance Sheet was previously unbounded.
+  const [aggRes, accountsRes] = await Promise.all([
+    supabase.rpc("get_account_balances", { p_from: from, p_to: to, p_cumulative: cumulative }),
+    supabase.from("accounts").select("id, type, detail_type"),
+  ]);
+  if (aggRes.error) throw new Error(aggRes.error.message);
+  const aggRows = (aggRes.data ?? []) as {
+    account_id: string; account_code: string; account_name: string;
+    total_debit: number | string; total_credit: number | string;
+  }[];
+  if (!aggRows.length) return [];
 
-  q = cumulative
-    ? q.lte("entry_date", to)
-    : q.gte("entry_date", from).lte("entry_date", to);
+  // Stored account labels (Account Type + Detail Type) drive classification;
+  // classifyByCode is a fallback only, for orphaned lines whose account is gone.
+  const accountMap = new Map<string, { type?: string; detail_type?: string | null }>(
+    (accountsRes.data ?? []).map((a: any) => [a.id as string, { type: a.type, detail_type: a.detail_type }])
+  );
 
-  const { data: entries, error } = await q;
-  if (error) throw new Error(error.message);
-  if (!entries?.length) return [];
-
-  // Aggregate debit/credit totals per account_id directly from journal lines
-  const totals = new Map<string, {
-    debit: number; credit: number; name: string; code: string;
-  }>();
-
-  for (const entry of entries) {
-    for (const line of ((entry.lines ?? []) as JournalLine[])) {
-      if (!line.account_id || !line.account_code) continue;
-      const prev = totals.get(line.account_id) ?? {
-        debit: 0, credit: 0, name: line.account_name, code: line.account_code,
-      };
-      prev.debit  += Number(line.debit)  || 0;
-      prev.credit += Number(line.credit) || 0;
-      totals.set(line.account_id, prev);
+  return aggRows.map((row) => {
+    const acct = accountMap.get(row.account_id);
+    let type: string;
+    let sub_type: string;
+    if (acct?.type) {
+      type = normalizeAccountType(acct.type);
+      sub_type = statementSection(catalog, acct.type, acct.detail_type ?? null);
+    } else {
+      const guessed = classifyByCode(row.account_code);
+      type = guessed.type;
+      sub_type = guessed.sub_type;
     }
-  }
-  if (!totals.size) return [];
-
-  // Classify each account from its code — no second DB call
-  return Array.from(totals.entries()).map(([id, agg]) => {
-    const { type, sub_type, normal_balance } = classifyByCode(agg.code);
-    const isDebitNormal = normal_balance === "debit";
+    const isDebitNormal = type === "asset" || type === "expense";
+    const debit = Number(row.total_debit) || 0;
+    const credit = Number(row.total_credit) || 0;
     return {
-      id,
-      name:           agg.name,
-      code:           agg.code,
+      id:             row.account_id,
+      name:           row.account_name,
+      code:           row.account_code,
       type,
       sub_type,
       category:       "",
-      normal_balance,
-      period_debit:   agg.debit,
-      period_credit:  agg.credit,
-      net_balance:    isDebitNormal ? agg.debit - agg.credit : agg.credit - agg.debit,
+      normal_balance: isDebitNormal ? "debit" : "credit",
+      period_debit:   debit,
+      period_credit:  credit,
+      net_balance:    isDebitNormal ? debit - credit : credit - debit,
     };
   });
+}
+
+async function fetchCashFlowData(from: string, to: string, catalog: DetailTypeRow[]): Promise<CashFlowResult> {
+  const [entriesRes, accountsRes] = await Promise.all([
+    supabase.from("journal_entries")
+      .select("entry_date, description, reference, invoice_id, collection_id, evoucher_id, booking_id, lines")
+      .eq("status", "posted")
+      .gte("entry_date", from).lte("entry_date", to),
+    supabase.from("accounts").select("id, type, detail_type"),
+  ]);
+  if (entriesRes.error) throw new Error(entriesRes.error.message);
+  return buildCashFlow((entriesRes.data ?? []) as any, (accountsRes.data ?? []) as any, catalog);
 }
 
 async function fetchFiling(
@@ -311,12 +327,17 @@ function SubLabel({ label }: { label: string }) {
   );
 }
 
+// Drill-down: lets any AccountRow open the journal entries behind it without
+// threading callbacks through every statement/section layer.
+const DrillContext = createContext<((code: string, name: string) => void) | null>(null);
+
 function AccountRow({
   name, code, amount, priorAmount, showPrior, indent = 2,
 }: {
   name: string; code: string; amount: number;
   priorAmount?: number; showPrior?: boolean; indent?: number;
 }) {
+  const drill = useContext(DrillContext);
   const isNegative = amount < 0;
   const warnNegative =
     isNegative && (code.startsWith("11") || code.startsWith("15") || code.startsWith("16"));
@@ -325,7 +346,9 @@ function AccountRow({
   return (
     <div
       className="flex items-center justify-between px-6 py-[5px] hover:bg-[var(--neuron-state-hover)] transition-colors"
-      style={{ paddingLeft: `${indent * 16}px` }}
+      style={{ paddingLeft: `${indent * 16}px`, cursor: drill ? "pointer" : "default" }}
+      onClick={drill ? () => drill(code, name) : undefined}
+      title={drill ? "View journal entries" : undefined}
     >
       <div className="flex items-center gap-2 min-w-0">
         <span className="text-[11px] font-mono tabular-nums w-10 shrink-0"
@@ -812,7 +835,7 @@ function IncomeStatement({
 }) {
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     revenue: true, other_income: true, cos: true,
-    selling: true, ga: true, other_exp: true, tax: true,
+    opex: true, other_exp: true, tax: true,
   });
   const toggle = (key: string) => setOpenSections((s) => ({ ...s, [key]: !s[key] }));
 
@@ -828,8 +851,7 @@ function IncomeStatement({
   const revenue  = filter("revenue", "Service Revenue");
   const otherInc = filter("revenue", "Other Income");
   const cos      = filter("expense", "Cost of Services");
-  const selling  = filter("expense", "Selling Expenses");
-  const ga       = filter("expense", "General & Administrative");
+  const opex     = filter("expense", "Operating Expenses");
   const otherExp = filter("expense", "Other Expenses");
   const taxExp   = filter("expense", "Income Tax");
 
@@ -837,9 +859,7 @@ function IncomeStatement({
   const totalOtherInc = otherInc.reduce((s, a) => s + a.net_balance, 0);
   const totalCos      = cos.reduce((s, a) => s + a.net_balance, 0);
   const grossProfit   = totalRevenue - totalCos;
-  const totalSelling  = selling.reduce((s, a) => s + a.net_balance, 0);
-  const totalGA       = ga.reduce((s, a) => s + a.net_balance, 0);
-  const totalOpex     = totalSelling + totalGA;
+  const totalOpex     = opex.reduce((s, a) => s + a.net_balance, 0);
   const operatingInc  = grossProfit - totalOpex;
   const totalOtherExp = otherExp.reduce((s, a) => s + a.net_balance, 0);
   const incBeforeTax  = operatingInc + totalOtherInc - totalOtherExp;
@@ -849,9 +869,7 @@ function IncomeStatement({
   const priorTotalRevenue = priorSum(priorFilter("revenue", "Service Revenue"));
   const priorTotalCos     = priorSum(priorFilter("expense", "Cost of Services"));
   const priorGrossProfit  = priorTotalRevenue - priorTotalCos;
-  const priorSelling      = priorSum(priorFilter("expense", "Selling Expenses"));
-  const priorGA           = priorSum(priorFilter("expense", "General & Administrative"));
-  const priorOpex         = priorSelling + priorGA;
+  const priorOpex         = priorSum(priorFilter("expense", "Operating Expenses"));
   const priorOperatingInc = priorGrossProfit - priorOpex;
   const priorOtherInc     = priorSum(priorFilter("revenue", "Other Income"));
   const priorOtherExp     = priorSum(priorFilter("expense", "Other Expenses"));
@@ -911,11 +929,7 @@ function IncomeStatement({
       {renderSection("revenue", "Service Revenue", revenue, "Total Service Revenue", totalRevenue, priorTotalRevenue)}
       {renderSection("cos", "Cost of Services", cos, "Total Cost of Services", totalCos, priorTotalCos)}
       <TotalRow label="Gross Profit" amount={grossProfit} highlight />
-      {renderSection("selling", "Selling Expenses", selling, "Total Selling Expenses", totalSelling, priorSelling)}
-      {renderSection("ga", "General & Administrative", ga, "Total G&A Expenses", totalGA, priorGA)}
-      {(showEmpty || selling.length > 0 || ga.length > 0) && (
-        <SubtotalRow label="Total Operating Expenses" amount={totalOpex} priorAmount={priorOpex} showPrior={showPrior} />
-      )}
+      {renderSection("opex", "Operating Expenses", opex, "Total Operating Expenses", totalOpex, priorOpex)}
       <TotalRow label="Operating Income" amount={operatingInc} highlight />
       {renderSection("other_income", "Other Income", otherInc, "Total Other Income", totalOtherInc, priorOtherInc)}
       {renderSection("other_exp", "Other Expenses", otherExp, "Total Other Expenses", totalOtherExp, priorOtherExp)}
@@ -1063,57 +1077,205 @@ function BalanceSheetReport({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Journal drill-down (Phase 3 — transparency)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function JournalDrillDown({
+  code, name, from, to, onClose,
+}: { code: string; name: string; from?: string; to: string; onClose: () => void }) {
+  const [rows, setRows] = useState<{ entry: any; line: any }[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      let q = supabase.from("journal_entries").select("*").eq("status", "posted")
+        .lte("entry_date", to).order("entry_date", { ascending: true });
+      if (from) q = q.gte("entry_date", from);
+      const { data } = await q;
+      const out: { entry: any; line: any }[] = [];
+      for (const e of (data ?? []) as any[]) {
+        for (const l of (e.lines ?? [])) {
+          if (l.account_code === code) out.push({ entry: e, line: l });
+        }
+      }
+      if (!cancelled) { setRows(out); setLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [code, from, to]);
+
+  const totalDebit  = rows.reduce((s, r) => s + (Number(r.line.debit) || 0), 0);
+  const totalCredit = rows.reduce((s, r) => s + (Number(r.line.credit) || 0), 0);
+
+  const sourceLabel = (e: any) =>
+    e.invoice_id ? "Invoice" : e.collection_id ? "Collection"
+      : e.evoucher_id ? "E-Voucher" : e.booking_id ? "Booking" : null;
+
+  return (
+    <>
+      <motion.div onClick={onClose} className="fixed inset-0 z-40" style={{ backgroundColor: "rgba(0,0,0,0.35)" }}
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.18 }} />
+      <motion.div className="fixed inset-y-0 right-0 z-50 flex flex-col" style={{ width: 520, maxWidth: "92vw",
+        backgroundColor: "var(--neuron-bg-elevated)", borderLeft: "1px solid var(--neuron-ui-border)" }}
+        initial={{ x: "100%" }} animate={{ x: 0 }} transition={{ type: "spring", damping: 30, stiffness: 300 }}>
+        <div className="px-6 py-5 flex items-start justify-between" style={{ borderBottom: "1px solid var(--neuron-ui-border)" }}>
+          <div>
+            <div className="text-[11px] font-mono" style={{ color: "var(--neuron-ink-muted)" }}>{code}</div>
+            <div className="text-[15px] font-semibold" style={{ color: "var(--neuron-ink-primary)" }}>{name}</div>
+            <div className="text-[12px] mt-0.5" style={{ color: "var(--neuron-ink-muted)" }}>
+              {rows.length} journal {rows.length === 1 ? "entry" : "entries"} in this period
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-[var(--neuron-state-hover)]">
+            <X size={18} style={{ color: "var(--neuron-ink-muted)" }} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="px-6 py-8 text-[13px]" style={{ color: "var(--neuron-ink-muted)" }}>Loading…</div>
+          ) : rows.length === 0 ? (
+            <div className="px-6 py-8 text-[13px]" style={{ color: "var(--neuron-ink-muted)" }}>
+              No journal entries for this account in the period.
+            </div>
+          ) : rows.map((r, i) => {
+            const dr = Number(r.line.debit) || 0;
+            const cr = Number(r.line.credit) || 0;
+            const src = sourceLabel(r.entry);
+            return (
+              <div key={i} className="px-6 py-3" style={{ borderBottom: "1px solid var(--neuron-ui-border)" }}>
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px]" style={{ color: "var(--neuron-ink-muted)" }}>
+                    {String(r.entry.entry_date ?? "").slice(0, 10)}
+                  </span>
+                  <span className="text-[13px] tabular-nums" style={{ color: "var(--neuron-ink-primary)" }}>
+                    {dr > 0 ? `Dr ${php(dr)}` : `Cr ${php(cr)}`}
+                  </span>
+                </div>
+                <div className="text-[13px] mt-0.5" style={{ color: "var(--neuron-ink-primary)" }}>
+                  {r.entry.description || r.line.description || "—"}
+                </div>
+                <div className="flex items-center gap-2 mt-1">
+                  {r.entry.reference && (
+                    <span className="text-[11px]" style={{ color: "var(--neuron-ink-muted)" }}>{r.entry.reference}</span>
+                  )}
+                  {src && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded"
+                      style={{ backgroundColor: "var(--neuron-bg-page)", color: "var(--neuron-brand-green)" }}>{src}</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="px-6 py-4 flex items-center justify-between"
+          style={{ borderTop: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--neuron-bg-page)" }}>
+          <span className="text-[12px] font-semibold" style={{ color: "var(--neuron-ink-primary)" }}>Period total</span>
+          <span className="text-[13px] font-semibold tabular-nums" style={{ color: "var(--neuron-ink-primary)" }}>
+            Dr {php(totalDebit)} · Cr {php(totalCredit)}
+          </span>
+        </div>
+      </motion.div>
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Cash Flow Statement
 // ─────────────────────────────────────────────────────────────────────────────
 
-function CashFlowStatement({
-  periodBalances, beginBalances, period, showEmpty,
-}: { periodBalances: AccountBalance[]; beginBalances: AccountBalance[]; period: string; showEmpty: boolean }) {
-  const totalRevenue  = periodBalances.filter((a) => a.type === "revenue").reduce((s, a) => s + a.net_balance, 0);
-  const totalExpenses = periodBalances.filter((a) => a.type === "expense").reduce((s, a) => s + a.net_balance, 0);
-  const netIncome     = totalRevenue - totalExpenses;
-
-  const depreciationExp = periodBalances.find((a) => a.code === DEPRECIATION_ACCOUNT);
-  const depreciation    = depreciationExp?.net_balance ?? 0;
-
-  function getBalance(arr: AccountBalance[], code: string) {
-    return arr.find((a) => a.code === code)?.net_balance ?? 0;
-  }
-  function getNetChange(codes: string[], sign: 1 | -1) {
-    return codes.reduce((s, code) => {
-      return s + sign * (getBalance(periodBalances, code) - getBalance(beginBalances, code));
-    }, 0);
-  }
-
-  const arChange  = getNetChange(AR_ACCOUNTS, -1);
-  const apChange  = getNetChange(AP_ACCOUNTS, 1);
-  const operatingCashFlow = netIncome + depreciation + arChange + apChange;
-
-  const investingCodes = ["1500","1520","1540","1600"];
-  const investingFlow  = getNetChange(investingCodes, -1);
-
-  const loanChange     = getNetChange(["2500"], 1);
-  const drawingsChange = -(getBalance(periodBalances, "3300"));
-  const capitalChange  = getBalance(periodBalances, "3000");
-  const financingFlow  = loanChange + drawingsChange + capitalChange;
-
-  const netCashChange = operatingCashFlow + investingFlow + financingFlow;
-
-  if (!periodBalances.length) return <EmptyState message={`No journal entries found for ${period}.`} />;
-
-  const CashRow = ({ label, amount, indent = false }: { label: string; amount: number; indent?: boolean }) => (
-    <div className="flex items-center justify-between py-[5px] hover:bg-[var(--neuron-state-hover)] transition-colors"
-      style={{ paddingLeft: indent ? "40px" : "24px", paddingRight: "24px" }}>
-      <span className="text-[13px]" style={{ color: "var(--neuron-ink-primary)" }}>{label}</span>
-      <span className="text-[13px] tabular-nums"
-        style={{ color: amount < 0 ? "var(--neuron-semantic-danger)" : "var(--neuron-ink-primary)" }}>
-        {amount < 0 ? `(${php(Math.abs(amount))})` : php(amount)}
-      </span>
-    </div>
+function CashFlowDrillDown({
+  label, sources, onClose,
+}: { label: string; sources: CashFlowSource[]; onClose: () => void }) {
+  const total = sources.reduce((s, r) => s + r.amount, 0);
+  return (
+    <>
+      <motion.div onClick={onClose} className="fixed inset-0 z-40" style={{ backgroundColor: "rgba(0,0,0,0.35)" }}
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.18 }} />
+      <motion.div className="fixed inset-y-0 right-0 z-50 flex flex-col" style={{ width: 520, maxWidth: "92vw",
+        backgroundColor: "var(--neuron-bg-elevated)", borderLeft: "1px solid var(--neuron-ui-border)" }}
+        initial={{ x: "100%" }} animate={{ x: 0 }} transition={{ type: "spring", damping: 30, stiffness: 300 }}>
+        <div className="px-6 py-5 flex items-start justify-between" style={{ borderBottom: "1px solid var(--neuron-ui-border)" }}>
+          <div>
+            <div className="text-[15px] font-semibold" style={{ color: "var(--neuron-ink-primary)" }}>{label}</div>
+            <div className="text-[12px] mt-0.5" style={{ color: "var(--neuron-ink-muted)" }}>
+              {sources.length} contributing {sources.length === 1 ? "entry" : "entries"}
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-[var(--neuron-state-hover)]">
+            <X size={18} style={{ color: "var(--neuron-ink-muted)" }} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {sources.length === 0 ? (
+            <div className="px-6 py-8 text-[13px]" style={{ color: "var(--neuron-ink-muted)" }}>No contributing entries.</div>
+          ) : sources.map((s, i) => (
+            <div key={i} className="px-6 py-3" style={{ borderBottom: "1px solid var(--neuron-ui-border)" }}>
+              <div className="flex items-center justify-between">
+                <span className="text-[12px]" style={{ color: "var(--neuron-ink-muted)" }}>{s.date}</span>
+                <span className="text-[13px] tabular-nums"
+                  style={{ color: s.amount < 0 ? "var(--neuron-semantic-danger)" : "var(--neuron-ink-primary)" }}>
+                  {s.amount < 0 ? `(${php(Math.abs(s.amount))})` : php(s.amount)}
+                </span>
+              </div>
+              <div className="text-[13px] mt-0.5" style={{ color: "var(--neuron-ink-primary)" }}>{s.description || "—"}</div>
+              <div className="flex items-center gap-2 mt-1">
+                {s.reference && <span className="text-[11px]" style={{ color: "var(--neuron-ink-muted)" }}>{s.reference}</span>}
+                {s.source && <span className="text-[10px] px-1.5 py-0.5 rounded"
+                  style={{ backgroundColor: "var(--neuron-bg-page)", color: "var(--neuron-brand-green)" }}>{s.source}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="px-6 py-4 flex items-center justify-between"
+          style={{ borderTop: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--neuron-bg-page)" }}>
+          <span className="text-[12px] font-semibold" style={{ color: "var(--neuron-ink-primary)" }}>Total</span>
+          <span className="text-[13px] font-semibold tabular-nums"
+            style={{ color: total < 0 ? "var(--neuron-semantic-danger)" : "var(--neuron-ink-primary)" }}>
+            {total < 0 ? `(${php(Math.abs(total))})` : php(total)}
+          </span>
+        </div>
+      </motion.div>
+    </>
   );
+}
 
-  const hasInvesting  = showEmpty || investingFlow !== 0;
-  const hasFinancing  = showEmpty || loanChange !== 0 || capitalChange !== 0 || drawingsChange !== 0;
+function CashFlowStatement({
+  result, period, showEmpty,
+}: { result: CashFlowResult | null; period: string; showEmpty: boolean }) {
+  const [cfDrill, setCfDrill] = useState<{ label: string; sources: CashFlowSource[] } | null>(null);
+  if (!result || result.entryCount === 0) {
+    return <EmptyState message={`No journal entries found for ${period}.`} />;
+  }
+
+  const {
+    netIncome, netIncomeSources, nonCash, workingCapital, operatingTotal,
+    investing, investingTotal, financing, financingTotal,
+    netChange, actualCashChange, difference, reconciled,
+  } = result;
+
+  const CashRow = ({ label, amount, indent = false, sources }: {
+    label: string; amount: number; indent?: boolean; sources?: CashFlowSource[];
+  }) => {
+    const clickable = !!sources && sources.length > 0;
+    return (
+      <div className="flex items-center justify-between py-[5px] hover:bg-[var(--neuron-state-hover)] transition-colors"
+        style={{ paddingLeft: indent ? "40px" : "24px", paddingRight: "24px", cursor: clickable ? "pointer" : "default" }}
+        onClick={clickable ? () => setCfDrill({ label, sources: sources! }) : undefined}
+        title={clickable ? "View the entries behind this line" : undefined}>
+        <span className="text-[13px]" style={{ color: "var(--neuron-ink-primary)" }}>{label}</span>
+        <span className="text-[13px] tabular-nums"
+          style={{ color: amount < 0 ? "var(--neuron-semantic-danger)" : "var(--neuron-ink-primary)" }}>
+          {amount < 0 ? `(${php(Math.abs(amount))})` : php(amount)}
+        </span>
+      </div>
+    );
+  };
+
+  const hasInvesting = showEmpty || investing.length > 0;
+  const hasFinancing = showEmpty || financing.length > 0;
 
   return (
     <div>
@@ -1121,23 +1283,21 @@ function CashFlowStatement({
 
       <SectionDivider />
       <SectionHeader label="Operating Activities" />
-      <CashRow label="Net Income" amount={netIncome} indent />
-      <SubLabel label="Adjustments for non-cash items" />
-      <CashRow label="Depreciation & Amortization" amount={depreciation} indent />
-      <SubLabel label="Changes in working capital" />
-      <CashRow label="(Increase)/Decrease in Receivables" amount={arChange} indent />
-      <CashRow label="Increase/(Decrease) in Payables" amount={apChange} indent />
-      <SubtotalRow label="Net Cash from Operating Activities" amount={operatingCashFlow} />
+      <CashRow label="Net Income" amount={netIncome} indent sources={netIncomeSources} />
+      {nonCash.length > 0 && <SubLabel label="Adjustments for non-cash items" />}
+      {nonCash.map((l) => <CashRow key={l.label} label={l.label} amount={l.amount} indent sources={l.sources} />)}
+      {workingCapital.length > 0 && <SubLabel label="Changes in working capital" />}
+      {workingCapital.map((l) => <CashRow key={l.label} label={l.label} amount={l.amount} indent sources={l.sources} />)}
+      <SubtotalRow label="Net Cash from Operating Activities" amount={operatingTotal} />
 
       {hasInvesting && (
         <>
           <SectionDivider />
           <SectionHeader label="Investing Activities" />
-          {investingFlow !== 0
-            ? <CashRow label="Purchase of Fixed Assets" amount={investingFlow} indent />
-            : <p className="px-10 pb-3 text-[12px] italic" style={{ color: "var(--neuron-ink-muted)" }}>No entries</p>
-          }
-          <SubtotalRow label="Net Cash from Investing Activities" amount={investingFlow} />
+          {investing.length > 0
+            ? investing.map((l) => <CashRow key={l.label} label={l.label} amount={l.amount} indent sources={l.sources} />)
+            : <p className="px-10 pb-3 text-[12px] italic" style={{ color: "var(--neuron-ink-muted)" }}>No entries</p>}
+          <SubtotalRow label="Net Cash from Investing Activities" amount={investingTotal} />
         </>
       )}
 
@@ -1145,17 +1305,47 @@ function CashFlowStatement({
         <>
           <SectionDivider />
           <SectionHeader label="Financing Activities" />
-          {loanChange !== 0    && <CashRow label="Proceeds from / Repayment of Loans" amount={loanChange} indent />}
-          {capitalChange !== 0 && <CashRow label="Capital Contributions" amount={capitalChange} indent />}
-          {drawingsChange !== 0&& <CashRow label="Owner's Drawings" amount={drawingsChange} indent />}
-          {loanChange === 0 && capitalChange === 0 && drawingsChange === 0 && (
-            <p className="px-10 pb-3 text-[12px] italic" style={{ color: "var(--neuron-ink-muted)" }}>No entries</p>
-          )}
-          <SubtotalRow label="Net Cash from Financing Activities" amount={financingFlow} />
+          {financing.length > 0
+            ? financing.map((l) => <CashRow key={l.label} label={l.label} amount={l.amount} indent sources={l.sources} />)
+            : <p className="px-10 pb-3 text-[12px] italic" style={{ color: "var(--neuron-ink-muted)" }}>No entries</p>}
+          <SubtotalRow label="Net Cash from Financing Activities" amount={financingTotal} />
         </>
       )}
 
-      <NetIncomeRow label="Net Increase / (Decrease) in Cash" amount={netCashChange} />
+      <NetIncomeRow label="Net Increase / (Decrease) in Cash" amount={netChange} />
+
+      {/* Reconciliation against the actual movement in Cash and Cash Equivalents */}
+      <div className="flex items-start gap-2 px-6 py-3"
+        style={{
+          borderTop: "1px solid var(--neuron-ui-border)",
+          backgroundColor: reconciled ? "var(--neuron-brand-green-100)" : "var(--neuron-semantic-warn-bg)",
+        }}>
+        {reconciled
+          ? <CheckCircle2 size={14} style={{ color: "var(--neuron-brand-green)", flexShrink: 0, marginTop: 2 }} />
+          : <AlertTriangle size={14} style={{ color: "var(--neuron-semantic-warn)", flexShrink: 0, marginTop: 2 }} />}
+        <div className="flex-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[12px] font-semibold" style={{ color: "var(--neuron-ink-primary)" }}>
+              Actual change in Cash &amp; Cash Equivalents
+            </span>
+            <span className="text-[12px] font-semibold tabular-nums"
+              style={{ color: actualCashChange < 0 ? "var(--neuron-semantic-danger)" : "var(--neuron-ink-primary)" }}>
+              {actualCashChange < 0 ? `(${php(Math.abs(actualCashChange))})` : php(actualCashChange)}
+            </span>
+          </div>
+          <p className="text-[11px] mt-1"
+            style={{ color: reconciled ? "var(--neuron-brand-green)" : "var(--neuron-semantic-warn)" }}>
+            {reconciled
+              ? "Reconciled — the activities above tie to the movement in cash accounts."
+              : `Out of reconciliation by ${php(Math.abs(difference))}. The activities above don't fully explain the change in cash — likely an entry touching cash with an unclassified or mis-labelled counterpart.`}
+          </p>
+        </div>
+      </div>
+
+      {cfDrill && (
+        <CashFlowDrillDown label={cfDrill.label} sources={cfDrill.sources} onClose={() => setCfDrill(null)} />
+      )}
+
       <SignatureBlock />
     </div>
   );
@@ -1189,6 +1379,8 @@ export function FinancialStatementsPage() {
   const [balances, setBalances]   = useState<AccountBalance[]>([]);
   const [priorBals, setPriorBals] = useState<AccountBalance[]>([]);
   const [beginBals, setBeginBals] = useState<AccountBalance[]>([]);
+  const [cashFlow, setCashFlow] = useState<CashFlowResult | null>(null);
+  const [drill, setDrill] = useState<{ code: string; name: string; from?: string; to: string } | null>(null);
   const [loading, setLoading]     = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [loadedAt, setLoadedAt]   = useState<Date | null>(null);
@@ -1218,16 +1410,19 @@ export function FinancialStatementsPage() {
     setFetchError(null);
     try {
       const isCumulative = tab === "balance_sheet";
-      const [period, prior, begin, fil] = await Promise.all([
-        fetchBalances(periodFrom, periodTo, isCumulative),
-        showPrior ? fetchBalances(priorFrom, priorTo, isCumulative) : Promise.resolve([]),
-        tab === "cash_flow" ? fetchBalances(periodFrom, beginTo, true) : Promise.resolve([]),
+      const catalog = await fetchDetailTypeCatalog();
+      const [period, prior, begin, fil, cf] = await Promise.all([
+        fetchBalances(periodFrom, periodTo, isCumulative, catalog),
+        showPrior ? fetchBalances(priorFrom, priorTo, isCumulative, catalog) : Promise.resolve([]),
+        tab === "cash_flow" ? fetchBalances(periodFrom, beginTo, true, catalog) : Promise.resolve([]),
         fetchFiling(tab, year, month),
+        tab === "cash_flow" ? fetchCashFlowData(periodFrom, periodTo, catalog) : Promise.resolve(null),
       ]);
       setBalances(period);
       setPriorBals(prior);
       setBeginBals(begin);
       setFiling(fil);
+      setCashFlow(cf);
       setLoadedAt(new Date());
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : "Failed to load GL data.");
@@ -1506,6 +1701,7 @@ export function FinancialStatementsPage() {
           />
         )}
 
+        <DrillContext.Provider value={(code, name) => setDrill({ code, name, from: tab === "balance_sheet" ? undefined : periodFrom, to: periodTo })}>
         <div className="max-w-5xl mx-auto rounded-lg overflow-hidden"
           style={{ backgroundColor: "var(--neuron-bg-elevated)", border: "1px solid var(--neuron-ui-border)" }}>
           {loading ? (
@@ -1529,13 +1725,22 @@ export function FinancialStatementsPage() {
             />
           ) : tab === "cash_flow" && canCashFlow ? (
             <CashFlowStatement
-              periodBalances={balances}
-              beginBalances={beginBals}
+              result={cashFlow}
               period={periodLabel}
               showEmpty={showEmpty}
             />
           ) : null}
         </div>
+        </DrillContext.Provider>
+        {drill && (
+          <JournalDrillDown
+            code={drill.code}
+            name={drill.name}
+            from={drill.from}
+            to={drill.to}
+            onClose={() => setDrill(null)}
+          />
+        )}
       </div>
     </div>
   );

@@ -1,0 +1,57 @@
+name: e2e
+
+# §3 guardrail — runs the Playwright suite (incl. toolbar-action-visibility,
+# which asserts a detail-view's primary action never hides behind content at any
+# window width) against the DEV Supabase project on every PR.
+#
+# Requires one repo secret: DEV_SUPABASE_ANON_KEY (the dev project's anon/
+# publishable key). Until it's set, the job stays GREEN but skips with a warning
+# so it never (a) spams red X's or (b) silently falls back to the PROD database.
+# Optional repo variable DEV_SUPABASE_URL overrides the default dev URL below.
+
+on:
+  pull_request:
+    branches: [dev, main]
+  workflow_dispatch:
+
+jobs:
+  playwright:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VITE_SUPABASE_URL: ${{ vars.DEV_SUPABASE_URL || 'https://oqermaidggvanahumjmj.supabase.co' }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.DEV_SUPABASE_ANON_KEY }}
+    steps:
+      - name: Guard — dev Supabase key present, and never the prod project
+        run: |
+          if [ -z "${VITE_SUPABASE_ANON_KEY}" ]; then
+            echo "::warning::DEV_SUPABASE_ANON_KEY not set — skipping e2e. Add it in repo Settings → Secrets to enable the toolbar guardrail in CI."
+            echo "SKIP=true" >> "$GITHUB_ENV"
+          elif echo "${VITE_SUPABASE_URL}" | grep -q "ubspbukgcxmzegnomlgi"; then
+            echo "::error::Refusing to run e2e against the PRODUCTION Supabase project."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        if: env.SKIP != 'true'
+      - uses: actions/setup-node@v4
+        if: env.SKIP != 'true'
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install deps
+        if: env.SKIP != 'true'
+        run: npm ci
+      - name: Install Playwright (chromium)
+        if: env.SKIP != 'true'
+        run: npx playwright install --with-deps chromium
+      - name: Run e2e
+        if: env.SKIP != 'true'
+        run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure() && env.SKIP != 'true'
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

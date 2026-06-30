@@ -919,7 +919,10 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
         flexWrap: "wrap",
         gap: "16px"
       }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        {/* Title floor: keep the title at least this wide so a tight header drops
+            the status/assign cluster to its own row instead of squeezing the
+            title into a thin column. */}
+        <div style={{ flex: 1, minWidth: "min(100%, 460px)" }}>
           <button
             onClick={onBack}
             style={{
@@ -945,25 +948,34 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
             Back to Quotations
           </button>
 
-          <h1 style={{
-            fontSize: "24px",
-            fontWeight: 600,
-            color: "var(--neuron-ink-primary)",
-            margin: 0,
-            lineHeight: 1.3,
-            wordBreak: "break-word",
-          }}>
+          <h1
+            title={quotation.quotation_name || "Untitled Quotation"}
+            style={{
+              fontSize: "24px",
+              fontWeight: 600,
+              color: "var(--neuron-ink-primary)",
+              margin: 0,
+              lineHeight: 1.3,
+              wordBreak: "break-word",
+              // Cap the title at two lines so a long name can't push the header
+              // (and the assign cluster beside it) into a tall stack.
+              display: "-webkit-box",
+              WebkitBoxOrient: "vertical",
+              WebkitLineClamp: 2,
+              overflow: "hidden",
+            }}>
             {quotation.quotation_name || "Untitled Quotation"}
-            {quotation.quote_number && (
-              <span style={{ fontSize: "13px", fontWeight: 400, color: "var(--neuron-ink-muted)", marginLeft: "10px", whiteSpace: "nowrap" }}>
-                {quotation.quote_number}
-              </span>
-            )}
           </h1>
+          {quotation.quote_number && (
+            <span style={{ display: "block", marginTop: "2px", fontSize: "13px", fontWeight: 400, color: "var(--neuron-ink-muted)", whiteSpace: "nowrap" }}>
+              {quotation.quote_number}
+            </span>
+          )}
         </div>
 
         {/* Top-right cluster: Status, Locked, Assign to */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0, flexWrap: "wrap" }}>
+        {/* marginLeft:auto keeps it right-aligned even when it wraps to its own row. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0, flexWrap: "wrap", marginLeft: "auto" }}>
           <StatusChangeButton
             quotation={quotation}
             onStatusChange={handleStatusChange}
@@ -1024,6 +1036,56 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
                   placeholder={isAssigning ? "Saving…" : "Select staff"}
                 />
               </div>
+            </div>
+          )}
+
+          {/* Price-by + Confirm — lives in the HEADER beside "Assign to" so picking
+              a staffer only reflows this header cluster. The toolbar below (tabs +
+              pricing/export actions) is never touched by the assign flow. */}
+          {canAssign && pendingAssigneeId && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: "12px", color: "var(--neuron-ink-muted)", whiteSpace: "nowrap" }}>
+                Price by:
+              </span>
+              <CustomDatePicker
+                value={pricingDeadline}
+                onChange={setPricingDeadline}
+                placeholder="Pick a date"
+                minWidth="150px"
+              />
+              <button
+                onClick={() => { setPendingAssigneeId(null); setPricingDeadline(""); }}
+                style={{
+                  fontSize: 13,
+                  padding: "5px 12px",
+                  borderRadius: 6,
+                  border: "1px solid var(--neuron-ui-border)",
+                  background: "transparent",
+                  color: "var(--neuron-ink-muted)",
+                  cursor: "pointer",
+                  height: 34,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => confirmAssign(pendingAssigneeId, pricingDeadline)}
+                disabled={!pricingDeadline || isAssigning}
+                style={{
+                  fontSize: 13,
+                  padding: "5px 14px",
+                  borderRadius: 6,
+                  border: "none",
+                  background: pricingDeadline && !isAssigning ? "var(--theme-action-primary-bg)" : "var(--neuron-ui-border)",
+                  color: pricingDeadline && !isAssigning ? "#fff" : "var(--neuron-ink-muted)",
+                  cursor: pricingDeadline && !isAssigning ? "pointer" : "not-allowed",
+                  fontWeight: 500,
+                  height: 34,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {isAssigning ? "Saving…" : "Confirm Assign"}
+              </button>
             </div>
           )}
         </div>
@@ -1122,56 +1184,6 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
 
         {/* Action Controls - Right Side */}
         <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-
-          {/* Deadline confirmation — shown in toolbar when a pending assignee is selected */}
-          {canAssign && pendingAssigneeId && (
-            <>
-              <span style={{ fontSize: 13, color: "var(--neuron-ink-muted)", whiteSpace: "nowrap" }}>
-                Price by:
-              </span>
-              <CustomDatePicker
-                value={pricingDeadline}
-                onChange={setPricingDeadline}
-                placeholder="Pick a date"
-                minWidth="140px"
-              />
-              <button
-                onClick={() => { setPendingAssigneeId(null); setPricingDeadline(""); }}
-                style={{
-                  fontSize: 13,
-                  padding: "5px 12px",
-                  borderRadius: 6,
-                  border: "1px solid var(--neuron-ui-border)",
-                  background: "transparent",
-                  color: "var(--neuron-ink-muted)",
-                  cursor: "pointer",
-                  height: 34,
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => confirmAssign(pendingAssigneeId, pricingDeadline)}
-                disabled={!pricingDeadline || isAssigning}
-                style={{
-                  fontSize: 13,
-                  padding: "5px 14px",
-                  borderRadius: 6,
-                  border: "none",
-                  background: pricingDeadline && !isAssigning ? "var(--theme-action-primary-bg)" : "var(--neuron-ui-border)",
-                  color: pricingDeadline && !isAssigning ? "#fff" : "var(--neuron-ink-muted)",
-                  cursor: pricingDeadline && !isAssigning ? "pointer" : "not-allowed",
-                  fontWeight: 500,
-                  height: 34,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {isAssigning ? "Saving…" : "Confirm Assign"}
-              </button>
-              {/* Divider */}
-              <div style={{ width: 1, height: 20, background: "var(--neuron-ui-border)" }} />
-            </>
-          )}
 
           {/* Deadline — visible to anyone who can edit pricing when a deadline is set */}
           {canEditPricing && !pendingAssigneeId && (() => {
