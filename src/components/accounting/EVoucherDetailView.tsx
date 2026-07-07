@@ -207,7 +207,28 @@ export function EVoucherDetailView({
             </div>
             <div>
               <div style={fieldLabel}>Paid To (Vendor)</div>
-              <div style={fieldValue}>{evoucher.vendor_name || "—"}</div>
+              <div style={fieldValue}>
+                {evoucher.vendor_name || "—"}
+                {evoucher.vendor_id && (
+                  <span
+                    title="Linked to a registered vendor"
+                    style={{
+                      marginLeft: "8px",
+                      fontSize: "10px",
+                      fontWeight: 600,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.4px",
+                      color: "var(--theme-status-success-fg, #0F766E)",
+                      border: "1px solid var(--theme-status-success-fg, #0F766E)",
+                      borderRadius: "4px",
+                      padding: "1px 5px",
+                      verticalAlign: "middle",
+                    }}
+                  >
+                    Registered
+                  </span>
+                )}
+              </div>
               {evoucher.vendor_contact && (
                 <div style={{ fontSize: "12px", color: "var(--theme-text-muted)", marginTop: "3px" }}>
                   {evoucher.vendor_contact}

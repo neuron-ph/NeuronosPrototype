@@ -24,6 +24,7 @@ import {
 import { resolveExchangeRate } from "../../utils/exchangeRates";
 import { uploadCrmAttachments, formatAttachmentSize, type CrmAttachment } from "../../utils/crmAttachments";
 import { useCurrencies } from "../../hooks/useCurrencies";
+import { useNetworkPartners } from "../../hooks/useNetworkPartners";
 
 interface LineItem {
   id: string;
@@ -131,6 +132,9 @@ export function AddRequestForPaymentPanel({
 
   // Use the custom hook for E-Voucher submission
   const { createDraft, submitForApproval, autoApprove, deleteEVoucher, isSaving } = useEVoucherSubmit(context, currentActor);
+
+  // NEU-046: registered vendors (service_providers) for the Vendor/Payee picker
+  const { partners: vendorPartners } = useNetworkPartners();
   
   // Form state
   const [transactionType, setTransactionType] = useState<PanelTransactionType>("expense");
@@ -148,6 +152,10 @@ export function AddRequestForPaymentPanel({
   const [showAddCategoryDropdown, setShowAddCategoryDropdown] = useState(false);
   const [preferredPayment, setPreferredPayment] = useState<PaymentMethod>("Bank Transfer");
   const [vendor, setVendor] = useState("");
+  // NEU-046: FK to service_providers when the payee is a registered vendor.
+  // Free-text `vendor` remains the display snapshot (and is still used for
+  // non-vendor counterparties like clients/payers/employees).
+  const [vendorId, setVendorId] = useState<string | null>(null);
   const [creditTerms, setCreditTerms] = useState<CreditTerm>("None");
   const [paymentSchedule, setPaymentSchedule] = useState("");
   const [notes, setNotes] = useState("");
@@ -291,6 +299,7 @@ export function AddRequestForPaymentPanel({
 
       if (dataToLoad.payment_method) setPreferredPayment((dataToLoad.payment_method as PaymentMethod) || "Bank Transfer");
       if (dataToLoad.vendor_name) setVendor(dataToLoad.vendor_name || "");
+      if (dataToLoad.vendor_id) setVendorId((dataToLoad.vendor_id as string) || null);
       if (dataToLoad.credit_terms) setCreditTerms((dataToLoad.credit_terms as CreditTerm) || "None");
       if (dataToLoad.due_date) setPaymentSchedule(dataToLoad.due_date || "");
       if (dataToLoad.notes) setNotes(dataToLoad.notes || "");
@@ -531,6 +540,7 @@ export function AddRequestForPaymentPanel({
         totalAmount,
         preferredPayment,
         vendor,
+        vendorId: vendorId || undefined,
         creditTerms,
         paymentSchedule,
         notes,
@@ -582,6 +592,7 @@ export function AddRequestForPaymentPanel({
         totalAmount,
         preferredPayment,
         vendor,
+        vendorId: vendorId || undefined,
         creditTerms,
         paymentSchedule,
         notes,
@@ -628,6 +639,7 @@ export function AddRequestForPaymentPanel({
         totalAmount,
         preferredPayment,
         vendor,
+        vendorId: vendorId || undefined,
         creditTerms,
         paymentSchedule,
         notes,
@@ -662,6 +674,7 @@ export function AddRequestForPaymentPanel({
     setCategorySections([]);
     setPreferredPayment("Bank Transfer");
     setVendor("");
+    setVendorId(null);
     setCreditTerms("None");
     setPaymentSchedule("");
     setNotes("");
@@ -710,6 +723,12 @@ export function AddRequestForPaymentPanel({
   const isCollectionMode = transactionType === "collection";
   const isBillingMode = transactionType === "billing";
   const isPersonal = context === "personal";
+
+  // NEU-046: the counterparty is a registered vendor only when we're paying OUT
+  // to a vendor/payee (expense, direct expense, reimbursement). Clients (billing),
+  // payers (collection), and employees (cash advance) are NOT in the vendor
+  // registry, so those keep the free-text field.
+  const isVendorCounterparty = isExpense || isDirectExpense || isReimbursement;
   
   const isFormValid =
     requestName.trim() !== "" &&
@@ -1245,24 +1264,45 @@ export function AddRequestForPaymentPanel({
                     }}>
                       {vendorLabel} <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
                     </label>
-                    <input
-                      type="text"
-                      required={!isViewMode}
-                      readOnly={isViewMode || isCollectionMode} // Auto-filled in collection mode
-                      value={vendor}
-                      onChange={(e) => !isViewMode && setVendor(e.target.value)}
-                      placeholder={isBillingMode ? "Client Name" : isCollectionMode ? "Payer Name" : "Vendor Name"}
-                      style={{
-                        width: "100%",
-                        padding: "10px 14px",
-                        fontSize: "14px",
-                        border: "1px solid var(--theme-border-default)",
-                        borderRadius: "6px",
-                        outline: "none",
-                        transition: "all 0.2s",
-                        backgroundColor: (isViewMode || isCollectionMode) ? "var(--neuron-pill-inactive-bg)" : "var(--theme-bg-surface)"
-                      }}
-                    />
+                    {!isViewMode && isVendorCounterparty ? (
+                      // NEU-046: registry-only vendor picker. One-off payees must be
+                      // added to the vendor registry (Network Partners) first.
+                      <CustomDropdown
+                        fullWidth
+                        searchable
+                        searchPlaceholder="Search registered vendors..."
+                        placeholder="Select a registered vendor"
+                        triggerAriaLabel={vendorLabel}
+                        value={vendorId || ""}
+                        options={[...vendorPartners]
+                          .sort((a, b) => (a.company_name || "").localeCompare(b.company_name || ""))
+                          .map(p => ({ value: p.id, label: p.company_name || "(unnamed vendor)" }))}
+                        onChange={(id) => {
+                          setVendorId(id || null);
+                          const picked = vendorPartners.find(p => p.id === id);
+                          setVendor(picked?.company_name || "");
+                        }}
+                      />
+                    ) : (
+                      <input
+                        type="text"
+                        required={!isViewMode}
+                        readOnly={isViewMode || isCollectionMode} // Auto-filled in collection mode
+                        value={vendor}
+                        onChange={(e) => !isViewMode && setVendor(e.target.value)}
+                        placeholder={isBillingMode ? "Client Name" : isCollectionMode ? "Payer Name" : "Vendor Name"}
+                        style={{
+                          width: "100%",
+                          padding: "10px 14px",
+                          fontSize: "14px",
+                          border: "1px solid var(--theme-border-default)",
+                          borderRadius: "6px",
+                          outline: "none",
+                          transition: "all 0.2s",
+                          backgroundColor: (isViewMode || isCollectionMode) ? "var(--neuron-pill-inactive-bg)" : "var(--theme-bg-surface)"
+                        }}
+                      />
+                    )}
                   </div>
                 </div>
 
