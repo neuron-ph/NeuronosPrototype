@@ -212,11 +212,12 @@ export function DisburseEVoucherPage() {
   }, []);
 
   // ── Derived ───────────────────────────────────────────────────────────────
-  // NEU-012 Phase 5b: disbursement gate mirrors the evouchers RLS.
+  // NEU-042: disbursement is gated on the dedicated Treasury disburse capability
+  // (split from acct_evouchers:approve, which now covers voucher approval only).
   const { can } = usePermission();
   const canDisburse =
     !!user &&
-    can("acct_evouchers", "approve") &&
+    can("acct_evouchers", "disburse") &&
     evoucher?.status === "pending_accounting";
 
   const isReimb = evoucher ? isReimbursement(evoucher.transaction_type) : false;

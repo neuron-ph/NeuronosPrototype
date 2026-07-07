@@ -114,6 +114,9 @@ export function EVoucherWorkflowPanel({
   const { can } = usePermission();
   const holdsManagerGate = can("my_evouchers", "approve");
   const holdsAccountingGate = can("acct_evouchers", "approve");
+  // NEU-042: disbursement is a distinct Treasury capability, split off from the
+  // approve gate (which now covers CEO approval / verify-and-post / unlock only).
+  const holdsDisburseGate = can("acct_evouchers", "disburse");
 
   // Audit #19: submitting is an edit — DB requires my_evouchers:edit. Gate the
   // button on it so view-only roles (TL/Sup/Mgr with V/VX) don't see a button
@@ -125,7 +128,7 @@ export function EVoucherWorkflowPanel({
   const canRejectAsTL    = holdsManagerGate && currentStatus === "pending_manager";
   const canApproveAsCEO  = holdsAccountingGate && currentStatus === "pending_ceo";
   const canRejectAsCEO   = holdsAccountingGate && currentStatus === "pending_ceo";
-  const canDisburse      = holdsAccountingGate && currentStatus === "pending_accounting";
+  const canDisburse      = holdsDisburseGate && currentStatus === "pending_accounting";
   const canVerifyAndPost = holdsAccountingGate && currentStatus === "pending_verification";
   const canUnlockForCorrection = holdsAccountingGate && currentStatus === "posted";
 
