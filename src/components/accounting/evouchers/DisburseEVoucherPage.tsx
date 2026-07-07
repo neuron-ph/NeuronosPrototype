@@ -49,7 +49,11 @@ const PHP = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" 
 const PAYMENT_METHODS = ["Cash", "Check", "Bank Transfer", "Petty Cash"] as const;
 type PaymentMethod = typeof PAYMENT_METHODS[number];
 
-const isReimbursement = (t: string) => t === "reimbursement";
+// NEU-044: only cash advances / budget requests are true advances (cash out
+// before receipts) — those park in 1150 and go to liquidation. Everything else
+// (reimbursement, expense, direct expense, billable) settles in one step:
+// post the expense and close. No fake liquidation.
+const isAdvanceEvoucher = (t: string) => t === "cash_advance" || t === "budget_request";
 
 const TRANSACTION_TYPE_LABELS: Record<string, string> = {
   expense: "Expense",
@@ -220,7 +224,9 @@ export function DisburseEVoucherPage() {
     can("acct_evouchers", "disburse") &&
     evoucher?.status === "pending_accounting";
 
-  const isReimb = evoucher ? isReimbursement(evoucher.transaction_type) : false;
+  const isAdvanceType = evoucher ? isAdvanceEvoucher(evoucher.transaction_type) : false;
+  // Direct-settle = post the expense and close in one step. The opposite of an advance.
+  const settlesDirectly = !isAdvanceType;
   const refRequired = paymentMethod === "Check" || paymentMethod === "Bank Transfer";
   // The voucher amount is in `evoucher.currency` (USD or PHP); the GL posts
   // in PHP base via the locked `exchange_rate` stamped at creation time.
@@ -257,7 +263,7 @@ export function DisburseEVoucherPage() {
   // For multi-step (cash advance) flows: realized FX between voucher rate and disbursement rate.
   // Reimbursements settle in one step at the disbursement rate, so AP carrying
   // value is by definition the cash value — no FX delta.
-  const realizesFx = isForeignVoucher && !isReimb && hasUsableRate && hasDisbRate;
+  const realizesFx = isForeignVoucher && !settlesDirectly && hasUsableRate && hasDisbRate;
   const fxDelta = realizesFx ? roundMoney(cashBase - apBase) : 0;
   // For E-Voucher disbursement we DR Advances (carrying) and CR Cash (paid).
   // If cash > AP → DR FX Loss (we paid more PHP than we owed).
@@ -298,7 +304,7 @@ export function DisburseEVoucherPage() {
     !!sourceAccountId &&
     !!paymentMethod &&
     (!refRequired || !!reference.trim()) &&
-    (!isReimb || !!expenseAccountId) &&
+    (!settlesDirectly || !!expenseAccountId) &&
     hasUsableRate &&
     (!isForeignVoucher || hasDisbRate) &&
     (!realizesFx || fxAbs < 0.005 || (fxIsGain ? !!fxGainAccount : !!fxLossAccount));
@@ -322,9 +328,13 @@ export function DisburseEVoucherPage() {
           }
         : {};
 
+      // NEU-044: neutral JE description — direct-settle now covers reimbursement,
+      // expense, and direct expense (not just reimbursement).
+      const directDesc = `${TRANSACTION_TYPE_LABELS[evoucher.transaction_type] ?? "Expense"} — ${evoucherNumber}`;
+
       let lines;
-      if (isReimb) {
-        // Reimbursements settle in one step at the disbursement rate — no FX delta.
+      if (settlesDirectly) {
+        // Direct-settle types post in one step at the disbursement rate — no FX delta.
         lines = [
           {
             account_id: expenseAccountId,
@@ -332,7 +342,7 @@ export function DisburseEVoucherPage() {
             account_name: expenseAccountName,
             debit: cashBase,
             credit: 0,
-            description: `Reimbursement — ${evoucherNumber}`,
+            description: directDesc,
             ...(isForeignVoucher ? { foreign_debit: foreignAmount, foreign_credit: 0, ...fxLineMeta(disbursementRate) } : {}),
           },
           {
@@ -341,7 +351,7 @@ export function DisburseEVoucherPage() {
             account_name: sourceAccountName,
             debit: 0,
             credit: cashBase,
-            description: `Reimbursement — ${evoucherNumber}`,
+            description: directDesc,
             ...(isForeignVoucher ? { foreign_debit: 0, foreign_credit: foreignAmount, ...fxLineMeta(disbursementRate) } : {}),
           },
         ];
@@ -420,7 +430,7 @@ export function DisburseEVoucherPage() {
       if (jeError) throw jeError;
 
       // 2. Update evoucher
-      const newStatus = isReimb ? "posted" : "disbursed";
+      const newStatus = settlesDirectly ? "posted" : "disbursed";
       const { error: evError } = await supabase
         .from("evouchers")
         .update({
@@ -434,15 +444,15 @@ export function DisburseEVoucherPage() {
           disbursed_by_user_id: user.id,
           disbursed_by_name: user.name,
           disbursement_remarks: remarks.trim() || null,
-          ...(isReimb ? { closing_journal_entry_id: entryId } : {}),
+          ...(settlesDirectly ? { closing_journal_entry_id: entryId } : {}),
           updated_at: now,
         })
         .eq("id", evoucher.id);
       if (evError) throw evError;
 
       // 3. Write history
-      const historyAction = isReimb
-        ? `Reimbursement Disbursed & Posted — ${paymentMethod}${reference ? ` [${reference}]` : ""} via ${sourceAccountName}`
+      const historyAction = settlesDirectly
+        ? `Disbursed & Posted — ${paymentMethod}${reference ? ` [${reference}]` : ""} via ${sourceAccountName}`
         : `Cash Disbursed by Accounting — ${paymentMethod}${reference ? ` [${reference}]` : ""} from ${sourceAccountName}`;
       await supabase.from("evoucher_history").insert({
         id: `EH-${Date.now()}`,
@@ -466,11 +476,11 @@ export function DisburseEVoucherPage() {
       // 4. Notify requestor
       if (evoucher.requestor_id) {
         createWorkflowTicket({
-          subject: isReimb
-            ? `Reimbursement Processed: ${evoucherNumber}`
+          subject: settlesDirectly
+            ? `Disbursed & Posted: ${evoucherNumber}`
             : `Disbursed: ${evoucherNumber}`,
-          body: isReimb
-            ? `Your reimbursement ${evoucherNumber} has been processed and posted.`
+          body: settlesDirectly
+            ? `Your E-Voucher ${evoucherNumber} has been disbursed and posted to the ledger.`
             : `Your E-Voucher ${evoucherNumber} has been disbursed. Cash has been released via ${paymentMethod}.`,
           type: "fyi",
           recipientUserId: evoucher.requestor_id,
@@ -484,8 +494,8 @@ export function DisburseEVoucherPage() {
       }
 
       toast.success(
-        isReimb
-          ? "Reimbursement disbursed and posted to ledger"
+        settlesDirectly
+          ? "Disbursed and posted to ledger"
           : "Cash disbursed — journal entry posted"
       );
       navigate(backRoute);
@@ -668,7 +678,7 @@ export function DisburseEVoucherPage() {
               }}>
                 <div>
                   <div style={{ fontSize: "9px", fontWeight: 700, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "4px" }}>DR</div>
-                  {isReimb ? (
+                  {settlesDirectly ? (
                     <div style={{ fontSize: "12px", color: expenseAccountId ? "var(--theme-text-primary)" : "var(--theme-text-muted)", fontStyle: expenseAccountId ? "normal" : "italic" }}>
                       {expenseAccountId ? `${expenseAccountCode} — ${expenseAccountName}` : "Select expense account →"}
                     </div>
@@ -681,7 +691,7 @@ export function DisburseEVoucherPage() {
                     </div>
                   )}
                 </div>
-                <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-text-primary)", textAlign: "right", paddingTop: "18px" }}>{PHP.format(isReimb ? cashBase : apBase)}</span>
+                <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-text-primary)", textAlign: "right", paddingTop: "18px" }}>{PHP.format(settlesDirectly ? cashBase : apBase)}</span>
                 <span style={{ fontSize: "12px", color: "var(--theme-text-muted)", textAlign: "right", paddingTop: "18px" }}>—</span>
               </div>
 
@@ -726,9 +736,9 @@ export function DisburseEVoucherPage() {
               )}
             </div>
 
-            {isReimb && (
+            {settlesDirectly && (
               <p style={{ fontSize: "11px", color: "var(--theme-text-muted)", marginTop: "12px", lineHeight: 1.6 }}>
-                Reimbursement disburses and closes in one step — no liquidation required.
+                Posts and closes in one step — no liquidation required.
               </p>
             )}
           </div>
@@ -774,7 +784,7 @@ export function DisburseEVoucherPage() {
                     </p>
                   </div>
                 )}
-                {isForeignVoucher && !isReimb && (
+                {isForeignVoucher && !settlesDirectly && (
                   <div>
                     <label htmlFor="disb-rate" style={{ display: "block", fontSize: "12px", fontWeight: 500, color: "var(--theme-text-muted)", marginBottom: "6px" }}>
                       Disbursement Rate ({voucherCurrency} → {FUNCTIONAL_CURRENCY}) *
@@ -808,7 +818,7 @@ export function DisburseEVoucherPage() {
                     )}
                   </div>
                 )}
-                {isReimb && (
+                {settlesDirectly && (
                   <AccountSelect
                     label="Expense Account (DR) *"
                     id="disb-expense-account"
@@ -980,7 +990,7 @@ export function DisburseEVoucherPage() {
           }}
         >
           {posting && <Loader2 size={15} className="animate-spin" />}
-          {posting ? "Processing…" : isReimb ? "Disburse & Post to Ledger" : "Confirm Disbursement"}
+          {posting ? "Processing…" : settlesDirectly ? "Disburse & Post to Ledger" : "Confirm Disbursement"}
         </button>
       </div>
     </div>

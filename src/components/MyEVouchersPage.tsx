@@ -274,9 +274,12 @@ export function MyEVouchersPage() {
         header: "",
         cell: (ev) => {
           const status = (ev.status ?? "").toLowerCase();
+          // NEU-044: only true advances (cash advance / budget request) liquidate.
+          const isAdvanceType =
+            ev.transaction_type === "cash_advance" || ev.transaction_type === "budget_request";
           const needsLiquidation =
             (status === "disbursed" || status === "pending_liquidation") &&
-            ev.transaction_type !== "reimbursement";
+            isAdvanceType;
           if (!needsLiquidation) return null;
           return (
             <button
