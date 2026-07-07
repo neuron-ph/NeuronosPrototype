@@ -129,9 +129,13 @@ export type ModuleId =
 // active contract after it's locked), kept separate from `approve` so a real
 // quotation-approval gate can use `approve` later. Applicable only on Pricing's
 // Quotations + Contracts (see actionApplicability) — inert "—" elsewhere, like export.
-export type ActionId = "view" | "create" | "edit" | "approve" | "delete" | "export" | "amend";
+//
+// NEU-042: `disburse` separates "release the cash" (Treasury) from "approve the
+// voucher" (Manager/CEO), which previously both rode acct_evouchers:approve.
+// Applicable only on acct_evouchers — inert "—" elsewhere.
+export type ActionId = "view" | "create" | "edit" | "approve" | "disburse" | "delete" | "export" | "amend";
 
-export const PERM_ACTIONS: ActionId[] = ["view", "create", "edit", "approve", "delete", "export", "amend"];
+export const PERM_ACTIONS: ActionId[] = ["view", "create", "edit", "approve", "disburse", "delete", "export", "amend"];
 
 export interface PermModule {
   id: ModuleId;

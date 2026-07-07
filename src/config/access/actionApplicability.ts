@@ -272,7 +272,7 @@ export const APPLICABLE_ACTIONS: Record<ModuleId, readonly ActionId[]> = {
   ops_invoices_settings_tab: ["view"],
 
   // ─── Accounting ─────────────────────────────────────────────────────────────
-  acct_evouchers: ["view", "create", "approve", "delete"],
+  acct_evouchers: ["view", "create", "approve", "disburse", "delete"],
   acct_reports: ["view", "export"],
   // NEU-020 2.6-final (DD-11): the acct_financials MASTER KEY is retired. Its
   // create/edit/delete granted money writes through every door globally; each
