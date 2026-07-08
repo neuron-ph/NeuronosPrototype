@@ -277,9 +277,15 @@ export function MyEVouchersPage() {
           // NEU-044: only true advances (cash advance / budget request) liquidate.
           const isAdvanceType =
             ev.transaction_type === "cash_advance" || ev.transaction_type === "budget_request";
+          // NEU-045: only the cash receiver liquidates (falls back to requestor
+          // when unset). The list now also surfaces vouchers I received but didn't
+          // create, so gate the button on the effective liquidator.
+          const isLiquidator = ev.cash_receiver_id
+            ? ev.cash_receiver_id === user?.id
+            : (!ev.requestor_id || ev.requestor_id === user?.id);
           const needsLiquidation =
             (status === "disbursed" || status === "pending_liquidation") &&
-            isAdvanceType;
+            isAdvanceType && isLiquidator;
           if (!needsLiquidation) return null;
           return (
             <button

@@ -5,7 +5,9 @@ import { supabase } from "../../../utils/supabase/client";
 import { createWorkflowTicket } from "../../../utils/workflowTickets";
 import { toast } from "sonner@2.0.3";
 import { useUser } from "../../../hooks/useUser";
+import { useUsers } from "../../../hooks/useUsers";
 import { usePermission } from "../../../context/PermissionProvider";
+import { CustomDropdown } from "../../bd/CustomDropdown";
 import type { EVoucherAPType } from "../../../types/evoucher";
 import {
   FUNCTIONAL_CURRENCY,
@@ -36,6 +38,8 @@ interface EVoucherSummary {
   requestor_id?: string;
   requestor_name?: string;
   requestor_department?: string;
+  cash_receiver_id?: string;
+  cash_receiver_name?: string;
   purpose?: string;
   currency?: string;
   original_currency?: string;
@@ -144,7 +148,13 @@ export function DisburseEVoucherPage() {
 
   // ── EVoucher data ─────────────────────────────────────────────────────────
   const [evoucher, setEvoucher] = useState<EVoucherSummary | null>(null);
+  const [rawDetails, setRawDetails] = useState<Record<string, unknown>>({});
   const [loadingEV, setLoadingEV] = useState(true);
+
+  // ── Cash receiver (NEU-045) — who physically receives the cash and will
+  // liquidate it. Defaults to the requestor; Treasury can reassign at payout.
+  const { users: activeUsers } = useUsers();
+  const [receiverId, setReceiverId] = useState<string | null>(null);
 
   // ── GL accounts ───────────────────────────────────────────────────────────
   const [accounts, setAccounts] = useState<GLAccount[]>([]);
@@ -186,6 +196,11 @@ export function DisburseEVoucherPage() {
       if (!error && data) {
         const merged = { ...data?.details, ...data } as EVoucherSummary;
         setEvoucher(merged);
+        setRawDetails((data?.details as Record<string, unknown>) ?? {});
+        // Default the receiver to whoever's already named, else the requestor.
+        setReceiverId(
+          (merged.cash_receiver_id as string) || (merged.requestor_id as string) || null,
+        );
       }
       setLoadingEV(false);
     };
@@ -305,6 +320,7 @@ export function DisburseEVoucherPage() {
     !!paymentMethod &&
     (!refRequired || !!reference.trim()) &&
     (!settlesDirectly || !!expenseAccountId) &&
+    (settlesDirectly || !!receiverId) &&
     hasUsableRate &&
     (!isForeignVoucher || hasDisbRate) &&
     (!realizesFx || fxAbs < 0.005 || (fxIsGain ? !!fxGainAccount : !!fxLossAccount));
@@ -318,6 +334,13 @@ export function DisburseEVoucherPage() {
       const now = new Date().toISOString();
       const disbDate = new Date(disbursementDate + "T12:00:00").toISOString();
       const evoucherNumber = evoucher.evoucher_number;
+
+      // NEU-045: for advances, stamp the cash receiver (who liquidates).
+      const effectiveReceiverId = receiverId || evoucher.requestor_id || null;
+      const effectiveReceiverName =
+        activeUsers.find((u) => u.id === effectiveReceiverId)?.name ||
+        (effectiveReceiverId === evoucher.requestor_id ? evoucher.requestor_name : undefined) ||
+        null;
 
       const foreignAmount = roundMoney(amount);
       const fxLineMeta = (rate: number) => isForeignVoucher
@@ -445,6 +468,16 @@ export function DisburseEVoucherPage() {
           disbursed_by_name: user.name,
           disbursement_remarks: remarks.trim() || null,
           ...(settlesDirectly ? { closing_journal_entry_id: entryId } : {}),
+          // Advances park for liquidation → persist the receiver into details.
+          ...(isAdvanceType
+            ? {
+                details: {
+                  ...rawDetails,
+                  cash_receiver_id: effectiveReceiverId,
+                  cash_receiver_name: effectiveReceiverName,
+                },
+              }
+            : {}),
           updated_at: now,
         })
         .eq("id", evoucher.id);
@@ -473,17 +506,31 @@ export function DisburseEVoucherPage() {
         created_at: now,
       });
 
-      // 4. Notify requestor
-      if (evoucher.requestor_id) {
+      // 4. Notify.
+      // NEU-045: for advances, send an actionable "For Liquidation" task to the
+      // cash receiver (the person who got the money) — not a passive FYI to the
+      // requestor. For direct-settle types, keep the FYI-posted note to requestor.
+      if (settlesDirectly) {
+        if (evoucher.requestor_id) {
+          createWorkflowTicket({
+            subject: `Disbursed & Posted: ${evoucherNumber}`,
+            body: `Your E-Voucher ${evoucherNumber} has been disbursed and posted to the ledger.`,
+            type: "fyi",
+            recipientUserId: evoucher.requestor_id,
+            linkedRecordType: "expense",
+            linkedRecordId: evoucher.id,
+            createdBy: user.id,
+            createdByName: user.name,
+            createdByDept: user.department || "Accounting",
+            autoCreated: true,
+          });
+        }
+      } else if (effectiveReceiverId) {
         createWorkflowTicket({
-          subject: settlesDirectly
-            ? `Disbursed & Posted: ${evoucherNumber}`
-            : `Disbursed: ${evoucherNumber}`,
-          body: settlesDirectly
-            ? `Your E-Voucher ${evoucherNumber} has been disbursed and posted to the ledger.`
-            : `Your E-Voucher ${evoucherNumber} has been disbursed. Cash has been released via ${paymentMethod}.`,
-          type: "fyi",
-          recipientUserId: evoucher.requestor_id,
+          subject: `For Liquidation: ${evoucherNumber}`,
+          body: `You received ${formatMoney(amount, voucherCurrency)} for ${evoucherNumber} via ${paymentMethod}. Submit your liquidation with receipts to close this advance.`,
+          type: "request",
+          recipientUserId: effectiveReceiverId,
           linkedRecordType: "expense",
           linkedRecordId: evoucher.id,
           createdBy: user.id,
@@ -769,6 +816,32 @@ export function DisburseEVoucherPage() {
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                {/* NEU-045: cash receiver — only advances liquidate, so only they
+                    need a receiver. Defaults to the requestor. */}
+                {!settlesDirectly && (
+                  <div>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 500, color: "var(--theme-text-muted)", marginBottom: "6px" }}>
+                      Cash Receiver *
+                    </label>
+                    <CustomDropdown
+                      fullWidth
+                      searchable
+                      value={receiverId || ""}
+                      placeholder="Select who receives the cash…"
+                      triggerAriaLabel="Cash receiver"
+                      options={[...activeUsers]
+                        .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
+                        .map((u) => ({
+                          value: u.id,
+                          label: u.department ? `${u.name} · ${u.department}` : u.name,
+                        }))}
+                      onChange={(id) => setReceiverId(id || null)}
+                    />
+                    <p style={{ margin: "6px 0 0", fontSize: "11px", color: "var(--theme-text-muted)", lineHeight: 1.5 }}>
+                      Whoever physically receives the cash — they'll get the liquidation task. Defaults to the requestor.
+                    </p>
+                  </div>
+                )}
                 {isForeignVoucher && (
                   <div style={{
                     padding: "10px 12px",

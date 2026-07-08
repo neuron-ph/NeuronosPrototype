@@ -164,6 +164,12 @@ export interface EVoucher {
   requestor_name: string;
   requestor_department?: string; // BD, Operations, HR, etc.
   request_date: string;
+
+  // Cash receiver (NEU-045) — set by Treasury at disbursement for advances.
+  // Iba ang requestor at receiver ng fund; ang receiver ang mag-li-liquidate.
+  // Defaults to the requestor when the same person collects the cash.
+  cash_receiver_id?: string;
+  cash_receiver_name?: string;
   
   // Transaction Information (filled by requestor)
   amount: number;

@@ -112,12 +112,16 @@ export function EVoucherDetailPage() {
     : (evoucher.line_items as any[]) || [];
 
   const isOwner = user?.id === evoucher.requestor_id;
+  // NEU-045: the cash receiver liquidates (falls back to requestor when unset).
+  const isLiquidator = evoucher.cash_receiver_id
+    ? evoucher.cash_receiver_id === user?.id
+    : isOwner;
   const status = evoucher.status?.toLowerCase?.() ?? evoucher.status;
   // NEU-044: only true advances (cash advance / budget request) liquidate.
   const isAdvanceType =
     evoucher.transaction_type === "cash_advance" || evoucher.transaction_type === "budget_request";
   const needsLiquidation = (status === "disbursed" || status === "pending_liquidation") &&
-    isAdvanceType && isOwner;
+    isAdvanceType && isLiquidator;
 
   return (
     <div style={{ padding: "32px 48px", maxWidth: "1200px", margin: "0 auto" }}>
@@ -276,6 +280,7 @@ export function EVoucherDetailPage() {
               amount={evoucher.amount}
               currentStatus={evoucher.status}
               requestorId={evoucher.requestor_id}
+              cashReceiverId={evoucher.cash_receiver_id}
               currentUser={user ? {
                 id: user.id,
                 name: user.name,
