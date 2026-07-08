@@ -31,6 +31,7 @@ interface EVoucherWorkflowPanelProps {
   amount?: number;
   currentStatus: string;
   requestorId?: string;
+  cashReceiverId?: string;
   currentUser?: CurrentUser;
   onStatusChange?: () => void;
   // Billable expense auto-billing
@@ -74,6 +75,7 @@ export function EVoucherWorkflowPanel({
   amount = 0,
   currentStatus,
   requestorId,
+  cashReceiverId,
   currentUser,
   onStatusChange,
   isBillable,
@@ -103,6 +105,9 @@ export function EVoucherWorkflowPanel({
 
   const userId = currentUser?.id;
   const isOwner = !requestorId || requestorId === userId;
+  // NEU-045: the cash receiver is the one who liquidates. Falls back to the
+  // requestor when no receiver was named (same-person case / legacy vouchers).
+  const isLiquidator = cashReceiverId ? cashReceiverId === userId : isOwner;
   const actor = currentUser
     ? { id: currentUser.id, name: currentUser.name, department: currentUser.department ?? "" }
     : null;
@@ -134,7 +139,7 @@ export function EVoucherWorkflowPanel({
 
   const isAdvanceType = transactionType === "cash_advance" || transactionType === "budget_request";
   const canOpenLiquidation =
-    isOwner && isAdvanceType &&
+    isLiquidator && isAdvanceType &&
     (currentStatus === "disbursed" || currentStatus === "pending_liquidation");
   const canCloseLiquidation =
     holdsAccountingGate && currentStatus === "pending_verification";

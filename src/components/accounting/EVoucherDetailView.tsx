@@ -441,6 +441,18 @@ export function EVoucherDetailView({
                 })}
               </div>
             </div>
+            {/* NEU-045: cash receiver — shown when someone other than the
+                requestor received the funds (the person who liquidates). */}
+            {evoucher.cash_receiver_name &&
+              evoucher.cash_receiver_id !== evoucher.requestor_id && (
+                <div>
+                  <div style={fieldLabel}>Cash Receiver</div>
+                  <div style={fieldValue}>{evoucher.cash_receiver_name}</div>
+                  <div style={{ fontSize: "12px", color: "var(--theme-text-muted)", marginTop: "2px" }}>
+                    Received the funds · liquidates this advance
+                  </div>
+                </div>
+              )}
           </div>
 
           {/* Approvers */}
@@ -581,6 +593,7 @@ export function EVoucherDetailView({
             amount={evoucher.amount}
             currentStatus={evoucher.status}
             requestorId={evoucher.requestor_id}
+            cashReceiverId={evoucher.cash_receiver_id}
             currentUser={currentUser}
             onStatusChange={() => {
               onStatusChange?.();

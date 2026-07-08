@@ -21,7 +21,9 @@ export function useEVouchers(view: EVoucherView, userId?: string, department?: s
     if (view === "pending") {
       query = query.in('status', ['pending_manager', 'pending_ceo', 'pending_accounting']);
     } else if (view === "my-evouchers" && userId) {
-      query = query.eq('created_by', userId);
+      // NEU-045: "mine" = I created it OR I'm the named cash receiver (so the
+      // person who received an advance sees it and can liquidate).
+      query = query.or(`created_by.eq.${userId},details->>cash_receiver_id.eq.${userId}`);
     } else if (view === "my-evouchers" && !userId) {
       return [];
     } else if (view === "acct-pending-disburse") {
