@@ -113,8 +113,11 @@ export function EVoucherDetailPage() {
 
   const isOwner = user?.id === evoucher.requestor_id;
   const status = evoucher.status?.toLowerCase?.() ?? evoucher.status;
+  // NEU-044: only true advances (cash advance / budget request) liquidate.
+  const isAdvanceType =
+    evoucher.transaction_type === "cash_advance" || evoucher.transaction_type === "budget_request";
   const needsLiquidation = (status === "disbursed" || status === "pending_liquidation") &&
-    evoucher.transaction_type !== "reimbursement" && isOwner;
+    isAdvanceType && isOwner;
 
   return (
     <div style={{ padding: "32px 48px", maxWidth: "1200px", margin: "0 auto" }}>

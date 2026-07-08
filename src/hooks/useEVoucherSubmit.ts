@@ -48,6 +48,8 @@ interface EVoucherData {
   totalAmount: number;
   preferredPayment: string;
   vendor: string;
+  /** NEU-046: FK to service_providers when the payee is a registered vendor. */
+  vendorId?: string;
   creditTerms: string;
   paymentSchedule?: string;
   notes?: string;
@@ -183,6 +185,7 @@ export function useEVoucherSubmit(
       booking_id: data.bookingId || null,
       project_number: data.projectNumber || null,
       vendor_name: data.vendor || null,
+      vendor_id: data.vendorId || null,
       amount: roundMoney(data.totalAmount),
       currency,
       original_currency: currency,
