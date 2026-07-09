@@ -10,14 +10,7 @@ import { EVoucherHistoryTimeline } from "./EVoucherHistoryTimeline";
 import { LiquidationForm } from "./LiquidationForm";
 import { LiquidationHistory } from "./LiquidationHistory";
 import type { EVoucher } from "../../../types/evoucher";
-
-const TRANSACTION_TYPE_LABELS: Record<string, string> = {
-  expense: "Expense",
-  cash_advance: "Cash Advance",
-  reimbursement: "Reimbursement",
-  budget_request: "Budget Request",
-  direct_expense: "Direct Expense",
-};
+import { evoucherTypeLabelFor } from "../../../utils/evoucherTransactionType";
 
 const BACK_ROUTES: Record<string, string> = {
   accounting: "/accounting/evouchers",
@@ -147,7 +140,7 @@ export function EVoucherDetailPage() {
             <EVoucherStatusBadge status={evoucher.status} size="md" />
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "16px", fontSize: "14px", color: "var(--theme-text-muted)" }}>
-            <span>{TRANSACTION_TYPE_LABELS[evoucher.transaction_type ?? ""] ?? evoucher.transaction_type}</span>
+            <span>{evoucherTypeLabelFor(evoucher)}</span>
             <span>·</span>
             <span>Created {new Date(evoucher.created_at).toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" })}</span>
           </div>

@@ -6,6 +6,7 @@ import { EVoucherStatusBadge } from "./evouchers/EVoucherStatusBadge";
 import { EVoucherHistoryTimeline } from "./evouchers/EVoucherHistoryTimeline";
 import { SidePanel } from "../common/SidePanel";
 import type { EVoucher } from "../../types/evoucher";
+import { evoucherTypeLabelFor } from "../../utils/evoucherTransactionType";
 
 interface EVoucherDetailViewProps {
   evoucher: EVoucher;
@@ -17,13 +18,6 @@ interface EVoucherDetailViewProps {
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(n);
 
-const TX_TYPE_LABEL: Record<string, string> = {
-  expense: "Expense",
-  cash_advance: "Cash Advance",
-  reimbursement: "Reimbursement",
-  budget_request: "Budget Request",
-  direct_expense: "Direct Expense",
-};
 
 // ── Shared style tokens ──────────────────────────────────────────────────────
 
@@ -177,7 +171,7 @@ export function EVoucherDetailView({
             <div>
               <div style={fieldLabel}>Transaction Type</div>
               <div style={fieldValue}>
-                {TX_TYPE_LABEL[evoucher.transaction_type ?? ""] || evoucher.transaction_type || "—"}
+                {evoucherTypeLabelFor(evoucher)}
               </div>
             </div>
             <div>

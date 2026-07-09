@@ -6,7 +6,8 @@ import { CustomDatePicker } from "../../common/CustomDatePicker";
 import { CustomDropdown } from "../../bd/CustomDropdown";
 import { EVoucherStatusBadge } from "./EVoucherStatusBadge";
 import { LiquidationPanel } from "./LiquidationPanel";
-import type { EVoucher, EVoucherTransactionType } from "../../../types/evoucher";
+import type { EVoucher } from "../../../types/evoucher";
+import { evoucherTypeLabelFor } from "../../../utils/evoucherTransactionType";
 
 interface UnifiedEVouchersTableProps {
   evouchers: EVoucher[];
@@ -50,18 +51,19 @@ export function UnifiedEVouchersTable({
     });
   };
 
-  const getTypeConfig = (type: EVoucherTransactionType | undefined): { label: string; style: React.CSSProperties } => {
-    switch (type) {
+  const getTypeConfig = (item: EVoucher): { label: string; style: React.CSSProperties } => {
+    const label = evoucherTypeLabelFor(item);
+    switch (item.transaction_type) {
       case "expense":
-        return { label: "Expense", style: { background: "var(--neuron-semantic-info-bg)", color: "var(--neuron-semantic-info)" } };
+        return { label, style: { background: "var(--neuron-semantic-info-bg)", color: "var(--neuron-semantic-info)" } };
       case "budget_request":
-        return { label: "Budget Request", style: { background: "var(--theme-status-warning-bg)", color: "var(--theme-status-warning-fg)" } };
+        return { label, style: { background: "var(--theme-status-warning-bg)", color: "var(--theme-status-warning-fg)" } };
       case "cash_advance":
-        return { label: "Cash Advance", style: { background: "var(--theme-status-success-bg)", color: "var(--theme-status-success-fg)" } };
+        return { label, style: { background: "var(--theme-status-success-bg)", color: "var(--theme-status-success-fg)" } };
       case "reimbursement":
-        return { label: "Reimbursement", style: { background: "var(--neuron-status-accent-bg)", color: "var(--neuron-status-accent-fg)" } };
+        return { label, style: { background: "var(--neuron-status-accent-bg)", color: "var(--neuron-status-accent-fg)" } };
       default:
-        return { label: "Expense", style: { background: "var(--theme-bg-surface-subtle)", color: "var(--theme-text-secondary)" } };
+        return { label, style: { background: "var(--theme-bg-surface-subtle)", color: "var(--theme-text-secondary)" } };
     }
   };
 
@@ -157,7 +159,7 @@ export function UnifiedEVouchersTable({
       header: "Type",
       width: "130px",
       cell: (item) => {
-        const { label, style } = getTypeConfig(item.transaction_type);
+        const { label, style } = getTypeConfig(item);
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium" style={style}>
             {label}
