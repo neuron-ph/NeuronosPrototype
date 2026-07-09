@@ -226,8 +226,11 @@ export function generateRateCardBillingItems(
     condition_label: rate.condition_label,
     mode_column: modeColumn,
 
-    // Catalog identity — carried from the contract row via the rate engine
+    // Catalog identity — carried from the contract row via the rate engine.
+    // catalog_category_id is the precise key used to re-resolve a stale
+    // catalog_item_id at apply time (see resolveContractCatalogIds).
     catalog_item_id: rate.catalog_item_id || null,
+    catalog_category_id: rate.catalog_category_id,
     catalog_snapshot: rate.catalog_item_id
       ? buildCatalogSnapshot(
           { description: rate.particular, amount: rate.subtotal, currency },

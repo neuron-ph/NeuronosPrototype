@@ -19,6 +19,7 @@ import { useState, useMemo, useCallback } from "react";
 import { Check, Loader2, FileSpreadsheet, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { calculateContractBilling, calculateMultiLineTruckingBilling, type BookingQuantities } from "../../utils/contractRateEngine";
 import { generateRateCardBillingItems } from "../../utils/rateCardToBilling";
+import { resolveContractCatalogIds } from "../../utils/resolveContractCatalogIds";
 import type { ContractRateMatrix, AppliedRate, TruckingLineItem } from "../../types/pricing";
 import { toast } from "../ui/toast-utils";
 import { supabase } from "../../utils/supabase/client";
@@ -250,6 +251,19 @@ export function InlineRateCardSection({
         return;
       }
 
+      // The contract's rate card carries snapshotted catalog ids that can drift
+      // stale as the catalog changes. Re-point them to the live catalog before
+      // insert so the FK never rejects the batch; block on anything unresolvable.
+      const { items: resolvedItems, unresolved } = await resolveContractCatalogIds(result.items);
+      if (unresolved.length > 0) {
+        const names = unresolved.map((u) => u.description).filter(Boolean).join(", ");
+        toast.error(
+          `These charges aren't in the Billing Catalog and must be added before applying: ${names}`
+        );
+        setIsSaving(false);
+        return;
+      }
+
       // Re-fetch existing rows fresh so we don't trust a stale prop snapshot.
       const { data: existingRows, error: fetchError } = await supabase
         .from('billing_line_items')
@@ -276,7 +290,7 @@ export function InlineRateCardSection({
       const billingRows: any[] = [];
       const now = new Date().toISOString();
 
-      for (const item of result.items) {
+      for (const item of resolvedItems) {
         const k = rowKey(item);
         const existing = existingMap.get(k);
         const newQty = item.quantity ?? 1;

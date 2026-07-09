@@ -184,10 +184,12 @@ export function instantiateRates(
   // Build row-id → category-name map for carry-through into AppliedRate.
   // Falls back to "<ServiceType> Charges" if the matrix has no categories defined.
   const rowCategoryMap = new Map<string, string>();
+  const rowCatalogCategoryMap = new Map<string, string>();
   if (matrix.categories) {
     for (const cat of matrix.categories) {
       for (const r of cat.rows) {
         rowCategoryMap.set(r.id, cat.category_name);
+        if (cat.catalog_category_id) rowCatalogCategoryMap.set(r.id, cat.catalog_category_id);
       }
     }
   }
@@ -266,6 +268,7 @@ export function instantiateRates(
       condition_label,
       catalog_item_id: row.catalog_item_id,
       category: rowCategoryMap.get(row.id) ?? fallbackCategory,
+      catalog_category_id: rowCatalogCategoryMap.get(row.id),
     });
   }
 
@@ -939,6 +942,7 @@ const dispatchDelivery: CategoryDispatcher = (category, matrix, modeColumn, ctx)
       rule_applied: `1 × P${rate.toLocaleString('en-PH')} (${container.container_number || 'container'} → ${containerAddress || 'no address'})`,
       catalog_item_id: match.catalog_item_id,
       category: categoryName,
+      catalog_category_id: category.catalog_category_id,
     });
   }
 

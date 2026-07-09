@@ -36,6 +36,7 @@ export interface BillingItem {
   is_manually_adjusted?: boolean;
   is_virtual?: boolean;
   catalog_item_id?: string; // Catalog linkage (Item Master reference)
+  catalog_category_id?: string; // Catalog category linkage — precise re-resolution key
   [key: string]: any;
 }
 
