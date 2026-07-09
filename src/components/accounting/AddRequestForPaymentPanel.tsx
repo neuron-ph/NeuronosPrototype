@@ -1123,7 +1123,10 @@ export function AddRequestForPaymentPanel({
                         value={
                           context === "personal"
                             ? transactionType
-                            : transactionType === "cash_advance" ? "cash_advance" : transactionSubtype === "billable_expense" ? "billable" : "expense"
+                            : transactionType === "cash_advance" ? "cash_advance"
+                            : transactionType === "reimbursement" ? "reimbursement"
+                            : transactionType === "direct_expense" ? "direct_expense"
+                            : transactionSubtype === "billable_expense" ? "billable" : "expense"
                         }
                         onChange={(val) => {
                           if (context === "personal") {
@@ -1131,6 +1134,12 @@ export function AddRequestForPaymentPanel({
                             setTransactionSubtype("regular_expense");
                           } else if (val === "cash_advance") {
                             setTransactionType("cash_advance");
+                            setTransactionSubtype("regular_expense");
+                          } else if (val === "reimbursement") {
+                            setTransactionType("reimbursement");
+                            setTransactionSubtype("regular_expense");
+                          } else if (val === "direct_expense") {
+                            setTransactionType("direct_expense");
                             setTransactionSubtype("regular_expense");
                           } else if (val === "billable") {
                             setTransactionType("expense");
@@ -1153,11 +1162,13 @@ export function AddRequestForPaymentPanel({
                                 { value: "cash_advance", label: "Cash Advance" }
                               ]
                             : [
-                                { value: "expense", label: "Regular Expense" },
-                                { value: "billable", label: "Billable Expense" },
-                                { value: "cash_advance", label: "Cash Advance" },
-                                { value: "reimbursement", label: "Reimbursement" },
-                                { value: "direct_expense", label: "Direct Expense" }
+                                // NEU-048: accounting taxonomy (Carol/Accounting, 7/09) — relabels
+                                // the 5 existing accounting types 1:1, no enum/schema/GL change.
+                                { value: "expense", label: "Project Expense" },
+                                { value: "billable", label: "Billable Project Expense" },
+                                { value: "cash_advance", label: "Cash Advances – Project and Office Expense" },
+                                { value: "reimbursement", label: "Reimbursement – Project and Office Expense" },
+                                { value: "direct_expense", label: "Office Expense" }
                               ]
                         }
                         placeholder="Select type"

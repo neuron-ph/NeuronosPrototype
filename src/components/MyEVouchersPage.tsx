@@ -19,16 +19,7 @@ import { AddRequestForPaymentPanel } from "./accounting/AddRequestForPaymentPane
 import { CustomDropdown } from "./bd/CustomDropdown";
 import { CustomDatePicker } from "./common/CustomDatePicker";
 import type { EVoucher } from "../types/evoucher";
-
-// ─── Constants ───────────────────────────────────────────────────────────────
-
-const TYPE_LABELS: Record<string, string> = {
-  expense: "Expense",
-  cash_advance: "Cash Advance",
-  reimbursement: "Reimbursement",
-  budget_request: "Budget Request",
-  direct_expense: "Direct Expense",
-};
+import { evoucherTypeLabel, evoucherTypeLabelFor } from "../utils/evoucherTransactionType";
 
 const STATUS_GROUPS = {
   draft: ["draft"],
@@ -211,7 +202,7 @@ export function MyEVouchersPage() {
             textTransform: "uppercase",
             letterSpacing: "0.04em",
           }}>
-            {TYPE_LABELS[ev.transaction_type ?? ""] ?? ev.transaction_type ?? "—"}
+            {evoucherTypeLabelFor(ev)}
           </span>
         ),
       },
@@ -461,11 +452,11 @@ export function MyEVouchersPage() {
               onChange={setTypeFilter}
               options={[
                 { value: "all", label: "All Types", icon: <FileText size={16} /> },
-                { value: "expense", label: "Expense", icon: <FileText size={16} style={{ color: "var(--theme-action-primary-bg)" }} /> },
-                { value: "cash_advance", label: "Cash Advance", icon: <FileText size={16} style={{ color: "var(--theme-status-warning-fg)" }} /> },
-                { value: "reimbursement", label: "Reimbursement", icon: <FileText size={16} style={{ color: "var(--theme-status-success-fg)" }} /> },
-                { value: "budget_request", label: "Budget Request", icon: <FileText size={16} style={{ color: "var(--theme-text-muted)" }} /> },
-                { value: "direct_expense", label: "Direct Expense", icon: <FileText size={16} style={{ color: "var(--theme-status-danger-fg)" }} /> },
+                { value: "expense", label: evoucherTypeLabel("expense"), icon: <FileText size={16} style={{ color: "var(--theme-action-primary-bg)" }} /> },
+                { value: "cash_advance", label: evoucherTypeLabel("cash_advance"), icon: <FileText size={16} style={{ color: "var(--theme-status-warning-fg)" }} /> },
+                { value: "reimbursement", label: evoucherTypeLabel("reimbursement"), icon: <FileText size={16} style={{ color: "var(--theme-status-success-fg)" }} /> },
+                { value: "budget_request", label: evoucherTypeLabel("budget_request"), icon: <FileText size={16} style={{ color: "var(--theme-text-muted)" }} /> },
+                { value: "direct_expense", label: evoucherTypeLabel("direct_expense"), icon: <FileText size={16} style={{ color: "var(--theme-status-danger-fg)" }} /> },
               ]}
               placeholder="All Types"
             />
@@ -626,7 +617,7 @@ export function MyEVouchersPage() {
                       color: "var(--theme-text-muted)",
                       textTransform: "uppercase", letterSpacing: "0.05em",
                     }}>
-                      {TYPE_LABELS[ev.transaction_type ?? ""] ?? ev.transaction_type}
+                      {evoucherTypeLabelFor(ev)}
                     </span>
                   </div>
                   <p style={{

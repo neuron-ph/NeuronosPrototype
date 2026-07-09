@@ -4,6 +4,8 @@ import { useEVouchers } from "../../../hooks/useEVouchers";
 import { EVoucherStatusBadge } from "./EVoucherStatusBadge";
 import { EVoucherDetailView } from "../EVoucherDetailView";
 import type { EVoucher } from "../../../types/evoucher";
+import { evoucherTypeLabelFor } from "../../../utils/evoucherTransactionType";
+import { getPaymentUrgencyFor, paymentUrgencyStyle, paymentUrgencyAmountColor } from "../../../utils/evoucherUrgency";
 
 interface EVoucherApprovalQueueProps {
   /** "pending-manager" for dept managers, "pending-ceo" for CEO */
@@ -14,13 +16,6 @@ interface EVoucherApprovalQueueProps {
   title?: string;
 }
 
-const TRANSACTION_TYPE_LABELS: Record<string, string> = {
-  expense: "Expense",
-  cash_advance: "Cash Advance",
-  reimbursement: "Reimbursement",
-  budget_request: "Budget Request",
-  direct_expense: "Direct Expense",
-};
 
 export function EVoucherApprovalQueue({ view, currentUser, title }: EVoucherApprovalQueueProps) {
   const { evouchers, isLoading, refresh } = useEVouchers(view);
@@ -113,8 +108,21 @@ export function EVoucherApprovalQueue({ view, currentUser, title }: EVoucherAppr
                   {ev.voucher_number}
                 </span>
                 <span style={{ fontSize: "12px", color: "var(--theme-text-muted)" }}>
-                  {TRANSACTION_TYPE_LABELS[ev.transaction_type ?? ""] ?? ev.transaction_type}
+                  {evoucherTypeLabelFor(ev)}
                 </span>
+                {(() => {
+                  const urgency = getPaymentUrgencyFor(ev);
+                  return urgency ? (
+                    <span style={{
+                      ...paymentUrgencyStyle(urgency.level),
+                      display: "inline-flex", alignItems: "center",
+                      padding: "1px 8px", borderRadius: "6px",
+                      fontSize: "11px", fontWeight: 600,
+                    }}>
+                      {urgency.label}
+                    </span>
+                  ) : null;
+                })()}
               </div>
               <div style={{ fontSize: "13px", color: "var(--theme-text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {ev.purpose || ev.description || "—"}
@@ -124,7 +132,7 @@ export function EVoucherApprovalQueue({ view, currentUser, title }: EVoucherAppr
               </div>
             </div>
             <div style={{ textAlign: "right", flexShrink: 0 }}>
-              <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)", marginBottom: "4px" }}>
+              <div style={{ fontSize: "14px", fontWeight: 600, color: paymentUrgencyAmountColor(getPaymentUrgencyFor(ev)?.level) || "var(--theme-text-primary)", marginBottom: "4px" }}>
                 {fmt(ev.amount)}
               </div>
               <EVoucherStatusBadge status={ev.status} size="sm" />

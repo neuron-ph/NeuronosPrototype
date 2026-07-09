@@ -10,14 +10,8 @@ import { EVoucherHistoryTimeline } from "./EVoucherHistoryTimeline";
 import { LiquidationForm } from "./LiquidationForm";
 import { LiquidationHistory } from "./LiquidationHistory";
 import type { EVoucher } from "../../../types/evoucher";
-
-const TRANSACTION_TYPE_LABELS: Record<string, string> = {
-  expense: "Expense",
-  cash_advance: "Cash Advance",
-  reimbursement: "Reimbursement",
-  budget_request: "Budget Request",
-  direct_expense: "Direct Expense",
-};
+import { evoucherTypeLabelFor } from "../../../utils/evoucherTransactionType";
+import { getPaymentUrgencyFor, paymentUrgencyStyle } from "../../../utils/evoucherUrgency";
 
 const BACK_ROUTES: Record<string, string> = {
   accounting: "/accounting/evouchers",
@@ -147,9 +141,25 @@ export function EVoucherDetailPage() {
             <EVoucherStatusBadge status={evoucher.status} size="md" />
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "16px", fontSize: "14px", color: "var(--theme-text-muted)" }}>
-            <span>{TRANSACTION_TYPE_LABELS[evoucher.transaction_type ?? ""] ?? evoucher.transaction_type}</span>
+            <span>{evoucherTypeLabelFor(evoucher)}</span>
             <span>·</span>
             <span>Created {new Date(evoucher.created_at).toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" })}</span>
+            {(() => {
+              const urgency = getPaymentUrgencyFor(evoucher);
+              return urgency ? (
+                <>
+                  <span>·</span>
+                  <span style={{
+                    ...paymentUrgencyStyle(urgency.level),
+                    display: "inline-flex", alignItems: "center",
+                    padding: "2px 8px", borderRadius: "6px",
+                    fontSize: "12px", fontWeight: 600,
+                  }}>
+                    {urgency.label}
+                  </span>
+                </>
+              ) : null;
+            })()}
           </div>
         </div>
         <div style={{ textAlign: "right" }}>
@@ -281,6 +291,8 @@ export function EVoucherDetailPage() {
               currentStatus={evoucher.status}
               requestorId={evoucher.requestor_id}
               cashReceiverId={evoucher.cash_receiver_id}
+              receiptConfirmedAt={(evoucher as any).details?.receipt_confirmed_at ?? (evoucher as any).receipt_confirmed_at}
+              cashReturnConfirmedAt={(evoucher as any).details?.cash_return_confirmed_at ?? (evoucher as any).cash_return_confirmed_at}
               currentUser={user ? {
                 id: user.id,
                 name: user.name,

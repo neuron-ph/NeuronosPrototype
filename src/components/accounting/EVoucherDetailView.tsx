@@ -6,6 +6,8 @@ import { EVoucherStatusBadge } from "./evouchers/EVoucherStatusBadge";
 import { EVoucherHistoryTimeline } from "./evouchers/EVoucherHistoryTimeline";
 import { SidePanel } from "../common/SidePanel";
 import type { EVoucher } from "../../types/evoucher";
+import { evoucherTypeLabelFor } from "../../utils/evoucherTransactionType";
+import { getPaymentUrgencyFor, resolveEvoucherDueDate, paymentUrgencyStyle } from "../../utils/evoucherUrgency";
 
 interface EVoucherDetailViewProps {
   evoucher: EVoucher;
@@ -17,13 +19,6 @@ interface EVoucherDetailViewProps {
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(n);
 
-const TX_TYPE_LABEL: Record<string, string> = {
-  expense: "Expense",
-  cash_advance: "Cash Advance",
-  reimbursement: "Reimbursement",
-  budget_request: "Budget Request",
-  direct_expense: "Direct Expense",
-};
 
 // ── Shared style tokens ──────────────────────────────────────────────────────
 
@@ -177,7 +172,7 @@ export function EVoucherDetailView({
             <div>
               <div style={fieldLabel}>Transaction Type</div>
               <div style={fieldValue}>
-                {TX_TYPE_LABEL[evoucher.transaction_type ?? ""] || evoucher.transaction_type || "—"}
+                {evoucherTypeLabelFor(evoucher)}
               </div>
             </div>
             <div>
@@ -385,20 +380,35 @@ export function EVoucherDetailView({
                   <div style={fieldValue}>{evoucher.payment_method}</div>
                 </div>
               )}
-              {(evoucher.credit_terms || evoucher.due_date) && (
-                <div>
-                  <div style={fieldLabel}>{evoucher.due_date ? "Due Date" : "Credit Terms"}</div>
-                  <div style={fieldValue}>
-                    {evoucher.due_date
-                      ? new Date(evoucher.due_date).toLocaleDateString("en-PH", {
-                          month: "long",
-                          day: "numeric",
-                          year: "numeric",
-                        })
-                      : evoucher.credit_terms}
+              {(() => {
+                const dueDate = resolveEvoucherDueDate(evoucher);
+                if (!evoucher.credit_terms && !dueDate) return null;
+                const urgency = getPaymentUrgencyFor(evoucher);
+                return (
+                  <div>
+                    <div style={fieldLabel}>{dueDate ? "Due Date" : "Credit Terms"}</div>
+                    <div style={{ ...fieldValue, display: "flex", alignItems: "center", gap: "8px" }}>
+                      {dueDate
+                        ? new Date(dueDate).toLocaleDateString("en-PH", {
+                            month: "long",
+                            day: "numeric",
+                            year: "numeric",
+                          })
+                        : evoucher.credit_terms}
+                      {urgency && (
+                        <span style={{
+                          ...paymentUrgencyStyle(urgency.level),
+                          display: "inline-flex", alignItems: "center",
+                          padding: "2px 8px", borderRadius: "6px",
+                          fontSize: "11px", fontWeight: 600,
+                        }}>
+                          {urgency.label}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
             {evoucher.notes && (
               <div>
@@ -451,6 +461,16 @@ export function EVoucherDetailView({
                   <div style={{ fontSize: "12px", color: "var(--theme-text-muted)", marginTop: "2px" }}>
                     Received the funds · liquidates this advance
                   </div>
+                  {/* NEU-050: receipt confirmation marker */}
+                  {(evoucher as any).details?.receipt_confirmed_at && (
+                    <div style={{ fontSize: "12px", color: "var(--theme-status-success-fg)", fontWeight: 500, marginTop: "4px", display: "flex", alignItems: "center", gap: "4px" }}>
+                      <CheckCircle size={12} />
+                      Receipt confirmed
+                      {(evoucher as any).details?.receipt_confirmed_by_name ? ` by ${(evoucher as any).details.receipt_confirmed_by_name}` : ""}
+                      {" · "}
+                      {new Date((evoucher as any).details.receipt_confirmed_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
+                    </div>
+                  )}
                 </div>
               )}
           </div>
@@ -594,6 +614,8 @@ export function EVoucherDetailView({
             currentStatus={evoucher.status}
             requestorId={evoucher.requestor_id}
             cashReceiverId={evoucher.cash_receiver_id}
+            receiptConfirmedAt={(evoucher as any).details?.receipt_confirmed_at ?? (evoucher as any).receipt_confirmed_at}
+            cashReturnConfirmedAt={(evoucher as any).details?.cash_return_confirmed_at ?? (evoucher as any).cash_return_confirmed_at}
             currentUser={currentUser}
             onStatusChange={() => {
               onStatusChange?.();

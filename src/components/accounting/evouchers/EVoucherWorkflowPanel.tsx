@@ -2,7 +2,7 @@ import { supabase } from "../../../utils/supabase/client";
 import { usePermission } from "../../../context/PermissionProvider";
 import { createWorkflowTicket } from "../../../utils/workflowTickets";
 import { logActivity, logApproval } from "../../../utils/activityLog";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import {
   CheckCircle, XCircle, Send, Ban, Loader2, ClipboardList, Unlock, AlertTriangle,
@@ -32,6 +32,12 @@ interface EVoucherWorkflowPanelProps {
   currentStatus: string;
   requestorId?: string;
   cashReceiverId?: string;
+  /** NEU-050: ISO timestamp when the cash receiver confirmed receipt (from
+   *  details.receipt_confirmed_at). Undefined = not yet confirmed. */
+  receiptConfirmedAt?: string;
+  /** NEU-051 (slice 3): ISO timestamp when Treasury confirmed receipt of unused
+   *  cash returned by the requestor (from details.cash_return_confirmed_at). */
+  cashReturnConfirmedAt?: string;
   currentUser?: CurrentUser;
   onStatusChange?: () => void;
   // Billable expense auto-billing
@@ -76,6 +82,8 @@ export function EVoucherWorkflowPanel({
   currentStatus,
   requestorId,
   cashReceiverId,
+  receiptConfirmedAt,
+  cashReturnConfirmedAt,
   currentUser,
   onStatusChange,
   isBillable,
@@ -92,8 +100,18 @@ export function EVoucherWorkflowPanel({
   const [previousTotalSpent, setPreviousTotalSpent] = useState(0);
   const [previousTotalReturned, setPreviousTotalReturned] = useState(0);
 
-  // Inline confirm for destructive actions (cancel, unlock)
-  const [pendingConfirm, setPendingConfirm] = useState<"cancel" | "unlock" | null>(null);
+  // Inline confirm for destructive actions (cancel, unlock) + receipt confirm (NEU-050)
+  // + cash-return confirm (NEU-051 slice 3)
+  const [pendingConfirm, setPendingConfirm] = useState<"cancel" | "unlock" | "receipt" | "cashreturn" | null>(null);
+
+  // NEU-051 (slices 2/3): liquidation review data for the Treasury verifier —
+  // whether every receipt line has an attachment, and how much unused cash the
+  // requestor must return. Loaded only when a voucher is at pending_verification.
+  const [liqReview, setLiqReview] = useState<{
+    receiptsComplete: boolean;
+    missingReceipts: number;
+    unusedReturn: number;
+  } | null>(null);
 
   // Inline reject zone
   const [showReject, setShowReject] = useState(false);
@@ -102,6 +120,32 @@ export function EVoucherWorkflowPanel({
 
   const [showLiquidationForm, setShowLiquidationForm] = useState(false);
   const [showGLSheet, setShowGLSheet] = useState(false);
+
+  // NEU-051: when a voucher is awaiting Treasury verification, load its
+  // liquidation submissions to check receipt-attachment completeness (slice 2)
+  // and the total unused cash to be returned (slice 3). Re-runs on refetch via
+  // cashReturnConfirmedAt (which changes when Treasury confirms the return).
+  useEffect(() => {
+    if (currentStatus !== "pending_verification") { setLiqReview(null); return; }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("liquidation_submissions")
+        .select("line_items, unused_return")
+        .eq("evoucher_id", evoucherId);
+      if (cancelled) return;
+      const rows = data ?? [];
+      const items = rows.flatMap((r) => (Array.isArray(r.line_items) ? r.line_items : []));
+      const missingReceipts = items.filter((li: any) => !li?.receipt_url).length;
+      const unusedReturn = rows.reduce((s, r) => s + (Number(r.unused_return) || 0), 0);
+      setLiqReview({
+        receiptsComplete: items.length > 0 && missingReceipts === 0,
+        missingReceipts,
+        unusedReturn,
+      });
+    })();
+    return () => { cancelled = true; };
+  }, [currentStatus, evoucherId, cashReturnConfirmedAt]);
 
   const userId = currentUser?.id;
   const isOwner = !requestorId || requestorId === userId;
@@ -134,20 +178,52 @@ export function EVoucherWorkflowPanel({
   const canApproveAsCEO  = holdsAccountingGate && currentStatus === "pending_ceo";
   const canRejectAsCEO   = holdsAccountingGate && currentStatus === "pending_ceo";
   const canDisburse      = holdsDisburseGate && currentStatus === "pending_accounting";
-  const canVerifyAndPost = holdsAccountingGate && currentStatus === "pending_verification";
+  // NEU-051: Treasury (not generic Accounting) verifies + posts liquidations.
+  const canVerifyAndPost = holdsDisburseGate && currentStatus === "pending_verification";
   const canUnlockForCorrection = holdsAccountingGate && currentStatus === "posted";
 
   const isAdvanceType = transactionType === "cash_advance" || transactionType === "budget_request";
+  // NEU-050: the tagged cash receiver acknowledges receipt of the disbursed cash
+  // before liquidating. A flag in details (no new status) — voucher stays `disbursed`.
+  const canConfirmReceipt =
+    isLiquidator && isAdvanceType && currentStatus === "disbursed" && !receiptConfirmedAt;
+  // Liquidation is now sequenced AFTER receipt confirmation: once disbursed, the
+  // receiver must confirm receipt first; once in pending_liquidation it stays open.
   const canOpenLiquidation =
     isLiquidator && isAdvanceType &&
-    (currentStatus === "disbursed" || currentStatus === "pending_liquidation");
+    ((currentStatus === "disbursed" && !!receiptConfirmedAt) || currentStatus === "pending_liquidation");
   const canCloseLiquidation =
-    holdsAccountingGate && currentStatus === "pending_verification";
+    holdsDisburseGate && currentStatus === "pending_verification";
+
+  // NEU-051 slice 3: Treasury confirms receipt of unused cash the requestor is
+  // returning (unused_return > 0) before the liquidation can be posted. The
+  // reverse case (company owes the requestor / overspend) is handled by the
+  // auto-created reimbursement EV and its own NEU-050 receipt confirmation.
+  const unusedReturn = liqReview?.unusedReturn ?? 0;
+  const needsCashReturnConfirm = unusedReturn > 0 && !cashReturnConfirmedAt;
+  const canConfirmCashReturn =
+    holdsDisburseGate && currentStatus === "pending_verification" && needsCashReturnConfirm;
+
+  // NEU-051 slices 2+3: a liquidation may only be verified/posted once (2) every
+  // receipt line has an attachment and (3) any unused cash return is confirmed.
+  const liquidationReady =
+    currentStatus !== "pending_verification" ||
+    (liqReview !== null && liqReview.receiptsComplete && !needsCashReturnConfirm);
+  const liquidationBlockReason =
+    currentStatus !== "pending_verification" || liquidationReady
+      ? null
+      : liqReview === null
+      ? "Loading liquidation…"
+      : !liqReview.receiptsComplete
+      ? `${liqReview.missingReceipts} receipt${liqReview.missingReceipts === 1 ? "" : "s"} missing an attachment — the handler must attach ${liqReview.missingReceipts === 1 ? "it" : "them"} before this can be verified.`
+      : needsCashReturnConfirm
+      ? `Confirm receipt of the ₱${unusedReturn.toLocaleString()} cash return before posting.`
+      : null;
 
   const noActionsAvailable =
     !canSubmit && !canApproveAsTL && !canRejectAsTL && !canApproveAsCEO && !canRejectAsCEO &&
-    !canDisburse && !canVerifyAndPost && !canOpenLiquidation && !canCloseLiquidation &&
-    !canUnlockForCorrection && !canCancel;
+    !canDisburse && !canVerifyAndPost && !canConfirmReceipt && !canConfirmCashReturn &&
+    !canOpenLiquidation && !canCloseLiquidation && !canUnlockForCorrection && !canCancel;
 
   // ── Shared helpers ────────────────────────────────────────────────────────
   const writeHistory = async (action: string, prevStatus: string, newStatus: string, notes?: string) => {
@@ -460,6 +536,142 @@ export function EVoucherWorkflowPanel({
     }
   };
 
+  // NEU-050: cash receiver confirms receipt of the disbursed cash. Records a
+  // marker in details + a workflow-history row, and notifies Treasury + requestor.
+  // Status is unchanged (stays `disbursed`) — this just gates liquidation.
+  const handleConfirmReceipt = async () => {
+    setPendingConfirm(null);
+    setIsSubmitting(true);
+    try {
+      // Merge into existing details so the cash_receiver_* fields aren't clobbered.
+      const { data: cur } = await supabase
+        .from("evouchers").select("details").eq("id", evoucherId).single();
+      const rawDetails = (cur?.details as Record<string, unknown>) || {};
+      const now = new Date().toISOString();
+      const { data, error } = await supabase
+        .from("evouchers")
+        .update({
+          details: {
+            ...rawDetails,
+            receipt_confirmed_at: now,
+            receipt_confirmed_by: userId,
+            receipt_confirmed_by_name: currentUser?.name,
+          },
+          updated_at: now,
+        })
+        .eq("id", evoucherId)
+        .select("id");
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error(
+          "You don't have permission to confirm receipt on this E-Voucher (only the tagged cash receiver can). Refresh and try again.",
+        );
+      }
+      await writeHistory(
+        "Cash Receipt Confirmed",
+        currentStatus,
+        currentStatus,
+        `${currentUser?.name} confirmed receipt of ₱${amount.toLocaleString()}`,
+      );
+
+      // Notify Treasury (Accounting) + the requestor that the cash was received.
+      if (currentUser?.id) {
+        const body = `${currentUser.name} confirmed receipt of ₱${amount.toLocaleString()} for ${evoucherNumber}.`;
+        createWorkflowTicket({
+          subject: `Cash receipt confirmed: ${evoucherNumber}`,
+          body,
+          type: "fyi",
+          recipientDept: "Accounting",
+          linkedRecordType: "expense",
+          linkedRecordId: evoucherId,
+          createdBy: currentUser.id,
+          createdByName: currentUser.name,
+          createdByDept: currentUser.department || "",
+          autoCreated: true,
+        });
+        if (requestorId && requestorId !== userId) {
+          createWorkflowTicket({
+            subject: `Cash receipt confirmed: ${evoucherNumber}`,
+            body,
+            type: "fyi",
+            recipientUserId: requestorId,
+            linkedRecordType: "expense",
+            linkedRecordId: evoucherId,
+            createdBy: currentUser.id,
+            createdByName: currentUser.name,
+            createdByDept: currentUser.department || "",
+            autoCreated: true,
+          });
+        }
+      }
+      toast.success("Receipt confirmed — you can now submit your liquidation");
+      onStatusChange?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to confirm receipt");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // NEU-051 slice 3: Treasury confirms receipt of the unused cash returned by the
+  // requestor. Marks details + history and notifies the requestor. Status stays
+  // pending_verification — this just unblocks Verify & Post.
+  const handleConfirmCashReturn = async () => {
+    setPendingConfirm(null);
+    setIsSubmitting(true);
+    try {
+      const { data: cur } = await supabase
+        .from("evouchers").select("details").eq("id", evoucherId).single();
+      const rawDetails = (cur?.details as Record<string, unknown>) || {};
+      const now = new Date().toISOString();
+      const { data, error } = await supabase
+        .from("evouchers")
+        .update({
+          details: {
+            ...rawDetails,
+            cash_return_confirmed_at: now,
+            cash_return_confirmed_by: userId,
+            cash_return_confirmed_by_name: currentUser?.name,
+          },
+          updated_at: now,
+        })
+        .eq("id", evoucherId)
+        .select("id");
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error(
+          "You don't have permission to confirm the cash return (Treasury only). Refresh and try again.",
+        );
+      }
+      await writeHistory(
+        "Cash Return Received",
+        currentStatus,
+        currentStatus,
+        `${currentUser?.name} confirmed receipt of ₱${unusedReturn.toLocaleString()} returned by the requestor`,
+      );
+      if (currentUser?.id && requestorId && requestorId !== userId) {
+        createWorkflowTicket({
+          subject: `Cash return received: ${evoucherNumber}`,
+          body: `Treasury (${currentUser.name}) confirmed receipt of the ₱${unusedReturn.toLocaleString()} you returned for ${evoucherNumber}.`,
+          type: "fyi",
+          recipientUserId: requestorId,
+          linkedRecordType: "expense",
+          linkedRecordId: evoucherId,
+          createdBy: currentUser.id,
+          createdByName: currentUser.name,
+          createdByDept: currentUser.department || "",
+          autoCreated: true,
+        });
+      }
+      toast.success("Cash return confirmed — you can now verify and post");
+      onStatusChange?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to confirm cash return");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // ── Inline confirm zone ───────────────────────────────────────────────────
 
   const InlineConfirm = ({
@@ -629,12 +841,69 @@ export function EVoucherWorkflowPanel({
           </button>
         )}
 
-        {/* Accounting: Verify & Post */}
+        {/* NEU-051: liquidation-review blockers (Treasury) — missing receipts / pending cash return */}
+        {holdsDisburseGate && currentStatus === "pending_verification" && liquidationBlockReason && (
+          <div style={{
+            padding: "10px 12px", borderRadius: "8px",
+            border: "1px solid var(--theme-status-warning-border, var(--theme-border-default))",
+            backgroundColor: "var(--theme-status-warning-bg)",
+            display: "flex", alignItems: "flex-start", gap: "8px",
+          }}>
+            <AlertTriangle size={13} style={{ color: "var(--theme-status-warning-fg)", flexShrink: 0, marginTop: "1px" }} />
+            <span style={{ fontSize: "12px", color: "var(--theme-status-warning-fg)", fontWeight: 500, lineHeight: 1.5 }}>
+              {liquidationBlockReason}
+            </span>
+          </div>
+        )}
+
+        {/* NEU-051 slice 3: Treasury confirms receipt of unused cash returned by requestor */}
+        {canConfirmCashReturn && pendingConfirm !== "cashreturn" && (
+          <button
+            onClick={() => setPendingConfirm("cashreturn")}
+            disabled={isSubmitting}
+            style={{ ...btnBase, backgroundColor: "var(--theme-action-primary-bg)", color: "#fff", opacity: isSubmitting ? 0.6 : 1, cursor: isSubmitting ? "not-allowed" : "pointer" }}
+          >
+            <CheckCircle size={15} />
+            Confirm Cash Return (₱{unusedReturn.toLocaleString()})
+          </button>
+        )}
+        {pendingConfirm === "cashreturn" && (
+          <div style={{
+            padding: "12px 14px", borderRadius: "8px",
+            border: "1px solid var(--theme-status-success-border, var(--theme-border-default))",
+            backgroundColor: "var(--theme-status-success-bg)",
+          }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: "8px", marginBottom: "10px" }}>
+              <CheckCircle size={13} style={{ color: "var(--theme-status-success-fg)", flexShrink: 0, marginTop: "1px" }} />
+              <span style={{ fontSize: "12px", color: "var(--theme-status-success-fg)", fontWeight: 500, lineHeight: 1.5 }}>
+                Confirm Treasury received ₱{unusedReturn.toLocaleString()} returned by the requestor. This will be recorded in the workflow history.
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                onClick={() => setPendingConfirm(null)}
+                style={{ flex: 1, padding: "7px", borderRadius: "6px", border: "1px solid var(--theme-border-default)", backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-muted)", fontSize: "12px", fontWeight: 500, cursor: "pointer" }}
+              >
+                Not yet
+              </button>
+              <button
+                onClick={handleConfirmCashReturn}
+                disabled={isSubmitting}
+                style={{ flex: 1, padding: "7px", borderRadius: "6px", border: "none", backgroundColor: "var(--theme-status-success-fg)", color: "#fff", fontSize: "12px", fontWeight: 600, cursor: isSubmitting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "5px" }}
+              >
+                {isSubmitting ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />}
+                Yes, received
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Accounting (Treasury): Verify & Post — gated on receipts complete + cash return confirmed */}
         {canVerifyAndPost && (
           <button
             onClick={() => setShowGLSheet(true)}
-            disabled={isSubmitting}
-            style={{ ...btnBase, backgroundColor: "var(--theme-status-success-fg)", color: "#fff", cursor: isSubmitting ? "not-allowed" : "pointer" }}
+            disabled={isSubmitting || !liquidationReady}
+            style={{ ...btnBase, backgroundColor: "var(--theme-status-success-fg)", color: "#fff", opacity: (isSubmitting || !liquidationReady) ? 0.5 : 1, cursor: (isSubmitting || !liquidationReady) ? "not-allowed" : "pointer" }}
           >
             <CheckCircle size={15} />
             Verify & Post
@@ -654,6 +923,48 @@ export function EVoucherWorkflowPanel({
         )}
         {pendingConfirm === "unlock" && (
           <InlineConfirm action="unlock" label="Unlock & Reverse" onConfirm={handleUnlockForCorrection} />
+        )}
+
+        {/* Cash receiver: confirm receipt (NEU-050) — sequenced before liquidation */}
+        {canConfirmReceipt && pendingConfirm !== "receipt" && (
+          <button
+            onClick={() => setPendingConfirm("receipt")}
+            disabled={isSubmitting}
+            style={{ ...btnBase, backgroundColor: "var(--theme-action-primary-bg)", color: "#fff", opacity: isSubmitting ? 0.6 : 1, cursor: isSubmitting ? "not-allowed" : "pointer" }}
+          >
+            <CheckCircle size={15} />
+            Confirm Receipt
+          </button>
+        )}
+        {pendingConfirm === "receipt" && (
+          <div style={{
+            padding: "12px 14px", borderRadius: "8px",
+            border: "1px solid var(--theme-status-success-border, var(--theme-border-default))",
+            backgroundColor: "var(--theme-status-success-bg)",
+          }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: "8px", marginBottom: "10px" }}>
+              <CheckCircle size={13} style={{ color: "var(--theme-status-success-fg)", flexShrink: 0, marginTop: "1px" }} />
+              <span style={{ fontSize: "12px", color: "var(--theme-status-success-fg)", fontWeight: 500, lineHeight: 1.5 }}>
+                Confirm you received ₱{amount.toLocaleString()} in cash. This will be recorded in the workflow history.
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                onClick={() => setPendingConfirm(null)}
+                style={{ flex: 1, padding: "7px", borderRadius: "6px", border: "1px solid var(--theme-border-default)", backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-muted)", fontSize: "12px", fontWeight: 500, cursor: "pointer" }}
+              >
+                Not yet
+              </button>
+              <button
+                onClick={handleConfirmReceipt}
+                disabled={isSubmitting}
+                style={{ flex: 1, padding: "7px", borderRadius: "6px", border: "none", backgroundColor: "var(--theme-status-success-fg)", color: "#fff", fontSize: "12px", fontWeight: 600, cursor: isSubmitting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "5px" }}
+              >
+                {isSubmitting ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />}
+                Yes, I received it
+              </button>
+            </div>
+          </div>
         )}
 
         {/* Requestor: open liquidation */}
@@ -678,12 +989,12 @@ export function EVoucherWorkflowPanel({
           </button>
         )}
 
-        {/* Accounting: close liquidation */}
+        {/* Accounting (Treasury): close liquidation — gated on receipts + cash return */}
         {canCloseLiquidation && (
           <button
             onClick={handleCloseLiquidation}
-            disabled={isSubmitting}
-            style={{ ...btnBase, backgroundColor: "var(--theme-status-success-fg)", color: "#fff", opacity: isSubmitting ? 0.6 : 1, cursor: isSubmitting ? "not-allowed" : "pointer" }}
+            disabled={isSubmitting || !liquidationReady}
+            style={{ ...btnBase, backgroundColor: "var(--theme-status-success-fg)", color: "#fff", opacity: (isSubmitting || !liquidationReady) ? 0.5 : 1, cursor: (isSubmitting || !liquidationReady) ? "not-allowed" : "pointer" }}
           >
             {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle size={15} />}
             {isSubmitting ? "Closing…" : "Close Liquidation"}
