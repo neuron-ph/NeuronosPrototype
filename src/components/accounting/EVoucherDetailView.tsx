@@ -615,6 +615,7 @@ export function EVoucherDetailView({
             requestorId={evoucher.requestor_id}
             cashReceiverId={evoucher.cash_receiver_id}
             receiptConfirmedAt={(evoucher as any).details?.receipt_confirmed_at ?? (evoucher as any).receipt_confirmed_at}
+            cashReturnConfirmedAt={(evoucher as any).details?.cash_return_confirmed_at ?? (evoucher as any).cash_return_confirmed_at}
             currentUser={currentUser}
             onStatusChange={() => {
               onStatusChange?.();
