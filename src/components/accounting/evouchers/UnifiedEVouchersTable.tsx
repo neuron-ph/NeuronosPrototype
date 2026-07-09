@@ -8,6 +8,7 @@ import { EVoucherStatusBadge } from "./EVoucherStatusBadge";
 import { LiquidationPanel } from "./LiquidationPanel";
 import type { EVoucher } from "../../../types/evoucher";
 import { evoucherTypeLabelFor } from "../../../utils/evoucherTransactionType";
+import { getPaymentUrgencyFor, resolveEvoucherDueDate, paymentUrgencyStyle, paymentUrgencyAmountColor } from "../../../utils/evoucherUrgency";
 
 interface UnifiedEVouchersTableProps {
   evouchers: EVoucher[];
@@ -119,31 +120,39 @@ export function UnifiedEVouchersTable({
   );
   const unreadEvoucherIds = useUnreadEntityIds("evoucher", visibleEvoucherIds);
 
-  const getUrgencyColor = (dateString: string) => {
-    const submitted = new Date(dateString);
-    const now = new Date();
-    const diffTime = Math.abs(now.getTime() - submitted.getTime());
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    
-    if (diffDays >= 3) return "text-[var(--theme-status-danger-fg)]";
-    if (diffDays >= 2) return "text-[var(--theme-status-warning-fg)]";
-    return "text-[var(--theme-text-primary)]";
-  };
-
   // -- Columns --
   const columns: ColumnDef<EVoucher>[] = [
     {
       header: "Date",
       width: "120px",
+      cell: (item) => (
+        <span className="text-[12px] font-medium text-[var(--theme-text-primary)]">
+          {formatDate(item.request_date)}
+        </span>
+      )
+    },
+    {
+      header: "Payment Due",
+      width: "130px",
       cell: (item) => {
-        const isPending = item.status === 'pending';
-        const colorClass = isPending ? getUrgencyColor(item.request_date) : "text-[var(--theme-text-primary)]";
-        
+        const dueDate = resolveEvoucherDueDate(item);
+        if (!dueDate) {
+          return <span className="text-[12px] text-[var(--theme-text-muted)]">—</span>;
+        }
+        const urgency = getPaymentUrgencyFor(item);
         return (
-            <span className={`text-[12px] font-medium ${colorClass}`}>
-            {formatDate(item.request_date)}
-            </span>
-        )
+          <div className="flex flex-col items-start gap-1">
+            {urgency && (
+              <span
+                className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold"
+                style={paymentUrgencyStyle(urgency.level)}
+              >
+                {urgency.label}
+              </span>
+            )}
+            <span className="text-[11px] text-[var(--theme-text-muted)]">{formatDate(dueDate)}</span>
+          </div>
+        );
       }
     },
     {
@@ -218,11 +227,17 @@ export function UnifiedEVouchersTable({
       header: "Amount",
       width: "120px",
       align: "right",
-      cell: (item) => (
-        <span className="text-[12px] font-bold text-[var(--theme-text-primary)]">
-          {formatCurrency(item.amount, item.currency)}
-        </span>
-      )
+      cell: (item) => {
+        const urgentColor = paymentUrgencyAmountColor(getPaymentUrgencyFor(item)?.level);
+        return (
+          <span
+            className="text-[12px] font-bold"
+            style={{ color: urgentColor || "var(--theme-text-primary)" }}
+          >
+            {formatCurrency(item.amount, item.currency)}
+          </span>
+        );
+      }
     },
     {
       header: "Status",

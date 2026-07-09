@@ -34,6 +34,14 @@
   --theme-status-danger-fg: #B42318;
   --theme-status-danger-border: #FCA5A5;
 
+  /* Payment urgency (NEU-049) — red/orange/yellow countdown to payment due date */
+  --theme-urgency-red-bg: #FEF2F2;
+  --theme-urgency-red-fg: #B42318;
+  --theme-urgency-orange-bg: #FFF4ED;
+  --theme-urgency-orange-fg: #C4320A;
+  --theme-urgency-yellow-bg: #FEFBE8;
+  --theme-urgency-yellow-fg: #A16207;
+
   /* Markup accent (orange-tinted inputs for selling price markup fields) */
   --theme-markup-bg: #FFFBF5;
   --theme-markup-border: #FBBF88;
@@ -242,6 +250,15 @@
   --theme-status-danger-bg: #351815;
   --theme-status-danger-fg: #F0AAA1;
   --theme-status-danger-border: #C94F3D;
+
+  /* Payment urgency (NEU-049) — dark mode */
+  --theme-urgency-red-bg: #351815;
+  --theme-urgency-red-fg: #F0AAA1;
+  --theme-urgency-orange-bg: #3A1E0E;
+  --theme-urgency-orange-fg: #F5B78A;
+  --theme-urgency-yellow-bg: #322A0C;
+  --theme-urgency-yellow-fg: #E8CE7A;
+
   --neuron-state-focus-ring: 0 0 0 3px rgba(95, 196, 161, 0.22);
 
   /* Elevations (Shadows) -- dark mode */

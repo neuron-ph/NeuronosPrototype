@@ -528,7 +528,7 @@ export function DisburseEVoucherPage() {
       } else if (effectiveReceiverId) {
         createWorkflowTicket({
           subject: `For Liquidation: ${evoucherNumber}`,
-          body: `You received ${formatMoney(amount, voucherCurrency)} for ${evoucherNumber} via ${paymentMethod}. Submit your liquidation with receipts to close this advance.`,
+          body: `You received ${formatMoney(amount, voucherCurrency)} for ${evoucherNumber} via ${paymentMethod}. Confirm receipt in the system, then submit your liquidation with receipts to close this advance.`,
           type: "request",
           recipientUserId: effectiveReceiverId,
           linkedRecordType: "expense",
