@@ -56,7 +56,11 @@ export function ContractsModule({ currentUser, onCreateTicket, initialContract, 
     }
   }, [initialContract]);
 
-  const { scope, isLoaded: scopeLoaded } = useDataScope('quotations');
+  // Contracts live on the `quotations` table but carry their OWN visibility dial
+  // ('contracts'), exactly like DB RLS (quotations_select keys the dial off
+  // quotation_type). Reading the 'quotations' dial here over-hid contracts from
+  // users whose contracts dial was open but quotations dial was 'own'.
+  const { scope, isLoaded: scopeLoaded } = useDataScope('contracts');
 
   // ── Contracts fetch ───────────────────────────────────────
   const {

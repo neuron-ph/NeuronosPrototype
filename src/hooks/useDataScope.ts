@@ -32,7 +32,7 @@ const BOOKING_KEYS = [
 ];
 const FINANCIAL_KEYS = ['invoices', 'collections', 'billings', 'expenses'];
 const ALL_KEYS = [
-  'contacts', 'customers', 'quotations', 'tasks', 'evouchers',
+  'contacts', 'customers', 'quotations', 'contracts', 'tasks', 'evouchers',
   ...FINANCIAL_KEYS, ...BOOKING_KEYS,
 ];
 
