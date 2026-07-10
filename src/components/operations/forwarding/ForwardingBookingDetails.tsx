@@ -8,6 +8,8 @@ import { UnifiedBillingsTab } from "../../shared/billings/UnifiedBillingsTab";
 import { UnifiedInvoicesTab } from "../../shared/invoices/UnifiedInvoicesTab";
 import { UnifiedCollectionsTab } from "../../shared/collections/UnifiedCollectionsTab";
 import { ExpensesTab } from "../shared/ExpensesTab";
+import { BookingFinancialsTab } from "../shared/BookingFinancialsTab";
+import { filterCollectionsForScope } from "../../../utils/financialSelectors";
 import { BookingCommentsTab } from "../../shared/BookingCommentsTab";
 import { BookingChronologicalTab } from "../../shared/BookingChronologicalTab";
 import { EntityAttachmentsTab } from "../../shared/EntityAttachmentsTab";
@@ -36,7 +38,7 @@ interface ForwardingBookingDetailsProps {
   highlightId?: string | null;
 }
 
-type DetailTab = "booking-info" | "billings" | "invoices" | "collections" | "expenses" | "comments" | "chrono" | "attachments";
+type DetailTab = "financials" | "booking-info" | "billings" | "invoices" | "collections" | "expenses" | "comments" | "chrono" | "attachments";
 
 
 // Activity Timeline Data Structure
@@ -80,6 +82,7 @@ export function ForwardingBookingDetails({
 }: ForwardingBookingDetailsProps) {
   const { can } = usePermission();
   // NEU-020 DD-1: per-service door keys
+  const canViewFinancials = can("ops_forwarding_financials_tab", "view"); // Accounting-only per-booking financial dashboard
   const canViewInfo = can("ops_forwarding_info_tab", "view");
   const canViewBillings = can("ops_forwarding_billings_tab", "view");
   const canViewInvoices = can("ops_forwarding_invoices_tab", "view");
@@ -92,7 +95,9 @@ export function ForwardingBookingDetails({
   const canDeleteAttachments = can("ops_forwarding_attachments_tab", "delete");
   const canEditBooking = can("ops_forwarding", "edit");
   const canCancelDeleteBooking = canEditBooking || can("ops_forwarding", "delete");
-  const firstViewableTab: DetailTab = canViewInfo
+  const firstViewableTab: DetailTab = canViewFinancials
+    ? "financials"
+    : canViewInfo
     ? "booking-info"
     : canViewBillings
       ? "billings"
@@ -108,7 +113,7 @@ export function ForwardingBookingDetails({
                 ? "attachments"
                 : "chrono";
   const [activeTab, setActiveTab] = useState<DetailTab>(
-    (initialTab === "booking-info" && !canViewInfo) || (initialTab === "billings" && !canViewBillings) || (initialTab === "invoices" && !canViewInvoices) || (initialTab === "collections" && !canViewCollections) || (initialTab === "expenses" && !canViewExpenses)
+    (initialTab === "financials" && !canViewFinancials) || (initialTab === "booking-info" && !canViewInfo) || (initialTab === "billings" && !canViewBillings) || (initialTab === "invoices" && !canViewInvoices) || (initialTab === "collections" && !canViewCollections) || (initialTab === "expenses" && !canViewExpenses)
       ? firstViewableTab
       : (initialTab as DetailTab) || firstViewableTab
   );
@@ -246,14 +251,27 @@ export function ForwardingBookingDetails({
     linkedBookings: [{ bookingId: booking.bookingId }],
   }), [booking.bookingId, booking.projectNumber, booking.customerName, (booking as any).customer_id]);
 
+  const bookingInvoices = useMemo(() =>
+    financials.invoices.filter((inv: any) =>
+      inv.booking_id === booking.bookingId ||
+      (Array.isArray(inv.booking_ids) && inv.booking_ids.includes(booking.bookingId))
+    ), [financials.invoices, booking.bookingId]);
+
   const bookingFinancials = useMemo(() => ({
     ...financials,
     billingItems: bookingBillingItems,
-    invoices: financials.invoices.filter((inv: any) =>
-      inv.booking_id === booking.bookingId ||
-      (Array.isArray(inv.booking_ids) && inv.booking_ids.includes(booking.bookingId))
-    ),
-  }), [financials, bookingBillingItems, booking.bookingId]);
+    invoices: bookingInvoices,
+  }), [financials, bookingBillingItems, bookingInvoices]);
+
+  // Booking-scoped collections (by the booking's invoice ids) + expenses — for the Financials dashboard.
+  const bookingCollections = useMemo(() =>
+    filterCollectionsForScope(
+      financials.collections,
+      bookingInvoices.map((inv: any) => inv.id).filter(Boolean),
+    ), [financials.collections, bookingInvoices]);
+  const bookingExpenses = useMemo(() =>
+    financials.expenses.filter((e: any) => e.booking_id === booking.bookingId),
+    [financials.expenses, booking.bookingId]);
 
   const confidentialAction = useConfidentialAction({
     table: "bookings",
@@ -358,6 +376,33 @@ export function ForwardingBookingDetails({
       }}>
         {/* Tabs - Left Side */}
         <div style={{ display: "flex", gap: "24px", height: "100%" }}>
+          {canViewFinancials && (
+            <button
+              onClick={() => setActiveTab("financials")}
+              style={{
+                padding: "0 4px",
+                fontSize: "14px",
+                fontWeight: 500,
+                color: activeTab === "financials" ? "var(--theme-action-primary-bg)" : "var(--neuron-ink-muted)",
+                background: "none",
+                borderTop: "none",
+                borderLeft: "none",
+                borderRight: "none",
+                borderBottom: activeTab === "financials" ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
+                cursor: "pointer",
+                transition: "all 0.2s",
+                height: "100%"
+              }}
+              onMouseEnter={(e) => {
+                if (activeTab !== "financials") e.currentTarget.style.color = "var(--neuron-ink-secondary)";
+              }}
+              onMouseLeave={(e) => {
+                if (activeTab !== "financials") e.currentTarget.style.color = "var(--neuron-ink-muted)";
+              }}
+            >
+              Financials
+            </button>
+          )}
           {canViewInfo && (
             <button
               onClick={() => setActiveTab("booking-info")}
@@ -697,6 +742,16 @@ export function ForwardingBookingDetails({
           overflow: "auto",
           transition: "flex 0.3s ease"
         }}>
+          {activeTab === "financials" && canViewFinancials && (
+            <BookingFinancialsTab
+              billingItems={bookingBillingItems}
+              invoices={bookingInvoices}
+              collections={bookingCollections}
+              expenses={bookingExpenses}
+              isLoading={financials.isLoading}
+              onNavigateTab={setActiveTab}
+            />
+          )}
           {activeTab === "booking-info" && canViewInfo && (
             <BookingInfoTab
               permissionDoor="ops_forwarding_info_tab"

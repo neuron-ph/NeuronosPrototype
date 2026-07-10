@@ -297,6 +297,7 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
         kind: "module", id: "ops_marine_insurance", moduleId: "ops_marine_insurance",
         label: "Marine Insurance", pageId: "ops-marine-insurance",
         tabs: [
+          tab("ops_marine_insurance_financials_tab", "Financials"),
           tab("ops_marine_insurance_info_tab", "Booking Info"),
           tab("ops_marine_insurance_billings_tab", "Billings"),
           tab("ops_marine_insurance_invoices_tab", "Invoices"),
@@ -319,6 +320,7 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
         kind: "module", id: "pricing_others", moduleId: "pricing_others",
         label: "Others", pageId: "pricing-others",
         tabs: [
+          tab("pricing_others_financials_tab", "Financials"),
           tab("pricing_others_info_tab", "Booking Info"),
           tab("pricing_others_billings_tab", "Billings"),
           tab("pricing_others_invoices_tab", "Invoices"),
@@ -347,6 +349,7 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
         kind: "module", id: "ops_forwarding", moduleId: "ops_forwarding",
         label: "Forwarding", pageId: "ops-forwarding",
         tabs: [
+          tab("ops_forwarding_financials_tab", "Financials"),
           tab("ops_forwarding_info_tab", "Booking Info"),
           tab("ops_forwarding_billings_tab", "Billings"),
           tab("ops_forwarding_invoices_tab", "Invoices"),
@@ -367,6 +370,7 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
         kind: "module", id: "ops_brokerage", moduleId: "ops_brokerage",
         label: "Brokerage", pageId: "ops-brokerage",
         tabs: [
+          tab("ops_brokerage_financials_tab", "Financials"),
           tab("ops_brokerage_info_tab", "Booking Info"),
           tab("ops_brokerage_billings_tab", "Billings"),
           tab("ops_brokerage_invoices_tab", "Invoices"),
@@ -387,6 +391,7 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
         kind: "module", id: "ops_trucking", moduleId: "ops_trucking",
         label: "Trucking", pageId: "ops-trucking",
         tabs: [
+          tab("ops_trucking_financials_tab", "Financials"),
           tab("ops_trucking_info_tab", "Booking Info"),
           tab("ops_trucking_billings_tab", "Billings"),
           tab("ops_trucking_invoices_tab", "Invoices"),
@@ -407,6 +412,7 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
         kind: "module", id: "ops_others", moduleId: "ops_others",
         label: "Others", pageId: "ops-others",
         tabs: [
+          tab("ops_others_financials_tab", "Financials"),
           tab("ops_others_info_tab", "Booking Info"),
           tab("ops_others_billings_tab", "Billings"),
           tab("ops_others_invoices_tab", "Invoices"),

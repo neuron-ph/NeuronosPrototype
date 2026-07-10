@@ -211,6 +211,13 @@ export const APPLICABLE_ACTIONS: Record<ModuleId, readonly ActionId[]> = {
   ops_bookings_expenses_tab: ["view", "create", "edit"],
   ops_bookings_comments_tab: ["view", "create"],
   ops_bookings_chrono_tab: ["view", "create", "edit", "delete"],
+  // Per-booking Financials dashboard tab (Accounting-only) — read-only
+  ops_forwarding_financials_tab: ["view"],
+  ops_brokerage_financials_tab: ["view"],
+  ops_trucking_financials_tab: ["view"],
+  ops_marine_insurance_financials_tab: ["view"],
+  ops_others_financials_tab: ["view"],
+  pricing_others_financials_tab: ["view"],
   // NEU-020 DD-1: per-service booking-detail doors (invoices delete = draft-delete + void per DD-9; export = PDF/Print per DD-3)
   ops_forwarding_info_tab: ["view", "edit"],
   ops_forwarding_billings_tab: ["view", "create", "edit", "delete"],

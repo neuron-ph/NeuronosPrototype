@@ -177,6 +177,24 @@ describe("calculateFinancialTotals", () => {
     expect(result.overdueAmount).toBe(10000);
   });
 
+  it("nets EWT out of outstanding + overdue (NEU-069)", () => {
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 86_400_000).toISOString();
+    // ₱73,800 invoice, ₱1,476 EWT withheld, still fully open + overdue.
+    // Outstanding/overdue should reflect the collectible net (₱72,324), not the gross.
+    const invoices = [
+      makeInvoice({
+        amount: 73800,
+        remaining_balance: 73800,
+        ewt_total: 1476,
+        payment_status: "unpaid",
+        due_date: ninetyDaysAgo,
+      }),
+    ];
+    const result = calculateFinancialTotals(invoices, [], [], []);
+    expect(result.outstandingAmount).toBe(72324);
+    expect(result.overdueAmount).toBe(72324);
+  });
+
   it("handles NaN / undefined amounts gracefully", () => {
     const invoices = [makeInvoice({ amount: undefined, total_amount: "not-a-number" })];
     const result = calculateFinancialTotals(invoices, [], [], []);

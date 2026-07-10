@@ -79,8 +79,16 @@ export function calculateInvoiceBalance(
     }
   });
 
-  const balance = Math.max(0, roundMoney(totalAmount - paidAmount));
-  const balanceBase = Math.max(0, roundMoney(totalAmountBase - paidAmountBase));
+  // NEU-069: EWT withheld by the customer is a settled portion of the receivable
+  // (backed by a BIR 2307), not cash we still collect. Fold it into the balance so
+  // the invoice closes when the net (total − ewt_total) is remitted. Legacy invoices
+  // have ewt_total = null → 0 → behaviour unchanged. Actual payments still drive the
+  // 'partial' status; EWT alone never marks an untouched invoice as partially paid.
+  const ewtTotal = Math.max(0, Number((invoice as any).ewt_total) || 0); // invoice currency
+  const ewtTotalBase = roundMoney(ewtTotal * invRate);
+
+  const balance = Math.max(0, roundMoney(totalAmount - paidAmount - ewtTotal));
+  const balanceBase = Math.max(0, roundMoney(totalAmountBase - paidAmountBase - ewtTotalBase));
 
   // Status is driven by PHP base so cross-currency settlements close cleanly.
   let status: 'paid' | 'partial' | 'open' | 'overdue' = 'open';

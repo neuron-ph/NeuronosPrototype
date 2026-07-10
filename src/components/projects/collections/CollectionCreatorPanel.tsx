@@ -54,6 +54,7 @@ interface OpenInvoice {
   payment_amount: number;          // invoice currency
   isSelected: boolean;
   isReversed?: boolean;
+  ewt_total?: number;              // NEU-069: EWT withheld (invoice currency); already netted out of the open balance
 }
 
 export function CollectionCreatorPanel({ 
@@ -223,6 +224,7 @@ export function CollectionCreatorPanel({
               invoice_rate: invRate,
               payment_amount: 0,
               isSelected: false,
+              ewt_total: Number((inv as any).ewt_total) || 0,
             };
           })
           .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
@@ -773,6 +775,14 @@ export function CollectionCreatorPanel({
                               )}
                             </div>
                             <div className="text-xs text-[var(--theme-text-muted)]">{inv.description}</div>
+                            {mode !== 'view' && (inv.ewt_total || 0) > 0 && (
+                              <div
+                                className="text-[11px] font-medium text-[var(--theme-action-primary-bg)] mt-0.5"
+                                title="Expanded Withholding Tax the customer withholds and remits to the BIR. The open balance is the net you expect to collect; this invoice closes once that net is received."
+                              >
+                                less EWT withheld: {formatCurrency(inv.ewt_total || 0)}
+                              </div>
+                            )}
                           </td>
                           <td className="px-6 py-4 text-sm text-[var(--theme-text-secondary)]">
                             {new Date(inv.due_date).toLocaleDateString()}

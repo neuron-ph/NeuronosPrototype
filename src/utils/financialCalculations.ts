@@ -34,13 +34,17 @@ const baseAmt = (row: RawRow): number => {
  * raw amount for legacy rows with no FX metadata.
  */
 const baseRemainingBalance = (row: RawRow): number => {
-  if (row.remaining_balance == null) return baseAmt(row);
-  const remainingOriginal = num(row.remaining_balance);
   const rate = Number(row.exchange_rate);
-  if (Number.isFinite(rate) && rate > 0 && rate !== 1) {
-    return remainingOriginal * rate;
-  }
-  return remainingOriginal;
+  const fxMul = Number.isFinite(rate) && rate > 0 && rate !== 1 ? rate : 1;
+  const gross =
+    row.remaining_balance == null ? baseAmt(row) : num(row.remaining_balance) * fxMul;
+  // NEU-069: EWT withheld by the customer is a settled portion of the receivable
+  // (backed by a BIR 2307), not cash still outstanding. Net it out of the aging /
+  // outstanding balance, mirroring calculateInvoiceBalance. ewt_total is in invoice
+  // currency → convert to PHP base with the same FX multiplier. Legacy rows have
+  // no ewt_total (→ 0) so behaviour is unchanged.
+  const ewtBase = num(row.ewt_total) * fxMul;
+  return Math.max(0, gross - ewtBase);
 };
 
 const str = (value: unknown): string => {

@@ -37,6 +37,10 @@ export interface BillingItem {
   is_virtual?: boolean;
   catalog_item_id?: string; // Catalog linkage (Item Master reference)
   catalog_category_id?: string; // Catalog category linkage — precise re-resolution key
+  // NEU-069: EWT withholding, captured per line. Rate in percent (2/10/15);
+  // 0/undefined = not subject. amount snapshot = amount * ewt_rate/100 (gross).
+  ewt_rate?: number;
+  ewt_amount?: number;
   [key: string]: any;
 }
 
@@ -465,7 +469,7 @@ export function UnifiedBillingsTab({
     if (field === 'serviceType' || field === 'service') backendField = 'service_type';
     
     // Ensure numeric types
-    if (['amount', 'quantity', 'forex_rate', 'amount_added', 'percentage_added'].includes(field)) {
+    if (['amount', 'quantity', 'forex_rate', 'amount_added', 'percentage_added', 'ewt_rate'].includes(field)) {
         value = Number(value) || 0;
     }
 
@@ -624,6 +628,13 @@ export function UnifiedBillingsTab({
             created_at: item.created_at || new Date().toISOString(),
             rule_applied: item.rule_applied || null,
             condition_label: item.condition_label || null,
+            // NEU-069: EWT captured per line. Snapshot the withheld peso at gross
+            // (amount × rate) so the invoice/collections read a stable figure even
+            // if the catalog amount later changes. 0/none → null.
+            ewt_rate: Number(item.ewt_rate) > 0 ? Number(item.ewt_rate) : null,
+            ewt_amount: Number(item.ewt_rate) > 0
+              ? Math.round(Number(item.amount || 0) * Number(item.ewt_rate) / 100 * 100) / 100
+              : null,
             });
           };
 

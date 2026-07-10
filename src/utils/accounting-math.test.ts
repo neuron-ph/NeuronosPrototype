@@ -144,6 +144,28 @@ describe("calculateInvoiceBalance", () => {
     expect(r.status).toBe("paid");
   });
 
+  // NEU-069: EWT withheld reduces the collectible balance so the invoice closes
+  // when the net (total − ewt_total) is remitted.
+  it("EWT — net remittance closes the invoice", () => {
+    // ₱73,800 invoice, ₱1,476 EWT (2%). Customer wires the net ₱72,324.
+    const { invoice, collections } = php(73800, [{ amount: 72324 }]);
+    (invoice as any).ewt_total = 1476;
+    const r = calculateInvoiceBalance(invoice, collections);
+    expect(r.balance).toBe(0);
+    expect(r.balanceBase).toBe(0);
+    expect(r.status).toBe("paid");
+  });
+
+  it("EWT — unpaid invoice shows the net as still open, not partial", () => {
+    // Before any payment, the EWT alone must NOT mark the invoice as partially paid.
+    const { invoice, collections } = php(73800, []);
+    (invoice as any).ewt_total = 1476;
+    const r = calculateInvoiceBalance(invoice, collections);
+    expect(r.balance).toBe(72324); // collectible net of withholding
+    expect(r.paidAmount).toBe(0);
+    expect(r.status).not.toBe("partial"); // EWT alone never reads as a partial payment
+  });
+
   it("legacy invoice with no FX columns defaults to PHP rate=1", () => {
     const invoice = { ...baseInvoice, total_amount: 5000 } as unknown as Invoice;
     const r = calculateInvoiceBalance(invoice, []);
