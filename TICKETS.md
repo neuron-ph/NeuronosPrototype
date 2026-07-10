@@ -99,6 +99,8 @@ Raised by Carol Infante (Accounting), forwarded 2026-07-06. Concerns diagnosed a
 
 ### Billing & Collection Batch
 
+**🚀 RELEASED TO PROD 2026-07-10 (stable/2026-07-10-2, main @ 82e7273).** All the "Fixed (dev)" items in this batch — invoice PDF NEU-062/063/064/065/066/067/068, D1 booking-linkage NEU-070/076/077, grouped subtotals NEU-058, bank input NEU-055 — plus Profiling lookups NEU-071 (migration 238) and EWT NEU-069 (migration 237) shipped. Migrations 237 + 238 applied to prod + verified. No edge-function changes. Still open/held (NOT shipped-complete): NEU-061 (later), NEU-075 (hold), NEU-078/079 (D1 rollout to billings + collections), and the NEU-069 EWT UI is on prod at whatever state Marcus committed 7/10.
+
 Raised by Falcons Accounting via **"CONCERNS FOR BILLING AND COLLECTION.pdf"** (annotated invoice-printing + collection-encoding screenshots), forwarded 2026-07-10. 15 concerns, dispositioned with Marcus at intake. Scope centers on the **Invoice / Billing Statement PDF** (`src/utils/documents/invoiceDocumentResolver.ts` + the invoice print/preview surface) and **Collection encoding** (Receive Payment). Two are held for later (NEU-058, NEU-061), one held pending decision (NEU-069 EWT), two are investigations (NEU-057 billable expenses, NEU-060 PDF download). NEU-068 (due-date math) is the only hard bug. Related: NEU-019 (consignee/shipper rename).
 
 | ID | Title | Area | Priority | Status | Notes |
