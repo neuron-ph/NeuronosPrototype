@@ -4,13 +4,16 @@ import type { Signatory } from "../useQuotationDocumentState";
 interface SignatoryControlProps {
   preparedBy: Signatory;
   approvedBy: Signatory;
-  onUpdate: (type: "prepared_by" | "approved_by", field: "name" | "title", value: string) => void;
+  // NEU-063: optional middle "Checked By" block (invoices). When omitted the
+  // control renders the original Prepared / Approved pair unchanged.
+  checkedBy?: Signatory;
+  onUpdate: (type: "prepared_by" | "approved_by" | "checked_by", field: "name" | "title", value: string) => void;
 }
 
 const inputCls = "w-full px-3.5 py-2 text-sm border border-[var(--theme-border-default)] rounded-lg focus:border-[var(--theme-action-primary-bg)] focus:ring-1 focus:ring-[var(--theme-action-primary-bg)] outline-none transition-all placeholder:text-[var(--theme-text-muted)]";
 const inputSubtleCls = `${inputCls} bg-[var(--theme-bg-surface-subtle)]`;
 
-export function SignatoryControl({ preparedBy, approvedBy, onUpdate }: SignatoryControlProps) {
+export function SignatoryControl({ preparedBy, approvedBy, checkedBy, onUpdate }: SignatoryControlProps) {
   return (
     <div className="space-y-5">
       {/* Prepared By */}
@@ -39,6 +42,35 @@ export function SignatoryControl({ preparedBy, approvedBy, onUpdate }: Signatory
           />
         </div>
       </div>
+
+      {/* Checked By (optional — invoices) */}
+      {checkedBy ? (
+        <div className="space-y-2.5">
+          <label htmlFor="sig-checked-name" className="text-xs font-semibold text-[var(--theme-text-primary)] uppercase tracking-wider">
+            Checked By
+          </label>
+          <div className="space-y-2">
+            <input
+              id="sig-checked-name"
+              type="text"
+              value={checkedBy.name}
+              onChange={(e) => onUpdate("checked_by", "name", e.target.value)}
+              className={inputCls}
+              placeholder="Name (Optional)"
+              aria-label="Checked by name"
+            />
+            <input
+              id="sig-checked-title"
+              type="text"
+              value={checkedBy.title}
+              onChange={(e) => onUpdate("checked_by", "title", e.target.value)}
+              className={inputSubtleCls}
+              placeholder="Job Title"
+              aria-label="Checked by job title"
+            />
+          </div>
+        </div>
+      ) : null}
 
       {/* Approved By */}
       <div className="space-y-2.5">

@@ -115,8 +115,9 @@ function buildInvoiceTable(
     { id: "quantity", label: "Qty", align: "center", widthHint: "6%", hideWhenEmpty: true },
     { id: "unit", label: "Unit", align: "center", widthHint: "8%", hideWhenEmpty: true },
     { id: "rate", label: "Rate", align: "right", format: "money", widthHint: "12%" },
-    { id: "tax_type", label: "Tax", align: "center", widthHint: "8%", hideWhenEmpty: true },
+    // NEU-067: Amount before Tax (accounting-requested column order).
     { id: "amount", label: "Amount", align: "right", format: "money", widthHint: "12%" },
+    { id: "tax_type", label: "Tax", align: "center", widthHint: "8%", hideWhenEmpty: true },
   ];
 
   // Single-currency check: if ALL line items use the invoice currency, hide
@@ -349,6 +350,11 @@ export function resolveInvoicePrintableDocument(args: ResolveInvoiceArgs): Print
   const approvedByName = settings.signatories?.approvedBy?.name;
   const approvedByTitle = settings.signatories?.approvedBy?.title;
 
+  // NEU-063: a middle "Checked by" block (Prepared / Checked / Approved). Only
+  // rendered when the document carries a checkedBy entry, so surfaces that don't
+  // supply one keep the two-column layout.
+  const hasCheckedBy = settings.signatories?.checkedBy !== undefined;
+
   const signatories: PrintableSignatory[] = [
     {
       id: "prepared_by",
@@ -357,6 +363,15 @@ export function resolveInvoicePrintableDocument(args: ResolveInvoiceArgs): Print
       title: preparedByTitle,
       includeSignatureLine: true,
     },
+    ...(hasCheckedBy
+      ? [{
+          id: "checked_by",
+          label: "Checked by",
+          name: settings.signatories?.checkedBy?.name,
+          title: settings.signatories?.checkedBy?.title,
+          includeSignatureLine: true,
+        } as PrintableSignatory]
+      : []),
     {
       id: "approved_by",
       label: "Approved by",

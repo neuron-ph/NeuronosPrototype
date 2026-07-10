@@ -36,6 +36,7 @@ export interface DocumentContactFooterOverride {
 export interface DocumentSettings {
   signatories: {
     preparedBy?: DocumentSignatoryInput;
+    checkedBy?: DocumentSignatoryInput;
     approvedBy?: DocumentSignatoryInput;
     conforme?: DocumentSignatoryInput;
   };
@@ -148,6 +149,14 @@ export function fromInvoicePrintOptions(
         name: options.signatories?.prepared_by?.name,
         title: options.signatories?.prepared_by?.title,
       },
+      // NEU-063: pass through the optional Checked-by block; when present it
+      // becomes the middle signatory in the printed invoice.
+      checkedBy: options.signatories?.checked_by
+        ? {
+            name: options.signatories.checked_by.name,
+            title: options.signatories.checked_by.title,
+          }
+        : undefined,
       approvedBy: {
         name: options.signatories?.approved_by?.name,
         title: options.signatories?.approved_by?.title,

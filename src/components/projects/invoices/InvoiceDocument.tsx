@@ -22,6 +22,7 @@ export interface InvoiceContactFooter {
 export interface InvoicePrintOptions {
   signatories: {
     prepared_by: { name: string; title: string };
+    checked_by?: { name: string; title: string };
     approved_by: { name: string; title: string };
   };
   display: {

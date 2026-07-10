@@ -205,6 +205,7 @@ export function InvoiceBuilder({
   // -- Shared Options State --
   const [signatories, setSignatories] = useState({
       prepared_by: { name: "System User", title: "Authorized User" },
+      checked_by: { name: "", title: "" },
       approved_by: { name: "MANAGEMENT", title: "Authorized Signatory" }
   });
   
@@ -262,11 +263,12 @@ export function InvoiceBuilder({
 
         // Load metadata (signatories, display options) if available
         const metadata = (viewInvoice as any).metadata || {};
-        if (metadata.signatories) setSignatories(metadata.signatories);
+        if (metadata.signatories) setSignatories(prev => ({ ...prev, ...metadata.signatories }));
         else {
              // Fallback default for View
              setSignatories({
                 prepared_by: { name: (viewInvoice.created_by_name as string) || "System User", title: "Authorized User" },
+                checked_by: { name: "", title: "" },
                 approved_by: { name: "MANAGEMENT", title: "Authorized Signatory" }
              });
         }
@@ -958,7 +960,7 @@ export function InvoiceBuilder({
   const zoomOut = () => { setAutoScale(false); setScale(prev => Math.max(prev - 0.1, 0.4)); };
   const toggleFit = () => { setAutoScale(true); };
   
-  const updateSignatory = (type: "prepared_by" | "approved_by", field: "name" | "title", value: string) => {
+  const updateSignatory = (type: "prepared_by" | "approved_by" | "checked_by", field: "name" | "title", value: string) => {
       setSignatories(prev => ({
           ...prev,
           [type]: { ...prev[type], [field]: value }
@@ -1521,6 +1523,7 @@ export function InvoiceBuilder({
                   <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--theme-text-muted)] mb-3">Signatories</p>
                   <SignatoryControl
                     preparedBy={signatories.prepared_by}
+                    checkedBy={signatories.checked_by}
                     approvedBy={signatories.approved_by}
                     onUpdate={updateSignatory}
                   />
@@ -1558,6 +1561,7 @@ export function InvoiceBuilder({
                   <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--theme-text-muted)] mb-3">Signatories</p>
                   <SignatoryControl
                     preparedBy={signatories.prepared_by}
+                    checkedBy={signatories.checked_by}
                     approvedBy={signatories.approved_by}
                     onUpdate={updateSignatory}
                   />
