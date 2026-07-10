@@ -116,6 +116,123 @@ describe("resolveInvoicePrintableDocument — taxes & columns", () => {
   });
 });
 
+describe("resolveInvoicePrintableDocument — NEU-067 column order", () => {
+  it("renders Amount before Tax in the line-item table", () => {
+    const doc = resolveInvoicePrintableDocument({
+      invoice: baseInvoice({
+        line_items: [
+          { description: "X", quantity: 1, unit_price: 100, amount: 100, tax_type: "VAT" },
+        ],
+      } as any),
+    });
+    const ids = doc.tables.find((t) => t.id === "invoice-lines")!.columns.map((c) => c.id);
+    expect(ids).toContain("amount");
+    expect(ids).toContain("tax_type");
+    expect(ids.indexOf("amount")).toBeLessThan(ids.indexOf("tax_type"));
+    // Rate still precedes Amount.
+    expect(ids.indexOf("rate")).toBeLessThan(ids.indexOf("amount"));
+  });
+});
+
+describe("resolveInvoicePrintableDocument — NEU-065 remarks as subtext", () => {
+  it("renders remarks as a row subtext, not a Remarks column", () => {
+    const doc = resolveInvoicePrintableDocument({
+      invoice: baseInvoice({
+        line_items: [
+          { description: "CUSTOMS PROCESSING FEE", unit_price: 4500, amount: 4500, tax_type: "NON-VAT", remarks: "AWDAWDAW-DAWKJKSDJNGK" },
+          { description: "Brokerage Fee", unit_price: 3500, amount: 3500, tax_type: "NON-VAT" },
+        ],
+      } as any),
+    });
+    const table = doc.tables.find((t) => t.id === "invoice-lines")!;
+    expect(table.columns.map((c) => c.id)).not.toContain("remarks");
+    const row = table.rows.find((r) => String(r.cells.description).includes("CUSTOMS"))!;
+    expect(row.subtext).toBe("AWDAWDAW-DAWKJKSDJNGK");
+    const noRemark = table.rows.find((r) => String(r.cells.description).includes("Brokerage"))!;
+    expect(noRemark.subtext).toBeUndefined();
+  });
+});
+
+describe("resolveInvoicePrintableDocument — NEU-058 grouped subtotals", () => {
+  it("groups charges into service VAT / Non-VAT / Billable with per-group subtotals", () => {
+    const doc = resolveInvoicePrintableDocument({
+      invoice: baseInvoice({
+        service_type: "Brokerage",
+        line_items: [
+          { description: "Brokerage Fee", unit_price: 3500, amount: 3500, tax_type: "VAT" },
+          { description: "Stamp & Notary", unit_price: 1000, amount: 1000, tax_type: "NON-VAT" },
+          { description: "EV-1 Trucking Detention", unit_price: 12000, amount: 12000, tax_type: "NON-VAT", source_type: "billable_expense" },
+        ],
+      } as any),
+    });
+    const table = doc.tables.find((t) => t.id === "invoice-lines")!;
+    expect(table.groups?.map((g) => g.title)).toEqual([
+      "Brokerage Charge (VAT)",
+      "Brokerage Charge (Non-VAT)",
+      "Billable",
+    ]);
+    const sub = (id: string) => Number(table.groups!.find((g) => g.id === id)!.subtotal!.cells.amount);
+    expect(sub("svc_vat")).toBe(3500);
+    expect(sub("svc_nonvat")).toBe(1000);
+    expect(sub("billable")).toBe(12000);
+  });
+
+  it("stays flat (no groups) when only one class is present", () => {
+    const doc = resolveInvoicePrintableDocument({
+      invoice: baseInvoice({
+        service_type: "Forwarding",
+        line_items: [{ description: "Ocean Freight", unit_price: 310, amount: 310, tax_type: "NON-VAT" }],
+      } as any),
+    });
+    const table = doc.tables.find((t) => t.id === "invoice-lines")!;
+    expect(table.groups || []).toHaveLength(0);
+  });
+});
+
+describe("resolveInvoicePrintableDocument — NEU-064 legal notice", () => {
+  it("sets the BIR input-tax compliance line for the pinned footer", () => {
+    const doc = resolveInvoicePrintableDocument({ invoice: baseInvoice() });
+    expect(doc.legalNotice).toBe("THIS DOCUMENT IS NOT VALID FOR CLAIMING OF INPUT TAXES");
+  });
+});
+
+describe("resolveInvoicePrintableDocument — NEU-063 checked-by signatory", () => {
+  const withSig = (checked?: { name: string; title: string }) =>
+    resolveInvoicePrintableDocument({
+      invoice: baseInvoice(),
+      options: {
+        signatories: {
+          prepared_by: { name: "Prep", title: "Encoder" },
+          ...(checked ? { checked_by: checked } : {}),
+          approved_by: { name: "Appr", title: "Manager" },
+        },
+        display: {
+          show_bank_details: true,
+          show_notes: true,
+          show_tax_summary: true,
+          show_letterhead: true,
+        },
+      },
+    });
+
+  it("inserts Checked by between Prepared and Approved when supplied", () => {
+    const doc = withSig({ name: "Chk", title: "Reviewer" });
+    expect(doc.signatories.map((s) => s.id)).toEqual([
+      "prepared_by",
+      "checked_by",
+      "approved_by",
+    ]);
+    const checked = doc.signatories.find((s) => s.id === "checked_by")!;
+    expect(checked.label).toBe("Checked by");
+    expect(checked.name).toBe("Chk");
+  });
+
+  it("keeps the two-column layout when no checked-by is supplied", () => {
+    const doc = withSig();
+    expect(doc.signatories.map((s) => s.id)).toEqual(["prepared_by", "approved_by"]);
+  });
+});
+
 describe("resolveInvoicePrintableDocument — totals", () => {
   it("includes PHP equivalent row only when invoice has FX rate", () => {
     const docFx = resolveInvoicePrintableDocument({

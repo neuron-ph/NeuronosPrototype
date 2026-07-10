@@ -101,13 +101,30 @@ const billingStatusStyles: Record<string, { bg: string; text: string; border: st
   "Voided": { bg: "var(--theme-status-danger-bg)", text: "var(--theme-status-danger-fg)", border: "var(--theme-status-danger-border)" },
 };
 
-function BreakdownSubRow({ item }: { item: BillingTableItem }) {
+// NEU-069: EWT rate options. Gross base (amount × rate); customer withholds this
+// and remits it to the BIR. Internal only — never printed on the invoice.
+const EWT_RATE_OPTIONS = [0, 2, 10, 15];
+
+function BreakdownSubRow({
+  item,
+  editable = false,
+  onEwtChange,
+}: {
+  item: BillingTableItem;
+  editable?: boolean;
+  onEwtChange?: (rate: number) => void;
+}) {
   const rule = item.originalData?.rule_applied;
   const condition = item.originalData?.condition_label;
   // NEU-022: surface lines a human overrode — these keep their hand-entered value
   // (the quotation / a contract amendment will not overwrite them).
   const manual = item.originalData?.is_manually_adjusted;
-  if (!rule && !manual) return null;
+  // NEU-069: EWT withholding on this line.
+  const ewtRate = Number(item.originalData?.ewt_rate) || 0;
+  const ewtAmount = ewtRate > 0 ? Math.round((item.amount || 0) * ewtRate / 100 * 100) / 100 : 0;
+  const showEwt = editable || ewtRate > 0;
+
+  if (!rule && !manual && !showEwt) return null;
   return (
     <div style={{ padding: "2px 16px 6px 44px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
       {rule && (
@@ -127,6 +144,45 @@ function BreakdownSubRow({ item }: { item: BillingTableItem }) {
         >
           Manually adjusted
         </span>
+      )}
+      {showEwt && (
+        editable ? (
+          <label
+            style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "10px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.03em" }}
+            title="Expanded Withholding Tax — captured internally, never shown on the printed invoice. Reduces the amount you expect to collect."
+          >
+            EWT
+            <select
+              value={ewtRate}
+              onChange={(e) => onEwtChange?.(Number(e.target.value))}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                fontSize: "11px", fontWeight: 600,
+                padding: "1px 4px", borderRadius: "4px",
+                border: "1px solid var(--theme-border-default)",
+                backgroundColor: "var(--theme-bg-surface)",
+                color: ewtRate > 0 ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)",
+                cursor: "pointer",
+              }}
+            >
+              {EWT_RATE_OPTIONS.map((r) => (
+                <option key={r} value={r}>{r === 0 ? "None" : `${r}%`}</option>
+              ))}
+            </select>
+            {ewtRate > 0 && (
+              <span style={{ fontSize: "10px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "none", letterSpacing: 0, fontFamily: "monospace" }}>
+                − {formatCurrency(ewtAmount, item.currency)} withheld
+              </span>
+            )}
+          </label>
+        ) : ewtRate > 0 ? (
+          <span
+            title="Expanded Withholding Tax withheld by the customer — internal only, not on the printed invoice."
+            style={{ fontSize: "10px", fontWeight: 600, color: "var(--theme-action-primary-bg)", backgroundColor: "var(--theme-bg-surface-tint)", padding: "1px 8px", borderRadius: "4px", display: "inline-block", fontFamily: "monospace" }}
+          >
+            EWT {ewtRate}% · − {formatCurrency(ewtAmount, item.currency)}
+          </span>
+        ) : null
       )}
     </div>
   );
@@ -566,7 +622,11 @@ export function BillingsTable({
                                     }}
                                     customActions={buildRowActions(item)}
                                   />
-                                  <BreakdownSubRow item={item} />
+                                  <BreakdownSubRow
+                                    item={item}
+                                    editable={!viewMode && !isBilled}
+                                    onEwtChange={(rate) => onItemChange?.(item.id, "ewt_rate", rate)}
+                                  />
                                   </div>
                                 );
                               })}
@@ -900,7 +960,11 @@ export function BillingsTable({
                                     }}
                                     customActions={buildRowActions(item)}
                                   />
-                                  <BreakdownSubRow item={item} />
+                                  <BreakdownSubRow
+                                    item={item}
+                                    editable={!viewMode && !isBilled}
+                                    onEwtChange={(rate) => onItemChange?.(item.id, "ewt_rate", rate)}
+                                  />
                                 </div>
                               );
                             })}
@@ -1026,7 +1090,11 @@ export function BillingsTable({
                                     }}
                                     customActions={buildRowActions(item)}
                                     />
-                                    <BreakdownSubRow item={item} />
+                                    <BreakdownSubRow
+                                    item={item}
+                                    editable={!viewMode && !isBilled}
+                                    onEwtChange={(rate) => onItemChange?.(item.id, "ewt_rate", rate)}
+                                  />
                                     </div>
                                     );
                                 })}

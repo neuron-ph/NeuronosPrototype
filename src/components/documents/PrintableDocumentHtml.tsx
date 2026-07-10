@@ -403,14 +403,12 @@ export const PrintableDocumentHtml = React.forwardRef<HTMLDivElement, PrintableD
           .p-sig-line { border-bottom: 1px solid #111827 !important; margin-bottom: 6px !important; }
           .p-sig-name { font-size: 9pt !important; font-weight: 700 !important; color: #111827 !important; text-transform: uppercase !important; min-height: 12pt !important; }
           .p-sig-title { font-size: 7pt !important; color: #4B5563 !important; }
-          .p-contact-footer { margin-top: auto !important; padding-top: 10px !important; border-top: 2px solid #172A4D !important; display: flex !important; justify-content: space-between !important; page-break-inside: avoid !important; gap: 18px !important; }
-          .p-mode-preview .p-contact-footer {
-            position: absolute !important;
-            left: 12mm !important;
-            right: 12mm !important;
-            bottom: 12mm !important;
-            background: white !important;
-          }
+          .p-contact-footer { padding-top: 10px !important; border-top: 2px solid #172A4D !important; display: flex !important; justify-content: space-between !important; page-break-inside: avoid !important; gap: 18px !important; background: white !important; }
+          /* NEU-062: pin signatories + legal notice + footer to the A4 bottom
+             regardless of how few/many line items, for both preview and print. */
+          .p-doc-bottom { margin-top: auto !important; }
+          /* NEU-064: BIR compliance line in the footer zone. */
+          .p-legal-notice { text-align: center !important; font-size: 7pt !important; font-weight: 700 !important; letter-spacing: 0.04em !important; text-transform: uppercase !important; color: #6B7280 !important; margin-top: 8px !important; padding-top: 6px !important; page-break-inside: avoid !important; }
           .p-contact-col { display: flex !important; flex-direction: column !important; }
           .p-contact-label { font-size: 8pt !important; font-weight: 800 !important; color: #172A4D !important; margin-bottom: 4px !important; }
           .p-contact-text { font-size: 7.5pt !important; color: #111827 !important; line-height: 1.4 !important; }
@@ -424,7 +422,7 @@ export const PrintableDocumentHtml = React.forwardRef<HTMLDivElement, PrintableD
           .p-footer-grid { break-inside: avoid !important; page-break-inside: avoid !important; }
           .p-branded-header { width: calc(100% + 24mm) !important; margin: -12mm -12mm 10px !important; overflow: hidden !important; height: 115px !important; }
           .p-branded-header img { width: 100% !important; display: block !important; object-fit: cover !important; object-position: top center !important; height: 100% !important; }
-          .p-branded-footer { overflow: hidden !important; height: 108px !important; margin-top: 10px !important; width: calc(100% + 24mm) !important; margin-left: -12mm !important; margin-right: -12mm !important; margin-bottom: -12mm !important; }
+          .p-branded-footer { overflow: hidden !important; height: 108px !important; margin-top: 10px !important; width: calc(100% + 24mm) !important; margin-left: -12mm !important; margin-right: -12mm !important; margin-bottom: 0 !important; }
           .p-branded-footer img { width: 100% !important; display: block !important; object-fit: cover !important; object-position: bottom center !important; height: 100% !important; }
           @page {
             margin: 6mm 0;
@@ -569,42 +567,59 @@ export const PrintableDocumentHtml = React.forwardRef<HTMLDivElement, PrintableD
           </div>
         )}
 
-        {/* Signatories */}
-        <SignatoriesBlock signatories={signatories} />
-
-        {/* Contact footer */}
-        {doc.brandedFooterImage && doc.options.showContactFooter ? (
-          <div className="p-branded-footer">
-            <img src={doc.brandedFooterImage} alt="Footer" />
-          </div>
-        ) : contactFooter && doc.options.showContactFooter ? (
-          <div className="p-contact-footer">
-            {contactFooter.callNumbers.length > 0 ? (
-              <div className="p-contact-col">
-                <span className="p-contact-label">Call</span>
-                {contactFooter.callNumbers.map((p, i) => (
-                  <span key={i} className="p-contact-text">{p}</span>
-                ))}
-              </div>
-            ) : null}
-            {contactFooter.emails.length > 0 ? (
-              <div className="p-contact-col">
-                <span className="p-contact-label">Message</span>
-                {contactFooter.emails.map((e, i) => (
-                  <span key={i} className="p-contact-text">{e}</span>
-                ))}
-              </div>
-            ) : null}
-            {contactFooter.addressLines.length > 0 ? (
-              <div className="p-contact-col" style={{ width: "40%" }}>
-                <span className="p-contact-label">Office Address</span>
-                {contactFooter.addressLines.map((line, i) => (
-                  <span key={i} className="p-contact-text">{line}</span>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+        {/* Bottom zone: signatories + footer + legal notice, pinned to the A4
+            bottom (NEU-062). Legal line is always the last element, below the
+            footer (NEU-064). */}
+        {(() => {
+          const legal = isPrintableValue(doc.legalNotice)
+            ? <div className="p-legal-notice">{doc.legalNotice}</div>
+            : null;
+          return (
+            <div className="p-doc-bottom">
+              <SignatoriesBlock signatories={signatories} />
+              {doc.brandedFooterImage && doc.options.showContactFooter ? (
+                <>
+                  <div className="p-branded-footer">
+                    <img src={doc.brandedFooterImage} alt="Footer" />
+                  </div>
+                  {legal}
+                </>
+              ) : contactFooter && doc.options.showContactFooter ? (
+                <>
+                  <div className="p-contact-footer">
+                    {contactFooter.callNumbers.length > 0 ? (
+                      <div className="p-contact-col">
+                        <span className="p-contact-label">Call</span>
+                        {contactFooter.callNumbers.map((p, i) => (
+                          <span key={i} className="p-contact-text">{p}</span>
+                        ))}
+                      </div>
+                    ) : null}
+                    {contactFooter.emails.length > 0 ? (
+                      <div className="p-contact-col">
+                        <span className="p-contact-label">Message</span>
+                        {contactFooter.emails.map((e, i) => (
+                          <span key={i} className="p-contact-text">{e}</span>
+                        ))}
+                      </div>
+                    ) : null}
+                    {contactFooter.addressLines.length > 0 ? (
+                      <div className="p-contact-col" style={{ width: "40%" }}>
+                        <span className="p-contact-label">Office Address</span>
+                        {contactFooter.addressLines.map((line, i) => (
+                          <span key={i} className="p-contact-text">{line}</span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  {legal}
+                </>
+              ) : (
+                legal
+              )}
+            </div>
+          );
+        })()}
       </div>
     );
   },

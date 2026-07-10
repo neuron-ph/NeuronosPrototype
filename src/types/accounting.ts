@@ -155,6 +155,7 @@ export interface Invoice extends FxFields {
   description?: string;
   amount?: number;
   total_amount?: number;
+  ewt_total?: number; // NEU-069: EWT withheld across lines; internal, reduces the collectible balance
   created_at?: string;
   notes?: string;
   created_by_name?: string;

@@ -14,6 +14,7 @@ import {
   type PrintableSignatory,
   type PrintableTable,
   type PrintableTableColumn,
+  type PrintableTableGroup,
   type PrintableTableRow,
   type PrintableTotalRow,
   type PrintableTotals,
@@ -107,16 +108,33 @@ function resolveContactFooter(
 function buildInvoiceTable(
   lineItems: any[],
   currency: string,
-  options: { showTax: boolean; omitEmpty: boolean },
+  options: { showTax: boolean; omitEmpty: boolean; serviceLabel: string },
 ): PrintableTable {
+  // NEU-058: group charges into subtotals — service charges split by VAT status,
+  // billable/pass-through expenses on their own. The service label comes from the
+  // invoice's booking (Doctrine D1 — one booking per invoice).
+  const svc = options.serviceLabel?.trim() || "Service";
+  const GROUP_DEFS = [
+    { id: "svc_vat", title: `${svc} Charge (VAT)` },
+    { id: "svc_nonvat", title: `${svc} Charge (Non-VAT)` },
+    { id: "billable", title: "Billable" },
+  ];
+  const groupOf = (item: any): string => {
+    if (String(item.source_type) === "billable_expense") return "billable";
+    return String(item.tax_type).toUpperCase() === "VAT" ? "svc_vat" : "svc_nonvat";
+  };
+
+  // NEU-065: remarks render as a subtext line beneath the description (mirrors
+  // Quotations), NOT a dedicated column — long remarks then breathe instead of
+  // stretching a narrow column and ballooning row height.
   const columns: PrintableTableColumn[] = [
-    { id: "description", label: "Description", widthHint: "40%" },
-    { id: "remarks", label: "Remarks", widthHint: "14%", hideWhenEmpty: true },
+    { id: "description", label: "Description", widthHint: "54%" },
     { id: "quantity", label: "Qty", align: "center", widthHint: "6%", hideWhenEmpty: true },
     { id: "unit", label: "Unit", align: "center", widthHint: "8%", hideWhenEmpty: true },
     { id: "rate", label: "Rate", align: "right", format: "money", widthHint: "12%" },
-    { id: "tax_type", label: "Tax", align: "center", widthHint: "8%", hideWhenEmpty: true },
+    // NEU-067: Amount before Tax (accounting-requested column order).
     { id: "amount", label: "Amount", align: "right", format: "money", widthHint: "12%" },
+    { id: "tax_type", label: "Tax", align: "center", widthHint: "8%", hideWhenEmpty: true },
   ];
 
   // Single-currency check: if ALL line items use the invoice currency, hide
@@ -136,24 +154,47 @@ function buildInvoiceTable(
       });
       descCell = `${description} (Converted from ${item.original_currency} ${origAmt} @ ${rate})`;
     }
+    const remarks = item.remarks ? String(item.remarks).trim() : "";
     return {
       id: item.id || `inv-line-${idx}`,
+      groupId: groupOf(item),
       cells: {
         description: descCell,
-        remarks: item.remarks ?? "",
         quantity: item.quantity ?? "",
         unit: item.unit ?? "",
         rate: Number(item.unit_price ?? item.rate ?? 0),
         tax_type: options.showTax && item.tax_type ? String(item.tax_type) : "",
         amount: Number(item.amount ?? 0),
       },
+      subtext: remarks || undefined,
     };
   });
+
+  // Build a subtotal group per non-empty class, in the requested order
+  // (service VAT → service Non-VAT → Billable). Only group when ≥2 classes are
+  // present — a single-class invoice stays flat (a lone subtotal = grand total).
+  const builtGroups: PrintableTableGroup[] = [];
+  for (const def of GROUP_DEFS) {
+    const groupRows = lineItems.filter((i) => groupOf(i) === def.id);
+    if (groupRows.length === 0) continue;
+    const subtotalAmt = groupRows.reduce((sum, i) => sum + Number(i.amount ?? 0), 0);
+    builtGroups.push({
+      id: def.id,
+      title: def.title,
+      subtotal: {
+        id: `${def.id}-subtotal`,
+        groupId: def.id,
+        emphasis: "subtotal",
+        cells: { description: "Subtotal", amount: subtotalAmt, currency },
+      },
+    });
+  }
 
   return {
     id: "invoice-lines",
     columns,
     rows,
+    groups: builtGroups.length > 1 ? builtGroups : [],
     hideWhenEmpty: options.omitEmpty,
     emptyMessage: "No items on this invoice.",
   };
@@ -255,6 +296,12 @@ export function resolveInvoicePrintableDocument(args: ResolveInvoiceArgs): Print
       label: "Project No.",
       value: project?.project_number || (invoice as any).project_number,
     },
+    // NEU-066: booking number (the invoice is booking-linked — Doctrine D1).
+    {
+      id: "booking_no",
+      label: "Booking No.",
+      value: (invoice as any).booking_number || zoneA.booking_number,
+    },
   ];
 
   // Bill To
@@ -309,6 +356,8 @@ export function resolveInvoicePrintableDocument(args: ResolveInvoiceArgs): Print
   const table = buildInvoiceTable(lineItems, currency, {
     showTax: settings.display.showTaxSummary,
     omitEmpty: DEFAULT_PRINTABLE_OPTIONS.omitEmptyTables,
+    // NEU-058: service label for the grouped subtotals, from the booking (D1).
+    serviceLabel: (invoice as any).service_type || zoneA.service_type || "",
   });
 
   // Totals
@@ -349,6 +398,11 @@ export function resolveInvoicePrintableDocument(args: ResolveInvoiceArgs): Print
   const approvedByName = settings.signatories?.approvedBy?.name;
   const approvedByTitle = settings.signatories?.approvedBy?.title;
 
+  // NEU-063: a middle "Checked by" block (Prepared / Checked / Approved). Only
+  // rendered when the document carries a checkedBy entry, so surfaces that don't
+  // supply one keep the two-column layout.
+  const hasCheckedBy = settings.signatories?.checkedBy !== undefined;
+
   const signatories: PrintableSignatory[] = [
     {
       id: "prepared_by",
@@ -357,6 +411,15 @@ export function resolveInvoicePrintableDocument(args: ResolveInvoiceArgs): Print
       title: preparedByTitle,
       includeSignatureLine: true,
     },
+    ...(hasCheckedBy
+      ? [{
+          id: "checked_by",
+          label: "Checked by",
+          name: settings.signatories?.checkedBy?.name,
+          title: settings.signatories?.checkedBy?.title,
+          includeSignatureLine: true,
+        } as PrintableSignatory]
+      : []),
     {
       id: "approved_by",
       label: "Approved by",
@@ -396,6 +459,8 @@ export function resolveInvoicePrintableDocument(args: ResolveInvoiceArgs): Print
     footerFields: [],
     options,
     pageFooterText,
+    // NEU-064: BIR compliance line pinned with the footer.
+    legalNotice: "THIS DOCUMENT IS NOT VALID FOR CLAIMING OF INPUT TAXES",
   };
 
   return normalizePrintableDocument(doc);

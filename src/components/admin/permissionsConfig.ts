@@ -65,6 +65,8 @@ export type ModuleId =
   | "ops_marine_insurance_info_tab" | "ops_marine_insurance_billings_tab" | "ops_marine_insurance_invoices_tab" | "ops_marine_insurance_collections_tab" | "ops_marine_insurance_expenses_tab" | "ops_marine_insurance_comments_tab" | "ops_marine_insurance_chrono_tab"
   | "ops_others_info_tab" | "ops_others_billings_tab" | "ops_others_invoices_tab" | "ops_others_collections_tab" | "ops_others_expenses_tab" | "ops_others_comments_tab" | "ops_others_chrono_tab"
   | "ops_forwarding_attachments_tab" | "ops_brokerage_attachments_tab" | "ops_trucking_attachments_tab" | "ops_marine_insurance_attachments_tab" | "ops_others_attachments_tab"
+  // Per-booking Financials dashboard tab (Accounting-only) — one door per service line
+  | "ops_forwarding_financials_tab" | "ops_brokerage_financials_tab" | "ops_trucking_financials_tab" | "ops_marine_insurance_financials_tab" | "ops_others_financials_tab" | "pricing_others_financials_tab"
   | "ops_projects_all_tab" | "ops_projects_active_tab" | "ops_projects_completed_tab"
   | "ops_projects_info_tab" | "ops_projects_bookings_tab"
   | "ops_projects_quotation_tab" | "ops_projects_expenses_tab" | "ops_projects_billings_tab"

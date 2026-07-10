@@ -15,6 +15,7 @@ import { queryKeys } from "../../../lib/queryKeys";
 import { InvoiceDocument, InvoicePrintOptions } from "./InvoiceDocument";
 import { downloadInvoicePDF } from "./InvoicePDFRenderer";
 import { SignatoryControl } from "../quotation/screen/controls/SignatoryControl";
+import { BankDetailsControl } from "../quotation/screen/controls/BankDetailsControl";
 import { DisplayOptionsControl } from "../quotation/screen/controls/DisplayOptionsControl";
 import { CustomDropdown } from "../../bd/CustomDropdown";
 import { useBookingGrouping } from "../../../hooks/useBookingGrouping";
@@ -31,7 +32,11 @@ import {
   type AccountingCurrency,
 } from "../../../utils/accountingCurrency";
 import { recordNotificationEvent } from "../../../utils/notifications";
-import { useCompanySettings } from "../../../hooks/useCompanySettings";
+import { useCompanySettings, useUpdateCompanySettings } from "../../../hooks/useCompanySettings";
+import { parseCreditTermDays } from "../../../utils/creditTerms";
+import { buildCatalogSnapshot } from "../../../utils/catalogSnapshot";
+import { useCreditTerms } from "../../../hooks/useCreditTerms";
+import { useBankAccounts } from "../../../hooks/useBankAccounts";
 
 
 // A4 Dimensions in pixels at 96 DPI
@@ -85,6 +90,9 @@ export function InvoiceBuilder({
   // -- Common State --
   const { user } = useUser();
   const { settings: companySettings } = useCompanySettings();
+  // NEU-071: Profiling-managed invoice lookups.
+  const { creditTerms: creditTermsList } = useCreditTerms();
+  const { bankAccounts } = useBankAccounts();
   const { can } = usePermission();
   // NEU-019 WG-06: the invoice lifecycle (draft/finalize/delete/void) wrote with
   // no permission beyond tab views. Same OR-gate family as billings/collections
@@ -191,9 +199,15 @@ export function InvoiceBuilder({
   // Accounting State (For GL Posting — Revenue Account for DR AR / CR Revenue)
   const [revenueAccountId, setRevenueAccountId] = useState("");
 
+  // Doctrine D1 (NEU-077): every invoice must be booking-linked. The invoice is
+  // tied to exactly one booking — auto-selected when the project has one,
+  // chosen when it has several, blocked when it has none.
+  const [selectedBookingId, setSelectedBookingId] = useState<string>("");
+
   // -- Shared Options State --
   const [signatories, setSignatories] = useState({
       prepared_by: { name: "System User", title: "Authorized User" },
+      checked_by: { name: "", title: "" },
       approved_by: { name: "MANAGEMENT", title: "Authorized Signatory" }
   });
   
@@ -203,6 +217,22 @@ export function InvoiceBuilder({
       show_letterhead: true,
       show_tax_summary: true
   });
+
+  // NEU-055: bank details shown on the invoice. Seeded from the company default
+  // (Profiling), editable per-invoice, and "Save as company default" writes back.
+  const [bankDetails, setBankDetails] = useState({ bank_name: "", account_name: "", account_number: "" });
+  const updateCompanySettings = useUpdateCompanySettings();
+
+  // NEU-071: Profiling-managed selectors. Credit terms falls back to a free-text
+  // "Custom…" entry; bank details can be picked from a profiled account.
+  const [useCustomTerms, setUseCustomTerms] = useState(false);
+  const [selectedBankAccountId, setSelectedBankAccountId] = useState("");
+
+  // Prefer a profiled term's net_days; fall back to parsing the label.
+  const getNetDays = (label: string): number => {
+    const t = creditTermsList.find((ct) => ct.label === label);
+    return t ? t.net_days : parseCreditTermDays(label);
+  };
 
   // -- Queries --
 
@@ -241,6 +271,29 @@ export function InvoiceBuilder({
     staleTime: 30_000,
   });
 
+  // Doctrine D1 (NEU-077): the project's bookings — the invoice must attach to one.
+  const { data: projectBookings = [] } = useQuery({
+    queryKey: ["invoice-project-bookings", project.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("bookings")
+        .select("id, booking_number, service_type")
+        .eq("project_id", project.id)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return (data || []) as Array<{ id: string; booking_number: string; service_type: string }>;
+    },
+    enabled: mode === "create" && !!project.id,
+    staleTime: 30_000,
+  });
+
+  // Auto-select when the project has exactly one booking.
+  useEffect(() => {
+    if (mode !== "create") return;
+    if (projectBookings.length === 1) setSelectedBookingId(projectBookings[0].id);
+    else if (!projectBookings.some(b => b.id === selectedBookingId)) setSelectedBookingId("");
+  }, [mode, projectBookings, selectedBookingId]);
+
   // -- Initialization / Effects --
 
   // 1. If View Mode, load data into state
@@ -249,13 +302,19 @@ export function InvoiceBuilder({
         // Load notes
         setNotes((viewInvoice.notes as string) || "");
 
+        // NEU-055: restore this invoice's saved bank block (falls back to the
+        // company default via the seed effect when the invoice has none).
+        const bd = ((viewInvoice as any).metadata || {}).bank_details;
+        if (bd && (bd.bank_name || bd.account_name || bd.account_number)) setBankDetails(bd);
+
         // Load metadata (signatories, display options) if available
         const metadata = (viewInvoice as any).metadata || {};
-        if (metadata.signatories) setSignatories(metadata.signatories);
+        if (metadata.signatories) setSignatories(prev => ({ ...prev, ...metadata.signatories }));
         else {
              // Fallback default for View
              setSignatories({
                 prepared_by: { name: (viewInvoice.created_by_name as string) || "System User", title: "Authorized User" },
+                checked_by: { name: "", title: "" },
                 approved_by: { name: "MANAGEMENT", title: "Authorized Signatory" }
              });
         }
@@ -383,7 +442,7 @@ export function InvoiceBuilder({
     let effectiveDueDate = dueDate;
     if (!effectiveDueDate) {
          const d = new Date(invoiceDate);
-         d.setDate(d.getDate() + 30);
+         d.setDate(d.getDate() + getNetDays(creditTerms));
          effectiveDueDate = d.toISOString().split('T')[0];
     }
     
@@ -434,7 +493,10 @@ export function InvoiceBuilder({
             unit_price: finalAmount,
             amount: finalAmount,
             tax_type: override.tax_type,
-            
+            // NEU-058: carry the source classification so the printed invoice can
+            // group charges into subtotals (Billable vs service charges).
+            source_type: item.source_type,
+
             // Snapshot Strategy Fields
             original_amount: originalAmount,
             original_currency: item.currency,
@@ -455,8 +517,10 @@ export function InvoiceBuilder({
       billed_to_type: billedToType,
       billed_to_consignee_id: billedToConsigneeId,
       project_number: selectedLineage.projectRefs.length === 1 ? selectedLineage.projectRefs[0] : project.project_number,
-      booking_id: selectedLineage.bookingIds.length === 1 ? selectedLineage.bookingIds[0] : undefined,
-      booking_ids: selectedLineage.bookingIds,
+      booking_id: selectedBookingId || undefined,
+      booking_ids: selectedBookingId ? [selectedBookingId] : [],
+      booking_number: projectBookings.find(b => b.id === selectedBookingId)?.booking_number,
+      service_type: projectBookings.find(b => b.id === selectedBookingId)?.service_type, // NEU-058 group label
       line_items: finalLineItems,
       subtotal: subtotal,
       tax_amount: taxAmount,
@@ -478,14 +542,57 @@ export function InvoiceBuilder({
       credit_terms: creditTerms,
       contract_number: selectedLineage.contractRefs.length === 1 ? selectedLineage.contractRefs[0] : undefined,
     } as Invoice;
-  }, [mode, viewInvoice, selectedItems, selectedLineage, invoiceDate, dueDate, notes, project, currency, signatories, customerTin, blNumber, consignee, commodityDescription, creditTerms, itemOverrides, customerAddress, targetCurrency, exchangeRate, billedToType, selectedConsignee]);
+  }, [mode, viewInvoice, selectedItems, selectedLineage, invoiceDate, dueDate, notes, project, currency, signatories, customerTin, blNumber, consignee, commodityDescription, creditTerms, itemOverrides, customerAddress, targetCurrency, exchangeRate, billedToType, selectedConsignee, selectedBookingId, projectBookings, creditTermsList]);
 
-  // Print Options Object
+  // NEU-055/071: seed the bank block once while empty (per-invoice edits win) —
+  // prefer a profiled bank account (currency-matched), else the company default.
+  useEffect(() => {
+    if (bankDetails.bank_name || bankDetails.account_name || bankDetails.account_number) return;
+    if (bankAccounts.length > 0) {
+      const match = bankAccounts.find(b => (b.currency || "").toUpperCase() === (targetCurrency || "").toUpperCase()) || bankAccounts[0];
+      setSelectedBankAccountId(match.id);
+      setBankDetails({ bank_name: match.bank_name, account_name: match.account_name, account_number: match.account_number });
+    } else if (companySettings?.bank_name || companySettings?.bank_account_number) {
+      setBankDetails({
+        bank_name: companySettings.bank_name || "",
+        account_name: companySettings.bank_account_name || "",
+        account_number: companySettings.bank_account_number || "",
+      });
+    }
+  }, [companySettings, bankAccounts, targetCurrency, bankDetails.bank_name, bankDetails.account_name, bankDetails.account_number]);
+
+  // NEU-071: pick a profiled bank account → fill the (still-editable) bank block.
+  const selectBankAccount = (id: string) => {
+    setSelectedBankAccountId(id);
+    const acct = bankAccounts.find(b => b.id === id);
+    if (acct) setBankDetails({ bank_name: acct.bank_name, account_name: acct.account_name, account_number: acct.account_number });
+  };
+
+  const updateBankDetail = (field: "bank_name" | "account_name" | "account_number", value: string) => {
+    setSelectedBankAccountId(""); // manual edit = custom, no longer a profiled account
+    setBankDetails(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSaveBankDefault = () => {
+    updateCompanySettings.mutate(
+      {
+        bank_name: bankDetails.bank_name || null,
+        bank_account_name: bankDetails.account_name || null,
+        bank_account_number: bankDetails.account_number || null,
+      },
+      {
+        onSuccess: () => toast.success("Saved as company default"),
+        onError: () => toast.error("Failed to save company default"),
+      }
+    );
+  };
+
   const printOptions: InvoicePrintOptions = useMemo(() => ({
       signatories: signatories,
       display: displayOptions,
-      custom_notes: notes
-  }), [signatories, displayOptions, notes]);
+      custom_notes: notes,
+      bank_details: bankDetails,
+  }), [signatories, displayOptions, notes, bankDetails]);
 
   const handleDownloadPDF = useCallback(async () => {
     setIsGeneratingPDF(true);
@@ -550,6 +657,16 @@ export function InvoiceBuilder({
       toast.error("Please select at least one billing item.");
       return;
     }
+    // Doctrine D1 (NEU-077): an invoice must be booking-linked.
+    if (projectBookings.length === 0) {
+      toast.error("This project has no booking. Create a booking before invoicing.");
+      return;
+    }
+    if (!selectedBookingId) {
+      toast.error("Select the booking this invoice belongs to.");
+      return;
+    }
+    const invoiceBooking = projectBookings.find(b => b.id === selectedBookingId);
 
     try {
       setIsSubmitting(true);
@@ -562,31 +679,65 @@ export function InvoiceBuilder({
           toast.info("Finalizing billing items...");
           
           const virtualItemsToSave = billingItems.filter(item => virtualIds.includes(item.id));
-          
-          // Prepare payload: remove virtual ID
-          const itemsToSave = virtualItemsToSave.map(item => {
-             // eslint-disable-next-line @typescript-eslint/no-unused-vars
-             const { id, is_virtual, ...rest } = item as any;
-             return {
-                 ...rest,
-                 project_id: project.id,
-                 status: 'unbilled'
-             };
-          });
 
-          const batchInsertItems = itemsToSave.map((item: any) => ({
-              ...item,
+          // Billing charges are NOT e-vouchers — persist them as real
+          // billing_line_items (the invoice references these). Mirror the
+          // canonical mapping in UnifiedBillingsTab: explicit column whitelist +
+          // catalog snapshot, dropping stray quotation-item fields (amount_added,
+          // percentage_added, base_cost, forex_rate…) that aren't columns here.
+          const batchInsertItems = virtualItemsToSave.map((item: any) => {
+            const lineCurrency = item.currency || "PHP";
+            const rawRate = Number(item.exchange_rate ?? item.forex_rate);
+            const lineRate = lineCurrency === "PHP"
+              ? 1
+              : (Number.isFinite(rawRate) && rawRate > 0 ? rawRate : null);
+            const lineAmount = Number(item.amount || 0);
+            const category = item.category || item.quotation_category || null;
+            return {
+              id: crypto.randomUUID(),
+              // D1: stamp the invoice's booking onto the charge so billings are
+              // booking-linked too (auto-assigns raw project/quotation charges).
+              booking_id: selectedBookingId,
+              booking_number: invoiceBooking?.booking_number || null,
               project_id: project.id,
               project_number: project.project_number,
-              transaction_type: 'billing',
+              description: item.description || "",
+              service_type: item.service_type || "",
+              category,
+              quotation_category: category,
+              amount: lineAmount,
+              quantity: item.quantity || 1,
+              unit_price: item.unit_price ?? item.amount ?? 0,
+              currency: lineCurrency,
+              exchange_rate: lineRate,
+              base_currency: "PHP",
+              base_amount: lineRate === null ? null : Math.round(lineAmount * lineRate * 100) / 100,
               status: 'unbilled',
+              is_taxed: item.is_taxed || false,
+              tax_code: item.tax_code || null,
+              unit_type: item.unit_type || null,
+              catalog_item_id: item.catalog_item_id || null,
+              catalog_snapshot: item.catalog_item_id
+                ? buildCatalogSnapshot(
+                    { description: item.description, unit_type: item.unit_type, tax_code: item.tax_code, amount: item.amount, currency: item.currency },
+                    category
+                  )
+                : (item.catalog_snapshot || null),
+              source_id: item.source_id || null,
+              source_type: item.source_type || (item.source_quotation_item_id ? "quotation_item" : "manual"),
+              source_quotation_item_id: item.source_quotation_item_id || null,
+              // NEU-069: carry any EWT captured on the charge (quotation-derived
+              // virtual items normally have none; real tagged charges do).
+              ewt_rate: Number(item.ewt_rate) > 0 ? Number(item.ewt_rate) : null,
+              ewt_amount: Number(item.ewt_rate) > 0
+                ? Math.round(lineAmount * Number(item.ewt_rate) / 100 * 100) / 100
+                : (item.ewt_amount ?? null),
               created_at: new Date().toISOString(),
-          }));
-          const { data: batchResult, error: batchSaveError } = await supabase.from('evouchers').insert(batchInsertItems).select();
+            };
+          });
+          const { data: batchResult, error: batchSaveError } = await supabase.from('billing_line_items').insert(batchInsertItems).select();
           if (batchSaveError) throw new Error(batchSaveError.message);
           const savedItems: any[] = batchResult || [];
-          const batchActor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
-          savedItems.forEach(inv => logCreation("invoice", inv.id, inv.invoice_number ?? inv.id, batchActor));
           
           // Map Virtual IDs -> Real IDs
           const idMap = new Map<string, string>();
@@ -621,13 +772,22 @@ export function InvoiceBuilder({
         return;
       }
 
-      const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}`;
+      // NEU-070 + Doctrine D1: invoice number = [Booking Number]-XXX. Every
+      // invoice is booking-linked (enforced above), so the base is always the
+      // selected booking's number. XXX = 3-digit running sequence (001, 002, …)
+      // counted from existing invoices that share the prefix.
+      const numberBase = invoiceBooking?.booking_number || project.project_number || "INV";
+      const { count: priorInvoiceCount } = await supabase
+        .from("invoices")
+        .select("id", { count: "exact", head: true })
+        .ilike("invoice_number", `${numberBase}-%`);
+      const invoiceNumber = `${numberBase}-${String((priorInvoiceCount || 0) + 1).padStart(3, "0")}`;
 
       // Compute effective due date for persistence
       let effectiveDueDate = dueDate || undefined;
       if (!effectiveDueDate) {
           const d = new Date(invoiceDate);
-          d.setDate(d.getDate() + 30);
+          d.setDate(d.getDate() + getNetDays(creditTerms));
           effectiveDueDate = d.toISOString().split('T')[0];
       }
 
@@ -649,6 +809,18 @@ export function InvoiceBuilder({
       });
       const rateDate = (invoiceDate || new Date().toISOString()).slice(0, 10);
 
+      // NEU-069: total EWT withheld across the invoiced lines (gross, invoice
+      // currency). Internal only — the printed invoice still shows the full
+      // total_amount; ewt_total reduces the collectible balance so the invoice
+      // closes when the net (total − ewt_total) is remitted.
+      const ewtTotal = roundMoney(
+        selectedItems.reduce((sum: number, it: any) => {
+          const rate = Number(it.ewt_rate) || 0;
+          const amt = Number(it.ewt_amount) || (rate > 0 ? Number(it.amount || 0) * rate / 100 : 0);
+          return sum + amt;
+        }, 0)
+      );
+
       const invoiceRow = {
         id: crypto.randomUUID(),
         invoice_number: invoiceNumber,
@@ -657,8 +829,8 @@ export function InvoiceBuilder({
         contract_refs: selectedLineage.contractRefs,
         customer_id: project.customer_id,
         customer_name: billedToType === "consignee" && selectedConsignee ? selectedConsignee.name : project.customer_name,
-        booking_id: selectedLineage.bookingIds.length === 1 ? selectedLineage.bookingIds[0] : null,
-        booking_ids: selectedLineage.bookingIds,
+        booking_id: selectedBookingId, // D1: every invoice is booking-linked
+        booking_ids: [selectedBookingId],
         billing_item_ids: finalBillingItemIds,
         invoice_date: invoiceDate,
         due_date: effectiveDueDate,
@@ -673,6 +845,7 @@ export function InvoiceBuilder({
         subtotal: draftInvoice.subtotal,
         total_amount: roundMoney(draftInvoice.total_amount),
         tax_amount: draftInvoice.tax_amount,
+        ewt_total: ewtTotal, // NEU-069: internal, reduces the collectible balance
         status: 'draft',
         metadata: {
             signatories,
@@ -689,8 +862,11 @@ export function InvoiceBuilder({
                 bl_number: blNumber,
                 consignee: consignee,
                 commodity_description: commodityDescription,
-                credit_terms: creditTerms
+                credit_terms: creditTerms,
+                booking_number: invoiceBooking?.booking_number || null,
             },
+            bank_details: bankDetails, // NEU-055: remember this invoice's bank block
+            bank_account_id: selectedBankAccountId || null, // NEU-071: profiled account, if picked
             item_overrides: itemOverrides
         },
         created_at: new Date().toISOString(),
@@ -707,10 +883,17 @@ export function InvoiceBuilder({
       const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
       logCreation("invoice", invoiceData.id, invoiceData.invoice_number ?? invoiceData.id, actor);
 
-      // Mark selected billing items as invoiced (claimed by this draft)
+      // Mark selected billing items as invoiced (claimed by this draft) and
+      // stamp the booking (D1) so any charge that lacked one is now booking-linked.
       const { error: updateError } = await supabase
         .from('billing_line_items')
-        .update({ status: 'invoiced', invoice_id: invoiceData.id, invoice_number: invoiceData.invoice_number })
+        .update({
+          status: 'invoiced',
+          invoice_id: invoiceData.id,
+          invoice_number: invoiceData.invoice_number,
+          booking_id: selectedBookingId,
+          booking_number: invoiceBooking?.booking_number || null,
+        })
         .in('id', finalBillingItemIds);
       if (updateError) console.warn('[InvoiceBuilder] Failed to mark items as invoiced:', updateError.message);
 
@@ -947,7 +1130,7 @@ export function InvoiceBuilder({
   const zoomOut = () => { setAutoScale(false); setScale(prev => Math.max(prev - 0.1, 0.4)); };
   const toggleFit = () => { setAutoScale(true); };
   
-  const updateSignatory = (type: "prepared_by" | "approved_by", field: "name" | "title", value: string) => {
+  const updateSignatory = (type: "prepared_by" | "approved_by" | "checked_by", field: "name" | "title", value: string) => {
       setSignatories(prev => ({
           ...prev,
           [type]: { ...prev[type], [field]: value }
@@ -1291,6 +1474,30 @@ export function InvoiceBuilder({
             {/* ─── CREATE MODE: Details Tab ─── */}
             {mode === 'create' && activeTab === 'details' && canViewDetailsTab && (
               <div className="p-5 space-y-4">
+                {/* Doctrine D1 (NEU-077): an invoice must be booking-linked. */}
+                <div>
+                  <label className="block text-[11px] font-bold text-[var(--theme-text-muted)] mb-1.5 uppercase tracking-wider">Booking *</label>
+                  {projectBookings.length === 0 ? (
+                    <div className="px-3 py-2 rounded-lg border border-[var(--theme-status-warning-border)] bg-[var(--theme-status-warning-bg)] text-[13px] text-[var(--theme-status-warning-fg)]">
+                      This project has no booking. An invoice must be booking-linked — create a booking before invoicing.
+                    </div>
+                  ) : projectBookings.length === 1 ? (
+                    <div className="px-3 py-2 rounded-lg border border-[var(--theme-border-default)] bg-[var(--theme-bg-surface-subtle)] text-[13px] text-[var(--theme-text-primary)]">
+                      {projectBookings[0].booking_number}
+                      <span className="text-[var(--theme-text-muted)]"> · {projectBookings[0].service_type}</span>
+                    </div>
+                  ) : (
+                    <CustomDropdown
+                      value={selectedBookingId}
+                      onChange={setSelectedBookingId}
+                      options={projectBookings.map(b => ({ value: b.id, label: `${b.booking_number} · ${b.service_type}` }))}
+                      placeholder="Select the booking for this invoice..."
+                      fullWidth
+                      size="sm"
+                    />
+                  )}
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] font-bold text-[var(--theme-text-muted)] mb-1.5 uppercase tracking-wider">Invoice Date</label>
@@ -1313,17 +1520,39 @@ export function InvoiceBuilder({
                 </div>
 
                 <div>
+                  {/* NEU-071: Profiling-managed Credit Terms with a Custom… fallback. */}
                   <label className="block text-[11px] font-bold text-[var(--theme-text-muted)] mb-1.5 uppercase tracking-wider">Credit Terms</label>
-                  <div className="relative">
-                    <CreditCard className="absolute left-3 top-2.5 text-[var(--theme-text-muted)]" size={14} />
-                    <input
-                      type="text"
-                      value={creditTerms}
-                      onChange={(e) => setCreditTerms(e.target.value)}
-                      placeholder="e.g. NET 15, NET 30, COD"
-                      className="w-full pl-9 pr-3 py-2 border border-[var(--theme-border-default)] rounded-lg text-sm focus:ring-2 focus:ring-[var(--theme-action-primary-bg)]/20 focus:border-[var(--theme-action-primary-bg)] outline-none transition-all placeholder:text-[var(--theme-text-muted)]"
-                    />
-                  </div>
+                  {(() => {
+                    const isKnown = creditTermsList.some(t => t.label === creditTerms);
+                    const custom = useCustomTerms || !isKnown;
+                    return (
+                      <>
+                        <CustomDropdown
+                          value={custom ? "__custom__" : creditTerms}
+                          onChange={(v) => {
+                            if (v === "__custom__") { setUseCustomTerms(true); }
+                            else { setCreditTerms(v); setUseCustomTerms(false); }
+                          }}
+                          options={[
+                            ...creditTermsList.map(t => ({ value: t.label, label: `${t.label} · ${t.net_days}d` })),
+                            { value: "__custom__", label: "Custom…" },
+                          ]}
+                          placeholder="Select credit terms..."
+                          fullWidth
+                          size="sm"
+                        />
+                        {custom && (
+                          <input
+                            type="text"
+                            value={creditTerms}
+                            onChange={(e) => setCreditTerms(e.target.value)}
+                            placeholder="e.g. NET 20"
+                            className="mt-2 w-full px-3 py-2 border border-[var(--theme-border-default)] rounded-lg text-sm focus:ring-2 focus:ring-[var(--theme-action-primary-bg)]/20 focus:border-[var(--theme-action-primary-bg)] outline-none transition-all placeholder:text-[var(--theme-text-muted)]"
+                          />
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
 
                 <div>
@@ -1510,8 +1739,38 @@ export function InvoiceBuilder({
                   <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--theme-text-muted)] mb-3">Signatories</p>
                   <SignatoryControl
                     preparedBy={signatories.prepared_by}
+                    checkedBy={signatories.checked_by}
                     approvedBy={signatories.approved_by}
                     onUpdate={updateSignatory}
+                  />
+                </div>
+
+                <div className="h-px bg-[var(--theme-border-default)]" />
+
+                {/* Bank Details (NEU-055) */}
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--theme-text-muted)] mb-3">Bank Details</p>
+                  {/* NEU-071: pick a profiled bank account (fills the editable fields below). */}
+                  {bankAccounts.length > 0 && (
+                    <div className="mb-3">
+                      <CustomDropdown
+                        value={selectedBankAccountId || "__custom__"}
+                        onChange={(v) => { if (v === "__custom__") setSelectedBankAccountId(""); else selectBankAccount(v); }}
+                        options={[
+                          ...bankAccounts.map(b => ({ value: b.id, label: b.currency ? `${b.label} · ${b.currency}` : b.label })),
+                          { value: "__custom__", label: "Custom / one-off" },
+                        ]}
+                        placeholder="Select a bank account..."
+                        fullWidth
+                        size="sm"
+                      />
+                    </div>
+                  )}
+                  <BankDetailsControl
+                    bankDetails={bankDetails}
+                    onUpdate={updateBankDetail}
+                    onSaveAsDefault={handleSaveBankDefault}
+                    isSavingDefault={updateCompanySettings.isPending}
                   />
                 </div>
 
@@ -1547,10 +1806,40 @@ export function InvoiceBuilder({
                   <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--theme-text-muted)] mb-3">Signatories</p>
                   <SignatoryControl
                     preparedBy={signatories.prepared_by}
+                    checkedBy={signatories.checked_by}
                     approvedBy={signatories.approved_by}
                     onUpdate={updateSignatory}
                   />
                   <p className="text-[10px] text-[var(--theme-text-muted)] mt-3 italic">Changes affect print output only.</p>
+                </div>
+
+                <div className="h-px bg-[var(--theme-border-default)]" />
+
+                {/* Bank Details (NEU-055) */}
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--theme-text-muted)] mb-3">Bank Details</p>
+                  {/* NEU-071: pick a profiled bank account (fills the editable fields below). */}
+                  {bankAccounts.length > 0 && (
+                    <div className="mb-3">
+                      <CustomDropdown
+                        value={selectedBankAccountId || "__custom__"}
+                        onChange={(v) => { if (v === "__custom__") setSelectedBankAccountId(""); else selectBankAccount(v); }}
+                        options={[
+                          ...bankAccounts.map(b => ({ value: b.id, label: b.currency ? `${b.label} · ${b.currency}` : b.label })),
+                          { value: "__custom__", label: "Custom / one-off" },
+                        ]}
+                        placeholder="Select a bank account..."
+                        fullWidth
+                        size="sm"
+                      />
+                    </div>
+                  )}
+                  <BankDetailsControl
+                    bankDetails={bankDetails}
+                    onUpdate={updateBankDetail}
+                    onSaveAsDefault={handleSaveBankDefault}
+                    isSavingDefault={updateCompanySettings.isPending}
+                  />
                 </div>
 
                 <div className="h-px bg-[var(--theme-border-default)]" />
@@ -1587,7 +1876,8 @@ export function InvoiceBuilder({
                 {canWriteInvoices && (
                 <button
                   onClick={handleSubmit}
-                  disabled={isSubmitting || selectedIds.size === 0}
+                  disabled={isSubmitting || selectedIds.size === 0 || !selectedBookingId}
+                  title={!selectedBookingId ? (projectBookings.length === 0 ? "This project has no booking" : "Select a booking in the Details tab") : undefined}
                   className="flex items-center justify-center gap-2 w-full px-4 py-3 text-[13px] font-bold text-white bg-[var(--theme-action-primary-bg)] rounded-lg hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (

@@ -17,9 +17,28 @@ import type {
   PrintableTableRow,
   PrintableTotals,
 } from "../../utils/documents/printableDocument";
-import { formatPrintableValue } from "../../utils/documents/printableDocumentFormat";
+import { formatPrintableValue as _fpv } from "../../utils/documents/printableDocumentFormat";
 import { FUNCTIONAL_CURRENCY } from "../../utils/accountingCurrency";
 import { isPrintableValue } from "../../utils/documents/printableDocumentNormalize";
+
+// react-pdf's built-in Helvetica (AFM/WinAnsi) has no glyph for several Unicode
+// symbols the app uses — the peso sign renders as a "±"-looking tofu box. Map the
+// known-missing glyphs to ASCII-safe equivalents for the PDF only (the HTML
+// preview keeps the real symbols). Keep this list tight so real text is untouched.
+const PDF_GLYPH_MAP: Array<[RegExp, string]> = [
+  [/₱\s?/g, "PHP "], // ₱ peso
+  [/\s?→\s?/g, " to "], // → arrow (FX rate labels)
+  [/≈\s?/g, "~"], // ≈ approx
+  [/✓/g, "Y"], // ✓ check
+];
+function pdfSafe(str: string): string {
+  let out = str;
+  for (const [re, rep] of PDF_GLYPH_MAP) out = out.replace(re, rep);
+  return out;
+}
+function fmt(...args: Parameters<typeof _fpv>): string {
+  return pdfSafe(_fpv(...args));
+}
 
 const s = StyleSheet.create({
   page: {
@@ -188,6 +207,19 @@ const s = StyleSheet.create({
   bankLabel: { fontSize: 7, color: "#6B7280" },
   bankValue: { fontSize: 8, color: "#111827", fontFamily: "Helvetica-Bold" },
 
+  bottomSpacer: { flexGrow: 1 },
+  legalNotice: {
+    position: "absolute",
+    bottom: 4,
+    left: 36,
+    right: 36,
+    fontSize: 6.5,
+    fontFamily: "Helvetica-Bold",
+    color: "#6B7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    textAlign: "center",
+  },
   sigGrid: { flexDirection: "row", justifyContent: "space-between", gap: 20, marginTop: 18, minHeight: 56 },
   sigBox: { flexDirection: "column", flex: 1 },
   sigAction: { fontSize: 7, color: "#6B7280", fontStyle: "italic", marginBottom: 18 },
@@ -236,19 +268,25 @@ const s = StyleSheet.create({
     height: 88,
     overflow: "hidden",
   },
+  // #1 fix: pin explicit A4-aspect dimensions (595.28 x 842 pt for the 2480x3508
+  // letterhead) instead of width:"100%". react-pdf otherwise squeezes the WHOLE
+  // page image into the 88/82pt band; explicit dims keep aspect and the container's
+  // overflow:hidden clips to the header (top) / footer (bottom, via marginTop) slice.
   brandedHeaderImg: {
-    width: "100%",
+    width: 595.28,
+    height: 842,
   },
   brandedFooter: {
     position: "absolute",
-    bottom: 0,
+    bottom: 14,
     left: 0,
     right: 0,
     height: 82,
     overflow: "hidden",
   },
   brandedFooterImg: {
-    width: "100%",
+    width: 595.28,
+    height: 842,
     marginTop: -760,
   },
   contactCol: { flexDirection: "column" },
@@ -314,7 +352,7 @@ function HeaderBlock({ company, title, subtitle, headerFields }: {
         {subtitle ? <Text style={s.subtitle}>{subtitle}</Text> : null}
         <View style={s.refGrid}>
           {headerFields.map((f) => {
-            const formatted = formatPrintableValue(f.value, f.format, f.currency);
+            const formatted = fmt(f.value, f.format, f.currency);
             if (!formatted) return null;
             return (
               <View style={s.refItem} key={f.id}>
@@ -336,7 +374,7 @@ function PartySection({ section }: { section: PrintableSection }) {
       {section.title ? <Text style={s.partyHeader}>{section.title.toUpperCase()}:</Text> : null}
       <View style={s.partyGrid}>
         {section.fields.map((f) => {
-          const formatted = formatPrintableValue(f.value, f.format, f.currency);
+          const formatted = fmt(f.value, f.format, f.currency);
           if (!formatted) return null;
           const cellStyle = f.width === "full" ? s.partyCellWide : s.partyCell;
           return (
@@ -360,7 +398,7 @@ function GridSection({ section }: { section: PrintableSection }) {
       {section.title ? <Text style={s.sectionHeader}>{section.title.toUpperCase()}</Text> : null}
       <View style={s.gridWrap}>
         {section.fields.map((f) => {
-          const formatted = formatPrintableValue(f.value, f.format, f.currency);
+          const formatted = fmt(f.value, f.format, f.currency);
           if (!formatted) return null;
           const isAllCaps = /[A-Za-z]/.test(formatted) && formatted === formatted.toUpperCase();
           return (
@@ -386,7 +424,7 @@ function StackSection({ section }: { section: PrintableSection }) {
             <Text key={`${f.id}-${i}`} style={s.termsBullet}>{`• ${v}`}</Text>
           ));
         }
-        const formatted = formatPrintableValue(f.value, f.format);
+        const formatted = fmt(f.value, f.format);
         if (!formatted) return null;
         return (
           <Text key={f.id} style={s.stackText}>
@@ -409,7 +447,7 @@ function PostTableSectionBlock({ section }: { section: PrintableSection }) {
             <Text key={`${f.id}-${i}`} style={s.postTableText}>{v}</Text>
           ));
         }
-        const formatted = formatPrintableValue(f.value, f.format);
+        const formatted = fmt(f.value, f.format);
         if (!formatted) return null;
         return (
           <Text key={f.id} style={s.postTableText}>{formatted}</Text>
@@ -480,7 +518,7 @@ function TableBlock({ table }: { table: PrintableTable }) {
                 // currency lives in the "Cur" column and the symbol appears at the
                 // subtotal/grand total, not on every line.
                 const cellCurrency = undefined;
-                const formatted = formatPrintableValue(raw, c.format, cellCurrency);
+                const formatted = fmt(raw, c.format, cellCurrency);
                 const showSubtext = ci === 0 && row.subtext && row.emphasis !== "subtotal";
                 return showSubtext ? (
                   <View key={c.id} style={colStyle(c)}>
@@ -509,7 +547,7 @@ function TableBlock({ table }: { table: PrintableTable }) {
               </Text>
               <View style={{ width: "18%" }}>
                 <Text style={[s.subtotalVal, s.tdText]}>
-                  {formatPrintableValue(group.subtotal.cells["amount"], "money", String(group.subtotal.cells["currency"] || "") || undefined)}
+                  {fmt(group.subtotal.cells["amount"], "money", String(group.subtotal.cells["currency"] || "") || undefined)}
                 </Text>
               </View>
             </View>
@@ -525,10 +563,10 @@ function TotalsBlock({ totals }: { totals?: PrintableTotals }) {
   return (
     <View style={s.totalsCol}>
       {totals.rows.map((row) => {
-        const formatted = formatPrintableValue(row.value, row.format || "money", row.currency);
+        const formatted = fmt(row.value, row.format || "money", row.currency);
         return (
           <View style={s.totalRow} key={row.id}>
-            <Text style={s.totalLabel}>{row.label}</Text>
+            <Text style={s.totalLabel}>{pdfSafe(row.label)}</Text>
             <Text style={s.totalValue}>{formatted}</Text>
           </View>
         );
@@ -537,18 +575,18 @@ function TotalsBlock({ totals }: { totals?: PrintableTotals }) {
         <View style={s.grandTotal}>
           <Text style={s.grandTotalLabel}>{totals.grandTotal.label}</Text>
           <Text style={s.grandTotalValue}>
-            {formatPrintableValue(totals.grandTotal.value, totals.grandTotal.format || "money", totals.grandTotal.currency)}
+            {fmt(totals.grandTotal.value, totals.grandTotal.format || "money", totals.grandTotal.currency)}
           </Text>
         </View>
       ) : null}
       {totals.convertedTotal ? (
         <Text style={{ fontSize: 8, color: "#667085", marginTop: 2, textAlign: "right" }}>
-          {"≈ " + formatPrintableValue(totals.convertedTotal.value, "money", totals.convertedTotal.currency)}
+          {"≈ " + fmt(totals.convertedTotal.value, "money", totals.convertedTotal.currency)}
         </Text>
       ) : null}
       {(totals.conversions || []).map((c) => (
         <Text key={c.currency} style={{ fontSize: 8, color: "#667085", marginTop: 2, textAlign: "right" }}>
-          {`incl. ${c.currency} ${formatPrintableValue(c.originalAmount, "money")} ≈ ${formatPrintableValue(c.phpAmount, "money", FUNCTIONAL_CURRENCY)} @ ${formatPrintableValue(c.rate, "money", FUNCTIONAL_CURRENCY)}`}
+          {`incl. ${c.currency} ${fmt(c.originalAmount, "money")} ≈ ${fmt(c.phpAmount, "money", FUNCTIONAL_CURRENCY)} @ ${fmt(c.rate, "money", FUNCTIONAL_CURRENCY)}`}
         </Text>
       ))}
     </View>
@@ -578,7 +616,7 @@ interface PrintableDocumentPdfProps {
 export function PrintableDocumentPdf({ document: doc }: PrintableDocumentPdfProps) {
   const pageFooter = doc.pageFooterText;
   const refLabel = doc.headerFields.map((f) => {
-    const formatted = formatPrintableValue(f.value, f.format, f.currency);
+    const formatted = fmt(f.value, f.format, f.currency);
     return formatted ? `${f.label}: ${formatted}` : "";
   }).filter(Boolean).join("  ·  ");
 
@@ -603,7 +641,7 @@ export function PrintableDocumentPdf({ document: doc }: PrintableDocumentPdfProp
             {doc.headerFields.length > 0 ? (
               <View style={s.refBar}>
                 {doc.headerFields.map((f) => {
-                  const formatted = formatPrintableValue(f.value, f.format, f.currency);
+                  const formatted = fmt(f.value, f.format, f.currency);
                   if (!formatted) return null;
                   return (
                     <View key={f.id} style={s.refBarItem}>
@@ -652,7 +690,7 @@ export function PrintableDocumentPdf({ document: doc }: PrintableDocumentPdfProp
                         <Text key={`${f.id}-${i}`} style={s.termsBullet}>{`• ${v}`}</Text>
                       ));
                     }
-                    const formatted = formatPrintableValue(f.value, f.format);
+                    const formatted = fmt(f.value, f.format);
                     if (!formatted) return null;
                     return (
                       <Text key={f.id} style={s.termsText}>
@@ -698,7 +736,15 @@ export function PrintableDocumentPdf({ document: doc }: PrintableDocumentPdfProp
           </View>
         )}
 
+        {/* NEU-062: push signatories to the page bottom so they sit with the
+            (fixed) footer regardless of line-item count. */}
+        <View style={s.bottomSpacer} />
         <Signatories list={doc.signatories} />
+
+        {/* NEU-064: legal line pinned below the footer at the very bottom edge. */}
+        {isPrintableValue(doc.legalNotice) ? (
+          <Text style={s.legalNotice} fixed>{pdfSafe(doc.legalNotice)}</Text>
+        ) : null}
 
         {doc.options.showContactFooter && doc.brandedFooterImage ? (
           <View style={s.brandedFooter} fixed>

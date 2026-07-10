@@ -6,6 +6,8 @@ import { UnifiedInvoicesTab } from "../shared/invoices/UnifiedInvoicesTab";
 import { UnifiedCollectionsTab } from "../shared/collections/UnifiedCollectionsTab";
 import { BookingRateCardButton } from "../contracts/BookingRateCardButton";
 import { ExpensesTab } from "./shared/ExpensesTab";
+import { BookingFinancialsTab } from "./shared/BookingFinancialsTab";
+import { filterCollectionsForScope } from "../../utils/financialSelectors";
 import { useProjectFinancials } from "../../hooks/useProjectFinancials";
 import { StatusSelector } from "../StatusSelector";
 import { useConfidentialAction } from "../../hooks/useConfidentialAction";
@@ -36,7 +38,7 @@ interface BrokerageBookingDetailsProps {
   highlightId?: string | null;
 }
 
-type DetailTab = "booking-info" | "billings" | "invoices" | "collections" | "expenses" | "comments" | "chrono" | "attachments";
+type DetailTab = "financials" | "booking-info" | "billings" | "invoices" | "collections" | "expenses" | "comments" | "chrono" | "attachments";
 
 interface ActivityLogEntry {
   id: string;
@@ -111,6 +113,7 @@ function ActivityTimeline({ activities }: { activities: ActivityLogEntry[] }) {
 export function BrokerageBookingDetails({ booking, onBack, onUpdate, currentUser, initialTab, highlightId }: BrokerageBookingDetailsProps) {
   const { can } = usePermission();
   // NEU-020 DD-1: per-service door keys
+  const canViewFinancials = can("ops_brokerage_financials_tab", "view"); // Accounting-only per-booking financial dashboard
   const canViewInfo = can("ops_brokerage_info_tab", "view");
   const canViewBillings = can("ops_brokerage_billings_tab", "view");
   const canViewInvoices = can("ops_brokerage_invoices_tab", "view");
@@ -123,7 +126,9 @@ export function BrokerageBookingDetails({ booking, onBack, onUpdate, currentUser
   const canDeleteAttachments = can("ops_brokerage_attachments_tab", "delete");
   const canEditBooking = can("ops_brokerage", "edit");
   const canCancelDeleteBooking = canEditBooking || can("ops_brokerage", "delete");
-  const firstViewableTab: DetailTab = canViewInfo
+  const firstViewableTab: DetailTab = canViewFinancials
+    ? "financials"
+    : canViewInfo
     ? "booking-info"
     : canViewBillings
       ? "billings"
@@ -139,7 +144,7 @@ export function BrokerageBookingDetails({ booking, onBack, onUpdate, currentUser
                 ? "attachments"
                 : "chrono";
   const [activeTab, setActiveTab] = useState<DetailTab>(
-    (initialTab === "booking-info" && !canViewInfo) || (initialTab === "billings" && !canViewBillings) || (initialTab === "invoices" && !canViewInvoices) || (initialTab === "collections" && !canViewCollections) || (initialTab === "expenses" && !canViewExpenses)
+    (initialTab === "financials" && !canViewFinancials) || (initialTab === "booking-info" && !canViewInfo) || (initialTab === "billings" && !canViewBillings) || (initialTab === "invoices" && !canViewInvoices) || (initialTab === "collections" && !canViewCollections) || (initialTab === "expenses" && !canViewExpenses)
       ? firstViewableTab
       : (initialTab as DetailTab) || firstViewableTab
   );
@@ -243,14 +248,27 @@ export function BrokerageBookingDetails({ booking, onBack, onUpdate, currentUser
     linkedBookings: [{ bookingId: booking.bookingId }],
   }), [booking.bookingId, booking.projectNumber, booking.customerName, (booking as any).customer_id]);
 
+  const bookingInvoices = useMemo(() =>
+    financials.invoices.filter((inv: any) =>
+      inv.booking_id === booking.bookingId ||
+      (Array.isArray(inv.booking_ids) && inv.booking_ids.includes(booking.bookingId))
+    ), [financials.invoices, booking.bookingId]);
+
   const bookingFinancials = useMemo(() => ({
     ...financials,
     billingItems: bookingBillingItems,
-    invoices: financials.invoices.filter((inv: any) =>
-      inv.booking_id === booking.bookingId ||
-      (Array.isArray(inv.booking_ids) && inv.booking_ids.includes(booking.bookingId))
-    ),
-  }), [financials, bookingBillingItems, booking.bookingId]);
+    invoices: bookingInvoices,
+  }), [financials, bookingBillingItems, bookingInvoices]);
+
+  // Booking-scoped collections (by the booking's invoice ids) + expenses — for the Financials dashboard.
+  const bookingCollections = useMemo(() =>
+    filterCollectionsForScope(
+      financials.collections,
+      bookingInvoices.map((inv: any) => inv.id).filter(Boolean),
+    ), [financials.collections, bookingInvoices]);
+  const bookingExpenses = useMemo(() =>
+    financials.expenses.filter((e: any) => e.booking_id === booking.bookingId),
+    [financials.expenses, booking.bookingId]);
 
   const tabStyle = (tab: DetailTab) => ({
     padding: "0 4px", fontSize: "14px", fontWeight: 500,
@@ -302,6 +320,7 @@ export function BrokerageBookingDetails({ booking, onBack, onUpdate, currentUser
       {/* Toolbar */}
       <div style={{ padding: "0 48px", borderBottom: "1px solid var(--neuron-ui-border)", backgroundColor: "var(--theme-bg-surface)", display: "flex", justifyContent: "space-between", alignItems: "center", height: "56px", position: "relative", zIndex: 20 }}>
         <div style={{ display: "flex", gap: "24px", height: "100%" }}>
+          {canViewFinancials && <button onClick={() => setActiveTab("financials")} style={tabStyle("financials")}>Financials</button>}
           {canViewInfo && <button onClick={() => setActiveTab("booking-info")} style={tabStyle("booking-info")}>Booking Information</button>}
           {canViewBillings && <button onClick={() => setActiveTab("billings")} style={tabStyle("billings")}>Billings</button>}
           {canViewInvoices && <button onClick={() => setActiveTab("invoices")} style={tabStyle("invoices")}>Invoices</button>}
@@ -380,6 +399,16 @@ export function BrokerageBookingDetails({ booking, onBack, onUpdate, currentUser
       {/* Content */}
       <div style={{ flex: 1, overflow: "hidden", display: "flex", position: "relative", zIndex: 0 }}>
         <div style={{ flex: showTimeline ? "0 0 65%" : "1", overflow: "auto", transition: "flex 0.3s ease" }}>
+          {activeTab === "financials" && canViewFinancials && (
+            <BookingFinancialsTab
+              billingItems={bookingBillingItems}
+              invoices={bookingInvoices}
+              collections={bookingCollections}
+              expenses={bookingExpenses}
+              isLoading={financials.isLoading}
+              onNavigateTab={setActiveTab}
+            />
+          )}
           {activeTab === "booking-info" && canViewInfo && (
             <BookingInfoTab
               permissionDoor="ops_brokerage_info_tab"
