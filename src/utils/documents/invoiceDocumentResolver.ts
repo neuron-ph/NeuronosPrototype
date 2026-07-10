@@ -14,6 +14,7 @@ import {
   type PrintableSignatory,
   type PrintableTable,
   type PrintableTableColumn,
+  type PrintableTableGroup,
   type PrintableTableRow,
   type PrintableTotalRow,
   type PrintableTotals,
@@ -107,8 +108,22 @@ function resolveContactFooter(
 function buildInvoiceTable(
   lineItems: any[],
   currency: string,
-  options: { showTax: boolean; omitEmpty: boolean },
+  options: { showTax: boolean; omitEmpty: boolean; serviceLabel: string },
 ): PrintableTable {
+  // NEU-058: group charges into subtotals — service charges split by VAT status,
+  // billable/pass-through expenses on their own. The service label comes from the
+  // invoice's booking (Doctrine D1 — one booking per invoice).
+  const svc = options.serviceLabel?.trim() || "Service";
+  const GROUP_DEFS = [
+    { id: "svc_vat", title: `${svc} Charge (VAT)` },
+    { id: "svc_nonvat", title: `${svc} Charge (Non-VAT)` },
+    { id: "billable", title: "Billable" },
+  ];
+  const groupOf = (item: any): string => {
+    if (String(item.source_type) === "billable_expense") return "billable";
+    return String(item.tax_type).toUpperCase() === "VAT" ? "svc_vat" : "svc_nonvat";
+  };
+
   // NEU-065: remarks render as a subtext line beneath the description (mirrors
   // Quotations), NOT a dedicated column — long remarks then breathe instead of
   // stretching a narrow column and ballooning row height.
@@ -142,6 +157,7 @@ function buildInvoiceTable(
     const remarks = item.remarks ? String(item.remarks).trim() : "";
     return {
       id: item.id || `inv-line-${idx}`,
+      groupId: groupOf(item),
       cells: {
         description: descCell,
         quantity: item.quantity ?? "",
@@ -154,10 +170,31 @@ function buildInvoiceTable(
     };
   });
 
+  // Build a subtotal group per non-empty class, in the requested order
+  // (service VAT → service Non-VAT → Billable). Only group when ≥2 classes are
+  // present — a single-class invoice stays flat (a lone subtotal = grand total).
+  const builtGroups: PrintableTableGroup[] = [];
+  for (const def of GROUP_DEFS) {
+    const groupRows = lineItems.filter((i) => groupOf(i) === def.id);
+    if (groupRows.length === 0) continue;
+    const subtotalAmt = groupRows.reduce((sum, i) => sum + Number(i.amount ?? 0), 0);
+    builtGroups.push({
+      id: def.id,
+      title: def.title,
+      subtotal: {
+        id: `${def.id}-subtotal`,
+        groupId: def.id,
+        emphasis: "subtotal",
+        cells: { description: "Subtotal", amount: subtotalAmt, currency },
+      },
+    });
+  }
+
   return {
     id: "invoice-lines",
     columns,
     rows,
+    groups: builtGroups.length > 1 ? builtGroups : [],
     hideWhenEmpty: options.omitEmpty,
     emptyMessage: "No items on this invoice.",
   };
@@ -319,6 +356,8 @@ export function resolveInvoicePrintableDocument(args: ResolveInvoiceArgs): Print
   const table = buildInvoiceTable(lineItems, currency, {
     showTax: settings.display.showTaxSummary,
     omitEmpty: DEFAULT_PRINTABLE_OPTIONS.omitEmptyTables,
+    // NEU-058: service label for the grouped subtotals, from the booking (D1).
+    serviceLabel: (invoice as any).service_type || zoneA.service_type || "",
   });
 
   // Totals

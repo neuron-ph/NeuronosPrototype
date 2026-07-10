@@ -153,6 +153,42 @@ describe("resolveInvoicePrintableDocument — NEU-065 remarks as subtext", () =>
   });
 });
 
+describe("resolveInvoicePrintableDocument — NEU-058 grouped subtotals", () => {
+  it("groups charges into service VAT / Non-VAT / Billable with per-group subtotals", () => {
+    const doc = resolveInvoicePrintableDocument({
+      invoice: baseInvoice({
+        service_type: "Brokerage",
+        line_items: [
+          { description: "Brokerage Fee", unit_price: 3500, amount: 3500, tax_type: "VAT" },
+          { description: "Stamp & Notary", unit_price: 1000, amount: 1000, tax_type: "NON-VAT" },
+          { description: "EV-1 Trucking Detention", unit_price: 12000, amount: 12000, tax_type: "NON-VAT", source_type: "billable_expense" },
+        ],
+      } as any),
+    });
+    const table = doc.tables.find((t) => t.id === "invoice-lines")!;
+    expect(table.groups?.map((g) => g.title)).toEqual([
+      "Brokerage Charge (VAT)",
+      "Brokerage Charge (Non-VAT)",
+      "Billable",
+    ]);
+    const sub = (id: string) => Number(table.groups!.find((g) => g.id === id)!.subtotal!.cells.amount);
+    expect(sub("svc_vat")).toBe(3500);
+    expect(sub("svc_nonvat")).toBe(1000);
+    expect(sub("billable")).toBe(12000);
+  });
+
+  it("stays flat (no groups) when only one class is present", () => {
+    const doc = resolveInvoicePrintableDocument({
+      invoice: baseInvoice({
+        service_type: "Forwarding",
+        line_items: [{ description: "Ocean Freight", unit_price: 310, amount: 310, tax_type: "NON-VAT" }],
+      } as any),
+    });
+    const table = doc.tables.find((t) => t.id === "invoice-lines")!;
+    expect(table.groups || []).toHaveLength(0);
+  });
+});
+
 describe("resolveInvoicePrintableDocument — NEU-064 legal notice", () => {
   it("sets the BIR input-tax compliance line for the pinned footer", () => {
     const doc = resolveInvoicePrintableDocument({ invoice: baseInvoice() });

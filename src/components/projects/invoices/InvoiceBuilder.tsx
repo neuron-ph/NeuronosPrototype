@@ -477,7 +477,10 @@ export function InvoiceBuilder({
             unit_price: finalAmount,
             amount: finalAmount,
             tax_type: override.tax_type,
-            
+            // NEU-058: carry the source classification so the printed invoice can
+            // group charges into subtotals (Billable vs service charges).
+            source_type: item.source_type,
+
             // Snapshot Strategy Fields
             original_amount: originalAmount,
             original_currency: item.currency,
@@ -501,6 +504,7 @@ export function InvoiceBuilder({
       booking_id: selectedBookingId || undefined,
       booking_ids: selectedBookingId ? [selectedBookingId] : [],
       booking_number: projectBookings.find(b => b.id === selectedBookingId)?.booking_number,
+      service_type: projectBookings.find(b => b.id === selectedBookingId)?.service_type, // NEU-058 group label
       line_items: finalLineItems,
       subtotal: subtotal,
       tax_amount: taxAmount,
@@ -693,6 +697,12 @@ export function InvoiceBuilder({
               source_id: item.source_id || null,
               source_type: item.source_type || (item.source_quotation_item_id ? "quotation_item" : "manual"),
               source_quotation_item_id: item.source_quotation_item_id || null,
+              // NEU-069: carry any EWT captured on the charge (quotation-derived
+              // virtual items normally have none; real tagged charges do).
+              ewt_rate: Number(item.ewt_rate) > 0 ? Number(item.ewt_rate) : null,
+              ewt_amount: Number(item.ewt_rate) > 0
+                ? Math.round(lineAmount * Number(item.ewt_rate) / 100 * 100) / 100
+                : (item.ewt_amount ?? null),
               created_at: new Date().toISOString(),
             };
           });
@@ -770,6 +780,18 @@ export function InvoiceBuilder({
       });
       const rateDate = (invoiceDate || new Date().toISOString()).slice(0, 10);
 
+      // NEU-069: total EWT withheld across the invoiced lines (gross, invoice
+      // currency). Internal only — the printed invoice still shows the full
+      // total_amount; ewt_total reduces the collectible balance so the invoice
+      // closes when the net (total − ewt_total) is remitted.
+      const ewtTotal = roundMoney(
+        selectedItems.reduce((sum: number, it: any) => {
+          const rate = Number(it.ewt_rate) || 0;
+          const amt = Number(it.ewt_amount) || (rate > 0 ? Number(it.amount || 0) * rate / 100 : 0);
+          return sum + amt;
+        }, 0)
+      );
+
       const invoiceRow = {
         id: crypto.randomUUID(),
         invoice_number: invoiceNumber,
@@ -794,6 +816,7 @@ export function InvoiceBuilder({
         subtotal: draftInvoice.subtotal,
         total_amount: roundMoney(draftInvoice.total_amount),
         tax_amount: draftInvoice.tax_amount,
+        ewt_total: ewtTotal, // NEU-069: internal, reduces the collectible balance
         status: 'draft',
         metadata: {
             signatories,
