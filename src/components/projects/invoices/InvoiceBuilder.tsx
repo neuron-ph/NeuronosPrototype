@@ -33,6 +33,7 @@ import {
 import { recordNotificationEvent } from "../../../utils/notifications";
 import { useCompanySettings } from "../../../hooks/useCompanySettings";
 import { parseCreditTermDays } from "../../../utils/creditTerms";
+import { buildCatalogSnapshot } from "../../../utils/catalogSnapshot";
 
 
 // A4 Dimensions in pixels at 96 DPI
@@ -565,31 +566,56 @@ export function InvoiceBuilder({
           toast.info("Finalizing billing items...");
           
           const virtualItemsToSave = billingItems.filter(item => virtualIds.includes(item.id));
-          
-          // Prepare payload: remove virtual ID
-          const itemsToSave = virtualItemsToSave.map(item => {
-             // eslint-disable-next-line @typescript-eslint/no-unused-vars
-             const { id, is_virtual, ...rest } = item as any;
-             return {
-                 ...rest,
-                 project_id: project.id,
-                 status: 'unbilled'
-             };
-          });
 
-          const batchInsertItems = itemsToSave.map((item: any) => ({
-              ...item,
+          // Billing charges are NOT e-vouchers — persist them as real
+          // billing_line_items (the invoice references these). Mirror the
+          // canonical mapping in UnifiedBillingsTab: explicit column whitelist +
+          // catalog snapshot, dropping stray quotation-item fields (amount_added,
+          // percentage_added, base_cost, forex_rate…) that aren't columns here.
+          const batchInsertItems = virtualItemsToSave.map((item: any) => {
+            const lineCurrency = item.currency || "PHP";
+            const rawRate = Number(item.exchange_rate ?? item.forex_rate);
+            const lineRate = lineCurrency === "PHP"
+              ? 1
+              : (Number.isFinite(rawRate) && rawRate > 0 ? rawRate : null);
+            const lineAmount = Number(item.amount || 0);
+            const category = item.category || item.quotation_category || null;
+            return {
+              id: crypto.randomUUID(),
+              booking_id: item.booking_id || null,
               project_id: project.id,
               project_number: project.project_number,
-              transaction_type: 'billing',
+              description: item.description || "",
+              service_type: item.service_type || "",
+              category,
+              quotation_category: category,
+              amount: lineAmount,
+              quantity: item.quantity || 1,
+              unit_price: item.unit_price ?? item.amount ?? 0,
+              currency: lineCurrency,
+              exchange_rate: lineRate,
+              base_currency: "PHP",
+              base_amount: lineRate === null ? null : Math.round(lineAmount * lineRate * 100) / 100,
               status: 'unbilled',
+              is_taxed: item.is_taxed || false,
+              tax_code: item.tax_code || null,
+              unit_type: item.unit_type || null,
+              catalog_item_id: item.catalog_item_id || null,
+              catalog_snapshot: item.catalog_item_id
+                ? buildCatalogSnapshot(
+                    { description: item.description, unit_type: item.unit_type, tax_code: item.tax_code, amount: item.amount, currency: item.currency },
+                    category
+                  )
+                : (item.catalog_snapshot || null),
+              source_id: item.source_id || null,
+              source_type: item.source_type || (item.source_quotation_item_id ? "quotation_item" : "manual"),
+              source_quotation_item_id: item.source_quotation_item_id || null,
               created_at: new Date().toISOString(),
-          }));
-          const { data: batchResult, error: batchSaveError } = await supabase.from('evouchers').insert(batchInsertItems).select();
+            };
+          });
+          const { data: batchResult, error: batchSaveError } = await supabase.from('billing_line_items').insert(batchInsertItems).select();
           if (batchSaveError) throw new Error(batchSaveError.message);
           const savedItems: any[] = batchResult || [];
-          const batchActor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
-          savedItems.forEach(inv => logCreation("invoice", inv.id, inv.invoice_number ?? inv.id, batchActor));
           
           // Map Virtual IDs -> Real IDs
           const idMap = new Map<string, string>();
