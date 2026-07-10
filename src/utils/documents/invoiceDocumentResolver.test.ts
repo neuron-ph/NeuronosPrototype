@@ -134,6 +134,13 @@ describe("resolveInvoicePrintableDocument — NEU-067 column order", () => {
   });
 });
 
+describe("resolveInvoicePrintableDocument — NEU-064 legal notice", () => {
+  it("sets the BIR input-tax compliance line for the pinned footer", () => {
+    const doc = resolveInvoicePrintableDocument({ invoice: baseInvoice() });
+    expect(doc.legalNotice).toBe("THIS DOCUMENT IS NOT VALID FOR CLAIMING OF INPUT TAXES");
+  });
+});
+
 describe("resolveInvoicePrintableDocument — NEU-063 checked-by signatory", () => {
   const withSig = (checked?: { name: string; title: string }) =>
     resolveInvoicePrintableDocument({

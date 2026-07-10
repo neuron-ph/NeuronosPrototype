@@ -411,6 +411,8 @@ export function resolveInvoicePrintableDocument(args: ResolveInvoiceArgs): Print
     footerFields: [],
     options,
     pageFooterText,
+    // NEU-064: BIR compliance line pinned with the footer.
+    legalNotice: "THIS DOCUMENT IS NOT VALID FOR CLAIMING OF INPUT TAXES",
   };
 
   return normalizePrintableDocument(doc);

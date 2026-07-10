@@ -188,6 +188,17 @@ const s = StyleSheet.create({
   bankLabel: { fontSize: 7, color: "#6B7280" },
   bankValue: { fontSize: 8, color: "#111827", fontFamily: "Helvetica-Bold" },
 
+  bottomSpacer: { flexGrow: 1 },
+  legalNotice: {
+    fontSize: 7,
+    fontFamily: "Helvetica-Bold",
+    color: "#6B7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    textAlign: "center",
+    marginTop: 8,
+    paddingTop: 6,
+  },
   sigGrid: { flexDirection: "row", justifyContent: "space-between", gap: 20, marginTop: 18, minHeight: 56 },
   sigBox: { flexDirection: "column", flex: 1 },
   sigAction: { fontSize: 7, color: "#6B7280", fontStyle: "italic", marginBottom: 18 },
@@ -698,7 +709,13 @@ export function PrintableDocumentPdf({ document: doc }: PrintableDocumentPdfProp
           </View>
         )}
 
+        {/* NEU-062: push signatories + legal notice to the page bottom so they
+            sit with the (fixed) footer regardless of line-item count. */}
+        <View style={s.bottomSpacer} />
         <Signatories list={doc.signatories} />
+        {isPrintableValue(doc.legalNotice) ? (
+          <Text style={s.legalNotice}>{doc.legalNotice}</Text>
+        ) : null}
 
         {doc.options.showContactFooter && doc.brandedFooterImage ? (
           <View style={s.brandedFooter} fixed>

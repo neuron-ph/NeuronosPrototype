@@ -195,6 +195,10 @@ export interface PrintableDocument {
   footerFields: PrintableField[];
   options: PrintableDocumentOptions;
   pageFooterText?: string;
+  // NEU-064: fixed compliance line shown in the pinned footer zone (e.g. invoices:
+  // "THIS DOCUMENT IS NOT VALID FOR CLAIMING OF INPUT TAXES"). Omitted for docs
+  // that don't need it (quotations).
+  legalNotice?: string;
   brandedHeaderImage?: string;
   brandedFooterImage?: string;
 }
