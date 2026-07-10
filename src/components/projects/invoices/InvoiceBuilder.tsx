@@ -193,6 +193,11 @@ export function InvoiceBuilder({
   // Accounting State (For GL Posting — Revenue Account for DR AR / CR Revenue)
   const [revenueAccountId, setRevenueAccountId] = useState("");
 
+  // Doctrine D1 (NEU-077): every invoice must be booking-linked. The invoice is
+  // tied to exactly one booking — auto-selected when the project has one,
+  // chosen when it has several, blocked when it has none.
+  const [selectedBookingId, setSelectedBookingId] = useState<string>("");
+
   // -- Shared Options State --
   const [signatories, setSignatories] = useState({
       prepared_by: { name: "System User", title: "Authorized User" },
@@ -243,6 +248,29 @@ export function InvoiceBuilder({
     enabled: mode === 'create' && !!project.customer_id,
     staleTime: 30_000,
   });
+
+  // Doctrine D1 (NEU-077): the project's bookings — the invoice must attach to one.
+  const { data: projectBookings = [] } = useQuery({
+    queryKey: ["invoice-project-bookings", project.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("bookings")
+        .select("id, booking_number, service_type")
+        .eq("project_id", project.id)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return (data || []) as Array<{ id: string; booking_number: string; service_type: string }>;
+    },
+    enabled: mode === "create" && !!project.id,
+    staleTime: 30_000,
+  });
+
+  // Auto-select when the project has exactly one booking.
+  useEffect(() => {
+    if (mode !== "create") return;
+    if (projectBookings.length === 1) setSelectedBookingId(projectBookings[0].id);
+    else if (!projectBookings.some(b => b.id === selectedBookingId)) setSelectedBookingId("");
+  }, [mode, projectBookings, selectedBookingId]);
 
   // -- Initialization / Effects --
 
@@ -554,6 +582,16 @@ export function InvoiceBuilder({
       toast.error("Please select at least one billing item.");
       return;
     }
+    // Doctrine D1 (NEU-077): an invoice must be booking-linked.
+    if (projectBookings.length === 0) {
+      toast.error("This project has no booking. Create a booking before invoicing.");
+      return;
+    }
+    if (!selectedBookingId) {
+      toast.error("Select the booking this invoice belongs to.");
+      return;
+    }
+    const invoiceBooking = projectBookings.find(b => b.id === selectedBookingId);
 
     try {
       setIsSubmitting(true);
@@ -582,7 +620,10 @@ export function InvoiceBuilder({
             const category = item.category || item.quotation_category || null;
             return {
               id: crypto.randomUUID(),
-              booking_id: item.booking_id || null,
+              // D1: stamp the invoice's booking onto the charge so billings are
+              // booking-linked too (auto-assigns raw project/quotation charges).
+              booking_id: selectedBookingId,
+              booking_number: invoiceBooking?.booking_number || null,
               project_id: project.id,
               project_number: project.project_number,
               description: item.description || "",
@@ -650,33 +691,11 @@ export function InvoiceBuilder({
         return;
       }
 
-      // NEU-070: invoice number = [Booking Number]-XXX for a single-booking
-      // invoice, else [Project Number]-XXX. XXX is a 3-digit running sequence
-      // (001, 002, …) counted from existing invoices that share the prefix.
-      const bookingIdSet = new Set<string>(selectedLineage.bookingIds);
-      ((project as any).linkedBookings || []).forEach((b: any) => {
-        const bid = b?.bookingId || b?.booking_id || b?.id;
-        if (bid) bookingIdSet.add(bid);
-      });
-      // Project context: the charges carry no booking — discover the project's
-      // own bookings so a single-booking project still numbers by its booking.
-      if (bookingIdSet.size === 0 && project.id) {
-        const { data: projBookings } = await supabase
-          .from("bookings")
-          .select("id")
-          .eq("project_id", project.id);
-        (projBookings || []).forEach((b: any) => b?.id && bookingIdSet.add(b.id));
-      }
-      const bookingIdList = Array.from(bookingIdSet);
-      let numberBase = project.project_number || "INV";
-      if (bookingIdList.length === 1) {
-        const { data: bk } = await supabase
-          .from("bookings")
-          .select("booking_number")
-          .eq("id", bookingIdList[0])
-          .maybeSingle();
-        if (bk?.booking_number) numberBase = bk.booking_number;
-      }
+      // NEU-070 + Doctrine D1: invoice number = [Booking Number]-XXX. Every
+      // invoice is booking-linked (enforced above), so the base is always the
+      // selected booking's number. XXX = 3-digit running sequence (001, 002, …)
+      // counted from existing invoices that share the prefix.
+      const numberBase = invoiceBooking?.booking_number || project.project_number || "INV";
       const { count: priorInvoiceCount } = await supabase
         .from("invoices")
         .select("id", { count: "exact", head: true })
@@ -717,8 +736,8 @@ export function InvoiceBuilder({
         contract_refs: selectedLineage.contractRefs,
         customer_id: project.customer_id,
         customer_name: billedToType === "consignee" && selectedConsignee ? selectedConsignee.name : project.customer_name,
-        booking_id: selectedLineage.bookingIds.length === 1 ? selectedLineage.bookingIds[0] : null,
-        booking_ids: selectedLineage.bookingIds,
+        booking_id: selectedBookingId, // D1: every invoice is booking-linked
+        booking_ids: [selectedBookingId],
         billing_item_ids: finalBillingItemIds,
         invoice_date: invoiceDate,
         due_date: effectiveDueDate,
@@ -767,10 +786,17 @@ export function InvoiceBuilder({
       const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
       logCreation("invoice", invoiceData.id, invoiceData.invoice_number ?? invoiceData.id, actor);
 
-      // Mark selected billing items as invoiced (claimed by this draft)
+      // Mark selected billing items as invoiced (claimed by this draft) and
+      // stamp the booking (D1) so any charge that lacked one is now booking-linked.
       const { error: updateError } = await supabase
         .from('billing_line_items')
-        .update({ status: 'invoiced', invoice_id: invoiceData.id, invoice_number: invoiceData.invoice_number })
+        .update({
+          status: 'invoiced',
+          invoice_id: invoiceData.id,
+          invoice_number: invoiceData.invoice_number,
+          booking_id: selectedBookingId,
+          booking_number: invoiceBooking?.booking_number || null,
+        })
         .in('id', finalBillingItemIds);
       if (updateError) console.warn('[InvoiceBuilder] Failed to mark items as invoiced:', updateError.message);
 
@@ -1351,6 +1377,30 @@ export function InvoiceBuilder({
             {/* ─── CREATE MODE: Details Tab ─── */}
             {mode === 'create' && activeTab === 'details' && canViewDetailsTab && (
               <div className="p-5 space-y-4">
+                {/* Doctrine D1 (NEU-077): an invoice must be booking-linked. */}
+                <div>
+                  <label className="block text-[11px] font-bold text-[var(--theme-text-muted)] mb-1.5 uppercase tracking-wider">Booking *</label>
+                  {projectBookings.length === 0 ? (
+                    <div className="px-3 py-2 rounded-lg border border-[var(--theme-status-warning-border)] bg-[var(--theme-status-warning-bg)] text-[13px] text-[var(--theme-status-warning-fg)]">
+                      This project has no booking. An invoice must be booking-linked — create a booking before invoicing.
+                    </div>
+                  ) : projectBookings.length === 1 ? (
+                    <div className="px-3 py-2 rounded-lg border border-[var(--theme-border-default)] bg-[var(--theme-bg-surface-subtle)] text-[13px] text-[var(--theme-text-primary)]">
+                      {projectBookings[0].booking_number}
+                      <span className="text-[var(--theme-text-muted)]"> · {projectBookings[0].service_type}</span>
+                    </div>
+                  ) : (
+                    <CustomDropdown
+                      value={selectedBookingId}
+                      onChange={setSelectedBookingId}
+                      options={projectBookings.map(b => ({ value: b.id, label: `${b.booking_number} · ${b.service_type}` }))}
+                      placeholder="Select the booking for this invoice..."
+                      fullWidth
+                      size="sm"
+                    />
+                  )}
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] font-bold text-[var(--theme-text-muted)] mb-1.5 uppercase tracking-wider">Invoice Date</label>
@@ -1649,7 +1699,8 @@ export function InvoiceBuilder({
                 {canWriteInvoices && (
                 <button
                   onClick={handleSubmit}
-                  disabled={isSubmitting || selectedIds.size === 0}
+                  disabled={isSubmitting || selectedIds.size === 0 || !selectedBookingId}
+                  title={!selectedBookingId ? (projectBookings.length === 0 ? "This project has no booking" : "Select a booking in the Details tab") : undefined}
                   className="flex items-center justify-center gap-2 w-full px-4 py-3 text-[13px] font-bold text-white bg-[var(--theme-action-primary-bg)] rounded-lg hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (
