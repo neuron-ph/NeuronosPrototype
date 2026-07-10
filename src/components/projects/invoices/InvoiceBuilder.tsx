@@ -650,7 +650,38 @@ export function InvoiceBuilder({
         return;
       }
 
-      const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}`;
+      // NEU-070: invoice number = [Booking Number]-XXX for a single-booking
+      // invoice, else [Project Number]-XXX. XXX is a 3-digit running sequence
+      // (001, 002, …) counted from existing invoices that share the prefix.
+      const bookingIdSet = new Set<string>(selectedLineage.bookingIds);
+      ((project as any).linkedBookings || []).forEach((b: any) => {
+        const bid = b?.bookingId || b?.booking_id || b?.id;
+        if (bid) bookingIdSet.add(bid);
+      });
+      // Project context: the charges carry no booking — discover the project's
+      // own bookings so a single-booking project still numbers by its booking.
+      if (bookingIdSet.size === 0 && project.id) {
+        const { data: projBookings } = await supabase
+          .from("bookings")
+          .select("id")
+          .eq("project_id", project.id);
+        (projBookings || []).forEach((b: any) => b?.id && bookingIdSet.add(b.id));
+      }
+      const bookingIdList = Array.from(bookingIdSet);
+      let numberBase = project.project_number || "INV";
+      if (bookingIdList.length === 1) {
+        const { data: bk } = await supabase
+          .from("bookings")
+          .select("booking_number")
+          .eq("id", bookingIdList[0])
+          .maybeSingle();
+        if (bk?.booking_number) numberBase = bk.booking_number;
+      }
+      const { count: priorInvoiceCount } = await supabase
+        .from("invoices")
+        .select("id", { count: "exact", head: true })
+        .ilike("invoice_number", `${numberBase}-%`);
+      const invoiceNumber = `${numberBase}-${String((priorInvoiceCount || 0) + 1).padStart(3, "0")}`;
 
       // Compute effective due date for persistence
       let effectiveDueDate = dueDate || undefined;
