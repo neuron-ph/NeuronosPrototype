@@ -38,6 +38,17 @@ import { useCompanySettings } from "../../../hooks/useCompanySettings";
 const A4_WIDTH_PX = 794; // 210mm
 const A4_HEIGHT_PX = 1123; // 297mm
 
+// NEU-068: derive the net payment days from credit terms so the due date honors
+// the term (e.g. "NET 15" → invoice date + 15). Manual due-date always wins over
+// this; this only fills a blank due date. "COD"/"DUE"/"CASH" → same-day (0).
+// Blank/unparseable → 15 (matches the default "NET 15" term).
+const parseCreditTermDays = (terms: string): number => {
+  const match = terms?.match(/\d+/);
+  if (match) return parseInt(match[0], 10);
+  if (/COD|CASH|DUE|RECEIPT/i.test(terms || "")) return 0;
+  return 15;
+};
+
 interface InvoiceBuilderProps {
   mode: "create" | "view";
   project: FinancialContainer;
@@ -383,7 +394,7 @@ export function InvoiceBuilder({
     let effectiveDueDate = dueDate;
     if (!effectiveDueDate) {
          const d = new Date(invoiceDate);
-         d.setDate(d.getDate() + 30);
+         d.setDate(d.getDate() + parseCreditTermDays(creditTerms));
          effectiveDueDate = d.toISOString().split('T')[0];
     }
     
@@ -627,7 +638,7 @@ export function InvoiceBuilder({
       let effectiveDueDate = dueDate || undefined;
       if (!effectiveDueDate) {
           const d = new Date(invoiceDate);
-          d.setDate(d.getDate() + 30);
+          d.setDate(d.getDate() + parseCreditTermDays(creditTerms));
           effectiveDueDate = d.toISOString().split('T')[0];
       }
 
