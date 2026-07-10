@@ -35,6 +35,8 @@ import { recordNotificationEvent } from "../../../utils/notifications";
 import { useCompanySettings, useUpdateCompanySettings } from "../../../hooks/useCompanySettings";
 import { parseCreditTermDays } from "../../../utils/creditTerms";
 import { buildCatalogSnapshot } from "../../../utils/catalogSnapshot";
+import { useCreditTerms } from "../../../hooks/useCreditTerms";
+import { useBankAccounts } from "../../../hooks/useBankAccounts";
 
 
 // A4 Dimensions in pixels at 96 DPI
@@ -88,6 +90,9 @@ export function InvoiceBuilder({
   // -- Common State --
   const { user } = useUser();
   const { settings: companySettings } = useCompanySettings();
+  // NEU-071: Profiling-managed invoice lookups.
+  const { creditTerms: creditTermsList } = useCreditTerms();
+  const { bankAccounts } = useBankAccounts();
   const { can } = usePermission();
   // NEU-019 WG-06: the invoice lifecycle (draft/finalize/delete/void) wrote with
   // no permission beyond tab views. Same OR-gate family as billings/collections
@@ -217,6 +222,17 @@ export function InvoiceBuilder({
   // (Profiling), editable per-invoice, and "Save as company default" writes back.
   const [bankDetails, setBankDetails] = useState({ bank_name: "", account_name: "", account_number: "" });
   const updateCompanySettings = useUpdateCompanySettings();
+
+  // NEU-071: Profiling-managed selectors. Credit terms falls back to a free-text
+  // "Custom…" entry; bank details can be picked from a profiled account.
+  const [useCustomTerms, setUseCustomTerms] = useState(false);
+  const [selectedBankAccountId, setSelectedBankAccountId] = useState("");
+
+  // Prefer a profiled term's net_days; fall back to parsing the label.
+  const getNetDays = (label: string): number => {
+    const t = creditTermsList.find((ct) => ct.label === label);
+    return t ? t.net_days : parseCreditTermDays(label);
+  };
 
   // -- Queries --
 
@@ -426,7 +442,7 @@ export function InvoiceBuilder({
     let effectiveDueDate = dueDate;
     if (!effectiveDueDate) {
          const d = new Date(invoiceDate);
-         d.setDate(d.getDate() + parseCreditTermDays(creditTerms));
+         d.setDate(d.getDate() + getNetDays(creditTerms));
          effectiveDueDate = d.toISOString().split('T')[0];
     }
     
@@ -526,23 +542,36 @@ export function InvoiceBuilder({
       credit_terms: creditTerms,
       contract_number: selectedLineage.contractRefs.length === 1 ? selectedLineage.contractRefs[0] : undefined,
     } as Invoice;
-  }, [mode, viewInvoice, selectedItems, selectedLineage, invoiceDate, dueDate, notes, project, currency, signatories, customerTin, blNumber, consignee, commodityDescription, creditTerms, itemOverrides, customerAddress, targetCurrency, exchangeRate, billedToType, selectedConsignee, selectedBookingId, projectBookings]);
+  }, [mode, viewInvoice, selectedItems, selectedLineage, invoiceDate, dueDate, notes, project, currency, signatories, customerTin, blNumber, consignee, commodityDescription, creditTerms, itemOverrides, customerAddress, targetCurrency, exchangeRate, billedToType, selectedConsignee, selectedBookingId, projectBookings, creditTermsList]);
 
-  // Print Options Object
-  // NEU-055: seed the bank fields from the company default once (per-invoice edits win).
+  // NEU-055/071: seed the bank block once while empty (per-invoice edits win) —
+  // prefer a profiled bank account (currency-matched), else the company default.
   useEffect(() => {
-    setBankDetails(prev => {
-      if (prev.bank_name || prev.account_name || prev.account_number) return prev;
-      return {
-        bank_name: companySettings?.bank_name || "",
-        account_name: companySettings?.bank_account_name || "",
-        account_number: companySettings?.bank_account_number || "",
-      };
-    });
-  }, [companySettings]);
+    if (bankDetails.bank_name || bankDetails.account_name || bankDetails.account_number) return;
+    if (bankAccounts.length > 0) {
+      const match = bankAccounts.find(b => (b.currency || "").toUpperCase() === (targetCurrency || "").toUpperCase()) || bankAccounts[0];
+      setSelectedBankAccountId(match.id);
+      setBankDetails({ bank_name: match.bank_name, account_name: match.account_name, account_number: match.account_number });
+    } else if (companySettings?.bank_name || companySettings?.bank_account_number) {
+      setBankDetails({
+        bank_name: companySettings.bank_name || "",
+        account_name: companySettings.bank_account_name || "",
+        account_number: companySettings.bank_account_number || "",
+      });
+    }
+  }, [companySettings, bankAccounts, targetCurrency, bankDetails.bank_name, bankDetails.account_name, bankDetails.account_number]);
 
-  const updateBankDetail = (field: "bank_name" | "account_name" | "account_number", value: string) =>
+  // NEU-071: pick a profiled bank account → fill the (still-editable) bank block.
+  const selectBankAccount = (id: string) => {
+    setSelectedBankAccountId(id);
+    const acct = bankAccounts.find(b => b.id === id);
+    if (acct) setBankDetails({ bank_name: acct.bank_name, account_name: acct.account_name, account_number: acct.account_number });
+  };
+
+  const updateBankDetail = (field: "bank_name" | "account_name" | "account_number", value: string) => {
+    setSelectedBankAccountId(""); // manual edit = custom, no longer a profiled account
     setBankDetails(prev => ({ ...prev, [field]: value }));
+  };
 
   const handleSaveBankDefault = () => {
     updateCompanySettings.mutate(
@@ -758,7 +787,7 @@ export function InvoiceBuilder({
       let effectiveDueDate = dueDate || undefined;
       if (!effectiveDueDate) {
           const d = new Date(invoiceDate);
-          d.setDate(d.getDate() + parseCreditTermDays(creditTerms));
+          d.setDate(d.getDate() + getNetDays(creditTerms));
           effectiveDueDate = d.toISOString().split('T')[0];
       }
 
@@ -837,6 +866,7 @@ export function InvoiceBuilder({
                 booking_number: invoiceBooking?.booking_number || null,
             },
             bank_details: bankDetails, // NEU-055: remember this invoice's bank block
+            bank_account_id: selectedBankAccountId || null, // NEU-071: profiled account, if picked
             item_overrides: itemOverrides
         },
         created_at: new Date().toISOString(),
@@ -1490,17 +1520,39 @@ export function InvoiceBuilder({
                 </div>
 
                 <div>
+                  {/* NEU-071: Profiling-managed Credit Terms with a Custom… fallback. */}
                   <label className="block text-[11px] font-bold text-[var(--theme-text-muted)] mb-1.5 uppercase tracking-wider">Credit Terms</label>
-                  <div className="relative">
-                    <CreditCard className="absolute left-3 top-2.5 text-[var(--theme-text-muted)]" size={14} />
-                    <input
-                      type="text"
-                      value={creditTerms}
-                      onChange={(e) => setCreditTerms(e.target.value)}
-                      placeholder="e.g. NET 15, NET 30, COD"
-                      className="w-full pl-9 pr-3 py-2 border border-[var(--theme-border-default)] rounded-lg text-sm focus:ring-2 focus:ring-[var(--theme-action-primary-bg)]/20 focus:border-[var(--theme-action-primary-bg)] outline-none transition-all placeholder:text-[var(--theme-text-muted)]"
-                    />
-                  </div>
+                  {(() => {
+                    const isKnown = creditTermsList.some(t => t.label === creditTerms);
+                    const custom = useCustomTerms || !isKnown;
+                    return (
+                      <>
+                        <CustomDropdown
+                          value={custom ? "__custom__" : creditTerms}
+                          onChange={(v) => {
+                            if (v === "__custom__") { setUseCustomTerms(true); }
+                            else { setCreditTerms(v); setUseCustomTerms(false); }
+                          }}
+                          options={[
+                            ...creditTermsList.map(t => ({ value: t.label, label: `${t.label} · ${t.net_days}d` })),
+                            { value: "__custom__", label: "Custom…" },
+                          ]}
+                          placeholder="Select credit terms..."
+                          fullWidth
+                          size="sm"
+                        />
+                        {custom && (
+                          <input
+                            type="text"
+                            value={creditTerms}
+                            onChange={(e) => setCreditTerms(e.target.value)}
+                            placeholder="e.g. NET 20"
+                            className="mt-2 w-full px-3 py-2 border border-[var(--theme-border-default)] rounded-lg text-sm focus:ring-2 focus:ring-[var(--theme-action-primary-bg)]/20 focus:border-[var(--theme-action-primary-bg)] outline-none transition-all placeholder:text-[var(--theme-text-muted)]"
+                          />
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
 
                 <div>
@@ -1698,6 +1750,22 @@ export function InvoiceBuilder({
                 {/* Bank Details (NEU-055) */}
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--theme-text-muted)] mb-3">Bank Details</p>
+                  {/* NEU-071: pick a profiled bank account (fills the editable fields below). */}
+                  {bankAccounts.length > 0 && (
+                    <div className="mb-3">
+                      <CustomDropdown
+                        value={selectedBankAccountId || "__custom__"}
+                        onChange={(v) => { if (v === "__custom__") setSelectedBankAccountId(""); else selectBankAccount(v); }}
+                        options={[
+                          ...bankAccounts.map(b => ({ value: b.id, label: b.currency ? `${b.label} · ${b.currency}` : b.label })),
+                          { value: "__custom__", label: "Custom / one-off" },
+                        ]}
+                        placeholder="Select a bank account..."
+                        fullWidth
+                        size="sm"
+                      />
+                    </div>
+                  )}
                   <BankDetailsControl
                     bankDetails={bankDetails}
                     onUpdate={updateBankDetail}
@@ -1750,6 +1818,22 @@ export function InvoiceBuilder({
                 {/* Bank Details (NEU-055) */}
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--theme-text-muted)] mb-3">Bank Details</p>
+                  {/* NEU-071: pick a profiled bank account (fills the editable fields below). */}
+                  {bankAccounts.length > 0 && (
+                    <div className="mb-3">
+                      <CustomDropdown
+                        value={selectedBankAccountId || "__custom__"}
+                        onChange={(v) => { if (v === "__custom__") setSelectedBankAccountId(""); else selectBankAccount(v); }}
+                        options={[
+                          ...bankAccounts.map(b => ({ value: b.id, label: b.currency ? `${b.label} · ${b.currency}` : b.label })),
+                          { value: "__custom__", label: "Custom / one-off" },
+                        ]}
+                        placeholder="Select a bank account..."
+                        fullWidth
+                        size="sm"
+                      />
+                    </div>
+                  )}
                   <BankDetailsControl
                     bankDetails={bankDetails}
                     onUpdate={updateBankDetail}

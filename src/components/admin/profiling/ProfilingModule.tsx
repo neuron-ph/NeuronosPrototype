@@ -5,10 +5,14 @@ import { profileRegistry } from '../../../config/profiles/profileRegistry';
 import { ProfileSection } from './ProfileSection';
 import { ProfilingGovernanceTab } from './ProfilingGovernanceTab';
 import { CurrenciesTab } from './CurrenciesTab';
+import { CreditTermsTab } from './CreditTermsTab';
+import { BankAccountsTab } from './BankAccountsTab';
 import { RoutingRulesTab } from './RoutingRulesTab';
 
 const GOVERNANCE_KEY = 'governance';
 const CURRENCIES_KEY = 'currencies';
+const CREDIT_TERMS_KEY = 'credit_terms';
+const BANK_ACCOUNTS_KEY = 'bank_accounts';
 const ROUTING_KEY = 'routing_rules';
 
 type SidebarItem = {
@@ -17,6 +21,8 @@ type SidebarItem = {
   description: string;
   isGovernance?: boolean;
   isCurrencies?: boolean;
+  isCreditTerms?: boolean;
+  isBankAccounts?: boolean;
   isRouting?: boolean;
   group: 'profiles' | 'vendors' | 'system';
 };
@@ -54,6 +60,20 @@ export function ProfilingModule() {
         label: 'Currencies',
         description: 'Currencies available in pricing & accounting dropdowns.',
         isCurrencies: true,
+        group: 'system',
+      },
+      {
+        key: CREDIT_TERMS_KEY,
+        label: 'Credit Terms',
+        description: 'Payment terms selectable when printing an invoice.',
+        isCreditTerms: true,
+        group: 'system',
+      },
+      {
+        key: BANK_ACCOUNTS_KEY,
+        label: 'Bank Accounts',
+        description: 'Payable bank accounts selectable when printing an invoice.',
+        isBankAccounts: true,
         group: 'system',
       },
       {
@@ -125,6 +145,10 @@ export function ProfilingModule() {
               <ProfilingGovernanceTab />
             ) : selectedItem?.isCurrencies ? (
               <CurrenciesTab />
+            ) : selectedItem?.isCreditTerms ? (
+              <CreditTermsTab />
+            ) : selectedItem?.isBankAccounts ? (
+              <BankAccountsTab />
             ) : selectedItem?.isRouting ? (
               <RoutingRulesTab />
             ) : (
