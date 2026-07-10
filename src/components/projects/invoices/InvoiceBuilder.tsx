@@ -15,6 +15,7 @@ import { queryKeys } from "../../../lib/queryKeys";
 import { InvoiceDocument, InvoicePrintOptions } from "./InvoiceDocument";
 import { downloadInvoicePDF } from "./InvoicePDFRenderer";
 import { SignatoryControl } from "../quotation/screen/controls/SignatoryControl";
+import { BankDetailsControl } from "../quotation/screen/controls/BankDetailsControl";
 import { DisplayOptionsControl } from "../quotation/screen/controls/DisplayOptionsControl";
 import { CustomDropdown } from "../../bd/CustomDropdown";
 import { useBookingGrouping } from "../../../hooks/useBookingGrouping";
@@ -31,7 +32,7 @@ import {
   type AccountingCurrency,
 } from "../../../utils/accountingCurrency";
 import { recordNotificationEvent } from "../../../utils/notifications";
-import { useCompanySettings } from "../../../hooks/useCompanySettings";
+import { useCompanySettings, useUpdateCompanySettings } from "../../../hooks/useCompanySettings";
 import { parseCreditTermDays } from "../../../utils/creditTerms";
 import { buildCatalogSnapshot } from "../../../utils/catalogSnapshot";
 
@@ -212,6 +213,11 @@ export function InvoiceBuilder({
       show_tax_summary: true
   });
 
+  // NEU-055: bank details shown on the invoice. Seeded from the company default
+  // (Profiling), editable per-invoice, and "Save as company default" writes back.
+  const [bankDetails, setBankDetails] = useState({ bank_name: "", account_name: "", account_number: "" });
+  const updateCompanySettings = useUpdateCompanySettings();
+
   // -- Queries --
 
   // Revenue accounts for GL posting (create mode only)
@@ -279,6 +285,11 @@ export function InvoiceBuilder({
     if (mode === 'view' && viewInvoice) {
         // Load notes
         setNotes((viewInvoice.notes as string) || "");
+
+        // NEU-055: restore this invoice's saved bank block (falls back to the
+        // company default via the seed effect when the invoice has none).
+        const bd = ((viewInvoice as any).metadata || {}).bank_details;
+        if (bd && (bd.bank_name || bd.account_name || bd.account_number)) setBankDetails(bd);
 
         // Load metadata (signatories, display options) if available
         const metadata = (viewInvoice as any).metadata || {};
@@ -487,8 +498,9 @@ export function InvoiceBuilder({
       billed_to_type: billedToType,
       billed_to_consignee_id: billedToConsigneeId,
       project_number: selectedLineage.projectRefs.length === 1 ? selectedLineage.projectRefs[0] : project.project_number,
-      booking_id: selectedLineage.bookingIds.length === 1 ? selectedLineage.bookingIds[0] : undefined,
-      booking_ids: selectedLineage.bookingIds,
+      booking_id: selectedBookingId || undefined,
+      booking_ids: selectedBookingId ? [selectedBookingId] : [],
+      booking_number: projectBookings.find(b => b.id === selectedBookingId)?.booking_number,
       line_items: finalLineItems,
       subtotal: subtotal,
       tax_amount: taxAmount,
@@ -510,14 +522,44 @@ export function InvoiceBuilder({
       credit_terms: creditTerms,
       contract_number: selectedLineage.contractRefs.length === 1 ? selectedLineage.contractRefs[0] : undefined,
     } as Invoice;
-  }, [mode, viewInvoice, selectedItems, selectedLineage, invoiceDate, dueDate, notes, project, currency, signatories, customerTin, blNumber, consignee, commodityDescription, creditTerms, itemOverrides, customerAddress, targetCurrency, exchangeRate, billedToType, selectedConsignee]);
+  }, [mode, viewInvoice, selectedItems, selectedLineage, invoiceDate, dueDate, notes, project, currency, signatories, customerTin, blNumber, consignee, commodityDescription, creditTerms, itemOverrides, customerAddress, targetCurrency, exchangeRate, billedToType, selectedConsignee, selectedBookingId, projectBookings]);
 
   // Print Options Object
+  // NEU-055: seed the bank fields from the company default once (per-invoice edits win).
+  useEffect(() => {
+    setBankDetails(prev => {
+      if (prev.bank_name || prev.account_name || prev.account_number) return prev;
+      return {
+        bank_name: companySettings?.bank_name || "",
+        account_name: companySettings?.bank_account_name || "",
+        account_number: companySettings?.bank_account_number || "",
+      };
+    });
+  }, [companySettings]);
+
+  const updateBankDetail = (field: "bank_name" | "account_name" | "account_number", value: string) =>
+    setBankDetails(prev => ({ ...prev, [field]: value }));
+
+  const handleSaveBankDefault = () => {
+    updateCompanySettings.mutate(
+      {
+        bank_name: bankDetails.bank_name || null,
+        bank_account_name: bankDetails.account_name || null,
+        bank_account_number: bankDetails.account_number || null,
+      },
+      {
+        onSuccess: () => toast.success("Saved as company default"),
+        onError: () => toast.error("Failed to save company default"),
+      }
+    );
+  };
+
   const printOptions: InvoicePrintOptions = useMemo(() => ({
       signatories: signatories,
       display: displayOptions,
-      custom_notes: notes
-  }), [signatories, displayOptions, notes]);
+      custom_notes: notes,
+      bank_details: bankDetails,
+  }), [signatories, displayOptions, notes, bankDetails]);
 
   const handleDownloadPDF = useCallback(async () => {
     setIsGeneratingPDF(true);
@@ -768,8 +810,10 @@ export function InvoiceBuilder({
                 bl_number: blNumber,
                 consignee: consignee,
                 commodity_description: commodityDescription,
-                credit_terms: creditTerms
+                credit_terms: creditTerms,
+                booking_number: invoiceBooking?.booking_number || null,
             },
+            bank_details: bankDetails, // NEU-055: remember this invoice's bank block
             item_overrides: itemOverrides
         },
         created_at: new Date().toISOString(),
@@ -1628,6 +1672,19 @@ export function InvoiceBuilder({
 
                 <div className="h-px bg-[var(--theme-border-default)]" />
 
+                {/* Bank Details (NEU-055) */}
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--theme-text-muted)] mb-3">Bank Details</p>
+                  <BankDetailsControl
+                    bankDetails={bankDetails}
+                    onUpdate={updateBankDetail}
+                    onSaveAsDefault={handleSaveBankDefault}
+                    isSavingDefault={updateCompanySettings.isPending}
+                  />
+                </div>
+
+                <div className="h-px bg-[var(--theme-border-default)]" />
+
                 {/* Display Options */}
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--theme-text-muted)] mb-3">Display Options</p>
@@ -1663,6 +1720,19 @@ export function InvoiceBuilder({
                     onUpdate={updateSignatory}
                   />
                   <p className="text-[10px] text-[var(--theme-text-muted)] mt-3 italic">Changes affect print output only.</p>
+                </div>
+
+                <div className="h-px bg-[var(--theme-border-default)]" />
+
+                {/* Bank Details (NEU-055) */}
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--theme-text-muted)] mb-3">Bank Details</p>
+                  <BankDetailsControl
+                    bankDetails={bankDetails}
+                    onUpdate={updateBankDetail}
+                    onSaveAsDefault={handleSaveBankDefault}
+                    isSavingDefault={updateCompanySettings.isPending}
+                  />
                 </div>
 
                 <div className="h-px bg-[var(--theme-border-default)]" />

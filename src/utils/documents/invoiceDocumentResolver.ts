@@ -259,6 +259,12 @@ export function resolveInvoicePrintableDocument(args: ResolveInvoiceArgs): Print
       label: "Project No.",
       value: project?.project_number || (invoice as any).project_number,
     },
+    // NEU-066: booking number (the invoice is booking-linked — Doctrine D1).
+    {
+      id: "booking_no",
+      label: "Booking No.",
+      value: (invoice as any).booking_number || zoneA.booking_number,
+    },
   ];
 
   // Bill To
