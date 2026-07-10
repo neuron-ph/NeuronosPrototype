@@ -134,6 +134,25 @@ describe("resolveInvoicePrintableDocument — NEU-067 column order", () => {
   });
 });
 
+describe("resolveInvoicePrintableDocument — NEU-065 remarks as subtext", () => {
+  it("renders remarks as a row subtext, not a Remarks column", () => {
+    const doc = resolveInvoicePrintableDocument({
+      invoice: baseInvoice({
+        line_items: [
+          { description: "CUSTOMS PROCESSING FEE", unit_price: 4500, amount: 4500, tax_type: "NON-VAT", remarks: "AWDAWDAW-DAWKJKSDJNGK" },
+          { description: "Brokerage Fee", unit_price: 3500, amount: 3500, tax_type: "NON-VAT" },
+        ],
+      } as any),
+    });
+    const table = doc.tables.find((t) => t.id === "invoice-lines")!;
+    expect(table.columns.map((c) => c.id)).not.toContain("remarks");
+    const row = table.rows.find((r) => String(r.cells.description).includes("CUSTOMS"))!;
+    expect(row.subtext).toBe("AWDAWDAW-DAWKJKSDJNGK");
+    const noRemark = table.rows.find((r) => String(r.cells.description).includes("Brokerage"))!;
+    expect(noRemark.subtext).toBeUndefined();
+  });
+});
+
 describe("resolveInvoicePrintableDocument — NEU-064 legal notice", () => {
   it("sets the BIR input-tax compliance line for the pinned footer", () => {
     const doc = resolveInvoicePrintableDocument({ invoice: baseInvoice() });

@@ -422,7 +422,7 @@ export const PrintableDocumentHtml = React.forwardRef<HTMLDivElement, PrintableD
           .p-footer-grid { break-inside: avoid !important; page-break-inside: avoid !important; }
           .p-branded-header { width: calc(100% + 24mm) !important; margin: -12mm -12mm 10px !important; overflow: hidden !important; height: 115px !important; }
           .p-branded-header img { width: 100% !important; display: block !important; object-fit: cover !important; object-position: top center !important; height: 100% !important; }
-          .p-branded-footer { overflow: hidden !important; height: 108px !important; margin-top: 10px !important; width: calc(100% + 24mm) !important; margin-left: -12mm !important; margin-right: -12mm !important; margin-bottom: -12mm !important; }
+          .p-branded-footer { overflow: hidden !important; height: 108px !important; margin-top: 10px !important; width: calc(100% + 24mm) !important; margin-left: -12mm !important; margin-right: -12mm !important; margin-bottom: 0 !important; }
           .p-branded-footer img { width: 100% !important; display: block !important; object-fit: cover !important; object-position: bottom center !important; height: 100% !important; }
           @page {
             margin: 6mm 0;
@@ -567,9 +567,9 @@ export const PrintableDocumentHtml = React.forwardRef<HTMLDivElement, PrintableD
           </div>
         )}
 
-        {/* Bottom zone: signatories + legal notice + footer, pinned to the A4
-            bottom (NEU-062). Legal line sits below the text footer but above the
-            full-bleed branded footer image (below it would be off-page). */}
+        {/* Bottom zone: signatories + footer + legal notice, pinned to the A4
+            bottom (NEU-062). Legal line is always the last element, below the
+            footer (NEU-064). */}
         {(() => {
           const legal = isPrintableValue(doc.legalNotice)
             ? <div className="p-legal-notice">{doc.legalNotice}</div>
@@ -579,10 +579,10 @@ export const PrintableDocumentHtml = React.forwardRef<HTMLDivElement, PrintableD
               <SignatoriesBlock signatories={signatories} />
               {doc.brandedFooterImage && doc.options.showContactFooter ? (
                 <>
-                  {legal}
                   <div className="p-branded-footer">
                     <img src={doc.brandedFooterImage} alt="Footer" />
                   </div>
+                  {legal}
                 </>
               ) : contactFooter && doc.options.showContactFooter ? (
                 <>

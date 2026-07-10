@@ -109,9 +109,11 @@ function buildInvoiceTable(
   currency: string,
   options: { showTax: boolean; omitEmpty: boolean },
 ): PrintableTable {
+  // NEU-065: remarks render as a subtext line beneath the description (mirrors
+  // Quotations), NOT a dedicated column — long remarks then breathe instead of
+  // stretching a narrow column and ballooning row height.
   const columns: PrintableTableColumn[] = [
-    { id: "description", label: "Description", widthHint: "40%" },
-    { id: "remarks", label: "Remarks", widthHint: "14%", hideWhenEmpty: true },
+    { id: "description", label: "Description", widthHint: "54%" },
     { id: "quantity", label: "Qty", align: "center", widthHint: "6%", hideWhenEmpty: true },
     { id: "unit", label: "Unit", align: "center", widthHint: "8%", hideWhenEmpty: true },
     { id: "rate", label: "Rate", align: "right", format: "money", widthHint: "12%" },
@@ -137,17 +139,18 @@ function buildInvoiceTable(
       });
       descCell = `${description} (Converted from ${item.original_currency} ${origAmt} @ ${rate})`;
     }
+    const remarks = item.remarks ? String(item.remarks).trim() : "";
     return {
       id: item.id || `inv-line-${idx}`,
       cells: {
         description: descCell,
-        remarks: item.remarks ?? "",
         quantity: item.quantity ?? "",
         unit: item.unit ?? "",
         rate: Number(item.unit_price ?? item.rate ?? 0),
         tax_type: options.showTax && item.tax_type ? String(item.tax_type) : "",
         amount: Number(item.amount ?? 0),
       },
+      subtext: remarks || undefined,
     };
   });
 
