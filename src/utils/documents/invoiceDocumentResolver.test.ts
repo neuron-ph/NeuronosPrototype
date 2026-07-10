@@ -116,6 +116,61 @@ describe("resolveInvoicePrintableDocument — taxes & columns", () => {
   });
 });
 
+describe("resolveInvoicePrintableDocument — NEU-067 column order", () => {
+  it("renders Amount before Tax in the line-item table", () => {
+    const doc = resolveInvoicePrintableDocument({
+      invoice: baseInvoice({
+        line_items: [
+          { description: "X", quantity: 1, unit_price: 100, amount: 100, tax_type: "VAT" },
+        ],
+      } as any),
+    });
+    const ids = doc.tables.find((t) => t.id === "invoice-lines")!.columns.map((c) => c.id);
+    expect(ids).toContain("amount");
+    expect(ids).toContain("tax_type");
+    expect(ids.indexOf("amount")).toBeLessThan(ids.indexOf("tax_type"));
+    // Rate still precedes Amount.
+    expect(ids.indexOf("rate")).toBeLessThan(ids.indexOf("amount"));
+  });
+});
+
+describe("resolveInvoicePrintableDocument — NEU-063 checked-by signatory", () => {
+  const withSig = (checked?: { name: string; title: string }) =>
+    resolveInvoicePrintableDocument({
+      invoice: baseInvoice(),
+      options: {
+        signatories: {
+          prepared_by: { name: "Prep", title: "Encoder" },
+          ...(checked ? { checked_by: checked } : {}),
+          approved_by: { name: "Appr", title: "Manager" },
+        },
+        display: {
+          show_bank_details: true,
+          show_notes: true,
+          show_tax_summary: true,
+          show_letterhead: true,
+        },
+      },
+    });
+
+  it("inserts Checked by between Prepared and Approved when supplied", () => {
+    const doc = withSig({ name: "Chk", title: "Reviewer" });
+    expect(doc.signatories.map((s) => s.id)).toEqual([
+      "prepared_by",
+      "checked_by",
+      "approved_by",
+    ]);
+    const checked = doc.signatories.find((s) => s.id === "checked_by")!;
+    expect(checked.label).toBe("Checked by");
+    expect(checked.name).toBe("Chk");
+  });
+
+  it("keeps the two-column layout when no checked-by is supplied", () => {
+    const doc = withSig();
+    expect(doc.signatories.map((s) => s.id)).toEqual(["prepared_by", "approved_by"]);
+  });
+});
+
 describe("resolveInvoicePrintableDocument — totals", () => {
   it("includes PHP equivalent row only when invoice has FX rate", () => {
     const docFx = resolveInvoicePrintableDocument({

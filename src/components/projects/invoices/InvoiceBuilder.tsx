@@ -32,22 +32,12 @@ import {
 } from "../../../utils/accountingCurrency";
 import { recordNotificationEvent } from "../../../utils/notifications";
 import { useCompanySettings } from "../../../hooks/useCompanySettings";
+import { parseCreditTermDays } from "../../../utils/creditTerms";
 
 
 // A4 Dimensions in pixels at 96 DPI
 const A4_WIDTH_PX = 794; // 210mm
 const A4_HEIGHT_PX = 1123; // 297mm
-
-// NEU-068: derive the net payment days from credit terms so the due date honors
-// the term (e.g. "NET 15" → invoice date + 15). Manual due-date always wins over
-// this; this only fills a blank due date. "COD"/"DUE"/"CASH" → same-day (0).
-// Blank/unparseable → 15 (matches the default "NET 15" term).
-const parseCreditTermDays = (terms: string): number => {
-  const match = terms?.match(/\d+/);
-  if (match) return parseInt(match[0], 10);
-  if (/COD|CASH|DUE|RECEIPT/i.test(terms || "")) return 0;
-  return 15;
-};
 
 interface InvoiceBuilderProps {
   mode: "create" | "view";
