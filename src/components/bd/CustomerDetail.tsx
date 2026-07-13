@@ -283,7 +283,6 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
         client_type: editedCustomer.client_type,
         industry: editedCustomer.industry,
         registered_address: editedCustomer.registered_address,
-        tin: editedCustomer.tin || null, // NEU-084
         status: editedCustomer.status,
         lead_source: editedCustomer.lead_source,
         owner_id: editedCustomer.owner_id || null,
@@ -492,21 +491,6 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                     </div>
                   )}
 
-                  {/* TIN — NEU-084 (auto-fills the invoice Customer TIN) */}
-                  {variant === "bd" && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <FileText size={14} style={{ color: "var(--neuron-ink-muted)" }} />
-                        <label className="text-[11px] font-medium uppercase tracking-wide" style={{ color: "var(--neuron-ink-muted)" }}>
-                          TIN
-                        </label>
-                      </div>
-                      <p className="text-[13px] pl-6" style={{ color: localCustomer.tin ? "var(--neuron-ink-primary)" : "var(--neuron-ink-muted)" }}>
-                        {localCustomer.tin || "—"}
-                      </p>
-                    </div>
-                  )}
-
                   {/* Lead Source */}
                   {variant === "bd" && (
                     <div>
@@ -656,25 +640,6 @@ export function CustomerDetail({ customer, onBack, onCreateInquiry, onViewInquir
                       onChange={(e) => setEditedCustomer({ ...editedCustomer, registered_address: e.target.value })}
                       rows={3}
                       className="w-full px-3 py-2 rounded-lg text-[13px] focus:outline-none focus:ring-2 resize-none"
-                      style={{
-                        border: "1px solid var(--neuron-ui-border)",
-                        backgroundColor: "var(--theme-bg-surface)",
-                        color: "var(--neuron-ink-primary)"
-                      }}
-                    />
-                  </div>
-
-                  {/* TIN — NEU-084 */}
-                  <div>
-                    <label className="block text-[11px] font-medium uppercase tracking-wide mb-1.5" style={{ color: "var(--neuron-ink-muted)" }}>
-                      TIN
-                    </label>
-                    <input
-                      type="text"
-                      value={editedCustomer.tin || ""}
-                      onChange={(e) => setEditedCustomer({ ...editedCustomer, tin: e.target.value })}
-                      placeholder="000-000-000-00000"
-                      className="w-full px-3 py-2 rounded-lg text-[13px] focus:outline-none focus:ring-2"
                       style={{
                         border: "1px solid var(--neuron-ui-border)",
                         backgroundColor: "var(--theme-bg-surface)",

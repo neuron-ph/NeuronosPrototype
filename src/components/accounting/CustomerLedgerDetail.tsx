@@ -272,6 +272,13 @@ export function CustomerLedgerDetail({ customer, onClose, contactCount }: Custom
                   <div className="text-[13px] text-[var(--theme-text-primary)]">{customer.industry || "—"}</div>
                 </div>
                 <div>
+                  {/* NEU-084: TIN shown only in the Accounting customers profile. */}
+                  <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)] mb-1">
+                    <FileText size={12} aria-hidden="true" /> TIN
+                  </div>
+                  <div className="text-[13px] text-[var(--theme-text-primary)]">{customer.tin || "—"}</div>
+                </div>
+                <div>
                   <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)] mb-1">
                     <MapPin size={12} aria-hidden="true" /> Registered Address
                   </div>
