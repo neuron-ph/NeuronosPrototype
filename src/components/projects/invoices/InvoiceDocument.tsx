@@ -55,7 +55,7 @@ export const InvoiceDocument = React.forwardRef<HTMLDivElement, InvoiceDocumentP
       options,
       companySettings,
       fallbackLogo: logoImage as unknown as string,
-    }));
+    }), "invoice");
     return <PrintableDocumentHtml ref={ref} document={doc} mode={mode} />;
   },
 );

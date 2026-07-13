@@ -201,6 +201,12 @@ export interface PrintableDocument {
   legalNotice?: string;
   brandedHeaderImage?: string;
   brandedFooterImage?: string;
+  // NEU-085: a simple full-width letterhead banner shown at natural aspect at the
+  // very top (e.g. invoices use the "A PLUS FALCONS FREIGHT INC." strip). Unlike
+  // brandedHeaderImage (a full A4 page clipped to a thin band, which distorts),
+  // this is a wide/short logo strip rendered whole. When set, the text footer
+  // (contactFooter) is used instead of a footer image.
+  brandedLetterheadImage?: string;
 }
 
 export const DEFAULT_PRINTABLE_OPTIONS: PrintableDocumentOptions = {

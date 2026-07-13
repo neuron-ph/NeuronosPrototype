@@ -102,12 +102,24 @@ const SHARED_GENERAL_INFORMATION: SectionDef = {
     // ---------------------------------------------------------------------------
     {
       // Matrix: Consignee = Yes for all five services in Booking GI.
-      // NEU-019: one shared field serves consignee (import) / shipper (export);
-      // label reflects both. Data key stays `consignee`.
+      // NEU-081: Consignee and Shipper are now SEPARATE concepts, both required,
+      // both in GI for all five services. Consignee = the receiving party; this
+      // is the value that prints on the invoice (per Marcus 7/13).
       key: 'consignee',
-      label: 'Consignee/Shipper',
+      label: 'Consignee',
       control: 'profile-lookup',
       profileType: 'consignee',
+      required: 'yes',
+      storage: 'details',
+    },
+    {
+      // NEU-081: Shipper = the sending party. Promoted from the per-service
+      // Shipment/Policy detail sections into shared GI so it is captured for
+      // every service, always required, distinct from Consignee. Data key `shipper`.
+      key: 'shipper',
+      label: 'Shipper',
+      control: 'profile-lookup',
+      profileType: 'shipper',
       required: 'yes',
       storage: 'details',
     },
@@ -279,15 +291,7 @@ const BROKERAGE_BOOKING_DETAILS: SectionDef = {
   key: 'brokerage_details',
   title: 'Shipment Details',
   fields: [
-    // Trade parties — consignee moved to shared GI (matrix: GI for all services)
-    {
-      key: 'shipper',
-      label: 'Shipper',
-      control: 'profile-lookup',
-      profileType: 'shipper',
-      required: 'yes',
-      storage: 'details',
-    },
+    // NEU-081: Consignee + Shipper both moved to shared GI (separate, all services)
     {
       key: 'carrier',
       label: 'Carrier / Airline',
@@ -792,15 +796,7 @@ const FORWARDING_BOOKING_DETAILS: SectionDef = {
   key: 'forwarding_details',
   title: 'Shipment Details',
   fields: [
-    // Trade parties — consignee moved to shared GI
-    {
-      key: 'shipper',
-      label: 'Shipper',
-      control: 'profile-lookup',
-      profileType: 'shipper',
-      required: 'yes',
-      storage: 'details',
-    },
+    // NEU-081: Consignee + Shipper both moved to shared GI (separate, all services)
     {
       key: 'carrier',
       label: 'Carrier',
@@ -1447,16 +1443,7 @@ const MARINE_POLICY_INFORMATION: SectionDef = {
   key: 'marine_policy',
   title: 'Policy Details',
   fields: [
-    // Primary parties
-    {
-      key: 'shipper',
-      label: 'Shipper',
-      control: 'profile-lookup',
-      profileType: 'shipper',
-      required: 'yes',
-      storage: 'details',
-    },
-    // consignee moved to shared GI
+    // NEU-081: Consignee + Shipper both moved to shared GI (separate, all services)
     {
       key: 'carrier',
       label: 'Carrier',

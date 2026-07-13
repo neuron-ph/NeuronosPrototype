@@ -422,6 +422,8 @@ export const PrintableDocumentHtml = React.forwardRef<HTMLDivElement, PrintableD
           .p-footer-grid { break-inside: avoid !important; page-break-inside: avoid !important; }
           .p-branded-header { width: calc(100% + 24mm) !important; margin: -12mm -12mm 10px !important; overflow: hidden !important; height: 115px !important; }
           .p-branded-header img { width: 100% !important; display: block !important; object-fit: cover !important; object-position: top center !important; height: 100% !important; }
+          .p-letterhead-strip { width: 100% !important; margin: 0 0 12px !important; text-align: center !important; }
+          .p-letterhead-strip img { height: 70px !important; width: auto !important; max-width: 100% !important; display: inline-block !important; }
           .p-branded-footer { overflow: hidden !important; height: 108px !important; margin-top: 10px !important; width: calc(100% + 24mm) !important; margin-left: -12mm !important; margin-right: -12mm !important; margin-bottom: 0 !important; }
           .p-branded-footer img { width: 100% !important; display: block !important; object-fit: cover !important; object-position: bottom center !important; height: 100% !important; }
           @page {
@@ -445,10 +447,12 @@ export const PrintableDocumentHtml = React.forwardRef<HTMLDivElement, PrintableD
         `}</style>
 
         {/* Header */}
-        {doc.brandedHeaderImage ? (
+        {doc.brandedHeaderImage || doc.brandedLetterheadImage ? (
           <>
-            <div className="p-branded-header">
-              <img src={doc.brandedHeaderImage} alt="Header" />
+            {/* NEU-085: letterhead strip (invoices) renders whole; the full-page
+                branded image (quotations) is clipped to a top band. */}
+            <div className={doc.brandedLetterheadImage ? "p-letterhead-strip" : "p-branded-header"}>
+              <img src={doc.brandedLetterheadImage || doc.brandedHeaderImage} alt="Header" />
             </div>
             {headerFields.length > 0 ? (
               <div className="p-ref-bar">

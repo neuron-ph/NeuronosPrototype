@@ -40,3 +40,32 @@ analysis/
 /test-results/
 /playwright-report/
 /.last-run.json
+
+# Sensitive client data — NEVER commit (repo is public for Vercel).
+# Apply data (e.g. TIN imports) directly to the database, not via git.
+CLIENT DATA.xlsx
+*_tin_import.sql
+docs/accounting-changelog/*_tin_import.sql
+viber_image_*
+contracts-fixed-magcalas.png
+mc-booking-detail.png
+mc-invoice-builder-items.png
+
+# One-off local reports / handoffs (may contain real client data)
+/BD_PARITY_REPORT.md
+/BD_QA_SCENARIOS.md
+/BD_REPORT_FOR_CLARENCE.html
+/DB_RELATIONSHIP_ANALYSIS.md
+/FIELD_MAPPING.md
+/FIELD_MAPPING_2.md
+/HANDOFF.md
+/JSONB_TRANSFORM_SPEC.md
+/MAIN_PARITY_BOARD.md
+/MIGRATION_PROVENANCE.md
+/MIGRATION_STATUS.md
+/PARITY_PLAN.md
+/SCHEMA_DIFF.md
+/builder.md
+/Forwarding-Field-Guide-for-Raph.*
+/Freight-Forwarding-Field-Guide.*
+/*.pdf

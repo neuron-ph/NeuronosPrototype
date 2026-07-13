@@ -78,6 +78,7 @@ export interface Customer {
   type?: string; // customer classification (e.g. "Prospect")
   industry: Industry;
   registered_address?: string;
+  tin?: string; // NEU-084: BIR Tax Identification Number — auto-fills the invoice Customer TIN
   status: CustomerStatus;
   lead_source?: string;
   owner_id?: string | null;
