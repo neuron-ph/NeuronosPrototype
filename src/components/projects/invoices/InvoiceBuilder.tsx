@@ -13,7 +13,7 @@ import { getAccounts } from "../../../utils/accounting-api";
 import { supabase } from "../../../utils/supabase/client";
 import { queryKeys } from "../../../lib/queryKeys";
 import { InvoiceDocument, InvoicePrintOptions } from "./InvoiceDocument";
-import { downloadInvoicePDF } from "./InvoicePDFRenderer";
+import { downloadInvoicePDF, printInvoicePDF } from "./InvoicePDFRenderer";
 import { SignatoryControl } from "../quotation/screen/controls/SignatoryControl";
 import { BankDetailsControl } from "../quotation/screen/controls/BankDetailsControl";
 import { DisplayOptionsControl } from "../quotation/screen/controls/DisplayOptionsControl";
@@ -37,6 +37,7 @@ import { parseCreditTermDays } from "../../../utils/creditTerms";
 import { buildCatalogSnapshot } from "../../../utils/catalogSnapshot";
 import { useCreditTerms } from "../../../hooks/useCreditTerms";
 import { useBankAccounts } from "../../../hooks/useBankAccounts";
+import { normalizeDetails } from "../../../utils/bookings/bookingDetailsCompat";
 
 
 // A4 Dimensions in pixels at 96 DPI
@@ -129,19 +130,10 @@ export function InvoiceBuilder({
   // -- View Mode State --
   const [viewInvoice, setViewInvoice] = useState<Invoice | null>(initialInvoice || null);
 
-  // Print handler using native browser print
-  const handlePrint = useCallback(() => {
-    const content = componentRef.current;
-    if (!content) return;
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
-    const title = viewInvoice ? `Invoice-${viewInvoice.invoice_number}` : "Invoice";
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>${title}</title><style>@media print { body { margin: 0; } }</style></head><body>${content.innerHTML}</body></html>`);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
-    printWindow.close();
-  }, [viewInvoice]);
+  // Print is handled via the PDF engine (printInvoicePDF) — defined below next to
+  // handleDownloadPDF, since it needs printOptions/companySettings. The old
+  // window.open + document.write approach was unreliable (popup-blocked, images
+  // raced print(), and the dialog rendered a blank/about:blank page).
 
   // PDF download handler using @react-pdf/renderer
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
@@ -277,11 +269,18 @@ export function InvoiceBuilder({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("bookings")
-        .select("id, booking_number, service_type")
-        .eq("project_id", project.id)
+        // NEU-082: pull `details` too so the invoice can prefill BL / Consignee /
+        // Commodity from the shipment record of the selected booking.
+        // NEU-083 fix: the container may be a PROJECT (match its bookings by
+        // project_id) or a single BOOKING (booking detail pages pass a
+        // bookingContainer whose id IS the booking id) — match that booking by
+        // its own id too, so the invoice number resolves in both surfaces.
+        // Project ids ("proj-…") and booking ids (uuid) never collide.
+        .select("id, booking_number, service_type, details")
+        .or(`project_id.eq.${project.id},id.eq.${project.id}`)
         .order("created_at", { ascending: true });
       if (error) throw error;
-      return (data || []) as Array<{ id: string; booking_number: string; service_type: string }>;
+      return (data || []) as Array<{ id: string; booking_number: string; service_type: string; details: Record<string, unknown> | null }>;
     },
     enabled: mode === "create" && !!project.id,
     staleTime: 30_000,
@@ -293,6 +292,48 @@ export function InvoiceBuilder({
     if (projectBookings.length === 1) setSelectedBookingId(projectBookings[0].id);
     else if (!projectBookings.some(b => b.id === selectedBookingId)) setSelectedBookingId("");
   }, [mode, projectBookings, selectedBookingId]);
+
+  // NEU-083: live preview of the invoice number [BookingNumber]-XXX (001 = first
+  // invoice for the booking). Mirrors the save-time logic in handleSubmit so the
+  // draft preview shows exactly what will persist — no more "INV-DRAFT" placeholder.
+  const previewBookingNumber = projectBookings.find(b => b.id === selectedBookingId)?.booking_number || "";
+  const { data: previewSeq = 1 } = useQuery({
+    queryKey: ["invoice-number-preview", previewBookingNumber],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("invoices")
+        .select("id", { count: "exact", head: true })
+        .ilike("invoice_number", `${previewBookingNumber}-%`);
+      return (count || 0) + 1;
+    },
+    enabled: mode === "create" && !!previewBookingNumber,
+    staleTime: 10_000,
+  });
+  const previewInvoiceNumber = previewBookingNumber
+    ? `${previewBookingNumber}-${String(previewSeq).padStart(3, "0")}`
+    : "INV-DRAFT";
+
+  // NEU-082: prefill BL No. / Consignee / Commodity from the selected booking's
+  // shipment details (BL = House BL, falling back to Master BL). Prefill runs
+  // once per booking selection — the user can still override each field, and
+  // switching bookings re-seeds from the new one. Consignee prints on the
+  // invoice; Shipper stays on the booking only (per Marcus 7/13).
+  const prefilledBookingRef = useRef<string>("");
+  useEffect(() => {
+    if (mode !== "create" || !selectedBookingId) return;
+    if (prefilledBookingRef.current === selectedBookingId) return;
+    const bk = projectBookings.find(b => b.id === selectedBookingId);
+    if (!bk) return;
+    const d = normalizeDetails((bk.details as Record<string, unknown>) || {}, bk.service_type);
+    const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+    const bkConsignee = str(d.consignee);
+    const bkCommodity = str(d.commodity_description);
+    const bkBl = str(d.hbl_hawb) || str(d.mbl_mawb);
+    if (bkConsignee) setConsignee(bkConsignee);
+    if (bkCommodity) setCommodityDescription(bkCommodity);
+    if (bkBl) setBlNumber(bkBl);
+    prefilledBookingRef.current = selectedBookingId;
+  }, [mode, selectedBookingId, projectBookings]);
 
   // -- Initialization / Effects --
 
@@ -508,7 +549,7 @@ export function InvoiceBuilder({
 
     return {
       id: "draft-preview",
-      invoice_number: "INV-DRAFT",
+      invoice_number: previewInvoiceNumber,
       invoice_date: invoiceDate,
       due_date: effectiveDueDate,
       customer_id: project.customer_id,
@@ -542,7 +583,7 @@ export function InvoiceBuilder({
       credit_terms: creditTerms,
       contract_number: selectedLineage.contractRefs.length === 1 ? selectedLineage.contractRefs[0] : undefined,
     } as Invoice;
-  }, [mode, viewInvoice, selectedItems, selectedLineage, invoiceDate, dueDate, notes, project, currency, signatories, customerTin, blNumber, consignee, commodityDescription, creditTerms, itemOverrides, customerAddress, targetCurrency, exchangeRate, billedToType, selectedConsignee, selectedBookingId, projectBookings, creditTermsList]);
+  }, [mode, viewInvoice, selectedItems, selectedLineage, invoiceDate, dueDate, notes, project, currency, signatories, customerTin, blNumber, consignee, commodityDescription, creditTerms, itemOverrides, customerAddress, targetCurrency, exchangeRate, billedToType, selectedConsignee, selectedBookingId, projectBookings, creditTermsList, previewInvoiceNumber]);
 
   // NEU-055/071: seed the bank block once while empty (per-invoice edits win) —
   // prefer a profiled bank account (currency-matched), else the company default.
@@ -601,6 +642,24 @@ export function InvoiceBuilder({
     } catch (err) {
       console.error("PDF generation failed:", err);
       toast.error("PDF generation failed. Try the print option instead.");
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  }, [viewInvoice, printOptions, companySettings]);
+
+  // Print via the PDF engine (hidden iframe) — same output as the download,
+  // reliable across browsers. Replaces the old popup/document.write approach.
+  const handlePrint = useCallback(async () => {
+    if (!viewInvoice) {
+      toast.error("Open an invoice to print.");
+      return;
+    }
+    setIsGeneratingPDF(true);
+    try {
+      await printInvoicePDF(viewInvoice as any, printOptions, companySettings);
+    } catch (err) {
+      console.error("Print failed:", err);
+      toast.error("Failed to prepare print. Try the PDF download instead.");
     } finally {
       setIsGeneratingPDF(false);
     }

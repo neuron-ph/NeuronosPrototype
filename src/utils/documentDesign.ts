@@ -1,6 +1,14 @@
 import type { PrintableContactFooter, PrintableDocument } from "./documents/printableDocument";
 import fullPageImage from "../assets/Full page.png";
+import invoiceLetterheadStrip from "../assets/aplus-letterhead-centered.png";
 import brandedLogoUrl from "../assets/white.svg";
+
+// NEU-085: quotations use the full-A4 letterhead image (header clipped to the
+// top band, footer to the bottom). Invoices instead use a simple "A PLUS FALCONS
+// FREIGHT INC." letterhead strip at the top + the text contact footer — the
+// full-page-clip approach mangled the logo and rendered the footer as black
+// boxes on invoices, so they get the clean strip path.
+export type DocumentBrandType = "invoice" | "quotation" | "default";
 
 const STORAGE_KEY = "neuron_doc_design";
 const VOUCHER_LOGO_KEY = "neuron_voucher_logo";
@@ -46,8 +54,22 @@ export function getBrandedLogo(): string {
   return brandedLogoUrl;
 }
 
-export function applyBrandedDesign(doc: PrintableDocument): PrintableDocument {
+export function applyBrandedDesign(
+  doc: PrintableDocument,
+  brandType: DocumentBrandType = "default",
+): PrintableDocument {
   if (getDocumentDesign() !== "branded") return doc;
+
+  // Invoices: clean letterhead strip at top + text contact footer (no full-page
+  // image, which distorts). Quotations/default: the full-A4 letterhead clipped
+  // to header + footer bands.
+  if (brandType === "invoice") {
+    return {
+      ...doc,
+      contactFooter: BRANDED_CONTACT_FOOTER,
+      brandedLetterheadImage: invoiceLetterheadStrip,
+    };
+  }
 
   return {
     ...doc,
