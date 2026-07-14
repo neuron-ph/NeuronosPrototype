@@ -1,22 +1,17 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Plus, Search, Briefcase, UserCheck, FileEdit, Clock, CheckCircle, Trash2, FileCheck, Archive } from "lucide-react";
+import { Plus, Search, Briefcase, UserCheck, FileEdit, Clock, CheckCircle, FileCheck, Archive } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
-import { assessBookingFinancialState, canHardDeleteBooking, getBookingCancellationMessage } from "../../utils/bookingCancellation";
 import { CreateBrokerageBookingPanel } from "./CreateBrokerageBookingPanel";
 import { BrokerageBookingDetails } from "./BrokerageBookingDetails";
 import { NeuronStatusPill } from "../NeuronStatusPill";
-import { toast } from "../ui/toast-utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { useDataScope } from "../../hooks/useDataScope";
 import { useBookingAssignmentVisibility } from "../../hooks/useBookingAssignmentVisibility";
 import { useBookingsPaginated, useBookingTabCounts, useBookingFilterOptions } from "../../hooks/useBookingsPaginated";
 import { SkeletonTable } from "../shared/NeuronSkeleton";
 import { usePermission } from "../../context/PermissionProvider";
-import { logDeletion } from "../../utils/activityLog";
 import { normalizeDetails } from "../../utils/bookings/bookingDetailsCompat";
 import { getStatusOptions } from "../../config/booking/bookingFieldOptions";
-import type { ExecutionStatus } from "../../types/operations";
-import { NeuronModal } from "../ui/NeuronModal";
 import { useUnreadEntityIds } from "../../hooks/useNotifications";
 import { useUrlSelection } from "../../hooks/useUrlSelection";
 import { useRealtimeSync } from "../../hooks/useRealtimeSync";
@@ -76,7 +71,6 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
   const suppressUrlSelectionRef = useRef(false);
   const [selectedBooking, setSelectedBooking] = useState<BrokerageBooking | null>(null);
   const [resumeDraft, setResumeDraft] = useState<Record<string, unknown> | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<{ id: string; label: string } | null>(null);
 
   const { scope, isLoaded: scopeLoaded } = useDataScope('bookings_brokerage');
   const { index: assignmentIndex, isLoaded: assignmentIndexLoaded } = useBookingAssignmentVisibility({
@@ -209,38 +203,6 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
   const handleBookingCreated = () => {
     setShowCreateModal(false);
     fetchBookings();
-  };
-
-  const handleDeleteBooking = async (bookingId: string, bookingLabel: string, currentStatus: ExecutionStatus, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!can("ops_brokerage", "delete")) return; // NEU-019 WG-09 backstop
-    try {
-      const financialState = await assessBookingFinancialState(bookingId);
-      if (!canHardDeleteBooking(currentStatus, financialState)) {
-        toast.error(getBookingCancellationMessage(currentStatus, financialState));
-        return;
-      }
-      setPendingDelete({ id: bookingId, label: bookingLabel });
-    } catch (error) {
-      console.error('Error deleting booking:', error);
-      toast.error('Unable to delete booking');
-    }
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!pendingDelete) return;
-    try {
-      const { error } = await supabase.from('bookings').delete().eq('id', pendingDelete.id);
-      if (error) throw error;
-      logDeletion("booking", pendingDelete.id, pendingDelete.label, { id: "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
-      toast.success('Booking deleted successfully');
-      fetchBookings();
-    } catch (error) {
-      console.error('Error deleting booking:', error);
-      toast.error('Unable to delete booking');
-    } finally {
-      setPendingDelete(null);
-    }
   };
 
   // Filter dropdown options + tab counts come from dedicated scoped queries
@@ -622,9 +584,6 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
                     <th className="text-left py-3 px-4 text-[var(--theme-text-muted)] font-semibold text-xs uppercase tracking-wide">
                       Created
                     </th>
-                    <th className="text-center py-3 px-4 text-[var(--theme-text-muted)] font-semibold text-xs uppercase tracking-wide" style={{ width: "80px" }}>
-                      Actions
-                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -731,38 +690,6 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
                           {new Date(booking.createdAt).toLocaleDateString()}
                         </div>
                       </td>
-                      <td className="py-4 px-4 text-center">
-                        {can("ops_brokerage", "delete") && (
-                        <button
-                          onClick={(e) => handleDeleteBooking(booking.bookingId, (booking as any).booking_number || booking.bookingId, booking.status as ExecutionStatus, e)}
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            gap: "4px",
-                            padding: "6px 12px",
-                            fontSize: "12px",
-                            fontWeight: 600,
-                            border: "1px solid var(--theme-status-danger-border)",
-                            borderRadius: "6px",
-                            background: "var(--theme-bg-surface)",
-                            color: "var(--theme-status-danger-fg)",
-                            cursor: "pointer",
-                            transition: "all 150ms"
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = "var(--theme-status-danger-fg)";
-                            e.currentTarget.style.color = "var(--theme-text-inverse)";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = "var(--theme-bg-surface)";
-                            e.currentTarget.style.color = "var(--theme-status-danger-fg)";
-                          }}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                        )}
-                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -801,15 +728,6 @@ export function BrokerageBookings({ currentUser, pendingBookingId, initialTab, h
           draftData={resumeDraft}
         />
       )}
-      <NeuronModal
-        isOpen={!!pendingDelete}
-        onClose={() => setPendingDelete(null)}
-        title={`Delete booking ${pendingDelete?.label ?? ''}?`}
-        description="No linked invoices, collections, expenses, or e-vouchers were found. This action cannot be undone."
-        confirmLabel="Delete Booking"
-        onConfirm={handleConfirmDelete}
-        variant="danger"
-      />
     </>
   );
 }

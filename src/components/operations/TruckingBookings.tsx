@@ -1,22 +1,17 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Plus, Search, Truck, Briefcase, UserCheck, FileEdit, Clock, CheckCircle, Trash2, Archive } from "lucide-react";
+import { Plus, Search, Truck, Briefcase, UserCheck, FileEdit, Clock, CheckCircle, Archive } from "lucide-react";
 import { supabase } from "../../utils/supabase/client";
-import { assessBookingFinancialState, canHardDeleteBooking, getBookingCancellationMessage } from "../../utils/bookingCancellation";
 import { CreateTruckingBookingPanel } from "./CreateTruckingBookingPanel";
 import { TruckingBookingDetails } from "./TruckingBookingDetails";
 import { NeuronStatusPill } from "../NeuronStatusPill";
-import { toast } from "../ui/toast-utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { useDataScope } from "../../hooks/useDataScope";
 import { useBookingAssignmentVisibility } from "../../hooks/useBookingAssignmentVisibility";
 import { useBookingsPaginated, useBookingTabCounts, useBookingFilterOptions } from "../../hooks/useBookingsPaginated";
 import { SkeletonTable } from "../shared/NeuronSkeleton";
 import { usePermission } from "../../context/PermissionProvider";
-import { logDeletion } from "../../utils/activityLog";
 import { normalizeDetails } from "../../utils/bookings/bookingDetailsCompat";
 import { getStatusOptions } from "../../config/booking/bookingFieldOptions";
-import type { ExecutionStatus } from "../../types/operations";
-import { NeuronModal } from "../ui/NeuronModal";
 import { useUnreadEntityIds } from "../../hooks/useNotifications";
 import { useUrlSelection } from "../../hooks/useUrlSelection";
 import { useRealtimeSync } from "../../hooks/useRealtimeSync";
@@ -35,6 +30,22 @@ interface TruckingBooking {
   accountHandler?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Volume cell for the trucking list: "{qty}X{size} {carrier}" e.g. "1X40 MSC MEDITERRANEAN…".
+ * Pulls qty + size from the first trucking line item (falling back to the legacy flat fields)
+ * and appends the full shipping-line name — the cell truncates it with an ellipsis.
+ */
+function formatTruckingVolume(booking: Record<string, any>): string {
+  const first = Array.isArray(booking.trucking_line_items) ? booking.trucking_line_items[0] : undefined;
+  const qty = String(first?.quantity ?? booking.qty ?? "").trim();
+  const rawSize = String(first?.truck_type ?? booking.truck_type ?? "").trim();
+  const size = rawSize.replace(/ft$/i, ""); // "40ft" → "40", "4W" stays "4W"
+  const carrier = String(booking.shipping_line ?? "").trim();
+
+  const spec = size ? (qty ? `${qty}X${size}` : size) : "";
+  return [spec, carrier].filter(Boolean).join(" ");
 }
 
 interface TruckingBookingsProps {
@@ -73,7 +84,6 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
   const [urlBookingId, setUrlBookingId] = useUrlSelection("booking");
   const suppressUrlSelectionRef = useRef(false);
   const [resumeDraft, setResumeDraft] = useState<Record<string, unknown> | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<{ id: string; label: string } | null>(null);
 
   const { scope, isLoaded: scopeLoaded } = useDataScope('bookings_trucking');
   const { index: assignmentIndex, isLoaded: assignmentIndexLoaded } = useBookingAssignmentVisibility({
@@ -211,38 +221,6 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
   const handleBookingCreated = () => {
     setShowCreateModal(false);
     fetchBookings();
-  };
-
-  const handleDeleteBooking = async (bookingId: string, bookingLabel: string, currentStatus: ExecutionStatus, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!can("ops_trucking", "delete")) return; // NEU-019 WG-09 backstop
-    try {
-      const financialState = await assessBookingFinancialState(bookingId);
-      if (!canHardDeleteBooking(currentStatus, financialState)) {
-        toast.error(getBookingCancellationMessage(currentStatus, financialState));
-        return;
-      }
-      setPendingDelete({ id: bookingId, label: bookingLabel });
-    } catch (error) {
-      console.error('Error deleting booking:', error);
-      toast.error('Unable to delete booking');
-    }
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!pendingDelete) return;
-    try {
-      const { error } = await supabase.from('bookings').delete().eq('id', pendingDelete.id);
-      if (error) throw error;
-      logDeletion("booking", pendingDelete.id, pendingDelete.label, { id: "", name: currentUser?.name ?? "", department: currentUser?.department ?? "" });
-      toast.success('Booking deleted successfully');
-      fetchBookings();
-    } catch (error) {
-      console.error('Error deleting booking:', error);
-      toast.error('Unable to delete booking');
-    } finally {
-      setPendingDelete(null);
-    }
   };
 
   // Filter dropdown options + tab counts come from dedicated scoped queries
@@ -598,31 +576,25 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
                 <thead>
                   <tr className="border-b border-[var(--theme-text-primary)]/10">
                     <th className="text-left py-3 px-4 text-[var(--theme-text-muted)] font-semibold text-xs uppercase tracking-wide">
-                      Booking Details
+                      Project No.
                     </th>
                     <th className="text-left py-3 px-4 text-[var(--theme-text-muted)] font-semibold text-xs uppercase tracking-wide">
-                      Customer
+                      Client Name
                     </th>
                     <th className="text-left py-3 px-4 text-[var(--theme-text-muted)] font-semibold text-xs uppercase tracking-wide">
-                      Movement
+                      Address
                     </th>
                     <th className="text-left py-3 px-4 text-[var(--theme-text-muted)] font-semibold text-xs uppercase tracking-wide">
-                      Delivery Address
+                      Container No.
                     </th>
                     <th className="text-left py-3 px-4 text-[var(--theme-text-muted)] font-semibold text-xs uppercase tracking-wide">
-                      Truck Type
+                      Volume
                     </th>
                     <th className="text-left py-3 px-4 text-[var(--theme-text-muted)] font-semibold text-xs uppercase tracking-wide">
-                      Handler
+                      Pullout Name
                     </th>
                     <th className="text-left py-3 px-4 text-[var(--theme-text-muted)] font-semibold text-xs uppercase tracking-wide">
                       Status
-                    </th>
-                    <th className="text-left py-3 px-4 text-[var(--theme-text-muted)] font-semibold text-xs uppercase tracking-wide">
-                      Created
-                    </th>
-                    <th className="text-center py-3 px-4 text-[var(--theme-text-muted)] font-semibold text-xs uppercase tracking-wide" style={{ width: "80px" }}>
-                      Actions
                     </th>
                   </tr>
                 </thead>
@@ -651,28 +623,12 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
                             <span aria-label="Unread" style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "var(--theme-status-danger-fg)", flexShrink: 0 }} />
                           )}
                           <Truck size={20} color="var(--theme-action-primary-bg)" style={{ flexShrink: 0 }} />
-                          <div>
-                            <div style={{
-                              fontSize: "14px",
-                              fontWeight: 600,
-                              color: "var(--theme-text-primary)",
-                              marginBottom: "2px"
-                            }}>
-                              {(booking as any).name || (booking as any).booking_number || "Unnamed Booking"}
-                            </div>
-                            {(booking as any).name && (booking as any).booking_number && (
-                              <div style={{ fontSize: "12px", color: "var(--theme-text-muted)" }}>
-                                {(booking as any).booking_number}
-                              </div>
-                            )}
-                            {booking.projectNumber && (
-                              <div style={{
-                                fontSize: "13px",
-                                color: "var(--theme-text-muted)"
-                              }}>
-                                Project: {booking.projectNumber}
-                              </div>
-                            )}
+                          <div style={{
+                            fontSize: "14px",
+                            fontWeight: 600,
+                            color: "var(--theme-text-primary)",
+                          }}>
+                            {(booking as any).booking_number || <span style={{ color: "var(--theme-text-muted)" }}>—</span>}
                           </div>
                         </div>
                       </td>
@@ -682,80 +638,37 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
                         </div>
                       </td>
                       <td className="py-4 px-4">
-                        <span style={{
-                          display: "inline-block",
-                          padding: "4px 8px",
-                          borderRadius: "4px",
-                          fontSize: "12px",
-                          fontWeight: 600,
-                          backgroundColor: booking.movement === "EXPORT" ? "var(--theme-status-warning-bg)" : "var(--theme-status-success-bg)",
-                          color: booking.movement === "EXPORT" ? "var(--theme-status-warning-fg)" : "var(--theme-action-primary-bg)",
-                        }}>
-                          {booking.movement || "IMPORT"}
-                        </span>
-                      </td>
-                      <td className="py-4 px-4">
                         <div style={{ fontSize: "13px", color: "var(--theme-text-primary)" }}>
                           {booking.deliveryAddress || <span style={{ color: "var(--theme-text-muted)" }}>—</span>}
                         </div>
                       </td>
                       <td className="py-4 px-4">
-                        <div style={{ 
-                          fontSize: "13px", 
-                          fontWeight: 500,
-                          color: "var(--theme-text-primary)" 
-                        }}>
-                          {booking.truckType || "—"}
+                        <div style={{ fontSize: "13px", fontWeight: 500, color: "var(--theme-text-primary)" }}>
+                          {(booking as any).name || <span style={{ color: "var(--theme-text-muted)" }}>—</span>}
                         </div>
                       </td>
                       <td className="py-4 px-4">
-                        {booking.accountHandler ? (
-                          <div style={{ fontSize: "13px", color: "var(--theme-text-primary)" }}>
-                            {booking.accountHandler}
-                          </div>
-                        ) : (
-                          <span style={{ fontSize: "13px", color: "var(--theme-text-muted)" }}>—</span>
-                        )}
+                        <div
+                          title={formatTruckingVolume(booking as any) || undefined}
+                          style={{
+                            fontSize: "13px",
+                            color: "var(--theme-text-primary)",
+                            maxWidth: "220px",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {formatTruckingVolume(booking as any) || <span style={{ color: "var(--theme-text-muted)" }}>—</span>}
+                        </div>
+                      </td>
+                      <td className="py-4 px-4">
+                        <div style={{ fontSize: "13px", color: "var(--theme-text-primary)" }}>
+                          {(booking as any).pull_out_location || <span style={{ color: "var(--theme-text-muted)" }}>—</span>}
+                        </div>
                       </td>
                       <td className="py-4 px-4">
                         <NeuronStatusPill status={booking.status} />
-                      </td>
-                      <td className="py-4 px-4">
-                        <div style={{ fontSize: "13px", color: "var(--theme-text-muted)" }}>
-                          {new Date(booking.createdAt).toLocaleDateString()}
-                        </div>
-                      </td>
-                      <td className="py-4 px-4 text-center">
-                        {can("ops_trucking", "delete") && (
-                        <button
-                          onClick={(e) => handleDeleteBooking(booking.bookingId, (booking as any).booking_number || booking.bookingId, booking.status as ExecutionStatus, e)}
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            gap: "4px",
-                            padding: "6px 12px",
-                            fontSize: "12px",
-                            fontWeight: 600,
-                            border: "1px solid var(--theme-status-danger-border)",
-                            borderRadius: "6px",
-                            background: "var(--theme-bg-surface)",
-                            color: "var(--theme-status-danger-fg)",
-                            cursor: "pointer",
-                            transition: "all 150ms"
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = "var(--theme-status-danger-fg)";
-                            e.currentTarget.style.color = "var(--theme-text-inverse)";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = "var(--theme-bg-surface)";
-                            e.currentTarget.style.color = "var(--theme-status-danger-fg)";
-                          }}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                        )}
                       </td>
                     </tr>
                   ))}
@@ -795,15 +708,6 @@ export function TruckingBookings({ currentUser, pendingBookingId, initialTab, hi
           draftData={resumeDraft}
         />
       )}
-      <NeuronModal
-        isOpen={!!pendingDelete}
-        onClose={() => setPendingDelete(null)}
-        title={`Delete booking ${pendingDelete?.label ?? ''}?`}
-        description="No linked invoices, collections, expenses, or e-vouchers were found. This action cannot be undone."
-        confirmLabel="Delete Booking"
-        onConfirm={handleConfirmDelete}
-        variant="danger"
-      />
     </>
   );
 }
