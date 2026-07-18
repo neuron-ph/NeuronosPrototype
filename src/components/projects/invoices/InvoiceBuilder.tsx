@@ -35,6 +35,7 @@ import { recordNotificationEvent } from "../../../utils/notifications";
 import { useCompanySettings, useUpdateCompanySettings } from "../../../hooks/useCompanySettings";
 import { parseCreditTermDays } from "../../../utils/creditTerms";
 import { buildCatalogSnapshot } from "../../../utils/catalogSnapshot";
+import { resolveRouting } from "../../../utils/routing/resolveRouting";
 import { useCreditTerms } from "../../../hooks/useCreditTerms";
 import { useBankAccounts } from "../../../hooks/useBankAccounts";
 import { normalizeDetails } from "../../../utils/bookings/bookingDetailsCompat";
@@ -880,6 +881,15 @@ export function InvoiceBuilder({
         }, 0)
       );
 
+      // NEU-103: route the invoice to an approver (Ma'am Ella — Operations manager)
+      // via the configurable routing engine. It lands `pending_approval` and can't
+      // be finalized until approved.
+      const invRouting = await resolveRouting("invoice", {
+        customer_name: project.customer_name,
+        project_number: project.project_number,
+        has_booking: !!selectedBookingId,
+      });
+
       const invoiceRow = {
         id: crypto.randomUUID(),
         invoice_number: invoiceNumber,
@@ -906,6 +916,9 @@ export function InvoiceBuilder({
         tax_amount: draftInvoice.tax_amount,
         ewt_total: ewtTotal, // NEU-069: internal, reduces the collectible balance
         status: 'draft',
+        approval_status: 'pending_approval', // NEU-103
+        pending_approver_department: invRouting?.department ?? 'Operations',
+        pending_approver_role: invRouting?.role ?? 'manager',
         metadata: {
             signatories,
             displayOptions,
@@ -972,6 +985,7 @@ export function InvoiceBuilder({
   const [isDeletingDraft, setIsDeletingDraft] = useState(false);
   const [confirmVoid, setConfirmVoid] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [isApproving, setIsApproving] = useState(false); // NEU-103
 
   const invoiceStatus = (viewInvoice?.status || "").toLowerCase();
   const isDraft = invoiceStatus === "draft";
@@ -979,8 +993,46 @@ export function InvoiceBuilder({
   const isVoid = invoiceStatus === "void";
   const hasJournalEntry = !!(viewInvoice as any)?.journal_entry_id;
 
+  // NEU-103: invoice approval gate. Legacy invoices (no approval_status) read as
+  // approved. The tagged approver (dept+role match, or an Executive) can approve.
+  const pendingApproval = ((viewInvoice as any)?.approval_status ?? "approved") === "pending_approval";
+  const pendingApproverDept = (viewInvoice as any)?.pending_approver_department ?? null;
+  const pendingApproverRole = (viewInvoice as any)?.pending_approver_role ?? null;
+  const canApproveInvoice =
+    pendingApproval && !!user &&
+    ((user.department === pendingApproverDept && (!pendingApproverRole || user.role === pendingApproverRole)) ||
+      user.department === "Executive");
+
+  const handleApproveInvoice = async () => {
+    if (!viewInvoice || !user) return;
+    setIsApproving(true);
+    try {
+      const now = new Date().toISOString();
+      const { error } = await supabase
+        .from("invoices")
+        .update({ approval_status: "approved", approved_by: user.id, approved_at: now, updated_at: now })
+        .eq("id", (viewInvoice as any).id);
+      if (error) throw error;
+      const actor = { id: user.id, name: user.name, department: user.department ?? "" };
+      logActivity("invoice", (viewInvoice as any).id, viewInvoice.invoice_number ?? (viewInvoice as any).id, "approved", actor);
+      setViewInvoice({ ...(viewInvoice as any), approval_status: "approved", approved_by: user.id, approved_at: now } as Invoice);
+      toast.success(`Invoice ${viewInvoice.invoice_number} approved — ready to finalize`);
+      if (onRefreshData) await onRefreshData();
+    } catch (err) {
+      console.error("Invoice approve failed:", err);
+      toast.error("Failed to approve invoice");
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
   const handleFinalize = async () => {
     if (!viewInvoice || !user || !canWriteInvoices) return; // WG-06 backstop
+    // NEU-103: an invoice must be approved before it can be finalized/posted.
+    if (((viewInvoice as any).approval_status ?? "approved") !== "approved") {
+      toast.error("This invoice is pending approval — it can't be finalized until approved.");
+      return;
+    }
     setIsFinalizing(true);
     try {
       const inv = viewInvoice as any;
@@ -1979,9 +2031,30 @@ export function InvoiceBuilder({
               </>
             ) : (
               <div className="flex flex-col gap-2.5">
+                {/* NEU-103: approval gate. The tagged approver (Ma'am Ella) approves;
+                    finalize is blocked until then. Approve is available to the
+                    approver even without invoice-write. */}
+                {isDraft && pendingApproval && canApproveInvoice && (
+                  <button
+                    onClick={handleApproveInvoice}
+                    disabled={isApproving}
+                    className="flex items-center justify-center gap-2 w-full px-4 py-3 text-[13px] font-bold text-white bg-[var(--theme-action-primary-bg)] rounded-lg hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {isApproving ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
+                    {isApproving ? "Approving..." : "Approve Invoice"}
+                  </button>
+                )}
+                {isDraft && pendingApproval && !canApproveInvoice && (
+                  <div className="flex items-center gap-2 w-full px-4 py-3 text-[12px] font-medium text-[var(--theme-status-warning-fg)] bg-[var(--theme-status-warning-bg)] border border-[var(--theme-status-warning-border)] rounded-lg">
+                    <AlertTriangle size={14} />
+                    Pending approval{pendingApproverDept ? ` — ${pendingApproverDept}${pendingApproverRole ? ` ${pendingApproverRole}` : ""}` : ""}
+                  </div>
+                )}
+
                 {/* Draft actions */}
                 {isDraft && canWriteInvoices && (
                   <>
+                    {!pendingApproval && (
                     <button
                       onClick={handleFinalize}
                       disabled={isFinalizing}
@@ -1990,6 +2063,7 @@ export function InvoiceBuilder({
                       {isFinalizing ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
                       {isFinalizing ? "Finalizing..." : "Finalize Invoice"}
                     </button>
+                    )}
                     {!confirmDelete ? (
                       canDeleteInvoices &&
                       <button
