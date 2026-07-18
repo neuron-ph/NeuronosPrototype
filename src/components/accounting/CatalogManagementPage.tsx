@@ -159,10 +159,11 @@ function ItemsTab() {
   const [renamingCatId, setRenamingCatId] = useState<string | null>(null);
   const [renamingValue, setRenamingValue] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
-  const [addForm, setAddForm] = useState<{ name: string; category_id: string | null }>({ name: "", category_id: null });
+  const [addForm, setAddForm] = useState<{ name: string; category_id: string | null; account_id: string | null }>({ name: "", category_id: null, account_id: null });
   const [showAddCategoryForm, setShowAddCategoryForm] = useState(false);
   const [addCategoryName, setAddCategoryName] = useState("");
   const [addCategorySide, setAddCategorySide] = useState<"revenue" | "expense">(sideFilter === "expense" ? "expense" : "revenue");
+  const [addCategoryParentAccountId, setAddCategoryParentAccountId] = useState(""); // NEU-091
 
   // ── Scroll fade state ──
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -235,6 +236,36 @@ function ItemsTab() {
     staleTime: 0,
   });
 
+  // ── Query 4: Chart of Accounts (NEU-091 catalog→COA linking) ──
+  const { data: accounts = [] } = useQuery({
+    queryKey: ["accounts", "catalog_coa"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("accounts")
+        .select("id, code, name, type, parent_id, is_active")
+        .order("code");
+      if (error) throw error;
+      return (data ?? []) as { id: string; code: string; name: string; type: string; parent_id: string | null; is_active?: boolean }[];
+    },
+    staleTime: 60_000,
+  });
+
+  const accountLabel = (id?: string | null) => {
+    const a = accounts.find(x => x.id === id);
+    return a ? `${a.code} · ${a.name}` : "";
+  };
+
+  // Parent-account options for a NEW category, scoped to its side. Expense has a
+  // folder→leaf tree, so we offer the top-level folders; revenue is flat, so all
+  // revenue accounts are offered.
+  const parentAccountOptions = useMemo(() => {
+    const targetType = addCategorySide === "revenue" ? "revenue" : "expense";
+    return accounts
+      .filter(a => a.type === targetType && a.is_active !== false)
+      .filter(a => (targetType === "revenue" ? true : a.parent_id == null))
+      .map(a => ({ value: a.id, label: `${a.code} · ${a.name}` }));
+  }, [accounts, addCategorySide]);
+
   // ── Derived data ──
   const usageCounts = useMemo(() => {
     const map: Record<string, number> = {};
@@ -251,6 +282,24 @@ function ItemsTab() {
     }
     return categories.map((c: any) => ({ ...c, item_count: catCountMap[c.id] ?? 0 }));
   }, [categories, items]);
+
+  // Account options for a NEW item, scoped to its category's parent account:
+  // the leaves under that parent (expense tree); if the parent has no children
+  // (flat revenue) or the category has no parent yet, fall back to all accounts
+  // of the category's side. NEU-091.
+  const itemAccountOptions = useMemo(() => {
+    const cat = (categories as any[]).find(c => c.id === addForm.category_id);
+    const parentId = cat?.parent_account_id ?? null;
+    const targetType = cat?.side === "revenue" ? "revenue" : cat?.side === "expense" ? "expense" : null;
+    let pool = accounts.filter(a => a.is_active !== false);
+    if (parentId) {
+      const children = pool.filter(a => a.parent_id === parentId);
+      pool = children.length ? children : (targetType ? pool.filter(a => a.type === targetType) : pool);
+    } else if (targetType) {
+      pool = pool.filter(a => a.type === targetType);
+    }
+    return pool.map(a => ({ value: a.id, label: `${a.code} · ${a.name}` }));
+  }, [accounts, categories, addForm.category_id]);
 
   const invalidateCatalog = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: queryKeys.catalog.all() });
@@ -345,11 +394,14 @@ function ItemsTab() {
 
   const handleAddCategory = async () => {
     if (!addCategoryName.trim()) { toast.error("Category name is required"); return; }
+    // NEU-091: a new category must map to a parent COA account.
+    if (!addCategoryParentAccountId) { toast.error("A parent account (COA) is required for a new category"); return; }
     const maxOrder = Math.max(0, ...categoriesWithCount.map((c: any) => c.sort_order ?? 0));
     const { error } = await supabase.from("catalog_categories").insert({
       id: `cat-${Date.now()}`,
       name: addCategoryName.trim(),
       side: addCategorySide,
+      parent_account_id: addCategoryParentAccountId,
       sort_order: maxOrder + 1,
       is_default: false,
     });
@@ -357,6 +409,7 @@ function ItemsTab() {
       toast.success(`Category "${addCategoryName}" created`);
       setAddCategoryName("");
       setAddCategorySide(sideFilter === "expense" ? "expense" : "revenue");
+      setAddCategoryParentAccountId("");
       setShowAddCategoryForm(false);
       invalidateCatalog();
     } else toast.error(error.message || "Error creating category");
@@ -366,6 +419,8 @@ function ItemsTab() {
     const name = addForm.name.trim();
     const categoryId = addForm.category_id || null;
     if (!name) { toast.error("Name is required"); return; }
+    // NEU-091: every catalog item must resolve to a COA account.
+    if (!addForm.account_id) { toast.error("An account (COA) is required for a new item"); return; }
     const duplicate = findCatalogItemDuplicate(items, name, categoryId);
     if (duplicate) {
       toast.error(`"${duplicate.name}" already exists in this category`);
@@ -376,11 +431,12 @@ function ItemsTab() {
       id: `ci-${Date.now()}`,
       name,
       category_id: categoryId,
+      account_id: addForm.account_id,
     });
     if (!error) {
       toast.success(`Created "${name}"`);
       setShowAddForm(false);
-      setAddForm({ name: "", category_id: null });
+      setAddForm({ name: "", category_id: null, account_id: null });
       invalidateCatalog();
     } else {
       toast.error(error.message || "Error creating item");
@@ -582,8 +638,20 @@ function ItemsTab() {
                 ))}
               </div>
             </div>
+            {/* NEU-091: required parent COA account for the new category. */}
+            <div style={{ flex: "1 1 220px" }}>
+              <label style={labelStyle}>Parent Account (COA) <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span></label>
+              <CustomDropdown
+                searchable
+                value={addCategoryParentAccountId}
+                options={parentAccountOptions}
+                onChange={val => setAddCategoryParentAccountId(val)}
+                placeholder="Select parent account…"
+                size="sm"
+              />
+            </div>
             <div style={{ display: "flex", gap: "6px" }}>
-              <button onClick={() => { setShowAddCategoryForm(false); setAddCategoryName(""); }} style={cancelBtnStyle}>Cancel</button>
+              <button onClick={() => { setShowAddCategoryForm(false); setAddCategoryName(""); setAddCategoryParentAccountId(""); }} style={cancelBtnStyle}>Cancel</button>
               <button onClick={handleAddCategory} style={saveBtnStyle}>Create</button>
             </div>
           </div>
@@ -613,13 +681,25 @@ function ItemsTab() {
                   { value: "", label: "— None —" },
                   ...(categoriesWithCount as any[]).map((c: any) => ({ value: c.id, label: c.name })),
                 ]}
-                onChange={val => setAddForm({ ...addForm, category_id: val || null })}
+                onChange={val => setAddForm({ ...addForm, category_id: val || null, account_id: null })}
                 placeholder="— None —"
                 size="sm"
               />
             </div>
+            {/* NEU-091: required COA account (scoped to the category's parent). */}
+            <div style={{ flex: "0 0 200px" }}>
+              <label style={labelStyle}>Account (COA) <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span></label>
+              <CustomDropdown
+                searchable
+                value={addForm.account_id || ""}
+                options={itemAccountOptions}
+                onChange={val => setAddForm({ ...addForm, account_id: val || null })}
+                placeholder="Select account…"
+                size="sm"
+              />
+            </div>
             <div style={{ display: "flex", gap: "6px" }}>
-              <button onClick={() => setShowAddForm(false)} style={cancelBtnStyle}>Cancel</button>
+              <button onClick={() => { setShowAddForm(false); setAddForm({ name: "", category_id: null, account_id: null }); }} style={cancelBtnStyle}>Cancel</button>
               <button onClick={handleAdd} style={saveBtnStyle}>Create</button>
             </div>
           </div>

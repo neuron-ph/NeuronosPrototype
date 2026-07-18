@@ -5,6 +5,7 @@ import { supabase } from "../../../utils/supabase/client";
 import { useUser } from "../../../hooks/useUser";
 import { toast } from "sonner@2.0.3";
 import { logFieldUpdate } from "../../../utils/activityLog";
+import { postJournalEntry } from "../../../utils/accounting/postTransactionJournal";
 import type { JournalEntry } from "./GeneralJournal";
 import { getSource, isReversalEntry } from "./GeneralJournal";
 import {
@@ -73,6 +74,28 @@ function StatusChip({ status, isReversal }: { status: JournalEntry["status"]; is
           color: "var(--theme-status-warning-fg)",
           border: "var(--theme-status-warning-border)",
           label: "Draft",
+          icon: null,
+        },
+        // Pre-posting pipeline stages (Transaction Journal).
+        pending: {
+          bg: "var(--theme-status-warning-bg)",
+          color: "var(--theme-status-warning-fg)",
+          border: "var(--theme-status-warning-border)",
+          label: "Pending",
+          icon: null,
+        },
+        awaiting_ack: {
+          bg: "var(--theme-status-warning-bg)",
+          color: "var(--theme-status-warning-fg)",
+          border: "var(--theme-status-warning-border)",
+          label: "Awaiting Ack",
+          icon: null,
+        },
+        ready_to_post: {
+          bg: "var(--theme-bg-surface-tint)",
+          color: "var(--theme-action-primary-bg)",
+          border: "var(--theme-action-primary-border)",
+          label: "Ready to Post",
           icon: null,
         },
         void: {
@@ -390,6 +413,29 @@ export function JournalEntryDetailPanel({
       onPosted?.();
     } catch {
       toast.error("Failed to post journal entry");
+    } finally {
+      setIsPosting(false);
+    }
+  };
+
+  // ── Submit-for-posting handler (Transaction Journal exit) ──
+  // A `ready_to_post` pipeline entry graduates into the posted General Journal.
+  // Unlike handlePost (legacy manual draft), this routes through postJournalEntry
+  // so source-document side-effects fire (invoice/collection/evoucher close-out).
+  const handleSubmitForPosting = async () => {
+    if (!user) return;
+    if (!isBalanced) {
+      toast.error("Entry is out of balance — cannot post");
+      return;
+    }
+    setIsPosting(true);
+    try {
+      await postJournalEntry(entry.id, { id: user.id, name: user.name });
+      toast.success(`${entry.entry_number} posted to the General Journal`);
+      onPosted?.();
+    } catch (err) {
+      console.error("[JE submit-for-posting] failed:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to post journal entry");
     } finally {
       setIsPosting(false);
     }
@@ -846,6 +892,38 @@ export function JournalEntryDetailPanel({
               <><Loader2 size={14} className="animate-spin" /> Posting…</>
             ) : (
               <><Send size={14} /> Post to General Ledger</>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* ── Ready-to-post footer (Transaction Journal exit) ── */}
+      {!isEditing && canAct && entry.status === "ready_to_post" && (
+        <div style={{
+          flexShrink: 0,
+          padding: "14px 20px",
+          borderTop: "1px solid var(--theme-border-default)",
+          backgroundColor: "var(--theme-bg-page)",
+          display: "flex", gap: "8px",
+        }}>
+          <button
+            onClick={handleSubmitForPosting}
+            disabled={isPosting || !isBalanced}
+            style={{
+              height: "40px", flex: 1,
+              display: "flex", alignItems: "center", justifyContent: "center", gap: "7px",
+              borderRadius: "7px", fontSize: "13px", fontWeight: 600,
+              cursor: isPosting || !isBalanced ? "not-allowed" : "pointer",
+              border: "none",
+              backgroundColor: isBalanced && !isPosting ? "var(--theme-action-primary-bg)" : "var(--theme-state-hover)",
+              color: isBalanced && !isPosting ? "#fff" : "var(--theme-text-muted)",
+              transition: "background-color 120ms ease",
+            }}
+          >
+            {isPosting ? (
+              <><Loader2 size={14} className="animate-spin" /> Posting…</>
+            ) : (
+              <><Send size={14} /> Submit for Posting</>
             )}
           </button>
         </div>

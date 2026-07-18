@@ -1,5 +1,5 @@
 import { X, Plus, Printer, Download, Calendar as CalendarIcon, CreditCard, Clock, Tag, ChevronDown, ChevronRight, RefreshCw, FileText, Banknote, Receipt, ArrowRight, CheckSquare, Square, Loader2, Save, Zap, Trash2, Check, Paperclip } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { VoucherBrandLogo } from "../VoucherBrandLogo";
@@ -22,6 +22,7 @@ import {
   type AccountingCurrency,
 } from "../../utils/accountingCurrency";
 import { resolveExchangeRate } from "../../utils/exchangeRates";
+import { TRANSACTION_TYPE_OPTIONS, evoucherTypeLabel } from "../../utils/evoucherTransactionType";
 import { uploadCrmAttachments, formatAttachmentSize, type CrmAttachment } from "../../utils/crmAttachments";
 import { useCurrencies } from "../../hooks/useCurrencies";
 import { useNetworkPartners } from "../../hooks/useNetworkPartners";
@@ -32,6 +33,7 @@ interface LineItem {
   description: string;
   amount: number;
   catalog_item_id?: string | null;
+  booking_id?: string | null; // NEU-089: per-line booking attribution
 }
 
 interface CategorySection {
@@ -146,7 +148,9 @@ export function AddRequestForPaymentPanel({
   // path. Picking a real booking sets booking_id, which lets the routing engine
   // classify the expense by the booking's service_type (e.g. Forwarding ->
   // Pricing Manager). Left empty for genuine direct expenses (no booking).
-  const [selectedBookingId, setSelectedBookingId] = useState("");
+  // NEU-088: form-level booking picker removed (booking is per line item now).
+  // Retained read-only as a fallback for callers that still pass a booking context.
+  const [selectedBookingId] = useState("");
   const [bookingOptions, setBookingOptions] = useState<{ value: string; label: string; number: string }[]>([]);
   const [categorySections, setCategorySections] = useState<CategorySection[]>([]);
   const [showAddCategoryDropdown, setShowAddCategoryDropdown] = useState(false);
@@ -278,6 +282,7 @@ export function AddRequestForPaymentPanel({
             description: item.description || "",
             amount: item.amount || 0,
             catalog_item_id: item.catalog_item_id || undefined,
+            booking_id: item.booking_id || undefined, // NEU-089
           });
         });
         setCategorySections(Object.values(groupMap).map((g, i) => ({
@@ -318,11 +323,12 @@ export function AddRequestForPaymentPanel({
     }
   }, [bookingId, bookingType, lockedProjectNumber, transactionType]);
 
-  // Load selectable bookings for the optional Project/Booking picker. Only when
-  // the reference is user-editable (not view mode, not a booking passed in by an
-  // Operations flow). RLS scopes the list to what the user may see.
+  // Load selectable bookings for the Project/Booking pickers. NEU-089: the
+  // per-line-item picker needs the list even when the form was opened inside a
+  // booking context (bookingId set) — the old gate skipped loading there. RLS
+  // scopes the list to what the user may see.
   useEffect(() => {
-    if (isViewMode || bookingId) return;
+    if (isViewMode) return;
     let cancelled = false;
     (async () => {
       const { data, error } = await supabase
@@ -351,6 +357,20 @@ export function AddRequestForPaymentPanel({
     };
   }, [isViewMode, bookingId]);
   
+  // NEU-104: a Cash Advance opens to a single fixed "Project Expense Budget"
+  // category whose lines are booking + allocation (Model A). Auto-seed it when
+  // switching into cash-advance mode with no sections yet.
+  useEffect(() => {
+    if (transactionType === "cash_advance" && mode !== "view" && categorySections.length === 0) {
+      setCategorySections([{
+        id: `peb-${Date.now()}`,
+        category_name: "Project Expense Budget",
+        expanded: true,
+        items: [{ id: `item-${Date.now()}`, particular: "", description: "", amount: 0, booking_id: bookingId || null }],
+      }]);
+    }
+  }, [transactionType]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Fetch Open Statements when in Collection Mode
   useEffect(() => {
     if (transactionType === "collection" && !isViewMode) {
@@ -456,7 +476,8 @@ export function AddRequestForPaymentPanel({
       category_name: name,
       catalog_category_id: catalogCategoryId,
       expanded: true,
-      items: [{ id: `item-${Date.now()}`, particular: "", description: "", amount: 0 }],
+      // NEU-089: seed new lines with the booking the form is scoped to (if any).
+      items: [{ id: `item-${Date.now()}`, particular: "", description: "", amount: 0, booking_id: bookingId || null }],
     };
     setCategorySections(prev => [...prev, newSection]);
   };
@@ -470,7 +491,7 @@ export function AddRequestForPaymentPanel({
   };
 
   const handleAddItemToSection = (sectionId: string) => {
-    const newItem: LineItem = { id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`, particular: "", description: "", amount: 0 };
+    const newItem: LineItem = { id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`, particular: "", description: "", amount: 0, booking_id: bookingId || null };
     setCategorySections(prev => prev.map(s => s.id === sectionId ? { ...s, items: [...s.items, newItem] } : s));
   };
 
@@ -526,13 +547,28 @@ export function AddRequestForPaymentPanel({
 
     if (!ensureFxRateValid()) return;
 
+    // D2 (NEU-088): booking is mandatory per line for Project / Cash Advance /
+    // Reimbursement vouchers; Office/Direct Expense is exempt.
+    if (autoTitleMode && bookingRequiredType) {
+      const missing = allLineItems.some(
+        li => (li.particular.trim() !== "" || li.amount > 0) && !li.booking_id
+      );
+      if (missing) {
+        toast.error("Each line must be linked to a booking for this voucher type (Office Expense is exempt).");
+        return;
+      }
+    }
+
     try {
-      const attachments = await uploadPendingFiles();
+      // NEU-092: keep any retained existing attachments (carried in via prefill /
+      // initialValues) and append the freshly-uploaded files — don't overwrite the
+      // column with only the new uploads, which silently dropped the existing ones.
+      const attachments = [...existingAttachments, ...(await uploadPendingFiles())];
       // Prepare form data
       const formData = {
         transactionType,
         transactionSubtype,
-        requestName,
+        requestName: autoTitleMode ? buildAutoTitle() : requestName, // NEU-088
         expenseCategory,
         subCategory: "",
         projectNumber,
@@ -579,12 +615,15 @@ export function AddRequestForPaymentPanel({
     if (!ensureFxRateValid()) return;
 
     try {
-      const attachments = await uploadPendingFiles();
+      // NEU-092: keep any retained existing attachments (carried in via prefill /
+      // initialValues) and append the freshly-uploaded files — don't overwrite the
+      // column with only the new uploads, which silently dropped the existing ones.
+      const attachments = [...existingAttachments, ...(await uploadPendingFiles())];
       // Prepare form data
       const formData = {
         transactionType,
         transactionSubtype,
-        requestName,
+        requestName: autoTitleMode ? buildAutoTitle() : requestName, // NEU-088
         expenseCategory,
         subCategory,
         projectNumber,
@@ -626,12 +665,15 @@ export function AddRequestForPaymentPanel({
     if (!ensureFxRateValid()) return;
 
     try {
-      const attachments = await uploadPendingFiles();
+      // NEU-092: keep any retained existing attachments (carried in via prefill /
+      // initialValues) and append the freshly-uploaded files — don't overwrite the
+      // column with only the new uploads, which silently dropped the existing ones.
+      const attachments = [...existingAttachments, ...(await uploadPendingFiles())];
       // Prepare form data
       const formData = {
         transactionType,
         transactionSubtype,
-        requestName,
+        requestName: autoTitleMode ? buildAutoTitle() : requestName, // NEU-088
         expenseCategory,
         subCategory,
         projectNumber,
@@ -722,6 +764,29 @@ export function AddRequestForPaymentPanel({
   const isDirectExpense = transactionType === "direct_expense";
   const isCollectionMode = transactionType === "collection";
   const isBillingMode = transactionType === "billing";
+
+  // NEU-088: expense-type vouchers no longer carry a typed Description/Purpose —
+  // the title is auto-generated. Billing/Collection (and BD) keep their typed title.
+  const autoTitleMode =
+    (context === "operations" || context === "accounting" || context === "personal") &&
+    !isBillingMode && !isCollectionMode;
+
+  // D2: booking is mandatory per line for these types; Office/Direct Expense is exempt.
+  const bookingRequiredType =
+    transactionType === "expense" || transactionType === "cash_advance" || transactionType === "reimbursement";
+
+  // NEU-088 (option B): "{TypeLabel} · {booking|N bookings} · {YYYY-MM-DD}".
+  const buildAutoTitle = (): string => {
+    const label = evoucherTypeLabel(transactionType, transactionSubtype === "billable_expense");
+    const bookingIds = Array.from(
+      new Set(allLineItems.map(li => li.booking_id).filter(Boolean) as string[])
+    );
+    let bookingPart = "";
+    if (bookingIds.length === 1) bookingPart = bookingOptions.find(o => o.value === bookingIds[0])?.number || "";
+    else if (bookingIds.length > 1) bookingPart = `${bookingIds.length} bookings`;
+    const today = new Date().toISOString().slice(0, 10);
+    return [label, bookingPart, today].filter(Boolean).join(" · ");
+  };
   const isPersonal = context === "personal";
 
   // NEU-046: the counterparty is a registered vendor only when we're paying OUT
@@ -731,7 +796,7 @@ export function AddRequestForPaymentPanel({
   const isVendorCounterparty = isExpense || isDirectExpense || isReimbursement;
   
   const isFormValid =
-    requestName.trim() !== "" &&
+    (autoTitleMode || requestName.trim() !== "") && // NEU-088: expense vouchers auto-title
     (isCollectionMode || categorySections.some(s => s.items.some(item => item.particular.trim() !== "" && item.amount > 0))) &&
     vendor.trim() !== "";
 
@@ -1058,11 +1123,12 @@ export function AddRequestForPaymentPanel({
                 <div style={{
                   display: "grid",
                   gridTemplateColumns: (context === "operations" || context === "accounting" || context === "personal")
-                    ? (!isCollectionMode && !isBillingMode ? "2fr 1fr 1fr" : "2fr 1fr")
+                    ? (!isCollectionMode && !isBillingMode ? "1fr 1fr" : "2fr 1fr")
                     : (!isCollectionMode && !isBillingMode ? "2fr 1fr" : "1fr"),
                   gap: "16px"
                 }}>
-                  {/* Request Name */}
+                  {/* Request Name — hidden for expense-type vouchers (NEU-088: auto-titled). */}
+                  {!autoTitleMode && (
                   <div>
                     <label style={{
                       display: "block",
@@ -1106,6 +1172,7 @@ export function AddRequestForPaymentPanel({
                       }}
                     />
                   </div>
+                  )}
 
                   {/* Transaction Type — scoped to context */}
                   {(context === "operations" || context === "accounting" || context === "personal") && (
@@ -1121,18 +1188,13 @@ export function AddRequestForPaymentPanel({
                       </label>
                       <CustomDropdown
                         value={
-                          context === "personal"
-                            ? transactionType
-                            : transactionType === "cash_advance" ? "cash_advance"
+                          transactionType === "cash_advance" ? "cash_advance"
                             : transactionType === "reimbursement" ? "reimbursement"
                             : transactionType === "direct_expense" ? "direct_expense"
                             : transactionSubtype === "billable_expense" ? "billable" : "expense"
                         }
                         onChange={(val) => {
-                          if (context === "personal") {
-                            setTransactionType(val as EVoucherTransactionType);
-                            setTransactionSubtype("regular_expense");
-                          } else if (val === "cash_advance") {
+                          if (val === "cash_advance") {
                             setTransactionType("cash_advance");
                             setTransactionSubtype("regular_expense");
                           } else if (val === "reimbursement") {
@@ -1149,28 +1211,10 @@ export function AddRequestForPaymentPanel({
                             setTransactionSubtype("regular_expense");
                           }
                         }}
-                        options={
-                          context === "personal"
-                            ? [
-                                { value: "reimbursement", label: "Reimbursement" },
-                                { value: "direct_expense", label: "Direct Expense" }
-                              ]
-                            : context === "operations"
-                            ? [
-                                { value: "expense", label: "Regular Expense" },
-                                { value: "billable", label: "Billable Expense" },
-                                { value: "cash_advance", label: "Cash Advance" }
-                              ]
-                            : [
-                                // NEU-048: accounting taxonomy (Carol/Accounting, 7/09) — relabels
-                                // the 5 existing accounting types 1:1, no enum/schema/GL change.
-                                { value: "expense", label: "Project Expense" },
-                                { value: "billable", label: "Billable Project Expense" },
-                                { value: "cash_advance", label: "Cash Advances – Project and Office Expense" },
-                                { value: "reimbursement", label: "Reimbursement – Project and Office Expense" },
-                                { value: "direct_expense", label: "Office Expense" }
-                              ]
-                        }
+                        // NEU-090: one canonical list on every entry surface
+                        // (was 3 divergent per-context lists). Source of truth:
+                        // evoucherTransactionType.ts.
+                        options={TRANSACTION_TYPE_OPTIONS}
                         placeholder="Select type"
                         disabled={isViewMode}
                       />
@@ -1213,59 +1257,9 @@ export function AddRequestForPaymentPanel({
                   )}
                 </div>
 
-                {/* Project / Booking Number */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                  <div>
-                    <label style={{ 
-                      display: "block", 
-                      fontSize: "12px", 
-                      fontWeight: 500, 
-                      color: "var(--theme-text-secondary)", 
-                      marginBottom: "8px" 
-                    }}>
-                      {isDirectExpense ? "Reference (Optional)" : "Project / Booking Ref (Optional)"}
-                    </label>
-                    {(isViewMode || !!bookingId || isCollectionMode) ? (
-                      // Locked / view: reference is fixed (Operations-linked booking or read-only display).
-                      <input
-                        type="text"
-                        readOnly
-                        value={projectNumber}
-                        placeholder="e.g., BN-2025-001"
-                        style={{
-                          width: "100%",
-                          padding: "10px 14px",
-                          fontSize: "14px",
-                          border: "1px solid var(--theme-border-default)",
-                          borderRadius: "6px",
-                          outline: "none",
-                          transition: "all 0.2s",
-                          backgroundColor: "var(--neuron-pill-inactive-bg)",
-                          color: "var(--theme-text-secondary)"
-                        }}
-                      />
-                    ) : (
-                      // Editable: optional structured booking link. Selecting a real
-                      // booking sets booking_id so routing can classify by service_type.
-                      <CustomDropdown
-                        fullWidth
-                        searchable
-                        searchPlaceholder="Search bookings…"
-                        placeholder="Link a booking (optional)"
-                        triggerAriaLabel="Project or booking reference"
-                        value={selectedBookingId}
-                        options={[{ value: "", label: "None (direct expense)" }, ...bookingOptions]}
-                        onChange={(val) => {
-                          setSelectedBookingId(val);
-                          const opt = bookingOptions.find((o) => o.value === val);
-                          setProjectNumber(opt?.number || "");
-                        }}
-                      />
-                    )}
-                  </div>
-                  
-                  {/* Vendor / Counterparty */}
-                  <div>
+                {/* Vendor / Counterparty — NEU-088: the top-level Project/Booking Ref
+                    field was removed; booking is now captured per line item (NEU-089). */}
+                <div>
                     <label style={{ 
                       display: "block", 
                       fontSize: "12px", 
@@ -1315,7 +1309,6 @@ export function AddRequestForPaymentPanel({
                       />
                     )}
                   </div>
-                </div>
 
               </div>
             </div>
@@ -1326,7 +1319,8 @@ export function AddRequestForPaymentPanel({
                 <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
                   Line Items
                 </h3>
-                {!isViewMode && !isCollectionMode && (
+                {/* NEU-104: Cash Advance uses a fixed Project Expense Budget category — no catalog category picker. */}
+                {!isViewMode && !isCollectionMode && !isCashAdvance && (
                   <div style={{ position: "relative" }}>
                     <button
                       type="button"
@@ -1383,6 +1377,8 @@ export function AddRequestForPaymentPanel({
                           >
                             <Plus size={11} /> Add Item
                           </button>
+                          {/* NEU-104: the Project Expense Budget section is fixed for Cash Advance. */}
+                          {!isCashAdvance && (
                           <button
                             type="button"
                             onClick={() => handleDeleteSection(section.id)}
@@ -1392,6 +1388,7 @@ export function AddRequestForPaymentPanel({
                           >
                             <Trash2 size={13} />
                           </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1401,7 +1398,7 @@ export function AddRequestForPaymentPanel({
                       <table style={{ width: "100%", borderCollapse: "collapse" }}>
                         <thead style={{ backgroundColor: "var(--theme-bg-surface)", borderBottom: "1px solid var(--theme-border-default)" }}>
                           <tr>
-                            <th style={{ padding: "8px 16px", textAlign: "left", fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", width: "40%" }}>Particulars</th>
+                            <th style={{ padding: "8px 16px", textAlign: "left", fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", width: "40%" }}>{isCashAdvance ? "Booking (Project Expense Budget)" : "Particulars"}</th>
                             <th style={{ padding: "8px 16px", textAlign: "left", fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", width: "30%" }}>Description</th>
                             <th style={{ padding: "8px 16px", textAlign: "right", fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", width: "20%" }}>Amount</th>
                             {!isViewMode && !isCollectionMode && <th style={{ width: "10%" }} />}
@@ -1409,10 +1406,27 @@ export function AddRequestForPaymentPanel({
                         </thead>
                         <tbody>
                           {section.items.map(item => (
-                            <tr key={item.id} style={{ borderBottom: "1px solid var(--theme-border-subtle)" }}>
+                            <Fragment key={item.id}>
+                            <tr style={{ borderBottom: (isBillingMode || isCollectionMode) ? "1px solid var(--theme-border-subtle)" : "none" }}>
                               <td style={{ padding: "10px 16px" }}>
                                 {isViewMode || isCollectionMode ? (
                                   <div style={{ fontSize: "14px" }}>{item.particular}</div>
+                                ) : isCashAdvance ? (
+                                  // NEU-104: the "particular" IS the booking (Project Expense Budget).
+                                  <CustomDropdown
+                                    fullWidth
+                                    searchable
+                                    searchPlaceholder="Search bookings…"
+                                    placeholder="Select a booking…"
+                                    triggerAriaLabel="Budget booking"
+                                    value={item.booking_id ?? ""}
+                                    options={bookingOptions.map(o => ({ value: o.value, label: o.label }))}
+                                    onChange={(val) => {
+                                      const opt = bookingOptions.find(o => o.value === val);
+                                      handleItemChange(section.id, item.id, "booking_id", val || null);
+                                      handleItemChange(section.id, item.id, "particular", opt?.number || "");
+                                    }}
+                                  />
                                 ) : (
                                   <CatalogItemCombobox
                                     value={item.particular}
@@ -1474,6 +1488,37 @@ export function AddRequestForPaymentPanel({
                                 </td>
                               )}
                             </tr>
+                            {/* NEU-089: per-line booking on a sub-row beneath the line
+                                (expense vouchers only), so it reads as a detail of the
+                                item rather than crowding the main columns. NEU-104: for
+                                Cash Advance the booking IS the main column, so no sub-row. */}
+                            {!isBillingMode && !isCollectionMode && !isCashAdvance && (
+                              <tr style={{ borderBottom: "1px solid var(--theme-border-subtle)" }}>
+                                <td colSpan={!isViewMode ? 4 : 3} style={{ padding: "0 16px 10px 16px" }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                    <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.03em", whiteSpace: "nowrap" }}>Booking</span>
+                                    {isViewMode ? (
+                                      <span style={{ fontSize: "13px", color: "var(--theme-text-secondary)" }}>{bookingOptions.find(o => o.value === item.booking_id)?.number || "—"}</span>
+                                    ) : (
+                                      <div style={{ flex: "0 1 300px", minWidth: 0 }}>
+                                        <CustomDropdown
+                                          fullWidth
+                                          searchable
+                                          dropdownMaxWidth={300}
+                                          searchPlaceholder="Search bookings…"
+                                          placeholder="Link a booking…"
+                                          triggerAriaLabel="Line item booking"
+                                          value={item.booking_id ?? ""}
+                                          options={[{ value: "", label: "None" }, ...bookingOptions]}
+                                          onChange={(val) => handleItemChange(section.id, item.id, "booking_id", val || null)}
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                            </Fragment>
                           ))}
                         </tbody>
                         <tfoot style={{ backgroundColor: "var(--theme-bg-page)", borderTop: "1px solid var(--theme-border-default)" }}>

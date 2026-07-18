@@ -97,9 +97,16 @@ export function UnifiedExpensesTab({
 
   const BILLABLE_ELIGIBLE_STATUSES = ["approved", "posted", "paid", "partial"];
 
-  // Set of source_ids already tracked in billing_line_items
-  const billedSourceIds = useMemo(() => {
-    return new Set(existingBillingItems.map(b => b.source_id).filter(Boolean) as string[]);
+  // Set of source voucher-ids already tracked in billing_line_items. NEU-109: a
+  // multi-booking billable voucher is billed as one row PER booking with source_id
+  // `${voucherId}::${bookingId}`, so strip the booking suffix to detect conversion
+  // (legacy single billings use the bare voucher id and still match).
+  const billedVoucherIds = useMemo(() => {
+    return new Set(
+      existingBillingItems
+        .map(b => str(b.source_id).split("::")[0])
+        .filter(Boolean) as string[],
+    );
   }, [existingBillingItems]);
 
   // Set of expense IDs that are billable and not yet converted
@@ -109,13 +116,13 @@ export function UnifiedExpensesTab({
       if (
         e.isBillable &&
         BILLABLE_ELIGIBLE_STATUSES.includes(str(e.status)) &&
-        !billedSourceIds.has(str(e.id))
+        !billedVoucherIds.has(str(e.id))
       ) {
         ids.add(str(e.id));
       }
     });
     return ids;
-  }, [expenses, billedSourceIds]);
+  }, [expenses, billedVoucherIds]);
 
   const handleConvert = (expenseData: any) => {
     const expenseId: string = expenseData?.id;
@@ -144,28 +151,60 @@ export function UnifiedExpensesTab({
     const expenseId: string = str(expenseData.id);
     setConvertingId(expenseId);
 
-    const resolvedBookingId = str(expenseData.bookingId || expenseData.booking_id) || bookingId || "";
+    const fallbackBookingId = str(expenseData.bookingId || expenseData.booking_id) || bookingId || "";
     const category = str(expenseData.expenseCategory || expenseData.expense_category) || "Billable Expenses";
-    const amount = num(expenseData.amount);
     const currency = str(expenseData.currency) || "PHP";
+    const description = conversionBillingItemName || str(expenseData.description || expenseData.expenseName) || "Billable Expense";
 
-    const { error } = await supabase.from("billing_line_items").insert({
-      booking_id: resolvedBookingId,
-      project_number: str(expenseData.projectNumber || expenseData.project_number) || projectNumber,
-      source_id: expenseId,
-      source_type: "billable_expense",
-      description: conversionBillingItemName || str(expenseData.description || expenseData.expenseName) || "Billable Expense",
-      service_type: "Reimbursable Expense",
-      amount,
-      currency,
-      status: "unbilled",
-      category,
-      catalog_item_id: conversionBillingItemId,
-      catalog_snapshot: buildCatalogSnapshot(
-        { description: conversionBillingItemName, amount, currency },
-        category
-      ),
-    });
+    // NEU-109 / D2: a billable voucher's lines may span bookings (and customers),
+    // so bill PER booking — group the voucher's line items by booking and create
+    // one billing each, on that booking's customer, for that booking's line share.
+    const { data: lines } = await supabase
+      .from("evoucher_line_items")
+      .select("booking_id, amount, bookings(project_number)")
+      .eq("evoucher_id", expenseId);
+
+    const groups = new Map<string, { bookingId: string; projectNumber: string; amount: number }>();
+    for (const row of (lines ?? []) as any[]) {
+      const b = str(row.booking_id) || fallbackBookingId;
+      if (!b) continue;
+      const pn = str(row.bookings?.project_number) || str(expenseData.projectNumber || expenseData.project_number) || projectNumber || "";
+      const g = groups.get(b) ?? { bookingId: b, projectNumber: pn, amount: 0 };
+      g.amount += num(row.amount);
+      groups.set(b, g);
+    }
+
+    // Fallback (no relational lines): a single billing on the resolved booking.
+    const billRows = groups.size > 0
+      ? Array.from(groups.values())
+      : (fallbackBookingId
+          ? [{ bookingId: fallbackBookingId, projectNumber: str(expenseData.projectNumber || expenseData.project_number) || projectNumber || "", amount: num(expenseData.amount) }]
+          : []);
+
+    if (billRows.length === 0) {
+      setConvertingId(null);
+      setPendingConversion(null);
+      toast.error("Cannot convert: expense has no linked booking.");
+      return;
+    }
+
+    const multi = billRows.length > 1;
+    const { error } = await supabase.from("billing_line_items").insert(
+      billRows.map(g => ({
+        booking_id: g.bookingId,
+        project_number: g.projectNumber,
+        source_id: multi ? `${expenseId}::${g.bookingId}` : expenseId,
+        source_type: "billable_expense",
+        description,
+        service_type: "Reimbursable Expense",
+        amount: g.amount,
+        currency,
+        status: "unbilled",
+        category,
+        catalog_item_id: conversionBillingItemId,
+        catalog_snapshot: buildCatalogSnapshot({ description, amount: g.amount, currency }, category),
+      })),
+    );
 
     setConvertingId(null);
     setPendingConversion(null);
@@ -475,6 +514,9 @@ export function UnifiedExpensesTab({
           transaction_type: (selectedExpense.transactionType || selectedExpense.transaction_type || "expense") as string,
           is_billable: selectedExpense.isBillable,
           sub_category: "",
+          // NEU-092: forward attachments into the view panel (load effect reads
+          // dataToLoad.attachments) — this literal was omitting them.
+          attachments: (selectedExpense as any).attachments || [],
           line_items: [{
             id: "1",
             particular: selectedExpense.description || "Expense",

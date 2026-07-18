@@ -40,7 +40,7 @@ export function EVoucherStatusBadge({ status, size = "md" }: EVoucherStatusBadge
         return { bg: "var(--theme-status-warning-bg)", color: "var(--theme-status-warning-fg)", border: "var(--theme-status-warning-border)", icon: Clock, label: "Submit Receipts" };
       case "pending_verification":
       case "liquidation_pending": // legacy
-        return { bg: "var(--theme-status-warning-bg)", color: "var(--theme-status-warning-fg)", border: "var(--theme-status-warning-border)", icon: Clock, label: "Pending Verification" };
+        return { bg: "var(--theme-status-warning-bg)", color: "var(--theme-status-warning-fg)", border: "var(--theme-status-warning-border)", icon: Clock, label: "Liquidated for Verification of Treasury" };
       case "liquidation_closed": // legacy — maps to posted
         return { bg: "var(--theme-status-success-bg)", color: "var(--theme-status-success-fg)", border: "var(--theme-status-success-border)", icon: CheckCircle, label: "Posted" };
       // Legacy statuses — kept for backwards compat with old DB records

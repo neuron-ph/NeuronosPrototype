@@ -14,8 +14,8 @@ type AccountingTab = "acct-pending-disburse" | "acct-waiting-on-rep" | "acct-pen
 
 const TABS: { id: AccountingTab; label: string; icon: typeof Banknote; description: string }[] = [
   { id: "acct-pending-disburse", label: "Pending Disburse", icon: Banknote, description: "Ready to release cash" },
-  { id: "acct-waiting-on-rep", label: "Waiting on Rep", icon: Clock, description: "Rep hasn't submitted receipts" },
-  { id: "acct-pending-verification", label: "Pending Verification", icon: CheckCircle, description: "Receipts in, ready to verify & post" },
+  { id: "acct-waiting-on-rep", label: "Waiting on Liquidation", icon: Clock, description: "Rep hasn't submitted liquidation" },
+  { id: "acct-pending-verification", label: "Liquidated for Verification of Treasury", icon: CheckCircle, description: "Liquidation in, ready to verify & post" },
   { id: "acct-archive", label: "Archive", icon: Archive, description: "Posted & completed" },
 ];
 

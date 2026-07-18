@@ -431,10 +431,17 @@ export function DisburseEVoucherPage() {
       const totalCredit = lines.reduce((s, l) => s + (Number((l as any).credit) || 0), 0);
 
       // 1. Create disbursement journal entry — PHP-balanced, FX preserved.
+      // NEU-100: the accounting entry no longer posts straight to the ledger.
+      // Direct-settle types land `ready_to_post` (one-click post — preserve UX).
+      // Advances land `awaiting_ack`: the cash receiver must Confirm Receipt first
+      // (flips awaiting_ack → ready_to_post), THEN Accounting posts it. The
+      // operational voucher lifecycle below is unchanged.
       const { error: jeError } = await supabase.from("journal_entries").insert({
         id: entryId,
         entry_date: disbDate,
         evoucher_id: evoucher.id,
+        kind: settlesDirectly ? "expense" : "advance",
+        disburse_to_user_id: settlesDirectly ? null : effectiveReceiverId,
         description: `Disbursement — ${evoucherNumber} via ${paymentMethod}${reference ? ` [${reference}]` : ""}`,
         lines,
         total_debit: totalDebit,
@@ -445,7 +452,7 @@ export function DisburseEVoucherPage() {
         source_amount: foreignAmount,
         base_amount: cashBase,
         exchange_rate_date: disbursementDate,
-        status: "posted",
+        status: settlesDirectly ? "ready_to_post" : "awaiting_ack",
         created_by: user.id,
         created_at: now,
         updated_at: now,
@@ -485,7 +492,7 @@ export function DisburseEVoucherPage() {
 
       // 3. Write history
       const historyAction = settlesDirectly
-        ? `Disbursed & Posted — ${paymentMethod}${reference ? ` [${reference}]` : ""} via ${sourceAccountName}`
+        ? `Disbursed — ${paymentMethod}${reference ? ` [${reference}]` : ""} via ${sourceAccountName} · entry queued in Transaction Journal`
         : `Cash Disbursed by Accounting — ${paymentMethod}${reference ? ` [${reference}]` : ""} from ${sourceAccountName}`;
       await supabase.from("evoucher_history").insert({
         id: `EH-${Date.now()}`,
@@ -513,8 +520,8 @@ export function DisburseEVoucherPage() {
       if (settlesDirectly) {
         if (evoucher.requestor_id) {
           createWorkflowTicket({
-            subject: `Disbursed & Posted: ${evoucherNumber}`,
-            body: `Your E-Voucher ${evoucherNumber} has been disbursed and posted to the ledger.`,
+            subject: `Disbursed: ${evoucherNumber}`,
+            body: `Your E-Voucher ${evoucherNumber} has been disbursed. The journal entry is queued in the Transaction Journal for posting.`,
             type: "fyi",
             recipientUserId: evoucher.requestor_id,
             linkedRecordType: "expense",
@@ -542,8 +549,8 @@ export function DisburseEVoucherPage() {
 
       toast.success(
         settlesDirectly
-          ? "Disbursed and posted to ledger"
-          : "Cash disbursed — journal entry posted"
+          ? "Disbursed — entry queued in the Transaction Journal"
+          : "Cash disbursed — entry queued in the Transaction Journal"
       );
       navigate(backRoute);
     } catch (err) {
@@ -785,7 +792,7 @@ export function DisburseEVoucherPage() {
 
             {settlesDirectly && (
               <p style={{ fontSize: "11px", color: "var(--theme-text-muted)", marginTop: "12px", lineHeight: 1.6 }}>
-                Posts and closes in one step — no liquidation required.
+                Settles in one step — no liquidation required. The entry queues in the Transaction Journal for posting.
               </p>
             )}
           </div>
@@ -1063,7 +1070,7 @@ export function DisburseEVoucherPage() {
           }}
         >
           {posting && <Loader2 size={15} className="animate-spin" />}
-          {posting ? "Processing…" : settlesDirectly ? "Disburse & Post to Ledger" : "Confirm Disbursement"}
+          {posting ? "Processing…" : settlesDirectly ? "Disburse & Queue for Posting" : "Confirm Disbursement"}
         </button>
       </div>
     </div>

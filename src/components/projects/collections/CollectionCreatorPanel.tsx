@@ -462,33 +462,10 @@ export function CollectionCreatorPanel({
 
       if (insertErr) throw new Error(insertErr.message);
 
-      // Create draft journal entry for Accounting to review and post.
-      // Total debit/credit are PHP base; the closing posting sheet writes the
-      // full FX-balanced lines and any realized FX gain/loss.
-      const jeId = `JE-COL-${Date.now()}`;
-      await supabase.from("journal_entries").insert({
-        id: jeId,
-        // entry_number filled by DB trigger (set_journal_entry_number)
-        entry_date: new Date().toISOString(),
-        collection_id: created.id,
-        description: `Collection ${collectionNumber} — ${project.customer_name}`,
-        reference: referenceNo || collectionNumber,
-        customer_name: project.customer_name || null,
-        lines: [],
-        total_debit: baseAmount,
-        total_credit: baseAmount,
-        transaction_currency: collectionCurrency,
-        exchange_rate: lockedRate,
-        base_currency: FUNCTIONAL_CURRENCY,
-        source_amount: roundMoney(amountReceived),
-        base_amount: baseAmount,
-        exchange_rate_date: rateDate,
-        status: "draft",
-        created_by: user?.id ?? null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-
+      // NEU-106: no empty-lines placeholder JE at creation anymore. The real
+      // Dr Cash / Cr AR (+ realized FX) entry is built by the Collection GL
+      // Posting Sheet and lands in the Transaction Journal as `ready_to_post`;
+      // Accounting confirms it there ("Submit for Posting") to hit the ledger.
       const actor = { id: user?.id ?? "", name: user?.name ?? "", department: user?.department ?? "" };
       logCreation("collection", created.id, created.collection_number ?? created.id, actor);
 

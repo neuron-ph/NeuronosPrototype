@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { LiquidationForm } from "./LiquidationForm";
-import { GLConfirmationSheet } from "./GLConfirmationSheet";
+import { postJournalEntry } from "../../../utils/accounting/postTransactionJournal";
 import type { EVoucherAPType } from "../../../types/evoucher";
 import { ensureBillableExpenseBillingItem } from "../../../utils/evoucherApproval";
 import { recordNotificationEvent } from "../../../utils/notifications";
@@ -119,7 +119,6 @@ export function EVoucherWorkflowPanel({
   const [rejectionReason, setRejectionReason] = useState("");
 
   const [showLiquidationForm, setShowLiquidationForm] = useState(false);
-  const [showGLSheet, setShowGLSheet] = useState(false);
 
   // NEU-051: when a voucher is awaiting Treasury verification, load its
   // liquidation submissions to check receipt-attachment completeness (slice 2)
@@ -496,10 +495,40 @@ export function EVoucherWorkflowPanel({
     }
   };
 
-  const handleCloseLiquidation = async () => {
+  // NEU-102/C: Treasury verifies + posts the liquidation. The closing entry
+  // (DR Expense per booking / DR Cash butal / CR 1150) was pre-built as
+  // `ready_to_post` at final liquidation; posting it flips the voucher to
+  // `posted` and clears the advance. Replaces the old GLConfirmationSheet +
+  // no-JE "Close Liquidation" paths.
+  const handleVerifyAndPostLiquidation = async () => {
     setIsSubmitting(true);
     try {
-      await transition("posted", "Verified & Posted by Accounting");
+      const { data: closingJe } = await supabase
+        .from("journal_entries")
+        .select("id")
+        .eq("evoucher_id", evoucherId)
+        .eq("kind", "liquidation")
+        .eq("status", "ready_to_post")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!closingJe) {
+        toast.error("No pending closing entry found — the handler must re-submit the liquidation.");
+        return;
+      }
+      await postJournalEntry(closingJe.id, { id: currentUser?.id ?? null, name: currentUser?.name ?? null });
+      // postJournalEntry's source-effect flips the voucher to `posted` + links the entry.
+      await supabase.from("evoucher_history").insert({
+        id: `EH-${Date.now()}`,
+        evoucher_id: evoucherId,
+        action: "Liquidation Verified & Posted to General Journal",
+        status: "posted",
+        user_id: currentUser?.id,
+        user_name: currentUser?.name,
+        user_role: currentUser?.department,
+        metadata: { previous_status: "pending_verification", new_status: "posted", journal_entry_id: closingJe.id },
+        created_at: new Date().toISOString(),
+      });
       if (currentUser?.id && requestorId) {
         createWorkflowTicket({
           subject: `Complete: ${evoucherNumber}`,
@@ -527,10 +556,10 @@ export function EVoucherWorkflowPanel({
         },
         recipientIds: [requestorId ?? null],
       });
-      toast.success("E-Voucher verified and posted to ledger");
+      toast.success("Liquidation verified and posted to the General Journal");
       onStatusChange?.();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to close liquidation");
+      toast.error(err instanceof Error ? err.message : "Failed to post liquidation");
     } finally {
       setIsSubmitting(false);
     }
@@ -567,6 +596,16 @@ export function EVoucherWorkflowPanel({
           "You don't have permission to confirm receipt on this E-Voucher (only the tagged cash receiver can). Refresh and try again.",
         );
       }
+
+      // NEU-100: acknowledging receipt releases the disbursement entry for posting
+      // (awaiting_ack → ready_to_post). Treasury can then post it in the TJ.
+      await supabase
+        .from("journal_entries")
+        .update({ status: "ready_to_post", acknowledged_at: now, acknowledged_by: userId, updated_at: now })
+        .eq("evoucher_id", evoucherId)
+        .eq("kind", "advance")
+        .eq("status", "awaiting_ack");
+
       await writeHistory(
         "Cash Receipt Confirmed",
         currentStatus,
@@ -898,15 +937,16 @@ export function EVoucherWorkflowPanel({
           </div>
         )}
 
-        {/* Accounting (Treasury): Verify & Post — gated on receipts complete + cash return confirmed */}
+        {/* Accounting (Treasury): Verify & Post the pre-built closing entry —
+            gated on receipts complete + cash return confirmed. */}
         {canVerifyAndPost && (
           <button
-            onClick={() => setShowGLSheet(true)}
+            onClick={handleVerifyAndPostLiquidation}
             disabled={isSubmitting || !liquidationReady}
             style={{ ...btnBase, backgroundColor: "var(--theme-status-success-fg)", color: "#fff", opacity: (isSubmitting || !liquidationReady) ? 0.5 : 1, cursor: (isSubmitting || !liquidationReady) ? "not-allowed" : "pointer" }}
           >
-            <CheckCircle size={15} />
-            Verify & Post
+            {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle size={15} />}
+            {isSubmitting ? "Posting…" : "Verify & Post"}
           </button>
         )}
 
@@ -989,18 +1029,6 @@ export function EVoucherWorkflowPanel({
           </button>
         )}
 
-        {/* Accounting (Treasury): close liquidation — gated on receipts + cash return */}
-        {canCloseLiquidation && (
-          <button
-            onClick={handleCloseLiquidation}
-            disabled={isSubmitting || !liquidationReady}
-            style={{ ...btnBase, backgroundColor: "var(--theme-status-success-fg)", color: "#fff", opacity: (isSubmitting || !liquidationReady) ? 0.5 : 1, cursor: (isSubmitting || !liquidationReady) ? "not-allowed" : "pointer" }}
-          >
-            {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle size={15} />}
-            {isSubmitting ? "Closing…" : "Close Liquidation"}
-          </button>
-        )}
-
         {/* Requestor: cancel */}
         {canCancel && pendingConfirm !== "cancel" && (
           <button
@@ -1022,20 +1050,6 @@ export function EVoucherWorkflowPanel({
           </p>
         )}
       </div>
-
-      {/* GL Confirmation Sheet */}
-      {showGLSheet && currentUser && (
-        <GLConfirmationSheet
-          isOpen={showGLSheet}
-          onClose={() => setShowGLSheet(false)}
-          evoucherId={evoucherId}
-          evoucherNumber={evoucherNumber}
-          transactionType={transactionType as EVoucherAPType}
-          amount={amount}
-          currentUser={{ id: currentUser.id, name: currentUser.name, department: currentUser.department }}
-          onPosted={() => { setShowGLSheet(false); onStatusChange?.(); }}
-        />
-      )}
 
       {/* Liquidation Form — inline, expands below the action buttons */}
       {currentUser && (

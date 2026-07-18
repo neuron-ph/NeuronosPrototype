@@ -2,6 +2,7 @@ import { CheckCircle, FileText, Download } from "lucide-react";
 import { VoucherBrandLogo } from "../VoucherBrandLogo";
 import { formatAttachmentSize } from "../../utils/crmAttachments";
 import { EVoucherWorkflowPanel } from "./evouchers/EVoucherWorkflowPanel";
+import { LiquidationHistory } from "./evouchers/LiquidationHistory";
 import { EVoucherStatusBadge } from "./evouchers/EVoucherStatusBadge";
 import { EVoucherHistoryTimeline } from "./evouchers/EVoucherHistoryTimeline";
 import { SidePanel } from "../common/SidePanel";
@@ -628,6 +629,20 @@ export function EVoucherDetailView({
             expenseCategory={(evoucher as any).expense_category ?? evoucher.gl_category}
           />
         </div>
+
+        {/* ── Liquidation history + per-booking reconciliation (NEU-105) ────────
+            cash_advance / budget_request, post-disbursement. Lives here (the LIVE
+            detail view) — the old EVoucherDetailPage that used to host it is dead. */}
+        {(evoucher.transaction_type === "cash_advance" || evoucher.transaction_type === "budget_request") &&
+          ["disbursed", "pending_liquidation", "pending_verification", "posted"].includes((evoucher.status || "").toLowerCase()) && (
+          <div style={{ paddingTop: "20px" }}>
+            <LiquidationHistory
+              evoucherId={evoucher.id}
+              advanceAmount={evoucher.amount}
+              currency={evoucher.currency}
+            />
+          </div>
+        )}
 
       </div>
     </SidePanel>

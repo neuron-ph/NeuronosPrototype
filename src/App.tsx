@@ -875,9 +875,30 @@ function AccountingCoaPage() {
 }
 
 function AccountingJournalPage() {
+  // NEU-099: General Journal (posted) + Transaction Journal (pre-posting) as two
+  // tabs of the same workspace, gated by the shared acct_journal permission.
+  const [journalTab, setJournalTab] = useState<"general" | "transaction">("transaction");
   return (
     <RouteWrapper page="acct-journal">
-      <GeneralJournal />
+      <div style={{ display: "flex", gap: "4px", padding: "16px 24px 0", borderBottom: "1px solid var(--theme-border-default)", backgroundColor: "var(--theme-bg-surface)" }}>
+        {([["transaction", "Transaction Journal"], ["general", "General Journal"]] as const).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setJournalTab(key)}
+            style={{
+              padding: "8px 16px", fontSize: "13px", fontWeight: journalTab === key ? 600 : 400,
+              color: journalTab === key ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)",
+              background: "none", border: "none", cursor: "pointer",
+              borderBottom: journalTab === key ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
+              marginBottom: "-1px",
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {/* Same component, two lenses: transaction = full pipeline, general = posted-only. */}
+      {journalTab === "general" ? <GeneralJournal mode="general" /> : <GeneralJournal mode="transaction" />}
     </RouteWrapper>
   );
 }

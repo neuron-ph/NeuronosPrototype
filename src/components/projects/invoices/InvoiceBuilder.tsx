@@ -993,16 +993,36 @@ export function InvoiceBuilder({
       });
       const rateDate = (inv.invoice_date || new Date().toISOString()).slice(0, 10);
 
+      // NEU-106: invoices route through the Transaction Journal. Build the REAL
+      // Dr Accounts Receivable / Cr Revenue entry (replacing the old empty-lines
+      // placeholder) and land it as `ready_to_post`. Accounting confirms it in the
+      // TJ ("Submit for Posting") and only then does it hit the General Journal /
+      // balances (postJournalEntry's source-effect stamps the invoice posted +
+      // journal_entry_id). The invoice document flip below is unchanged.
+      const revenueId = inv.metadata?.revenue_account_id || "coa-4000";
+      const { data: acctRows } = await supabase
+        .from("accounts")
+        .select("id, code, name")
+        .in("id", ["coa-1100", revenueId]);
+      const acctMap = new Map((acctRows ?? []).map((a: any) => [a.id, a]));
+      const ar = acctMap.get("coa-1100") ?? { id: "coa-1100", code: "1100", name: "Accounts Receivable - Trade" };
+      const rev = acctMap.get(revenueId) ?? { id: "coa-4000", code: "4000", name: "Freight Forwarding Revenue" };
+      const invLines = [
+        { account_id: ar.id, account_code: ar.code, account_name: ar.name, debit: baseAmount, credit: 0, description: `AR — ${inv.invoice_number} · ${inv.customer_name}` },
+        { account_id: rev.id, account_code: rev.code, account_name: rev.name, debit: 0, credit: baseAmount, description: `Revenue — ${inv.invoice_number}` },
+      ];
+
       const jeId = `JE-INV-${Date.now()}`;
       await supabase.from("journal_entries").insert({
         id: jeId,
         entry_date: new Date().toISOString(),
         invoice_id: inv.id,
+        kind: "invoice",
         description: `Invoice ${inv.invoice_number} — ${inv.customer_name}`,
         reference: inv.invoice_number,
         project_number: inv.project_number || null,
         customer_name: inv.customer_name || null,
-        lines: [],
+        lines: invLines,
         total_debit: baseAmount,
         total_credit: baseAmount,
         transaction_currency: invoiceCurrency,
@@ -1011,7 +1031,7 @@ export function InvoiceBuilder({
         source_amount: roundMoney(inv.total_amount),
         base_amount: baseAmount,
         exchange_rate_date: rateDate,
-        status: "draft",
+        status: "ready_to_post",
         created_by: user.id,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -1050,7 +1070,7 @@ export function InvoiceBuilder({
       });
 
       setViewInvoice({ ...viewInvoice, status: "posted" } as Invoice);
-      toast.success(`Invoice ${inv.invoice_number} finalized`);
+      toast.success(`Invoice ${inv.invoice_number} finalized — entry queued in the Transaction Journal`);
       if (onRefreshData) await onRefreshData();
       if (onBack) onBack();
     } catch (err) {
@@ -1110,6 +1130,15 @@ export function InvoiceBuilder({
         setIsVoiding(false);
         return;
       }
+
+      // NEU-106: if the invoice was voided BEFORE its Transaction Journal entry
+      // was posted, neutralize the still-pending entry so it can never post
+      // orphaned revenue. (Posted entries are handled by the reversal below.)
+      await supabase
+        .from("journal_entries")
+        .update({ status: "void", updated_at: new Date().toISOString() })
+        .eq("invoice_id", inv.id)
+        .eq("status", "ready_to_post");
 
       if (hasJournalEntry) {
         const invoiceCurrency = normalizeCurrency(inv.original_currency || inv.currency || "PHP", FUNCTIONAL_CURRENCY);

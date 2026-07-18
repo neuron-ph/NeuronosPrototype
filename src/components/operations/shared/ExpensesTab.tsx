@@ -35,17 +35,36 @@ export function ExpensesTab({
   const { data: expenses = [], isLoading } = useQuery({
     queryKey: ["evouchers", "booking_expenses", bookingId],
     queryFn: async () => {
-      const { data: allEVouchers, error } = await supabase
-        .from("evouchers")
-        .select("*")
+      // NEU-108 / D2: a booking's expenses = the LINE ITEMS charged to it
+      // (booking now lives on the line, not the voucher). Read the line table,
+      // group lines back to their parent voucher, and sum ONLY the amounts for
+      // THIS booking — so a multi-booking voucher shows here with just its share.
+      const { data: lines, error } = await supabase
+        .from("evoucher_line_items")
+        .select(`
+          evoucher_id, amount, booking_id,
+          evouchers!inner (
+            id, evoucher_number, status, vendor_name, transaction_type,
+            created_at, purpose, description, project_number,
+            currency, details, attachments,
+            gl_category, gl_sub_category
+          )
+        `)
         .eq("booking_id", bookingId);
 
       if (error) throw error;
 
-      const relevantEVouchers = allEVouchers || [];
+      // Group lines by parent voucher; accumulate the booking-scoped amount.
+      const byVoucher = new Map<string, { ev: any; amount: number }>();
+      for (const row of (lines ?? []) as any[]) {
+        const ev = row.evouchers;
+        if (!ev) continue;
+        const cur = byVoucher.get(ev.id) ?? { ev, amount: 0 };
+        cur.amount += Number(row.amount) || 0;
+        byVoucher.set(ev.id, cur);
+      }
 
-      // Map to OperationsExpense type
-      const mappedExpenses: OperationsExpense[] = relevantEVouchers.map((ev: any) => {
+      const mappedExpenses: OperationsExpense[] = Array.from(byVoucher.values()).map(({ ev, amount }) => {
         let status = "pending";
         const rawStatus = (ev.status || "").toLowerCase();
         if (rawStatus === "draft") status = "draft";
@@ -59,23 +78,24 @@ export function ExpensesTab({
           bookingId: bookingId,
           projectNumber: ev.project_number,
           bookingType: bookingType || "Other",
-          expenseName: ev.voucher_number || "—",
-          expenseCategory: ev.expense_category || ev.gl_category || "Uncategorized",
-          amount: ev.total_amount || ev.amount || 0,
+          expenseName: ev.evoucher_number || "—",
+          expenseCategory: ev.gl_category || "Uncategorized",
+          amount, // booking-scoped sum of this voucher's lines charged to this booking
           currency: ev.currency || "PHP",
-          expenseDate: ev.request_date || ev.created_at,
+          expenseDate: ev.details?.request_date || ev.created_at,
           vendorName: ev.vendor_name || "—",
           description: ev.purpose || ev.description,
           notes: ev.description,
-          createdBy: ev.requestor_name,
+          createdBy: ev.details?.requestor_name ?? null,
           createdAt: ev.created_at,
           status: status,
           vendor: ev.vendor_name,
-          category: ev.expense_category || ev.gl_category,
-          subCategory: ev.sub_category || ev.gl_sub_category,
-          lineItems: ev.line_items || [],
-          isBillable: ev.is_billable ?? ev.details?.is_billable ?? false,
+          category: ev.gl_category,
+          subCategory: ev.gl_sub_category,
+          lineItems: [],
+          isBillable: ev.details?.is_billable ?? false,
           transactionType: ev.transaction_type || ev.details?.transaction_type || "expense",
+          attachments: ev.attachments || [],
         } as unknown as OperationsExpense;
       });
 
