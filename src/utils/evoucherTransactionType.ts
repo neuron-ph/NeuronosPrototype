@@ -13,6 +13,7 @@ const BASE_LABELS: Record<string, string> = {
   reimbursement: "Reimbursement – Project and Office Expense",
   budget_request: "Budget Request",
   direct_expense: "Office Expense",
+  fund_transfer: "Transfer of Funds",   // NEU-095: internal cash movement (From/To account)
 };
 
 /** Canonical create-dropdown options — the SAME list on EVERY e-voucher entry
@@ -26,6 +27,7 @@ export const TRANSACTION_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "cash_advance",  label: "Cash Advances – Project and Office Expense" },
   { value: "reimbursement", label: "Reimbursement – Project and Office Expense" },
   { value: "direct_expense", label: "Office Expense" },
+  { value: "fund_transfer", label: "Transfer of Funds" },
 ];
 
 /** Human label for a transaction type. Pass `isBillable` to distinguish a

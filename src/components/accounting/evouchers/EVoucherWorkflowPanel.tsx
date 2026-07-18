@@ -10,6 +10,7 @@ import {
 import { toast } from "sonner@2.0.3";
 import { LiquidationForm } from "./LiquidationForm";
 import { postJournalEntry } from "../../../utils/accounting/postTransactionJournal";
+import { buildTransferEntry } from "../../../utils/accounting/buildTransferEntry";
 import type { EVoucherAPType } from "../../../types/evoucher";
 import { ensureBillableExpenseBillingItem } from "../../../utils/evoucherApproval";
 import { recordNotificationEvent } from "../../../utils/notifications";
@@ -172,8 +173,16 @@ export function EVoucherWorkflowPanel({
   const canSubmit = isOwner && currentStatus === "draft" && can("my_evouchers", "edit");
   const canCancel = isOwner && (currentStatus === "draft" || currentStatus === "rejected");
 
-  const canApproveAsTL   = holdsManagerGate && currentStatus === "pending_manager";
+  // NEU-095: a fund transfer routes to an Executive manager (Mark Javier) who
+  // "processes" it — builds the Dr To / Cr From entry — instead of the normal
+  // manager→ceo→accounting chain. So the standard TL approve is swapped for a
+  // dedicated Process action on transfers at the manager stage.
+  const isFundTransfer   = transactionType === "fund_transfer";
+  const canApproveAsTL   = holdsManagerGate && currentStatus === "pending_manager" && !isFundTransfer;
   const canRejectAsTL    = holdsManagerGate && currentStatus === "pending_manager";
+  const canProcessTransfer =
+    isFundTransfer && currentStatus === "pending_manager" && holdsManagerGate &&
+    currentUser?.department === "Executive";
   const canApproveAsCEO  = holdsAccountingGate && currentStatus === "pending_ceo";
   const canRejectAsCEO   = holdsAccountingGate && currentStatus === "pending_ceo";
   const canDisburse      = holdsDisburseGate && currentStatus === "pending_accounting";
@@ -222,7 +231,8 @@ export function EVoucherWorkflowPanel({
   const noActionsAvailable =
     !canSubmit && !canApproveAsTL && !canRejectAsTL && !canApproveAsCEO && !canRejectAsCEO &&
     !canDisburse && !canVerifyAndPost && !canConfirmReceipt && !canConfirmCashReturn &&
-    !canOpenLiquidation && !canCloseLiquidation && !canUnlockForCorrection && !canCancel;
+    !canOpenLiquidation && !canCloseLiquidation && !canUnlockForCorrection && !canCancel &&
+    !canProcessTransfer;
 
   // ── Shared helpers ────────────────────────────────────────────────────────
   const writeHistory = async (action: string, prevStatus: string, newStatus: string, notes?: string) => {
@@ -257,6 +267,34 @@ export function EVoucherWorkflowPanel({
       );
     }
     await writeHistory(action, currentStatus, newStatus, notes);
+  };
+
+  // NEU-095: the Executive approver (Mark) processes a fund transfer — builds the
+  // Dr To / Cr From entry into the Transaction Journal and closes the voucher.
+  const handleProcessTransfer = async () => {
+    setIsSubmitting(true);
+    try {
+      const result = await buildTransferEntry({
+        evoucherId,
+        evoucherNumber,
+        actor: { id: currentUser?.id ?? "", name: currentUser?.name ?? null },
+      });
+      if (!result) {
+        toast.error("Couldn't build the transfer entry — check the From/To accounts.");
+        return;
+      }
+      await transition(
+        "posted",
+        "Transfer Processed — entry queued in the Transaction Journal",
+        `${currentUser?.name} processed the transfer`,
+      );
+      toast.success("Transfer processed — entry queued in the Transaction Journal for posting");
+      onStatusChange?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to process transfer");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // ── Billable expense auto-billing ─────────────────────────────────────────
@@ -781,6 +819,18 @@ export function EVoucherWorkflowPanel({
           >
             {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle size={15} />}
             {isSubmitting ? "Approving…" : "Approve"}
+          </button>
+        )}
+
+        {/* NEU-095: Executive (Mark) processes a fund transfer → builds the TJ entry */}
+        {canProcessTransfer && (
+          <button
+            onClick={handleProcessTransfer}
+            disabled={isSubmitting}
+            style={{ ...btnBase, backgroundColor: "var(--theme-status-success-fg)", color: "#fff", opacity: isSubmitting ? 0.6 : 1, cursor: isSubmitting ? "not-allowed" : "pointer" }}
+          >
+            {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle size={15} />}
+            {isSubmitting ? "Processing…" : "Process Transfer"}
           </button>
         )}
 

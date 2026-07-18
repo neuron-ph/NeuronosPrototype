@@ -36,7 +36,8 @@ export type EVoucherAPType =
   | "cash_advance"     // Give employee money before job — creates advance asset
   | "reimbursement"    // Pay employee back for out-of-pocket — creates cost record, direct cash
   | "budget_request"   // Lump sum to a department — creates advance asset
-  | "direct_expense";  // Direct purchase request, not tied to booking — CEO approval only
+  | "direct_expense"   // Direct purchase request, not tied to booking — CEO approval only
+  | "fund_transfer";   // NEU-095: internal cash movement (From account -> To account)
 
 // EVoucherTransactionType is now identical to EVoucherAPType.
 // The retired AR-side pseudo-types ("billing", "collection", "adjustment") have been removed.
