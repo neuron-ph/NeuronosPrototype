@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../../../utils/supabase/client";
+import { toast } from "sonner@2.0.3";
 import {
   Clock,
   Loader2,
@@ -8,6 +9,7 @@ import {
   FileText,
   Send,
   Ban,
+  MessageSquare,
 } from "lucide-react";
 
 interface HistoryEntry {
@@ -39,17 +41,54 @@ interface HistoryEntry {
 
 interface EVoucherHistoryTimelineProps {
   evoucherId: string;
+  /** NEU-097: when a user is provided, a comment box is shown. Comments can be
+   *  posted at ANY stage (including after closure) and never change status. */
+  currentUser?: { id: string; name?: string | null; department?: string | null; role?: string | null } | null;
+  currentStatus?: string;
 }
 
 export function EVoucherHistoryTimeline({
   evoucherId,
+  currentUser,
+  currentStatus,
 }: EVoucherHistoryTimelineProps) {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [comment, setComment] = useState("");
+  const [posting, setPosting] = useState(false);
 
   useEffect(() => {
     fetchHistory();
   }, [evoucherId]);
+
+  // NEU-097: post a standalone comment — a history row with no status change.
+  const handleAddComment = async () => {
+    if (!comment.trim() || !currentUser) return;
+    setPosting(true);
+    try {
+      const now = new Date().toISOString();
+      const { error } = await supabase.from("evoucher_history").insert({
+        id: `EH-${Date.now()}`,
+        evoucher_id: evoucherId,
+        action: "Comment",
+        status: currentStatus ?? null,
+        user_id: currentUser.id,
+        user_name: currentUser.name,
+        user_role: currentUser.department,
+        remarks: comment.trim(),
+        metadata: { note: comment.trim() },
+        created_at: now,
+      });
+      if (error) throw error;
+      setComment("");
+      await fetchHistory();
+    } catch (err) {
+      console.error("[comment] failed:", err);
+      toast.error("Couldn't post the comment");
+    } finally {
+      setPosting(false);
+    }
+  };
 
   const fetchHistory = async () => {
     setIsLoading(true);
@@ -73,10 +112,11 @@ export function EVoucherHistoryTimeline({
   const getActionIcon = (action: string) => {
     const actionLower = action.toLowerCase();
 
+    if (actionLower === "comment") return MessageSquare;
     if (actionLower.includes("created")) return FileText;
     if (actionLower.includes("submitted")) return Send;
     if (actionLower.includes("approved")) return CheckCircle;
-    if (actionLower.includes("rejected")) return XCircle;
+    if (actionLower.includes("rejected") || actionLower.includes("sent back")) return XCircle;
     if (actionLower.includes("cancelled")) return Ban;
 
     return Clock;
@@ -89,10 +129,11 @@ export function EVoucherHistoryTimeline({
     if (actionLower.includes("submitted")) {
       return "var(--theme-status-warning-fg)";
     }
+    if (actionLower === "comment") return "var(--theme-action-primary-bg)";
     if (actionLower.includes("approved") || actionLower.includes("posted")) {
       return "var(--theme-status-success-fg)";
     }
-    if (actionLower.includes("rejected")) return "var(--theme-status-danger-fg)";
+    if (actionLower.includes("rejected") || actionLower.includes("sent back")) return "var(--theme-status-danger-fg)";
     if (actionLower.includes("cancelled")) return "var(--theme-text-muted)";
 
     return "var(--theme-text-muted)";
@@ -115,35 +156,69 @@ export function EVoucherHistoryTimeline({
     );
   }
 
+  // NEU-097: comment composer — always available when a user is provided, at any
+  // stage (including post-closure).
+  const commentBox = currentUser ? (
+    <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "20px" }}>
+      <textarea
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+        placeholder="Add a comment… (visible to everyone on this voucher)"
+        rows={2}
+        style={{
+          width: "100%", padding: "8px 10px", borderRadius: "8px",
+          border: "1px solid var(--theme-border-default)", fontSize: "13px",
+          fontFamily: "inherit", resize: "vertical", outline: "none", boxSizing: "border-box",
+          backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-primary)",
+        }}
+      />
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <button
+          onClick={handleAddComment}
+          disabled={posting || !comment.trim()}
+          style={{
+            height: "32px", padding: "0 14px", borderRadius: "6px", border: "none",
+            backgroundColor: "var(--theme-action-primary-bg)", color: "#fff",
+            fontSize: "12px", fontWeight: 600,
+            cursor: posting || !comment.trim() ? "not-allowed" : "pointer",
+            opacity: !comment.trim() ? 0.5 : 1,
+            display: "flex", alignItems: "center", gap: "6px",
+          }}
+        >
+          {posting ? <Loader2 size={13} className="animate-spin" /> : <MessageSquare size={13} />}
+          Comment
+        </button>
+      </div>
+    </div>
+  ) : null;
+
+  const sectionHeader = (
+    <div
+      style={{
+        fontSize: "11px", fontWeight: 700, letterSpacing: "0.06em",
+        textTransform: "uppercase", color: "var(--theme-text-muted)", marginBottom: "16px",
+      }}
+    >
+      Comments &amp; History
+    </div>
+  );
+
   if (history.length === 0) {
     return (
-      <div
-        style={{
-          padding: "24px",
-          textAlign: "center",
-          color: "var(--theme-text-muted)",
-          fontSize: "14px",
-        }}
-      >
-        No history available
+      <div style={{ padding: "20px" }}>
+        {sectionHeader}
+        {commentBox}
+        <div style={{ textAlign: "center", color: "var(--theme-text-muted)", fontSize: "13px", padding: "8px" }}>
+          No activity yet
+        </div>
       </div>
     );
   }
 
   return (
     <div style={{ padding: "20px" }}>
-      <div
-        style={{
-          fontSize: "11px",
-          fontWeight: 700,
-          letterSpacing: "0.06em",
-          textTransform: "uppercase",
-          color: "var(--theme-text-muted)",
-          marginBottom: "16px",
-        }}
-      >
-        Workflow History
-      </div>
+      {sectionHeader}
+      {commentBox}
 
       <div style={{ position: "relative" }}>
         {/* Subtle vertical line */}

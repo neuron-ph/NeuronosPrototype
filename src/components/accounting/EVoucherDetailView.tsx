@@ -596,7 +596,7 @@ export function EVoucherDetailView({
 
         {/* ── Workflow History ─────────────────────────────────────────────── */}
         <div style={{ marginBottom: "28px" }}>
-          <EVoucherHistoryTimeline evoucherId={evoucher.id} />
+          <EVoucherHistoryTimeline evoucherId={evoucher.id} currentUser={currentUser} currentStatus={evoucher.status} />
         </div>
 
         {/* ── Workflow Actions ─────────────────────────────────────────────── */}

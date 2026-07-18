@@ -116,7 +116,7 @@ export function EVoucherWorkflowPanel({
 
   // Inline reject zone
   const [showReject, setShowReject] = useState(false);
-  const [rejectingAs, setRejectingAs] = useState<"manager" | "ceo">("manager");
+  const [rejectingAs, setRejectingAs] = useState<"manager" | "ceo" | "late">("manager");
   const [rejectionReason, setRejectionReason] = useState("");
 
   const [showLiquidationForm, setShowLiquidationForm] = useState(false);
@@ -171,7 +171,11 @@ export function EVoucherWorkflowPanel({
   // button on it so view-only roles (TL/Sup/Mgr with V/VX) don't see a button
   // that silently bounces at RLS.
   const canSubmit = isOwner && currentStatus === "draft" && can("my_evouchers", "edit");
-  const canCancel = isOwner && (currentStatus === "draft" || currentStatus === "rejected");
+  // NEU-096: the requestor can cancel/void their own voucher at any stage BEFORE
+  // cash moves (draft/rejected + the whole pending approval chain). Once disbursed
+  // or posted it needs a reversal (accounting's Unlock/Reverse), not a cancel.
+  const canCancel = isOwner &&
+    ["draft", "rejected", "pending_manager", "pending_ceo", "pending_accounting"].includes(currentStatus);
 
   // NEU-095: a fund transfer routes to an Executive manager (Mark Javier) who
   // "processes" it — builds the Dr To / Cr From entry — instead of the normal
@@ -185,6 +189,12 @@ export function EVoucherWorkflowPanel({
     currentUser?.department === "Executive";
   const canApproveAsCEO  = holdsAccountingGate && currentStatus === "pending_ceo";
   const canRejectAsCEO   = holdsAccountingGate && currentStatus === "pending_ceo";
+  // NEU-098: back-track a post-approval voucher to the requestor for revision
+  // (full re-traverse). Scoped to `pending_accounting` — i.e. after the approval
+  // chain but BEFORE any cash moves; bouncing a disbursed/liquidating voucher would
+  // need reversal logic, so that's out of scope for a simple back-track.
+  const canSendBack =
+    (holdsAccountingGate || holdsDisburseGate) && currentStatus === "pending_accounting";
   const canDisburse      = holdsDisburseGate && currentStatus === "pending_accounting";
   // NEU-051: Treasury (not generic Accounting) verifies + posts liquidations.
   const canVerifyAndPost = holdsDisburseGate && currentStatus === "pending_verification";
@@ -232,7 +242,7 @@ export function EVoucherWorkflowPanel({
     !canSubmit && !canApproveAsTL && !canRejectAsTL && !canApproveAsCEO && !canRejectAsCEO &&
     !canDisburse && !canVerifyAndPost && !canConfirmReceipt && !canConfirmCashReturn &&
     !canOpenLiquidation && !canCloseLiquidation && !canUnlockForCorrection && !canCancel &&
-    !canProcessTransfer;
+    !canProcessTransfer && !canSendBack;
 
   // ── Shared helpers ────────────────────────────────────────────────────────
   const writeHistory = async (action: string, prevStatus: string, newStatus: string, notes?: string) => {
@@ -476,13 +486,19 @@ export function EVoucherWorkflowPanel({
     }
     setIsSubmitting(true);
     try {
-      const targetStatus = rejectingAs === "ceo" ? "pending_manager" : "draft";
-      const action = rejectingAs === "ceo" ? "Rejected by CEO" : "Rejected by Manager";
+      // NEU-098: back-track always returns the voucher to the requestor (draft)
+      // for a full re-traverse of the approval chain — from ANY stage, no
+      // partial mgr/ceo hop. The reason is carried so the requestor knows why.
+      const targetStatus = "draft";
+      const byLabel = rejectingAs === "ceo" ? "the CEO"
+        : rejectingAs === "late" ? "Accounting"
+        : "your Manager";
+      const action = `Sent back to requestor by ${rejectingAs === "ceo" ? "CEO" : rejectingAs === "late" ? "Accounting" : "Manager"}`;
       await transition(targetStatus, action, rejectionReason);
       if (currentUser?.id && requestorId) {
         createWorkflowTicket({
-          subject: `Rejected: ${evoucherNumber}`,
-          body: `Your E-Voucher ${evoucherNumber} was not approved by ${rejectingAs === "ceo" ? "the CEO" : "your Manager"}.\n\nReason: ${rejectionReason}`,
+          subject: `Sent back: ${evoucherNumber}`,
+          body: `Your E-Voucher ${evoucherNumber} was sent back for revision by ${byLabel}.\n\nReason: ${rejectionReason}\n\nUpdate it and resubmit — it will go through the full approval chain again.`,
           type: "fyi",
           priority: "urgent",
           recipientUserId: requestorId,
@@ -502,13 +518,13 @@ export function EVoucherWorkflowPanel({
         entityId: evoucherId,
         kind: "rejected",
         summary: {
-          label: `E-Voucher ${evoucherNumber} rejected`,
+          label: `E-Voucher ${evoucherNumber} sent back for revision`,
           reference: evoucherNumber,
           to_status: targetStatus,
         },
         recipientIds: [requestorId ?? null],
       });
-      toast.success("E-Voucher rejected");
+      toast.success("Sent back to the requestor for revision");
       setShowReject(false);
       setRejectionReason("");
       onStatusChange?.();
@@ -870,6 +886,19 @@ export function EVoucherWorkflowPanel({
           </button>
         )}
 
+        {/* NEU-098: Accounting/Treasury sends a post-approval voucher back to the
+            requestor for revision (full re-traverse). */}
+        {canSendBack && !showReject && (
+          <button
+            onClick={() => { setRejectingAs("late"); setShowReject(true); }}
+            disabled={isSubmitting}
+            style={{ ...btnBase, backgroundColor: "transparent", color: "var(--theme-status-warning-fg)", border: "1px solid var(--theme-status-warning-border, var(--theme-border-default))", cursor: isSubmitting ? "not-allowed" : "pointer" }}
+          >
+            <XCircle size={14} />
+            Send Back to Requestor
+          </button>
+        )}
+
         {/* Inline reject zone */}
         {showReject && (
           <div style={{
@@ -882,7 +911,7 @@ export function EVoucherWorkflowPanel({
               htmlFor="ev-reject-reason"
               style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-status-danger-fg)" }}
             >
-              Reason for rejection — the requestor will see this
+              Reason for sending back — the requestor will see this
             </label>
             <textarea
               id="ev-reject-reason"
@@ -912,7 +941,7 @@ export function EVoucherWorkflowPanel({
                 style={{ flex: 1, padding: "7px", borderRadius: "6px", border: "none", backgroundColor: "var(--theme-status-danger-fg)", color: "#fff", fontSize: "12px", fontWeight: 600, cursor: isSubmitting || !rejectionReason.trim() ? "not-allowed" : "pointer", opacity: !rejectionReason.trim() ? 0.5 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "5px" }}
               >
                 {isSubmitting ? <Loader2 size={12} className="animate-spin" /> : <XCircle size={12} />}
-                Confirm Rejection
+                Send Back
               </button>
             </div>
           </div>
