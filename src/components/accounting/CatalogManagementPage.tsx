@@ -196,7 +196,7 @@ function ItemsTab() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("catalog_items")
-        .select(`${CATALOG_ITEM_SELECT_FIELDS}, catalog_categories(name)`)
+        .select(`${CATALOG_ITEM_SELECT_FIELDS}, account_id, catalog_categories(name)`)
         .order("name");
       if (error) throw error;
       return (data ?? []).map((i: any) => ({
@@ -204,6 +204,7 @@ function ItemsTab() {
         name: i.name,
         category_id: i.category_id,
         category_name: i.catalog_categories?.name ?? null,
+        account_id: i.account_id ?? null,
         created_at: i.created_at,
         updated_at: i.updated_at,
       })) as CatalogItemWithCategoryName[];
@@ -372,7 +373,11 @@ function ItemsTab() {
     const { catalog_categories: _cc, category_name: _cn, ...updates } = editForm as any;
     const nextName = String(updates.name ?? "").trim();
     const nextCategoryId = updates.category_id ?? null;
+    const nextAccountId = (updates.account_id as string | undefined) ?? null;
     if (!nextName) { toast.error("Name is required"); return; }
+    // NEU-091: the COA link is enforced on edit too — an item can never be saved
+    // back to a NULL account. It's the autofill seed for every journal line.
+    if (!nextAccountId) { toast.error("An account (COA) is required — every item must map to one"); return; }
     const duplicate = findCatalogItemDuplicate(items, nextName, nextCategoryId, id);
     if (duplicate) {
       toast.error(`"${duplicate.name}" already exists in this category`);
@@ -382,6 +387,7 @@ function ItemsTab() {
     const { error } = await supabase.from("catalog_items").update({
       name: nextName,
       category_id: nextCategoryId,
+      account_id: nextAccountId,
     }).eq("id", id);
     if (!error) {
       toast.success("Item updated");
@@ -842,6 +848,7 @@ function ItemsTab() {
                     editForm={editForm}
                     setEditForm={setEditForm}
                     categories={categoriesWithCount as CatalogCategory[]}
+                    accounts={accounts}
                     onSave={() => handleSave(item.id)}
                     onCancel={() => setEditingId(null)}
                   />
@@ -850,6 +857,7 @@ function ItemsTab() {
                     key={item.id}
                     item={item}
                     usage={usageCounts[item.id] ?? 0}
+                    accountLabel={accountLabel((item as any).account_id)}
                     hovered={hoveredRow === item.id}
                     onMouseEnter={() => setHoveredRow(item.id)}
                     onMouseLeave={() => setHoveredRow(null)}
@@ -879,6 +887,7 @@ function ItemsTab() {
                   editForm={editForm}
                   setEditForm={setEditForm}
                   categories={categoriesWithCount as CatalogCategory[]}
+                  accounts={accounts}
                   onSave={() => handleSave(item.id)}
                   onCancel={() => setEditingId(null)}
                 />
@@ -887,6 +896,7 @@ function ItemsTab() {
                   key={item.id}
                   item={item}
                   usage={usageCounts[item.id] ?? 0}
+                  accountLabel={accountLabel((item as any).account_id)}
                   hovered={hoveredRow === item.id}
                   onMouseEnter={() => setHoveredRow(item.id)}
                   onMouseLeave={() => setHoveredRow(null)}
@@ -965,11 +975,12 @@ function SideBadge({ side }: { side: "revenue" | "expense" }) {
 // ==================== ITEM VIEW ROW ====================
 
 function ItemViewRow({
-  item, usage, hovered, onMouseEnter, onMouseLeave, onEdit, onDelete, onMove,
+  item, usage, hovered, accountLabel, onMouseEnter, onMouseLeave, onEdit, onDelete, onMove,
 }: {
   item: CatalogItem;
   usage: number;
   hovered: boolean;
+  accountLabel: string;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
   onEdit: () => void;
@@ -1003,6 +1014,25 @@ function ItemViewRow({
         {item.name}
       </span>
 
+      {/* NEU-091: linked COA account — visible on every row so the mapping is
+          never hidden. Muted chip; full label on hover. */}
+      {accountLabel && (
+        <span
+          title={accountLabel}
+          style={{
+            flexShrink: 0, maxWidth: "180px", marginRight: "12px",
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            fontSize: "11px", fontWeight: 500, fontVariantNumeric: "tabular-nums",
+            color: "var(--theme-text-muted)",
+            padding: "2px 8px", borderRadius: "6px",
+            border: "1px solid var(--theme-border-subtle)",
+            backgroundColor: "var(--theme-bg-surface-subtle)",
+          }}
+        >
+          {accountLabel}
+        </span>
+      )}
+
       {/* Usage count */}
       <span style={{
         fontSize: "12px", fontWeight: usage > 0 ? 600 : 400,
@@ -1029,12 +1059,13 @@ function ItemViewRow({
 // ==================== ITEM EDIT ROW ====================
 
 function ItemEditRow({
-  item, editForm, setEditForm, categories, onSave, onCancel,
+  item, editForm, setEditForm, categories, accounts, onSave, onCancel,
 }: {
   item: CatalogItem;
   editForm: Partial<CatalogItem>;
   setEditForm: (f: Partial<CatalogItem>) => void;
   categories: CatalogCategory[];
+  accounts: { id: string; code: string; name: string; type: string; parent_id: string | null; is_active?: boolean }[];
   onSave: () => void;
   onCancel: () => void;
 }) {
@@ -1042,6 +1073,25 @@ function ItemEditRow({
     { value: "", label: "— No category —" },
     ...categories.map(c => ({ value: c.id, label: c.name })),
   ];
+
+  // NEU-091: account options scoped to the edited item's category (leaves under
+  // the category's parent account, else all accounts of that side). Mirrors the
+  // new-item picker so editing the mapping is just as clear as creating it.
+  const editAccountId = (editForm as any).account_id || "";
+  const editCategoryId = (editForm as any).category_id || null;
+  const accountOptions = (() => {
+    const cat = categories.find(c => c.id === editCategoryId) as any;
+    const parentId = cat?.parent_account_id ?? null;
+    const side = cat?.side === "revenue" ? "revenue" : cat?.side === "expense" ? "expense" : null;
+    let pool = accounts.filter(a => a.is_active !== false);
+    if (parentId) {
+      const children = pool.filter(a => a.parent_id === parentId);
+      pool = children.length ? children : (side ? pool.filter(a => a.type === side) : pool);
+    } else if (side) {
+      pool = pool.filter(a => a.type === side);
+    }
+    return pool.map(a => ({ value: a.id, label: `${a.code} · ${a.name}` }));
+  })();
 
   return (
     <div style={{
@@ -1058,12 +1108,30 @@ function ItemEditRow({
         style={{ ...inputStyle, fontWeight: 500, flex: 1 }}
         autoFocus
       />
-      <div style={{ flex: "0 0 160px" }}>
+      <div style={{ flex: "0 0 150px" }}>
         <CustomDropdown
-          value={(editForm as any).category_id || ""}
+          value={editCategoryId || ""}
           options={categoryOptions}
           onChange={val => setEditForm({ ...editForm, category_id: val || null } as any)}
           placeholder="— No category —"
+          size="sm"
+        />
+      </div>
+      {/* NEU-091: linked account (COA) — required, autofill seed for journal lines.
+          Red ring when empty so the requirement is unmistakable. */}
+      <div
+        style={{
+          flex: "0 0 210px",
+          borderRadius: "8px",
+          boxShadow: editAccountId ? "none" : "0 0 0 1px var(--theme-status-danger-fg)",
+        }}
+        title="Linked account (COA) — seeds every journal line for this item"
+      >
+        <CustomDropdown
+          value={editAccountId}
+          options={accountOptions}
+          onChange={val => setEditForm({ ...editForm, account_id: val || null } as any)}
+          placeholder="Account (COA) *"
           size="sm"
         />
       </div>

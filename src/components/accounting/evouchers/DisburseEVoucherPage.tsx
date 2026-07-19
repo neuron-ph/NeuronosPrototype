@@ -168,9 +168,6 @@ export function DisburseEVoucherPage() {
   const [sourceAccountName, setSourceAccountName] = useState("");
   const [sourceAccountCode, setSourceAccountCode] = useState("");
 
-  const [expenseAccountId, setExpenseAccountId] = useState("");
-  const [expenseAccountName, setExpenseAccountName] = useState("");
-  const [expenseAccountCode, setExpenseAccountCode] = useState("");
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
   const [reference, setReference] = useState("");
@@ -275,10 +272,11 @@ export function DisburseEVoucherPage() {
   const cashBase = hasDisbRate
     ? toBaseAmount({ amount, currency: voucherCurrency, exchangeRate: disbursementRate })
     : 0;
-  // For multi-step (cash advance) flows: realized FX between voucher rate and disbursement rate.
-  // Reimbursements settle in one step at the disbursement rate, so AP carrying
-  // value is by definition the cash value — no FX delta.
-  const realizesFx = isForeignVoucher && !settlesDirectly && hasUsableRate && hasDisbRate;
+  // Realized FX between the carrying rate (payable/advance recognized at the
+  // voucher's locked rate) and the disbursement-day rate. Now applies to BOTH
+  // flows: the AP two-step recognizes the payable at approval, so a direct-settle
+  // expense can also realize FX when cash goes out at a different rate.
+  const realizesFx = isForeignVoucher && hasUsableRate && hasDisbRate;
   const fxDelta = realizesFx ? roundMoney(cashBase - apBase) : 0;
   // For E-Voucher disbursement we DR Advances (carrying) and CR Cash (paid).
   // If cash > AP → DR FX Loss (we paid more PHP than we owed).
@@ -310,16 +308,19 @@ export function DisburseEVoucherPage() {
   const sourceAccounts = accounts.filter(
     (a) => a.type === "asset" || a.type === "cash" || a.type === "bank"
   );
-  const expenseAccounts = accounts.filter((a) => a.type === "expense" || a.type === "cost").length > 0
-    ? accounts.filter((a) => a.type === "expense" || a.type === "cost")
-    : accounts;
+  // AP two-step: a direct-settle disbursement clears the payable recognized at
+  // approval (Dr Accounts Payable / Cr Cash) rather than debiting an expense. The
+  // account is the default AP-Trade; it's editable at journal finalize like any
+  // other TJ line (e.g. to a sub-payable that matched the recognition).
+  const apAccount =
+    accounts.find((a) => a.id === "coa-2000") ??
+    { id: "coa-2000", code: "2000", name: "Accounts Payable - Trade" };
 
   const canConfirm =
     canDisburse &&
     !!sourceAccountId &&
     !!paymentMethod &&
     (!refRequired || !!reference.trim()) &&
-    (!settlesDirectly || !!expenseAccountId) &&
     (settlesDirectly || !!receiverId) &&
     hasUsableRate &&
     (!isForeignVoucher || hasDisbRate) &&
@@ -351,78 +352,63 @@ export function DisburseEVoucherPage() {
           }
         : {};
 
-      // NEU-044: neutral JE description — direct-settle now covers reimbursement,
-      // expense, and direct expense (not just reimbursement).
-      const directDesc = `${TRANSACTION_TYPE_LABELS[evoucher.transaction_type] ?? "Expense"} — ${evoucherNumber}`;
+      // AP two-step + advances now share one shape: DR the carrying account at the
+      // locked rate, CR Cash at the disbursement rate, realize FX on any delta.
+      //   direct-settle expense → DR Accounts Payable (clears the payable recognized
+      //                           at approval; Dr AP / Cr Cash)
+      //   advance             → DR Employee Cash Advances Receivable (Dr 1150 / Cr Cash)
+      const carryingAccount = settlesDirectly
+        ? { id: apAccount.id, code: apAccount.code, name: apAccount.name }
+        : {
+            id: advancesReceivable?.id ?? "sys-adv-recv-001",
+            code: advancesReceivable?.code ?? "1150",
+            name: advancesReceivable?.name ?? "Employee Cash Advances Receivable",
+          };
+      const carryingDesc = settlesDirectly
+        ? `AP settled — ${evoucherNumber}`
+        : `Cash advance disbursed — ${evoucherNumber}`;
 
-      let lines;
-      if (settlesDirectly) {
-        // Direct-settle types post in one step at the disbursement rate — no FX delta.
-        lines = [
-          {
-            account_id: expenseAccountId,
-            account_code: expenseAccountCode,
-            account_name: expenseAccountName,
-            debit: cashBase,
-            credit: 0,
-            description: directDesc,
-            ...(isForeignVoucher ? { foreign_debit: foreignAmount, foreign_credit: 0, ...fxLineMeta(disbursementRate) } : {}),
-          },
-          {
-            account_id: sourceAccountId,
-            account_code: sourceAccountCode,
-            account_name: sourceAccountName,
-            debit: 0,
-            credit: cashBase,
-            description: directDesc,
-            ...(isForeignVoucher ? { foreign_debit: 0, foreign_credit: foreignAmount, ...fxLineMeta(disbursementRate) } : {}),
-          },
-        ];
-      } else {
-        // Multi-step: DR Advances at carrying value (locked rate), CR Cash at disbursement rate.
-        // Difference is realized FX gain/loss.
-        lines = [
-          {
-            account_id: advancesReceivable?.id ?? "sys-adv-recv-001",
-            account_code: advancesReceivable?.code ?? "1150",
-            account_name: advancesReceivable?.name ?? "Employee Cash Advances Receivable",
-            debit: apBase,
-            credit: 0,
-            description: `Cash advance disbursed — ${evoucherNumber}`,
-            ...(isForeignVoucher ? { foreign_debit: foreignAmount, foreign_credit: 0, ...fxLineMeta(lockedRate) } : {}),
-          },
-          {
-            account_id: sourceAccountId,
-            account_code: sourceAccountCode,
-            account_name: sourceAccountName,
-            debit: 0,
-            credit: cashBase,
-            description: `Cash advance disbursed — ${evoucherNumber}`,
-            ...(isForeignVoucher ? { foreign_debit: 0, foreign_credit: foreignAmount, ...fxLineMeta(disbursementRate) } : {}),
-          },
-        ];
+      const lines: any[] = [
+        {
+          account_id: carryingAccount.id,
+          account_code: carryingAccount.code,
+          account_name: carryingAccount.name,
+          debit: apBase,
+          credit: 0,
+          description: carryingDesc,
+          ...(isForeignVoucher ? { foreign_debit: foreignAmount, foreign_credit: 0, ...fxLineMeta(lockedRate) } : {}),
+        },
+        {
+          account_id: sourceAccountId,
+          account_code: sourceAccountCode,
+          account_name: sourceAccountName,
+          debit: 0,
+          credit: cashBase,
+          description: carryingDesc,
+          ...(isForeignVoucher ? { foreign_debit: 0, foreign_credit: foreignAmount, ...fxLineMeta(disbursementRate) } : {}),
+        },
+      ];
 
-        // 3rd line: realized FX gain/loss (only if non-trivial).
-        if (realizesFx && fxAbs >= 0.005) {
-          if (fxIsLoss && fxLossAccount) {
-            lines.push({
-              account_id: fxLossAccount.id,
-              account_code: fxLossAccount.code,
-              account_name: fxLossAccount.name,
-              debit: fxAbs,
-              credit: 0,
-              description: `Realized FX loss — ${evoucherNumber}`,
-            } as any);
-          } else if (fxIsGain && fxGainAccount) {
-            lines.push({
-              account_id: fxGainAccount.id,
-              account_code: fxGainAccount.code,
-              account_name: fxGainAccount.name,
-              debit: 0,
-              credit: fxAbs,
-              description: `Realized FX gain — ${evoucherNumber}`,
-            } as any);
-          }
+      // 3rd line: realized FX gain/loss (only if non-trivial).
+      if (realizesFx && fxAbs >= 0.005) {
+        if (fxIsLoss && fxLossAccount) {
+          lines.push({
+            account_id: fxLossAccount.id,
+            account_code: fxLossAccount.code,
+            account_name: fxLossAccount.name,
+            debit: fxAbs,
+            credit: 0,
+            description: `Realized FX loss — ${evoucherNumber}`,
+          });
+        } else if (fxIsGain && fxGainAccount) {
+          lines.push({
+            account_id: fxGainAccount.id,
+            account_code: fxGainAccount.code,
+            account_name: fxGainAccount.name,
+            debit: 0,
+            credit: fxAbs,
+            description: `Realized FX gain — ${evoucherNumber}`,
+          });
         }
       }
 
@@ -440,7 +426,7 @@ export function DisburseEVoucherPage() {
         id: entryId,
         entry_date: disbDate,
         evoucher_id: evoucher.id,
-        kind: settlesDirectly ? "expense" : "advance",
+        kind: settlesDirectly ? "disbursement" : "advance",
         disburse_to_user_id: settlesDirectly ? null : effectiveReceiverId,
         description: `Disbursement — ${evoucherNumber} via ${paymentMethod}${reference ? ` [${reference}]` : ""}`,
         lines,
@@ -732,20 +718,16 @@ export function DisburseEVoucherPage() {
               }}>
                 <div>
                   <div style={{ fontSize: "9px", fontWeight: 700, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "4px" }}>DR</div>
-                  {settlesDirectly ? (
-                    <div style={{ fontSize: "12px", color: expenseAccountId ? "var(--theme-text-primary)" : "var(--theme-text-muted)", fontStyle: expenseAccountId ? "normal" : "italic" }}>
-                      {expenseAccountId ? `${expenseAccountCode} — ${expenseAccountName}` : "Select expense account →"}
-                    </div>
-                  ) : (
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: "5px" }}>
-                      <Lock size={10} style={{ color: "var(--theme-text-muted)", marginTop: "2px", flexShrink: 0 }} />
-                      <span style={{ fontSize: "12px", color: "var(--theme-text-primary)", lineHeight: 1.4 }}>
-                        {advancesReceivable ? `${advancesReceivable.code} — ${advancesReceivable.name}` : "1150 — Employee Cash Advances Receivable"}
-                      </span>
-                    </div>
-                  )}
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: "5px" }}>
+                    <Lock size={10} style={{ color: "var(--theme-text-muted)", marginTop: "2px", flexShrink: 0 }} />
+                    <span style={{ fontSize: "12px", color: "var(--theme-text-primary)", lineHeight: 1.4 }}>
+                      {settlesDirectly
+                        ? `${apAccount.code} — ${apAccount.name}`
+                        : (advancesReceivable ? `${advancesReceivable.code} — ${advancesReceivable.name}` : "1150 — Employee Cash Advances Receivable")}
+                    </span>
+                  </div>
                 </div>
-                <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-text-primary)", textAlign: "right", paddingTop: "18px" }}>{PHP.format(settlesDirectly ? cashBase : apBase)}</span>
+                <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-text-primary)", textAlign: "right", paddingTop: "18px" }}>{PHP.format(apBase)}</span>
                 <span style={{ fontSize: "12px", color: "var(--theme-text-muted)", textAlign: "right", paddingTop: "18px" }}>—</span>
               </div>
 
@@ -898,21 +880,6 @@ export function DisburseEVoucherPage() {
                     )}
                   </div>
                 )}
-                {settlesDirectly && (
-                  <AccountSelect
-                    label="Expense Account (DR) *"
-                    id="disb-expense-account"
-                    accounts={expenseAccounts}
-                    value={expenseAccountId}
-                    onChange={(id, acct) => {
-                      setExpenseAccountId(id);
-                      setExpenseAccountName(acct.name);
-                      setExpenseAccountCode(acct.code);
-                    }}
-                    placeholder="Select expense account…"
-                  />
-                )}
-
                 <AccountSelect
                   label="Source Account — Cash or Bank (CR) *"
                   id="disb-source-account"

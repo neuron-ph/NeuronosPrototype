@@ -11,6 +11,7 @@ import { toast } from "sonner@2.0.3";
 import { LiquidationForm } from "./LiquidationForm";
 import { postJournalEntry } from "../../../utils/accounting/postTransactionJournal";
 import { buildTransferEntry } from "../../../utils/accounting/buildTransferEntry";
+import { ensureExpensePayableEntry } from "../../../utils/accounting/buildExpensePayableEntry";
 import type { EVoucherAPType } from "../../../types/evoucher";
 import { ensureBillableExpenseBillingItem } from "../../../utils/evoucherApproval";
 import { recordNotificationEvent } from "../../../utils/notifications";
@@ -277,6 +278,21 @@ export function EVoucherWorkflowPanel({
       );
     }
     await writeHistory(action, currentStatus, newStatus, notes);
+
+    // AP two-step: arriving at `pending_accounting` = final approval. Recognize
+    // the payable (Dr Expense / Cr AP) into the Transaction Journal BEFORE
+    // disbursement. Idempotent + advance-exempt inside the helper. Wrapped so a
+    // recognition hiccup never rolls back the approval that already committed.
+    if (newStatus === "pending_accounting") {
+      try {
+        await ensureExpensePayableEntry(evoucherId, evoucherNumber, {
+          id: currentUser?.id ?? "",
+          name: currentUser?.name ?? null,
+        });
+      } catch (e) {
+        console.error("[payable] recognition failed:", e);
+      }
+    }
   };
 
   // NEU-095: the Executive approver (Mark) processes a fund transfer — builds the
