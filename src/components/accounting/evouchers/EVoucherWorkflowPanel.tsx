@@ -669,12 +669,23 @@ export function EVoucherWorkflowPanel({
 
       // NEU-100: acknowledging receipt releases the disbursement entry for posting
       // (awaiting_ack → ready_to_post). Treasury can then post it in the TJ.
-      await supabase
+      // The receiver is permitted to flip only their own advance entry via the
+      // journal_entries_update_ack RLS carve-out (migration 248). Guard the write:
+      // an RLS-blocked UPDATE affects 0 rows without throwing, so without this the
+      // entry would silently strand at awaiting_ack (the original bug).
+      const { data: ackData, error: ackError } = await supabase
         .from("journal_entries")
         .update({ status: "ready_to_post", acknowledged_at: now, acknowledged_by: userId, updated_at: now })
         .eq("evoucher_id", evoucherId)
         .eq("kind", "advance")
-        .eq("status", "awaiting_ack");
+        .eq("status", "awaiting_ack")
+        .select("id");
+      if (ackError) throw ackError;
+      if (isAdvanceType && (!ackData || ackData.length === 0)) {
+        throw new Error(
+          "Receipt was recorded, but the cash-advance entry couldn't be released for posting (a permissions issue). Please refresh and try again, or ask Accounting.",
+        );
+      }
 
       await writeHistory(
         "Cash Receipt Confirmed",
