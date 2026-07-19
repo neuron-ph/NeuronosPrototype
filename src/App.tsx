@@ -44,6 +44,7 @@ const GeneralJournal = lazy(() => import("./components/accounting/journal/Genera
 const HR = lazy(() => import("./components/HR").then((module) => ({ default: module.HR })));
 const InboxPage = lazy(() => import("./components/InboxPage").then((module) => ({ default: module.InboxPage })));
 const MyEVouchersPage = lazy(() => import("./components/MyEVouchersPage").then((module) => ({ default: module.MyEVouchersPage })));
+const ApprovalsPage = lazy(() => import("./components/ApprovalsPage").then((module) => ({ default: module.ApprovalsPage })));
 const DisburseEVoucherPage = lazy(() => import("./components/accounting/evouchers/DisburseEVoucherPage").then((module) => ({ default: module.DisburseEVoucherPage })));
 const ActivityLogPage = lazy(() => import("./components/ActivityLogPage").then((module) => ({ default: module.ActivityLogPage })));
 const EmployeeProfile = lazy(() => import("./components/EmployeeProfile").then((module) => ({ default: module.EmployeeProfile })));
@@ -273,6 +274,7 @@ function RouteWrapper({ children, page }: { children: React.ReactNode; page: str
     if (path.startsWith("/accounting/catalog")) return "acct-catalog";
     if (path.startsWith("/hr")) return "hr";
     if (path.startsWith("/calendar")) return "calendar";
+    if (path.startsWith("/approvals")) return "approvals";
     if (path.startsWith("/my-evouchers")) return "my-evouchers";
     if (path.startsWith("/inbox")) return "inbox";
     if (path.startsWith("/activity-log")) return "activity-log";
@@ -329,6 +331,7 @@ function RouteWrapper({ children, page }: { children: React.ReactNode; page: str
       "hr": "/hr",
       "calendar": "/calendar",
       "inbox": "/inbox",
+      "approvals": "/approvals",
       "my-evouchers": "/my-evouchers",
       "activity-log": "/activity-log",
       "settings": "/settings",
@@ -988,6 +991,14 @@ function InboxPageWrapper() {
   );
 }
 
+function ApprovalsPageWrapper() {
+  return (
+    <RouteWrapper page="approvals">
+      <ApprovalsPage />
+    </RouteWrapper>
+  );
+}
+
 function MyEVouchersPageWrapper() {
   return (
     <RouteWrapper page="my-evouchers">
@@ -1268,6 +1279,9 @@ function AppContent() {
         <Route element={<GuardedLayout requiredPermission={{ moduleId: "inbox", action: "view" }} />}>
           <Route path="/inbox" element={<InboxPageWrapper />} />
         </Route>
+        {/* Approvals — self-scoping: RLS returns only items routed to the current
+            user, so no hard module gate (a non-approver simply sees an empty queue). */}
+        <Route path="/approvals" element={<ApprovalsPageWrapper />} />
         <Route element={<GuardedLayout requiredPermission={{ moduleId: "my_evouchers", action: "view" }} />}>
           <Route path="/my-evouchers" element={<MyEVouchersPageWrapper />} />
         </Route>

@@ -68,7 +68,10 @@ export function MyEVouchersPage() {
   const canCreateEvoucher = can("my_evouchers", "create");
   const canApproveMgrGate = can("my_evouchers", "approve");
   const isExecutive = can("acct_evouchers", "approve");
-  const showApprovalQueue = canApproveMgrGate || isExecutive;
+  // Retired: the "Needs Your Approval" panel moved to the dedicated Approvals
+  // module (/approvals), which unifies e-voucher AND invoice sign-offs in one
+  // place. This page is back to just your requests + department view.
+  const showApprovalQueue = false;
   const showScopeFilter = canApproveMgrGate || isExecutive;
 
   // ── UI state ────────────────────────────────────────────────────────────
