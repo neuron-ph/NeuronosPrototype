@@ -1,13 +1,18 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../utils/supabase/client";
 import { useUser } from "../hooks/useUser";
 import { usePermission } from "../context/PermissionProvider";
 import { useEVouchers } from "../hooks/useEVouchers";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner@2.0.3";
-import { FileText, ReceiptText, ArrowRightLeft, ShieldCheck, Loader2, X, Check } from "lucide-react";
+import { FileText, ReceiptText, ArrowRightLeft, Loader2, X, Check, Search } from "lucide-react";
 import { EVoucherDetailView } from "./accounting/EVoucherDetailView";
+import { DataTable, type ColumnDef } from "./common/DataTable";
+import { TablePagination } from "./shared/TablePagination";
+import { CustomDropdown } from "./bd/CustomDropdown";
 import type { EVoucher } from "../types/evoucher";
+
+const PAGE_SIZE = 15;
 
 const PHP = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" });
 
@@ -107,6 +112,66 @@ export function ApprovalsPage() {
   const iconFor = (row: ApprovalRow) =>
     row.kind === "invoice" ? ReceiptText : row.label === "Transfer of Funds" ? ArrowRightLeft : FileText;
 
+  // ── Filter + paginate client-side, like the other module list pages ──
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"all" | "evoucher" | "invoice">("all");
+  const [page, setPage] = useState(0);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (typeFilter !== "all" && r.kind !== typeFilter) return false;
+      if (!q) return true;
+      return r.number.toLowerCase().includes(q) || r.who.toLowerCase().includes(q);
+    });
+  }, [rows, search, typeFilter]);
+
+  useEffect(() => { setPage(0); }, [search, typeFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageSafe = Math.min(page, totalPages - 1);
+  const paged = filtered.slice(pageSafe * PAGE_SIZE, pageSafe * PAGE_SIZE + PAGE_SIZE);
+
+  const openRow = (r: ApprovalRow) =>
+    r.kind === "evoucher" ? setOpenEV(r.raw as EVoucher) : setOpenInvoice(r.raw);
+
+  const columns: ColumnDef<ApprovalRow>[] = [
+    {
+      header: "Type", width: "150px",
+      cell: (r) => {
+        const Icon = iconFor(r);
+        return (
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Icon size={15} style={{ color: "var(--theme-action-primary-bg)", flexShrink: 0 }} />
+            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--theme-text-secondary)" }}>{r.label}</span>
+          </div>
+        );
+      },
+    },
+    {
+      header: "Reference",
+      cell: (r) => (
+        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--theme-action-primary-bg)", fontVariantNumeric: "tabular-nums" }}>{r.number}</span>
+      ),
+    },
+    {
+      header: "From",
+      cell: (r) => (
+        <span style={{ fontSize: 13, color: "var(--theme-text-secondary)" }}>{r.who}</span>
+      ),
+    },
+    {
+      header: "Amount", align: "right", width: "160px",
+      cell: (r) => (
+        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--theme-text-primary)", fontVariantNumeric: "tabular-nums" }}>{PHP.format(r.amount)}</span>
+      ),
+    },
+    {
+      header: "Age", align: "right", width: "90px", mobileHidden: true,
+      cell: (r) => (<span style={{ fontSize: 12, color: "var(--theme-text-muted)" }}>{ago(r.date)} ago</span>),
+    },
+  ];
+
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", overflow: "auto", background: "var(--theme-bg-surface)" }}>
       <div style={{ padding: "32px 48px" }}>
@@ -128,70 +193,48 @@ export function ApprovalsPage() {
           )}
         </div>
 
-        {loading && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--theme-text-muted)", padding: 24 }}>
-            <Loader2 size={16} className="animate-spin" /> Loading your approvals…
+        {/* Search + type filter — like the other module list pages */}
+        <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+          <div style={{ position: "relative", flex: 1 }}>
+            <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--theme-text-muted)" }} />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by number or requestor…"
+              style={{ width: "100%", height: 40, padding: "0 12px 0 38px", borderRadius: 8, border: "1px solid var(--theme-border-default)", fontSize: 13, outline: "none", backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-primary)", boxSizing: "border-box" }}
+            />
           </div>
-        )}
+          <div style={{ width: 200 }}>
+            <CustomDropdown
+              value={typeFilter}
+              options={[
+                { value: "all", label: "All types" },
+                { value: "evoucher", label: "E-Vouchers" },
+                { value: "invoice", label: "Invoices" },
+              ]}
+              onChange={(v) => setTypeFilter((v as "all" | "evoucher" | "invoice") || "all")}
+            />
+          </div>
+        </div>
 
-        {!loading && rows.length === 0 && (
-          <div style={{
-            border: "1px solid var(--theme-border-default)", borderRadius: 10, padding: "48px 24px",
-            textAlign: "center", color: "var(--theme-text-muted)", backgroundColor: "var(--theme-bg-surface)",
-          }}>
-            <ShieldCheck size={28} style={{ color: "var(--theme-status-success-fg)", marginBottom: 10 }} />
-            <div style={{ fontSize: 14, fontWeight: 500, color: "var(--theme-text-secondary)" }}>All clear</div>
-            <div style={{ fontSize: 13, marginTop: 4 }}>Nothing is pending your approval right now.</div>
-          </div>
-        )}
+        <DataTable
+          data={paged}
+          columns={columns}
+          isLoading={loading}
+          onRowClick={openRow}
+          emptyMessage={rows.length === 0
+            ? "All clear — nothing is pending your approval right now."
+            : "No approvals match your search."}
+        />
 
-        {!loading && rows.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {rows.map((row) => {
-              const Icon = iconFor(row);
-              return (
-                <button
-                  key={`${row.kind}-${row.id}`}
-                  onClick={() => (row.kind === "evoucher" ? setOpenEV(row.raw as EVoucher) : setOpenInvoice(row.raw))}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 14, width: "100%", textAlign: "left",
-                    padding: "14px 18px", borderRadius: 10, cursor: "pointer",
-                    border: "1px solid var(--theme-border-default)", backgroundColor: "var(--theme-bg-surface)",
-                  }}
-                >
-                  <div style={{
-                    width: 38, height: 38, borderRadius: 9, flexShrink: 0,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    backgroundColor: "var(--theme-bg-surface-subtle)", border: "1px solid var(--theme-border-subtle)",
-                  }}>
-                    <Icon size={18} style={{ color: "var(--theme-action-primary-bg)" }} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--theme-text-primary)" }}>{row.number}</span>
-                      <span style={{
-                        fontSize: 10, fontWeight: 700, letterSpacing: "0.03em", textTransform: "uppercase",
-                        color: "var(--theme-text-muted)", backgroundColor: "var(--theme-bg-surface-subtle)",
-                        border: "1px solid var(--theme-border-subtle)", borderRadius: 5, padding: "1px 6px",
-                      }}>{row.label}</span>
-                    </div>
-                    <div style={{ fontSize: 12, color: "var(--theme-text-muted)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {row.who}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "right", flexShrink: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--theme-text-primary)", fontVariantNumeric: "tabular-nums" }}>
-                      {PHP.format(row.amount)}
-                    </div>
-                    <div style={{ fontSize: 11, color: "var(--theme-text-muted)", marginTop: 2 }}>{ago(row.date)} ago</div>
-                  </div>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--theme-action-primary-bg)", flexShrink: 0 }}>
-                    Review →
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+        {filtered.length > PAGE_SIZE && (
+          <TablePagination
+            page={pageSafe}
+            totalPages={totalPages}
+            total={filtered.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+          />
         )}
       </div>
 
