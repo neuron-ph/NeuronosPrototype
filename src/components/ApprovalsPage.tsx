@@ -108,20 +108,25 @@ export function ApprovalsPage() {
     row.kind === "invoice" ? ReceiptText : row.label === "Transfer of Funds" ? ArrowRightLeft : FileText;
 
   return (
-    <div style={{ height: "100%", overflow: "auto", backgroundColor: "var(--theme-bg-page)" }}>
-      <div style={{ maxWidth: 860, margin: "0 auto", padding: "40px 32px" }}>
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 4 }}>
-          <h1 style={{ fontSize: 32, fontWeight: 600, color: "var(--theme-text-primary)", margin: 0 }}>Approvals</h1>
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", overflow: "auto", background: "var(--theme-bg-surface)" }}>
+      <div style={{ padding: "32px 48px" }}>
+        {/* Header — matches the standard Neuron module shell: full-width,
+            left-aligned title + subtitle (no centered column). */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 32 }}>
+          <div>
+            <h1 style={{ fontSize: 32, fontWeight: 600, letterSpacing: "-1.2px", color: "var(--theme-text-primary)", margin: "0 0 4px" }}>
+              Approvals
+            </h1>
+            <p style={{ fontSize: 14, color: "var(--theme-text-muted)", margin: 0 }}>
+              Everything across Neuron that needs your sign-off, in one place.
+            </p>
+          </div>
           {!loading && rows.length > 0 && (
-            <span style={{ fontSize: 13, color: "var(--theme-text-muted)" }}>
+            <span style={{ fontSize: 13, color: "var(--theme-text-muted)", flexShrink: 0, marginTop: 6 }}>
               {rows.length} waiting on you
             </span>
           )}
         </div>
-        <p style={{ fontSize: 13, color: "var(--theme-text-muted)", margin: "0 0 28px" }}>
-          Everything across Neuron that needs your sign-off, in one place.
-        </p>
 
         {loading && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--theme-text-muted)", padding: 24 }}>

@@ -779,6 +779,14 @@ export function AddRequestForPaymentPanel({
   const isBillingMode = transactionType === "billing";
   const isFundTransfer = transactionType === "fund_transfer"; // NEU-095
 
+  // UX: Transfer of Funds is a treasury/accounting instrument (routes to the
+  // Executive to process). Hide it from users who can't create accounting
+  // vouchers — otherwise they pick a type they can't complete. Still shown when
+  // already editing a transfer, so its label resolves.
+  const typeOptions = (can("acct_evouchers", "create") || isFundTransfer)
+    ? TRANSACTION_TYPE_OPTIONS
+    : TRANSACTION_TYPE_OPTIONS.filter((o) => o.value !== "fund_transfer");
+
   // NEU-088: expense-type vouchers no longer carry a typed Description/Purpose —
   // the title is auto-generated. Billing/Collection (and BD) keep their typed title.
   const autoTitleMode =
@@ -1245,7 +1253,7 @@ export function AddRequestForPaymentPanel({
                         // NEU-090: one canonical list on every entry surface
                         // (was 3 divergent per-context lists). Source of truth:
                         // evoucherTransactionType.ts.
-                        options={TRANSACTION_TYPE_OPTIONS}
+                        options={typeOptions}
                         placeholder="Select type"
                         disabled={isViewMode}
                       />
@@ -1588,12 +1596,22 @@ export function AddRequestForPaymentPanel({
                             {!isBillingMode && !isCollectionMode && !isCashAdvance && (
                               <tr style={{ borderBottom: "1px solid var(--theme-border-subtle)" }}>
                                 <td colSpan={!isViewMode ? 4 : 3} style={{ padding: "0 16px 10px 16px" }}>
+                                  {(() => {
+                                    // Flag a content-bearing line that isn't linked to a booking.
+                                    // Office Expense (direct_expense) is booking-optional, so no flag there.
+                                    const needsBooking = !isViewMode
+                                      && transactionType !== "direct_expense"
+                                      && !item.booking_id
+                                      && (item.particular.trim() !== "" || item.amount > 0);
+                                    return (
                                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                    <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.03em", whiteSpace: "nowrap" }}>Booking</span>
+                                    <span style={{ fontSize: "11px", fontWeight: 700, color: needsBooking ? "var(--theme-status-warning-fg)" : "var(--theme-text-secondary)", textTransform: "uppercase", letterSpacing: "0.03em", whiteSpace: "nowrap" }}>
+                                      Booking{needsBooking ? " *" : ""}
+                                    </span>
                                     {isViewMode ? (
                                       <span style={{ fontSize: "13px", color: "var(--theme-text-secondary)" }}>{bookingOptions.find(o => o.value === item.booking_id)?.number || "—"}</span>
                                     ) : (
-                                      <div style={{ flex: "0 1 300px", minWidth: 0 }}>
+                                      <div style={{ flex: "0 1 300px", minWidth: 0, borderRadius: "8px", boxShadow: needsBooking ? "0 0 0 1px var(--theme-status-warning-fg)" : "none" }}>
                                         <CustomDropdown
                                           fullWidth
                                           searchable
@@ -1607,7 +1625,12 @@ export function AddRequestForPaymentPanel({
                                         />
                                       </div>
                                     )}
+                                    {needsBooking && (
+                                      <span style={{ fontSize: "11px", color: "var(--theme-status-warning-fg)", whiteSpace: "nowrap" }}>needs a booking</span>
+                                    )}
                                   </div>
+                                    );
+                                  })()}
                                 </td>
                               </tr>
                             )}
