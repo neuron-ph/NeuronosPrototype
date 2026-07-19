@@ -1008,10 +1008,11 @@ export function InvoiceBuilder({
     setIsApproving(true);
     try {
       const now = new Date().toISOString();
-      const { error } = await supabase
-        .from("invoices")
-        .update({ approval_status: "approved", approved_by: user.id, approved_at: now, updated_at: now })
-        .eq("id", (viewInvoice as any).id);
+      // NEU-103 / Approvals: approve via a SECURITY DEFINER RPC. The designated
+      // approver (e.g. the Operations manager) often lacks general invoice-edit +
+      // record visibility, so a direct UPDATE is blocked by RLS. The RPC enforces
+      // "am I this invoice's approver" server-side, then flips the status.
+      const { error } = await supabase.rpc("approve_invoice", { p_invoice_id: (viewInvoice as any).id });
       if (error) throw error;
       const actor = { id: user.id, name: user.name, department: user.department ?? "" };
       logActivity("invoice", (viewInvoice as any).id, viewInvoice.invoice_number ?? (viewInvoice as any).id, "approved", actor);
