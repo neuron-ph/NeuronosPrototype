@@ -512,6 +512,7 @@ export function DisburseEVoucherPage() {
             recipientUserId: evoucher.requestor_id,
             linkedRecordType: "expense",
             linkedRecordId: evoucher.id,
+            linkedRecordLabel: evoucherNumber, // show EV-… not the raw internal id
             createdBy: user.id,
             createdByName: user.name,
             createdByDept: user.department || "Accounting",
@@ -526,6 +527,7 @@ export function DisburseEVoucherPage() {
           recipientUserId: effectiveReceiverId,
           linkedRecordType: "expense",
           linkedRecordId: evoucher.id,
+          linkedRecordLabel: evoucherNumber, // show EV-… not the raw internal id
           createdBy: user.id,
           createdByName: user.name,
           createdByDept: user.department || "Accounting",
