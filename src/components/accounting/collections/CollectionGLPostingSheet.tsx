@@ -502,10 +502,15 @@ export function CollectionGLPostingSheet({
       const now = new Date().toISOString();
 
       // 1. Create PHP-balanced journal entry with FX metadata.
+      // NEU-106: this no longer posts straight to the ledger. It lands in the
+      // Transaction Journal as `ready_to_post` + kind='collection'; Accounting
+      // confirms it there ("Submit for Posting") and only then does it hit the
+      // General Journal / balances.
       const { error: jeError } = await supabase.from("journal_entries").insert({
         id: entryId,
         entry_date: now,
         collection_id: collectionId,
+        kind: "collection",
         description,
         lines,
         total_debit: roundMoney(totalDebit),
@@ -516,7 +521,7 @@ export function CollectionGLPostingSheet({
         source_amount: roundMoney(postingAmount),
         base_amount: cashBaseAmount,
         exchange_rate_date: rateDate,
-        status: "posted",
+        status: "ready_to_post",
         created_at: now,
         updated_at: now,
       });
@@ -547,7 +552,7 @@ export function CollectionGLPostingSheet({
       if (colError) throw colError;
 
       toast.success(
-        "Collection posted to GL",
+        "Collection queued in the Transaction Journal",
         fxDelta !== 0
           ? `Realized FX ${isFxGain ? "gain" : "loss"} ${formatMoney(Math.abs(fxDelta), FUNCTIONAL_CURRENCY)} recognised`
           : `DR ${debitAccountName} / CR ${creditAccountName}`,
@@ -649,7 +654,7 @@ export function CollectionGLPostingSheet({
       </button>
       {isAlreadyPosted ? (
         <span style={{ fontSize: "13px", color: "var(--theme-status-success-fg)", fontWeight: 500 }}>
-          Already posted to GL
+          Entry already queued
         </span>
       ) : (
         <button
@@ -841,7 +846,7 @@ export function CollectionGLPostingSheet({
             }}
           >
             <p style={{ fontSize: "12px", color: "var(--theme-status-success-fg)", fontWeight: 500 }}>
-              This collection already has a linked journal entry and cannot be posted again.
+              This collection already has a journal entry queued in the Transaction Journal — it can't be queued again.
             </p>
           </div>
         )}

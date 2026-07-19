@@ -1,10 +1,13 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2, Loader2, AlertTriangle, Paperclip, FileText, Image as ImageIcon, ExternalLink, X } from "lucide-react";
 import { supabase } from "../../../utils/supabase/client";
 import { logCreation, logStatusChange } from "../../../utils/activityLog";
 import { createWorkflowTicket } from "../../../utils/workflowTickets";
 import { toast } from "sonner@2.0.3";
 import { SidePanel } from "../../common/SidePanel";
+import { CatalogItemCombobox } from "../../shared/pricing/CatalogItemCombobox";
+import { CustomDropdown } from "../../bd/CustomDropdown";
+import { buildLiquidationClosingEntry } from "../../../utils/accounting/buildLiquidationClosingEntry";
 import type { LiquidationLineItem } from "../../../types/evoucher";
 
 interface LiquidationFormProps {
@@ -28,8 +31,13 @@ function newLineItem(): LiquidationLineItem {
     id: `li-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     description: "",
     amount: 0,
+    particular: "",
+    catalog_item_id: null,
+    booking_id: null,
   };
 }
+
+type BookingOption = { value: string; label: string; number: string };
 
 type ReceiptMeta = {
   url: string;
@@ -65,7 +73,29 @@ export function LiquidationForm({
   const [unusedReturn, setUnusedReturn] = useState<string>("");
   const [isFinal, setIsFinal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [bookingOptions, setBookingOptions] = useState<BookingOption[]>([]);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // NEU-094: bookings for the per-line booking picker (D1 attribution).
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    supabase
+      .from("bookings")
+      .select("id, booking_number")
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        if (cancelled) return;
+        setBookingOptions(
+          (data ?? []).map((b: any) => ({
+            value: b.id,
+            label: b.booking_number || b.id,
+            number: b.booking_number || "",
+          })),
+        );
+      });
+    return () => { cancelled = true; };
+  }, [isOpen]);
 
   const currentSessionSpend = lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   // Keep totalSpend as current-session value for DB storage
@@ -77,7 +107,7 @@ export function LiquidationForm({
   const hasOverspend = isFinal && overspend > 0;
   const hasPrevious = previousTotalSpent > 0 || previousTotalReturned > 0;
 
-  const updateItem = (id: string, field: keyof LiquidationLineItem, value: string | number) => {
+  const updateItem = (id: string, field: keyof LiquidationLineItem, value: string | number | null) => {
     setLineItems((prev) =>
       prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
     );
@@ -139,10 +169,16 @@ export function LiquidationForm({
   };
 
   const handleSubmit = async () => {
-    // Validate: all line items need a description and positive amount
-    const hasEmptyRows = lineItems.some((item) => !item.description.trim() || !item.amount);
-    if (hasEmptyRows) {
-      toast.error("All receipt lines need a description and amount");
+    // NEU-094: each line is a real expense line — needs a catalog item, a booking
+    // (D1 attribution), and a positive amount.
+    const missingItem = lineItems.some((item) => !(item.particular || "").trim() || !item.amount);
+    if (missingItem) {
+      toast.error("Each expense line needs a catalog item and an amount");
+      return;
+    }
+    const missingBooking = lineItems.some((item) => !item.booking_id);
+    if (missingBooking) {
+      toast.error("Each expense line needs a linked booking");
       return;
     }
 
@@ -195,6 +231,27 @@ export function LiquidationForm({
           },
           created_at: new Date().toISOString(),
         });
+
+        // 2b. NEU-102: auto-build the closing entry (DR Expense per booking / DR
+        // Cash butal / CR 1150) into the Transaction Journal as `ready_to_post`.
+        // Accounting confirms it there ("Submit for Posting") to clear the advance.
+        try {
+          const closing = await buildLiquidationClosingEntry({
+            evoucherId,
+            evoucherNumber,
+            advanceAmount,
+            actor: { id: currentUser.id, name: currentUser.name },
+          });
+          if (closing) {
+            await supabase
+              .from("evouchers")
+              .update({ closing_journal_entry_id: closing.jeId, updated_at: new Date().toISOString() })
+              .eq("id", evoucherId);
+          }
+        } catch (closingErr) {
+          console.error("[Liquidation] closing entry build failed:", closingErr);
+          toast.warning("Liquidation saved, but the closing journal entry couldn't be built. Accounting can post it manually.");
+        }
 
         // 3. Auto-create Reimbursement EV if overspend (cumulative)
         if (hasOverspend) {
@@ -472,7 +529,7 @@ export function LiquidationForm({
                 >
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                      Receipt {index + 1}
+                      Expense {index + 1}
                     </span>
                     <button
                       onClick={() => removeItem(item.id)}
@@ -507,26 +564,37 @@ export function LiquidationForm({
                     </button>
                   </div>
 
+                  {/* NEU-094: catalog item (the "what") — Expense Catalog, doctrine. */}
+                  <div>
+                    <label style={{ display: "block", fontSize: "11px", color: "var(--theme-text-muted)", marginBottom: "4px", fontWeight: 500 }}>
+                      Expense item
+                    </label>
+                    <CatalogItemCombobox
+                      value={item.particular || ""}
+                      catalogItemId={item.catalog_item_id ?? undefined}
+                      side="expense"
+                      placeholder="Select or type an expense item…"
+                      onChange={(name, catId) => {
+                        updateItem(item.id, "particular", name);
+                        updateItem(item.id, "catalog_item_id", catId ?? null);
+                      }}
+                    />
+                  </div>
+
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 140px", gap: "10px" }}>
                     <div>
-                      <label htmlFor={`li-desc-${item.id}`} style={{ display: "block", fontSize: "11px", color: "var(--theme-text-muted)", marginBottom: "4px", fontWeight: 500 }}>
-                        Description
+                      <label style={{ display: "block", fontSize: "11px", color: "var(--theme-text-muted)", marginBottom: "4px", fontWeight: 500 }}>
+                        Booking
                       </label>
-                      <input
-                        id={`li-desc-${item.id}`}
-                        type="text"
-                        value={item.description}
-                        onChange={(e) => updateItem(item.id, "description", e.target.value)}
-                        placeholder="e.g., Port charges, fuel"
-                        style={inputBaseStyle}
-                        onFocus={(e) => {
-                          e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
-                          e.currentTarget.style.boxShadow = "0 0 0 3px rgba(15, 118, 110, 0.18)";
-                        }}
-                        onBlur={(e) => {
-                          e.currentTarget.style.borderColor = "var(--theme-border-default)";
-                          e.currentTarget.style.boxShadow = "none";
-                        }}
+                      <CustomDropdown
+                        fullWidth
+                        searchable
+                        searchPlaceholder="Search bookings…"
+                        placeholder="Link a booking…"
+                        triggerAriaLabel="Line booking"
+                        value={item.booking_id ?? ""}
+                        options={bookingOptions.map((o) => ({ value: o.value, label: o.label }))}
+                        onChange={(val) => updateItem(item.id, "booking_id", val || null)}
                       />
                     </div>
                     <div>
@@ -553,6 +621,23 @@ export function LiquidationForm({
                       />
                     </div>
                   </div>
+
+                  {/* Optional free-text note */}
+                  <input
+                    type="text"
+                    value={item.description}
+                    onChange={(e) => updateItem(item.id, "description", e.target.value)}
+                    placeholder="Note (optional) — e.g. port charges, fuel"
+                    style={{ ...inputBaseStyle, height: "34px", fontSize: "12px" }}
+                    onFocus={(e) => {
+                      e.currentTarget.style.borderColor = "var(--theme-action-primary-bg)";
+                      e.currentTarget.style.boxShadow = "0 0 0 3px rgba(15, 118, 110, 0.18)";
+                    }}
+                    onBlur={(e) => {
+                      e.currentTarget.style.borderColor = "var(--theme-border-default)";
+                      e.currentTarget.style.boxShadow = "none";
+                    }}
+                  />
 
                   {/* Receipt attachment */}
                   <input

@@ -6,6 +6,7 @@ export type Authority = {
   department?: string | null;
   role?: string | null;
   scope?: string | null;
+  user_id?: string | null; // NEU-095/103: route to a SPECIFIC user (overrides dept/role)
 };
 
 export type RoutingRule = {
@@ -31,11 +32,16 @@ export function matchesTrigger(
   bag: AttributeBag,
 ): boolean {
   return Object.entries(trigger).every(([key, expected]) => {
-    const actual = norm(bag[key]);
-    if (Array.isArray(expected)) {
-      return expected.some((e) => norm(e) === actual);
+    const raw = bag[key];
+    const expectedArr = (Array.isArray(expected) ? expected : [expected]).map(norm);
+    // NEU-107 / D2: a bag value may itself be a SET (e.g. the distinct service
+    // types across a voucher's per-line bookings). The trigger then matches if
+    // ANY expected value is present in that set. Scalar bag values behave as before.
+    if (Array.isArray(raw)) {
+      const actualArr = raw.map(norm);
+      return expectedArr.some((e) => actualArr.includes(e));
     }
-    return norm(expected) === actual;
+    return expectedArr.includes(norm(raw));
   });
 }
 

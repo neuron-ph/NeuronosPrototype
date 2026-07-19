@@ -36,7 +36,8 @@ export type EVoucherAPType =
   | "cash_advance"     // Give employee money before job — creates advance asset
   | "reimbursement"    // Pay employee back for out-of-pocket — creates cost record, direct cash
   | "budget_request"   // Lump sum to a department — creates advance asset
-  | "direct_expense";  // Direct purchase request, not tied to booking — CEO approval only
+  | "direct_expense"   // Direct purchase request, not tied to booking — CEO approval only
+  | "fund_transfer";   // NEU-095: internal cash movement (From account -> To account)
 
 // EVoucherTransactionType is now identical to EVoucherAPType.
 // The retired AR-side pseudo-types ("billing", "collection", "adjustment") have been removed.
@@ -291,14 +292,24 @@ export interface EVoucherLineItem {
   updated_at: string;
 }
 
-// A single receipt/expense line item within a liquidation submission
+// A single receipt/expense line item within a liquidation submission.
+// NEU-094: liquidation lines are now REAL expense lines — catalog item + booking +
+// COA account (autofilled from the catalog item) — so the closing entry can post
+// Dr Expense per booking straight from them, upholding the catalog doctrine.
 export interface LiquidationLineItem {
   id: string;
-  description: string;
-  vendor_name?: string;     // Who was paid (rep fills)
+  description: string;              // optional free-text note
+  vendor_name?: string;            // Who was paid (rep fills)
   amount: number;
-  receipt_url?: string;     // Uploaded receipt photo/scan
-  gl_category?: string;     // Accounting assigns during verification
+  receipt_url?: string;            // Uploaded receipt photo/scan
+  gl_category?: string;            // legacy — Accounting assigned during verification
+  // NEU-094 expense-line fields:
+  particular?: string;             // catalog item name (the "what")
+  catalog_item_id?: string | null; // Expense Catalog link (required for real lines)
+  booking_id?: string | null;      // per-line booking (D1)
+  account_id?: string | null;      // COA account — resolved from the catalog item at close
+  account_code?: string | null;
+  account_name?: string | null;
 }
 
 // A liquidation submission against a cash_advance or budget_request EV

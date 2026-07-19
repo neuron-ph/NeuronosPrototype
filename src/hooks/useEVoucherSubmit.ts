@@ -35,6 +35,7 @@ interface LineItem {
   description: string;
   amount: number;
   catalog_item_id?: string | null;
+  booking_id?: string | null; // NEU-089: per-line booking attribution
   expense_category?: string;
 }
 
@@ -59,6 +60,9 @@ interface EVoucherData {
   transaction_type?: string;
   isBillable?: boolean;
   sourceAccountId?: string;
+  /** NEU-095: fund-transfer From/To COA accounts (fund_transfer type only). */
+  fromAccountId?: string;
+  toAccountId?: string;
   linkedBillings?: { id: string; amount: number }[];
   parentVoucherId?: string;
   parent_voucher_id?: string;
@@ -153,6 +157,9 @@ export function useEVoucherSubmit(
     due_date: data.paymentSchedule || null,
     is_billable: data.isBillable ?? false,
     source_account_id: data.sourceAccountId || null,
+    // NEU-095: fund-transfer accounts (From debits To, credits From at process time).
+    from_account_id: data.fromAccountId || null,
+    to_account_id: data.toAccountId || null,
     linked_billings:
       data.transactionType === "collection" ? data.linkedBillings || [] : [],
     line_items: data.lineItems || [],
@@ -221,22 +228,41 @@ export function useEVoucherSubmit(
   const resolveVoucherRouting = async (
     data: EVoucherData,
   ): Promise<Authority | null> => {
-    let bookingServiceType: string | null = null;
-    if (data.bookingId) {
-      const { data: bk } = await supabase
+    // NEU-107 / D2: booking lives per line now, so routing resolves from the SET
+    // of distinct service types across the voucher's line bookings (plus any
+    // legacy voucher-level booking). A rule keyed on a single service (e.g.
+    // Forwarding → Sir Jayson) matches if that service is present on ANY line;
+    // when several service rules match, the lowest-priority-number rule wins
+    // (rule ordering encodes "Forwarding beats Brokerage").
+    const bookingIds = Array.from(
+      new Set(
+        [
+          ...data.lineItems.map((li) => li.booking_id),
+          data.bookingId, // legacy / booking-context fallback
+        ].filter(Boolean) as string[],
+      ),
+    );
+    let serviceTypes: string[] = [];
+    if (bookingIds.length > 0) {
+      const { data: bks } = await supabase
         .from("bookings")
         .select("service_type")
-        .eq("id", data.bookingId)
-        .maybeSingle();
-      bookingServiceType = (bk?.service_type as string | undefined) ?? null;
+        .in("id", bookingIds);
+      serviceTypes = Array.from(
+        new Set(
+          (bks ?? [])
+            .map((b) => b.service_type as string | undefined)
+            .filter(Boolean) as string[],
+        ),
+      );
     }
     return resolveRouting("evoucher", {
       transaction_type: getTransactionType(data),
       source_module: getSourceModule(),
       requestor_department: actor?.department ?? context,
       is_billable: data.isBillable ?? false,
-      has_booking: !!data.bookingId,
-      booking_service_type: bookingServiceType,
+      has_booking: bookingIds.length > 0,
+      booking_service_type: serviceTypes, // a SET (matcher handles membership)
     });
   };
 
@@ -332,6 +358,7 @@ export function useEVoucherSubmit(
       description: item.description,
       amount: item.amount,
       catalog_item_id: item.catalog_item_id || null,
+      booking_id: item.booking_id || null, // NEU-089
       catalog_snapshot: item.catalog_item_id
         ? buildCatalogSnapshot(
             { description: item.particular, amount: item.amount },
@@ -399,14 +426,28 @@ export function useEVoucherSubmit(
       if (!data.requestName || data.requestName.trim() === "") {
         throw new Error("Request name is required");
       }
-      if (!data.expenseCategory) {
-        throw new Error("Expense category is required");
-      }
-      if (!data.lineItems || data.lineItems.length === 0) {
-        throw new Error("At least one line item is required");
-      }
-      if (!data.vendor || data.vendor.trim() === "") {
-        throw new Error("Vendor is required");
+      // NEU-095: a fund transfer has no category / line items / vendor — it needs
+      // distinct From/To accounts and a positive amount instead.
+      if (data.transactionType === "fund_transfer") {
+        if (!data.fromAccountId || !data.toAccountId) {
+          throw new Error("A transfer needs a From and a To account");
+        }
+        if (data.fromAccountId === data.toAccountId) {
+          throw new Error("From and To must be different accounts");
+        }
+        if (!(data.totalAmount > 0)) {
+          throw new Error("Transfer amount must be positive");
+        }
+      } else {
+        if (!data.expenseCategory) {
+          throw new Error("Expense category is required");
+        }
+        if (!data.lineItems || data.lineItems.length === 0) {
+          throw new Error("At least one line item is required");
+        }
+        if (!data.vendor || data.vendor.trim() === "") {
+          throw new Error("Vendor is required");
+        }
       }
 
       const routing = await resolveVoucherRouting(data);
@@ -447,7 +488,12 @@ export function useEVoucherSubmit(
 
       // Accounting and Executive-created e-vouchers skip manager/CEO approval
       // and go straight to the disbursement queue.
-      const submittedStatus = determineSubmittedEVoucherStatus(context, actor);
+      // NEU-095: a fund transfer always routes to the Executive approver (Mark)
+      // for processing — regardless of who created it — so it lands at
+      // pending_manager (the routed pending_approver = Executive/manager).
+      const submittedStatus = data.transactionType === "fund_transfer"
+        ? "pending_manager"
+        : determineSubmittedEVoucherStatus(context, actor);
 
       const { error: submitErr } = await supabase
         .from("evouchers")

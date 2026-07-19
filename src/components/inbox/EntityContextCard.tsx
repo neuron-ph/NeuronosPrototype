@@ -73,6 +73,12 @@ const ENTITY_ROUTES: Record<string, Record<string, (id: string) => string>> = {
   expense: {
     "Accounting": (id) => `/accounting/expenses/${id}`,
     "Executive":  (id) => `/accounting/expenses/${id}`,
+    // Requestors / cash receivers reach an e-voucher through their own list, so
+    // the chip navigates there instead of being a dead-end.
+    "Operations":           () => `/my-evouchers`,
+    "Business Development":  () => `/my-evouchers`,
+    "Pricing":              () => `/my-evouchers`,
+    "HR":                   () => `/my-evouchers`,
   },
   customer: {
     "Business Development": (id) => `/bd/customers/${id}`,
@@ -99,6 +105,14 @@ export function EntityContextCard({ entity_type, entity_id, entity_label }: Enti
   const tone = TICKET_ENTITY_TONES[entity_type] ?? { bg: "#F7FAF8", text: "#5F6E69", border: "#E2E8E5" };
   const label = config?.label ?? entity_type;
   const Icon = config?.icon;
+
+  // Never surface a raw internal id (e.g. "evoucher-1782711658165-abc") as the
+  // primary text — legacy tickets stored the id as their label. Fall back to the
+  // friendly type label instead.
+  const looksLikeRawId = (s?: string) => !!s && /^[a-z_]+-\d{6,}/i.test(s);
+  const primaryText = entity_label && !looksLikeRawId(entity_label)
+    ? entity_label
+    : (looksLikeRawId(entity_id) ? label : (entity_label || entity_id));
 
   const routeFn = ENTITY_ROUTES[entity_type]?.[effectiveDepartment ?? ""];
   const route = routeFn ? routeFn(entity_id) : null;
@@ -150,7 +164,7 @@ export function EntityContextCard({ entity_type, entity_id, entity_label }: Enti
             lineHeight: 1.3,
           }}
         >
-          {entity_label || entity_id}
+          {primaryText}
         </span>
         <span
           style={{

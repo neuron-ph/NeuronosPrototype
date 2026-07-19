@@ -499,8 +499,8 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
         label: "E-Vouchers", pageId: "acct-evouchers",
         tabs: [
           tab("accounting_evouchers_pending_disburse_tab",     "Pending Disbursement"),
-          tab("accounting_evouchers_waiting_on_rep_tab",       "Waiting on Rep"),
-          tab("accounting_evouchers_pending_verification_tab", "Pending Verification"),
+          tab("accounting_evouchers_waiting_on_rep_tab",       "Waiting on Liquidation"),
+          tab("accounting_evouchers_pending_verification_tab", "Liquidated for Verification of Treasury"),
           tab("accounting_evouchers_archive_tab",              "Archive"),
         ],
       },

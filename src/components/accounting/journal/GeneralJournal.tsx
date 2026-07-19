@@ -45,7 +45,7 @@ export interface JournalEntry {
   lines: JournalLine[];
   total_debit: number;
   total_credit: number;
-  status: "draft" | "posted" | "void";
+  status: "draft" | "posted" | "void" | "pending" | "awaiting_ack" | "ready_to_post";
   created_by: string | null;
   created_by_name: string | null;
   created_at: string;
@@ -59,7 +59,7 @@ export interface JournalEntry {
 }
 
 type SourceType = "all" | "evoucher" | "invoice" | "collection" | "manual";
-type StatusFilter = "all" | "draft" | "posted" | "void";
+type StatusFilter = "all" | "draft" | "posted" | "void" | "pending" | "awaiting_ack" | "ready_to_post";
 
 // "all" or any active currency code (NEU-027 — currencies are data-driven).
 type CurrencyFilter = string;
@@ -211,6 +211,19 @@ export function StatusChip({ status, isReversal }: { status: JournalEntry["statu
           label: "Reversed",
           icon: null,
         },
+        // Pre-posting pipeline stages (transaction-journal view).
+        pending: {
+          bg: "var(--theme-status-warning-bg)", color: "var(--theme-status-warning-fg)",
+          border: "var(--theme-status-warning-border)", label: "Pending", icon: null,
+        },
+        awaiting_ack: {
+          bg: "var(--theme-status-warning-bg)", color: "var(--theme-status-warning-fg)",
+          border: "var(--theme-status-warning-border)", label: "Awaiting Ack", icon: null,
+        },
+        ready_to_post: {
+          bg: "var(--theme-bg-surface-tint)", color: "var(--theme-action-primary-bg)",
+          border: "var(--theme-action-primary-border)", label: "Ready to Post", icon: null,
+        },
       }[status];
   return (
     <span style={{
@@ -246,7 +259,11 @@ function SourceChip({ entry }: { entry: JournalEntry }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function GeneralJournal() {
+export function GeneralJournal({ mode = "general" }: { mode?: "general" | "transaction" } = {}) {
+  // NEU-099 (unified journal): one component, two lenses. mode="general" shows
+  // only POSTED entries (the final ledger); mode="transaction" shows every entry
+  // across its lifecycle (the pre-posting pipeline). Same table, same UI.
+  const isTransactionView = mode === "transaction";
   const { user } = useUser();
   const { can } = usePermission();
   const { currencies } = useCurrencies();
@@ -299,45 +316,46 @@ export function GeneralJournal() {
       .then(({ data }) => setAccounts((data ?? []) as COAAccount[]));
   }, []);
 
-  // ── Restore selected entry from URL on mount ──
+  // ── Restore selected entry from URL (deep-link) ──
+  // Runs only when the deep-link id changes — NOT on every list reload. Depending
+  // on loadingEntries here would re-hydrate a just-closed panel each time the list
+  // refetched (e.g. right after posting), resurrecting the stale entry.
   useEffect(() => {
     if (!urlDetailId || selectedEntry) return;
-    // Try to find in already-loaded entries first
+    // Fast path: already in the loaded page.
     const found = entries.find((e) => e.id === urlDetailId);
     if (found) {
       setSelectedEntry(found);
       return;
     }
-    // Otherwise fetch from supabase
-    if (!loadingEntries && entries.length >= 0) {
-      supabase
-        .from("journal_entries")
-        .select("*, users!created_by(name)")
-        .eq("id", urlDetailId)
-        .maybeSingle()
-        .then(({ data }) => {
-          if (data) {
-            const mapped = {
-              ...data,
-              created_by_name: (data.users as { name?: string } | null)?.name ?? null,
-              users: undefined,
-            } as unknown as JournalEntry;
-            setSelectedEntry(mapped);
-          } else {
-            // Entry not found — clear stale URL param
-            setUrlDetailId(null);
-          }
-        });
-    }
+    // Otherwise fetch directly — reliable regardless of list load state.
+    supabase
+      .from("journal_entries")
+      .select("*, users!created_by(name)")
+      .eq("id", urlDetailId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          const mapped = {
+            ...data,
+            created_by_name: (data.users as { name?: string } | null)?.name ?? null,
+            users: undefined,
+          } as unknown as JournalEntry;
+          setSelectedEntry(mapped);
+        } else {
+          // Entry not found — clear stale URL param
+          setUrlDetailId(null);
+        }
+      });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlDetailId, loadingEntries]);
+  }, [urlDetailId]);
 
   // ── Fetch summary (full filtered set, no pagination) ──
   const fetchSummary = useCallback(async (f: Filters) => {
     setLoadingSummary(true);
     try {
       let q = supabase.from("journal_entries").select("total_debit, total_credit");
-      q = applyFiltersToQuery(q, f);
+      q = applyFiltersToQuery(q, f, mode);
       const { data, error } = await q;
       if (error) throw error;
       const rows = (data ?? []) as { total_debit: number; total_credit: number }[];
@@ -349,7 +367,7 @@ export function GeneralJournal() {
     } finally {
       setLoadingSummary(false);
     }
-  }, []);
+  }, [mode]);
 
   // ── Fetch page ──
   const fetchEntries = useCallback(async (f: Filters, pg: number) => {
@@ -359,7 +377,7 @@ export function GeneralJournal() {
         .order("entry_date", { ascending: false })
         .order("created_at", { ascending: false })
         .range(pg * PAGE_SIZE, (pg + 1) * PAGE_SIZE - 1);
-      q = applyFiltersToQuery(q, f);
+      q = applyFiltersToQuery(q, f, mode);
       const { data, error } = await q;
       if (error) throw error;
       const mapped = (data ?? []).map((row: Record<string, unknown>) => ({
@@ -373,7 +391,7 @@ export function GeneralJournal() {
     } finally {
       setLoadingEntries(false);
     }
-  }, []);
+  }, [mode]);
 
   // ── React to filter / page changes ──
   useEffect(() => {
@@ -456,7 +474,7 @@ export function GeneralJournal() {
     try {
       let q = supabase.from("journal_entries").select("*")
         .order("entry_date", { ascending: false });
-      q = applyFiltersToQuery(q, filters);
+      q = applyFiltersToQuery(q, filters, mode);
       const { data, error } = await q;
       if (error) throw error;
       exportCSV((data ?? []) as JournalEntry[], filters.dateFrom, filters.dateTo);
@@ -494,10 +512,12 @@ export function GeneralJournal() {
         <div className="flex items-start justify-between mb-6">
           <div>
             <h1 className="text-[32px] font-semibold text-[var(--theme-text-primary)] mb-1 tracking-tight">
-              General Journal
+              {isTransactionView ? "Transaction Journal" : "General Journal"}
             </h1>
             <p className="text-[14px] text-[var(--theme-text-muted)]">
-              Track and review all posted accounting entries
+              {isTransactionView
+                ? "Every entry across its lifecycle. Each posts into the General Journal when ready."
+                : "Track and review all posted accounting entries"}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -571,17 +591,21 @@ export function GeneralJournal() {
               className="h-9 px-3 border border-[var(--theme-border-default)] rounded-lg text-[13px] text-[var(--theme-text-primary)] bg-[var(--theme-bg-page)] outline-none focus:ring-2 focus:ring-[var(--theme-state-focus-ring)]"
             />
           </div>
-          {/* Status filter */}
-          <select
-            value={filters.statusFilter}
-            onChange={(e) => setFilter("statusFilter", e.target.value as StatusFilter)}
-            className="h-9 px-3 border border-[var(--theme-border-default)] rounded-lg text-[13px] text-[var(--theme-text-primary)] bg-[var(--theme-bg-page)] outline-none focus:ring-2 focus:ring-[var(--theme-state-focus-ring)] cursor-pointer"
-          >
-            <option value="all">All Statuses</option>
-            <option value="draft">Draft</option>
-            <option value="posted">Posted</option>
-            <option value="void">Reversed</option>
-          </select>
+          {/* Status filter — hidden in the General (posted-only) view; the
+              Transaction view exposes the pre-posting stages. */}
+          {isTransactionView && (
+            <select
+              value={filters.statusFilter}
+              onChange={(e) => setFilter("statusFilter", e.target.value as StatusFilter)}
+              className="h-9 px-3 border border-[var(--theme-border-default)] rounded-lg text-[13px] text-[var(--theme-text-primary)] bg-[var(--theme-bg-page)] outline-none focus:ring-2 focus:ring-[var(--theme-state-focus-ring)] cursor-pointer"
+            >
+              <option value="all">All Stages</option>
+              <option value="draft">Draft</option>
+              <option value="pending">Pending</option>
+              <option value="awaiting_ack">Awaiting Ack</option>
+              <option value="ready_to_post">Ready to Post</option>
+            </select>
+          )}
           {/* Account filter */}
           <select
             value={filters.accountId}
@@ -938,7 +962,7 @@ export function GeneralJournal() {
 // ─── Filter application helper (shared between data + summary queries) ────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function applyFiltersToQuery(query: any, f: Filters) {
+function applyFiltersToQuery(query: any, f: Filters, mode: "general" | "transaction" = "general") {
   if (f.dateFrom) query = query.gte("entry_date", f.dateFrom);
   if (f.dateTo)   query = query.lte("entry_date", f.dateTo + "T23:59:59");
   if (f.sourceType === "evoucher")   query = query.not("evoucher_id",   "is", null);
@@ -947,7 +971,18 @@ function applyFiltersToQuery(query: any, f: Filters) {
   else if (f.sourceType === "manual") {
     query = query.is("evoucher_id", null).is("invoice_id", null).is("collection_id", null).is("booking_id", null);
   }
-  if (f.statusFilter !== "all") query = query.eq("status", f.statusFilter);
+  // NEU-099: complementary lenses. The General Journal is the finalized books
+  // (posted + reversed); the Transaction Journal is the in-flight pipeline only
+  // (draft/pending/awaiting_ack/ready_to_post) — a posted entry graduates OUT of
+  // the TJ into the GJ, so it lives in exactly one place.
+  const TJ_STAGES = ["draft", "pending", "awaiting_ack", "ready_to_post"];
+  if (mode === "general") {
+    query = query.in("status", ["posted", "void"]);
+  } else if (f.statusFilter !== "all" && TJ_STAGES.includes(f.statusFilter)) {
+    query = query.eq("status", f.statusFilter);
+  } else {
+    query = query.in("status", TJ_STAGES);
+  }
   if (f.currency === "PHP") {
     // PHP-only: include legacy rows where transaction_currency is null.
     query = query.or("transaction_currency.eq.PHP,transaction_currency.is.null");

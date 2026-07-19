@@ -1,11 +1,10 @@
 import { useState, useMemo } from "react";
-import { Search, FileText } from "lucide-react";
+import { Search } from "lucide-react";
 import { DataTable, ColumnDef } from "../../common/DataTable";
 import { useUnreadEntityIds } from "../../../hooks/useNotifications";
 import { CustomDatePicker } from "../../common/CustomDatePicker";
 import { CustomDropdown } from "../../bd/CustomDropdown";
 import { EVoucherStatusBadge } from "./EVoucherStatusBadge";
-import { LiquidationPanel } from "./LiquidationPanel";
 import type { EVoucher } from "../../../types/evoucher";
 import { evoucherTypeLabelFor } from "../../../utils/evoucherTransactionType";
 import { getPaymentUrgencyFor, resolveEvoucherDueDate, paymentUrgencyStyle, paymentUrgencyAmountColor } from "../../../utils/evoucherUrgency";
@@ -33,7 +32,6 @@ export function UnifiedEVouchersTable({
   const [departmentFilter, setDepartmentFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [liquidationVoucher, setLiquidationVoucher] = useState<EVoucher | null>(null);
 
   // -- Helpers --
   const formatCurrency = (amount: number, currency: string = "PHP") => {
@@ -246,20 +244,6 @@ export function UnifiedEVouchersTable({
       cell: (item) => (
         <div className="flex flex-col items-end gap-2">
             <EVoucherStatusBadge status={item.status} size="sm" />
-            
-            {/* Liquidation Action for Posted Budget Requests & Cash Advances */}
-            {view === "my-evouchers" && item.status === "posted" && (item.transaction_type === "budget_request" || item.transaction_type === "cash_advance") && (
-                <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        setLiquidationVoucher(item);
-                    }}
-                    className="text-[10px] font-semibold text-[var(--theme-action-primary-bg)] hover:text-[var(--theme-action-primary-border)] bg-[var(--theme-bg-surface-tint)] hover:bg-[var(--theme-status-success-bg)] px-2 py-1 rounded transition-colors flex items-center gap-1"
-                >
-                    <FileText size={10} />
-                    Liquidate
-                </button>
-            )}
         </div>
       )
     }
@@ -352,18 +336,6 @@ export function UnifiedEVouchersTable({
         ]}
       />
 
-      {/* Liquidation Panel */}
-      {liquidationVoucher && (
-        <LiquidationPanel
-          isOpen={!!liquidationVoucher}
-          onClose={() => setLiquidationVoucher(null)}
-          originalVoucher={liquidationVoucher}
-          onSuccess={() => {
-            if (onRefresh) onRefresh();
-            setLiquidationVoucher(null);
-          }}
-        />
-      )}
     </div>
   );
 }
