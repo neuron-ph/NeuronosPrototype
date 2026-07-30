@@ -196,17 +196,41 @@ Also: `utils/workflowTickets.ts:226,230` — two tickets currently resolve *insi
 
 ---
 
-### Phase 3 — Remove the fund-transfer type
+### Phase 3 — Remove the fund-transfer type — **ATTENDED**
 
-- `types/evoucher.ts:40` — drop the enum member
-- `utils/evoucherTransactionType.ts:16,30` — label + option
-- `AddRequestForPaymentPanel.tsx` — 6 sites (~208, 780, 788, 1229, 1242–1243) incl. the From/To account fields
-- `EVoucherWorkflowPanel.tsx:185`
-- `useEVoucherSubmit.ts:63, 431, 494` — note 494 sets a **distinct submitted status** for transfers; that branch goes
-- `ApprovalsPage.tsx:84` — the "Transfer of Funds" label
-- Check `routing_rules` rows for transfer approvers
+> **Rescoped 2026-07-30.** Originally logged as mechanical, ~8 sites. That was an undercount from reading grep hits rather than the surface. It is ~35 sites across two large files and it **changes approval routing**. Not autonomous.
 
-**Verify:** the voucher type picker no longer offers Transfer of Funds; Approvals renders cleanly; existing transfer rows in dev are deleted (disposable data).
+**The approval-routing part is the reason this needs eyes.** `EVoucherWorkflowPanel.tsx:185-190`:
+
+```ts
+const canApproveAsTL   = holdsManagerGate && currentStatus === "pending_manager" && !isFundTransfer;
+const canProcessTransfer =
+  isFundTransfer && currentStatus === "pending_manager" && holdsManagerGate &&
+  currentUser?.department === "Executive";
+```
+
+Transfers bypass the normal manager → CEO → accounting chain and get a dedicated **Process** action restricted to the Executive department at `pending_manager`. Removing the type deletes a whole approval path — and `canApproveAsTL` is *defined in terms of* `!isFundTransfer`, so the condition for ordinary vouchers has to be rewritten, not just deleted.
+
+**Full surface:**
+
+| File | Sites | What |
+|---|---|---|
+| `types/evoucher.ts:40` | 1 | enum member |
+| `utils/evoucherTransactionType.ts:16,30` | 2 | `BASE_LABELS` entry + dropdown option |
+| `AddRequestForPaymentPanel.tsx` | ~30 | local `accounts` state (206) + `fromAccountId`/`toAccountId` (209-210); **three duplicated submit blocks** (582-597, 639-654, 691-706); `typeOptions` gating (786-788); `transferAmount` + `isFundTransferValid` + `isFormValid` (803-833); type-picker branches (1229, 1242-43); four conditional render blocks (1302, 1356-1390, 1417, 1690) incl. the From/To pickers and the same-account guard |
+| `EVoucherWorkflowPanel.tsx` | 4 | import of `buildTransferEntry` (13), `isFundTransfer` (185), `canApproveAsTL` (186), `canProcessTransfer` (188-190), the call site (303) |
+| `useEVoucherSubmit.ts` | 3 | `fromAccountId`/`toAccountId` on the payload type (63); the transfer validation branch (431-443); the **distinct submitted status** `pending_manager` (494) |
+| `ApprovalsPage.tsx:84` | 1 | the "Transfer of Funds" row label |
+| `routing_rules` (migration `246`) | — | transfer approver rows — a **DB change**, surface before applying |
+
+**Decisions needed from Marcus before this runs:**
+1. With `canProcessTransfer` gone, does anything else need the Executive-at-`pending_manager` path, or does it disappear entirely?
+2. Existing `fund_transfer` vouchers in dev/prod — delete the rows, or leave them orphaned with a dead type string?
+3. `routing_rules` transfer rows — remove in the same migration, or leave as inert data?
+
+**Side benefit:** `AddRequestForPaymentPanel` holds its own `accounts` state for the From/To pickers, so this phase removes one more COA consumer — which shrinks Phase 1.
+
+**Verify:** the voucher type picker no longer offers Transfer of Funds; the Approvals queue renders; ordinary vouchers still approve correctly at `pending_manager` (the rewritten `canApproveAsTL`).
 
 ---
 
