@@ -155,7 +155,16 @@ Pure dead code, verified zero external importers.
 
 ### Phase 1 — Unweld the Catalog
 
-The blocker. Must land before any DB drop.
+> **Split 2026-07-30.** The plan claimed the whole catalog unweld had to come first. That is true of the **UI**, not of the column drop.
+>
+> `utils/accounting/buildLiquidationClosingEntry.ts:48` does `from("catalog_items").select("id, account_id")` at runtime. Dropping the column before Phase 2 removes that reader breaks e-voucher liquidation immediately. Postgres permits the drop; the running app does not survive it.
+>
+> - **Phase 1a — the UI unweld.** ✅ Shipped, commit `a06edca`.
+> - **Phase 1b — `ALTER TABLE … DROP COLUMN`.** Must land **after Phase 2**.
+>
+> Real dependency chain: **1a → 2 → 1b → 6**, not a straight 1→6.
+>
+> Lesson for the rest of this work: *what blocks a `DROP TABLE`* and *what blocks a `DROP COLUMN`* are different questions. A NOT NULL FK blocks the former; an ordinary `SELECT` of the column blocks the latter — and grepping migrations will never surface the runtime reader.
 
 - `CatalogManagementPage.tsx` — remove Query 4 (`accounts`, ~241), `parentAccountOptions` (~262), `itemAccountOptions` (~291), the `account_id` field on the add form (~162, ~207), the account column in the item select (~199), and the hard validation at **~380** (`"An account (COA) is required"`).
 - Strip `parent_account_id` from the category create form (`addCategoryParentAccountId`, ~166).
