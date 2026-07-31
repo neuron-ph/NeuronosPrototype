@@ -1032,11 +1032,16 @@ export function FinancialsModule() {
         key,
         label: key,
         items,
-        subtotal: items.reduce((sum, inv) => sum + pickReportingAmount(inv as any), 0),
+        // A void/reversed invoice is listed for the record but was never really
+        // invoiced — same rule as the Total Invoiced KPI, so the two agree.
+        subtotal: items.reduce((sum, inv) => {
+          const st = settlementOf(inv).status;
+          return st === "void" || st === "reversed" ? sum : sum + pickReportingAmount(inv as any);
+        }, 0),
         count: items.length,
       }))
       .sort((a, b) => b.subtotal - a.subtotal);
-  }, [filteredInvoices, invoicesGroupBy, resolveLineage]);
+  }, [filteredInvoices, invoicesGroupBy, resolveLineage, settlementOf]);
 
   // ══════════════════════════════════════════════
   // ── Collections Aggregate (Phase 4) ──
@@ -1080,7 +1085,12 @@ export function FinancialsModule() {
     const avgDays = countWithDates > 0 ? Math.round(totalDays / countWithDates) : 0;
 
     // Collection rate (collected vs. total outstanding invoices in scope)
-    const totalInvoiced = scopedInvoices.reduce((sum, inv: any) =>
+    const totalInvoiced = scopedInvoices
+      .filter((inv: any) => {
+        const st = settlementOf(inv).status;
+        return st !== "void" && st !== "reversed";
+      })
+      .reduce((sum, inv: any) =>
       sum + pickReportingAmount(inv), 0);
     const collRate = totalInvoiced > 0 ? (totalCollected / totalInvoiced) * 100 : 0;
 
@@ -1114,7 +1124,7 @@ export function FinancialsModule() {
         severity: collRate < 60 ? "danger" as const : collRate < 80 ? "warning" as const : "normal" as const,
       },
     ];
-  }, [scopedCollections, scopedInvoices]);
+  }, [scopedCollections, scopedInvoices, settlementOf]);
 
   const COLLECTIONS_GROUP_OPTIONS: GroupOption[] = [
     { value: "customer", label: "Customer" },

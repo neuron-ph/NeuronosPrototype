@@ -1069,7 +1069,9 @@ Update the lines and resubmit.`,
           </div>
         )}
 
-        {/* Accounting Manager: Unlock for GL Correction */}
+        {/* Accounting Manager: reopen a closed voucher for correction. Named
+            "Unlock for GL Correction" / "Unlock & Reverse" when there was a
+            journal entry to reverse; there is nothing to reverse now. */}
         {canUnlockForCorrection && pendingConfirm !== "unlock" && (
           <button
             onClick={() => setPendingConfirm("unlock")}
@@ -1077,11 +1079,11 @@ Update the lines and resubmit.`,
             style={{ ...btnBase, backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-status-warning-fg)", border: "1px solid var(--theme-status-warning-fg)", cursor: isSubmitting ? "not-allowed" : "pointer" }}
           >
             <Unlock size={15} />
-            Unlock for GL Correction
+            Reopen for Correction
           </button>
         )}
         {pendingConfirm === "unlock" && (
-          <InlineConfirm action="unlock" label="Unlock & Reverse" onConfirm={handleUnlockForCorrection} />
+          <InlineConfirm action="unlock" label="Reopen" onConfirm={handleUnlockForCorrection} />
         )}
 
         {/* Cash receiver: confirm receipt (NEU-050) — sequenced before liquidation */}
