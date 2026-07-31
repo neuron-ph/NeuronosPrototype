@@ -2,7 +2,43 @@
 
 **From:** driving scenarios 1–7 in the browser across four real accounts (Bambi → Mariella → Mark → Janice), not from reading code.
 **Date:** 2026-07-31
-**Status:** findings + recommendations. **No UI changed yet** — these are design calls.
+**Status:** ALL RESOLVED as of 2026-07-31. Every finding below is fixed and verified on dev;
+the original text is kept verbatim as the record of what was observed. See the resolution table.
+
+## Resolution
+
+| | Finding | Verdict | Commit |
+|---|---|---|---|
+| F1 | Liquidation action buried | fixed — actions above history | earlier |
+| F2 | No feedback on action click | fixed — scrollIntoView | earlier |
+| F3 | Duplicate "Liquidate" buttons | fixed — row action opens the form | `20b6fd9` |
+| F4 | Cash Receiver looks empty when set | fixed — synthetic option + loading placeholder | `20b6fd9` |
+| F5 | Purpose duplicates type; booking ref empty | fixed — ref from line items, type stripped | `93d59fb` |
+| F6 | Liquidation without a receipt DEADLOCKS | fixed — reason-or-receipt + Treasury send-back | `d1d6de5` |
+| F7 | "Verify & Post" + native confirm() | fixed — "Verify & Close", inline confirm | `93d59fb` |
+| F8 | Invoice balance ignores collections | fixed — derived from collections | `efbffc9` |
+| F9 | Booking deep links don't resolve | fixed — service type read from the booking | `20b6fd9` |
+| F10 | "Create Invoice" goes nowhere | fixed — dead param dropped, next step stated | `20b6fd9` |
+| F11 | Void action not locatable | triaged — it existed, 247px below the fold | `81bec23` |
+| F12 | **Void never worked, and half-applied** | fixed — found by running scenario 16 | `86eab05` |
+
+**Two diagnoses in the original text below are wrong; corrected here.**
+
+- **F8** blamed the collections array not reaching the component. The real cause was
+  `inv.remaining_balance` — a column that does not exist on `invoices`. The `??` chain
+  fell through to `total_amount` forever, and collections were never consulted at all.
+- **F11** was reported as possibly unimplemented. It was implemented and correctly
+  permissioned; it was buried under five print/display toggles.
+
+**F12 was not in the original drive** — it was found later by actually running
+scenario 16. Voiding wrote three phantom columns, so the UPDATE failed, but the
+billing-item release ran first and succeeded: a posted invoice whose charges were
+back in the unbilled pool, re-invoiceable. Nobody had ever voided successfully.
+
+All 23 scenarios have now been run. 18/19/20 closed on 2026-07-31 (`7b7b12a`).
+
+---
+
 
 Everything here is measured, not impression. Where I say "N px" I measured it in the live DOM at a 1536×674 viewport.
 
