@@ -76,8 +76,8 @@ export type ModuleId =
   | "ops_invoices_legal_tab" | "ops_invoices_settings_tab"
   // ─── Accounting ──────────────────────────────────────────────────────────────
   | "acct_evouchers" | "acct_reports"
-  | "acct_financials" | "acct_coa" | "acct_projects" | "acct_contracts" | "acct_bookings" | "acct_customers"
-  | "acct_catalog" | "acct_statements" | "acct_journal"
+  | "acct_financials" | "acct_projects" | "acct_contracts" | "acct_bookings" | "acct_customers"
+  | "acct_catalog"
   | "accounting_evouchers_pending_disburse_tab" | "accounting_evouchers_waiting_on_rep_tab"
   | "accounting_evouchers_pending_verification_tab" | "accounting_evouchers_archive_tab"
   | "accounting_financials_dashboard_tab" | "accounting_financials_billings_tab"

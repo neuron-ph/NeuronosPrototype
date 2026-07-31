@@ -505,26 +505,6 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
         ],
       },
       {
-        kind: "module", id: "acct_journal", moduleId: "acct_journal",
-        label: "General Journal", pageId: "acct-journal",
-        tabs: [
-          tab("accounting_journal_all_sources_tab", "All Sources"),
-          tab("accounting_journal_evoucher_tab",    "E-Voucher"),
-          tab("accounting_journal_invoice_tab",     "Invoice"),
-          tab("accounting_journal_collection_tab",  "Collection"),
-          tab("accounting_journal_manual_tab",      "Manual"),
-        ],
-      },
-      {
-        kind: "module", id: "acct_coa", moduleId: "acct_coa",
-        label: "Chart of Accounts", pageId: "acct-coa",
-        tabs: [
-          tab("accounting_coa_all_tab",              "All"),
-          tab("accounting_coa_balance_sheet_tab",    "Balance Sheet"),
-          tab("accounting_coa_income_statement_tab", "Income Statement"),
-        ],
-      },
-      {
         kind: "module", id: "acct_projects", moduleId: "acct_projects",
         label: "Projects", pageId: "acct-projects",
         tabs: [
@@ -598,15 +578,6 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
         ],
       },
       { kind: "module", id: "acct_reports", moduleId: "acct_reports", label: "Reports", pageId: "acct-reports", tabs: [] },
-      {
-        kind: "module", id: "acct_statements", moduleId: "acct_statements",
-        label: "Financial Statements", pageId: "acct-statements",
-        tabs: [
-          tab("accounting_financial_statements_income_statement_tab", "Income Statement"),
-          tab("accounting_financial_statements_balance_sheet_tab",    "Balance Sheet"),
-          tab("accounting_financial_statements_cash_flow_tab",        "Cash Flow"),
-        ],
-      },
     ],
   },
 

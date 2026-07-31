@@ -214,7 +214,7 @@ const prefetchOperations = () => void import("./Operations");
 const prefetchAccounting = () => void import("./accounting/FinancialsModule");
 const prefetchInbox      = () => void import("./InboxPage");
 
-type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" |"pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" | "pricing-others" |"ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" |"operations" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-journal" | "acct-coa" | "acct-reports" | "acct-statements" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "calendar" | "inbox" | "approvals" | "my-evouchers" | "ticket-queue" | "settings" | "admin-users" | "admin-profiling" | "admin" | "ticket-testing" | "activity-log" | "design-system";
+type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" |"pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" | "pricing-others" |"ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" |"operations" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-reports" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "calendar" | "inbox" | "approvals" | "my-evouchers" | "ticket-queue" | "settings" | "admin-users" | "admin-profiling" | "admin" | "ticket-testing" | "activity-log" | "design-system";
 
 // Sidebar permission map — derived from canonical schema for sidebar-backed pages,
 // plus explicit entries for legacy non-sidebar accounting routes that still need
@@ -510,15 +510,12 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
     "pricing-others":      FileText,
     "acct-financials":     CreditCard,
     "acct-evouchers":      Receipt,
-    "acct-journal":        ScrollText,
-    "acct-coa":            BookOpen,
     "acct-projects":       Briefcase,
     "acct-contracts":      Handshake,
     "acct-bookings":       Package,
     "acct-customers":      Users,
     "acct-catalog":        ClipboardCheck,
     "acct-reports":        BarChart3,
-    "acct-statements":     TrendingUp,
   };
   type SubItem = { id: Page; label: string; icon: any };
   const buildSubItems = (deptLabel: string): SubItem[] =>

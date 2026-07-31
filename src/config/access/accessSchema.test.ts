@@ -101,15 +101,12 @@ describe("access schema integrity", () => {
     expect(ids).toEqual([
       "acct_financials",
       "acct_evouchers",
-      "acct_journal",
-      "acct_coa",
       "acct_projects",
       "acct_contracts",
       "acct_bookings",
       "acct_customers",
       "acct_catalog",
       "acct_reports",
-      "acct_statements",
     ]);
   });
 
