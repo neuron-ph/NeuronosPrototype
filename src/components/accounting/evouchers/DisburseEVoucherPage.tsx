@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router";
 import { ArrowLeft, Loader2, ChevronDown, Lock, AlertTriangle } from "lucide-react";
 import { supabase } from "../../../utils/supabase/client";
@@ -79,7 +79,7 @@ export function DisburseEVoucherPage() {
 
   // ── Cash receiver (NEU-045) — who physically receives the cash and will
   // liquidate it. Defaults to the requestor; Treasury can reassign at payout.
-  const { users: activeUsers } = useUsers();
+  const { users: activeUsers, isLoading: usersLoading } = useUsers();
   const [receiverId, setReceiverId] = useState<string | null>(null);
 
   // ── Form state ────────────────────────────────────────────────────────────
@@ -134,6 +134,27 @@ export function DisburseEVoucherPage() {
     evoucher?.original_currency ?? evoucher?.currency ?? FUNCTIONAL_CURRENCY,
     FUNCTIONAL_CURRENCY,
   );
+
+  // The dropdown renders its placeholder whenever `value` matches no option —
+  // so a receiver defaulted from the voucher looked UNSET while the user list
+  // was still loading, or permanently if that person is deactivated. Keep a
+  // synthetic entry for the current value so the field always shows who it is.
+  const receiverOptions = useMemo(() => {
+    const opts = [...activeUsers]
+      .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
+      .map((u) => ({
+        value: u.id,
+        label: u.department ? `${u.name} · ${u.department}` : u.name,
+      }));
+    if (receiverId && !opts.some((o) => o.value === receiverId)) {
+      const known =
+        (evoucher?.cash_receiver_name as string) ||
+        (receiverId === evoucher?.requestor_id ? (evoucher?.requestor_name as string) : "") ||
+        "";
+      opts.unshift({ value: receiverId, label: known || "Current receiver" });
+    }
+    return opts;
+  }, [activeUsers, receiverId, evoucher]);
 
   const canConfirm =
     canDisburse &&
@@ -414,14 +435,9 @@ export function DisburseEVoucherPage() {
                       fullWidth
                       searchable
                       value={receiverId || ""}
-                      placeholder="Select who receives the cash…"
+                      placeholder={usersLoading ? "Loading people…" : "Select who receives the cash…"}
                       triggerAriaLabel="Cash receiver"
-                      options={[...activeUsers]
-                        .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
-                        .map((u) => ({
-                          value: u.id,
-                          label: u.department ? `${u.name} · ${u.department}` : u.name,
-                        }))}
+                      options={receiverOptions}
                       onChange={(id) => setReceiverId(id || null)}
                     />
                     <p style={{ margin: "6px 0 0", fontSize: "11px", color: "var(--theme-text-muted)", lineHeight: 1.5 }}>

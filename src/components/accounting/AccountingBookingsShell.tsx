@@ -12,6 +12,7 @@ import { useState, useEffect } from "react";
 import { useSearchParams, useNavigationType } from "react-router";
 import { usePermission } from "../../context/PermissionProvider";
 import { useUrlSelection } from "../../hooks/useUrlSelection";
+import { supabase } from "../../utils/supabase/client";
 import { Container, Ship, Truck, FileText, Package } from "lucide-react";
 import { ForwardingBookings } from "../operations/forwarding/ForwardingBookings";
 import { BrokerageBookings } from "../operations/BrokerageBookings";
@@ -28,6 +29,15 @@ const SERVICE_TABS: { id: ServiceTab; label: string; icon: typeof Container }[] 
   { id: "marine-insurance", label: "Marine Insurance", icon: Ship },
   { id: "others", label: "Others", icon: FileText },
 ];
+
+// bookings.service_type -> the tab that renders it.
+const SERVICE_TYPE_TO_TAB: Record<string, ServiceTab> = {
+  Forwarding: "forwarding",
+  Brokerage: "brokerage",
+  Trucking: "trucking",
+  "Marine Insurance": "marine-insurance",
+  Others: "others",
+};
 
 export function AccountingBookingsShell() {
   const { can } = usePermission();
@@ -77,11 +87,31 @@ export function AccountingBookingsShell() {
       ["OTH", "others"],
       ["BR", "brokerage"],
     ];
-    const detected = prefixMap.find(([p]) => upper.startsWith(p))?.[1] || "forwarding";
-    setActiveTab(detected);
+    const detected = prefixMap.find(([p]) => upper.startsWith(p))?.[1] || null;
     setPendingBookingId(bookingId);
     setPendingTab(targetTab || null);
     setPendingHighlightId(targetHighlight || null);
+
+    if (detected) {
+      setActiveTab(detected);
+    } else {
+      // In-app links carry the booking's UUID, which has no service prefix — the
+      // old fallback sent every one of them to Forwarding regardless of what the
+      // booking actually is. Ask the row.
+      //
+      // Deliberately NOT cancelled on cleanup: clearing the query param below
+      // re-runs this effect, and a cancel-on-cleanup would abort the very
+      // lookup we just started. The effect only fires on a real deep-link, so
+      // a late setActiveTab has nothing to race with.
+      void supabase
+        .from("bookings")
+        .select("service_type")
+        .eq("id", bookingId)
+        .maybeSingle()
+        .then(({ data }) => {
+          setActiveTab(SERVICE_TYPE_TO_TAB[String(data?.service_type || "")] || "forwarding");
+        });
+    }
 
     // Clean the query param
     setSearchParams({}, { replace: true });

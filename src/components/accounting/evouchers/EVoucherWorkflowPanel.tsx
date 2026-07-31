@@ -38,6 +38,9 @@ interface EVoucherWorkflowPanelProps {
    *  cash returned by the requestor (from details.cash_return_confirmed_at). */
   cashReturnConfirmedAt?: string;
   currentUser?: CurrentUser;
+  /** Opened from the list's "Liquidate" row action — land on the form rather
+   *  than making the user hunt for a second button with the same label. */
+  autoOpenLiquidation?: boolean;
   onStatusChange?: () => void;
   // Billable expense auto-billing
   isBillable?: boolean;
@@ -84,6 +87,7 @@ export function EVoucherWorkflowPanel({
   receiptConfirmedAt,
   cashReturnConfirmedAt,
   currentUser,
+  autoOpenLiquidation,
   onStatusChange,
   isBillable,
   bookingId,
@@ -121,7 +125,7 @@ export function EVoucherWorkflowPanel({
   const [showReturnLiq, setShowReturnLiq] = useState(false);
   const [returnLiqReason, setReturnLiqReason] = useState("");
 
-  const [showLiquidationForm, setShowLiquidationForm] = useState(false);
+  const [showLiquidationForm, setShowLiquidationForm] = useState(Boolean(autoOpenLiquidation));
   // The form renders inline below the action buttons, which in a long voucher
   // panel puts it off-screen — clicking Liquidate looked like nothing happened.
   // Scroll it into view once it mounts so the click has a visible result.

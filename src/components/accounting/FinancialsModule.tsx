@@ -200,13 +200,18 @@ export function FinancialsModule() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Create actions (C12) — navigate to project-scoped creation flows
+  // Create actions (C12) — invoices and collections are always created against
+  // a container, so these land on the project list. The old ?action= param was
+  // never read by anything: the button dropped users on a list with no dialog,
+  // no prompt and no clue what to do next. Say the next step out loud instead.
   const handleCreateInvoice = useCallback(() => {
-    navigate("/accounting/projects?action=create-invoice");
+    navigate("/accounting/projects");
+    toast.info("Open the project or booking to bill, then use its Invoices tab.");
   }, [navigate]);
 
   const handleCreateCollection = useCallback(() => {
-    navigate("/accounting/projects?action=create-collection");
+    navigate("/accounting/projects");
+    toast.info("Open the project or booking that was paid, then use its Collections tab.");
   }, [navigate]);
 
   // Aggregate scope state (shared across tabs — Phase 1: billings only)

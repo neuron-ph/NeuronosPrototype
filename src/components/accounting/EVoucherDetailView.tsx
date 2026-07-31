@@ -14,6 +14,8 @@ interface EVoucherDetailViewProps {
   evoucher: EVoucher;
   onClose: () => void;
   currentUser?: { id: string; name: string; email: string; role?: string; department?: string; ev_approval_authority?: boolean | null };
+  /** Opened via the list's "Liquidate" row action — open the form on arrival. */
+  autoOpenLiquidation?: boolean;
   onStatusChange?: () => void;
 }
 
@@ -54,6 +56,7 @@ export function EVoucherDetailView({
   onClose,
   currentUser,
   onStatusChange,
+  autoOpenLiquidation,
 }: EVoucherDetailViewProps) {
   // Prefer relational line items; fall back to legacy JSONB array
   const lineItems: Array<{ id?: string; particular?: string; description?: string; amount?: number }> =
@@ -610,6 +613,7 @@ export function EVoucherDetailView({
             currentStatus={evoucher.status}
             requestorId={evoucher.requestor_id}
             cashReceiverId={evoucher.cash_receiver_id}
+            autoOpenLiquidation={autoOpenLiquidation}
             receiptConfirmedAt={(evoucher as any).details?.receipt_confirmed_at ?? (evoucher as any).receipt_confirmed_at}
             cashReturnConfirmedAt={(evoucher as any).details?.cash_return_confirmed_at ?? (evoucher as any).cash_return_confirmed_at}
             currentUser={currentUser}
