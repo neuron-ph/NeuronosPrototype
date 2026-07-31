@@ -644,6 +644,47 @@ const BROKERAGE_IMPORT_CUSTOMS: SectionDef = {
   key: 'brokerage_import_customs',
   title: 'Customs Details',
   fields: [
+    // ── Processing timeline ──────────────────────────────────────────────────
+    // These four dates are what the Brokerage scorecard is reckoned from
+    // (Lodgment 15%, Final Assessment Notice 15%). A trigger on `bookings`
+    // records each one into booking_milestones the first time it is set, so the
+    // KPI is computed from the date the declarant entered rather than from when
+    // a row happened to be saved.
+    //
+    // All optional: Ops fills a booking in as the shipment progresses, and a
+    // required date here would block every save before the entry is lodged.
+    {
+      // Lodgment KPI clock starts at the LATER of this and the manifest date,
+      // so a declarant is not penalised for paperwork that had not arrived.
+      key: 'final_docs_complete_date',
+      label: 'Final Documents Complete',
+      control: 'date',
+      required: 'no',
+      storage: 'details',
+    },
+    {
+      key: 'manifest_date',
+      label: 'Manifest Date',
+      control: 'date',
+      required: 'no',
+      storage: 'details',
+    },
+    {
+      // Lodgment KPI: within 24 hrs of the clock start above.
+      key: 'lodgment_date',
+      label: 'Lodgment Date',
+      control: 'date',
+      required: 'no',
+      storage: 'details',
+    },
+    {
+      // Final Assessment Notice KPI: within 48 hrs of lodgment.
+      key: 'final_assessment_date',
+      label: 'Final Assessment Notice Date',
+      control: 'date',
+      required: 'no',
+      storage: 'details',
+    },
     {
       key: 'selectivity_color',
       label: 'Selectivity Color',
@@ -796,6 +837,25 @@ const FORWARDING_BOOKING_DETAILS: SectionDef = {
   key: 'forwarding_details',
   title: 'Shipment Details',
   fields: [
+    // ── Manifest timeline ────────────────────────────────────────────────────
+    // The Forwarding scorecard's largest KPI is Late Manifest (20%). It needs
+    // BOTH sides: without a cut-off there is no deadline to be late against, and
+    // assuming one would manufacture a result. Recorded into booking_milestones
+    // by the trigger on `bookings`.
+    {
+      key: 'manifest_cutoff_at',
+      label: 'Manifest Cut-off',
+      control: 'date',
+      required: 'no',
+      storage: 'details',
+    },
+    {
+      key: 'manifest_submitted_at',
+      label: 'Manifest Submitted',
+      control: 'date',
+      required: 'no',
+      storage: 'details',
+    },
     // NEU-081: Consignee + Shipper both moved to shared GI (separate, all services)
     {
       key: 'carrier',

@@ -34,6 +34,7 @@ import {
   TrendingUp,
   Database,
   CheckCircle2,
+  Target,
   AlertTriangle,
   Info,
   Bell
@@ -214,7 +215,7 @@ const prefetchOperations = () => void import("./Operations");
 const prefetchAccounting = () => void import("./accounting/FinancialsModule");
 const prefetchInbox      = () => void import("./InboxPage");
 
-type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" |"pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" | "pricing-others" |"ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" |"operations" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-reports" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "calendar" | "inbox" | "approvals" | "my-evouchers" | "ticket-queue" | "settings" | "admin-users" | "admin-profiling" | "admin" | "ticket-testing" | "activity-log" | "design-system";
+type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" |"pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" | "pricing-others" |"ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" |"operations" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-reports" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "hr-performance" | "calendar" | "inbox" | "approvals" | "my-evouchers" | "my-scorecard" | "ticket-queue" | "settings" | "admin-users" | "admin-profiling" | "admin" | "ticket-testing" | "activity-log" | "design-system";
 
 // Sidebar permission map — derived from canonical schema for sidebar-backed pages,
 // plus explicit entries for legacy non-sidebar accounting routes that still need
@@ -572,6 +573,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
   const workItems = [
     { id: "operations" as Page, label: "Operations", icon: Package },
     { id: "hr" as Page, label: "HR", icon: User },
+    { id: "hr-performance" as Page, label: "Performance", icon: Target },
   ];
   
   // Personal section — view-gated like every other section (NEU-019 WG-07:
@@ -585,6 +587,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
     ...(canApproveAnything ? [{ id: "approvals" as Page, label: "Approvals", icon: CheckCircle2 }] : []),
     { id: "inbox" as Page, label: "Inbox", icon: Inbox },
     { id: "my-evouchers" as Page, label: "E-Vouchers", icon: FileText },
+    { id: "my-scorecard" as Page, label: "My Scorecard", icon: Target },
   ].filter(item => item.id === "approvals" || canViewPage(item.id));
   
 

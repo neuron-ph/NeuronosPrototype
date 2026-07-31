@@ -406,6 +406,15 @@ export const APPLICABLE_ACTIONS: Record<ModuleId, readonly ActionId[]> = {
   my_evouchers_pending_tab: ["view"],
   my_evouchers_active_tab: ["view"],
   my_evouchers_done_tab: ["view"],
+  // Read-only by construction: the page renders get_kpi_scorecard(current user)
+  // and the RPC refuses any other user_id. There is nothing here to create,
+  // edit, approve, delete or export — ratings are written from the evaluator's
+  // side (hr_performance), never from the employee's own card.
+  my_scorecard: ["view"],
+  // `view` reads other people's scorecards. `edit` is the separate power to
+  // decide someone's rating — seeing a score and setting one are not the same
+  // authority, so an evaluator is granted deliberately rather than by implication.
+  hr_performance: ["view", "edit"],
 };
 
 /**

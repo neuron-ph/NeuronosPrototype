@@ -125,7 +125,13 @@ export type ModuleId =
   | "calendar"
   | "my_evouchers"
   | "my_evouchers_all_tab" | "my_evouchers_draft_tab" | "my_evouchers_pending_tab"
-  | "my_evouchers_active_tab" | "my_evouchers_done_tab";
+  | "my_evouchers_active_tab" | "my_evouchers_done_tab"
+  // Own KPI scorecard. Read-only, self-scoping — the page only ever renders the
+  // signed-in user's card, so `view` is the only meaningful action.
+  | "my_scorecard"
+  // Everyone else's scorecards. Deliberately a separate door from my_scorecard:
+  // holding this is what lets get_kpi_scorecard return another person's card.
+  | "hr_performance";
 
 // NEU-022: `amend` is a distinct elevated capability (re-edit a CONVERTED quote /
 // active contract after it's locked), kept separate from `approve` so a real

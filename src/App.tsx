@@ -41,6 +41,8 @@ const EVouchersContent = lazy(() => import("./components/accounting/EVouchersCon
 const HR = lazy(() => import("./components/HR").then((module) => ({ default: module.HR })));
 const InboxPage = lazy(() => import("./components/InboxPage").then((module) => ({ default: module.InboxPage })));
 const MyEVouchersPage = lazy(() => import("./components/MyEVouchersPage").then((module) => ({ default: module.MyEVouchersPage })));
+const PerformancePage = lazy(() => import("./components/kpi/PerformancePage").then((module) => ({ default: module.PerformancePage })));
+const MyScorecardPage = lazy(() => import("./components/kpi/MyScorecardPage").then((module) => ({ default: module.MyScorecardPage })));
 const ApprovalsPage = lazy(() => import("./components/ApprovalsPage").then((module) => ({ default: module.ApprovalsPage })));
 const DisburseEVoucherPage = lazy(() => import("./components/accounting/evouchers/DisburseEVoucherPage").then((module) => ({ default: module.DisburseEVoucherPage })));
 const ActivityLogPage = lazy(() => import("./components/ActivityLogPage").then((module) => ({ default: module.ActivityLogPage })));
@@ -265,10 +267,12 @@ function RouteWrapper({ children, page }: { children: React.ReactNode; page: str
     if (path.startsWith("/accounting/bookings")) return "acct-bookings";
     if (path.startsWith("/accounting/reports")) return "acct-reports";
     if (path.startsWith("/accounting/catalog")) return "acct-catalog";
+    if (path.startsWith("/hr/performance")) return "hr-performance";
     if (path.startsWith("/hr")) return "hr";
     if (path.startsWith("/calendar")) return "calendar";
     if (path.startsWith("/approvals")) return "approvals";
     if (path.startsWith("/my-evouchers")) return "my-evouchers";
+    if (path.startsWith("/my-scorecard")) return "my-scorecard";
     if (path.startsWith("/inbox")) return "inbox";
     if (path.startsWith("/activity-log")) return "activity-log";
     if (path.startsWith("/settings")) return "settings";
@@ -318,10 +322,12 @@ function RouteWrapper({ children, page }: { children: React.ReactNode; page: str
       "acct-reports": "/accounting/reports",
       "acct-catalog": "/accounting/catalog",
       "hr": "/hr",
+      "hr-performance": "/hr/performance",
       "calendar": "/calendar",
       "inbox": "/inbox",
       "approvals": "/approvals",
       "my-evouchers": "/my-evouchers",
+      "my-scorecard": "/my-scorecard",
       "activity-log": "/activity-log",
       "settings": "/settings",
       "admin-users": "/admin/users",
@@ -943,6 +949,22 @@ function MyEVouchersPageWrapper() {
   );
 }
 
+function PerformancePageWrapper() {
+  return (
+    <RouteWrapper page="hr-performance">
+      <PerformancePage />
+    </RouteWrapper>
+  );
+}
+
+function MyScorecardPageWrapper() {
+  return (
+    <RouteWrapper page="my-scorecard">
+      <MyScorecardPage />
+    </RouteWrapper>
+  );
+}
+
 function ActivityLogPageWrapper() {
   return (
     <RouteWrapper page="activity-log">
@@ -1208,6 +1230,9 @@ function AppContent() {
         <Route path="/approvals" element={<ApprovalsPageWrapper />} />
         <Route element={<GuardedLayout requiredPermission={{ moduleId: "my_evouchers", action: "view" }} />}>
           <Route path="/my-evouchers" element={<MyEVouchersPageWrapper />} />
+          <Route path="/my-scorecard" element={<MyScorecardPageWrapper />} />
+          <Route path="/hr/performance" element={<PerformancePageWrapper />} />
+          <Route path="/hr/performance/:userId" element={<PerformancePageWrapper />} />
         </Route>
         <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_evouchers", action: "view" }} />}>
           <Route path="/evouchers/:id/disburse" element={<RouteWrapper page="acct-evouchers"><DisburseEVoucherPage /></RouteWrapper>} />

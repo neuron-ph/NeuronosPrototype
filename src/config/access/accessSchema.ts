@@ -587,6 +587,12 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
     label: DEPT_LABEL.hr,
     modules: [
       { kind: "module", id: "hr", moduleId: "hr", label: "HR", pageId: "hr", tabs: [] },
+      // Performance — everyone else's scorecards, department distributions and
+      // systemic flags. Granting `view` here is what widens get_kpi_scorecard
+      // beyond the caller's own card, so this is the control for reading other
+      // people's performance data. Kept separate from my_scorecard on purpose.
+      { kind: "module", id: "hr_performance", moduleId: "hr_performance",
+        label: "Performance", pageId: "hr-performance", tabs: [] },
     ],
   },
 
@@ -680,6 +686,13 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
           tab("my_evouchers_done_tab",    "Done"),
         ],
       },
+      // My Scorecard — the employee's own KPI card, live for the open period.
+      // Self-scoping: the page reads get_kpi_scorecard(current user), so there is
+      // no row to gate and `view` is the only live action. Reading ANOTHER
+      // person's scorecard is a separate door (hr_performance, Phase 2) — never
+      // a widened version of this one.
+      { kind: "module", id: "my_scorecard", moduleId: "my_scorecard",
+        label: "My Scorecard", pageId: "my-scorecard", tabs: [] },
     ],
   },
 ];
