@@ -699,7 +699,7 @@ Update the lines and resubmit.`,
 
   // NEU-051 slice 3: Treasury confirms receipt of the unused cash returned by the
   // requestor. Marks details + history and notifies the requestor. Status stays
-  // pending_verification — this just unblocks Verify & Post.
+  // pending_verification — this just unblocks Verify & Close.
   const handleConfirmCashReturn = async () => {
     setPendingConfirm(null);
     setIsSubmitting(true);
@@ -995,8 +995,10 @@ Update the lines and resubmit.`,
           </div>
         )}
 
-        {/* Accounting (Treasury): Verify & Post the pre-built closing entry —
-            gated on receipts complete + cash return confirmed. */}
+        {/* Accounting (Treasury): verify the receipts and close the advance —
+            gated on receipts complete + cash return confirmed. Named "Verify &
+            Post" when it posted a closing journal entry; there is nothing to
+            post any more. */}
         {canVerifyAndPost && (
           <button
             onClick={handleVerifyAndPostLiquidation}
@@ -1004,7 +1006,7 @@ Update the lines and resubmit.`,
             style={{ ...btnBase, backgroundColor: "var(--theme-status-success-fg)", color: "#fff", opacity: (isSubmitting || !liquidationReady) ? 0.5 : 1, cursor: (isSubmitting || !liquidationReady) ? "not-allowed" : "pointer" }}
           >
             {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle size={15} />}
-            {isSubmitting ? "Posting…" : "Verify & Post"}
+            {isSubmitting ? "Closing…" : "Verify & Close"}
           </button>
         )}
 

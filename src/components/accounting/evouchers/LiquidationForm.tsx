@@ -71,6 +71,10 @@ export function LiquidationForm({
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [unusedReturn, setUnusedReturn] = useState<string>("");
   const [isFinal, setIsFinal] = useState(false);
+  // Overspend needs a second look before it goes through. It used to be a
+  // native confirm() — the one jarring, unstyleable dialog in a workflow whose
+  // every other confirmation is inline.
+  const [showOverspendConfirm, setShowOverspendConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [bookingOptions, setBookingOptions] = useState<BookingOption[]>([]);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -211,9 +215,9 @@ export function LiquidationForm({
       }
     }
 
-    if (isFinal && hasOverspend) {
-      const confirmMsg = `Your total spend (₱${cumulativeSpend.toLocaleString()}) exceeds the advance (₱${advanceAmount.toLocaleString()}) by ₱${overspend.toLocaleString()}. A Reimbursement E-Voucher will be created for this difference. Proceed?`;
-      if (!confirm(confirmMsg)) return;
+    if (isFinal && hasOverspend && !showOverspendConfirm) {
+      setShowOverspendConfirm(true);
+      return;
     }
 
     setSubmitting(true);
@@ -364,6 +368,32 @@ export function LiquidationForm({
           <span style={{ color: "var(--theme-text-muted)" }}> — close the advance and send to Accounting for review.</span>
         </span>
       </label>
+
+      {showOverspendConfirm && (
+        <div style={{ padding: "12px 14px", borderRadius: "10px", border: "1px solid var(--theme-status-warning-border)", backgroundColor: "var(--theme-status-warning-bg)", display: "flex", flexDirection: "column", gap: "10px" }}>
+          <p style={{ margin: 0, fontSize: "12px", lineHeight: 1.5, color: "var(--theme-status-warning-fg)" }}>
+            You spent <strong>₱{cumulativeSpend.toLocaleString()}</strong> against a{" "}
+            <strong>₱{advanceAmount.toLocaleString()}</strong> advance — over by{" "}
+            <strong>₱{overspend.toLocaleString()}</strong>. Submitting will raise a
+            Reimbursement E-Voucher for the difference.
+          </p>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
+              onClick={() => setShowOverspendConfirm(false)}
+              style={{ flex: 1, height: "34px", borderRadius: "8px", border: "1px solid var(--theme-border-default)", backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-muted)", fontSize: "12px", fontWeight: 500, cursor: "pointer" }}
+            >
+              Not yet
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              style={{ flex: 1, height: "34px", borderRadius: "8px", border: "none", backgroundColor: "var(--theme-status-warning-fg)", color: "#fff", fontSize: "12px", fontWeight: 600, cursor: submitting ? "not-allowed" : "pointer" }}
+            >
+              Yes, submit and reimburse
+            </button>
+          </div>
+        </div>
+      )}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
         <button

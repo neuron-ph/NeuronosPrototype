@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { CheckCircle, FileText, Download } from "lucide-react";
+import { supabase } from "../../utils/supabase/client";
 import { VoucherBrandLogo } from "../VoucherBrandLogo";
 import { formatAttachmentSize } from "../../utils/crmAttachments";
 import { EVoucherWorkflowPanel } from "./evouchers/EVoucherWorkflowPanel";
@@ -59,6 +61,47 @@ export function EVoucherDetailView({
   autoOpenLiquidation,
 }: EVoucherDetailViewProps) {
   // Prefer relational line items; fall back to legacy JSONB array
+  // NEU-088 puts the booking on the LINE ITEMS, not on the voucher — so
+  // project_number is null on modern vouchers and "Project / Booking Ref" read
+  // "—" while the booking sat in the auto-generated purpose string above it.
+  // Read the lines straight from the table: the list queries that feed this
+  // panel don't join evoucher_line_items, so the prop is usually empty.
+  const [lineBookingNumbers, setLineBookingNumbers] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void supabase
+      .from("evoucher_line_items")
+      .select("booking_id, bookings:booking_id(booking_number)")
+      .eq("evoucher_id", evoucher.id)
+      .then(({ data }) => {
+        if (cancelled) return;
+        const nums = new Set<string>();
+        for (const row of (data ?? []) as any[]) {
+          const n = row?.bookings?.booking_number;
+          if (n) nums.add(String(n));
+        }
+        setLineBookingNumbers([...nums]);
+      });
+    return () => { cancelled = true; };
+  }, [evoucher.id]);
+
+  const bookingRef =
+    evoucher.project_number ||
+    (lineBookingNumbers.length > 0 ? lineBookingNumbers.join(", ") : "") ||
+    "—";
+
+  // The NEU-088 auto-title is "{Type} · {Booking} · {Date}" — every part of
+  // which now has its own field. Strip the leading type so Purpose stops
+  // restating the Transaction Type verbatim one line below itself. A purpose
+  // someone actually typed won't match the prefix and is left alone.
+  const purposeText = (() => {
+    const raw = String(evoucher.purpose || evoucher.description || "").trim();
+    if (!raw) return "—";
+    const typeLabel = evoucherTypeLabelFor(evoucher);
+    const prefix = `${typeLabel} · `;
+    return raw.startsWith(prefix) ? raw.slice(prefix.length) : raw;
+  })();
+
   const lineItems: Array<{ id?: string; particular?: string; description?: string; amount?: number }> =
     evoucher.evoucher_line_items?.length
       ? evoucher.evoucher_line_items
@@ -160,7 +203,7 @@ export function EVoucherDetailView({
           <div style={{ marginBottom: "20px" }}>
             <div style={fieldLabel}>Description / Purpose</div>
             <div style={{ ...fieldValue, fontSize: "14px", lineHeight: 1.55 }}>
-              {evoucher.purpose || evoucher.description || "—"}
+              {purposeText}
             </div>
           </div>
 
@@ -197,7 +240,7 @@ export function EVoucherDetailView({
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
             <div>
               <div style={fieldLabel}>Project / Booking Ref</div>
-              <div style={fieldValue}>{evoucher.project_number || "—"}</div>
+              <div style={fieldValue}>{bookingRef}</div>
               {evoucher.customer_name && (
                 <div style={{ fontSize: "12px", color: "var(--theme-text-muted)", marginTop: "3px" }}>
                   {evoucher.customer_name}
