@@ -81,7 +81,7 @@ export function ApprovalsPage() {
       kind: "evoucher",
       id: ev.id,
       number: ev.evoucher_number ?? ev.voucher_number ?? ev.id,
-      label: ev.transaction_type === "fund_transfer" ? "Transfer of Funds" : "E-Voucher",
+      label: "E-Voucher",
       who: ev.requestor_name ?? ev.details?.requestor_name ?? "—",
       amount: Number(ev.amount) || 0,
       date: ev.request_date ?? ev.created_at,

@@ -205,10 +205,6 @@ export function AddRequestForPaymentPanel({
   // Bank/Cash Accounts
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [sourceAccountId, setSourceAccountId] = useState("");
-  // NEU-095: fund-transfer fields (fund_transfer type only).
-  const [fromAccountId, setFromAccountId] = useState("");
-  const [toAccountId, setToAccountId] = useState("");
-  const [transferAmount, setTransferAmount] = useState<number>(0);
 
   // Fetch Accounts (Assets Only)
   useEffect(() => {
@@ -579,10 +575,10 @@ export function AddRequestForPaymentPanel({
         expenseCategory,
         subCategory: "",
         projectNumber,
-        lineItems: isFundTransfer ? [] : allLineItems,
-        totalAmount: isFundTransfer ? transferAmount : totalAmount, // NEU-095
+        lineItems: allLineItems,
+        totalAmount,
         preferredPayment,
-        vendor: isFundTransfer ? "" : vendor,
+        vendor,
         vendorId: vendorId || undefined,
         creditTerms,
         paymentSchedule,
@@ -593,8 +589,6 @@ export function AddRequestForPaymentPanel({
         isBillable: transactionSubtype === "billable_expense",
         linkedBillings: isCollectionMode ? linkedBillings : undefined,
         sourceAccountId: sourceAccountId || undefined,
-        fromAccountId: isFundTransfer ? fromAccountId : undefined, // NEU-095
-        toAccountId: isFundTransfer ? toAccountId : undefined,     // NEU-095
         currency,
         exchangeRate: currency === FUNCTIONAL_CURRENCY ? 1 : parseFloat(exchangeRateInput),
       };
@@ -636,10 +630,10 @@ export function AddRequestForPaymentPanel({
         expenseCategory,
         subCategory,
         projectNumber,
-        lineItems: isFundTransfer ? [] : allLineItems,
-        totalAmount: isFundTransfer ? transferAmount : totalAmount, // NEU-095
+        lineItems: allLineItems,
+        totalAmount,
         preferredPayment,
-        vendor: isFundTransfer ? "" : vendor,
+        vendor,
         vendorId: vendorId || undefined,
         creditTerms,
         paymentSchedule,
@@ -650,8 +644,6 @@ export function AddRequestForPaymentPanel({
         isBillable: transactionSubtype === "billable_expense",
         linkedBillings: isCollectionMode ? linkedBillings : undefined,
         sourceAccountId: sourceAccountId || undefined,
-        fromAccountId: isFundTransfer ? fromAccountId : undefined, // NEU-095
-        toAccountId: isFundTransfer ? toAccountId : undefined,     // NEU-095
         currency,
         exchangeRate: currency === FUNCTIONAL_CURRENCY ? 1 : parseFloat(exchangeRateInput),
       };
@@ -688,10 +680,10 @@ export function AddRequestForPaymentPanel({
         expenseCategory,
         subCategory,
         projectNumber,
-        lineItems: isFundTransfer ? [] : allLineItems,
-        totalAmount: isFundTransfer ? transferAmount : totalAmount, // NEU-095
+        lineItems: allLineItems,
+        totalAmount,
         preferredPayment,
-        vendor: isFundTransfer ? "" : vendor,
+        vendor,
         vendorId: vendorId || undefined,
         creditTerms,
         paymentSchedule,
@@ -702,8 +694,6 @@ export function AddRequestForPaymentPanel({
         isBillable: transactionSubtype === "billable_expense",
         linkedBillings: isCollectionMode ? linkedBillings : undefined,
         sourceAccountId: sourceAccountId || undefined,
-        fromAccountId: isFundTransfer ? fromAccountId : undefined, // NEU-095
-        toAccountId: isFundTransfer ? toAccountId : undefined,     // NEU-095
         currency,
         exchangeRate: currency === FUNCTIONAL_CURRENCY ? 1 : parseFloat(exchangeRateInput),
       };
@@ -777,15 +767,8 @@ export function AddRequestForPaymentPanel({
   const isDirectExpense = transactionType === "direct_expense";
   const isCollectionMode = transactionType === "collection";
   const isBillingMode = transactionType === "billing";
-  const isFundTransfer = transactionType === "fund_transfer"; // NEU-095
 
-  // UX: Transfer of Funds is a treasury/accounting instrument (routes to the
-  // Executive to process). Hide it from users who can't create accounting
-  // vouchers — otherwise they pick a type they can't complete. Still shown when
-  // already editing a transfer, so its label resolves.
-  const typeOptions = (can("acct_evouchers", "create") || isFundTransfer)
-    ? TRANSACTION_TYPE_OPTIONS
-    : TRANSACTION_TYPE_OPTIONS.filter((o) => o.value !== "fund_transfer");
+  const typeOptions = TRANSACTION_TYPE_OPTIONS;
 
   // NEU-088: expense-type vouchers no longer carry a typed Description/Purpose —
   // the title is auto-generated. Billing/Collection (and BD) keep their typed title.
@@ -800,13 +783,6 @@ export function AddRequestForPaymentPanel({
   // NEU-088 (option B): "{TypeLabel} · {booking|N bookings} · {YYYY-MM-DD}".
   const buildAutoTitle = (): string => {
     const label = evoucherTypeLabel(transactionType, transactionSubtype === "billable_expense");
-    if (isFundTransfer) {
-      // NEU-095: "Transfer of Funds · {From} → {To} · {YYYY-MM-DD}"
-      const from = accounts.find(a => a.id === fromAccountId);
-      const to = accounts.find(a => a.id === toAccountId);
-      const route = from && to ? `${from.code} → ${to.code}` : "";
-      return [label, route, new Date().toISOString().slice(0, 10)].filter(Boolean).join(" · ");
-    }
     const bookingIds = Array.from(
       new Set(allLineItems.map(li => li.booking_id).filter(Boolean) as string[])
     );
@@ -824,16 +800,10 @@ export function AddRequestForPaymentPanel({
   // registry, so those keep the free-text field.
   const isVendorCounterparty = isExpense || isDirectExpense || isReimbursement;
   
-  // NEU-095: a fund transfer is valid when From/To are distinct accounts and the
-  // amount is positive — no vendor, no line items.
-  const isFundTransferValid =
-    !!fromAccountId && !!toAccountId && fromAccountId !== toAccountId && transferAmount > 0;
-
-  const isFormValid = isFundTransfer
-    ? isFundTransferValid
-    : (autoTitleMode || requestName.trim() !== "") && // NEU-088: expense vouchers auto-title
-      (isCollectionMode || categorySections.some(s => s.items.some(item => item.particular.trim() !== "" && item.amount > 0))) &&
-      vendor.trim() !== "";
+  const isFormValid =
+    (autoTitleMode || requestName.trim() !== "") && // NEU-088: expense vouchers auto-title
+    (isCollectionMode || categorySections.some(s => s.items.some(item => item.particular.trim() !== "" && item.amount > 0))) &&
+    vendor.trim() !== "";
 
   // Disable save paths while the mutation runs OR files are uploading
   const busy = isSaving || isUploading;
@@ -1226,7 +1196,6 @@ export function AddRequestForPaymentPanel({
                           transactionType === "cash_advance" ? "cash_advance"
                             : transactionType === "reimbursement" ? "reimbursement"
                             : transactionType === "direct_expense" ? "direct_expense"
-                            : transactionType === "fund_transfer" ? "fund_transfer"
                             : transactionSubtype === "billable_expense" ? "billable" : "expense"
                         }
                         onChange={(val) => {
@@ -1238,9 +1207,6 @@ export function AddRequestForPaymentPanel({
                             setTransactionSubtype("regular_expense");
                           } else if (val === "direct_expense") {
                             setTransactionType("direct_expense");
-                            setTransactionSubtype("regular_expense");
-                          } else if (val === "fund_transfer") {
-                            setTransactionType("fund_transfer");
                             setTransactionSubtype("regular_expense");
                           } else if (val === "billable") {
                             setTransactionType("expense");
@@ -1299,7 +1265,6 @@ export function AddRequestForPaymentPanel({
                 {/* Vendor / Counterparty — NEU-088: the top-level Project/Booking Ref
                     field was removed; booking is now captured per line item (NEU-089).
                     NEU-095: a fund transfer has no counterparty — hidden for it. */}
-                {!isFundTransfer && (
                 <div>
                     <label style={{
                       display: "block",
@@ -1350,71 +1315,12 @@ export function AddRequestForPaymentPanel({
                       />
                     )}
                   </div>
-                )}
-
-                {/* NEU-095: Fund Transfer — From / To account + amount. */}
-                {isFundTransfer && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                      <div>
-                        <label style={{ display: "block", fontSize: "12px", fontWeight: 500, color: "var(--theme-text-secondary)", marginBottom: "8px" }}>
-                          From account <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
-                        </label>
-                        <CustomDropdown
-                          fullWidth searchable
-                          searchPlaceholder="Search accounts…"
-                          placeholder="Select source account…"
-                          triggerAriaLabel="From account"
-                          value={fromAccountId}
-                          options={accounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
-                          onChange={(id) => setFromAccountId(id || "")}
-                        />
-                      </div>
-                      <div>
-                        <label style={{ display: "block", fontSize: "12px", fontWeight: 500, color: "var(--theme-text-secondary)", marginBottom: "8px" }}>
-                          To account <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
-                        </label>
-                        <CustomDropdown
-                          fullWidth searchable
-                          searchPlaceholder="Search accounts…"
-                          placeholder="Select destination account…"
-                          triggerAriaLabel="To account"
-                          value={toAccountId}
-                          options={accounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
-                          onChange={(id) => setToAccountId(id || "")}
-                        />
-                      </div>
-                    </div>
-                    {fromAccountId && toAccountId && fromAccountId === toAccountId && (
-                      <p style={{ fontSize: "12px", color: "var(--theme-status-danger-fg)", margin: 0 }}>
-                        From and To must be different accounts.
-                      </p>
-                    )}
-                    <div>
-                      <label style={{ display: "block", fontSize: "12px", fontWeight: 500, color: "var(--theme-text-secondary)", marginBottom: "8px" }}>
-                        Amount <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span>
-                      </label>
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <span style={{ color: "var(--theme-text-muted)", fontSize: "14px" }}>{currency === "USD" ? "$" : "₱"}</span>
-                        <input
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          value={transferAmount || ""}
-                          onChange={(e) => setTransferAmount(parseFloat(e.target.value) || 0)}
-                          placeholder="0.00"
-                          style={{ width: "220px", padding: "10px 14px", fontSize: "14px", textAlign: "right", border: "1px solid var(--theme-border-default)", borderRadius: "6px", outline: "none", fontVariantNumeric: "tabular-nums", backgroundColor: "var(--theme-bg-surface)" }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
+                
 
               </div>
             </div>
 
             {/* Line Items Section — NEU-095: transfers have no line items. */}
-            {!isFundTransfer && (
             <div style={{ marginBottom: "32px" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
                 <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--theme-text-primary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
@@ -1684,10 +1590,9 @@ export function AddRequestForPaymentPanel({
                 </div>
               )}
             </div>
-            )}
+            
 
             {/* Payment & Terms Section — NEU-095: transfers have no payment terms. */}
-            {!isFundTransfer && (
             <div style={{ marginBottom: "32px" }}>
               <h3 style={{
                 fontSize: "14px",
@@ -1740,7 +1645,7 @@ export function AddRequestForPaymentPanel({
                 </div>
               </div>
             </div>
-            )}
+            
 
             {/* Notes Section */}
             <div>
