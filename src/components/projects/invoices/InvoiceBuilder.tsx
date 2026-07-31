@@ -954,6 +954,7 @@ export function InvoiceBuilder({
   const [isVoiding, setIsVoiding] = useState(false);
   const [isDeletingDraft, setIsDeletingDraft] = useState(false);
   const [confirmVoid, setConfirmVoid] = useState(false);
+  const [voidReason, setVoidReason] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isApproving, setIsApproving] = useState(false); // NEU-103
 
@@ -1098,6 +1099,10 @@ export function InvoiceBuilder({
 
   const handleVoidInvoice = async () => {
     if (!viewInvoice || !user || !canDeleteInvoices) return; // WG-06 backstop — NEU-020 DD-9: void is delete-class
+    if (!voidReason.trim()) {
+      toast.error("Please say why this invoice is being voided");
+      return;
+    }
     setIsVoiding(true);
     try {
       const inv = viewInvoice as any;
@@ -1114,34 +1119,46 @@ export function InvoiceBuilder({
         return;
       }
 
-      const billingItemIds = Array.isArray(inv.billing_item_ids) ? inv.billing_item_ids : [];
-      if (billingItemIds.length > 0) {
-        await supabase
-          .from("billing_line_items")
-          .update({ status: "unbilled", invoice_id: null, invoice_number: null })
-          .in("id", billingItemIds);
-      }
-
+      // Void the invoice FIRST. Releasing the billing items first used to leave
+      // the charges back in the unbilled pool while the invoice stayed posted
+      // when this update failed — the same charge could then be invoiced twice.
+      // (It always failed: payment_status / remaining_balance / amount_due are
+      // not columns on invoices, so PostgREST rejected the whole statement.)
+      const voidedAt = new Date().toISOString();
       const { error } = await supabase
         .from("invoices")
         .update({
           status: "void",
-          payment_status: "void",
-          remaining_balance: 0,
-          amount_due: 0,
-          updated_at: new Date().toISOString(),
+          metadata: {
+            ...(inv.metadata || {}),
+            void_reason: voidReason.trim(),
+            voided_at: voidedAt,
+            voided_by: user.id,
+            voided_by_name: user.name,
+          },
+          updated_at: voidedAt,
         })
         .eq("id", inv.id);
       if (error) throw error;
 
+      const billingItemIds = Array.isArray(inv.billing_item_ids) ? inv.billing_item_ids : [];
+      if (billingItemIds.length > 0) {
+        const { error: releaseErr } = await supabase
+          .from("billing_line_items")
+          .update({ status: "unbilled", invoice_id: null })
+          .in("id", billingItemIds);
+        if (releaseErr) throw releaseErr;
+      }
+
       const actor = { id: user.id, name: user.name, department: user.department ?? "" };
       logActivity("invoice", inv.id, inv.invoice_number ?? inv.id, "voided", actor, {
-        description: "Voided",
+        description: `Voided — ${voidReason.trim()}`,
       });
 
       setViewInvoice({ ...viewInvoice, status: "void" } as Invoice);
       toast.success(`Invoice ${inv.invoice_number} voided`);
       setConfirmVoid(false);
+      setVoidReason("");
       if (onRefreshData) await onRefreshData();
       if (onBack) onBack();
     } catch (err) {
@@ -1469,17 +1486,28 @@ export function InvoiceBuilder({
                             This will void the invoice. Billing items will be released back to unbilled.
                           </p>
                         </div>
+                        <label htmlFor="inv-void-reason" className="block text-[11px] font-semibold text-[var(--theme-status-danger-fg)] mb-1.5">
+                          Reason for voiding — kept on the invoice and in the activity log
+                        </label>
+                        <textarea
+                          id="inv-void-reason"
+                          value={voidReason}
+                          onChange={(e) => setVoidReason(e.target.value)}
+                          rows={2}
+                          placeholder="e.g. Issued to the wrong customer"
+                          className="w-full mb-3 px-2.5 py-2 text-[12px] border border-[var(--theme-border-default)] rounded-md outline-none resize-none bg-[var(--theme-bg-surface)] text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)]"
+                        />
                         <div className="flex gap-2">
                           <button
                             onClick={handleVoidInvoice}
-                            disabled={isVoiding}
+                            disabled={isVoiding || !voidReason.trim()}
                             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-bold text-white bg-[var(--theme-status-danger-fg)] rounded-lg hover:opacity-90 transition-all disabled:opacity-60"
                           >
                             {isVoiding ? <Loader2 size={14} className="animate-spin" /> : <Ban size={14} />}
                             Confirm Void
                           </button>
                           <button
-                            onClick={() => setConfirmVoid(false)}
+                            onClick={() => { setConfirmVoid(false); setVoidReason(""); }}
                             className="px-4 py-2.5 text-[13px] font-medium text-[var(--theme-text-secondary)] border border-[var(--theme-border-default)] rounded-lg hover:bg-[var(--theme-bg-surface-subtle)] transition-all bg-[var(--theme-bg-surface)]"
                           >
                             Cancel

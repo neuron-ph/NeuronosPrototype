@@ -715,9 +715,17 @@ export function FinancialsModule() {
   // Unified invoice views already use, so every surface now agrees.
   const settlementOf = useCallback((inv: any) => {
     const fin = calculateInvoiceBalance(inv, collections as any);
-    // A draft has not been issued, so it is not open/partial/paid/overdue.
-    const isDraft = String(inv?.status || "").toLowerCase() === "draft";
-    return { ...fin, status: isDraft ? ("draft" as const) : fin.status };
+    const raw = String(inv?.status || "").toLowerCase();
+    // A draft has not been issued, and a void/reversed document is dead — none
+    // of them are open/partial/paid/overdue, so the document status wins.
+    const passthrough = raw === "draft" || raw === "void" || raw === "reversed";
+    return {
+      ...fin,
+      status: passthrough ? (raw as any) : fin.status,
+      // A dead document carries no receivable, whatever its lines say.
+      balance: raw === "void" || raw === "reversed" ? 0 : fin.balance,
+      balanceBase: raw === "void" || raw === "reversed" ? 0 : fin.balanceBase,
+    };
   }, [collections]);
 
   // Aging bucket helper
@@ -926,6 +934,8 @@ export function FinancialsModule() {
         const s = settlementOf(inv).status;
         const fgMap: Record<string, string> = {
           draft: "var(--theme-text-muted)",
+          void: "var(--theme-text-muted)",
+          reversed: "var(--theme-text-muted)",
           open: "#2563EB",
           partial: "var(--theme-status-warning-fg)",
           overdue: "var(--theme-status-danger-fg)",
@@ -933,6 +943,8 @@ export function FinancialsModule() {
         };
         const bgMap: Record<string, string> = {
           draft: "var(--theme-bg-surface-subtle)",
+          void: "var(--theme-bg-surface-subtle)",
+          reversed: "var(--theme-bg-surface-subtle)",
           open: "#2563EB20",
           partial: "var(--theme-status-warning-bg)",
           overdue: "var(--theme-status-danger-bg)",
