@@ -594,11 +594,6 @@ export function EVoucherDetailView({
           </div>
         )}
 
-        {/* ── Workflow History ─────────────────────────────────────────────── */}
-        <div style={{ marginBottom: "28px" }}>
-          <EVoucherHistoryTimeline evoucherId={evoucher.id} currentUser={currentUser} currentStatus={evoucher.status} />
-        </div>
-
         {/* ── Workflow Actions ─────────────────────────────────────────────── */}
         <div
           style={{
@@ -628,6 +623,15 @@ export function EVoucherDetailView({
             currency={evoucher.currency}
             expenseCategory={(evoucher as any).expense_category ?? evoucher.gl_category}
           />
+        </div>
+
+        {/* ── Workflow History ───────────────────────────────────────────────
+            Deliberately BELOW the actions. The timeline is reference material and
+            it grows with every approval step — rendered above the actions it
+            pushed the user's actual task further off-screen the more a voucher
+            had been worked on. Liquidating an advance sat ~4 screens down. */}
+        <div style={{ marginBottom: "28px" }}>
+          <EVoucherHistoryTimeline evoucherId={evoucher.id} currentUser={currentUser} currentStatus={evoucher.status} />
         </div>
 
         {/* ── Liquidation history + per-booking reconciliation (NEU-105) ────────

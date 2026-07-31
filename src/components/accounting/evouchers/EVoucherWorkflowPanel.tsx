@@ -2,7 +2,7 @@ import { supabase } from "../../../utils/supabase/client";
 import { usePermission } from "../../../context/PermissionProvider";
 import { createWorkflowTicket } from "../../../utils/workflowTickets";
 import { logActivity, logApproval } from "../../../utils/activityLog";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import {
   CheckCircle, XCircle, Send, Ban, Loader2, ClipboardList, Unlock, AlertTriangle,
@@ -118,6 +118,17 @@ export function EVoucherWorkflowPanel({
   const [rejectionReason, setRejectionReason] = useState("");
 
   const [showLiquidationForm, setShowLiquidationForm] = useState(false);
+  // The form renders inline below the action buttons, which in a long voucher
+  // panel puts it off-screen — clicking Liquidate looked like nothing happened.
+  // Scroll it into view once it mounts so the click has a visible result.
+  const liquidationFormRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!showLiquidationForm) return;
+    const id = requestAnimationFrame(() =>
+      liquidationFormRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }),
+    );
+    return () => cancelAnimationFrame(id);
+  }, [showLiquidationForm]);
 
   // NEU-051: when a voucher is awaiting Treasury verification, load its
   // liquidation submissions to check receipt-attachment completeness (slice 2)
@@ -1023,6 +1034,7 @@ export function EVoucherWorkflowPanel({
 
       {/* Liquidation Form — inline, expands below the action buttons */}
       {currentUser && (
+        <div ref={liquidationFormRef}>
         <LiquidationForm
           isOpen={showLiquidationForm}
           onClose={() => setShowLiquidationForm(false)}
@@ -1035,6 +1047,7 @@ export function EVoucherWorkflowPanel({
           previousTotalSpent={previousTotalSpent > 0 ? previousTotalSpent : undefined}
           previousTotalReturned={previousTotalReturned > 0 ? previousTotalReturned : undefined}
         />
+        </div>
       )}
     </>
   );
