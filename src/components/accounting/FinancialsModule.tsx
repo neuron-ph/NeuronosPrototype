@@ -42,6 +42,7 @@ import { useDataScope } from "../../hooks/useDataScope";
 import type { DataScope } from "../../hooks/useDataScope";
 import { calculateFinancialTotals } from "../../utils/financialCalculations";
 import { calculateInvoiceBalance } from "../../utils/accounting-math";
+import { isInvoiceVisibleDocument } from "../../utils/invoiceReversal";
 import { pickReportingAmount } from "../../utils/accountingCurrency";
 import type { FinancialData } from "../../hooks/useProjectFinancials";
 import type { BillingItem } from "../shared/billings/UnifiedBillingsTab";
@@ -306,15 +307,12 @@ export function FinancialsModule() {
           }))
         : [];
 
+      // One definition of "is this a document you can see", shared with the
+      // aggregate invoices page. The local allow-list this replaces omitted
+      // "void", so a voided invoice silently vanished from the only screen
+      // that lists invoices.
       const invoices = (!e2 && invoiceRows)
-        ? invoiceRows.filter((b: any) => {
-            const status = (b.status || "").toLowerCase();
-            const paymentStatus = (b.payment_status || "").toLowerCase();
-            return (
-              ["draft", "posted", "approved", "paid", "open", "partial"].includes(status) ||
-              ["paid", "partial"].includes(paymentStatus)
-            );
-          })
+        ? invoiceRows.filter((b: any) => isInvoiceVisibleDocument(b))
         : [];
 
       const collections = (!e3 && collectionRows) ? collectionRows : [];
@@ -791,7 +789,13 @@ export function FinancialsModule() {
       Number(inv.base_amount ?? inv.total_amount ?? inv.amount ?? 0);
     const baseRemaining = (inv: any) => settlementOf(inv).balanceBase;
 
-    const totalInvoiced = items.reduce((sum, inv: any) => sum + baseTotal(inv), 0);
+    // A voided or reversed document is listed for the record but was never
+    // really invoiced — keep it out of the money.
+    const live = items.filter((inv: any) => {
+      const s = settlementOf(inv).status;
+      return s !== "void" && s !== "reversed";
+    });
+    const totalInvoiced = live.reduce((sum, inv: any) => sum + baseTotal(inv), 0);
 
     const unpaid = items.filter((inv: any) => baseRemaining(inv) > 0.01);
     const outstanding = unpaid.reduce((sum, inv: any) => sum + baseRemaining(inv), 0);
@@ -813,7 +817,7 @@ export function FinancialsModule() {
       {
         label: "Total Invoiced",
         value: formatCurrencyCompact(totalInvoiced),
-        subtext: `${items.length} invoices`,
+        subtext: `${live.length} invoices`,
         icon: FileStack,
         severity: "normal" as const,
       },
