@@ -75,7 +75,7 @@ export function EVouchersContent() {
               E-Vouchers
             </h1>
             <p className="text-[14px] text-[var(--theme-text-muted)]">
-              Manage disbursements, verify receipts, and post to the general ledger
+              Manage disbursements and verify receipts
             </p>
           </div>
           <div className="flex items-center gap-3">

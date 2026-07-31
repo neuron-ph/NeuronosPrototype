@@ -28,7 +28,6 @@ interface BillingDetailsSheetProps {
 
 export function BillingDetailsSheet({ isOpen, onClose, billingId }: BillingDetailsSheetProps) {
   // NEU-019 WG-08: reversal drafts/completion write invoices (same OR-gate as
-  // WG-06); Post to GL writes journal entries (same gate as General Journal).
   const { can } = usePermission();
   const canKey = can as unknown as (moduleId: string, action: string) => boolean;
   // 2.6-final: acct_financials master key retired (record-mirroring write gate,

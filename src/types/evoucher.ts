@@ -329,15 +329,6 @@ export interface LiquidationSubmission {
   created_at: string;
 }
 
-// GL journal entry suggestion per EV type (used in the GL Confirmation Sheet)
-export interface GLEntrySuggestion {
-  debit_account_id: string;
-  debit_account_name: string;
-  credit_account_id: string;
-  credit_account_name: string;
-  amount: number;
-  description: string;
-}
 
 // Canonical GL contract per AP type
 export const GL_CONTRACT: Record<EVoucherAPType, { on_approval: string; on_disbursement: string }> = {

@@ -23,8 +23,6 @@ interface CollectionDetailsSheetProps {
 
 export function CollectionDetailsSheet({ isOpen, onClose, collectionId }: CollectionDetailsSheetProps) {
   // NEU-019 WG-08: credit/refund resolution writes collections + linked
-  // evouchers (collections OR-gate, as in UnifiedCollectionsTab); Post to GL
-  // writes journal entries (same gate as General Journal).
   const { can } = usePermission();
   const canKey = can as unknown as (moduleId: string, action: string) => boolean;
   // 2.6-final: acct_financials master key retired (record-mirroring write gate,
