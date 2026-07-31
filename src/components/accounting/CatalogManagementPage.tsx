@@ -159,11 +159,10 @@ function ItemsTab() {
   const [renamingCatId, setRenamingCatId] = useState<string | null>(null);
   const [renamingValue, setRenamingValue] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
-  const [addForm, setAddForm] = useState<{ name: string; category_id: string | null; account_id: string | null }>({ name: "", category_id: null, account_id: null });
+  const [addForm, setAddForm] = useState<{ name: string; category_id: string | null }>({ name: "", category_id: null });
   const [showAddCategoryForm, setShowAddCategoryForm] = useState(false);
   const [addCategoryName, setAddCategoryName] = useState("");
   const [addCategorySide, setAddCategorySide] = useState<"revenue" | "expense">(sideFilter === "expense" ? "expense" : "revenue");
-  const [addCategoryParentAccountId, setAddCategoryParentAccountId] = useState(""); // NEU-091
 
   // ── Scroll fade state ──
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -196,7 +195,7 @@ function ItemsTab() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("catalog_items")
-        .select(`${CATALOG_ITEM_SELECT_FIELDS}, account_id, catalog_categories(name)`)
+        .select(`${CATALOG_ITEM_SELECT_FIELDS}, catalog_categories(name)`)
         .order("name");
       if (error) throw error;
       return (data ?? []).map((i: any) => ({
@@ -204,7 +203,6 @@ function ItemsTab() {
         name: i.name,
         category_id: i.category_id,
         category_name: i.catalog_categories?.name ?? null,
-        account_id: i.account_id ?? null,
         created_at: i.created_at,
         updated_at: i.updated_at,
       })) as CatalogItemWithCategoryName[];
@@ -237,36 +235,6 @@ function ItemsTab() {
     staleTime: 0,
   });
 
-  // ── Query 4: Chart of Accounts (NEU-091 catalog→COA linking) ──
-  const { data: accounts = [] } = useQuery({
-    queryKey: ["accounts", "catalog_coa"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("accounts")
-        .select("id, code, name, type, parent_id, is_active")
-        .order("code");
-      if (error) throw error;
-      return (data ?? []) as { id: string; code: string; name: string; type: string; parent_id: string | null; is_active?: boolean }[];
-    },
-    staleTime: 60_000,
-  });
-
-  const accountLabel = (id?: string | null) => {
-    const a = accounts.find(x => x.id === id);
-    return a ? `${a.code} · ${a.name}` : "";
-  };
-
-  // Parent-account options for a NEW category, scoped to its side. Expense has a
-  // folder→leaf tree, so we offer the top-level folders; revenue is flat, so all
-  // revenue accounts are offered.
-  const parentAccountOptions = useMemo(() => {
-    const targetType = addCategorySide === "revenue" ? "revenue" : "expense";
-    return accounts
-      .filter(a => a.type === targetType && a.is_active !== false)
-      .filter(a => (targetType === "revenue" ? true : a.parent_id == null))
-      .map(a => ({ value: a.id, label: `${a.code} · ${a.name}` }));
-  }, [accounts, addCategorySide]);
-
   // ── Derived data ──
   const usageCounts = useMemo(() => {
     const map: Record<string, number> = {};
@@ -283,24 +251,6 @@ function ItemsTab() {
     }
     return categories.map((c: any) => ({ ...c, item_count: catCountMap[c.id] ?? 0 }));
   }, [categories, items]);
-
-  // Account options for a NEW item, scoped to its category's parent account:
-  // the leaves under that parent (expense tree); if the parent has no children
-  // (flat revenue) or the category has no parent yet, fall back to all accounts
-  // of the category's side. NEU-091.
-  const itemAccountOptions = useMemo(() => {
-    const cat = (categories as any[]).find(c => c.id === addForm.category_id);
-    const parentId = cat?.parent_account_id ?? null;
-    const targetType = cat?.side === "revenue" ? "revenue" : cat?.side === "expense" ? "expense" : null;
-    let pool = accounts.filter(a => a.is_active !== false);
-    if (parentId) {
-      const children = pool.filter(a => a.parent_id === parentId);
-      pool = children.length ? children : (targetType ? pool.filter(a => a.type === targetType) : pool);
-    } else if (targetType) {
-      pool = pool.filter(a => a.type === targetType);
-    }
-    return pool.map(a => ({ value: a.id, label: `${a.code} · ${a.name}` }));
-  }, [accounts, categories, addForm.category_id]);
 
   const invalidateCatalog = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: queryKeys.catalog.all() });
@@ -373,11 +323,7 @@ function ItemsTab() {
     const { catalog_categories: _cc, category_name: _cn, ...updates } = editForm as any;
     const nextName = String(updates.name ?? "").trim();
     const nextCategoryId = updates.category_id ?? null;
-    const nextAccountId = (updates.account_id as string | undefined) ?? null;
     if (!nextName) { toast.error("Name is required"); return; }
-    // NEU-091: the COA link is enforced on edit too — an item can never be saved
-    // back to a NULL account. It's the autofill seed for every journal line.
-    if (!nextAccountId) { toast.error("An account (COA) is required — every item must map to one"); return; }
     const duplicate = findCatalogItemDuplicate(items, nextName, nextCategoryId, id);
     if (duplicate) {
       toast.error(`"${duplicate.name}" already exists in this category`);
@@ -387,7 +333,6 @@ function ItemsTab() {
     const { error } = await supabase.from("catalog_items").update({
       name: nextName,
       category_id: nextCategoryId,
-      account_id: nextAccountId,
     }).eq("id", id);
     if (!error) {
       toast.success("Item updated");
@@ -400,14 +345,11 @@ function ItemsTab() {
 
   const handleAddCategory = async () => {
     if (!addCategoryName.trim()) { toast.error("Category name is required"); return; }
-    // NEU-091: a new category must map to a parent COA account.
-    if (!addCategoryParentAccountId) { toast.error("A parent account (COA) is required for a new category"); return; }
     const maxOrder = Math.max(0, ...categoriesWithCount.map((c: any) => c.sort_order ?? 0));
     const { error } = await supabase.from("catalog_categories").insert({
       id: `cat-${Date.now()}`,
       name: addCategoryName.trim(),
       side: addCategorySide,
-      parent_account_id: addCategoryParentAccountId,
       sort_order: maxOrder + 1,
       is_default: false,
     });
@@ -415,7 +357,6 @@ function ItemsTab() {
       toast.success(`Category "${addCategoryName}" created`);
       setAddCategoryName("");
       setAddCategorySide(sideFilter === "expense" ? "expense" : "revenue");
-      setAddCategoryParentAccountId("");
       setShowAddCategoryForm(false);
       invalidateCatalog();
     } else toast.error(error.message || "Error creating category");
@@ -425,8 +366,6 @@ function ItemsTab() {
     const name = addForm.name.trim();
     const categoryId = addForm.category_id || null;
     if (!name) { toast.error("Name is required"); return; }
-    // NEU-091: every catalog item must resolve to a COA account.
-    if (!addForm.account_id) { toast.error("An account (COA) is required for a new item"); return; }
     const duplicate = findCatalogItemDuplicate(items, name, categoryId);
     if (duplicate) {
       toast.error(`"${duplicate.name}" already exists in this category`);
@@ -437,12 +376,11 @@ function ItemsTab() {
       id: `ci-${Date.now()}`,
       name,
       category_id: categoryId,
-      account_id: addForm.account_id,
     });
     if (!error) {
       toast.success(`Created "${name}"`);
       setShowAddForm(false);
-      setAddForm({ name: "", category_id: null, account_id: null });
+      setAddForm({ name: "", category_id: null });
       invalidateCatalog();
     } else {
       toast.error(error.message || "Error creating item");
@@ -644,20 +582,8 @@ function ItemsTab() {
                 ))}
               </div>
             </div>
-            {/* NEU-091: required parent COA account for the new category. */}
-            <div style={{ flex: "1 1 220px" }}>
-              <label style={labelStyle}>Parent Account (COA) <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span></label>
-              <CustomDropdown
-                searchable
-                value={addCategoryParentAccountId}
-                options={parentAccountOptions}
-                onChange={val => setAddCategoryParentAccountId(val)}
-                placeholder="Select parent account…"
-                size="sm"
-              />
-            </div>
             <div style={{ display: "flex", gap: "6px" }}>
-              <button onClick={() => { setShowAddCategoryForm(false); setAddCategoryName(""); setAddCategoryParentAccountId(""); }} style={cancelBtnStyle}>Cancel</button>
+              <button onClick={() => { setShowAddCategoryForm(false); setAddCategoryName(""); }} style={cancelBtnStyle}>Cancel</button>
               <button onClick={handleAddCategory} style={saveBtnStyle}>Create</button>
             </div>
           </div>
@@ -687,25 +613,13 @@ function ItemsTab() {
                   { value: "", label: "— None —" },
                   ...(categoriesWithCount as any[]).map((c: any) => ({ value: c.id, label: c.name })),
                 ]}
-                onChange={val => setAddForm({ ...addForm, category_id: val || null, account_id: null })}
+                onChange={val => setAddForm({ ...addForm, category_id: val || null })}
                 placeholder="— None —"
                 size="sm"
               />
             </div>
-            {/* NEU-091: required COA account (scoped to the category's parent). */}
-            <div style={{ flex: "0 0 200px" }}>
-              <label style={labelStyle}>Account (COA) <span style={{ color: "var(--theme-status-danger-fg)" }}>*</span></label>
-              <CustomDropdown
-                searchable
-                value={addForm.account_id || ""}
-                options={itemAccountOptions}
-                onChange={val => setAddForm({ ...addForm, account_id: val || null })}
-                placeholder="Select account…"
-                size="sm"
-              />
-            </div>
             <div style={{ display: "flex", gap: "6px" }}>
-              <button onClick={() => { setShowAddForm(false); setAddForm({ name: "", category_id: null, account_id: null }); }} style={cancelBtnStyle}>Cancel</button>
+              <button onClick={() => { setShowAddForm(false); setAddForm({ name: "", category_id: null }); }} style={cancelBtnStyle}>Cancel</button>
               <button onClick={handleAdd} style={saveBtnStyle}>Create</button>
             </div>
           </div>
@@ -848,7 +762,6 @@ function ItemsTab() {
                     editForm={editForm}
                     setEditForm={setEditForm}
                     categories={categoriesWithCount as CatalogCategory[]}
-                    accounts={accounts}
                     onSave={() => handleSave(item.id)}
                     onCancel={() => setEditingId(null)}
                   />
@@ -857,7 +770,6 @@ function ItemsTab() {
                     key={item.id}
                     item={item}
                     usage={usageCounts[item.id] ?? 0}
-                    accountLabel={accountLabel((item as any).account_id)}
                     hovered={hoveredRow === item.id}
                     onMouseEnter={() => setHoveredRow(item.id)}
                     onMouseLeave={() => setHoveredRow(null)}
@@ -887,7 +799,6 @@ function ItemsTab() {
                   editForm={editForm}
                   setEditForm={setEditForm}
                   categories={categoriesWithCount as CatalogCategory[]}
-                  accounts={accounts}
                   onSave={() => handleSave(item.id)}
                   onCancel={() => setEditingId(null)}
                 />
@@ -896,7 +807,6 @@ function ItemsTab() {
                   key={item.id}
                   item={item}
                   usage={usageCounts[item.id] ?? 0}
-                  accountLabel={accountLabel((item as any).account_id)}
                   hovered={hoveredRow === item.id}
                   onMouseEnter={() => setHoveredRow(item.id)}
                   onMouseLeave={() => setHoveredRow(null)}
@@ -975,12 +885,11 @@ function SideBadge({ side }: { side: "revenue" | "expense" }) {
 // ==================== ITEM VIEW ROW ====================
 
 function ItemViewRow({
-  item, usage, hovered, accountLabel, onMouseEnter, onMouseLeave, onEdit, onDelete, onMove,
+  item, usage, hovered, onMouseEnter, onMouseLeave, onEdit, onDelete, onMove,
 }: {
   item: CatalogItem;
   usage: number;
   hovered: boolean;
-  accountLabel: string;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
   onEdit: () => void;
@@ -1014,25 +923,6 @@ function ItemViewRow({
         {item.name}
       </span>
 
-      {/* NEU-091: linked COA account — visible on every row so the mapping is
-          never hidden. Muted chip; full label on hover. */}
-      {accountLabel && (
-        <span
-          title={accountLabel}
-          style={{
-            flexShrink: 0, maxWidth: "180px", marginRight: "12px",
-            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-            fontSize: "11px", fontWeight: 500, fontVariantNumeric: "tabular-nums",
-            color: "var(--theme-text-muted)",
-            padding: "2px 8px", borderRadius: "6px",
-            border: "1px solid var(--theme-border-subtle)",
-            backgroundColor: "var(--theme-bg-surface-subtle)",
-          }}
-        >
-          {accountLabel}
-        </span>
-      )}
-
       {/* Usage count */}
       <span style={{
         fontSize: "12px", fontWeight: usage > 0 ? 600 : 400,
@@ -1059,13 +949,12 @@ function ItemViewRow({
 // ==================== ITEM EDIT ROW ====================
 
 function ItemEditRow({
-  item, editForm, setEditForm, categories, accounts, onSave, onCancel,
+  item, editForm, setEditForm, categories, onSave, onCancel,
 }: {
   item: CatalogItem;
   editForm: Partial<CatalogItem>;
   setEditForm: (f: Partial<CatalogItem>) => void;
   categories: CatalogCategory[];
-  accounts: { id: string; code: string; name: string; type: string; parent_id: string | null; is_active?: boolean }[];
   onSave: () => void;
   onCancel: () => void;
 }) {
@@ -1074,24 +963,7 @@ function ItemEditRow({
     ...categories.map(c => ({ value: c.id, label: c.name })),
   ];
 
-  // NEU-091: account options scoped to the edited item's category (leaves under
-  // the category's parent account, else all accounts of that side). Mirrors the
-  // new-item picker so editing the mapping is just as clear as creating it.
-  const editAccountId = (editForm as any).account_id || "";
   const editCategoryId = (editForm as any).category_id || null;
-  const accountOptions = (() => {
-    const cat = categories.find(c => c.id === editCategoryId) as any;
-    const parentId = cat?.parent_account_id ?? null;
-    const side = cat?.side === "revenue" ? "revenue" : cat?.side === "expense" ? "expense" : null;
-    let pool = accounts.filter(a => a.is_active !== false);
-    if (parentId) {
-      const children = pool.filter(a => a.parent_id === parentId);
-      pool = children.length ? children : (side ? pool.filter(a => a.type === side) : pool);
-    } else if (side) {
-      pool = pool.filter(a => a.type === side);
-    }
-    return pool.map(a => ({ value: a.id, label: `${a.code} · ${a.name}` }));
-  })();
 
   return (
     <div style={{
@@ -1114,24 +986,6 @@ function ItemEditRow({
           options={categoryOptions}
           onChange={val => setEditForm({ ...editForm, category_id: val || null } as any)}
           placeholder="— No category —"
-          size="sm"
-        />
-      </div>
-      {/* NEU-091: linked account (COA) — required, autofill seed for journal lines.
-          Red ring when empty so the requirement is unmistakable. */}
-      <div
-        style={{
-          flex: "0 0 210px",
-          borderRadius: "8px",
-          boxShadow: editAccountId ? "none" : "0 0 0 1px var(--theme-status-danger-fg)",
-        }}
-        title="Linked account (COA) — seeds every journal line for this item"
-      >
-        <CustomDropdown
-          value={editAccountId}
-          options={accountOptions}
-          onChange={val => setEditForm({ ...editForm, account_id: val || null } as any)}
-          placeholder="Account (COA) *"
           size="sm"
         />
       </div>

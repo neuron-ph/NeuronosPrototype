@@ -287,7 +287,6 @@ export const APPLICABLE_ACTIONS: Record<ModuleId, readonly ActionId[]> = {
   // seeded into them (migrations 175/172). Only view survives — it still gates
   // the Financials route (App.tsx) and record visibility (recordVisibilityConfig).
   acct_financials: ["view"],
-  acct_coa: ["view", "create", "edit", "delete"],
   acct_projects: ["view"],
   acct_contracts: ["view"],
   acct_bookings: ["view"],
@@ -295,8 +294,6 @@ export const APPLICABLE_ACTIONS: Record<ModuleId, readonly ActionId[]> = {
   acct_catalog: ["view", "create", "edit", "delete"],
   // NEU-020 2.10c (#10): CSV/report exports are export-class — give these
   // accounting modules a real Export cell instead of an ungated download button.
-  acct_statements: ["view", "create", "edit", "export"],
-  acct_journal: ["view", "create", "edit", "export"],
   accounting_evouchers_pending_disburse_tab: ["view"],
   accounting_evouchers_waiting_on_rep_tab: ["view"],
   accounting_evouchers_pending_verification_tab: ["view"],
@@ -409,6 +406,15 @@ export const APPLICABLE_ACTIONS: Record<ModuleId, readonly ActionId[]> = {
   my_evouchers_pending_tab: ["view"],
   my_evouchers_active_tab: ["view"],
   my_evouchers_done_tab: ["view"],
+  // Read-only by construction: the page renders get_kpi_scorecard(current user)
+  // and the RPC refuses any other user_id. There is nothing here to create,
+  // edit, approve, delete or export — ratings are written from the evaluator's
+  // side (exec_performance), never from the employee's own card.
+  my_scorecard: ["view"],
+  // `view` reads other people's scorecards. `edit` is the separate power to
+  // decide someone's rating — seeing a score and setting one are not the same
+  // authority, so an evaluator is granted deliberately rather than by implication.
+  exec_performance: ["view", "edit"],
 };
 
 /**

@@ -1,10 +1,10 @@
-import { X, Calendar, CreditCard, Building, User, FileText, CheckCircle2, Clock, AlertCircle, Loader2, BookOpen } from "lucide-react";
+import { X, Calendar, CreditCard, Building, User, FileText, CheckCircle2, Clock, AlertCircle, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import defaultLogoImage from "../../../assets/white.svg";
 import { getDocumentDesign, getBrandedLogo } from "../../../utils/documentDesign";
 const logoImage = getDocumentDesign() === "branded" ? getBrandedLogo() : defaultLogoImage;
 import { supabase } from "../../../utils/supabase/client";
-import type { Billing } from "../../../types/accounting";
+import type { Billing } from "../../../types/financials";
 import { SidePanel } from "../../common/SidePanel";
 import {
   completeInvoiceReversalDraft,
@@ -17,7 +17,6 @@ import {
   isInvoiceReversedOriginal,
 } from "../../../utils/invoiceReversal";
 import { toast } from "../../ui/toast-utils";
-import { InvoiceGLPostingSheet } from "../invoices/InvoiceGLPostingSheet";
 import { useMarkEntityReadOnMount } from "../../../hooks/useNotifications";
 import { usePermission } from "../../../context/PermissionProvider";
 
@@ -29,7 +28,6 @@ interface BillingDetailsSheetProps {
 
 export function BillingDetailsSheet({ isOpen, onClose, billingId }: BillingDetailsSheetProps) {
   // NEU-019 WG-08: reversal drafts/completion write invoices (same OR-gate as
-  // WG-06); Post to GL writes journal entries (same gate as General Journal).
   const { can } = usePermission();
   const canKey = can as unknown as (moduleId: string, action: string) => boolean;
   // 2.6-final: acct_financials master key retired (record-mirroring write gate,
@@ -38,7 +36,6 @@ export function BillingDetailsSheet({ isOpen, onClose, billingId }: BillingDetai
     canKey("accounting_financials_invoices_tab", a) ||
     canKey("ops_bookings_invoices_tab", a) ||
     canKey("ops_projects_invoices_tab", a));
-  const canPostToGL = can("acct_journal", "create") || can("acct_journal", "edit");
   const [billing, setBilling] = useState<Billing | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +43,6 @@ export function BillingDetailsSheet({ isOpen, onClose, billingId }: BillingDetai
   const [reversalDocument, setReversalDocument] = useState<any | null>(null);
   const [isCreatingReversal, setIsCreatingReversal] = useState(false);
   const [isCompletingReversal, setIsCompletingReversal] = useState(false);
-  const [showGLPosting, setShowGLPosting] = useState(false);
   useMarkEntityReadOnMount("invoice", isOpen ? billingId : null);
 
   useEffect(() => {
@@ -449,19 +445,6 @@ export function BillingDetailsSheet({ isOpen, onClose, billingId }: BillingDetai
                  </div>
               </div>
 
-              {canPostToGL && billing.invoice_number && !billing.journal_entry_id && !isInvoiceReversalPosted(billing) && !isInvoiceReversedOriginal(billing) && (
-                <div style={{ marginBottom: "16px" }}>
-                  <button
-                    onClick={() => setShowGLPosting(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[13px] font-medium text-white"
-                    style={{ backgroundColor: "var(--neuron-brand-green, #0F766E)" }}
-                  >
-                    <BookOpen size={14} />
-                    Post to GL
-                  </button>
-                </div>
-              )}
-
               {billing.invoice_number && (
                 <div
                   style={{
@@ -582,18 +565,6 @@ export function BillingDetailsSheet({ isOpen, onClose, billingId }: BillingDetai
           ) : null}
         </div>
 
-      {billingId && (
-        <InvoiceGLPostingSheet
-          isOpen={showGLPosting}
-          onClose={() => setShowGLPosting(false)}
-          invoiceId={billingId}
-          onPosted={() => {
-            setShowGLPosting(false);
-            // refetch to reflect updated journal_entry_id
-            setBilling(prev => prev ? { ...prev, journal_entry_id: "__posted__" } : prev);
-          }}
-        />
-      )}
     </SidePanel>
   );
 }

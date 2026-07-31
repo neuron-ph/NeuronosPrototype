@@ -64,8 +64,6 @@ const DEPT_PREVIEW: Partial<Record<string, Array<{ id: ModuleId; label: string }
   "Accounting": [
     { id: "acct_financials",  label: "Finance Overview" },
     { id: "acct_evouchers",   label: "E-Vouchers" },
-    { id: "acct_journal",     label: "General Journal" },
-    { id: "acct_statements",  label: "Financial Statements" },
   ],
   "HR": [
     { id: "hr", label: "HR Module" },

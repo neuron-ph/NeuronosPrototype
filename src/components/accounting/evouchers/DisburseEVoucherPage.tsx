@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router";
 import { ArrowLeft, Loader2, ChevronDown, Lock, AlertTriangle } from "lucide-react";
 import { supabase } from "../../../utils/supabase/client";
@@ -13,21 +13,10 @@ import {
   FUNCTIONAL_CURRENCY,
   formatMoney,
   normalizeCurrency,
-  resolvePostingRate,
-  roundMoney,
-  toBaseAmount,
   type AccountingCurrency,
 } from "../../../utils/accountingCurrency";
-import { resolveExchangeRate } from "../../../utils/exchangeRates";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-interface GLAccount {
-  id: string;
-  code: string;
-  name: string;
-  type: string;
-}
 
 interface EVoucherSummary {
   id: string;
@@ -72,69 +61,6 @@ const BACK_ROUTES: Record<string, string> = {
   my: "/my-evouchers",
 };
 
-// ─── AccountSelect ────────────────────────────────────────────────────────────
-
-function AccountSelect({
-  label,
-  id,
-  accounts,
-  value,
-  onChange,
-  placeholder = "Select account…",
-}: {
-  label: string;
-  id: string;
-  accounts: GLAccount[];
-  value: string;
-  onChange: (id: string, account: GLAccount) => void;
-  placeholder?: string;
-}) {
-  return (
-    <div>
-      <label
-        htmlFor={id}
-        style={{ display: "block", fontSize: "12px", fontWeight: 500, color: "var(--theme-text-muted)", marginBottom: "6px" }}
-      >
-        {label}
-      </label>
-      <div style={{ position: "relative" }}>
-        <select
-          id={id}
-          value={value}
-          onChange={(e) => {
-            const acct = accounts.find((a) => a.id === e.target.value);
-            if (acct) onChange(acct.id, acct);
-          }}
-          style={{
-            width: "100%",
-            height: "40px",
-            border: "1px solid var(--theme-border-default)",
-            borderRadius: "8px",
-            padding: "0 36px 0 12px",
-            fontSize: "13px",
-            backgroundColor: "var(--theme-bg-surface)",
-            color: "var(--theme-text-primary)",
-            appearance: "none",
-            cursor: "pointer",
-            outline: "none",
-          }}
-        >
-          <option value="">{placeholder}</option>
-          {accounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.code} — {a.name}
-            </option>
-          ))}
-        </select>
-        <ChevronDown
-          size={14}
-          style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--theme-text-muted)", pointerEvents: "none" }}
-        />
-      </div>
-    </div>
-  );
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function DisburseEVoucherPage() {
@@ -153,31 +79,15 @@ export function DisburseEVoucherPage() {
 
   // ── Cash receiver (NEU-045) — who physically receives the cash and will
   // liquidate it. Defaults to the requestor; Treasury can reassign at payout.
-  const { users: activeUsers } = useUsers();
+  const { users: activeUsers, isLoading: usersLoading } = useUsers();
   const [receiverId, setReceiverId] = useState<string | null>(null);
 
-  // ── GL accounts ───────────────────────────────────────────────────────────
-  const [accounts, setAccounts] = useState<GLAccount[]>([]);
-  const [advancesReceivable, setAdvancesReceivable] = useState<GLAccount | null>(null);
-  const [fxGainAccount, setFxGainAccount] = useState<GLAccount | null>(null);
-  const [fxLossAccount, setFxLossAccount] = useState<GLAccount | null>(null);
-  const [loadingAccounts, setLoadingAccounts] = useState(true);
-
   // ── Form state ────────────────────────────────────────────────────────────
-  const [sourceAccountId, setSourceAccountId] = useState("");
-  const [sourceAccountName, setSourceAccountName] = useState("");
-  const [sourceAccountCode, setSourceAccountCode] = useState("");
-
-
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
   const [reference, setReference] = useState("");
   const [disbursementDate, setDisbursementDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [remarks, setRemarks] = useState("");
   const [posting, setPosting] = useState(false);
-  // Cash-leg FX rate at the moment of disbursement. Defaults to today's rate
-  // from the exchange_rates table, falls back to the voucher's locked rate.
-  // Difference between this and the voucher's locked rate is realized FX.
-  const [disbursementRateInput, setDisbursementRateInput] = useState<string>("");
 
   // ── Load EVoucher ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -204,29 +114,6 @@ export function DisburseEVoucherPage() {
     load();
   }, [id]);
 
-  // ── Load GL accounts ──────────────────────────────────────────────────────
-  useEffect(() => {
-    const load = async () => {
-      setLoadingAccounts(true);
-      const { data } = await supabase
-        .from("accounts")
-        .select("id, code, name, type")
-        .eq("is_active", true)
-        .order("code", { ascending: true });
-      const all = (data || []) as GLAccount[];
-      setAccounts(all);
-      const adv =
-        all.find((a) => a.code === "1150") ??
-        all.find((a) => a.name.toLowerCase().includes("advances receivable")) ??
-        null;
-      setAdvancesReceivable(adv);
-      setFxGainAccount(all.find((a) => a.code === "4510") ?? null);
-      setFxLossAccount(all.find((a) => a.code === "7010") ?? null);
-      setLoadingAccounts(false);
-    };
-    load();
-  }, []);
-
   // ── Derived ───────────────────────────────────────────────────────────────
   // NEU-042: disbursement is gated on the dedicated Treasury disburse capability
   // (split from acct_evouchers:approve, which now covers voucher approval only).
@@ -247,91 +134,39 @@ export function DisburseEVoucherPage() {
     evoucher?.original_currency ?? evoucher?.currency ?? FUNCTIONAL_CURRENCY,
     FUNCTIONAL_CURRENCY,
   );
-  const lockedRate = (() => {
-    try {
-      return resolvePostingRate(voucherCurrency, evoucher?.exchange_rate);
-    } catch {
-      return NaN;
+
+  // The dropdown renders its placeholder whenever `value` matches no option —
+  // so a receiver defaulted from the voucher looked UNSET while the user list
+  // was still loading, or permanently if that person is deactivated. Keep a
+  // synthetic entry for the current value so the field always shows who it is.
+  const receiverOptions = useMemo(() => {
+    const opts = [...activeUsers]
+      .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
+      .map((u) => ({
+        value: u.id,
+        label: u.department ? `${u.name} · ${u.department}` : u.name,
+      }));
+    if (receiverId && !opts.some((o) => o.value === receiverId)) {
+      const known =
+        (evoucher?.cash_receiver_name as string) ||
+        (receiverId === evoucher?.requestor_id ? (evoucher?.requestor_name as string) : "") ||
+        "";
+      opts.unshift({ value: receiverId, label: known || "Current receiver" });
     }
-  })();
-  const hasUsableRate = Number.isFinite(lockedRate) && lockedRate > 0;
-  // Carrying amount (AP/Advances) at the voucher's locked creation rate.
-  const apBase = hasUsableRate
-    ? toBaseAmount({ amount, currency: voucherCurrency, exchangeRate: lockedRate })
-    : 0;
-  const isForeignVoucher = voucherCurrency !== FUNCTIONAL_CURRENCY;
-
-  // Disbursement-day rate (cash leg). For PHP vouchers always 1; for foreign,
-  // user can override; defaults to today's rate from the FX table or falls
-  // back to the voucher's locked rate.
-  const parsedDisbRate = parseFloat(disbursementRateInput);
-  const disbursementRate = !isForeignVoucher
-    ? 1
-    : (Number.isFinite(parsedDisbRate) && parsedDisbRate > 0 ? parsedDisbRate : (hasUsableRate ? lockedRate : NaN));
-  const hasDisbRate = Number.isFinite(disbursementRate) && disbursementRate > 0;
-  const cashBase = hasDisbRate
-    ? toBaseAmount({ amount, currency: voucherCurrency, exchangeRate: disbursementRate })
-    : 0;
-  // Realized FX between the carrying rate (payable/advance recognized at the
-  // voucher's locked rate) and the disbursement-day rate. Now applies to BOTH
-  // flows: the AP two-step recognizes the payable at approval, so a direct-settle
-  // expense can also realize FX when cash goes out at a different rate.
-  const realizesFx = isForeignVoucher && hasUsableRate && hasDisbRate;
-  const fxDelta = realizesFx ? roundMoney(cashBase - apBase) : 0;
-  // For E-Voucher disbursement we DR Advances (carrying) and CR Cash (paid).
-  // If cash > AP → DR FX Loss (we paid more PHP than we owed).
-  // If cash < AP → CR FX Gain (we paid less PHP than we owed).
-  const fxIsLoss = fxDelta > 0;
-  const fxIsGain = fxDelta < 0;
-  const fxAbs = Math.abs(fxDelta);
-  // baseAmount is the PHP magnitude of the document for stamping on the JE header.
-  const baseAmount = realizesFx ? cashBase : apBase;
-
-  // Auto-prefill disbursement rate from the FX table when foreign + date changes.
-  useEffect(() => {
-    if (!isForeignVoucher) return;
-    if (disbursementRateInput) return;
-    let cancelled = false;
-    resolveExchangeRate({
-      fromCurrency: voucherCurrency,
-      toCurrency: FUNCTIONAL_CURRENCY,
-      rateDate: disbursementDate || new Date(),
-    })
-      .then((row) => {
-        if (cancelled) return;
-        setDisbursementRateInput((cur) => cur || String(row.rate));
-      })
-      .catch(() => undefined);
-    return () => { cancelled = true; };
-  }, [isForeignVoucher, voucherCurrency, disbursementDate, disbursementRateInput]);
-
-  const sourceAccounts = accounts.filter(
-    (a) => a.type === "asset" || a.type === "cash" || a.type === "bank"
-  );
-  // AP two-step: a direct-settle disbursement clears the payable recognized at
-  // approval (Dr Accounts Payable / Cr Cash) rather than debiting an expense. The
-  // account is the default AP-Trade; it's editable at journal finalize like any
-  // other TJ line (e.g. to a sub-payable that matched the recognition).
-  const apAccount =
-    accounts.find((a) => a.id === "coa-2000") ??
-    { id: "coa-2000", code: "2000", name: "Accounts Payable - Trade" };
+    return opts;
+  }, [activeUsers, receiverId, evoucher]);
 
   const canConfirm =
     canDisburse &&
-    !!sourceAccountId &&
     !!paymentMethod &&
     (!refRequired || !!reference.trim()) &&
-    (settlesDirectly || !!receiverId) &&
-    hasUsableRate &&
-    (!isForeignVoucher || hasDisbRate) &&
-    (!realizesFx || fxAbs < 0.005 || (fxIsGain ? !!fxGainAccount : !!fxLossAccount));
+    (settlesDirectly || !!receiverId);
 
   // ── Submit ────────────────────────────────────────────────────────────────
   const handleConfirm = async () => {
     if (!canConfirm || !evoucher || !user) return;
     setPosting(true);
     try {
-      const entryId = `JE-DISB-${Date.now()}`;
       const now = new Date().toISOString();
       const disbDate = new Date(disbursementDate + "T12:00:00").toISOString();
       const evoucherNumber = evoucher.evoucher_number;
@@ -343,108 +178,6 @@ export function DisburseEVoucherPage() {
         (effectiveReceiverId === evoucher.requestor_id ? evoucher.requestor_name : undefined) ||
         null;
 
-      const foreignAmount = roundMoney(amount);
-      const fxLineMeta = (rate: number) => isForeignVoucher
-        ? {
-            currency: voucherCurrency,
-            exchange_rate: rate,
-            base_currency: FUNCTIONAL_CURRENCY,
-          }
-        : {};
-
-      // AP two-step + advances now share one shape: DR the carrying account at the
-      // locked rate, CR Cash at the disbursement rate, realize FX on any delta.
-      //   direct-settle expense → DR Accounts Payable (clears the payable recognized
-      //                           at approval; Dr AP / Cr Cash)
-      //   advance             → DR Employee Cash Advances Receivable (Dr 1150 / Cr Cash)
-      const carryingAccount = settlesDirectly
-        ? { id: apAccount.id, code: apAccount.code, name: apAccount.name }
-        : {
-            id: advancesReceivable?.id ?? "sys-adv-recv-001",
-            code: advancesReceivable?.code ?? "1150",
-            name: advancesReceivable?.name ?? "Employee Cash Advances Receivable",
-          };
-      const carryingDesc = settlesDirectly
-        ? `AP settled — ${evoucherNumber}`
-        : `Cash advance disbursed — ${evoucherNumber}`;
-
-      const lines: any[] = [
-        {
-          account_id: carryingAccount.id,
-          account_code: carryingAccount.code,
-          account_name: carryingAccount.name,
-          debit: apBase,
-          credit: 0,
-          description: carryingDesc,
-          ...(isForeignVoucher ? { foreign_debit: foreignAmount, foreign_credit: 0, ...fxLineMeta(lockedRate) } : {}),
-        },
-        {
-          account_id: sourceAccountId,
-          account_code: sourceAccountCode,
-          account_name: sourceAccountName,
-          debit: 0,
-          credit: cashBase,
-          description: carryingDesc,
-          ...(isForeignVoucher ? { foreign_debit: 0, foreign_credit: foreignAmount, ...fxLineMeta(disbursementRate) } : {}),
-        },
-      ];
-
-      // 3rd line: realized FX gain/loss (only if non-trivial).
-      if (realizesFx && fxAbs >= 0.005) {
-        if (fxIsLoss && fxLossAccount) {
-          lines.push({
-            account_id: fxLossAccount.id,
-            account_code: fxLossAccount.code,
-            account_name: fxLossAccount.name,
-            debit: fxAbs,
-            credit: 0,
-            description: `Realized FX loss — ${evoucherNumber}`,
-          });
-        } else if (fxIsGain && fxGainAccount) {
-          lines.push({
-            account_id: fxGainAccount.id,
-            account_code: fxGainAccount.code,
-            account_name: fxGainAccount.name,
-            debit: 0,
-            credit: fxAbs,
-            description: `Realized FX gain — ${evoucherNumber}`,
-          });
-        }
-      }
-
-      // Compute totals from the lines so the FX adjustment balances them.
-      const totalDebit = lines.reduce((s, l) => s + (Number((l as any).debit) || 0), 0);
-      const totalCredit = lines.reduce((s, l) => s + (Number((l as any).credit) || 0), 0);
-
-      // 1. Create disbursement journal entry — PHP-balanced, FX preserved.
-      // NEU-100: the accounting entry no longer posts straight to the ledger.
-      // Direct-settle types land `ready_to_post` (one-click post — preserve UX).
-      // Advances land `awaiting_ack`: the cash receiver must Confirm Receipt first
-      // (flips awaiting_ack → ready_to_post), THEN Accounting posts it. The
-      // operational voucher lifecycle below is unchanged.
-      const { error: jeError } = await supabase.from("journal_entries").insert({
-        id: entryId,
-        entry_date: disbDate,
-        evoucher_id: evoucher.id,
-        kind: settlesDirectly ? "disbursement" : "advance",
-        disburse_to_user_id: settlesDirectly ? null : effectiveReceiverId,
-        description: `Disbursement — ${evoucherNumber} via ${paymentMethod}${reference ? ` [${reference}]` : ""}`,
-        lines,
-        total_debit: totalDebit,
-        total_credit: totalCredit,
-        transaction_currency: voucherCurrency,
-        exchange_rate: disbursementRate,
-        base_currency: FUNCTIONAL_CURRENCY,
-        source_amount: foreignAmount,
-        base_amount: cashBase,
-        exchange_rate_date: disbursementDate,
-        status: settlesDirectly ? "ready_to_post" : "awaiting_ack",
-        created_by: user.id,
-        created_at: now,
-        updated_at: now,
-      });
-      if (jeError) throw jeError;
-
       // 2. Update evoucher
       const newStatus = settlesDirectly ? "posted" : "disbursed";
       const { error: evError } = await supabase
@@ -454,13 +187,9 @@ export function DisburseEVoucherPage() {
           disbursement_method: paymentMethod,
           disbursement_reference: reference.trim() || null,
           disbursement_date: disbDate,
-          disbursement_source_account_id: sourceAccountId,
-          disbursement_source_account_name: sourceAccountName,
-          disbursement_journal_entry_id: entryId,
           disbursed_by_user_id: user.id,
           disbursed_by_name: user.name,
           disbursement_remarks: remarks.trim() || null,
-          ...(settlesDirectly ? { closing_journal_entry_id: entryId } : {}),
           // Advances park for liquidation → persist the receiver into details.
           ...(isAdvanceType
             ? {
@@ -478,8 +207,8 @@ export function DisburseEVoucherPage() {
 
       // 3. Write history
       const historyAction = settlesDirectly
-        ? `Disbursed — ${paymentMethod}${reference ? ` [${reference}]` : ""} via ${sourceAccountName} · entry queued in Transaction Journal`
-        : `Cash Disbursed by Accounting — ${paymentMethod}${reference ? ` [${reference}]` : ""} from ${sourceAccountName}`;
+        ? `Disbursed — ${paymentMethod}${reference ? ` [${reference}]` : ""}`
+        : `Cash Disbursed by Accounting — ${paymentMethod}${reference ? ` [${reference}]` : ""}`;
       await supabase.from("evoucher_history").insert({
         id: `EH-${Date.now()}`,
         evoucher_id: evoucher.id,
@@ -493,7 +222,6 @@ export function DisburseEVoucherPage() {
           new_status: newStatus,
           disbursement_method: paymentMethod,
           disbursement_reference: reference.trim() || null,
-          disbursement_source: sourceAccountName,
           disbursement_date: disbDate,
         },
         created_at: now,
@@ -507,7 +235,7 @@ export function DisburseEVoucherPage() {
         if (evoucher.requestor_id) {
           createWorkflowTicket({
             subject: `Disbursed: ${evoucherNumber}`,
-            body: `Your E-Voucher ${evoucherNumber} has been disbursed. The journal entry is queued in the Transaction Journal for posting.`,
+            body: `Your E-Voucher ${evoucherNumber} has been disbursed.`,
             type: "fyi",
             recipientUserId: evoucher.requestor_id,
             linkedRecordType: "expense",
@@ -535,11 +263,7 @@ export function DisburseEVoucherPage() {
         });
       }
 
-      toast.success(
-        settlesDirectly
-          ? "Disbursed — entry queued in the Transaction Journal"
-          : "Cash disbursed — entry queued in the Transaction Journal"
-      );
+      toast.success(settlesDirectly ? "Disbursed" : "Cash disbursed");
       navigate(backRoute);
     } catch (err) {
       console.error("Disbursement error:", err);
@@ -645,14 +369,9 @@ export function DisburseEVoucherPage() {
             <div style={{ fontSize: "15px", fontWeight: 600, color: "var(--theme-text-muted)", letterSpacing: "0.01em", marginBottom: "4px" }}>
               {evoucher.evoucher_number}
             </div>
-            <div style={{ fontSize: "30px", fontWeight: 700, color: "var(--theme-text-primary)", letterSpacing: "-0.02em", lineHeight: 1.1, marginBottom: isForeignVoucher ? "6px" : "14px" }}>
+            <div style={{ fontSize: "30px", fontWeight: 700, color: "var(--theme-text-primary)", letterSpacing: "-0.02em", lineHeight: 1.1, marginBottom: "14px" }}>
               {formatMoney(amount, voucherCurrency)}
             </div>
-            {isForeignVoucher && (
-              <div style={{ fontSize: "12px", color: "var(--theme-text-muted)", marginBottom: "14px" }}>
-                ≈ {hasUsableRate ? formatMoney(baseAmount, FUNCTIONAL_CURRENCY) : "—"} @ rate {hasUsableRate ? lockedRate : "—"}
-              </div>
-            )}
             <span style={{
               display: "inline-flex", alignItems: "center",
               padding: "3px 9px", borderRadius: "4px",
@@ -683,103 +402,6 @@ export function DisburseEVoucherPage() {
             </div>
           </div>
 
-          {/* Journal entry ledger */}
-          <div style={{ padding: "20px 24px", flex: 1 }}>
-            <div style={{
-              fontSize: "10px", fontWeight: 600, color: "var(--theme-text-muted)",
-              textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "14px",
-            }}>
-              Journal Entry Preview
-            </div>
-
-            <div style={{
-              border: "1px solid var(--theme-border-default)",
-              borderRadius: "8px",
-              overflow: "hidden",
-            }}>
-              {/* Ledger header */}
-              <div style={{
-                display: "grid", gridTemplateColumns: "1fr 76px 76px",
-                padding: "8px 12px",
-                backgroundColor: "var(--theme-bg-surface-subtle)",
-                borderBottom: "1px solid var(--theme-border-default)",
-                gap: "8px",
-              }}>
-                <span style={{ fontSize: "10px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Account</span>
-                <span style={{ fontSize: "10px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "right" }}>Debit</span>
-                <span style={{ fontSize: "10px", fontWeight: 600, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "right" }}>Credit</span>
-              </div>
-
-              {/* DR row */}
-              <div style={{
-                display: "grid", gridTemplateColumns: "1fr 76px 76px",
-                padding: "12px",
-                borderBottom: "1px solid var(--theme-border-default)",
-                gap: "8px",
-                alignItems: "start",
-              }}>
-                <div>
-                  <div style={{ fontSize: "9px", fontWeight: 700, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "4px" }}>DR</div>
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: "5px" }}>
-                    <Lock size={10} style={{ color: "var(--theme-text-muted)", marginTop: "2px", flexShrink: 0 }} />
-                    <span style={{ fontSize: "12px", color: "var(--theme-text-primary)", lineHeight: 1.4 }}>
-                      {settlesDirectly
-                        ? `${apAccount.code} — ${apAccount.name}`
-                        : (advancesReceivable ? `${advancesReceivable.code} — ${advancesReceivable.name}` : "1150 — Employee Cash Advances Receivable")}
-                    </span>
-                  </div>
-                </div>
-                <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-text-primary)", textAlign: "right", paddingTop: "18px" }}>{PHP.format(apBase)}</span>
-                <span style={{ fontSize: "12px", color: "var(--theme-text-muted)", textAlign: "right", paddingTop: "18px" }}>—</span>
-              </div>
-
-              {/* CR row */}
-              <div style={{
-                display: "grid", gridTemplateColumns: "1fr 76px 76px",
-                padding: "12px 12px 12px 24px",
-                gap: "8px",
-                alignItems: "start",
-                borderBottom: realizesFx && fxAbs >= 0.005 ? "1px solid var(--theme-border-default)" : "none",
-              }}>
-                <div>
-                  <div style={{ fontSize: "9px", fontWeight: 700, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "4px" }}>CR</div>
-                  <div style={{ fontSize: "12px", color: sourceAccountId ? "var(--theme-text-primary)" : "var(--theme-text-muted)", fontStyle: sourceAccountId ? "normal" : "italic" }}>
-                    {sourceAccountId ? `${sourceAccountCode} — ${sourceAccountName}` : "Select source account →"}
-                  </div>
-                </div>
-                <span style={{ fontSize: "12px", color: "var(--theme-text-muted)", textAlign: "right", paddingTop: "18px" }}>—</span>
-                <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-text-primary)", textAlign: "right", paddingTop: "18px" }}>{PHP.format(cashBase)}</span>
-              </div>
-
-              {/* FX row — only when there's a realized delta */}
-              {realizesFx && fxAbs >= 0.005 && (
-                <div style={{
-                  display: "grid", gridTemplateColumns: "1fr 76px 76px",
-                  padding: "12px",
-                  gap: "8px",
-                  alignItems: "start",
-                  backgroundColor: "var(--theme-bg-surface-subtle)",
-                }}>
-                  <div>
-                    <div style={{ fontSize: "9px", fontWeight: 700, color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "4px" }}>{fxIsLoss ? "DR" : "CR"} · FX</div>
-                    <div style={{ fontSize: "12px", color: "var(--theme-text-primary)" }}>
-                      {fxIsLoss
-                        ? `${fxLossAccount?.code ?? "7010"} — ${fxLossAccount?.name ?? "Realized FX Loss"}`
-                        : `${fxGainAccount?.code ?? "4510"} — ${fxGainAccount?.name ?? "Realized FX Gain"}`}
-                    </div>
-                  </div>
-                  <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-text-primary)", textAlign: "right", paddingTop: "18px" }}>{fxIsLoss ? PHP.format(fxAbs) : "—"}</span>
-                  <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-text-primary)", textAlign: "right", paddingTop: "18px" }}>{fxIsGain ? PHP.format(fxAbs) : "—"}</span>
-                </div>
-              )}
-            </div>
-
-            {settlesDirectly && (
-              <p style={{ fontSize: "11px", color: "var(--theme-text-muted)", marginTop: "12px", lineHeight: 1.6 }}>
-                Settles in one step — no liquidation required. The entry queues in the Transaction Journal for posting.
-              </p>
-            )}
-          </div>
         </div>
 
         {/* ── Right panel: Form ── */}
@@ -801,12 +423,7 @@ export function DisburseEVoucherPage() {
               </p>
             </div>
 
-            {loadingAccounts ? (
-              <div style={{ display: "flex", justifyContent: "center", padding: "64px" }}>
-                <Loader2 size={22} style={{ animation: "spin 1s linear infinite", color: "var(--theme-text-muted)" }} />
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                 {/* NEU-045: cash receiver — only advances liquidate, so only they
                     need a receiver. Defaults to the requestor. */}
                 {!settlesDirectly && (
@@ -818,14 +435,9 @@ export function DisburseEVoucherPage() {
                       fullWidth
                       searchable
                       value={receiverId || ""}
-                      placeholder="Select who receives the cash…"
+                      placeholder={usersLoading ? "Loading people…" : "Select who receives the cash…"}
                       triggerAriaLabel="Cash receiver"
-                      options={[...activeUsers]
-                        .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
-                        .map((u) => ({
-                          value: u.id,
-                          label: u.department ? `${u.name} · ${u.department}` : u.name,
-                        }))}
+                      options={receiverOptions}
                       onChange={(id) => setReceiverId(id || null)}
                     />
                     <p style={{ margin: "6px 0 0", fontSize: "11px", color: "var(--theme-text-muted)", lineHeight: 1.5 }}>
@@ -833,67 +445,6 @@ export function DisburseEVoucherPage() {
                     </p>
                   </div>
                 )}
-                {isForeignVoucher && (
-                  <div style={{
-                    padding: "10px 12px",
-                    borderRadius: "8px",
-                    backgroundColor: hasUsableRate ? "var(--theme-bg-surface-subtle)" : "var(--theme-status-warning-bg)",
-                    border: `1px solid ${hasUsableRate ? "var(--theme-border-default)" : "var(--theme-status-warning-border)"}`,
-                  }}>
-                    <p style={{ margin: 0, fontSize: "12px", color: hasUsableRate ? "var(--theme-text-secondary)" : "var(--theme-status-warning-fg)", lineHeight: 1.5 }}>
-                      {hasUsableRate
-                        ? <>Voucher in <strong>{voucherCurrency}</strong>; AP carrying rate <strong>{lockedRate}</strong> ({formatMoney(apBase, FUNCTIONAL_CURRENCY)}).</>
-                        : <>Voucher is in <strong>{voucherCurrency}</strong> but has no locked exchange rate. Edit the voucher to capture a rate before disbursing.</>
-                      }
-                    </p>
-                  </div>
-                )}
-                {isForeignVoucher && !settlesDirectly && (
-                  <div>
-                    <label htmlFor="disb-rate" style={{ display: "block", fontSize: "12px", fontWeight: 500, color: "var(--theme-text-muted)", marginBottom: "6px" }}>
-                      Disbursement Rate ({voucherCurrency} → {FUNCTIONAL_CURRENCY}) *
-                    </label>
-                    <input
-                      id="disb-rate"
-                      type="number"
-                      step="0.0001"
-                      min="0"
-                      value={disbursementRateInput}
-                      onChange={(e) => setDisbursementRateInput(e.target.value)}
-                      placeholder="e.g. 58.25"
-                      style={{
-                        width: "100%", height: "40px",
-                        border: "1px solid var(--theme-border-default)", borderRadius: "8px",
-                        padding: "0 12px", fontSize: "13px", outline: "none",
-                        boxSizing: "border-box",
-                        backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-primary)",
-                      }}
-                    />
-                    {realizesFx && fxAbs >= 0.005 && (
-                      <p style={{ margin: "8px 0 0", fontSize: "11px", color: fxIsLoss ? "var(--theme-status-danger-fg)" : "var(--theme-status-success-fg)", lineHeight: 1.5 }}>
-                        Realized FX {fxIsLoss ? "loss" : "gain"} of {formatMoney(fxAbs, FUNCTIONAL_CURRENCY)} will post to{" "}
-                        <strong>{fxIsLoss ? (fxLossAccount?.code ?? "7010") : (fxGainAccount?.code ?? "4510")}</strong>.
-                      </p>
-                    )}
-                    {realizesFx && fxAbs >= 0.005 && ((fxIsLoss && !fxLossAccount) || (fxIsGain && !fxGainAccount)) && (
-                      <p style={{ margin: "8px 0 0", fontSize: "11px", color: "var(--theme-status-warning-fg)", lineHeight: 1.5 }}>
-                        Missing FX {fxIsLoss ? "loss (7010)" : "gain (4510)"} account in COA — seed before disbursing.
-                      </p>
-                    )}
-                  </div>
-                )}
-                <AccountSelect
-                  label="Source Account — Cash or Bank (CR) *"
-                  id="disb-source-account"
-                  accounts={sourceAccounts.length > 0 ? sourceAccounts : accounts}
-                  value={sourceAccountId}
-                  onChange={(id, acct) => {
-                    setSourceAccountId(id);
-                    setSourceAccountName(acct.name);
-                    setSourceAccountCode(acct.code);
-                  }}
-                  placeholder="Select cash or bank account…"
-                />
 
                 <div>
                   <label htmlFor="disb-method" style={{ display: "block", fontSize: "12px", fontWeight: 500, color: "var(--theme-text-muted)", marginBottom: "6px" }}>
@@ -1000,8 +551,7 @@ export function DisburseEVoucherPage() {
                     }}
                   />
                 </div>
-              </div>
-            )}
+            </div>
           </div>
         </div>
       </div>
@@ -1039,7 +589,7 @@ export function DisburseEVoucherPage() {
           }}
         >
           {posting && <Loader2 size={15} className="animate-spin" />}
-          {posting ? "Processing…" : settlesDirectly ? "Disburse & Queue for Posting" : "Confirm Disbursement"}
+          {posting ? "Processing…" : settlesDirectly ? "Disburse & Close" : "Confirm Disbursement"}
         </button>
       </div>
     </div>

@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { CheckCircle, FileText, Download } from "lucide-react";
+import { supabase } from "../../utils/supabase/client";
 import { VoucherBrandLogo } from "../VoucherBrandLogo";
 import { formatAttachmentSize } from "../../utils/crmAttachments";
 import { EVoucherWorkflowPanel } from "./evouchers/EVoucherWorkflowPanel";
@@ -14,6 +16,8 @@ interface EVoucherDetailViewProps {
   evoucher: EVoucher;
   onClose: () => void;
   currentUser?: { id: string; name: string; email: string; role?: string; department?: string; ev_approval_authority?: boolean | null };
+  /** Opened via the list's "Liquidate" row action — open the form on arrival. */
+  autoOpenLiquidation?: boolean;
   onStatusChange?: () => void;
 }
 
@@ -54,8 +58,50 @@ export function EVoucherDetailView({
   onClose,
   currentUser,
   onStatusChange,
+  autoOpenLiquidation,
 }: EVoucherDetailViewProps) {
   // Prefer relational line items; fall back to legacy JSONB array
+  // NEU-088 puts the booking on the LINE ITEMS, not on the voucher — so
+  // project_number is null on modern vouchers and "Project / Booking Ref" read
+  // "—" while the booking sat in the auto-generated purpose string above it.
+  // Read the lines straight from the table: the list queries that feed this
+  // panel don't join evoucher_line_items, so the prop is usually empty.
+  const [lineBookingNumbers, setLineBookingNumbers] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void supabase
+      .from("evoucher_line_items")
+      .select("booking_id, bookings:booking_id(booking_number)")
+      .eq("evoucher_id", evoucher.id)
+      .then(({ data }) => {
+        if (cancelled) return;
+        const nums = new Set<string>();
+        for (const row of (data ?? []) as any[]) {
+          const n = row?.bookings?.booking_number;
+          if (n) nums.add(String(n));
+        }
+        setLineBookingNumbers([...nums]);
+      });
+    return () => { cancelled = true; };
+  }, [evoucher.id]);
+
+  const bookingRef =
+    evoucher.project_number ||
+    (lineBookingNumbers.length > 0 ? lineBookingNumbers.join(", ") : "") ||
+    "—";
+
+  // The NEU-088 auto-title is "{Type} · {Booking} · {Date}" — every part of
+  // which now has its own field. Strip the leading type so Purpose stops
+  // restating the Transaction Type verbatim one line below itself. A purpose
+  // someone actually typed won't match the prefix and is left alone.
+  const purposeText = (() => {
+    const raw = String(evoucher.purpose || evoucher.description || "").trim();
+    if (!raw) return "—";
+    const typeLabel = evoucherTypeLabelFor(evoucher);
+    const prefix = `${typeLabel} · `;
+    return raw.startsWith(prefix) ? raw.slice(prefix.length) : raw;
+  })();
+
   const lineItems: Array<{ id?: string; particular?: string; description?: string; amount?: number }> =
     evoucher.evoucher_line_items?.length
       ? evoucher.evoucher_line_items
@@ -157,7 +203,7 @@ export function EVoucherDetailView({
           <div style={{ marginBottom: "20px" }}>
             <div style={fieldLabel}>Description / Purpose</div>
             <div style={{ ...fieldValue, fontSize: "14px", lineHeight: 1.55 }}>
-              {evoucher.purpose || evoucher.description || "—"}
+              {purposeText}
             </div>
           </div>
 
@@ -194,7 +240,7 @@ export function EVoucherDetailView({
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
             <div>
               <div style={fieldLabel}>Project / Booking Ref</div>
-              <div style={fieldValue}>{evoucher.project_number || "—"}</div>
+              <div style={fieldValue}>{bookingRef}</div>
               {evoucher.customer_name && (
                 <div style={{ fontSize: "12px", color: "var(--theme-text-muted)", marginTop: "3px" }}>
                   {evoucher.customer_name}
@@ -594,11 +640,6 @@ export function EVoucherDetailView({
           </div>
         )}
 
-        {/* ── Workflow History ─────────────────────────────────────────────── */}
-        <div style={{ marginBottom: "28px" }}>
-          <EVoucherHistoryTimeline evoucherId={evoucher.id} currentUser={currentUser} currentStatus={evoucher.status} />
-        </div>
-
         {/* ── Workflow Actions ─────────────────────────────────────────────── */}
         <div
           style={{
@@ -615,6 +656,7 @@ export function EVoucherDetailView({
             currentStatus={evoucher.status}
             requestorId={evoucher.requestor_id}
             cashReceiverId={evoucher.cash_receiver_id}
+            autoOpenLiquidation={autoOpenLiquidation}
             receiptConfirmedAt={(evoucher as any).details?.receipt_confirmed_at ?? (evoucher as any).receipt_confirmed_at}
             cashReturnConfirmedAt={(evoucher as any).details?.cash_return_confirmed_at ?? (evoucher as any).cash_return_confirmed_at}
             currentUser={currentUser}
@@ -628,6 +670,15 @@ export function EVoucherDetailView({
             currency={evoucher.currency}
             expenseCategory={(evoucher as any).expense_category ?? evoucher.gl_category}
           />
+        </div>
+
+        {/* ── Workflow History ───────────────────────────────────────────────
+            Deliberately BELOW the actions. The timeline is reference material and
+            it grows with every approval step — rendered above the actions it
+            pushed the user's actual task further off-screen the more a voucher
+            had been worked on. Liquidating an advance sat ~4 screens down. */}
+        <div style={{ marginBottom: "28px" }}>
+          <EVoucherHistoryTimeline evoucherId={evoucher.id} currentUser={currentUser} currentStatus={evoucher.status} />
         </div>
 
         {/* ── Liquidation history + per-booking reconciliation (NEU-105) ────────

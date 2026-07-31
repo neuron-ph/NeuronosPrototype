@@ -42,6 +42,7 @@ import { useDataScope } from "../../hooks/useDataScope";
 import type { DataScope } from "../../hooks/useDataScope";
 import { calculateFinancialTotals } from "../../utils/financialCalculations";
 import { calculateInvoiceBalance } from "../../utils/accounting-math";
+import { isInvoiceVisibleDocument } from "../../utils/invoiceReversal";
 import { pickReportingAmount } from "../../utils/accountingCurrency";
 import type { FinancialData } from "../../hooks/useProjectFinancials";
 import type { BillingItem } from "../shared/billings/UnifiedBillingsTab";
@@ -199,13 +200,18 @@ export function FinancialsModule() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Create actions (C12) — navigate to project-scoped creation flows
+  // Create actions (C12) — invoices and collections are always created against
+  // a container, so these land on the project list. The old ?action= param was
+  // never read by anything: the button dropped users on a list with no dialog,
+  // no prompt and no clue what to do next. Say the next step out loud instead.
   const handleCreateInvoice = useCallback(() => {
-    navigate("/accounting/projects?action=create-invoice");
+    navigate("/accounting/projects");
+    toast.info("Open the project or booking to bill, then use its Invoices tab.");
   }, [navigate]);
 
   const handleCreateCollection = useCallback(() => {
-    navigate("/accounting/projects?action=create-collection");
+    navigate("/accounting/projects");
+    toast.info("Open the project or booking that was paid, then use its Collections tab.");
   }, [navigate]);
 
   // Aggregate scope state (shared across tabs — Phase 1: billings only)
@@ -306,15 +312,12 @@ export function FinancialsModule() {
           }))
         : [];
 
+      // One definition of "is this a document you can see", shared with the
+      // aggregate invoices page. The local allow-list this replaces omitted
+      // "void", so a voided invoice silently vanished from the only screen
+      // that lists invoices.
       const invoices = (!e2 && invoiceRows)
-        ? invoiceRows.filter((b: any) => {
-            const status = (b.status || "").toLowerCase();
-            const paymentStatus = (b.payment_status || "").toLowerCase();
-            return (
-              ["draft", "posted", "approved", "paid", "open", "partial"].includes(status) ||
-              ["paid", "partial"].includes(paymentStatus)
-            );
-          })
+        ? invoiceRows.filter((b: any) => isInvoiceVisibleDocument(b))
         : [];
 
       const collections = (!e3 && collectionRows) ? collectionRows : [];
@@ -708,6 +711,26 @@ export function FinancialsModule() {
     );
   }, [invoices, scope]);
 
+  // The invoices table has no settlement columns. A row's `status` is its
+  // DOCUMENT lifecycle (draft → posted) and nothing in the app ever moves it
+  // past posted, so it can never mean "paid". Settlement is derived from the
+  // collections applied to the invoice — the same helper the booking and
+  // Unified invoice views already use, so every surface now agrees.
+  const settlementOf = useCallback((inv: any) => {
+    const fin = calculateInvoiceBalance(inv, collections as any);
+    const raw = String(inv?.status || "").toLowerCase();
+    // A draft has not been issued, and a void/reversed document is dead — none
+    // of them are open/partial/paid/overdue, so the document status wins.
+    const passthrough = raw === "draft" || raw === "void" || raw === "reversed";
+    return {
+      ...fin,
+      status: passthrough ? (raw as any) : fin.status,
+      // A dead document carries no receivable, whatever its lines say.
+      balance: raw === "void" || raw === "reversed" ? 0 : fin.balance,
+      balanceBase: raw === "void" || raw === "reversed" ? 0 : fin.balanceBase,
+    };
+  }, [collections]);
+
   // Aging bucket helper
   const getAgingDays = (inv: any): number => {
     const dueDate = inv.due_date ? new Date(inv.due_date) : null;
@@ -727,10 +750,9 @@ export function FinancialsModule() {
 
   // Aging buckets (computed from scoped invoices, excluding fully paid)
   const invoicesAgingBuckets: AgingBucket[] = useMemo(() => {
-    const unpaid = scopedInvoices.filter((inv: any) => {
-      const s = (inv.status || "").toLowerCase();
-      return s !== "paid";
-    });
+    const unpaid = scopedInvoices.filter(
+      (inv: any) => settlementOf(inv).balanceBase > 0.01,
+    );
 
     const bucketMap: Record<string, { amount: number; count: number }> = {
       "Current": { amount: 0, count: 0 },
@@ -743,17 +765,8 @@ export function FinancialsModule() {
     unpaid.forEach((inv: any) => {
       const days = getAgingDays(inv);
       const label = getAgingBucketLabel(days);
-      // PHP-base balance: remaining_balance is in original currency; translate
-      // by exchange_rate so USD invoices aggregate correctly with PHP ones.
-      const rate = Number(inv.exchange_rate);
-      const remainingOriginal = Number(
-        inv.remaining_balance ?? inv.total_amount ?? inv.amount ?? 0,
-      );
-      const balance =
-        Number.isFinite(rate) && rate > 0 && rate !== 1
-          ? remainingOriginal * rate
-          : Number(inv.base_amount ?? remainingOriginal);
-      bucketMap[label].amount += balance;
+      // balanceBase is already PHP — calculateInvoiceBalance does the FX.
+      bucketMap[label].amount += settlementOf(inv).balanceBase;
       bucketMap[label].count += 1;
     });
 
@@ -771,40 +784,30 @@ export function FinancialsModule() {
       count: data.count,
       color: AGING_COLORS[label] || "#6B7A76",
     }));
-  }, [scopedInvoices]);
+  }, [scopedInvoices, settlementOf]);
 
   // Invoice KPIs
   const invoicesKPIs: KPICard[] = useMemo(() => {
     const items = scopedInvoices;
-    // Aggregations are in PHP base. Prefer the persisted base_amount column
-    // and translate `remaining_balance` (original currency) via exchange_rate
-    // so USD invoices roll up correctly alongside PHP ones.
+    // Aggregations are in PHP base; calculateInvoiceBalance already does the FX.
     const baseTotal = (inv: any) =>
       Number(inv.base_amount ?? inv.total_amount ?? inv.amount ?? 0);
-    const baseRemaining = (inv: any) => {
-      const remainingOriginal = Number(
-        inv.remaining_balance ?? inv.total_amount ?? inv.amount ?? 0,
-      );
-      const rate = Number(inv.exchange_rate);
-      if (Number.isFinite(rate) && rate > 0 && rate !== 1) {
-        return remainingOriginal * rate;
-      }
-      // Fall back to base_amount when remaining_balance is missing.
-      return inv.remaining_balance == null
-        ? Number(inv.base_amount ?? remainingOriginal)
-        : remainingOriginal;
-    };
+    const baseRemaining = (inv: any) => settlementOf(inv).balanceBase;
 
-    const totalInvoiced = items.reduce((sum, inv: any) => sum + baseTotal(inv), 0);
+    // A voided or reversed document is listed for the record but was never
+    // really invoiced — keep it out of the money.
+    const live = items.filter((inv: any) => {
+      const s = settlementOf(inv).status;
+      return s !== "void" && s !== "reversed";
+    });
+    const totalInvoiced = live.reduce((sum, inv: any) => sum + baseTotal(inv), 0);
 
-    const unpaid = items.filter((inv: any) => (inv.status || "").toLowerCase() !== "paid");
+    const unpaid = items.filter((inv: any) => baseRemaining(inv) > 0.01);
     const outstanding = unpaid.reduce((sum, inv: any) => sum + baseRemaining(inv), 0);
 
-    const overdue = items.filter((inv: any) => {
-      const s = (inv.status || "").toLowerCase();
-      if (s === "paid") return false;
-      return getAgingDays(inv) > 0;
-    });
+    const overdue = items.filter(
+      (inv: any) => baseRemaining(inv) > 0.01 && getAgingDays(inv) > 0,
+    );
     const overdueAmount = overdue.reduce((sum, inv: any) => sum + baseRemaining(inv), 0);
 
     // Collection rate: use scoped collections that match scoped invoices
@@ -819,7 +822,7 @@ export function FinancialsModule() {
       {
         label: "Total Invoiced",
         value: formatCurrencyCompact(totalInvoiced),
-        subtext: `${items.length} invoices`,
+        subtext: `${live.length} invoices`,
         icon: FileStack,
         severity: "normal" as const,
       },
@@ -845,7 +848,7 @@ export function FinancialsModule() {
         severity: collectionRate < 60 ? "danger" as const : collectionRate < 80 ? "warning" as const : "normal" as const,
       },
     ];
-  }, [scopedInvoices, collections, scope]);
+  }, [scopedInvoices, collections, scope, settlementOf]);
 
   const INVOICES_GROUP_OPTIONS: GroupOption[] = [
     { value: "customer", label: "Customer" },
@@ -854,11 +857,14 @@ export function FinancialsModule() {
     { value: "booking", label: "Booking" },
   ];
 
+  // Settlement states, matching what the Status chip now shows. "Posted" is
+  // gone on purpose — every issued invoice is posted, so it never told anyone
+  // anything; whether it is open, late or settled is the useful question.
   const INVOICES_STATUS_OPTIONS: StatusOption[] = [
     { value: "draft", label: "Draft", color: "var(--theme-text-muted)" },
-    { value: "posted", label: "Posted", color: "var(--theme-action-primary-bg)" },
     { value: "open", label: "Open", color: "#2563EB" },
     { value: "partial", label: "Partial", color: "var(--theme-status-warning-fg)" },
+    { value: "overdue", label: "Overdue", color: "var(--theme-status-danger-fg)" },
     { value: "paid", label: "Paid", color: "var(--theme-status-success-fg)" },
   ];
 
@@ -920,8 +926,8 @@ export function FinancialsModule() {
       width: "100px",
       align: "right" as const,
       cell: (inv: any) => {
-        const balance = Number(inv.remaining_balance ?? inv.total_amount ?? inv.amount ?? 0);
-        const isPaid = (inv.status || "").toLowerCase() === "paid";
+        const { balance, status } = settlementOf(inv);
+        const isPaid = status === "paid";
         return (
           <span className="tabular-nums" style={{ color: isPaid ? "var(--neuron-semantic-success)" : "inherit" }}>
             {isPaid ? "Paid" : formatCurrencyFull(balance)}
@@ -934,19 +940,23 @@ export function FinancialsModule() {
       width: "80px",
       align: "center" as const,
       cell: (inv: any) => {
-        const s = (inv.status || "").toLowerCase();
+        const s = settlementOf(inv).status;
         const fgMap: Record<string, string> = {
           draft: "var(--theme-text-muted)",
-          posted: "var(--theme-action-primary-bg)",
+          void: "var(--theme-text-muted)",
+          reversed: "var(--theme-text-muted)",
           open: "#2563EB",
           partial: "var(--theme-status-warning-fg)",
+          overdue: "var(--theme-status-danger-fg)",
           paid: "var(--theme-status-success-fg)",
         };
         const bgMap: Record<string, string> = {
           draft: "var(--theme-bg-surface-subtle)",
-          posted: "var(--theme-status-success-bg)",
+          void: "var(--theme-bg-surface-subtle)",
+          reversed: "var(--theme-bg-surface-subtle)",
           open: "#2563EB20",
           partial: "var(--theme-status-warning-bg)",
+          overdue: "var(--theme-status-danger-bg)",
           paid: "var(--theme-status-success-bg)",
         };
         const fg = fgMap[s] || "var(--theme-text-muted)";
@@ -961,20 +971,19 @@ export function FinancialsModule() {
         );
       },
     },
-  ], []);
+  ], [settlementOf]);
 
   // Filtered invoices (status + search + aging bucket)
   const filteredInvoices = useMemo(() => {
     let items = scopedInvoices;
     // Status filter
     if (invoicesStatusFilter) {
-      items = items.filter((inv: any) => (inv.status || "").toLowerCase() === invoicesStatusFilter);
+      items = items.filter((inv: any) => settlementOf(inv).status === invoicesStatusFilter);
     }
     // Aging bucket filter
     if (invoicesAgingBucket) {
       items = items.filter((inv: any) => {
-        const s = (inv.status || "").toLowerCase();
-        if (s === "paid") return false;
+        if (settlementOf(inv).balanceBase <= 0.01) return false;
         return getAgingBucketLabel(getAgingDays(inv)) === invoicesAgingBucket;
       });
     }
@@ -990,7 +999,7 @@ export function FinancialsModule() {
       );
     }
     return items;
-  }, [scopedInvoices, invoicesStatusFilter, invoicesAgingBucket, invoicesSearch, resolveLineage]);
+  }, [scopedInvoices, invoicesStatusFilter, invoicesAgingBucket, invoicesSearch, resolveLineage, settlementOf]);
 
   // Grouped invoices
   const invoicesGroups: GroupedItems<any>[] = useMemo(() => {
@@ -1023,11 +1032,16 @@ export function FinancialsModule() {
         key,
         label: key,
         items,
-        subtotal: items.reduce((sum, inv) => sum + pickReportingAmount(inv as any), 0),
+        // A void/reversed invoice is listed for the record but was never really
+        // invoiced — same rule as the Total Invoiced KPI, so the two agree.
+        subtotal: items.reduce((sum, inv) => {
+          const st = settlementOf(inv).status;
+          return st === "void" || st === "reversed" ? sum : sum + pickReportingAmount(inv as any);
+        }, 0),
         count: items.length,
       }))
       .sort((a, b) => b.subtotal - a.subtotal);
-  }, [filteredInvoices, invoicesGroupBy, resolveLineage]);
+  }, [filteredInvoices, invoicesGroupBy, resolveLineage, settlementOf]);
 
   // ══════════════════════════════════════════════
   // ── Collections Aggregate (Phase 4) ──
@@ -1071,7 +1085,12 @@ export function FinancialsModule() {
     const avgDays = countWithDates > 0 ? Math.round(totalDays / countWithDates) : 0;
 
     // Collection rate (collected vs. total outstanding invoices in scope)
-    const totalInvoiced = scopedInvoices.reduce((sum, inv: any) =>
+    const totalInvoiced = scopedInvoices
+      .filter((inv: any) => {
+        const st = settlementOf(inv).status;
+        return st !== "void" && st !== "reversed";
+      })
+      .reduce((sum, inv: any) =>
       sum + pickReportingAmount(inv), 0);
     const collRate = totalInvoiced > 0 ? (totalCollected / totalInvoiced) * 100 : 0;
 
@@ -1105,7 +1124,7 @@ export function FinancialsModule() {
         severity: collRate < 60 ? "danger" as const : collRate < 80 ? "warning" as const : "normal" as const,
       },
     ];
-  }, [scopedCollections, scopedInvoices]);
+  }, [scopedCollections, scopedInvoices, settlementOf]);
 
   const COLLECTIONS_GROUP_OPTIONS: GroupOption[] = [
     { value: "customer", label: "Customer" },

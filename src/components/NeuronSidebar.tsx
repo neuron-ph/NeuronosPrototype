@@ -34,6 +34,7 @@ import {
   TrendingUp,
   Database,
   CheckCircle2,
+  Target,
   AlertTriangle,
   Info,
   Bell
@@ -214,7 +215,7 @@ const prefetchOperations = () => void import("./Operations");
 const prefetchAccounting = () => void import("./accounting/FinancialsModule");
 const prefetchInbox      = () => void import("./InboxPage");
 
-type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" |"pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" | "pricing-others" |"ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" |"operations" | "acct-transactions" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-journal" | "acct-coa" | "acct-reports" | "acct-statements" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "calendar" | "inbox" | "approvals" | "my-evouchers" | "ticket-queue" | "settings" | "admin-users" | "admin-profiling" | "admin" | "ticket-testing" | "activity-log" | "design-system";
+type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" |"pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" | "pricing-others" |"ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" |"operations" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-reports" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "exec-performance" | "calendar" | "inbox" | "approvals" | "my-evouchers" | "my-scorecard" | "ticket-queue" | "settings" | "admin-users" | "admin-profiling" | "admin" | "ticket-testing" | "activity-log" | "design-system";
 
 // Sidebar permission map — derived from canonical schema for sidebar-backed pages,
 // plus explicit entries for legacy non-sidebar accounting routes that still need
@@ -510,15 +511,12 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
     "pricing-others":      FileText,
     "acct-financials":     CreditCard,
     "acct-evouchers":      Receipt,
-    "acct-journal":        ScrollText,
-    "acct-coa":            BookOpen,
     "acct-projects":       Briefcase,
     "acct-contracts":      Handshake,
     "acct-bookings":       Package,
     "acct-customers":      Users,
     "acct-catalog":        ClipboardCheck,
     "acct-reports":        BarChart3,
-    "acct-statements":     TrendingUp,
   };
   type SubItem = { id: Page; label: string; icon: any };
   const buildSubItems = (deptLabel: string): SubItem[] =>
@@ -561,6 +559,10 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
   const showOperationsSection = visibleOperationsSubItems.length > 0;
   const showAccountingSection = visibleAcctSubItems.length > 0;
   const showHRItem = showHR && canViewPage("hr");
+  // Performance lives under Executive, not HR: reading the whole company's
+  // performance is an executive capability. It is also why it must not ride
+  // `showHR`, which is dev-only (!import.meta.env.PROD).
+  const showPerformanceItem = canViewPage("exec-performance");
   const showActivityLog = canViewPage("activity-log");
   const showAdminUsers = canViewPage("admin-users");
   const showAdminProfiling = canViewPage("admin-profiling");
@@ -588,6 +590,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
     ...(canApproveAnything ? [{ id: "approvals" as Page, label: "Approvals", icon: CheckCircle2 }] : []),
     { id: "inbox" as Page, label: "Inbox", icon: Inbox },
     { id: "my-evouchers" as Page, label: "E-Vouchers", icon: FileText },
+    { id: "my-scorecard" as Page, label: "My Scorecard", icon: Target },
   ].filter(item => item.id === "approvals" || canViewPage(item.id));
   
 
@@ -1358,9 +1361,10 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
         {otherItems.map(item => renderNavButton(item))}
 
         {/* Executive Section */}
-        {(showActivityLog || showAdminUsers || showAdminProfiling) && (
+        {(showPerformanceItem || showActivityLog || showAdminUsers || showAdminProfiling) && (
           <>
             {renderSectionHeader("EXECUTIVE")}
+            {showPerformanceItem && renderNavButton({ id: "exec-performance" as Page, label: "Performance", icon: Target })}
             {showActivityLog && renderNavButton({ id: "activity-log" as Page, label: "Activity Log", icon: Activity })}
             {showAdminUsers && (() => {
               const isActive = currentPage === "admin-users";

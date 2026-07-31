@@ -4,10 +4,9 @@ import { logCreation } from "../../../utils/activityLog";
 import { toast } from "../../ui/toast-utils";
 import type { FinancialContainer } from "../../../types/financials";
 import type { LinkedBilling } from "../../../types/evoucher";
-import { Invoice, Collection } from "../../../types/accounting";
+import { Invoice, Collection } from "../../../types/financials";
 import { useUser } from "../../../hooks/useUser";
 import { usePermission } from "../../../context/PermissionProvider";
-import { fireGLPostingTicketOnCollection } from "../../../utils/workflowTickets";
 import { SidePanel } from "../../common/SidePanel";
 import { CustomDatePicker } from "../../common/CustomDatePicker";
 import { CustomDropdown } from "../../bd/CustomDropdown";
@@ -494,18 +493,6 @@ export function CollectionCreatorPanel({
         },
         recipientIds: [projectOwnerId, ...(arManagers || []).map((u: any) => u.id)],
       });
-
-      if (user?.id) {
-        fireGLPostingTicketOnCollection({
-          collectionId: created.id,
-          collectionRef: referenceNo || collectionNumber,
-          customerName: project.customer_name,
-          amount: amountReceived,
-          userId: user.id,
-          userName: user.name || "Accounting",
-          userDept: user.department || "Accounting",
-        });
-      }
 
       onSuccess();
       onClose();

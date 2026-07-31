@@ -37,13 +37,12 @@ const CatalogManagementPage = lazy(() => import("./components/accounting/Catalog
 const AccountingBookingsShell = lazy(() => import("./components/accounting/AccountingBookingsShell").then((module) => ({ default: module.AccountingBookingsShell })));
 const AccountingCustomers = lazy(() => import("./components/accounting/AccountingCustomers").then((module) => ({ default: module.AccountingCustomers })));
 const ReportsModule = lazy(() => import("./components/accounting/reports/ReportsModule").then((module) => ({ default: module.ReportsModule })));
-const FinancialStatementsPage = lazy(() => import("./components/accounting/FinancialStatementsPage").then((module) => ({ default: module.FinancialStatementsPage })));
 const EVouchersContent = lazy(() => import("./components/accounting/EVouchersContent").then((module) => ({ default: module.EVouchersContent })));
-const ChartOfAccounts = lazy(() => import("./components/accounting/coa/ChartOfAccounts").then((module) => ({ default: module.ChartOfAccounts })));
-const GeneralJournal = lazy(() => import("./components/accounting/journal/GeneralJournal").then((module) => ({ default: module.GeneralJournal })));
 const HR = lazy(() => import("./components/HR").then((module) => ({ default: module.HR })));
 const InboxPage = lazy(() => import("./components/InboxPage").then((module) => ({ default: module.InboxPage })));
 const MyEVouchersPage = lazy(() => import("./components/MyEVouchersPage").then((module) => ({ default: module.MyEVouchersPage })));
+const PerformancePage = lazy(() => import("./components/kpi/PerformancePage").then((module) => ({ default: module.PerformancePage })));
+const MyScorecardPage = lazy(() => import("./components/kpi/MyScorecardPage").then((module) => ({ default: module.MyScorecardPage })));
 const ApprovalsPage = lazy(() => import("./components/ApprovalsPage").then((module) => ({ default: module.ApprovalsPage })));
 const DisburseEVoucherPage = lazy(() => import("./components/accounting/evouchers/DisburseEVoucherPage").then((module) => ({ default: module.DisburseEVoucherPage })));
 const ActivityLogPage = lazy(() => import("./components/ActivityLogPage").then((module) => ({ default: module.ActivityLogPage })));
@@ -256,26 +255,24 @@ function RouteWrapper({ children, page }: { children: React.ReactNode; page: str
     if (path.startsWith("/operations")) return "operations";
     if (path.startsWith("/projects")) return "projects";
     if (path.startsWith("/contracts")) return "contracts";
-    if (path.startsWith("/accounting/journal")) return "acct-journal";
-    if (path.startsWith("/accounting/coa")) return "acct-coa";
     if (path.startsWith("/accounting/evouchers")) return "acct-evouchers";
     if (path.startsWith("/accounting/financials")) return "acct-financials";
     if (path.startsWith("/accounting/invoices")) return "acct-invoices";
     if (path.startsWith("/accounting/billings")) return "acct-billings";
     if (path.startsWith("/accounting/collections")) return "acct-collections";
     if (path.startsWith("/accounting/expenses")) return "acct-expenses";
-    if (path.startsWith("/accounting/ledger")) return "acct-ledger";
     if (path.startsWith("/accounting/projects")) return "acct-projects";
     if (path.startsWith("/accounting/contracts")) return "acct-contracts";
     if (path.startsWith("/accounting/customers")) return "acct-customers";
     if (path.startsWith("/accounting/bookings")) return "acct-bookings";
-    if (path.startsWith("/accounting/statements")) return "acct-statements";
     if (path.startsWith("/accounting/reports")) return "acct-reports";
     if (path.startsWith("/accounting/catalog")) return "acct-catalog";
+    if (path.startsWith("/performance")) return "exec-performance";
     if (path.startsWith("/hr")) return "hr";
     if (path.startsWith("/calendar")) return "calendar";
     if (path.startsWith("/approvals")) return "approvals";
     if (path.startsWith("/my-evouchers")) return "my-evouchers";
+    if (path.startsWith("/my-scorecard")) return "my-scorecard";
     if (path.startsWith("/inbox")) return "inbox";
     if (path.startsWith("/activity-log")) return "activity-log";
     if (path.startsWith("/settings")) return "settings";
@@ -312,27 +309,25 @@ function RouteWrapper({ children, page }: { children: React.ReactNode; page: str
       "ops-marine-insurance": "/operations/marine-insurance",
       "ops-others": "/operations/others",
       "pricing-others": "/pricing/others", // NEU-020 DD-2
-      "acct-journal": "/accounting/journal",
-      "acct-coa": "/accounting/coa",
       "acct-evouchers": "/accounting/evouchers",
       "acct-financials": "/accounting/financials",
       "acct-invoices": "/accounting/invoices",
       "acct-billings": "/accounting/billings",
       "acct-collections": "/accounting/collections",
       "acct-expenses": "/accounting/expenses",
-      "acct-ledger": "/accounting/ledger",
       "acct-projects": "/accounting/projects",
       "acct-contracts": "/accounting/contracts",
       "acct-customers": "/accounting/customers",
       "acct-bookings": "/accounting/bookings",
-      "acct-statements": "/accounting/statements",
       "acct-reports": "/accounting/reports",
       "acct-catalog": "/accounting/catalog",
       "hr": "/hr",
+      "exec-performance": "/performance",
       "calendar": "/calendar",
       "inbox": "/inbox",
       "approvals": "/approvals",
       "my-evouchers": "/my-evouchers",
+      "my-scorecard": "/my-scorecard",
       "activity-log": "/activity-log",
       "settings": "/settings",
       "admin-users": "/admin/users",
@@ -845,63 +840,10 @@ function AccountingExpensesPage() {
   );
 }
 
-function AccountingLedgerPage() {
-  return (
-    <RouteWrapper page="acct-ledger">
-      <ChartOfAccounts />
-    </RouteWrapper>
-  );
-}
-
 function AccountingReportsPage() {
   return (
     <RouteWrapper page="acct-reports">
       <ReportsModule />
-    </RouteWrapper>
-  );
-}
-
-function AccountingStatementsPage() {
-  return (
-    <RouteWrapper page="acct-statements">
-      <FinancialStatementsPage />
-    </RouteWrapper>
-  );
-}
-
-function AccountingCoaPage() {
-  return (
-    <RouteWrapper page="acct-coa">
-      <ChartOfAccounts />
-    </RouteWrapper>
-  );
-}
-
-function AccountingJournalPage() {
-  // NEU-099: General Journal (posted) + Transaction Journal (pre-posting) as two
-  // tabs of the same workspace, gated by the shared acct_journal permission.
-  const [journalTab, setJournalTab] = useState<"general" | "transaction">("transaction");
-  return (
-    <RouteWrapper page="acct-journal">
-      <div style={{ display: "flex", gap: "4px", padding: "16px 24px 0", borderBottom: "1px solid var(--theme-border-default)", backgroundColor: "var(--theme-bg-surface)" }}>
-        {([["transaction", "Transaction Journal"], ["general", "General Journal"]] as const).map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setJournalTab(key)}
-            style={{
-              padding: "8px 16px", fontSize: "13px", fontWeight: journalTab === key ? 600 : 400,
-              color: journalTab === key ? "var(--theme-action-primary-bg)" : "var(--theme-text-muted)",
-              background: "none", border: "none", cursor: "pointer",
-              borderBottom: journalTab === key ? "2px solid var(--theme-action-primary-bg)" : "2px solid transparent",
-              marginBottom: "-1px",
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      {/* Same component, two lenses: transaction = full pipeline, general = posted-only. */}
-      {journalTab === "general" ? <GeneralJournal mode="general" /> : <GeneralJournal mode="transaction" />}
     </RouteWrapper>
   );
 }
@@ -1003,6 +945,22 @@ function MyEVouchersPageWrapper() {
   return (
     <RouteWrapper page="my-evouchers">
       <MyEVouchersPage />
+    </RouteWrapper>
+  );
+}
+
+function PerformancePageWrapper() {
+  return (
+    <RouteWrapper page="exec-performance">
+      <PerformancePage />
+    </RouteWrapper>
+  );
+}
+
+function MyScorecardPageWrapper() {
+  return (
+    <RouteWrapper page="my-scorecard">
+      <MyScorecardPage />
     </RouteWrapper>
   );
 }
@@ -1215,10 +1173,6 @@ function AppContent() {
         <Route element={<GuardedLayout requiredPermission={{ moduleId: "accounting_financials_expenses_tab", action: "view" }} />}>
           <Route path="/accounting/expenses" element={<AccountingExpensesPage />} />
         </Route>
-        <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_coa", action: "view" }} />}>
-          <Route path="/accounting/coa" element={<AccountingCoaPage />} />
-          <Route path="/accounting/ledger" element={<AccountingLedgerPage />} />
-        </Route>
         <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_projects", action: "view" }} />}>
           <Route path="/accounting/projects" element={<AccountingProjectsPage />} />
         </Route>
@@ -1236,14 +1190,6 @@ function AppContent() {
         </Route>
         <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_catalog", action: "view" }} />}>
           <Route path="/accounting/catalog" element={<AccountingCatalogPage />} />
-        </Route>
-
-        {/* General Journal + Financial Statements — Accounting + Executive */}
-        <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_journal", action: "view" }} />}>
-          <Route path="/accounting/journal" element={<AccountingJournalPage />} />
-        </Route>
-        <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_statements", action: "view" }} />}>
-          <Route path="/accounting/statements" element={<AccountingStatementsPage />} />
         </Route>
 
         {/* Finance Overview — Accounting Manager or Executive only */}
@@ -1284,6 +1230,9 @@ function AppContent() {
         <Route path="/approvals" element={<ApprovalsPageWrapper />} />
         <Route element={<GuardedLayout requiredPermission={{ moduleId: "my_evouchers", action: "view" }} />}>
           <Route path="/my-evouchers" element={<MyEVouchersPageWrapper />} />
+          <Route path="/my-scorecard" element={<MyScorecardPageWrapper />} />
+          <Route path="/performance" element={<PerformancePageWrapper />} />
+          <Route path="/performance/:userId" element={<PerformancePageWrapper />} />
         </Route>
         <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_evouchers", action: "view" }} />}>
           <Route path="/evouchers/:id/disburse" element={<RouteWrapper page="acct-evouchers"><DisburseEVoucherPage /></RouteWrapper>} />

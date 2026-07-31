@@ -156,7 +156,6 @@ export async function createInvoiceReversalDraft(originalInvoice: any, actor?: A
     subtotal: toNegative(originalInvoice.subtotal),
     total_amount: toNegative(originalInvoice.total_amount || originalInvoice.amount),
     tax_amount: toNegative(originalInvoice.tax_amount),
-    revenue_account_id: originalInvoice.revenue_account_id || null,
     status: REVERSAL_DRAFT_STATUS,
     payment_status: "unpaid",
     metadata: {

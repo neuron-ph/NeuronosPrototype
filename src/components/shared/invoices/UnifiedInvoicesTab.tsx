@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { Search, Plus, FileText } from "lucide-react";
 import type { FinancialData } from "../../../hooks/useProjectFinancials";
 import type { FinancialContainer } from "../../../types/financials";
-import { Invoice } from "../../../types/accounting";
+import { Invoice } from "../../../types/financials";
 import { InvoiceCreatorPage } from "../../../components/projects/invoices/InvoiceCreatorPage";
 import { CustomDropdown } from "../../bd/CustomDropdown";
 import { CustomDatePicker } from "../../common/CustomDatePicker";

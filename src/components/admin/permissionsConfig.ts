@@ -76,8 +76,8 @@ export type ModuleId =
   | "ops_invoices_legal_tab" | "ops_invoices_settings_tab"
   // ─── Accounting ──────────────────────────────────────────────────────────────
   | "acct_evouchers" | "acct_reports"
-  | "acct_financials" | "acct_coa" | "acct_projects" | "acct_contracts" | "acct_bookings" | "acct_customers"
-  | "acct_catalog" | "acct_statements" | "acct_journal"
+  | "acct_financials" | "acct_projects" | "acct_contracts" | "acct_bookings" | "acct_customers"
+  | "acct_catalog"
   | "accounting_evouchers_pending_disburse_tab" | "accounting_evouchers_waiting_on_rep_tab"
   | "accounting_evouchers_pending_verification_tab" | "accounting_evouchers_archive_tab"
   | "accounting_financials_dashboard_tab" | "accounting_financials_billings_tab"
@@ -125,7 +125,13 @@ export type ModuleId =
   | "calendar"
   | "my_evouchers"
   | "my_evouchers_all_tab" | "my_evouchers_draft_tab" | "my_evouchers_pending_tab"
-  | "my_evouchers_active_tab" | "my_evouchers_done_tab";
+  | "my_evouchers_active_tab" | "my_evouchers_done_tab"
+  // Own KPI scorecard. Read-only, self-scoping — the page only ever renders the
+  // signed-in user's card, so `view` is the only meaningful action.
+  | "my_scorecard"
+  // Everyone else's scorecards. Deliberately a separate door from my_scorecard:
+  // holding this is what lets get_kpi_scorecard return another person's card.
+  | "exec_performance";
 
 // NEU-022: `amend` is a distinct elevated capability (re-edit a CONVERTED quote /
 // active contract after it's locked), kept separate from `approve` so a real

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Project } from "../../../../types/pricing";
-import { Invoice } from "../../../../types/accounting";
+import { Invoice } from "../../../../types/financials";
 import { InvoicePrintOptions, InvoiceBankDetails } from "../InvoiceDocument";
 import { DEFAULT_COMPANY_SETTINGS, type CompanySettings } from "../../../../hooks/useCompanySettings";
 

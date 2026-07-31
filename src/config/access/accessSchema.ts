@@ -505,26 +505,6 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
         ],
       },
       {
-        kind: "module", id: "acct_journal", moduleId: "acct_journal",
-        label: "General Journal", pageId: "acct-journal",
-        tabs: [
-          tab("accounting_journal_all_sources_tab", "All Sources"),
-          tab("accounting_journal_evoucher_tab",    "E-Voucher"),
-          tab("accounting_journal_invoice_tab",     "Invoice"),
-          tab("accounting_journal_collection_tab",  "Collection"),
-          tab("accounting_journal_manual_tab",      "Manual"),
-        ],
-      },
-      {
-        kind: "module", id: "acct_coa", moduleId: "acct_coa",
-        label: "Chart of Accounts", pageId: "acct-coa",
-        tabs: [
-          tab("accounting_coa_all_tab",              "All"),
-          tab("accounting_coa_balance_sheet_tab",    "Balance Sheet"),
-          tab("accounting_coa_income_statement_tab", "Income Statement"),
-        ],
-      },
-      {
         kind: "module", id: "acct_projects", moduleId: "acct_projects",
         label: "Projects", pageId: "acct-projects",
         tabs: [
@@ -598,15 +578,6 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
         ],
       },
       { kind: "module", id: "acct_reports", moduleId: "acct_reports", label: "Reports", pageId: "acct-reports", tabs: [] },
-      {
-        kind: "module", id: "acct_statements", moduleId: "acct_statements",
-        label: "Financial Statements", pageId: "acct-statements",
-        tabs: [
-          tab("accounting_financial_statements_income_statement_tab", "Income Statement"),
-          tab("accounting_financial_statements_balance_sheet_tab",    "Balance Sheet"),
-          tab("accounting_financial_statements_cash_flow_tab",        "Cash Flow"),
-        ],
-      },
     ],
   },
 
@@ -624,6 +595,16 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
     id: "executive",
     label: DEPT_LABEL.executive,
     modules: [
+      // Performance — everyone else's scorecards, department distributions and
+      // systemic flags. Executive rather than HR: reading the whole company's
+      // performance is an executive capability, and HR's own sidebar entry is
+      // dev-only, which would have scoped this to dev by accident.
+      //
+      // `view` is what widens get_kpi_scorecard beyond the caller's own card;
+      // `edit` is the separate power to set someone's rating. Kept distinct from
+      // my_scorecard on purpose.
+      { kind: "module", id: "exec_performance", moduleId: "exec_performance",
+        label: "Performance", pageId: "exec-performance", tabs: [] },
       { kind: "module", id: "exec_activity_log", moduleId: "exec_activity_log", label: "Activity Log", pageId: "activity-log", tabs: [] },
       {
         kind: "module", id: "exec_users", moduleId: "exec_users",
@@ -709,6 +690,13 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
           tab("my_evouchers_done_tab",    "Done"),
         ],
       },
+      // My Scorecard — the employee's own KPI card, live for the open period.
+      // Self-scoping: the page reads get_kpi_scorecard(current user), so there is
+      // no row to gate and `view` is the only live action. Reading ANOTHER
+      // person's scorecard is a separate door (exec_performance) — never
+      // a widened version of this one.
+      { kind: "module", id: "my_scorecard", moduleId: "my_scorecard",
+        label: "My Scorecard", pageId: "my-scorecard", tabs: [] },
     ],
   },
 ];

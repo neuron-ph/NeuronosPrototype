@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router";
 import { FileText, Calendar, Receipt, AlertCircle, CheckCircle2, Clock } from "lucide-react";
 import { useState } from "react";
-import type { Billing } from "../../types/accounting";
+import type { Billing } from "../../types/financials";
 import { BillingDetailsSheet } from "./billings/BillingDetailsSheet";
 import { SkeletonTable } from "../shared/NeuronSkeleton";
 

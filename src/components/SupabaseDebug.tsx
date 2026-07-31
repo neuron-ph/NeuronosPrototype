@@ -93,8 +93,8 @@ export function SupabaseDebug() {
     const tables = [
       "users", "customers", "contacts", "inquiries", "quotations",
       "projects", "contracts", "bookings", "invoices", "billing_line_items",
-      "collections", "evouchers", "expenses", "journal_entries",
-      "chart_of_accounts", "counters", "tickets", "ticket_types",
+      "collections", "evouchers", "expenses",
+      "counters", "tickets", "ticket_types",
       "activities", "tasks", "vendors", "budget_requests",
     ];
 

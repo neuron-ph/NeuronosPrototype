@@ -86,6 +86,11 @@ export function MyEVouchersPage() {
   const [dateTo, setDateTo] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [selectedEV, setSelectedEV] = useState<EVoucher | null>(null);
+  // The row's "Liquidate" and the panel's "Submit Liquidation" used to be two
+  // buttons with the same label and different behaviour — the row one only
+  // opened the panel, then sat behind the scrim inviting a dead click. The row
+  // action now lands on the form.
+  const [openToLiquidation, setOpenToLiquidation] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [approvingId, setApprovingId] = useState<string | null>(null);
 
@@ -283,7 +288,7 @@ export function MyEVouchersPage() {
           if (!needsLiquidation) return null;
           return (
             <button
-              onClick={(e) => { e.stopPropagation(); setSelectedEV(ev); }}
+              onClick={(e) => { e.stopPropagation(); setOpenToLiquidation(true); setSelectedEV(ev); }}
               style={{
                 display: "flex", alignItems: "center", gap: "4px",
                 fontSize: "12px", fontWeight: 500,
@@ -694,7 +699,7 @@ export function MyEVouchersPage() {
           data={filteredEVs}
           columns={columns}
           isLoading={tableLoading}
-          onRowClick={setSelectedEV}
+          onRowClick={(ev) => { setOpenToLiquidation(false); setSelectedEV(ev); }}
           emptyMessage={
             searchQuery || typeFilter !== "all" || dateFrom || dateTo
               ? "No E-Vouchers match your filters."
@@ -725,7 +730,8 @@ export function MyEVouchersPage() {
       {selectedEV && (
         <EVoucherDetailView
           evoucher={selectedEV}
-          onClose={() => setSelectedEV(null)}
+          autoOpenLiquidation={openToLiquidation}
+          onClose={() => { setSelectedEV(null); setOpenToLiquidation(false); }}
           currentUser={
             user
               ? {
@@ -739,6 +745,7 @@ export function MyEVouchersPage() {
           }
           onStatusChange={() => {
             setSelectedEV(null);
+            setOpenToLiquidation(false);
             refreshAll();
           }}
         />

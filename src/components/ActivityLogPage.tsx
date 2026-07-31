@@ -396,7 +396,6 @@ export function ActivityLogPage() {
               { value: "collection",     label: "Collection" },
               { value: "billing",        label: "Billing" },
               { value: "expense",        label: "Expense" },
-              { value: "journal_entry",  label: "Journal Entry" },
               { value: "contact",        label: "Contact" },
               { value: "customer",       label: "Customer" },
               { value: "task",           label: "Task" },

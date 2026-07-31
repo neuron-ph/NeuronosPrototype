@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { calculateInvoiceBalance } from "./accounting-math";
-import type { Invoice, Collection } from "../types/accounting";
+import type { Invoice, Collection } from "../types/financials";
 
 const baseInvoice = {
   id: "INV-1",

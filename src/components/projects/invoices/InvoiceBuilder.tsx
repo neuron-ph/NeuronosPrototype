@@ -4,12 +4,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useUser } from "../../../hooks/useUser";
 import { usePermission } from "../../../context/PermissionProvider";
 import { logCreation, logActivity } from "../../../utils/activityLog";
+import { fireInvoiceARTicket } from "../../../utils/workflowTickets";
 import { toast } from "../../ui/toast-utils";
 import type { FinancialContainer } from "../../../types/financials";
 import type { Project } from "../../../types/pricing";
-import { Invoice, Billing, Account } from "../../../types/accounting";
+import { Invoice, Billing } from "../../../types/financials";
 import type { BillingLineItem } from "../../../types/operations";
-import { getAccounts } from "../../../utils/accounting-api";
 import { supabase } from "../../../utils/supabase/client";
 import { queryKeys } from "../../../lib/queryKeys";
 import { InvoiceDocument, InvoicePrintOptions } from "./InvoiceDocument";
@@ -189,9 +189,6 @@ export function InvoiceBuilder({
     }
   };
 
-  // Accounting State (For GL Posting — Revenue Account for DR AR / CR Revenue)
-  const [revenueAccountId, setRevenueAccountId] = useState("");
-
   // Doctrine D1 (NEU-077): every invoice must be booking-linked. The invoice is
   // tied to exactly one booking — auto-selected when the project has one,
   // chosen when it has several, blocked when it has none.
@@ -228,25 +225,6 @@ export function InvoiceBuilder({
   };
 
   // -- Queries --
-
-  // Revenue accounts for GL posting (create mode only)
-  const { data: allAccountsRaw = [], isLoading: loadingAccounts } = useQuery({
-    queryKey: queryKeys.transactions.accounts(),
-    queryFn: async () => {
-      const accs = await getAccounts();
-      return accs;
-    },
-    enabled: mode === 'create',
-    staleTime: 60_000,
-  });
-
-  const accounts = useMemo(() => {
-    const incomeAccounts = allAccountsRaw.filter((a: any) => {
-      const t = (a.type || '').toLowerCase();
-      return (t === 'income' || t === 'revenue') && !a.is_folder;
-    });
-    return incomeAccounts as unknown as Account[];
-  }, [allAccountsRaw]);
 
   // Customer address lookup (create mode only)
   const { data: customerData } = useQuery({
@@ -363,13 +341,6 @@ export function InvoiceBuilder({
         if (metadata.displayOptions) setDisplayOptions(metadata.displayOptions);
     }
   }, [mode, viewInvoice]);
-
-  // 2. Auto-select first revenue account when accounts load
-  useEffect(() => {
-    if (mode === 'create' && !revenueAccountId && accounts.length > 0) {
-      setRevenueAccountId(accounts[0].id);
-    }
-  }, [mode, accounts, revenueAccountId]);
 
   // 3. Apply customer address/TIN from query result
   useEffect(() => {
@@ -927,7 +898,6 @@ export function InvoiceBuilder({
             customer_address: customerAddress,
             exchange_rate: lockedRate,
             original_currency: invoiceCurrency,
-            revenue_account_id: revenueAccountId || null,
             line_items: draftInvoice.line_items,
             zone_a: {
                 customer_tin: customerTin,
@@ -984,6 +954,7 @@ export function InvoiceBuilder({
   const [isVoiding, setIsVoiding] = useState(false);
   const [isDeletingDraft, setIsDeletingDraft] = useState(false);
   const [confirmVoid, setConfirmVoid] = useState(false);
+  const [voidReason, setVoidReason] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isApproving, setIsApproving] = useState(false); // NEU-103
 
@@ -991,7 +962,6 @@ export function InvoiceBuilder({
   const isDraft = invoiceStatus === "draft";
   const isPosted = invoiceStatus === "posted" || invoiceStatus === "open" || invoiceStatus === "sent";
   const isVoid = invoiceStatus === "void";
-  const hasJournalEntry = !!(viewInvoice as any)?.journal_entry_id;
 
   // NEU-103: invoice approval gate. Legacy invoices (no approval_status) read as
   // approved. The tagged approver (dept+role match, or an Executive) can approve.
@@ -1038,58 +1008,6 @@ export function InvoiceBuilder({
     try {
       const inv = viewInvoice as any;
       const invoiceCurrency = normalizeCurrency(inv.original_currency || inv.currency || "PHP", FUNCTIONAL_CURRENCY);
-      const lockedRate = inv.exchange_rate || 1;
-      const baseAmount = toBaseAmount({
-        amount: inv.total_amount,
-        currency: invoiceCurrency,
-        exchangeRate: lockedRate,
-      });
-      const rateDate = (inv.invoice_date || new Date().toISOString()).slice(0, 10);
-
-      // NEU-106: invoices route through the Transaction Journal. Build the REAL
-      // Dr Accounts Receivable / Cr Revenue entry (replacing the old empty-lines
-      // placeholder) and land it as `ready_to_post`. Accounting confirms it in the
-      // TJ ("Submit for Posting") and only then does it hit the General Journal /
-      // balances (postJournalEntry's source-effect stamps the invoice posted +
-      // journal_entry_id). The invoice document flip below is unchanged.
-      const revenueId = inv.metadata?.revenue_account_id || "coa-4000";
-      const { data: acctRows } = await supabase
-        .from("accounts")
-        .select("id, code, name")
-        .in("id", ["coa-1100", revenueId]);
-      const acctMap = new Map((acctRows ?? []).map((a: any) => [a.id, a]));
-      const ar = acctMap.get("coa-1100") ?? { id: "coa-1100", code: "1100", name: "Accounts Receivable - Trade" };
-      const rev = acctMap.get(revenueId) ?? { id: "coa-4000", code: "4000", name: "Freight Forwarding Revenue" };
-      const invLines = [
-        { account_id: ar.id, account_code: ar.code, account_name: ar.name, debit: baseAmount, credit: 0, description: `AR — ${inv.invoice_number} · ${inv.customer_name}` },
-        { account_id: rev.id, account_code: rev.code, account_name: rev.name, debit: 0, credit: baseAmount, description: `Revenue — ${inv.invoice_number}` },
-      ];
-
-      const jeId = `JE-INV-${Date.now()}`;
-      await supabase.from("journal_entries").insert({
-        id: jeId,
-        entry_date: new Date().toISOString(),
-        invoice_id: inv.id,
-        kind: "invoice",
-        description: `Invoice ${inv.invoice_number} — ${inv.customer_name}`,
-        reference: inv.invoice_number,
-        project_number: inv.project_number || null,
-        customer_name: inv.customer_name || null,
-        lines: invLines,
-        total_debit: baseAmount,
-        total_credit: baseAmount,
-        transaction_currency: invoiceCurrency,
-        exchange_rate: lockedRate,
-        base_currency: FUNCTIONAL_CURRENCY,
-        source_amount: roundMoney(inv.total_amount),
-        base_amount: baseAmount,
-        exchange_rate_date: rateDate,
-        status: "ready_to_post",
-        created_by: user.id,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-
       const { error } = await supabase
         .from("invoices")
         .update({ status: "posted", updated_at: new Date().toISOString() })
@@ -1098,6 +1016,19 @@ export function InvoiceBuilder({
 
       const actor = { id: user.id, name: user.name, department: user.department ?? "" };
       logActivity("invoice", inv.id, inv.invoice_number ?? inv.id, "finalized", actor);
+
+      // The customer now owes us — raise the collections follow-up. This used to
+      // fire from the invoice GL posting sheet; issuing the invoice is the honest
+      // trigger for it.
+      void fireInvoiceARTicket({
+        invoiceId: inv.id,
+        invoiceNumber: inv.invoice_number ?? inv.id,
+        customerName: inv.customer_name ?? "",
+        totalAmount: Number(inv.total_amount) || 0,
+        userId: user.id,
+        userName: user.name || "Accounting",
+        userDept: user.department || "Accounting",
+      });
 
       const { data: arManagers } = await supabase
         .from("users")
@@ -1123,7 +1054,7 @@ export function InvoiceBuilder({
       });
 
       setViewInvoice({ ...viewInvoice, status: "posted" } as Invoice);
-      toast.success(`Invoice ${inv.invoice_number} finalized — entry queued in the Transaction Journal`);
+      toast.success(`Invoice ${inv.invoice_number} issued`);
       if (onRefreshData) await onRefreshData();
       if (onBack) onBack();
     } catch (err) {
@@ -1168,6 +1099,10 @@ export function InvoiceBuilder({
 
   const handleVoidInvoice = async () => {
     if (!viewInvoice || !user || !canDeleteInvoices) return; // WG-06 backstop — NEU-020 DD-9: void is delete-class
+    if (!voidReason.trim()) {
+      toast.error("Please say why this invoice is being voided");
+      return;
+    }
     setIsVoiding(true);
     try {
       const inv = viewInvoice as any;
@@ -1184,78 +1119,46 @@ export function InvoiceBuilder({
         return;
       }
 
-      // NEU-106: if the invoice was voided BEFORE its Transaction Journal entry
-      // was posted, neutralize the still-pending entry so it can never post
-      // orphaned revenue. (Posted entries are handled by the reversal below.)
-      await supabase
-        .from("journal_entries")
-        .update({ status: "void", updated_at: new Date().toISOString() })
-        .eq("invoice_id", inv.id)
-        .eq("status", "ready_to_post");
-
-      if (hasJournalEntry) {
-        const invoiceCurrency = normalizeCurrency(inv.original_currency || inv.currency || "PHP", FUNCTIONAL_CURRENCY);
-        const lockedRate = inv.exchange_rate || 1;
-        const baseAmount = toBaseAmount({
-          amount: inv.total_amount,
-          currency: invoiceCurrency,
-          exchangeRate: lockedRate,
-        });
-        const rateDate = new Date().toISOString().slice(0, 10);
-
-        const reversingJeId = `JE-VOID-${Date.now()}`;
-        await supabase.from("journal_entries").insert({
-          id: reversingJeId,
-          entry_date: new Date().toISOString(),
-          invoice_id: inv.id,
-          description: `VOID — Reversal of Invoice ${inv.invoice_number}`,
-          reference: `VOID-${inv.invoice_number}`,
-          project_number: inv.project_number || null,
-          customer_name: inv.customer_name || null,
-          lines: [],
-          total_debit: baseAmount,
-          total_credit: baseAmount,
-          transaction_currency: invoiceCurrency,
-          exchange_rate: lockedRate,
-          base_currency: FUNCTIONAL_CURRENCY,
-          source_amount: roundMoney(inv.total_amount),
-          base_amount: baseAmount,
-          exchange_rate_date: rateDate,
-          status: "posted",
-          created_by: user.id,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
-      }
-
-      const billingItemIds = Array.isArray(inv.billing_item_ids) ? inv.billing_item_ids : [];
-      if (billingItemIds.length > 0) {
-        await supabase
-          .from("billing_line_items")
-          .update({ status: "unbilled", invoice_id: null, invoice_number: null })
-          .in("id", billingItemIds);
-      }
-
+      // Void the invoice FIRST. Releasing the billing items first used to leave
+      // the charges back in the unbilled pool while the invoice stayed posted
+      // when this update failed — the same charge could then be invoiced twice.
+      // (It always failed: payment_status / remaining_balance / amount_due are
+      // not columns on invoices, so PostgREST rejected the whole statement.)
+      const voidedAt = new Date().toISOString();
       const { error } = await supabase
         .from("invoices")
         .update({
           status: "void",
-          payment_status: "void",
-          remaining_balance: 0,
-          amount_due: 0,
-          updated_at: new Date().toISOString(),
+          metadata: {
+            ...(inv.metadata || {}),
+            void_reason: voidReason.trim(),
+            voided_at: voidedAt,
+            voided_by: user.id,
+            voided_by_name: user.name,
+          },
+          updated_at: voidedAt,
         })
         .eq("id", inv.id);
       if (error) throw error;
 
+      const billingItemIds = Array.isArray(inv.billing_item_ids) ? inv.billing_item_ids : [];
+      if (billingItemIds.length > 0) {
+        const { error: releaseErr } = await supabase
+          .from("billing_line_items")
+          .update({ status: "unbilled", invoice_id: null })
+          .in("id", billingItemIds);
+        if (releaseErr) throw releaseErr;
+      }
+
       const actor = { id: user.id, name: user.name, department: user.department ?? "" };
       logActivity("invoice", inv.id, inv.invoice_number ?? inv.id, "voided", actor, {
-        description: hasJournalEntry ? "Voided with reversing journal entry" : "Voided (no GL entry to reverse)",
+        description: `Voided — ${voidReason.trim()}`,
       });
 
       setViewInvoice({ ...viewInvoice, status: "void" } as Invoice);
       toast.success(`Invoice ${inv.invoice_number} voided`);
       setConfirmVoid(false);
+      setVoidReason("");
       if (onRefreshData) await onRefreshData();
       if (onBack) onBack();
     } catch (err) {
@@ -1492,6 +1395,160 @@ export function InvoiceBuilder({
           )}
 
           {/* ── SCROLLABLE CONTENT AREA ── */}
+          {/* ── ACTIONS (view mode) ──
+              Pinned ABOVE the scrolling rail on purpose. As a footer these sat
+              at the bottom of a 626px rail that starts ~400px down the page, so
+              Void / PDF / Print rendered ~250px below the fold behind five
+              print-display toggles — present, scrollable-to, and invisible.
+              Do not "tidy" them back under the display options. */}
+          {mode === 'view' && (
+            <div className="p-4 border-b border-[var(--theme-border-default)] bg-[var(--theme-bg-surface)] shrink-0">
+              <div className="flex flex-col gap-2.5">
+                {/* NEU-103: approval gate. The tagged approver (Ma'am Ella) approves;
+                    finalize is blocked until then. Approve is available to the
+                    approver even without invoice-write. */}
+                {isDraft && pendingApproval && canApproveInvoice && (
+                  <button
+                    onClick={handleApproveInvoice}
+                    disabled={isApproving}
+                    className="flex items-center justify-center gap-2 w-full px-4 py-3 text-[13px] font-bold text-white bg-[var(--theme-action-primary-bg)] rounded-lg hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {isApproving ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
+                    {isApproving ? "Approving..." : "Approve Invoice"}
+                  </button>
+                )}
+                {isDraft && pendingApproval && !canApproveInvoice && (
+                  <div className="flex items-center gap-2 w-full px-4 py-3 text-[12px] font-medium text-[var(--theme-status-warning-fg)] bg-[var(--theme-status-warning-bg)] border border-[var(--theme-status-warning-border)] rounded-lg">
+                    <AlertTriangle size={14} />
+                    Pending approval{pendingApproverDept ? ` — ${pendingApproverDept}${pendingApproverRole ? ` ${pendingApproverRole}` : ""}` : ""}
+                  </div>
+                )}
+
+                {/* Draft actions */}
+                {isDraft && canWriteInvoices && (
+                  <>
+                    {!pendingApproval && (
+                    <button
+                      onClick={handleFinalize}
+                      disabled={isFinalizing}
+                      className="flex items-center justify-center gap-2 w-full px-4 py-3 text-[13px] font-bold text-white bg-[var(--theme-action-primary-bg)] rounded-lg hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {isFinalizing ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
+                      {isFinalizing ? "Finalizing..." : "Finalize Invoice"}
+                    </button>
+                    )}
+                    {!confirmDelete ? (
+                      canDeleteInvoices &&
+                      <button
+                        onClick={() => setConfirmDelete(true)}
+                        className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-[13px] font-medium text-[var(--theme-status-danger-fg)] border border-[var(--theme-status-danger-border)] rounded-lg hover:bg-[var(--theme-status-danger-bg)] transition-all"
+                      >
+                        <Trash2 size={15} />
+                        Delete Draft
+                      </button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleDeleteDraft}
+                          disabled={isDeletingDraft}
+                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-bold text-white bg-[var(--theme-status-danger-fg)] rounded-lg hover:opacity-90 transition-all disabled:opacity-60"
+                        >
+                          {isDeletingDraft ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                          Confirm Delete
+                        </button>
+                        <button
+                          onClick={() => setConfirmDelete(false)}
+                          className="px-4 py-2.5 text-[13px] font-medium text-[var(--theme-text-secondary)] border border-[var(--theme-border-default)] rounded-lg hover:bg-[var(--theme-bg-surface-subtle)] transition-all"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Void action for posted invoices — NEU-020 DD-9: void is delete-class */}
+                {isPosted && !isVoid && canDeleteInvoices && (
+                  <>
+                    {!confirmVoid ? (
+                      <button
+                        onClick={() => setConfirmVoid(true)}
+                        className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-[13px] font-medium text-[var(--theme-status-danger-fg)] border border-[var(--theme-status-danger-border)] rounded-lg hover:bg-[var(--theme-status-danger-bg)] transition-all"
+                      >
+                        <Ban size={15} />
+                        Void Invoice
+                      </button>
+                    ) : (
+                      <div className="p-3 border border-[var(--theme-status-danger-border)] rounded-lg bg-[var(--theme-status-danger-bg)]">
+                        <div className="flex items-start gap-2 mb-3">
+                          <AlertTriangle size={14} className="text-[var(--theme-status-danger-fg)] shrink-0 mt-0.5" />
+                          <p className="text-[12px] text-[var(--theme-status-danger-fg)] leading-relaxed">
+                            This will void the invoice. Billing items will be released back to unbilled.
+                          </p>
+                        </div>
+                        <label htmlFor="inv-void-reason" className="block text-[11px] font-semibold text-[var(--theme-status-danger-fg)] mb-1.5">
+                          Reason for voiding — kept on the invoice and in the activity log
+                        </label>
+                        <textarea
+                          id="inv-void-reason"
+                          value={voidReason}
+                          onChange={(e) => setVoidReason(e.target.value)}
+                          rows={2}
+                          placeholder="e.g. Issued to the wrong customer"
+                          className="w-full mb-3 px-2.5 py-2 text-[12px] border border-[var(--theme-border-default)] rounded-md outline-none resize-none bg-[var(--theme-bg-surface)] text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)]"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleVoidInvoice}
+                            disabled={isVoiding || !voidReason.trim()}
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-bold text-white bg-[var(--theme-status-danger-fg)] rounded-lg hover:opacity-90 transition-all disabled:opacity-60"
+                          >
+                            {isVoiding ? <Loader2 size={14} className="animate-spin" /> : <Ban size={14} />}
+                            Confirm Void
+                          </button>
+                          <button
+                            onClick={() => { setConfirmVoid(false); setVoidReason(""); }}
+                            className="px-4 py-2.5 text-[13px] font-medium text-[var(--theme-text-secondary)] border border-[var(--theme-border-default)] rounded-lg hover:bg-[var(--theme-bg-surface-subtle)] transition-all bg-[var(--theme-bg-surface)]"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Void badge */}
+                {isVoid && (
+                  <div className="flex items-center justify-center gap-2 w-full px-4 py-3 text-[13px] font-bold text-[var(--theme-text-muted)] bg-[var(--theme-bg-surface-subtle)] border border-[var(--theme-border-default)] rounded-lg">
+                    <Ban size={15} />
+                    Invoice Voided
+                  </div>
+                )}
+
+                {/* PDF / Print — NEU-020 DD-3: export-class, gated by the door's export toggle */}
+                {canExportInvoices && (
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={handleDownloadPDF}
+                    disabled={isGeneratingPDF}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-medium text-[var(--theme-text-secondary)] border border-[var(--theme-border-default)] rounded-lg hover:bg-[var(--theme-bg-surface-subtle)] transition-all disabled:opacity-60"
+                  >
+                    {isGeneratingPDF ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+                    {isGeneratingPDF ? "Generating..." : "PDF"}
+                  </button>
+                  <button
+                    onClick={handlePrint}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-medium text-[var(--theme-text-secondary)] border border-[var(--theme-border-default)] rounded-lg hover:bg-[var(--theme-bg-surface-subtle)] transition-all"
+                  >
+                    <Printer size={15} />
+                    Print
+                  </button>
+                </div>
+                )}
+              </div>
+            </div>
+          )}
           <div className={`flex-1 ${mode === 'create' && activeTab === 'items' ? 'overflow-hidden flex flex-col' : 'overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--theme-border-default)]'}`}>
 
             {/* ─── CREATE MODE: Items Tab ─── */}
@@ -1853,17 +1910,6 @@ export function InvoiceBuilder({
                         className="w-full h-9 pl-3 pr-3 text-sm border border-[var(--theme-border-default)] rounded-md focus:ring-2 focus:ring-[var(--theme-action-primary-bg)]/20 focus:border-[var(--theme-action-primary-bg)] outline-none transition-all"
                       />
                     </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-[var(--theme-text-muted)] uppercase tracking-[0.05em] mb-1.5">Revenue Account</label>
-                      <CustomDropdown
-                        value={revenueAccountId}
-                        onChange={setRevenueAccountId}
-                        options={accounts.map(acc => ({ value: acc.id, label: acc.code ? `${acc.code} - ${acc.name}` : acc.name }))}
-                        placeholder="Select Revenue Account..."
-                        fullWidth
-                        size="sm"
-                      />
-                    </div>
                     {selectedItems.some(i => i.currency !== targetCurrency) && (
                       <div className="bg-[var(--theme-status-warning-bg)] border border-[var(--theme-status-warning-border)] rounded-md p-3 text-xs text-[var(--theme-status-warning-fg)] flex items-start gap-2">
                         <RefreshCw className="w-4 h-4 shrink-0 mt-0.5" />
@@ -1994,9 +2040,9 @@ export function InvoiceBuilder({
             )}
           </div>
 
-          {/* ── FOOTER: Actions & Totals ── */}
-          <div className="p-4 border-t border-[var(--theme-border-default)] bg-[var(--theme-bg-surface)] shrink-0">
-            {mode === 'create' ? (
+          {/* ── FOOTER: Totals & Save (create mode) ── */}
+          {mode === 'create' && (
+            <div className="p-4 border-t border-[var(--theme-border-default)] bg-[var(--theme-bg-surface)] shrink-0">
               <>
                 {/* Totals */}
                 <div className="mb-4 space-y-1.5">
@@ -2030,142 +2076,8 @@ export function InvoiceBuilder({
                 </button>
                 )}
               </>
-            ) : (
-              <div className="flex flex-col gap-2.5">
-                {/* NEU-103: approval gate. The tagged approver (Ma'am Ella) approves;
-                    finalize is blocked until then. Approve is available to the
-                    approver even without invoice-write. */}
-                {isDraft && pendingApproval && canApproveInvoice && (
-                  <button
-                    onClick={handleApproveInvoice}
-                    disabled={isApproving}
-                    className="flex items-center justify-center gap-2 w-full px-4 py-3 text-[13px] font-bold text-white bg-[var(--theme-action-primary-bg)] rounded-lg hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {isApproving ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
-                    {isApproving ? "Approving..." : "Approve Invoice"}
-                  </button>
-                )}
-                {isDraft && pendingApproval && !canApproveInvoice && (
-                  <div className="flex items-center gap-2 w-full px-4 py-3 text-[12px] font-medium text-[var(--theme-status-warning-fg)] bg-[var(--theme-status-warning-bg)] border border-[var(--theme-status-warning-border)] rounded-lg">
-                    <AlertTriangle size={14} />
-                    Pending approval{pendingApproverDept ? ` — ${pendingApproverDept}${pendingApproverRole ? ` ${pendingApproverRole}` : ""}` : ""}
-                  </div>
-                )}
-
-                {/* Draft actions */}
-                {isDraft && canWriteInvoices && (
-                  <>
-                    {!pendingApproval && (
-                    <button
-                      onClick={handleFinalize}
-                      disabled={isFinalizing}
-                      className="flex items-center justify-center gap-2 w-full px-4 py-3 text-[13px] font-bold text-white bg-[var(--theme-action-primary-bg)] rounded-lg hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      {isFinalizing ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
-                      {isFinalizing ? "Finalizing..." : "Finalize Invoice"}
-                    </button>
-                    )}
-                    {!confirmDelete ? (
-                      canDeleteInvoices &&
-                      <button
-                        onClick={() => setConfirmDelete(true)}
-                        className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-[13px] font-medium text-[var(--theme-status-danger-fg)] border border-[var(--theme-status-danger-border)] rounded-lg hover:bg-[var(--theme-status-danger-bg)] transition-all"
-                      >
-                        <Trash2 size={15} />
-                        Delete Draft
-                      </button>
-                    ) : (
-                      <div className="flex gap-2">
-                        <button
-                          onClick={handleDeleteDraft}
-                          disabled={isDeletingDraft}
-                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-bold text-white bg-[var(--theme-status-danger-fg)] rounded-lg hover:opacity-90 transition-all disabled:opacity-60"
-                        >
-                          {isDeletingDraft ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                          Confirm Delete
-                        </button>
-                        <button
-                          onClick={() => setConfirmDelete(false)}
-                          className="px-4 py-2.5 text-[13px] font-medium text-[var(--theme-text-secondary)] border border-[var(--theme-border-default)] rounded-lg hover:bg-[var(--theme-bg-surface-subtle)] transition-all"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* Void action for posted invoices — NEU-020 DD-9: void is delete-class */}
-                {isPosted && !isVoid && canDeleteInvoices && (
-                  <>
-                    {!confirmVoid ? (
-                      <button
-                        onClick={() => setConfirmVoid(true)}
-                        className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-[13px] font-medium text-[var(--theme-status-danger-fg)] border border-[var(--theme-status-danger-border)] rounded-lg hover:bg-[var(--theme-status-danger-bg)] transition-all"
-                      >
-                        <Ban size={15} />
-                        Void Invoice
-                      </button>
-                    ) : (
-                      <div className="p-3 border border-[var(--theme-status-danger-border)] rounded-lg bg-[var(--theme-status-danger-bg)]">
-                        <div className="flex items-start gap-2 mb-3">
-                          <AlertTriangle size={14} className="text-[var(--theme-status-danger-fg)] shrink-0 mt-0.5" />
-                          <p className="text-[12px] text-[var(--theme-status-danger-fg)] leading-relaxed">
-                            This will void the invoice{hasJournalEntry ? " and create a reversing journal entry" : ""}. Billing items will be released back to unbilled.
-                          </p>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={handleVoidInvoice}
-                            disabled={isVoiding}
-                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-bold text-white bg-[var(--theme-status-danger-fg)] rounded-lg hover:opacity-90 transition-all disabled:opacity-60"
-                          >
-                            {isVoiding ? <Loader2 size={14} className="animate-spin" /> : <Ban size={14} />}
-                            Confirm Void
-                          </button>
-                          <button
-                            onClick={() => setConfirmVoid(false)}
-                            className="px-4 py-2.5 text-[13px] font-medium text-[var(--theme-text-secondary)] border border-[var(--theme-border-default)] rounded-lg hover:bg-[var(--theme-bg-surface-subtle)] transition-all bg-[var(--theme-bg-surface)]"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* Void badge */}
-                {isVoid && (
-                  <div className="flex items-center justify-center gap-2 w-full px-4 py-3 text-[13px] font-bold text-[var(--theme-text-muted)] bg-[var(--theme-bg-surface-subtle)] border border-[var(--theme-border-default)] rounded-lg">
-                    <Ban size={15} />
-                    Invoice Voided
-                  </div>
-                )}
-
-                {/* PDF / Print — NEU-020 DD-3: export-class, gated by the door's export toggle */}
-                {canExportInvoices && (
-                <div className="flex gap-2 pt-1">
-                  <button
-                    onClick={handleDownloadPDF}
-                    disabled={isGeneratingPDF}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-medium text-[var(--theme-text-secondary)] border border-[var(--theme-border-default)] rounded-lg hover:bg-[var(--theme-bg-surface-subtle)] transition-all disabled:opacity-60"
-                  >
-                    {isGeneratingPDF ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
-                    {isGeneratingPDF ? "Generating..." : "PDF"}
-                  </button>
-                  <button
-                    onClick={handlePrint}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-medium text-[var(--theme-text-secondary)] border border-[var(--theme-border-default)] rounded-lg hover:bg-[var(--theme-bg-surface-subtle)] transition-all"
-                  >
-                    <Printer size={15} />
-                    Print
-                  </button>
-                </div>
-                )}
-              </div>
-            )}
-          </div>
+            </div>
+          )}
       </div>
     </div>
   );

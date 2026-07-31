@@ -36,8 +36,7 @@ export type EVoucherAPType =
   | "cash_advance"     // Give employee money before job — creates advance asset
   | "reimbursement"    // Pay employee back for out-of-pocket — creates cost record, direct cash
   | "budget_request"   // Lump sum to a department — creates advance asset
-  | "direct_expense"   // Direct purchase request, not tied to booking — CEO approval only
-  | "fund_transfer";   // NEU-095: internal cash movement (From account -> To account)
+  | "direct_expense";  // Direct purchase request, not tied to booking — CEO approval only
 
 // EVoucherTransactionType is now identical to EVoucherAPType.
 // The retired AR-side pseudo-types ("billing", "collection", "adjustment") have been removed.
@@ -302,6 +301,14 @@ export interface LiquidationLineItem {
   vendor_name?: string;            // Who was paid (rep fills)
   amount: number;
   receipt_url?: string;            // Uploaded receipt photo/scan
+  /**
+   * Declared when no receipt exists for this line (jeepney fare, port fixer,
+   * informal charges). Treasury's verify gate accepts a line that has EITHER a
+   * receipt_url OR a reason here — but never one with neither, which used to
+   * deadlock the voucher (nothing validated it at submit, everything blocked at
+   * verify, and the handler had no route back).
+   */
+  no_receipt_reason?: string;
   gl_category?: string;            // legacy — Accounting assigned during verification
   // NEU-094 expense-line fields:
   particular?: string;             // catalog item name (the "what")
@@ -330,15 +337,6 @@ export interface LiquidationSubmission {
   created_at: string;
 }
 
-// GL journal entry suggestion per EV type (used in the GL Confirmation Sheet)
-export interface GLEntrySuggestion {
-  debit_account_id: string;
-  debit_account_name: string;
-  credit_account_id: string;
-  credit_account_name: string;
-  amount: number;
-  description: string;
-}
 
 // Canonical GL contract per AP type
 export const GL_CONTRACT: Record<EVoucherAPType, { on_approval: string; on_disbursement: string }> = {

@@ -1,7 +1,7 @@
 // Thin compatibility wrapper around the shared document engine.
 
 import { pdf } from "@react-pdf/renderer";
-import type { Invoice } from "../../../types/accounting";
+import type { Invoice } from "../../../types/financials";
 import type { InvoicePrintOptions } from "./InvoiceDocument";
 import type { CompanySettings } from "../../../hooks/useCompanySettings";
 import { resolveInvoicePrintableDocument } from "../../../utils/documents/invoiceDocumentResolver";

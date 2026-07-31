@@ -2,16 +2,13 @@ import { supabase } from "../../../utils/supabase/client";
 import { usePermission } from "../../../context/PermissionProvider";
 import { createWorkflowTicket } from "../../../utils/workflowTickets";
 import { logActivity, logApproval } from "../../../utils/activityLog";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import {
   CheckCircle, XCircle, Send, Ban, Loader2, ClipboardList, Unlock, AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { LiquidationForm } from "./LiquidationForm";
-import { postJournalEntry } from "../../../utils/accounting/postTransactionJournal";
-import { buildTransferEntry } from "../../../utils/accounting/buildTransferEntry";
-import { ensureExpensePayableEntry } from "../../../utils/accounting/buildExpensePayableEntry";
 import type { EVoucherAPType } from "../../../types/evoucher";
 import { ensureBillableExpenseBillingItem } from "../../../utils/evoucherApproval";
 import { recordNotificationEvent } from "../../../utils/notifications";
@@ -41,6 +38,9 @@ interface EVoucherWorkflowPanelProps {
    *  cash returned by the requestor (from details.cash_return_confirmed_at). */
   cashReturnConfirmedAt?: string;
   currentUser?: CurrentUser;
+  /** Opened from the list's "Liquidate" row action — land on the form rather
+   *  than making the user hunt for a second button with the same label. */
+  autoOpenLiquidation?: boolean;
   onStatusChange?: () => void;
   // Billable expense auto-billing
   isBillable?: boolean;
@@ -87,6 +87,7 @@ export function EVoucherWorkflowPanel({
   receiptConfirmedAt,
   cashReturnConfirmedAt,
   currentUser,
+  autoOpenLiquidation,
   onStatusChange,
   isBillable,
   bookingId,
@@ -112,6 +113,8 @@ export function EVoucherWorkflowPanel({
   const [liqReview, setLiqReview] = useState<{
     receiptsComplete: boolean;
     missingReceipts: number;
+    /** Lines with no attachment but a stated reason — Treasury's judgement call. */
+    declaredNoReceipt: number;
     unusedReturn: number;
   } | null>(null);
 
@@ -119,8 +122,21 @@ export function EVoucherWorkflowPanel({
   const [showReject, setShowReject] = useState(false);
   const [rejectingAs, setRejectingAs] = useState<"manager" | "ceo" | "late">("manager");
   const [rejectionReason, setRejectionReason] = useState("");
+  const [showReturnLiq, setShowReturnLiq] = useState(false);
+  const [returnLiqReason, setReturnLiqReason] = useState("");
 
-  const [showLiquidationForm, setShowLiquidationForm] = useState(false);
+  const [showLiquidationForm, setShowLiquidationForm] = useState(Boolean(autoOpenLiquidation));
+  // The form renders inline below the action buttons, which in a long voucher
+  // panel puts it off-screen — clicking Liquidate looked like nothing happened.
+  // Scroll it into view once it mounts so the click has a visible result.
+  const liquidationFormRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!showLiquidationForm) return;
+    const id = requestAnimationFrame(() =>
+      liquidationFormRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }),
+    );
+    return () => cancelAnimationFrame(id);
+  }, [showLiquidationForm]);
 
   // NEU-051: when a voucher is awaiting Treasury verification, load its
   // liquidation submissions to check receipt-attachment completeness (slice 2)
@@ -133,15 +149,25 @@ export function EVoucherWorkflowPanel({
       const { data } = await supabase
         .from("liquidation_submissions")
         .select("line_items, unused_return")
-        .eq("evoucher_id", evoucherId);
+        .eq("evoucher_id", evoucherId)
+        .neq("status", "revision_requested");
       if (cancelled) return;
       const rows = data ?? [];
       const items = rows.flatMap((r) => (Array.isArray(r.line_items) ? r.line_items : []));
-      const missingReceipts = items.filter((li: any) => !li?.receipt_url).length;
+      // A line is evidenced by an attachment OR a stated reason for not having
+      // one (jeepney fare, port fixer). Neither = unevidenced, and Treasury
+      // cannot verify it.
+      const missingReceipts = items.filter(
+        (li: any) => !li?.receipt_url && !String(li?.no_receipt_reason || "").trim(),
+      ).length;
+      const declaredNoReceipt = items.filter(
+        (li: any) => !li?.receipt_url && String(li?.no_receipt_reason || "").trim(),
+      ).length;
       const unusedReturn = rows.reduce((s, r) => s + (Number(r.unused_return) || 0), 0);
       setLiqReview({
         receiptsComplete: items.length > 0 && missingReceipts === 0,
         missingReceipts,
+        declaredNoReceipt,
         unusedReturn,
       });
     })();
@@ -178,16 +204,8 @@ export function EVoucherWorkflowPanel({
   const canCancel = isOwner &&
     ["draft", "rejected", "pending_manager", "pending_ceo", "pending_accounting"].includes(currentStatus);
 
-  // NEU-095: a fund transfer routes to an Executive manager (Mark Javier) who
-  // "processes" it — builds the Dr To / Cr From entry — instead of the normal
-  // manager→ceo→accounting chain. So the standard TL approve is swapped for a
-  // dedicated Process action on transfers at the manager stage.
-  const isFundTransfer   = transactionType === "fund_transfer";
-  const canApproveAsTL   = holdsManagerGate && currentStatus === "pending_manager" && !isFundTransfer;
+  const canApproveAsTL   = holdsManagerGate && currentStatus === "pending_manager";
   const canRejectAsTL    = holdsManagerGate && currentStatus === "pending_manager";
-  const canProcessTransfer =
-    isFundTransfer && currentStatus === "pending_manager" && holdsManagerGate &&
-    currentUser?.department === "Executive";
   const canApproveAsCEO  = holdsAccountingGate && currentStatus === "pending_ceo";
   const canRejectAsCEO   = holdsAccountingGate && currentStatus === "pending_ceo";
   // NEU-098: back-track a post-approval voucher to the requestor for revision
@@ -199,6 +217,10 @@ export function EVoucherWorkflowPanel({
   const canDisburse      = holdsDisburseGate && currentStatus === "pending_accounting";
   // NEU-051: Treasury (not generic Accounting) verifies + posts liquidations.
   const canVerifyAndPost = holdsDisburseGate && currentStatus === "pending_verification";
+  // Treasury can return a liquidation to the handler. Without this a submission
+  // with an unevidenced line was a dead end: Treasury could not verify it and
+  // the handler had no gate at pending_verification to fix it.
+  const canReturnLiquidation = holdsDisburseGate && currentStatus === "pending_verification";
   const canUnlockForCorrection = holdsAccountingGate && currentStatus === "posted";
 
   const isAdvanceType = transactionType === "cash_advance" || transactionType === "budget_request";
@@ -234,7 +256,7 @@ export function EVoucherWorkflowPanel({
       : liqReview === null
       ? "Loading liquidation…"
       : !liqReview.receiptsComplete
-      ? `${liqReview.missingReceipts} receipt${liqReview.missingReceipts === 1 ? "" : "s"} missing an attachment — the handler must attach ${liqReview.missingReceipts === 1 ? "it" : "them"} before this can be verified.`
+      ? `${liqReview.missingReceipts} line${liqReview.missingReceipts === 1 ? "" : "s"} ${liqReview.missingReceipts === 1 ? "has" : "have"} no receipt and no stated reason. Send it back so the handler can fix it.`
       : needsCashReturnConfirm
       ? `Confirm receipt of the ₱${unusedReturn.toLocaleString()} cash return before posting.`
       : null;
@@ -243,7 +265,7 @@ export function EVoucherWorkflowPanel({
     !canSubmit && !canApproveAsTL && !canRejectAsTL && !canApproveAsCEO && !canRejectAsCEO &&
     !canDisburse && !canVerifyAndPost && !canConfirmReceipt && !canConfirmCashReturn &&
     !canOpenLiquidation && !canCloseLiquidation && !canUnlockForCorrection && !canCancel &&
-    !canProcessTransfer && !canSendBack;
+    !canSendBack;
 
   // ── Shared helpers ────────────────────────────────────────────────────────
   const writeHistory = async (action: string, prevStatus: string, newStatus: string, notes?: string) => {
@@ -278,49 +300,6 @@ export function EVoucherWorkflowPanel({
       );
     }
     await writeHistory(action, currentStatus, newStatus, notes);
-
-    // AP two-step: arriving at `pending_accounting` = final approval. Recognize
-    // the payable (Dr Expense / Cr AP) into the Transaction Journal BEFORE
-    // disbursement. Idempotent + advance-exempt inside the helper. Wrapped so a
-    // recognition hiccup never rolls back the approval that already committed.
-    if (newStatus === "pending_accounting") {
-      try {
-        await ensureExpensePayableEntry(evoucherId, evoucherNumber, {
-          id: currentUser?.id ?? "",
-          name: currentUser?.name ?? null,
-        });
-      } catch (e) {
-        console.error("[payable] recognition failed:", e);
-      }
-    }
-  };
-
-  // NEU-095: the Executive approver (Mark) processes a fund transfer — builds the
-  // Dr To / Cr From entry into the Transaction Journal and closes the voucher.
-  const handleProcessTransfer = async () => {
-    setIsSubmitting(true);
-    try {
-      const result = await buildTransferEntry({
-        evoucherId,
-        evoucherNumber,
-        actor: { id: currentUser?.id ?? "", name: currentUser?.name ?? null },
-      });
-      if (!result) {
-        toast.error("Couldn't build the transfer entry — check the From/To accounts.");
-        return;
-      }
-      await transition(
-        "posted",
-        "Transfer Processed — entry queued in the Transaction Journal",
-        `${currentUser?.name} processed the transfer`,
-      );
-      toast.success("Transfer processed — entry queued in the Transaction Journal for posting");
-      onStatusChange?.();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to process transfer");
-    } finally {
-      setIsSubmitting(false);
-    }
   };
 
   // ── Billable expense auto-billing ─────────────────────────────────────────
@@ -440,56 +419,73 @@ export function EVoucherWorkflowPanel({
     setPendingConfirm(null);
     setIsSubmitting(true);
     try {
-      const { data: ev, error: evFetchError } = await supabase
-        .from("evouchers").select("closing_journal_entry_id").eq("id", evoucherId).maybeSingle();
-      if (evFetchError) throw evFetchError;
-
-      if (ev?.closing_journal_entry_id) {
-        const { data: originalJE, error: jeFetchError } = await supabase
-          .from("journal_entries")
-          .select("lines, description, total_debit, total_credit")
-          .eq("id", ev.closing_journal_entry_id).maybeSingle();
-
-        if (!jeFetchError && originalJE) {
-          const reversalLines = (originalJE.lines as Array<{
-            account_id: string; account_code: string; account_name: string;
-            debit: number; credit: number; description: string;
-          }>).map((line) => ({
-            ...line,
-            debit: line.credit,
-            credit: line.debit,
-            description: `REVERSAL: ${line.description}`,
-          }));
-          const reversalId = `JE-REV-${Date.now()}`;
-          await supabase.from("journal_entries").insert({
-            id: reversalId,
-            entry_date: new Date().toISOString(),
-            evoucher_id: evoucherId,
-            description: `REVERSAL of ${ev.closing_journal_entry_id} — Correction Unlock by ${currentUser?.name}`,
-            lines: reversalLines,
-            total_debit: originalJE.total_credit,
-            total_credit: originalJE.total_debit,
-            status: "posted",
-            created_by: userId,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          });
-          if (actor) logActivity("evoucher", evoucherId, evoucherNumber, "posted", actor);
-        }
-      }
-
       const { error: updateError } = await supabase
         .from("evouchers")
-        .update({ status: "pending_accounting", closing_journal_entry_id: null, updated_at: new Date().toISOString() })
+        .update({ status: "pending_accounting", updated_at: new Date().toISOString() })
         .eq("id", evoucherId);
       if (updateError) throw updateError;
 
       if (actor) logActivity("evoucher", evoucherId, evoucherNumber, "updated", actor, { description: "Unlocked for correction" });
-      await writeHistory("Unlocked for GL Correction — Original Entry Reversed", currentStatus, "pending_accounting");
-      toast.success("E-Voucher unlocked — original journal entry reversed. Post a new GL entry.");
+      await writeHistory("Unlocked for Correction", currentStatus, "pending_accounting");
+      toast.success("E-Voucher unlocked for correction");
       onStatusChange?.();
     } catch {
       toast.error("Failed to unlock for correction");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Treasury returns a submitted liquidation to the handler for a fix — a
+  // missing receipt, a wrong amount, a line that needs a reason. Goes back to
+  // pending_liquidation so the handler's Submit Liquidation form reopens.
+  const handleReturnLiquidation = async () => {
+    if (!returnLiqReason.trim()) {
+      toast.error("Please say what needs fixing");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await transition("pending_liquidation", "Liquidation returned by Treasury", returnLiqReason);
+      // Void the submission being sent back. Without this the handler's fresh
+      // submission stacks on top of the bad one, which keeps blocking the gate
+      // and double-counts the spend.
+      await supabase
+        .from("liquidation_submissions")
+        .update({
+          status: "revision_requested",
+          reviewed_by: currentUser?.id ?? null,
+          reviewed_at: new Date().toISOString(),
+          reviewer_remarks: returnLiqReason,
+        })
+        .eq("evoucher_id", evoucherId)
+        .eq("status", "pending");
+      const handlerId = cashReceiverId || requestorId;
+      if (currentUser?.id && handlerId) {
+        createWorkflowTicket({
+          subject: `Liquidation returned: ${evoucherNumber}`,
+          body: `Treasury returned your liquidation for ${evoucherNumber}.
+
+What needs fixing: ${returnLiqReason}
+
+Update the lines and resubmit.`,
+          type: "fyi",
+          priority: "urgent",
+          recipientUserId: handlerId,
+          linkedRecordType: "expense",
+          linkedRecordId: evoucherId,
+          createdBy: currentUser.id,
+          createdByName: currentUser.name,
+          createdByDept: currentUser.department || "",
+          autoCreated: true,
+        });
+      }
+      setShowReturnLiq(false);
+      setReturnLiqReason("");
+      toast.success("Liquidation returned to the handler");
+      onStatusChange?.();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to return the liquidation");
     } finally {
       setIsSubmitting(false);
     }
@@ -565,44 +561,32 @@ export function EVoucherWorkflowPanel({
     }
   };
 
-  // NEU-102/C: Treasury verifies + posts the liquidation. The closing entry
-  // (DR Expense per booking / DR Cash butal / CR 1150) was pre-built as
-  // `ready_to_post` at final liquidation; posting it flips the voucher to
-  // `posted` and clears the advance. Replaces the old GLConfirmationSheet +
-  // no-JE "Close Liquidation" paths.
+  // NEU-102/C: Treasury verifies the liquidation, which completes the voucher
+  // and clears the advance. (This used to post a pre-built closing journal entry,
+  // whose source-effect did the status flip — the flip is now direct.)
   const handleVerifyAndPostLiquidation = async () => {
     setIsSubmitting(true);
     try {
-      const { data: closingJe } = await supabase
-        .from("journal_entries")
-        .select("id")
-        .eq("evoucher_id", evoucherId)
-        .eq("kind", "liquidation")
-        .eq("status", "ready_to_post")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (!closingJe) {
-        toast.error("No pending closing entry found — the handler must re-submit the liquidation.");
-        return;
-      }
-      await postJournalEntry(closingJe.id, { id: currentUser?.id ?? null, name: currentUser?.name ?? null });
-      // postJournalEntry's source-effect flips the voucher to `posted` + links the entry.
+      const { error: closeErr } = await supabase
+        .from("evouchers")
+        .update({ status: "posted", updated_at: new Date().toISOString() })
+        .eq("id", evoucherId);
+      if (closeErr) throw closeErr;
       await supabase.from("evoucher_history").insert({
         id: `EH-${Date.now()}`,
         evoucher_id: evoucherId,
-        action: "Liquidation Verified & Posted to General Journal",
+        action: "Liquidation Verified",
         status: "posted",
         user_id: currentUser?.id,
         user_name: currentUser?.name,
         user_role: currentUser?.department,
-        metadata: { previous_status: "pending_verification", new_status: "posted", journal_entry_id: closingJe.id },
+        metadata: { previous_status: "pending_verification", new_status: "posted" },
         created_at: new Date().toISOString(),
       });
       if (currentUser?.id && requestorId) {
         createWorkflowTicket({
           subject: `Complete: ${evoucherNumber}`,
-          body: `Your E-Voucher ${evoucherNumber} has been verified and posted. This transaction is complete.`,
+          body: `Your E-Voucher ${evoucherNumber} has been verified. This transaction is complete.`,
           type: "fyi",
           recipientUserId: requestorId,
           linkedRecordType: "expense",
@@ -621,12 +605,12 @@ export function EVoucherWorkflowPanel({
         entityId: evoucherId,
         kind: "posted",
         summary: {
-          label: `E-Voucher ${evoucherNumber} verified and posted`,
+          label: `E-Voucher ${evoucherNumber} verified`,
           reference: evoucherNumber,
         },
         recipientIds: [requestorId ?? null],
       });
-      toast.success("Liquidation verified and posted to the General Journal");
+      toast.success("Liquidation verified — voucher complete");
       onStatusChange?.();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to post liquidation");
@@ -664,26 +648,6 @@ export function EVoucherWorkflowPanel({
       if (!data || data.length === 0) {
         throw new Error(
           "You don't have permission to confirm receipt on this E-Voucher (only the tagged cash receiver can). Refresh and try again.",
-        );
-      }
-
-      // NEU-100: acknowledging receipt releases the disbursement entry for posting
-      // (awaiting_ack → ready_to_post). Treasury can then post it in the TJ.
-      // The receiver is permitted to flip only their own advance entry via the
-      // journal_entries_update_ack RLS carve-out (migration 248). Guard the write:
-      // an RLS-blocked UPDATE affects 0 rows without throwing, so without this the
-      // entry would silently strand at awaiting_ack (the original bug).
-      const { data: ackData, error: ackError } = await supabase
-        .from("journal_entries")
-        .update({ status: "ready_to_post", acknowledged_at: now, acknowledged_by: userId, updated_at: now })
-        .eq("evoucher_id", evoucherId)
-        .eq("kind", "advance")
-        .eq("status", "awaiting_ack")
-        .select("id");
-      if (ackError) throw ackError;
-      if (isAdvanceType && (!ackData || ackData.length === 0)) {
-        throw new Error(
-          "Receipt was recorded, but the cash-advance entry couldn't be released for posting (a permissions issue). Please refresh and try again, or ask Accounting.",
         );
       }
 
@@ -735,7 +699,7 @@ export function EVoucherWorkflowPanel({
 
   // NEU-051 slice 3: Treasury confirms receipt of the unused cash returned by the
   // requestor. Marks details + history and notifies the requestor. Status stays
-  // pending_verification — this just unblocks Verify & Post.
+  // pending_verification — this just unblocks Verify & Close.
   const handleConfirmCashReturn = async () => {
     setPendingConfirm(null);
     setIsSubmitting(true);
@@ -813,7 +777,7 @@ export function EVoucherWorkflowPanel({
         <span style={{ fontSize: "12px", color: "var(--theme-status-warning-fg)", fontWeight: 500, lineHeight: 1.5 }}>
           {action === "cancel"
             ? "This cannot be undone. The E-Voucher will be permanently cancelled."
-            : "The original journal entry will be automatically reversed."}
+            : "The E-Voucher will return to Accounting for correction."}
         </span>
       </div>
       <div style={{ display: "flex", gap: "8px" }}>
@@ -862,18 +826,6 @@ export function EVoucherWorkflowPanel({
           >
             {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle size={15} />}
             {isSubmitting ? "Approving…" : "Approve"}
-          </button>
-        )}
-
-        {/* NEU-095: Executive (Mark) processes a fund transfer → builds the TJ entry */}
-        {canProcessTransfer && (
-          <button
-            onClick={handleProcessTransfer}
-            disabled={isSubmitting}
-            style={{ ...btnBase, backgroundColor: "var(--theme-status-success-fg)", color: "#fff", opacity: isSubmitting ? 0.6 : 1, cursor: isSubmitting ? "not-allowed" : "pointer" }}
-          >
-            {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle size={15} />}
-            {isSubmitting ? "Processing…" : "Process Transfer"}
           </button>
         )}
 
@@ -1043,8 +995,10 @@ export function EVoucherWorkflowPanel({
           </div>
         )}
 
-        {/* Accounting (Treasury): Verify & Post the pre-built closing entry —
-            gated on receipts complete + cash return confirmed. */}
+        {/* Accounting (Treasury): verify the receipts and close the advance —
+            gated on receipts complete + cash return confirmed. Named "Verify &
+            Post" when it posted a closing journal entry; there is nothing to
+            post any more. */}
         {canVerifyAndPost && (
           <button
             onClick={handleVerifyAndPostLiquidation}
@@ -1052,11 +1006,72 @@ export function EVoucherWorkflowPanel({
             style={{ ...btnBase, backgroundColor: "var(--theme-status-success-fg)", color: "#fff", opacity: (isSubmitting || !liquidationReady) ? 0.5 : 1, cursor: (isSubmitting || !liquidationReady) ? "not-allowed" : "pointer" }}
           >
             {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle size={15} />}
-            {isSubmitting ? "Posting…" : "Verify & Post"}
+            {isSubmitting ? "Closing…" : "Verify & Close"}
           </button>
         )}
 
-        {/* Accounting Manager: Unlock for GL Correction */}
+        {/* Treasury: return the liquidation to the handler for a fix. This is the
+            way out when a line can't be verified — without it the voucher is stuck. */}
+        {canReturnLiquidation && !showReturnLiq && (
+          <button
+            onClick={() => setShowReturnLiq(true)}
+            disabled={isSubmitting}
+            style={{ ...btnBase, backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-status-warning-fg)", border: "1px solid var(--theme-status-warning-fg)", cursor: isSubmitting ? "not-allowed" : "pointer" }}
+          >
+            <XCircle size={15} />
+            Return to Handler
+          </button>
+        )}
+        {canReturnLiquidation && showReturnLiq && (
+          <div style={{
+            padding: "12px 14px", borderRadius: "8px",
+            border: "1px solid var(--theme-status-warning-fg)",
+            backgroundColor: "var(--theme-status-warning-bg)",
+            display: "flex", flexDirection: "column", gap: "10px",
+          }}>
+            <label
+              htmlFor="ev-return-liq-reason"
+              style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-status-warning-fg)" }}
+            >
+              What needs fixing — the handler will see this
+            </label>
+            <textarea
+              id="ev-return-liq-reason"
+              value={returnLiqReason}
+              onChange={(e) => setReturnLiqReason(e.target.value)}
+              placeholder="e.g. Line 2 has no receipt and no reason given"
+              rows={3}
+              style={{
+                width: "100%", padding: "8px 10px", borderRadius: "6px",
+                border: "1px solid var(--theme-border-default)",
+                fontSize: "13px", fontFamily: "inherit", resize: "vertical",
+                outline: "none", boxSizing: "border-box",
+                backgroundColor: "var(--theme-bg-surface)",
+                color: "var(--theme-text-primary)",
+              }}
+            />
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                onClick={() => { setShowReturnLiq(false); setReturnLiqReason(""); }}
+                style={{ flex: 1, padding: "7px", borderRadius: "6px", border: "1px solid var(--theme-border-default)", backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-muted)", fontSize: "12px", fontWeight: 500, cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReturnLiquidation}
+                disabled={isSubmitting || !returnLiqReason.trim()}
+                style={{ flex: 1, padding: "7px", borderRadius: "6px", border: "none", backgroundColor: "var(--theme-status-warning-fg)", color: "#fff", fontSize: "12px", fontWeight: 600, cursor: isSubmitting || !returnLiqReason.trim() ? "not-allowed" : "pointer", opacity: !returnLiqReason.trim() ? 0.5 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "5px" }}
+              >
+                {isSubmitting ? <Loader2 size={12} className="animate-spin" /> : <XCircle size={12} />}
+                Return
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Accounting Manager: reopen a closed voucher for correction. Named
+            "Unlock for GL Correction" / "Unlock & Reverse" when there was a
+            journal entry to reverse; there is nothing to reverse now. */}
         {canUnlockForCorrection && pendingConfirm !== "unlock" && (
           <button
             onClick={() => setPendingConfirm("unlock")}
@@ -1064,11 +1079,11 @@ export function EVoucherWorkflowPanel({
             style={{ ...btnBase, backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-status-warning-fg)", border: "1px solid var(--theme-status-warning-fg)", cursor: isSubmitting ? "not-allowed" : "pointer" }}
           >
             <Unlock size={15} />
-            Unlock for GL Correction
+            Reopen for Correction
           </button>
         )}
         {pendingConfirm === "unlock" && (
-          <InlineConfirm action="unlock" label="Unlock & Reverse" onConfirm={handleUnlockForCorrection} />
+          <InlineConfirm action="unlock" label="Reopen" onConfirm={handleUnlockForCorrection} />
         )}
 
         {/* Cash receiver: confirm receipt (NEU-050) — sequenced before liquidation */}
@@ -1121,7 +1136,8 @@ export function EVoucherWorkflowPanel({
                 const { data } = await supabase
                   .from("liquidation_submissions")
                   .select("total_spend, unused_return")
-                  .eq("evoucher_id", evoucherId);
+                  .eq("evoucher_id", evoucherId)
+                  .neq("status", "revision_requested");
                 const rows = data ?? [];
                 setPreviousTotalSpent(rows.reduce((s: number, r: any) => s + (r.total_spend ?? 0), 0));
                 setPreviousTotalReturned(rows.reduce((s: number, r: any) => s + (r.unused_return ?? 0), 0));
@@ -1159,6 +1175,7 @@ export function EVoucherWorkflowPanel({
 
       {/* Liquidation Form — inline, expands below the action buttons */}
       {currentUser && (
+        <div ref={liquidationFormRef}>
         <LiquidationForm
           isOpen={showLiquidationForm}
           onClose={() => setShowLiquidationForm(false)}
@@ -1171,6 +1188,7 @@ export function EVoucherWorkflowPanel({
           previousTotalSpent={previousTotalSpent > 0 ? previousTotalSpent : undefined}
           previousTotalReturned={previousTotalReturned > 0 ? previousTotalReturned : undefined}
         />
+        </div>
       )}
     </>
   );

@@ -7,7 +7,6 @@ import { toast } from "sonner@2.0.3";
 import { SidePanel } from "../../common/SidePanel";
 import { CatalogItemCombobox } from "../../shared/pricing/CatalogItemCombobox";
 import { CustomDropdown } from "../../bd/CustomDropdown";
-import { buildLiquidationClosingEntry } from "../../../utils/accounting/buildLiquidationClosingEntry";
 import type { LiquidationLineItem } from "../../../types/evoucher";
 
 interface LiquidationFormProps {
@@ -72,6 +71,10 @@ export function LiquidationForm({
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [unusedReturn, setUnusedReturn] = useState<string>("");
   const [isFinal, setIsFinal] = useState(false);
+  // Overspend needs a second look before it goes through. It used to be a
+  // native confirm() — the one jarring, unstyleable dialog in a workflow whose
+  // every other confirmation is inline.
+  const [showOverspendConfirm, setShowOverspendConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [bookingOptions, setBookingOptions] = useState<BookingOption[]>([]);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -168,6 +171,22 @@ export function LiquidationForm({
     );
   };
 
+  // "No receipt available" — the declared alternative to an attachment. Marking a
+  // line seeds an empty reason so the input appears; clearing sets it back to
+  // undefined so the line returns to needing evidence.
+  const markNoReceipt = (lineId: string) =>
+    setLineItems((prev) =>
+      prev.map((item) => (item.id === lineId ? { ...item, no_receipt_reason: "" } : item)),
+    );
+  const clearNoReceipt = (lineId: string) =>
+    setLineItems((prev) =>
+      prev.map((item) => (item.id === lineId ? { ...item, no_receipt_reason: undefined } : item)),
+    );
+  const setNoReceiptReason = (lineId: string, reason: string) =>
+    setLineItems((prev) =>
+      prev.map((item) => (item.id === lineId ? { ...item, no_receipt_reason: reason } : item)),
+    );
+
   const handleSubmit = async () => {
     // NEU-094: each line is a real expense line — needs a catalog item, a booking
     // (D1 attribution), and a positive amount.
@@ -181,10 +200,24 @@ export function LiquidationForm({
       toast.error("Each expense line needs a linked booking");
       return;
     }
+    // Treasury cannot verify a line that has neither a receipt nor a stated
+    // reason for not having one — and once this is final-submitted the handler
+    // has no way back in. So refuse it here, while it can still be fixed.
+    if (isFinal) {
+      const unevidenced = lineItems.filter(
+        (item) => !item.receipt_url && !(item.no_receipt_reason || "").trim(),
+      ).length;
+      if (unevidenced > 0) {
+        toast.error(
+          `${unevidenced} line${unevidenced === 1 ? "" : "s"} ${unevidenced === 1 ? "has" : "have"} no receipt — attach one, or say why there isn't one.`,
+        );
+        return;
+      }
+    }
 
-    if (isFinal && hasOverspend) {
-      const confirmMsg = `Your total spend (₱${cumulativeSpend.toLocaleString()}) exceeds the advance (₱${advanceAmount.toLocaleString()}) by ₱${overspend.toLocaleString()}. A Reimbursement E-Voucher will be created for this difference. Proceed?`;
-      if (!confirm(confirmMsg)) return;
+    if (isFinal && hasOverspend && !showOverspendConfirm) {
+      setShowOverspendConfirm(true);
+      return;
     }
 
     setSubmitting(true);
@@ -231,27 +264,6 @@ export function LiquidationForm({
           },
           created_at: new Date().toISOString(),
         });
-
-        // 2b. NEU-102: auto-build the closing entry (DR Expense per booking / DR
-        // Cash butal / CR 1150) into the Transaction Journal as `ready_to_post`.
-        // Accounting confirms it there ("Submit for Posting") to clear the advance.
-        try {
-          const closing = await buildLiquidationClosingEntry({
-            evoucherId,
-            evoucherNumber,
-            advanceAmount,
-            actor: { id: currentUser.id, name: currentUser.name },
-          });
-          if (closing) {
-            await supabase
-              .from("evouchers")
-              .update({ closing_journal_entry_id: closing.jeId, updated_at: new Date().toISOString() })
-              .eq("id", evoucherId);
-          }
-        } catch (closingErr) {
-          console.error("[Liquidation] closing entry build failed:", closingErr);
-          toast.warning("Liquidation saved, but the closing journal entry couldn't be built. Accounting can post it manually.");
-        }
 
         // 3. Auto-create Reimbursement EV if overspend (cumulative)
         if (hasOverspend) {
@@ -356,6 +368,32 @@ export function LiquidationForm({
           <span style={{ color: "var(--theme-text-muted)" }}> — close the advance and send to Accounting for review.</span>
         </span>
       </label>
+
+      {showOverspendConfirm && (
+        <div style={{ padding: "12px 14px", borderRadius: "10px", border: "1px solid var(--theme-status-warning-border)", backgroundColor: "var(--theme-status-warning-bg)", display: "flex", flexDirection: "column", gap: "10px" }}>
+          <p style={{ margin: 0, fontSize: "12px", lineHeight: 1.5, color: "var(--theme-status-warning-fg)" }}>
+            You spent <strong>₱{cumulativeSpend.toLocaleString()}</strong> against a{" "}
+            <strong>₱{advanceAmount.toLocaleString()}</strong> advance — over by{" "}
+            <strong>₱{overspend.toLocaleString()}</strong>. Submitting will raise a
+            Reimbursement E-Voucher for the difference.
+          </p>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
+              onClick={() => setShowOverspendConfirm(false)}
+              style={{ flex: 1, height: "34px", borderRadius: "8px", border: "1px solid var(--theme-border-default)", backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-muted)", fontSize: "12px", fontWeight: 500, cursor: "pointer" }}
+            >
+              Not yet
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              style={{ flex: 1, height: "34px", borderRadius: "8px", border: "none", backgroundColor: "var(--theme-status-warning-fg)", color: "#fff", fontSize: "12px", fontWeight: 600, cursor: submitting ? "not-allowed" : "pointer" }}
+            >
+              Yes, submit and reimburse
+            </button>
+          </div>
+        </div>
+      )}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
         <button
@@ -717,7 +755,30 @@ export function LiquidationForm({
                         <X size={14} />
                       </button>
                     </div>
+                  ) : item.no_receipt_reason !== undefined ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <input
+                        type="text"
+                        value={item.no_receipt_reason}
+                        onChange={(e) => setNoReceiptReason(item.id, e.target.value)}
+                        placeholder="Why is there no receipt? e.g. jeepney fare, port fixer"
+                        style={{ ...inputBaseStyle, flex: 1 }}
+                      />
+                      <button
+                        onClick={() => clearNoReceipt(item.id)}
+                        aria-label="Cancel no-receipt declaration"
+                        style={{
+                          width: "28px", height: "28px", borderRadius: "6px",
+                          border: "none", backgroundColor: "transparent",
+                          color: "var(--theme-text-muted)", cursor: "pointer",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                        }}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
                   ) : (
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                     <button
                       onClick={() => fileInputRefs.current[item.id]?.click()}
                       disabled={isUploadingThis}
@@ -760,6 +821,17 @@ export function LiquidationForm({
                         </>
                       )}
                     </button>
+                    <button
+                      onClick={() => markNoReceipt(item.id)}
+                      style={{
+                        background: "none", border: "none", padding: 0,
+                        fontSize: "12px", color: "var(--theme-text-muted)",
+                        textDecoration: "underline", cursor: "pointer", whiteSpace: "nowrap",
+                      }}
+                    >
+                      No receipt
+                    </button>
+                    </div>
                   )}
                 </div>
               );
