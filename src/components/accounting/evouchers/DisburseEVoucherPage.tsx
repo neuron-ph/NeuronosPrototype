@@ -573,7 +573,7 @@ export function DisburseEVoucherPage() {
           }}
         >
           {posting && <Loader2 size={15} className="animate-spin" />}
-          {posting ? "Processing…" : settlesDirectly ? "Disburse & Queue for Posting" : "Confirm Disbursement"}
+          {posting ? "Processing…" : settlesDirectly ? "Disburse & Close" : "Confirm Disbursement"}
         </button>
       </div>
     </div>
