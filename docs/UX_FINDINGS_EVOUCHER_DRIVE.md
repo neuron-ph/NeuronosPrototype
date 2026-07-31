@@ -1,4 +1,4 @@
-# UX Findings — E-Voucher Cost Path
+# UX Findings — Workflow Drive (cost + revenue paths)
 
 **From:** driving scenarios 1–7 in the browser across four real accounts (Bambi → Mariella → Mark → Janice), not from reading code.
 **Date:** 2026-07-31
@@ -173,3 +173,68 @@ Two smaller things spotted in the same flow:
 - **The submit button relabels itself** from "Save receipts" to "Submit & close advance" when Final submission is ticked. Small, and exactly right.
 - **Treasury's cash-return action carries the amount** — "Confirm Cash Return (₱5,000)" — so the reviewer never has to go looking for the number.
 - **The disabled-with-a-reason pattern on Verify & Post is the best interaction in the module.** It names the blocker, the actor and the fix. F2's Liquidate button should copy it.
+
+---
+
+# Revenue-path findings
+
+## F8 — Invoice Balance ignores linked collections; AR is overstated · **MAJOR**
+
+**Reproduced twice, on old and new data.**
+
+| Invoice | Created | Amount | Collected | Balance SHOWN |
+|---|---|---|---|---|
+| `BRK-2026-0031-001` | 2026-07-31 (this drive) | ₱1,121.60 | ₱1,121.60 (2 payments) | **₱1,121.60** |
+| `BR202606-126-001` | 2026-07-13 (pre-existing) | ₱8,000.00 | ₱8,000.00 | **₱8,000.00** |
+
+Both are fully settled. Both display their full amount as outstanding, and the KPI strip counts them as unpaid — "4 invoices / 4 unpaid / Outstanding PHP 140.1K".
+
+**What is NOT the cause** (all checked):
+- The data is correct. Both collections carry `linked_billings[].id` equal to the invoice id, plus `invoice_id` set, status `posted`.
+- The collections ARE loaded on the same page — the Collections tab of the same Financials view lists both.
+- `isCollectionAppliedToInvoice()` only excludes `credited`/`refunded`; `posted` passes.
+- `calculateInvoiceBalance()` matches on `linked_billings.id === invoice.id` OR `invoice_id === invoice.id`. Both hold here.
+
+So the logic and the data both look right in isolation, which points at **which `collections` array actually reaches `UnifiedInvoicesTab`** — `financials.collections` in `FinancialsModule`. That is where I would look first.
+
+**Impact:** AR is overstated by the full collected amount everywhere this component is used. On this dev data that is ~₱9.1K of ₱140.1K, but the error is structural, not proportional.
+
+**NOT caused by the accounting removal.** The 13 July invoice was already wrong three weeks before this session. I also checked the archived `CollectionGLPostingSheet` — it only READ the invoice (to recover its locked FX rate for the AR entry) and never updated it, so deleting it removed no settlement logic.
+
+---
+
+## F9 — Booking deep links do not resolve on load · **MODERATE**
+
+`\/accounting\/bookings?booking=<id>` lands on the default **Forwarding** list rather than the booking. The param survives in the URL and applies as soon as any service tab is clicked — so the state is read, just not on first render.
+
+Worse, this affects **in-app navigation**, not only bookmarks: clicking an invoice row in Financials navigates to `?tab=invoices&highlight=<id>` and lands on the Forwarding booking list. The user has to know to click "Brokerage" and search for the booking themselves.
+
+Any link from a ticket, email or notification into a booking has the same problem.
+
+---
+
+## F10 — "Create Invoice" goes nowhere useful · **MODERATE**
+
+The **Create Invoice** button on Financials → Invoices navigates to `\/accounting\/projects?action=create-invoice` — the Projects list, with no dialog, no prompt, and no visible response to the `action` param. Nothing tells the user what to do next.
+
+The path that works is Booking → Invoices tab → **New Invoice**.
+
+---
+
+## F11 — The void action could not be found in the UI · **NEEDS TRIAGE**
+
+Scenarios 16/17 (void an invoice; void one that has collections) could not be run. On a posted invoice, the detail view offers only print/display controls — no Void, Delete or Reverse — when signed in as **Marycris** (correct: she lacks `accounting_financials_invoices_tab:delete`) **and also as Mark**, who does hold that grant.
+
+`handleVoidInvoice` exists in `InvoiceBuilder.tsx` and is gated on `canDeleteInvoices`, so the capability is implemented. Either it surfaces somewhere I did not reach, or it is not wired into this view. Worth 10 minutes to confirm which — a void path that authorised users cannot find is effectively missing.
+
+---
+
+## Verified working on the revenue path
+
+- **The billable-expense bridge.** Expenses raised as billable appear as invoiceable billing items on their booking (`EV-2026-0114`, `EV-2026-0109`).
+- **No double-billing.** Invoicing 3 of 14 items moved exactly those 3 to `invoiced`; the other 11 stayed `unbilled` and remained selectable.
+- **Invoice approval routing.** Routed to Operations/manager; Jerome holds `ops_bookings_invoices_tab:approve` but is a team_leader, so the role gate correctly excluded him and Mariella (manager) could act.
+- **Finalize.** The ONLY action offered was "Finalize Invoice" — no Post to GL, no posting sheet. Status reached `posted` and the AR follow-up ticket fired from its new home with the corrected wording *"has been issued"*.
+- **Collections.** Partial (₱500) then balance (₱621.60) both recorded, born `posted`, correctly linked — no posting step anywhere.
+- **The invoice detail view says "Issued"**, not "Posted", even though the stored status string is still `posted`.
+- **RBAC on delete.** The Void action is correctly absent for a user without the delete grant.
