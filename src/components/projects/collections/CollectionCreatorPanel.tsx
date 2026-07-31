@@ -4,7 +4,7 @@ import { logCreation } from "../../../utils/activityLog";
 import { toast } from "../../ui/toast-utils";
 import type { FinancialContainer } from "../../../types/financials";
 import type { LinkedBilling } from "../../../types/evoucher";
-import { Invoice, Collection } from "../../../types/accounting";
+import { Invoice, Collection } from "../../../types/financials";
 import { useUser } from "../../../hooks/useUser";
 import { usePermission } from "../../../context/PermissionProvider";
 import { SidePanel } from "../../common/SidePanel";

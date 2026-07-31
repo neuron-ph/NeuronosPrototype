@@ -1,6 +1,6 @@
 // Convert an Invoice into a normalized PrintableDocument.
 
-import type { Invoice } from "../../types/accounting";
+import type { Invoice } from "../../types/financials";
 import type { Project } from "../../types/pricing";
 import { DEFAULT_COMPANY_SETTINGS, type CompanySettings } from "../../hooks/useCompanySettings";
 import type { InvoicePrintOptions } from "../../components/projects/invoices/InvoiceDocument";

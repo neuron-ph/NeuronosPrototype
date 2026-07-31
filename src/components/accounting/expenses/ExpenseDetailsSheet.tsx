@@ -5,7 +5,7 @@ import defaultLogoImage from "../../../assets/white.svg";
 import { getDocumentDesign, getBrandedLogo } from "../../../utils/documentDesign";
 const logoImage = getDocumentDesign() === "branded" ? getBrandedLogo() : defaultLogoImage;
 import { supabase } from "../../../utils/supabase/client";
-import type { Expense } from "../../../types/accounting";
+import type { Expense } from "../../../types/financials";
 
 interface ExpenseDetailsSheetProps {
   isOpen: boolean;

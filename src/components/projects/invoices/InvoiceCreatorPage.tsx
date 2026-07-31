@@ -2,7 +2,7 @@ import { motion } from "motion/react";
 import { ArrowLeft, FileText } from "lucide-react";
 import { InvoiceBuilder } from "./InvoiceBuilder";
 import type { FinancialContainer } from "../../../types/financials";
-import type { Invoice, Billing } from "../../../types/accounting";
+import type { Invoice, Billing } from "../../../types/financials";
 
 interface InvoiceCreatorPageProps {
   mode: "create" | "view";

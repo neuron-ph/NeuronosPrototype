@@ -1,6 +1,6 @@
 import React from "react";
 import type { Project } from "../../../types/pricing";
-import type { Invoice } from "../../../types/accounting";
+import type { Invoice } from "../../../types/financials";
 import { resolveInvoicePrintableDocument } from "../../../utils/documents/invoiceDocumentResolver";
 import { PrintableDocumentHtml } from "../../documents/PrintableDocumentHtml";
 import { useCompanySettings } from "../../../hooks/useCompanySettings";

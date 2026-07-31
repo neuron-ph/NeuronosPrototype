@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Printer, Save, ZoomIn, ZoomOut, Maximize, User, Layout, FileText, Download, Building2, Phone } from "lucide-react";
 import type { Project } from "../../../../types/pricing";
-import { Invoice } from "../../../../types/accounting";
+import { Invoice } from "../../../../types/financials";
 import { InvoiceDocument } from "../InvoiceDocument";
 import { useInvoiceDocumentState } from "./useInvoiceDocumentState";
 import { SignatoryControl } from "./controls/SignatoryControl";

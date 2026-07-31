@@ -1,4 +1,4 @@
-import { Invoice, Collection } from "../types/accounting";
+import { Invoice, Collection } from "../types/financials";
 import { isCollectionAppliedToInvoice } from "./collectionResolution";
 import { pickReportingAmount, roundMoney } from "./accountingCurrency";
 

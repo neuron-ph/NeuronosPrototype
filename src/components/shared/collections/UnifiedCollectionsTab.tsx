@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Plus, Receipt, Search } from "lucide-react";
 import type { FinancialData } from "../../../hooks/useProjectFinancials";
 import type { FinancialContainer } from "../../../types/financials";
-import { Collection } from "../../../types/accounting";
+import { Collection } from "../../../types/financials";
 import { CollectionCreatorPanel } from "../../projects/collections/CollectionCreatorPanel";
 import { CustomDropdown } from "../../bd/CustomDropdown";
 import { CustomDatePicker } from "../../common/CustomDatePicker";

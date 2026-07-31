@@ -8,9 +8,8 @@ import { fireInvoiceARTicket } from "../../../utils/workflowTickets";
 import { toast } from "../../ui/toast-utils";
 import type { FinancialContainer } from "../../../types/financials";
 import type { Project } from "../../../types/pricing";
-import { Invoice, Billing, Account } from "../../../types/accounting";
+import { Invoice, Billing } from "../../../types/financials";
 import type { BillingLineItem } from "../../../types/operations";
-import { getAccounts } from "../../../utils/accounting-api";
 import { supabase } from "../../../utils/supabase/client";
 import { queryKeys } from "../../../lib/queryKeys";
 import { InvoiceDocument, InvoicePrintOptions } from "./InvoiceDocument";
@@ -190,9 +189,6 @@ export function InvoiceBuilder({
     }
   };
 
-  // Accounting State (For GL Posting — Revenue Account for DR AR / CR Revenue)
-  const [revenueAccountId, setRevenueAccountId] = useState("");
-
   // Doctrine D1 (NEU-077): every invoice must be booking-linked. The invoice is
   // tied to exactly one booking — auto-selected when the project has one,
   // chosen when it has several, blocked when it has none.
@@ -229,25 +225,6 @@ export function InvoiceBuilder({
   };
 
   // -- Queries --
-
-  // Revenue accounts for GL posting (create mode only)
-  const { data: allAccountsRaw = [], isLoading: loadingAccounts } = useQuery({
-    queryKey: queryKeys.transactions.accounts(),
-    queryFn: async () => {
-      const accs = await getAccounts();
-      return accs;
-    },
-    enabled: mode === 'create',
-    staleTime: 60_000,
-  });
-
-  const accounts = useMemo(() => {
-    const incomeAccounts = allAccountsRaw.filter((a: any) => {
-      const t = (a.type || '').toLowerCase();
-      return (t === 'income' || t === 'revenue') && !a.is_folder;
-    });
-    return incomeAccounts as unknown as Account[];
-  }, [allAccountsRaw]);
 
   // Customer address lookup (create mode only)
   const { data: customerData } = useQuery({
@@ -364,13 +341,6 @@ export function InvoiceBuilder({
         if (metadata.displayOptions) setDisplayOptions(metadata.displayOptions);
     }
   }, [mode, viewInvoice]);
-
-  // 2. Auto-select first revenue account when accounts load
-  useEffect(() => {
-    if (mode === 'create' && !revenueAccountId && accounts.length > 0) {
-      setRevenueAccountId(accounts[0].id);
-    }
-  }, [mode, accounts, revenueAccountId]);
 
   // 3. Apply customer address/TIN from query result
   useEffect(() => {
@@ -928,7 +898,6 @@ export function InvoiceBuilder({
             customer_address: customerAddress,
             exchange_rate: lockedRate,
             original_currency: invoiceCurrency,
-            revenue_account_id: revenueAccountId || null,
             line_items: draftInvoice.line_items,
             zone_a: {
                 customer_tin: customerTin,
@@ -1768,17 +1737,6 @@ export function InvoiceBuilder({
                         value={exchangeRate}
                         onChange={(e) => setExchangeRate(parseFloat(e.target.value) || 0)}
                         className="w-full h-9 pl-3 pr-3 text-sm border border-[var(--theme-border-default)] rounded-md focus:ring-2 focus:ring-[var(--theme-action-primary-bg)]/20 focus:border-[var(--theme-action-primary-bg)] outline-none transition-all"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-[var(--theme-text-muted)] uppercase tracking-[0.05em] mb-1.5">Revenue Account</label>
-                      <CustomDropdown
-                        value={revenueAccountId}
-                        onChange={setRevenueAccountId}
-                        options={accounts.map(acc => ({ value: acc.id, label: acc.code ? `${acc.code} - ${acc.name}` : acc.name }))}
-                        placeholder="Select Revenue Account..."
-                        fullWidth
-                        size="sm"
                       />
                     </div>
                     {selectedItems.some(i => i.currency !== targetCurrency) && (

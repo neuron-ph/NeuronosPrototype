@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router";
 import { Package, Truck, Briefcase, Home, Coffee, Wallet, Clock, CheckCircle, AlertCircle, FileText, XCircle } from "lucide-react";
 import { useState } from "react";
-import type { Expense } from "../../types/accounting";
+import type { Expense } from "../../types/financials";
 import { ExpenseDetailsSheet } from "./expenses/ExpenseDetailsSheet";
 import { SkeletonTable } from "../shared/NeuronSkeleton";
 

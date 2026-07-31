@@ -5,7 +5,7 @@ import defaultLogoImage from "../../../assets/white.svg";
 import { getDocumentDesign, getBrandedLogo } from "../../../utils/documentDesign";
 const logoImage = getDocumentDesign() === "branded" ? getBrandedLogo() : defaultLogoImage;
 import { supabase } from "../../../utils/supabase/client";
-import type { Collection } from "../../../types/accounting";
+import type { Collection } from "../../../types/financials";
 import {
   getCollectionResolutionLabel,
   isCollectionResolvedByCreditOrRefund,

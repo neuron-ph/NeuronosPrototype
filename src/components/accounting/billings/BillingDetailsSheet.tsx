@@ -4,7 +4,7 @@ import defaultLogoImage from "../../../assets/white.svg";
 import { getDocumentDesign, getBrandedLogo } from "../../../utils/documentDesign";
 const logoImage = getDocumentDesign() === "branded" ? getBrandedLogo() : defaultLogoImage;
 import { supabase } from "../../../utils/supabase/client";
-import type { Billing } from "../../../types/accounting";
+import type { Billing } from "../../../types/financials";
 import { SidePanel } from "../../common/SidePanel";
 import {
   completeInvoiceReversalDraft,

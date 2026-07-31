@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { resolveInvoicePrintableDocument } from "./invoiceDocumentResolver";
-import type { Invoice } from "../../types/accounting";
+import type { Invoice } from "../../types/financials";
 
 function baseInvoice(overrides: Partial<Invoice> = {}): Invoice {
   return {

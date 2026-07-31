@@ -11,8 +11,6 @@ import type { EVoucher, EVoucherTransactionType, LinkedBilling } from "../../typ
 import { useEVoucherSubmit } from "../../hooks/useEVoucherSubmit";
 import { useUser } from "../../hooks/useUser";
 import { supabase } from "../../utils/supabase/client";
-import { getAccounts } from "../../utils/accounting-api";
-import type { Account } from "../../types/accounting-core";
 import { usePermission } from "../../context/PermissionProvider";
 import { toast } from "sonner@2.0.3";
 import {
@@ -202,31 +200,6 @@ export function AddRequestForPaymentPanel({
   const [isLoadingStatements, setIsLoadingStatements] = useState(false);
   const [selectedStatementRef, setSelectedStatementRef] = useState<string>("");
 
-  // Bank/Cash Accounts
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [sourceAccountId, setSourceAccountId] = useState("");
-
-  // Fetch Accounts (Assets Only)
-  useEffect(() => {
-    let cancelled = false;
-    const loadAccounts = async () => {
-      try {
-        const allAccounts = await getAccounts();
-        if (!cancelled) {
-          // Account `type` is stored lowercase ('asset') in the DB; compare
-          // case-insensitively so the cash/bank picker (source + NEU-095 transfer
-          // From/To) is actually populated.
-          const assetAccounts = allAccounts.filter(a => (a.type || "").toLowerCase() === "asset" && !a.is_folder);
-          setAccounts(assetAccounts);
-        }
-      } catch (e) {
-        console.error("Failed to load accounts", e);
-        if (!cancelled) toast.error("Failed to load bank/cash accounts");
-      }
-    };
-    loadAccounts();
-    return () => { cancelled = true; };
-  }, []);
 
   // Initialize Transaction Type based on Context
   useEffect(() => {
@@ -311,7 +284,6 @@ export function AddRequestForPaymentPanel({
       if (dataToLoad.credit_terms) setCreditTerms((dataToLoad.credit_terms as CreditTerm) || "None");
       if (dataToLoad.due_date) setPaymentSchedule(dataToLoad.due_date || "");
       if (dataToLoad.notes) setNotes(dataToLoad.notes || "");
-      if (dataToLoad.source_account_id) setSourceAccountId(dataToLoad.source_account_id || "");
       
       if (dataToLoad.linked_billings) setLinkedBillings(dataToLoad.linked_billings);
       if (Array.isArray(dataToLoad.attachments)) setExistingAttachments(dataToLoad.attachments as CrmAttachment[]);
@@ -588,7 +560,6 @@ export function AddRequestForPaymentPanel({
         bookingId: bookingId || selectedBookingId || undefined,
         isBillable: transactionSubtype === "billable_expense",
         linkedBillings: isCollectionMode ? linkedBillings : undefined,
-        sourceAccountId: sourceAccountId || undefined,
         currency,
         exchangeRate: currency === FUNCTIONAL_CURRENCY ? 1 : parseFloat(exchangeRateInput),
       };
@@ -643,7 +614,6 @@ export function AddRequestForPaymentPanel({
         bookingId: bookingId || selectedBookingId || undefined,
         isBillable: transactionSubtype === "billable_expense",
         linkedBillings: isCollectionMode ? linkedBillings : undefined,
-        sourceAccountId: sourceAccountId || undefined,
         currency,
         exchangeRate: currency === FUNCTIONAL_CURRENCY ? 1 : parseFloat(exchangeRateInput),
       };
@@ -693,7 +663,6 @@ export function AddRequestForPaymentPanel({
         bookingId: bookingId || selectedBookingId || undefined,
         isBillable: transactionSubtype === "billable_expense",
         linkedBillings: isCollectionMode ? linkedBillings : undefined,
-        sourceAccountId: sourceAccountId || undefined,
         currency,
         exchangeRate: currency === FUNCTIONAL_CURRENCY ? 1 : parseFloat(exchangeRateInput),
       };
@@ -728,7 +697,6 @@ export function AddRequestForPaymentPanel({
     setTransactionSubtype("regular_expense");
     setLinkedBillings([]);
     setSelectedStatementRef("");
-    setSourceAccountId("");
   };
 
   const handleDelete = async () => {
