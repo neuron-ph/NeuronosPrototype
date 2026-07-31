@@ -118,3 +118,58 @@ Worth recording, since the drive was looking for problems:
 | F5 | Purpose duplicates type; booking ref empty | Minor | small |
 
 **None of these were caused by the accounting removal.** F1–F5 are pre-existing. The removal made the panel *shorter* (the GL posting sheet and journal preview are gone), so this was worse before.
+
+---
+
+## F6 — A liquidation submitted without a receipt attachment DEADLOCKS · **CRITICAL**
+
+Found by running scenario 8. Confirmed from both sides of the workflow.
+
+**The trap.** Bambi final-submits her liquidation for the ₱20,000 advance and forgets to attach a receipt image to a line. The voucher moves to `pending_verification`. Then:
+
+- **Treasury** opens it. `Verify & Post` is **disabled**, with a clear and correct message:
+  > *"1 receipt missing an attachment — the handler must attach it before this can be verified."*
+- **The handler** opens it. She has **no actions at all** — no attach, no reopen, nothing.
+
+The app tells Treasury to wait for the handler, and gives the handler no way to act. **Nobody can move it.** The advance is stuck, and so is the ₱5,000 return reconciliation attached to it.
+
+**Root cause** — `EVoucherWorkflowPanel.tsx`:
+
+```
+canOpenLiquidation = isLiquidator && isAdvanceType &&
+  ((currentStatus === "disbursed" && receiptConfirmedAt) || currentStatus === "pending_liquidation")
+
+canVerifyAndPost   = holdsDisburseGate && currentStatus === "pending_verification"
+                     … further gated on liqReview.receiptsComplete
+```
+
+There is no gate for the handler at `pending_verification`. Final submission is a one-way door, and the receipts check sits on the *other* side of it. `canSendBack` exists but only fires at `pending_accounting`, so it cannot rescue this either.
+
+**Why it isn't caught earlier:** the liquidation form does not require an attachment to submit — it validates catalog item, amount and booking (`LiquidationForm.tsx:175,180`) but not `receipt_url`. So the app cheerfully accepts the thing it will later refuse to verify.
+
+**Recommendations, cheapest first:**
+1. **Validate at submission.** If `Final submission` is ticked, require every line to have an attachment — refuse it at the point the user can still fix it. One check, mirrors the existing two.
+2. **Give Treasury a send-back.** Extend `canSendBack` to `pending_verification`, returning the voucher to `pending_liquidation`. This is the general escape hatch and is worth having regardless.
+3. **Let the handler attach at `pending_verification`.** Narrower: allow attachment-only edits without reopening the whole form.
+
+I'd do **1 and 2** — 1 prevents it, 2 rescues the ones already stuck. Note there may be vouchers in this state on prod already.
+
+**Not caused by the accounting removal.** These gates are NEU-050/051 work and predate it.
+
+---
+
+## F7 — "Verify & Post" and the native confirm dialog · **MINOR**
+
+Two smaller things spotted in the same flow:
+
+- Treasury's button still reads **"Verify & Post"**. There is nothing to post any more. Suggest **"Verify & Close"**.
+- Final liquidation submission goes through a native browser `confirm()` (`LiquidationForm.tsx:186`). Every other confirmation in this workflow is a styled inline one ("Not yet / Yes, I received it", "Not yet / Yes, received"). The native dialog is jarring and inconsistent, and it is the only one that cannot be styled or tested consistently.
+
+---
+
+## What else worked well in scenarios 5–8
+
+- **The variance panel is excellent.** Cash advance ₱20,000 / Total spent this session ₱15,000 / Balance remaining ₱5,000, live as you type.
+- **The submit button relabels itself** from "Save receipts" to "Submit & close advance" when Final submission is ticked. Small, and exactly right.
+- **Treasury's cash-return action carries the amount** — "Confirm Cash Return (₱5,000)" — so the reviewer never has to go looking for the number.
+- **The disabled-with-a-reason pattern on Verify & Post is the best interaction in the module.** It names the blocker, the actor and the fix. F2's Liquidate button should copy it.
