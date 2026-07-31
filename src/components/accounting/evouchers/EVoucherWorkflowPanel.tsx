@@ -9,7 +9,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { LiquidationForm } from "./LiquidationForm";
-import { postJournalEntry } from "../../../utils/accounting/postTransactionJournal";
 import { buildTransferEntry } from "../../../utils/accounting/buildTransferEntry";
 import type { EVoucherAPType } from "../../../types/evoucher";
 import { ensureBillableExpenseBillingItem } from "../../../utils/evoucherApproval";
@@ -424,53 +423,15 @@ export function EVoucherWorkflowPanel({
     setPendingConfirm(null);
     setIsSubmitting(true);
     try {
-      const { data: ev, error: evFetchError } = await supabase
-        .from("evouchers").select("closing_journal_entry_id").eq("id", evoucherId).maybeSingle();
-      if (evFetchError) throw evFetchError;
-
-      if (ev?.closing_journal_entry_id) {
-        const { data: originalJE, error: jeFetchError } = await supabase
-          .from("journal_entries")
-          .select("lines, description, total_debit, total_credit")
-          .eq("id", ev.closing_journal_entry_id).maybeSingle();
-
-        if (!jeFetchError && originalJE) {
-          const reversalLines = (originalJE.lines as Array<{
-            account_id: string; account_code: string; account_name: string;
-            debit: number; credit: number; description: string;
-          }>).map((line) => ({
-            ...line,
-            debit: line.credit,
-            credit: line.debit,
-            description: `REVERSAL: ${line.description}`,
-          }));
-          const reversalId = `JE-REV-${Date.now()}`;
-          await supabase.from("journal_entries").insert({
-            id: reversalId,
-            entry_date: new Date().toISOString(),
-            evoucher_id: evoucherId,
-            description: `REVERSAL of ${ev.closing_journal_entry_id} — Correction Unlock by ${currentUser?.name}`,
-            lines: reversalLines,
-            total_debit: originalJE.total_credit,
-            total_credit: originalJE.total_debit,
-            status: "posted",
-            created_by: userId,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          });
-          if (actor) logActivity("evoucher", evoucherId, evoucherNumber, "posted", actor);
-        }
-      }
-
       const { error: updateError } = await supabase
         .from("evouchers")
-        .update({ status: "pending_accounting", closing_journal_entry_id: null, updated_at: new Date().toISOString() })
+        .update({ status: "pending_accounting", updated_at: new Date().toISOString() })
         .eq("id", evoucherId);
       if (updateError) throw updateError;
 
       if (actor) logActivity("evoucher", evoucherId, evoucherNumber, "updated", actor, { description: "Unlocked for correction" });
-      await writeHistory("Unlocked for GL Correction — Original Entry Reversed", currentStatus, "pending_accounting");
-      toast.success("E-Voucher unlocked — original journal entry reversed. Post a new GL entry.");
+      await writeHistory("Unlocked for Correction", currentStatus, "pending_accounting");
+      toast.success("E-Voucher unlocked for correction");
       onStatusChange?.();
     } catch {
       toast.error("Failed to unlock for correction");
@@ -549,44 +510,32 @@ export function EVoucherWorkflowPanel({
     }
   };
 
-  // NEU-102/C: Treasury verifies + posts the liquidation. The closing entry
-  // (DR Expense per booking / DR Cash butal / CR 1150) was pre-built as
-  // `ready_to_post` at final liquidation; posting it flips the voucher to
-  // `posted` and clears the advance. Replaces the old GLConfirmationSheet +
-  // no-JE "Close Liquidation" paths.
+  // NEU-102/C: Treasury verifies the liquidation, which completes the voucher
+  // and clears the advance. (This used to post a pre-built closing journal entry,
+  // whose source-effect did the status flip — the flip is now direct.)
   const handleVerifyAndPostLiquidation = async () => {
     setIsSubmitting(true);
     try {
-      const { data: closingJe } = await supabase
-        .from("journal_entries")
-        .select("id")
-        .eq("evoucher_id", evoucherId)
-        .eq("kind", "liquidation")
-        .eq("status", "ready_to_post")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (!closingJe) {
-        toast.error("No pending closing entry found — the handler must re-submit the liquidation.");
-        return;
-      }
-      await postJournalEntry(closingJe.id, { id: currentUser?.id ?? null, name: currentUser?.name ?? null });
-      // postJournalEntry's source-effect flips the voucher to `posted` + links the entry.
+      const { error: closeErr } = await supabase
+        .from("evouchers")
+        .update({ status: "posted", updated_at: new Date().toISOString() })
+        .eq("id", evoucherId);
+      if (closeErr) throw closeErr;
       await supabase.from("evoucher_history").insert({
         id: `EH-${Date.now()}`,
         evoucher_id: evoucherId,
-        action: "Liquidation Verified & Posted to General Journal",
+        action: "Liquidation Verified",
         status: "posted",
         user_id: currentUser?.id,
         user_name: currentUser?.name,
         user_role: currentUser?.department,
-        metadata: { previous_status: "pending_verification", new_status: "posted", journal_entry_id: closingJe.id },
+        metadata: { previous_status: "pending_verification", new_status: "posted" },
         created_at: new Date().toISOString(),
       });
       if (currentUser?.id && requestorId) {
         createWorkflowTicket({
           subject: `Complete: ${evoucherNumber}`,
-          body: `Your E-Voucher ${evoucherNumber} has been verified and posted. This transaction is complete.`,
+          body: `Your E-Voucher ${evoucherNumber} has been verified. This transaction is complete.`,
           type: "fyi",
           recipientUserId: requestorId,
           linkedRecordType: "expense",
@@ -605,12 +554,12 @@ export function EVoucherWorkflowPanel({
         entityId: evoucherId,
         kind: "posted",
         summary: {
-          label: `E-Voucher ${evoucherNumber} verified and posted`,
+          label: `E-Voucher ${evoucherNumber} verified`,
           reference: evoucherNumber,
         },
         recipientIds: [requestorId ?? null],
       });
-      toast.success("Liquidation verified and posted to the General Journal");
+      toast.success("Liquidation verified — voucher complete");
       onStatusChange?.();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to post liquidation");
@@ -648,26 +597,6 @@ export function EVoucherWorkflowPanel({
       if (!data || data.length === 0) {
         throw new Error(
           "You don't have permission to confirm receipt on this E-Voucher (only the tagged cash receiver can). Refresh and try again.",
-        );
-      }
-
-      // NEU-100: acknowledging receipt releases the disbursement entry for posting
-      // (awaiting_ack → ready_to_post). Treasury can then post it in the TJ.
-      // The receiver is permitted to flip only their own advance entry via the
-      // journal_entries_update_ack RLS carve-out (migration 248). Guard the write:
-      // an RLS-blocked UPDATE affects 0 rows without throwing, so without this the
-      // entry would silently strand at awaiting_ack (the original bug).
-      const { data: ackData, error: ackError } = await supabase
-        .from("journal_entries")
-        .update({ status: "ready_to_post", acknowledged_at: now, acknowledged_by: userId, updated_at: now })
-        .eq("evoucher_id", evoucherId)
-        .eq("kind", "advance")
-        .eq("status", "awaiting_ack")
-        .select("id");
-      if (ackError) throw ackError;
-      if (isAdvanceType && (!ackData || ackData.length === 0)) {
-        throw new Error(
-          "Receipt was recorded, but the cash-advance entry couldn't be released for posting (a permissions issue). Please refresh and try again, or ask Accounting.",
         );
       }
 
@@ -797,7 +726,7 @@ export function EVoucherWorkflowPanel({
         <span style={{ fontSize: "12px", color: "var(--theme-status-warning-fg)", fontWeight: 500, lineHeight: 1.5 }}>
           {action === "cancel"
             ? "This cannot be undone. The E-Voucher will be permanently cancelled."
-            : "The original journal entry will be automatically reversed."}
+            : "The E-Voucher will return to Accounting for correction."}
         </span>
       </div>
       <div style={{ display: "flex", gap: "8px" }}>

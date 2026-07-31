@@ -7,7 +7,6 @@ import { toast } from "sonner@2.0.3";
 import { SidePanel } from "../../common/SidePanel";
 import { CatalogItemCombobox } from "../../shared/pricing/CatalogItemCombobox";
 import { CustomDropdown } from "../../bd/CustomDropdown";
-import { buildLiquidationClosingEntry } from "../../../utils/accounting/buildLiquidationClosingEntry";
 import type { LiquidationLineItem } from "../../../types/evoucher";
 
 interface LiquidationFormProps {
@@ -231,27 +230,6 @@ export function LiquidationForm({
           },
           created_at: new Date().toISOString(),
         });
-
-        // 2b. NEU-102: auto-build the closing entry (DR Expense per booking / DR
-        // Cash butal / CR 1150) into the Transaction Journal as `ready_to_post`.
-        // Accounting confirms it there ("Submit for Posting") to clear the advance.
-        try {
-          const closing = await buildLiquidationClosingEntry({
-            evoucherId,
-            evoucherNumber,
-            advanceAmount,
-            actor: { id: currentUser.id, name: currentUser.name },
-          });
-          if (closing) {
-            await supabase
-              .from("evouchers")
-              .update({ closing_journal_entry_id: closing.jeId, updated_at: new Date().toISOString() })
-              .eq("id", evoucherId);
-          }
-        } catch (closingErr) {
-          console.error("[Liquidation] closing entry build failed:", closingErr);
-          toast.warning("Liquidation saved, but the closing journal entry couldn't be built. Accounting can post it manually.");
-        }
 
         // 3. Auto-create Reimbursement EV if overspend (cumulative)
         if (hasOverspend) {
