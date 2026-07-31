@@ -559,6 +559,10 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
   const showOperationsSection = visibleOperationsSubItems.length > 0;
   const showAccountingSection = visibleAcctSubItems.length > 0;
   const showHRItem = showHR && canViewPage("hr");
+  // Performance is gated on its own hr_performance grant, deliberately NOT on
+  // showHR: that flag is dev-only (!import.meta.env.PROD) and scoping a real
+  // feature to dev because it happens to sit next to HR would be an accident.
+  const showPerformanceItem = canViewPage("hr-performance");
   const showActivityLog = canViewPage("activity-log");
   const showAdminUsers = canViewPage("admin-users");
   const showAdminProfiling = canViewPage("admin-profiling");
@@ -573,7 +577,6 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
   const workItems = [
     { id: "operations" as Page, label: "Operations", icon: Package },
     { id: "hr" as Page, label: "HR", icon: User },
-    { id: "hr-performance" as Page, label: "Performance", icon: Target },
   ];
   
   // Personal section — view-gated like every other section (NEU-019 WG-07:
@@ -1132,6 +1135,7 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
         {/* HR */}
         <div className="space-y-1">
           {showHRItem && renderNavButton({ id: "hr" as Page, label: "HR", icon: User })}
+          {showPerformanceItem && renderNavButton({ id: "hr-performance" as Page, label: "Performance", icon: Target })}
         </div>
 
         {/* Accounting with sub-items */}
