@@ -177,18 +177,35 @@ Surviving reports: Sales, Collections, Receivables Aging, Unbilled Revenue, Book
 
 ---
 
-## Roles
+## Roles — and the dev cast that plays them
 
-| Capability | Who |
+Grants are stored flat as `"module:action": true` in `permission_overrides.module_grants`.
+
+| Capability | What it unlocks |
 |---|---|
 | `my_evouchers:edit` | raise + submit own vouchers |
-| `my_evouchers:approve` | manager gate at `pending_manager` |
+| `my_evouchers:approve` | manager gate at `pending_manager` (DB also enforces a requestor-department match) |
 | `acct_evouchers:approve` | CEO gate at `pending_ceo`; unlock a posted voucher |
 | `acct_evouchers:disburse` | **Treasury** — release cash, verify liquidation, confirm cash return |
-| invoice approver (NEU-103) | approve an invoice before finalize |
-| `accounting_financials_*_tab` | the billings / invoices / collections / expenses tabs |
+| `ops_bookings_invoices_tab:approve` | approve an invoice before finalize (NEU-103) |
+| `accounting_financials_invoices_tab:create` / `..._collections_tab:create` | raise invoices / record collections |
 
-⚠ **No dev account currently holds `acct_evouchers:disburse`.** That must be granted in the Access Configuration matrix before disbursement can be driven in the browser.
+### The cast (all `devpassword123`)
+
+Each account does the job it actually holds. **No god-account.**
+
+| Plays | Person | Login |
+|---|---|---|
+| **Requestor / cash receiver** | Bambi C. Badajos · Operations staff | `jr.cusdec13@falconslogistics-ph.com` |
+| **Dept manager approval** | Mariella R. Soriano · Operations manager | `jr.manager02@falconslogistics-ph.com` |
+| **Executive / CEO approval** | Mark D. Javier · Executive manager | `inquiry@falconslogistics-ph.com` |
+| **Treasury** — disburse, verify, confirm return | Janice D. De Villa · Accounting manager | `treasury@falconslogistics-ph.com` |
+| **AR** — build invoices, record collections | Marycris P. Magcalas · Accounting staff | `accountreceivables@falconslogistics-ph.com` |
+| **Invoice approver** | Jerome A. Cueto · Operations team leader | `jr.supervisor02@falconslogistics-ph.com` |
+
+Mariella holds `my_evouchers:approve` with `ev_approval_authority = false`, so manager approval routes onward to `pending_ceo` — which exercises the **full** three-gate chain rather than the shortcut.
+
+> **Correction:** an earlier draft of this spec claimed no dev account held `acct_evouchers:disburse`. That was a bad query on my part — it probed the wrong JSONB shape. Two accounts hold it: `treasury@` (Janice, Treasury) and `wenchemaes@`. **No permission changes are needed to run any scenario below.**
 
 ---
 
@@ -212,7 +229,19 @@ The terminal status is still the string **`posted`** on vouchers, invoices and c
 
 ## Scenario list for the browser drive
 
-Proposed run order. Each is end-to-end and independently checkable.
+Run as the company, not as an admin. Each scenario names **who is signed in**, and the
+handoffs between them are the point — a voucher that a manager can approve but a
+requestor cannot, an invoice that cannot be finalized by the person who raised it.
+Sign out and back in at each handoff; that is the test.
+
+| Step | Signed in as |
+|---|---|
+| 1, 5, 6, 7, 9, 19 | **Bambi** (Operations requestor / cash receiver) |
+| 2 | **Mariella** (Operations manager) |
+| 3 | **Mark** (Executive) |
+| 4, 8, 20 | **Janice** (Treasury) |
+| 10–18, 21–22 | **Marycris** (AR), with **Jerome** for the approval step |
+| 23 | any |
 
 **Cost path**
 1. Raise a **Project Expense** with catalog line items + booking → submit → verify it lands at `pending_manager`.
