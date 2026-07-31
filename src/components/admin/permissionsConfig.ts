@@ -131,7 +131,7 @@ export type ModuleId =
   | "my_scorecard"
   // Everyone else's scorecards. Deliberately a separate door from my_scorecard:
   // holding this is what lets get_kpi_scorecard return another person's card.
-  | "hr_performance";
+  | "exec_performance";
 
 // NEU-022: `amend` is a distinct elevated capability (re-edit a CONVERTED quote /
 // active contract after it's locked), kept separate from `approve` so a real

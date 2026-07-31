@@ -267,7 +267,7 @@ function RouteWrapper({ children, page }: { children: React.ReactNode; page: str
     if (path.startsWith("/accounting/bookings")) return "acct-bookings";
     if (path.startsWith("/accounting/reports")) return "acct-reports";
     if (path.startsWith("/accounting/catalog")) return "acct-catalog";
-    if (path.startsWith("/hr/performance")) return "hr-performance";
+    if (path.startsWith("/performance")) return "exec-performance";
     if (path.startsWith("/hr")) return "hr";
     if (path.startsWith("/calendar")) return "calendar";
     if (path.startsWith("/approvals")) return "approvals";
@@ -322,7 +322,7 @@ function RouteWrapper({ children, page }: { children: React.ReactNode; page: str
       "acct-reports": "/accounting/reports",
       "acct-catalog": "/accounting/catalog",
       "hr": "/hr",
-      "hr-performance": "/hr/performance",
+      "exec-performance": "/performance",
       "calendar": "/calendar",
       "inbox": "/inbox",
       "approvals": "/approvals",
@@ -951,7 +951,7 @@ function MyEVouchersPageWrapper() {
 
 function PerformancePageWrapper() {
   return (
-    <RouteWrapper page="hr-performance">
+    <RouteWrapper page="exec-performance">
       <PerformancePage />
     </RouteWrapper>
   );
@@ -1231,8 +1231,8 @@ function AppContent() {
         <Route element={<GuardedLayout requiredPermission={{ moduleId: "my_evouchers", action: "view" }} />}>
           <Route path="/my-evouchers" element={<MyEVouchersPageWrapper />} />
           <Route path="/my-scorecard" element={<MyScorecardPageWrapper />} />
-          <Route path="/hr/performance" element={<PerformancePageWrapper />} />
-          <Route path="/hr/performance/:userId" element={<PerformancePageWrapper />} />
+          <Route path="/performance" element={<PerformancePageWrapper />} />
+          <Route path="/performance/:userId" element={<PerformancePageWrapper />} />
         </Route>
         <Route element={<GuardedLayout requiredPermission={{ moduleId: "acct_evouchers", action: "view" }} />}>
           <Route path="/evouchers/:id/disburse" element={<RouteWrapper page="acct-evouchers"><DisburseEVoucherPage /></RouteWrapper>} />

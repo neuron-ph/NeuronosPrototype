@@ -215,7 +215,7 @@ const prefetchOperations = () => void import("./Operations");
 const prefetchAccounting = () => void import("./accounting/FinancialsModule");
 const prefetchInbox      = () => void import("./InboxPage");
 
-type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" |"pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" | "pricing-others" |"ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" |"operations" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-reports" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "hr-performance" | "calendar" | "inbox" | "approvals" | "my-evouchers" | "my-scorecard" | "ticket-queue" | "settings" | "admin-users" | "admin-profiling" | "admin" | "ticket-testing" | "activity-log" | "design-system";
+type Page = "dashboard" | "bd-contacts" | "bd-customers" | "bd-inquiries" | "projects" | "bd-projects" | "bd-contracts" | "bd-tasks" | "bd-activities" | "bd-budget-requests" |"pricing-contacts" | "pricing-customers" | "pricing-quotations" | "pricing-projects" | "pricing-contracts" | "pricing-vendors" | "pricing-others" |"ops-forwarding" | "ops-brokerage" | "ops-trucking" | "ops-marine-insurance" | "ops-others" |"operations" | "acct-evouchers" | "acct-billings" | "acct-invoices" | "acct-collections" | "acct-expenses" | "acct-reports" | "acct-projects" | "acct-contracts" | "acct-customers" | "acct-bookings" | "acct-catalog" | "acct-financials" | "hr" | "exec-performance" | "calendar" | "inbox" | "approvals" | "my-evouchers" | "my-scorecard" | "ticket-queue" | "settings" | "admin-users" | "admin-profiling" | "admin" | "ticket-testing" | "activity-log" | "design-system";
 
 // Sidebar permission map — derived from canonical schema for sidebar-backed pages,
 // plus explicit entries for legacy non-sidebar accounting routes that still need
@@ -559,10 +559,10 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
   const showOperationsSection = visibleOperationsSubItems.length > 0;
   const showAccountingSection = visibleAcctSubItems.length > 0;
   const showHRItem = showHR && canViewPage("hr");
-  // Performance is gated on its own hr_performance grant, deliberately NOT on
-  // showHR: that flag is dev-only (!import.meta.env.PROD) and scoping a real
-  // feature to dev because it happens to sit next to HR would be an accident.
-  const showPerformanceItem = canViewPage("hr-performance");
+  // Performance lives under Executive, not HR: reading the whole company's
+  // performance is an executive capability. It is also why it must not ride
+  // `showHR`, which is dev-only (!import.meta.env.PROD).
+  const showPerformanceItem = canViewPage("exec-performance");
   const showActivityLog = canViewPage("activity-log");
   const showAdminUsers = canViewPage("admin-users");
   const showAdminProfiling = canViewPage("admin-profiling");
@@ -1135,7 +1135,6 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
         {/* HR */}
         <div className="space-y-1">
           {showHRItem && renderNavButton({ id: "hr" as Page, label: "HR", icon: User })}
-          {showPerformanceItem && renderNavButton({ id: "hr-performance" as Page, label: "Performance", icon: Target })}
         </div>
 
         {/* Accounting with sub-items */}
@@ -1362,9 +1361,10 @@ export function NeuronSidebar({ currentPage, onNavigate, currentUser, isCollapse
         {otherItems.map(item => renderNavButton(item))}
 
         {/* Executive Section */}
-        {(showActivityLog || showAdminUsers || showAdminProfiling) && (
+        {(showPerformanceItem || showActivityLog || showAdminUsers || showAdminProfiling) && (
           <>
             {renderSectionHeader("EXECUTIVE")}
+            {showPerformanceItem && renderNavButton({ id: "exec-performance" as Page, label: "Performance", icon: Target })}
             {showActivityLog && renderNavButton({ id: "activity-log" as Page, label: "Activity Log", icon: Activity })}
             {showAdminUsers && (() => {
               const isActive = currentPage === "admin-users";

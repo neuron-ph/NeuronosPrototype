@@ -587,12 +587,6 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
     label: DEPT_LABEL.hr,
     modules: [
       { kind: "module", id: "hr", moduleId: "hr", label: "HR", pageId: "hr", tabs: [] },
-      // Performance — everyone else's scorecards, department distributions and
-      // systemic flags. Granting `view` here is what widens get_kpi_scorecard
-      // beyond the caller's own card, so this is the control for reading other
-      // people's performance data. Kept separate from my_scorecard on purpose.
-      { kind: "module", id: "hr_performance", moduleId: "hr_performance",
-        label: "Performance", pageId: "hr-performance", tabs: [] },
     ],
   },
 
@@ -601,6 +595,16 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
     id: "executive",
     label: DEPT_LABEL.executive,
     modules: [
+      // Performance — everyone else's scorecards, department distributions and
+      // systemic flags. Executive rather than HR: reading the whole company's
+      // performance is an executive capability, and HR's own sidebar entry is
+      // dev-only, which would have scoped this to dev by accident.
+      //
+      // `view` is what widens get_kpi_scorecard beyond the caller's own card;
+      // `edit` is the separate power to set someone's rating. Kept distinct from
+      // my_scorecard on purpose.
+      { kind: "module", id: "exec_performance", moduleId: "exec_performance",
+        label: "Performance", pageId: "exec-performance", tabs: [] },
       { kind: "module", id: "exec_activity_log", moduleId: "exec_activity_log", label: "Activity Log", pageId: "activity-log", tabs: [] },
       {
         kind: "module", id: "exec_users", moduleId: "exec_users",
@@ -689,7 +693,7 @@ export const ACCESS_SCHEMA: AccessDepartmentNode[] = [
       // My Scorecard — the employee's own KPI card, live for the open period.
       // Self-scoping: the page reads get_kpi_scorecard(current user), so there is
       // no row to gate and `view` is the only live action. Reading ANOTHER
-      // person's scorecard is a separate door (hr_performance, Phase 2) — never
+      // person's scorecard is a separate door (exec_performance) — never
       // a widened version of this one.
       { kind: "module", id: "my_scorecard", moduleId: "my_scorecard",
         label: "My Scorecard", pageId: "my-scorecard", tabs: [] },

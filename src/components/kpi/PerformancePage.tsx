@@ -16,7 +16,7 @@ import { ReviewPanel, type ReviewKpi } from "./ReviewPanel";
 // available but is not what the page opens with, because "who is worst" should
 // not be the first thing this surface teaches you to ask.
 //
-// Access: gated on hr_performance:view, which is also what widens
+// Access: gated on exec_performance:view, which is also what widens
 // get_kpi_scorecard past the caller's own card.
 
 interface Person {
@@ -194,7 +194,7 @@ export function PerformancePage() {
       <div className="p-8">
         <button
           type="button"
-          onClick={() => navigate("/hr/performance")}
+          onClick={() => navigate("/performance")}
           className="inline-flex items-center gap-1.5 text-[13px] mb-4"
           style={{ color: UI.inkMuted }}
         >
@@ -336,7 +336,7 @@ export function PerformancePage() {
                 people={d.members as StripPerson[]}
                 median={d.median}
                 t={t}
-                onPick={(id) => navigate(`/hr/performance/${id}`)}
+                onPick={(id) => navigate(`/performance/${id}`)}
               />
               <div className="text-[13px] text-right"
                    style={{ color: d.median == null ? UI.inkMuted : statusColor(d.median, t),
@@ -430,7 +430,7 @@ export function PerformancePage() {
               <button
                 key={r.user_id}
                 type="button"
-                onClick={() => navigate(`/hr/performance/${r.user_id}`)}
+                onClick={() => navigate(`/performance/${r.user_id}`)}
                 className="grid gap-3 px-6 py-3 items-center w-full text-left"
                 style={{ gridTemplateColumns: "minmax(200px,1.6fr) minmax(140px,1fr) 80px 90px 110px" }}
               >
