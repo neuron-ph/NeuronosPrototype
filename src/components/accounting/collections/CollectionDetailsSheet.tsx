@@ -1,4 +1,4 @@
-import { X, Calendar, CreditCard, Building, User, FileText, CheckCircle2, Clock, AlertCircle, Hash, DollarSign, BookOpen } from "lucide-react";
+import { X, Calendar, CreditCard, Building, User, FileText, CheckCircle2, Clock, AlertCircle, Hash, DollarSign } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
 import defaultLogoImage from "../../../assets/white.svg";
@@ -12,7 +12,6 @@ import {
   resolveCollectionDisposition,
 } from "../../../utils/collectionResolution";
 import { toast } from "../../ui/toast-utils";
-import { CollectionGLPostingSheet } from "./CollectionGLPostingSheet";
 import { useMarkEntityReadOnMount } from "../../../hooks/useNotifications";
 import { usePermission } from "../../../context/PermissionProvider";
 
@@ -35,13 +34,11 @@ export function CollectionDetailsSheet({ isOpen, onClose, collectionId }: Collec
     canKey("acct_collections", a) ||
     canKey("ops_bookings_collections_tab", a) ||
     canKey("ops_projects_collections_tab", a));
-  const canPostToGL = can("acct_journal", "create") || can("acct_journal", "edit");
   const [collection, setCollection] = useState<Collection | null>(null);
   const [collectionSource, setCollectionSource] = useState<"collections" | "evouchers" | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isResolving, setIsResolving] = useState(false);
-  const [showGLPosting, setShowGLPosting] = useState(false);
   useMarkEntityReadOnMount("collection", isOpen ? collectionId : null);
 
   useEffect(() => {
@@ -372,19 +369,6 @@ export function CollectionDetailsSheet({ isOpen, onClose, collectionId }: Collec
                 </div>
               </div>
 
-              {canPostToGL && !(collection as any).journal_entry_id && !isCollectionResolvedByCreditOrRefund(collection) && (
-                <div style={{ marginBottom: "16px" }}>
-                  <button
-                    onClick={() => setShowGLPosting(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[13px] font-medium text-white"
-                    style={{ backgroundColor: "var(--neuron-brand-green, #0F766E)" }}
-                  >
-                    <BookOpen size={14} />
-                    Post to GL
-                  </button>
-                </div>
-              )}
-
               {(canResolve || isCollectionResolvedByCreditOrRefund(collection)) && (
                 <div
                   style={{
@@ -502,18 +486,6 @@ export function CollectionDetailsSheet({ isOpen, onClose, collectionId }: Collec
         </div>
       </motion.div>
 
-      {collectionId && (
-        <CollectionGLPostingSheet
-          isOpen={showGLPosting}
-          onClose={() => setShowGLPosting(false)}
-          collectionId={collectionId}
-          onPosted={() => {
-            setShowGLPosting(false);
-            // refetch to reflect updated journal_entry_id
-            setCollection(prev => prev ? { ...prev, journal_entry_id: "__posted__" } : prev);
-          }}
-        />
-      )}
     </>
   );
 }

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useUser } from "../../../hooks/useUser";
 import { usePermission } from "../../../context/PermissionProvider";
 import { logCreation, logActivity } from "../../../utils/activityLog";
+import { fireInvoiceARTicket } from "../../../utils/workflowTickets";
 import { toast } from "../../ui/toast-utils";
 import type { FinancialContainer } from "../../../types/financials";
 import type { Project } from "../../../types/pricing";
@@ -991,7 +992,6 @@ export function InvoiceBuilder({
   const isDraft = invoiceStatus === "draft";
   const isPosted = invoiceStatus === "posted" || invoiceStatus === "open" || invoiceStatus === "sent";
   const isVoid = invoiceStatus === "void";
-  const hasJournalEntry = !!(viewInvoice as any)?.journal_entry_id;
 
   // NEU-103: invoice approval gate. Legacy invoices (no approval_status) read as
   // approved. The tagged approver (dept+role match, or an Executive) can approve.
@@ -1038,58 +1038,6 @@ export function InvoiceBuilder({
     try {
       const inv = viewInvoice as any;
       const invoiceCurrency = normalizeCurrency(inv.original_currency || inv.currency || "PHP", FUNCTIONAL_CURRENCY);
-      const lockedRate = inv.exchange_rate || 1;
-      const baseAmount = toBaseAmount({
-        amount: inv.total_amount,
-        currency: invoiceCurrency,
-        exchangeRate: lockedRate,
-      });
-      const rateDate = (inv.invoice_date || new Date().toISOString()).slice(0, 10);
-
-      // NEU-106: invoices route through the Transaction Journal. Build the REAL
-      // Dr Accounts Receivable / Cr Revenue entry (replacing the old empty-lines
-      // placeholder) and land it as `ready_to_post`. Accounting confirms it in the
-      // TJ ("Submit for Posting") and only then does it hit the General Journal /
-      // balances (postJournalEntry's source-effect stamps the invoice posted +
-      // journal_entry_id). The invoice document flip below is unchanged.
-      const revenueId = inv.metadata?.revenue_account_id || "coa-4000";
-      const { data: acctRows } = await supabase
-        .from("accounts")
-        .select("id, code, name")
-        .in("id", ["coa-1100", revenueId]);
-      const acctMap = new Map((acctRows ?? []).map((a: any) => [a.id, a]));
-      const ar = acctMap.get("coa-1100") ?? { id: "coa-1100", code: "1100", name: "Accounts Receivable - Trade" };
-      const rev = acctMap.get(revenueId) ?? { id: "coa-4000", code: "4000", name: "Freight Forwarding Revenue" };
-      const invLines = [
-        { account_id: ar.id, account_code: ar.code, account_name: ar.name, debit: baseAmount, credit: 0, description: `AR — ${inv.invoice_number} · ${inv.customer_name}` },
-        { account_id: rev.id, account_code: rev.code, account_name: rev.name, debit: 0, credit: baseAmount, description: `Revenue — ${inv.invoice_number}` },
-      ];
-
-      const jeId = `JE-INV-${Date.now()}`;
-      await supabase.from("journal_entries").insert({
-        id: jeId,
-        entry_date: new Date().toISOString(),
-        invoice_id: inv.id,
-        kind: "invoice",
-        description: `Invoice ${inv.invoice_number} — ${inv.customer_name}`,
-        reference: inv.invoice_number,
-        project_number: inv.project_number || null,
-        customer_name: inv.customer_name || null,
-        lines: invLines,
-        total_debit: baseAmount,
-        total_credit: baseAmount,
-        transaction_currency: invoiceCurrency,
-        exchange_rate: lockedRate,
-        base_currency: FUNCTIONAL_CURRENCY,
-        source_amount: roundMoney(inv.total_amount),
-        base_amount: baseAmount,
-        exchange_rate_date: rateDate,
-        status: "ready_to_post",
-        created_by: user.id,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-
       const { error } = await supabase
         .from("invoices")
         .update({ status: "posted", updated_at: new Date().toISOString() })
@@ -1098,6 +1046,19 @@ export function InvoiceBuilder({
 
       const actor = { id: user.id, name: user.name, department: user.department ?? "" };
       logActivity("invoice", inv.id, inv.invoice_number ?? inv.id, "finalized", actor);
+
+      // The customer now owes us — raise the collections follow-up. This used to
+      // fire from the invoice GL posting sheet; issuing the invoice is the honest
+      // trigger for it.
+      void fireInvoiceARTicket({
+        invoiceId: inv.id,
+        invoiceNumber: inv.invoice_number ?? inv.id,
+        customerName: inv.customer_name ?? "",
+        totalAmount: Number(inv.total_amount) || 0,
+        userId: user.id,
+        userName: user.name || "Accounting",
+        userDept: user.department || "Accounting",
+      });
 
       const { data: arManagers } = await supabase
         .from("users")
@@ -1123,7 +1084,7 @@ export function InvoiceBuilder({
       });
 
       setViewInvoice({ ...viewInvoice, status: "posted" } as Invoice);
-      toast.success(`Invoice ${inv.invoice_number} finalized — entry queued in the Transaction Journal`);
+      toast.success(`Invoice ${inv.invoice_number} issued`);
       if (onRefreshData) await onRefreshData();
       if (onBack) onBack();
     } catch (err) {
@@ -1184,50 +1145,6 @@ export function InvoiceBuilder({
         return;
       }
 
-      // NEU-106: if the invoice was voided BEFORE its Transaction Journal entry
-      // was posted, neutralize the still-pending entry so it can never post
-      // orphaned revenue. (Posted entries are handled by the reversal below.)
-      await supabase
-        .from("journal_entries")
-        .update({ status: "void", updated_at: new Date().toISOString() })
-        .eq("invoice_id", inv.id)
-        .eq("status", "ready_to_post");
-
-      if (hasJournalEntry) {
-        const invoiceCurrency = normalizeCurrency(inv.original_currency || inv.currency || "PHP", FUNCTIONAL_CURRENCY);
-        const lockedRate = inv.exchange_rate || 1;
-        const baseAmount = toBaseAmount({
-          amount: inv.total_amount,
-          currency: invoiceCurrency,
-          exchangeRate: lockedRate,
-        });
-        const rateDate = new Date().toISOString().slice(0, 10);
-
-        const reversingJeId = `JE-VOID-${Date.now()}`;
-        await supabase.from("journal_entries").insert({
-          id: reversingJeId,
-          entry_date: new Date().toISOString(),
-          invoice_id: inv.id,
-          description: `VOID — Reversal of Invoice ${inv.invoice_number}`,
-          reference: `VOID-${inv.invoice_number}`,
-          project_number: inv.project_number || null,
-          customer_name: inv.customer_name || null,
-          lines: [],
-          total_debit: baseAmount,
-          total_credit: baseAmount,
-          transaction_currency: invoiceCurrency,
-          exchange_rate: lockedRate,
-          base_currency: FUNCTIONAL_CURRENCY,
-          source_amount: roundMoney(inv.total_amount),
-          base_amount: baseAmount,
-          exchange_rate_date: rateDate,
-          status: "posted",
-          created_by: user.id,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
-      }
-
       const billingItemIds = Array.isArray(inv.billing_item_ids) ? inv.billing_item_ids : [];
       if (billingItemIds.length > 0) {
         await supabase
@@ -1250,7 +1167,7 @@ export function InvoiceBuilder({
 
       const actor = { id: user.id, name: user.name, department: user.department ?? "" };
       logActivity("invoice", inv.id, inv.invoice_number ?? inv.id, "voided", actor, {
-        description: hasJournalEntry ? "Voided with reversing journal entry" : "Voided (no GL entry to reverse)",
+        description: "Voided",
       });
 
       setViewInvoice({ ...viewInvoice, status: "void" } as Invoice);
@@ -2111,7 +2028,7 @@ export function InvoiceBuilder({
                         <div className="flex items-start gap-2 mb-3">
                           <AlertTriangle size={14} className="text-[var(--theme-status-danger-fg)] shrink-0 mt-0.5" />
                           <p className="text-[12px] text-[var(--theme-status-danger-fg)] leading-relaxed">
-                            This will void the invoice{hasJournalEntry ? " and create a reversing journal entry" : ""}. Billing items will be released back to unbilled.
+                            This will void the invoice. Billing items will be released back to unbilled.
                           </p>
                         </div>
                         <div className="flex gap-2">
