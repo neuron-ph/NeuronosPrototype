@@ -1378,6 +1378,149 @@ export function InvoiceBuilder({
           )}
 
           {/* ── SCROLLABLE CONTENT AREA ── */}
+          {/* ── ACTIONS (view mode) ──
+              Pinned ABOVE the scrolling rail on purpose. As a footer these sat
+              at the bottom of a 626px rail that starts ~400px down the page, so
+              Void / PDF / Print rendered ~250px below the fold behind five
+              print-display toggles — present, scrollable-to, and invisible.
+              Do not "tidy" them back under the display options. */}
+          {mode === 'view' && (
+            <div className="p-4 border-b border-[var(--theme-border-default)] bg-[var(--theme-bg-surface)] shrink-0">
+              <div className="flex flex-col gap-2.5">
+                {/* NEU-103: approval gate. The tagged approver (Ma'am Ella) approves;
+                    finalize is blocked until then. Approve is available to the
+                    approver even without invoice-write. */}
+                {isDraft && pendingApproval && canApproveInvoice && (
+                  <button
+                    onClick={handleApproveInvoice}
+                    disabled={isApproving}
+                    className="flex items-center justify-center gap-2 w-full px-4 py-3 text-[13px] font-bold text-white bg-[var(--theme-action-primary-bg)] rounded-lg hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {isApproving ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
+                    {isApproving ? "Approving..." : "Approve Invoice"}
+                  </button>
+                )}
+                {isDraft && pendingApproval && !canApproveInvoice && (
+                  <div className="flex items-center gap-2 w-full px-4 py-3 text-[12px] font-medium text-[var(--theme-status-warning-fg)] bg-[var(--theme-status-warning-bg)] border border-[var(--theme-status-warning-border)] rounded-lg">
+                    <AlertTriangle size={14} />
+                    Pending approval{pendingApproverDept ? ` — ${pendingApproverDept}${pendingApproverRole ? ` ${pendingApproverRole}` : ""}` : ""}
+                  </div>
+                )}
+
+                {/* Draft actions */}
+                {isDraft && canWriteInvoices && (
+                  <>
+                    {!pendingApproval && (
+                    <button
+                      onClick={handleFinalize}
+                      disabled={isFinalizing}
+                      className="flex items-center justify-center gap-2 w-full px-4 py-3 text-[13px] font-bold text-white bg-[var(--theme-action-primary-bg)] rounded-lg hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {isFinalizing ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
+                      {isFinalizing ? "Finalizing..." : "Finalize Invoice"}
+                    </button>
+                    )}
+                    {!confirmDelete ? (
+                      canDeleteInvoices &&
+                      <button
+                        onClick={() => setConfirmDelete(true)}
+                        className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-[13px] font-medium text-[var(--theme-status-danger-fg)] border border-[var(--theme-status-danger-border)] rounded-lg hover:bg-[var(--theme-status-danger-bg)] transition-all"
+                      >
+                        <Trash2 size={15} />
+                        Delete Draft
+                      </button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleDeleteDraft}
+                          disabled={isDeletingDraft}
+                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-bold text-white bg-[var(--theme-status-danger-fg)] rounded-lg hover:opacity-90 transition-all disabled:opacity-60"
+                        >
+                          {isDeletingDraft ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                          Confirm Delete
+                        </button>
+                        <button
+                          onClick={() => setConfirmDelete(false)}
+                          className="px-4 py-2.5 text-[13px] font-medium text-[var(--theme-text-secondary)] border border-[var(--theme-border-default)] rounded-lg hover:bg-[var(--theme-bg-surface-subtle)] transition-all"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Void action for posted invoices — NEU-020 DD-9: void is delete-class */}
+                {isPosted && !isVoid && canDeleteInvoices && (
+                  <>
+                    {!confirmVoid ? (
+                      <button
+                        onClick={() => setConfirmVoid(true)}
+                        className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-[13px] font-medium text-[var(--theme-status-danger-fg)] border border-[var(--theme-status-danger-border)] rounded-lg hover:bg-[var(--theme-status-danger-bg)] transition-all"
+                      >
+                        <Ban size={15} />
+                        Void Invoice
+                      </button>
+                    ) : (
+                      <div className="p-3 border border-[var(--theme-status-danger-border)] rounded-lg bg-[var(--theme-status-danger-bg)]">
+                        <div className="flex items-start gap-2 mb-3">
+                          <AlertTriangle size={14} className="text-[var(--theme-status-danger-fg)] shrink-0 mt-0.5" />
+                          <p className="text-[12px] text-[var(--theme-status-danger-fg)] leading-relaxed">
+                            This will void the invoice. Billing items will be released back to unbilled.
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleVoidInvoice}
+                            disabled={isVoiding}
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-bold text-white bg-[var(--theme-status-danger-fg)] rounded-lg hover:opacity-90 transition-all disabled:opacity-60"
+                          >
+                            {isVoiding ? <Loader2 size={14} className="animate-spin" /> : <Ban size={14} />}
+                            Confirm Void
+                          </button>
+                          <button
+                            onClick={() => setConfirmVoid(false)}
+                            className="px-4 py-2.5 text-[13px] font-medium text-[var(--theme-text-secondary)] border border-[var(--theme-border-default)] rounded-lg hover:bg-[var(--theme-bg-surface-subtle)] transition-all bg-[var(--theme-bg-surface)]"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Void badge */}
+                {isVoid && (
+                  <div className="flex items-center justify-center gap-2 w-full px-4 py-3 text-[13px] font-bold text-[var(--theme-text-muted)] bg-[var(--theme-bg-surface-subtle)] border border-[var(--theme-border-default)] rounded-lg">
+                    <Ban size={15} />
+                    Invoice Voided
+                  </div>
+                )}
+
+                {/* PDF / Print — NEU-020 DD-3: export-class, gated by the door's export toggle */}
+                {canExportInvoices && (
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={handleDownloadPDF}
+                    disabled={isGeneratingPDF}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-medium text-[var(--theme-text-secondary)] border border-[var(--theme-border-default)] rounded-lg hover:bg-[var(--theme-bg-surface-subtle)] transition-all disabled:opacity-60"
+                  >
+                    {isGeneratingPDF ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+                    {isGeneratingPDF ? "Generating..." : "PDF"}
+                  </button>
+                  <button
+                    onClick={handlePrint}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-medium text-[var(--theme-text-secondary)] border border-[var(--theme-border-default)] rounded-lg hover:bg-[var(--theme-bg-surface-subtle)] transition-all"
+                  >
+                    <Printer size={15} />
+                    Print
+                  </button>
+                </div>
+                )}
+              </div>
+            </div>
+          )}
           <div className={`flex-1 ${mode === 'create' && activeTab === 'items' ? 'overflow-hidden flex flex-col' : 'overflow-y-auto scrollbar-thin scrollbar-thumb-[var(--theme-border-default)]'}`}>
 
             {/* ─── CREATE MODE: Items Tab ─── */}
@@ -1869,9 +2012,9 @@ export function InvoiceBuilder({
             )}
           </div>
 
-          {/* ── FOOTER: Actions & Totals ── */}
-          <div className="p-4 border-t border-[var(--theme-border-default)] bg-[var(--theme-bg-surface)] shrink-0">
-            {mode === 'create' ? (
+          {/* ── FOOTER: Totals & Save (create mode) ── */}
+          {mode === 'create' && (
+            <div className="p-4 border-t border-[var(--theme-border-default)] bg-[var(--theme-bg-surface)] shrink-0">
               <>
                 {/* Totals */}
                 <div className="mb-4 space-y-1.5">
@@ -1905,142 +2048,8 @@ export function InvoiceBuilder({
                 </button>
                 )}
               </>
-            ) : (
-              <div className="flex flex-col gap-2.5">
-                {/* NEU-103: approval gate. The tagged approver (Ma'am Ella) approves;
-                    finalize is blocked until then. Approve is available to the
-                    approver even without invoice-write. */}
-                {isDraft && pendingApproval && canApproveInvoice && (
-                  <button
-                    onClick={handleApproveInvoice}
-                    disabled={isApproving}
-                    className="flex items-center justify-center gap-2 w-full px-4 py-3 text-[13px] font-bold text-white bg-[var(--theme-action-primary-bg)] rounded-lg hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {isApproving ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
-                    {isApproving ? "Approving..." : "Approve Invoice"}
-                  </button>
-                )}
-                {isDraft && pendingApproval && !canApproveInvoice && (
-                  <div className="flex items-center gap-2 w-full px-4 py-3 text-[12px] font-medium text-[var(--theme-status-warning-fg)] bg-[var(--theme-status-warning-bg)] border border-[var(--theme-status-warning-border)] rounded-lg">
-                    <AlertTriangle size={14} />
-                    Pending approval{pendingApproverDept ? ` — ${pendingApproverDept}${pendingApproverRole ? ` ${pendingApproverRole}` : ""}` : ""}
-                  </div>
-                )}
-
-                {/* Draft actions */}
-                {isDraft && canWriteInvoices && (
-                  <>
-                    {!pendingApproval && (
-                    <button
-                      onClick={handleFinalize}
-                      disabled={isFinalizing}
-                      className="flex items-center justify-center gap-2 w-full px-4 py-3 text-[13px] font-bold text-white bg-[var(--theme-action-primary-bg)] rounded-lg hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      {isFinalizing ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
-                      {isFinalizing ? "Finalizing..." : "Finalize Invoice"}
-                    </button>
-                    )}
-                    {!confirmDelete ? (
-                      canDeleteInvoices &&
-                      <button
-                        onClick={() => setConfirmDelete(true)}
-                        className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-[13px] font-medium text-[var(--theme-status-danger-fg)] border border-[var(--theme-status-danger-border)] rounded-lg hover:bg-[var(--theme-status-danger-bg)] transition-all"
-                      >
-                        <Trash2 size={15} />
-                        Delete Draft
-                      </button>
-                    ) : (
-                      <div className="flex gap-2">
-                        <button
-                          onClick={handleDeleteDraft}
-                          disabled={isDeletingDraft}
-                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-bold text-white bg-[var(--theme-status-danger-fg)] rounded-lg hover:opacity-90 transition-all disabled:opacity-60"
-                        >
-                          {isDeletingDraft ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                          Confirm Delete
-                        </button>
-                        <button
-                          onClick={() => setConfirmDelete(false)}
-                          className="px-4 py-2.5 text-[13px] font-medium text-[var(--theme-text-secondary)] border border-[var(--theme-border-default)] rounded-lg hover:bg-[var(--theme-bg-surface-subtle)] transition-all"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* Void action for posted invoices — NEU-020 DD-9: void is delete-class */}
-                {isPosted && !isVoid && canDeleteInvoices && (
-                  <>
-                    {!confirmVoid ? (
-                      <button
-                        onClick={() => setConfirmVoid(true)}
-                        className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-[13px] font-medium text-[var(--theme-status-danger-fg)] border border-[var(--theme-status-danger-border)] rounded-lg hover:bg-[var(--theme-status-danger-bg)] transition-all"
-                      >
-                        <Ban size={15} />
-                        Void Invoice
-                      </button>
-                    ) : (
-                      <div className="p-3 border border-[var(--theme-status-danger-border)] rounded-lg bg-[var(--theme-status-danger-bg)]">
-                        <div className="flex items-start gap-2 mb-3">
-                          <AlertTriangle size={14} className="text-[var(--theme-status-danger-fg)] shrink-0 mt-0.5" />
-                          <p className="text-[12px] text-[var(--theme-status-danger-fg)] leading-relaxed">
-                            This will void the invoice. Billing items will be released back to unbilled.
-                          </p>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={handleVoidInvoice}
-                            disabled={isVoiding}
-                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-bold text-white bg-[var(--theme-status-danger-fg)] rounded-lg hover:opacity-90 transition-all disabled:opacity-60"
-                          >
-                            {isVoiding ? <Loader2 size={14} className="animate-spin" /> : <Ban size={14} />}
-                            Confirm Void
-                          </button>
-                          <button
-                            onClick={() => setConfirmVoid(false)}
-                            className="px-4 py-2.5 text-[13px] font-medium text-[var(--theme-text-secondary)] border border-[var(--theme-border-default)] rounded-lg hover:bg-[var(--theme-bg-surface-subtle)] transition-all bg-[var(--theme-bg-surface)]"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* Void badge */}
-                {isVoid && (
-                  <div className="flex items-center justify-center gap-2 w-full px-4 py-3 text-[13px] font-bold text-[var(--theme-text-muted)] bg-[var(--theme-bg-surface-subtle)] border border-[var(--theme-border-default)] rounded-lg">
-                    <Ban size={15} />
-                    Invoice Voided
-                  </div>
-                )}
-
-                {/* PDF / Print — NEU-020 DD-3: export-class, gated by the door's export toggle */}
-                {canExportInvoices && (
-                <div className="flex gap-2 pt-1">
-                  <button
-                    onClick={handleDownloadPDF}
-                    disabled={isGeneratingPDF}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-medium text-[var(--theme-text-secondary)] border border-[var(--theme-border-default)] rounded-lg hover:bg-[var(--theme-bg-surface-subtle)] transition-all disabled:opacity-60"
-                  >
-                    {isGeneratingPDF ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
-                    {isGeneratingPDF ? "Generating..." : "PDF"}
-                  </button>
-                  <button
-                    onClick={handlePrint}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-medium text-[var(--theme-text-secondary)] border border-[var(--theme-border-default)] rounded-lg hover:bg-[var(--theme-bg-surface-subtle)] transition-all"
-                  >
-                    <Printer size={15} />
-                    Print
-                  </button>
-                </div>
-                )}
-              </div>
-            )}
-          </div>
+            </div>
+          )}
       </div>
     </div>
   );
