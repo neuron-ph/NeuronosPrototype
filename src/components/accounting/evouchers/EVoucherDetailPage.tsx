@@ -317,7 +317,8 @@ export function EVoucherDetailPage() {
                   const { data } = await supabase
                     .from("liquidation_submissions")
                     .select("total_spend, unused_return")
-                    .eq("evoucher_id", evoucher.id);
+                    .eq("evoucher_id", evoucher.id)
+                    .neq("status", "revision_requested");
                   const rows = data ?? [];
                   setPrevTotalSpent(rows.reduce((s: number, r: any) => s + (r.total_spend ?? 0), 0));
                   setPrevTotalReturned(rows.reduce((s: number, r: any) => s + (r.unused_return ?? 0), 0));

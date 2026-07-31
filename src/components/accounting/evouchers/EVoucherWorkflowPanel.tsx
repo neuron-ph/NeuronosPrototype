@@ -109,6 +109,8 @@ export function EVoucherWorkflowPanel({
   const [liqReview, setLiqReview] = useState<{
     receiptsComplete: boolean;
     missingReceipts: number;
+    /** Lines with no attachment but a stated reason — Treasury's judgement call. */
+    declaredNoReceipt: number;
     unusedReturn: number;
   } | null>(null);
 
@@ -116,6 +118,8 @@ export function EVoucherWorkflowPanel({
   const [showReject, setShowReject] = useState(false);
   const [rejectingAs, setRejectingAs] = useState<"manager" | "ceo" | "late">("manager");
   const [rejectionReason, setRejectionReason] = useState("");
+  const [showReturnLiq, setShowReturnLiq] = useState(false);
+  const [returnLiqReason, setReturnLiqReason] = useState("");
 
   const [showLiquidationForm, setShowLiquidationForm] = useState(false);
   // The form renders inline below the action buttons, which in a long voucher
@@ -141,15 +145,25 @@ export function EVoucherWorkflowPanel({
       const { data } = await supabase
         .from("liquidation_submissions")
         .select("line_items, unused_return")
-        .eq("evoucher_id", evoucherId);
+        .eq("evoucher_id", evoucherId)
+        .neq("status", "revision_requested");
       if (cancelled) return;
       const rows = data ?? [];
       const items = rows.flatMap((r) => (Array.isArray(r.line_items) ? r.line_items : []));
-      const missingReceipts = items.filter((li: any) => !li?.receipt_url).length;
+      // A line is evidenced by an attachment OR a stated reason for not having
+      // one (jeepney fare, port fixer). Neither = unevidenced, and Treasury
+      // cannot verify it.
+      const missingReceipts = items.filter(
+        (li: any) => !li?.receipt_url && !String(li?.no_receipt_reason || "").trim(),
+      ).length;
+      const declaredNoReceipt = items.filter(
+        (li: any) => !li?.receipt_url && String(li?.no_receipt_reason || "").trim(),
+      ).length;
       const unusedReturn = rows.reduce((s, r) => s + (Number(r.unused_return) || 0), 0);
       setLiqReview({
         receiptsComplete: items.length > 0 && missingReceipts === 0,
         missingReceipts,
+        declaredNoReceipt,
         unusedReturn,
       });
     })();
@@ -199,6 +213,10 @@ export function EVoucherWorkflowPanel({
   const canDisburse      = holdsDisburseGate && currentStatus === "pending_accounting";
   // NEU-051: Treasury (not generic Accounting) verifies + posts liquidations.
   const canVerifyAndPost = holdsDisburseGate && currentStatus === "pending_verification";
+  // Treasury can return a liquidation to the handler. Without this a submission
+  // with an unevidenced line was a dead end: Treasury could not verify it and
+  // the handler had no gate at pending_verification to fix it.
+  const canReturnLiquidation = holdsDisburseGate && currentStatus === "pending_verification";
   const canUnlockForCorrection = holdsAccountingGate && currentStatus === "posted";
 
   const isAdvanceType = transactionType === "cash_advance" || transactionType === "budget_request";
@@ -234,7 +252,7 @@ export function EVoucherWorkflowPanel({
       : liqReview === null
       ? "Loading liquidation…"
       : !liqReview.receiptsComplete
-      ? `${liqReview.missingReceipts} receipt${liqReview.missingReceipts === 1 ? "" : "s"} missing an attachment — the handler must attach ${liqReview.missingReceipts === 1 ? "it" : "them"} before this can be verified.`
+      ? `${liqReview.missingReceipts} line${liqReview.missingReceipts === 1 ? "" : "s"} ${liqReview.missingReceipts === 1 ? "has" : "have"} no receipt and no stated reason. Send it back so the handler can fix it.`
       : needsCashReturnConfirm
       ? `Confirm receipt of the ₱${unusedReturn.toLocaleString()} cash return before posting.`
       : null;
@@ -409,6 +427,61 @@ export function EVoucherWorkflowPanel({
       onStatusChange?.();
     } catch {
       toast.error("Failed to unlock for correction");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Treasury returns a submitted liquidation to the handler for a fix — a
+  // missing receipt, a wrong amount, a line that needs a reason. Goes back to
+  // pending_liquidation so the handler's Submit Liquidation form reopens.
+  const handleReturnLiquidation = async () => {
+    if (!returnLiqReason.trim()) {
+      toast.error("Please say what needs fixing");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await transition("pending_liquidation", "Liquidation returned by Treasury", returnLiqReason);
+      // Void the submission being sent back. Without this the handler's fresh
+      // submission stacks on top of the bad one, which keeps blocking the gate
+      // and double-counts the spend.
+      await supabase
+        .from("liquidation_submissions")
+        .update({
+          status: "revision_requested",
+          reviewed_by: currentUser?.id ?? null,
+          reviewed_at: new Date().toISOString(),
+          reviewer_remarks: returnLiqReason,
+        })
+        .eq("evoucher_id", evoucherId)
+        .eq("status", "pending");
+      const handlerId = cashReceiverId || requestorId;
+      if (currentUser?.id && handlerId) {
+        createWorkflowTicket({
+          subject: `Liquidation returned: ${evoucherNumber}`,
+          body: `Treasury returned your liquidation for ${evoucherNumber}.
+
+What needs fixing: ${returnLiqReason}
+
+Update the lines and resubmit.`,
+          type: "fyi",
+          priority: "urgent",
+          recipientUserId: handlerId,
+          linkedRecordType: "expense",
+          linkedRecordId: evoucherId,
+          createdBy: currentUser.id,
+          createdByName: currentUser.name,
+          createdByDept: currentUser.department || "",
+          autoCreated: true,
+        });
+      }
+      setShowReturnLiq(false);
+      setReturnLiqReason("");
+      toast.success("Liquidation returned to the handler");
+      onStatusChange?.();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to return the liquidation");
     } finally {
       setIsSubmitting(false);
     }
@@ -931,6 +1004,65 @@ export function EVoucherWorkflowPanel({
           </button>
         )}
 
+        {/* Treasury: return the liquidation to the handler for a fix. This is the
+            way out when a line can't be verified — without it the voucher is stuck. */}
+        {canReturnLiquidation && !showReturnLiq && (
+          <button
+            onClick={() => setShowReturnLiq(true)}
+            disabled={isSubmitting}
+            style={{ ...btnBase, backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-status-warning-fg)", border: "1px solid var(--theme-status-warning-fg)", cursor: isSubmitting ? "not-allowed" : "pointer" }}
+          >
+            <XCircle size={15} />
+            Return to Handler
+          </button>
+        )}
+        {canReturnLiquidation && showReturnLiq && (
+          <div style={{
+            padding: "12px 14px", borderRadius: "8px",
+            border: "1px solid var(--theme-status-warning-fg)",
+            backgroundColor: "var(--theme-status-warning-bg)",
+            display: "flex", flexDirection: "column", gap: "10px",
+          }}>
+            <label
+              htmlFor="ev-return-liq-reason"
+              style={{ fontSize: "12px", fontWeight: 600, color: "var(--theme-status-warning-fg)" }}
+            >
+              What needs fixing — the handler will see this
+            </label>
+            <textarea
+              id="ev-return-liq-reason"
+              value={returnLiqReason}
+              onChange={(e) => setReturnLiqReason(e.target.value)}
+              placeholder="e.g. Line 2 has no receipt and no reason given"
+              rows={3}
+              style={{
+                width: "100%", padding: "8px 10px", borderRadius: "6px",
+                border: "1px solid var(--theme-border-default)",
+                fontSize: "13px", fontFamily: "inherit", resize: "vertical",
+                outline: "none", boxSizing: "border-box",
+                backgroundColor: "var(--theme-bg-surface)",
+                color: "var(--theme-text-primary)",
+              }}
+            />
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                onClick={() => { setShowReturnLiq(false); setReturnLiqReason(""); }}
+                style={{ flex: 1, padding: "7px", borderRadius: "6px", border: "1px solid var(--theme-border-default)", backgroundColor: "var(--theme-bg-surface)", color: "var(--theme-text-muted)", fontSize: "12px", fontWeight: 500, cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReturnLiquidation}
+                disabled={isSubmitting || !returnLiqReason.trim()}
+                style={{ flex: 1, padding: "7px", borderRadius: "6px", border: "none", backgroundColor: "var(--theme-status-warning-fg)", color: "#fff", fontSize: "12px", fontWeight: 600, cursor: isSubmitting || !returnLiqReason.trim() ? "not-allowed" : "pointer", opacity: !returnLiqReason.trim() ? 0.5 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "5px" }}
+              >
+                {isSubmitting ? <Loader2 size={12} className="animate-spin" /> : <XCircle size={12} />}
+                Return
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Accounting Manager: Unlock for GL Correction */}
         {canUnlockForCorrection && pendingConfirm !== "unlock" && (
           <button
@@ -996,7 +1128,8 @@ export function EVoucherWorkflowPanel({
                 const { data } = await supabase
                   .from("liquidation_submissions")
                   .select("total_spend, unused_return")
-                  .eq("evoucher_id", evoucherId);
+                  .eq("evoucher_id", evoucherId)
+                  .neq("status", "revision_requested");
                 const rows = data ?? [];
                 setPreviousTotalSpent(rows.reduce((s: number, r: any) => s + (r.total_spend ?? 0), 0));
                 setPreviousTotalReturned(rows.reduce((s: number, r: any) => s + (r.unused_return ?? 0), 0));

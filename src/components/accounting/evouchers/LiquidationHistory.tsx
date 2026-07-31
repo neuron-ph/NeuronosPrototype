@@ -95,9 +95,13 @@ export function LiquidationHistory({
 
   if (!loading && submissions.length === 0) return null;
 
+  // Submissions Treasury sent back are void — they stay listed for the audit
+  // trail, but every number below is computed from the live ones only.
+  const liveSubmissions = submissions.filter((s) => s.status !== "revision_requested");
+
   // NEU-105: per-booking planned vs actual reconciliation.
   const actualByBooking = new Map<string, number>();
-  for (const sub of submissions) {
+  for (const sub of liveSubmissions) {
     for (const li of (sub.line_items ?? []) as any[]) {
       if (!li.booking_id) continue;
       actualByBooking.set(li.booking_id, (actualByBooking.get(li.booking_id) ?? 0) + (Number(li.amount) || 0));
@@ -111,8 +115,8 @@ export function LiquidationHistory({
     return { bookingId, number: bookingNames[bookingId] || bookingId, plan, actual, variance: actual - plan };
   });
 
-  const totalSpent = submissions.reduce((s, r) => s + (r.total_spend ?? 0), 0);
-  const totalReturned = submissions.reduce((s, r) => s + (r.unused_return ?? 0), 0);
+  const totalSpent = liveSubmissions.reduce((s, r) => s + (r.total_spend ?? 0), 0);
+  const totalReturned = liveSubmissions.reduce((s, r) => s + (r.unused_return ?? 0), 0);
   // Unaccounted balance: advance minus what was expensed AND returned. A fully
   // reconciled advance nets to 0 (spent + returned == advance).
   const remainingBalance = advanceAmount - totalSpent - totalReturned;

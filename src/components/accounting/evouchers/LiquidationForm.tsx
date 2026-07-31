@@ -167,6 +167,22 @@ export function LiquidationForm({
     );
   };
 
+  // "No receipt available" — the declared alternative to an attachment. Marking a
+  // line seeds an empty reason so the input appears; clearing sets it back to
+  // undefined so the line returns to needing evidence.
+  const markNoReceipt = (lineId: string) =>
+    setLineItems((prev) =>
+      prev.map((item) => (item.id === lineId ? { ...item, no_receipt_reason: "" } : item)),
+    );
+  const clearNoReceipt = (lineId: string) =>
+    setLineItems((prev) =>
+      prev.map((item) => (item.id === lineId ? { ...item, no_receipt_reason: undefined } : item)),
+    );
+  const setNoReceiptReason = (lineId: string, reason: string) =>
+    setLineItems((prev) =>
+      prev.map((item) => (item.id === lineId ? { ...item, no_receipt_reason: reason } : item)),
+    );
+
   const handleSubmit = async () => {
     // NEU-094: each line is a real expense line — needs a catalog item, a booking
     // (D1 attribution), and a positive amount.
@@ -179,6 +195,20 @@ export function LiquidationForm({
     if (missingBooking) {
       toast.error("Each expense line needs a linked booking");
       return;
+    }
+    // Treasury cannot verify a line that has neither a receipt nor a stated
+    // reason for not having one — and once this is final-submitted the handler
+    // has no way back in. So refuse it here, while it can still be fixed.
+    if (isFinal) {
+      const unevidenced = lineItems.filter(
+        (item) => !item.receipt_url && !(item.no_receipt_reason || "").trim(),
+      ).length;
+      if (unevidenced > 0) {
+        toast.error(
+          `${unevidenced} line${unevidenced === 1 ? "" : "s"} ${unevidenced === 1 ? "has" : "have"} no receipt — attach one, or say why there isn't one.`,
+        );
+        return;
+      }
     }
 
     if (isFinal && hasOverspend) {
@@ -695,7 +725,30 @@ export function LiquidationForm({
                         <X size={14} />
                       </button>
                     </div>
+                  ) : item.no_receipt_reason !== undefined ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <input
+                        type="text"
+                        value={item.no_receipt_reason}
+                        onChange={(e) => setNoReceiptReason(item.id, e.target.value)}
+                        placeholder="Why is there no receipt? e.g. jeepney fare, port fixer"
+                        style={{ ...inputBaseStyle, flex: 1 }}
+                      />
+                      <button
+                        onClick={() => clearNoReceipt(item.id)}
+                        aria-label="Cancel no-receipt declaration"
+                        style={{
+                          width: "28px", height: "28px", borderRadius: "6px",
+                          border: "none", backgroundColor: "transparent",
+                          color: "var(--theme-text-muted)", cursor: "pointer",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                        }}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
                   ) : (
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                     <button
                       onClick={() => fileInputRefs.current[item.id]?.click()}
                       disabled={isUploadingThis}
@@ -738,6 +791,17 @@ export function LiquidationForm({
                         </>
                       )}
                     </button>
+                    <button
+                      onClick={() => markNoReceipt(item.id)}
+                      style={{
+                        background: "none", border: "none", padding: 0,
+                        fontSize: "12px", color: "var(--theme-text-muted)",
+                        textDecoration: "underline", cursor: "pointer", whiteSpace: "nowrap",
+                      }}
+                    >
+                      No receipt
+                    </button>
+                    </div>
                   )}
                 </div>
               );

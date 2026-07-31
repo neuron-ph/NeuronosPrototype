@@ -17,6 +17,9 @@ export async function fetchLiquidationTotals(
     .from("liquidation_submissions")
     .select("*")
     .eq("evoucher_id", evoucherId)
+    // A submission Treasury sent back is void — the handler's replacement is the
+    // live one. Counting both would double-count the spend.
+    .neq("status", "revision_requested")
     .order("submitted_at", { ascending: true });
 
   const submissions = (data ?? []) as LiquidationSubmission[];

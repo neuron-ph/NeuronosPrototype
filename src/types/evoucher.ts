@@ -301,6 +301,14 @@ export interface LiquidationLineItem {
   vendor_name?: string;            // Who was paid (rep fills)
   amount: number;
   receipt_url?: string;            // Uploaded receipt photo/scan
+  /**
+   * Declared when no receipt exists for this line (jeepney fare, port fixer,
+   * informal charges). Treasury's verify gate accepts a line that has EITHER a
+   * receipt_url OR a reason here — but never one with neither, which used to
+   * deadlock the voucher (nothing validated it at submit, everything blocked at
+   * verify, and the handler had no route back).
+   */
+  no_receipt_reason?: string;
   gl_category?: string;            // legacy — Accounting assigned during verification
   // NEU-094 expense-line fields:
   particular?: string;             // catalog item name (the "what")
