@@ -1,0 +1,5596 @@
+{
+  "generatedFrom": "src/config/access/accessSchema.ts, src/App.tsx, src/**/*.ts(x)",
+  "totals": {
+    "departments": 8,
+    "modules": 41,
+    "tabs": 283,
+    "doorActionPairs": 689,
+    "routes": 63,
+    "smokeableRoutes": 54,
+    "writeCallSites": 306,
+    "distinctTables": 60,
+    "rpcCallSites": 36,
+    "distinctRpcs": 29
+  },
+  "departments": [
+    {
+      "id": "business-development",
+      "label": "Business Development",
+      "modules": [
+        {
+          "moduleId": "bd_contacts",
+          "label": "Contacts",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "delete"
+          ],
+          "tabs": [
+            {
+              "moduleId": "bd_contacts_activities_tab",
+              "label": "Activities",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "bd_contacts_tasks_tab",
+              "label": "Tasks",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "bd_contacts_inquiries_tab",
+              "label": "Inquiries",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "bd_contacts_attachments_tab",
+              "label": "Attachments",
+              "actions": [
+                "view",
+                "create",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "bd_contacts_comments_tab",
+              "label": "Comments",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "bd_contacts_teams_tab",
+              "label": "Teams",
+              "actions": [
+                "view",
+                "edit"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "bd_customers",
+          "label": "Customers",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "delete"
+          ],
+          "tabs": [
+            {
+              "moduleId": "bd_customers_contacts_tab",
+              "label": "Contacts",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "bd_customers_activities_tab",
+              "label": "Activities",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "bd_customers_tasks_tab",
+              "label": "Tasks",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "bd_customers_inquiries_tab",
+              "label": "Inquiries",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "bd_customers_comments_tab",
+              "label": "Comments",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "bd_customers_attachments_tab",
+              "label": "Attachments",
+              "actions": [
+                "view",
+                "create",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "bd_customers_projects_tab",
+              "label": "Projects",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "bd_customers_contracts_tab",
+              "label": "Contracts",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "bd_customers_teams_tab",
+              "label": "Teams",
+              "actions": [
+                "view",
+                "edit"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "bd_inquiries",
+          "label": "Inquiries",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "delete",
+            "export"
+          ],
+          "tabs": [
+            {
+              "moduleId": "bd_inquiries_details_tab",
+              "label": "Details",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "bd_inquiries_comments_tab",
+              "label": "Comments",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "bd_inquiries_attachments_tab",
+              "label": "Attachments",
+              "actions": [
+                "view",
+                "create",
+                "delete"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "bd_projects",
+          "label": "Projects",
+          "actions": [
+            "view",
+            "create",
+            "edit"
+          ],
+          "tabs": [
+            {
+              "moduleId": "bd_projects_all_tab",
+              "label": "All",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "bd_projects_active_tab",
+              "label": "Active",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "bd_projects_completed_tab",
+              "label": "Completed",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "bd_projects_info_tab",
+              "label": "Info",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "bd_projects_quotation_tab",
+              "label": "Quotation",
+              "actions": [
+                "view",
+                "edit",
+                "export"
+              ]
+            },
+            {
+              "moduleId": "bd_projects_bookings_tab",
+              "label": "Bookings",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "bd_projects_expenses_tab",
+              "label": "Expenses",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "bd_projects_billings_tab",
+              "label": "Billings",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "bd_projects_invoices_tab",
+              "label": "Invoices",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "bd_projects_collections_tab",
+              "label": "Collections",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "bd_projects_attachments_tab",
+              "label": "Attachments",
+              "actions": [
+                "view",
+                "create",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "bd_projects_comments_tab",
+              "label": "Comments",
+              "actions": [
+                "view",
+                "create"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "bd_contracts",
+          "label": "Contracts",
+          "actions": [
+            "view",
+            "edit"
+          ],
+          "tabs": [
+            {
+              "moduleId": "bd_contracts_all_tab",
+              "label": "All",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "bd_contracts_active_tab",
+              "label": "Active",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "bd_contracts_expiring_tab",
+              "label": "Expiring",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "bd_contracts_financial_overview_tab",
+              "label": "Financial Overview",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "bd_contracts_quotation_tab",
+              "label": "Quotation",
+              "actions": [
+                "view",
+                "edit",
+                "export"
+              ]
+            },
+            {
+              "moduleId": "bd_contracts_rate_card_tab",
+              "label": "Rate Card",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "bd_contracts_bookings_tab",
+              "label": "Bookings",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "bd_contracts_billings_tab",
+              "label": "Billings",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "bd_contracts_invoices_tab",
+              "label": "Invoices",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "bd_contracts_collections_tab",
+              "label": "Collections",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "bd_contracts_expenses_tab",
+              "label": "Expenses",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "bd_contracts_attachments_tab",
+              "label": "Attachments",
+              "actions": [
+                "view",
+                "create",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "bd_contracts_comments_tab",
+              "label": "Comments",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "bd_contracts_activity_tab",
+              "label": "Activity",
+              "actions": [
+                "view"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "bd_tasks",
+          "label": "Tasks",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "delete"
+          ],
+          "tabs": []
+        },
+        {
+          "moduleId": "bd_activities",
+          "label": "Activities",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "delete"
+          ],
+          "tabs": []
+        },
+        {
+          "moduleId": "bd_budget_requests",
+          "label": "Budget Requests",
+          "actions": [
+            "view",
+            "create"
+          ],
+          "tabs": [
+            {
+              "moduleId": "bd_budget_requests_all_tab",
+              "label": "All",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "bd_budget_requests_my_requests_tab",
+              "label": "My Requests",
+              "actions": [
+                "view"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pricing",
+      "label": "Pricing",
+      "modules": [
+        {
+          "moduleId": "pricing_contacts",
+          "label": "Contacts",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "delete"
+          ],
+          "tabs": [
+            {
+              "moduleId": "pricing_contacts_activities_tab",
+              "label": "Activities",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "pricing_contacts_tasks_tab",
+              "label": "Tasks",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "pricing_contacts_inquiries_tab",
+              "label": "Inquiries",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "pricing_contacts_attachments_tab",
+              "label": "Attachments",
+              "actions": [
+                "view",
+                "create",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "pricing_contacts_comments_tab",
+              "label": "Comments",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "pricing_contacts_teams_tab",
+              "label": "Teams",
+              "actions": [
+                "view",
+                "edit"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "pricing_customers",
+          "label": "Customers",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "delete"
+          ],
+          "tabs": [
+            {
+              "moduleId": "pricing_customers_contacts_tab",
+              "label": "Contacts",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "pricing_customers_activities_tab",
+              "label": "Activities",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "pricing_customers_tasks_tab",
+              "label": "Tasks",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "pricing_customers_inquiries_tab",
+              "label": "Inquiries",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "pricing_customers_comments_tab",
+              "label": "Comments",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "pricing_customers_attachments_tab",
+              "label": "Attachments",
+              "actions": [
+                "view",
+                "create",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "pricing_customers_projects_tab",
+              "label": "Projects",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "pricing_customers_contracts_tab",
+              "label": "Contracts",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "pricing_customers_teams_tab",
+              "label": "Teams",
+              "actions": [
+                "view",
+                "edit"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "pricing_quotations",
+          "label": "Quotations",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "delete",
+            "export",
+            "amend"
+          ],
+          "tabs": [
+            {
+              "moduleId": "pricing_quotations_details_tab",
+              "label": "Details",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "pricing_quotations_comments_tab",
+              "label": "Comments",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "pricing_quotations_attachments_tab",
+              "label": "Attachments",
+              "actions": [
+                "view",
+                "create",
+                "delete"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "pricing_projects",
+          "label": "Projects",
+          "actions": [
+            "view",
+            "create",
+            "edit"
+          ],
+          "tabs": [
+            {
+              "moduleId": "pricing_projects_all_tab",
+              "label": "All",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "pricing_projects_active_tab",
+              "label": "Active",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "pricing_projects_completed_tab",
+              "label": "Completed",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "pricing_projects_info_tab",
+              "label": "Info",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "pricing_projects_quotation_tab",
+              "label": "Quotation",
+              "actions": [
+                "view",
+                "edit",
+                "export"
+              ]
+            },
+            {
+              "moduleId": "pricing_projects_bookings_tab",
+              "label": "Bookings",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "pricing_projects_expenses_tab",
+              "label": "Expenses",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "pricing_projects_billings_tab",
+              "label": "Billings",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "pricing_projects_invoices_tab",
+              "label": "Invoices",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "pricing_projects_collections_tab",
+              "label": "Collections",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "pricing_projects_attachments_tab",
+              "label": "Attachments",
+              "actions": [
+                "view",
+                "create",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "pricing_projects_comments_tab",
+              "label": "Comments",
+              "actions": [
+                "view",
+                "create"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "pricing_contracts",
+          "label": "Contracts",
+          "actions": [
+            "view",
+            "edit",
+            "amend"
+          ],
+          "tabs": [
+            {
+              "moduleId": "pricing_contracts_all_tab",
+              "label": "All",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "pricing_contracts_active_tab",
+              "label": "Active",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "pricing_contracts_expiring_tab",
+              "label": "Expiring",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "pricing_contracts_financial_overview_tab",
+              "label": "Financial Overview",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "pricing_contracts_quotation_tab",
+              "label": "Quotation",
+              "actions": [
+                "view",
+                "edit",
+                "export"
+              ]
+            },
+            {
+              "moduleId": "pricing_contracts_rate_card_tab",
+              "label": "Rate Card",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "pricing_contracts_bookings_tab",
+              "label": "Bookings",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "pricing_contracts_billings_tab",
+              "label": "Billings",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "pricing_contracts_invoices_tab",
+              "label": "Invoices",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "pricing_contracts_collections_tab",
+              "label": "Collections",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "pricing_contracts_expenses_tab",
+              "label": "Expenses",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "pricing_contracts_attachments_tab",
+              "label": "Attachments",
+              "actions": [
+                "view",
+                "create",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "pricing_contracts_comments_tab",
+              "label": "Comments",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "pricing_contracts_activity_tab",
+              "label": "Activity",
+              "actions": [
+                "view"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "pricing_network_partners",
+          "label": "Vendor",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "delete"
+          ],
+          "tabs": [
+            {
+              "moduleId": "pricing_network_partners_international_tab",
+              "label": "International",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "pricing_network_partners_co_loader_tab",
+              "label": "Co-Loader",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "pricing_network_partners_all_in_tab",
+              "label": "All-In",
+              "actions": [
+                "view"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "ops_marine_insurance",
+          "label": "Marine Insurance",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "delete"
+          ],
+          "tabs": [
+            {
+              "moduleId": "ops_marine_insurance_financials_tab",
+              "label": "Financials",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_marine_insurance_info_tab",
+              "label": "Booking Info",
+              "actions": [
+                "view",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "ops_marine_insurance_billings_tab",
+              "label": "Billings",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "ops_marine_insurance_invoices_tab",
+              "label": "Invoices",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete",
+                "export"
+              ]
+            },
+            {
+              "moduleId": "ops_marine_insurance_collections_tab",
+              "label": "Collections",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "ops_marine_insurance_expenses_tab",
+              "label": "Expenses",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "ops_marine_insurance_comments_tab",
+              "label": "Comments",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "ops_marine_insurance_chrono_tab",
+              "label": "Chrono",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "ops_marine_insurance_attachments_tab",
+              "label": "Attachments",
+              "actions": [
+                "view",
+                "create",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "ops_marine_insurance_all_tab",
+              "label": "All",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_marine_insurance_my_tab",
+              "label": "My",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_marine_insurance_draft_tab",
+              "label": "Draft",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_marine_insurance_in_progress_tab",
+              "label": "In Progress",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_marine_insurance_completed_tab",
+              "label": "Completed",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_marine_insurance_cancelled_tab",
+              "label": "Archived",
+              "actions": [
+                "view"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "pricing_others",
+          "label": "Others",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "delete"
+          ],
+          "tabs": [
+            {
+              "moduleId": "pricing_others_financials_tab",
+              "label": "Financials",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "pricing_others_info_tab",
+              "label": "Booking Info",
+              "actions": [
+                "view",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "pricing_others_billings_tab",
+              "label": "Billings",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "pricing_others_invoices_tab",
+              "label": "Invoices",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete",
+                "export"
+              ]
+            },
+            {
+              "moduleId": "pricing_others_collections_tab",
+              "label": "Collections",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "pricing_others_expenses_tab",
+              "label": "Expenses",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "pricing_others_comments_tab",
+              "label": "Comments",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "pricing_others_chrono_tab",
+              "label": "Chrono",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "pricing_others_attachments_tab",
+              "label": "Attachments",
+              "actions": [
+                "view",
+                "create",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "pricing_others_all_tab",
+              "label": "All",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "pricing_others_my_tab",
+              "label": "My",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "pricing_others_draft_tab",
+              "label": "Draft",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "pricing_others_in_progress_tab",
+              "label": "In Progress",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "pricing_others_completed_tab",
+              "label": "Completed",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "pricing_others_cancelled_tab",
+              "label": "Archived",
+              "actions": [
+                "view"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "operations",
+      "label": "Operations",
+      "modules": [
+        {
+          "moduleId": "ops_forwarding",
+          "label": "Forwarding",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "delete"
+          ],
+          "tabs": [
+            {
+              "moduleId": "ops_forwarding_financials_tab",
+              "label": "Financials",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_forwarding_info_tab",
+              "label": "Booking Info",
+              "actions": [
+                "view",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "ops_forwarding_billings_tab",
+              "label": "Billings",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "ops_forwarding_invoices_tab",
+              "label": "Invoices",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete",
+                "export"
+              ]
+            },
+            {
+              "moduleId": "ops_forwarding_collections_tab",
+              "label": "Collections",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "ops_forwarding_expenses_tab",
+              "label": "Expenses",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "ops_forwarding_comments_tab",
+              "label": "Comments",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "ops_forwarding_chrono_tab",
+              "label": "Chrono",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "ops_forwarding_attachments_tab",
+              "label": "Attachments",
+              "actions": [
+                "view",
+                "create",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "ops_forwarding_all_tab",
+              "label": "All",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_forwarding_my_tab",
+              "label": "My",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_forwarding_draft_tab",
+              "label": "Draft",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_forwarding_in_progress_tab",
+              "label": "In Progress",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_forwarding_completed_tab",
+              "label": "Completed",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_forwarding_cancelled_tab",
+              "label": "Archived",
+              "actions": [
+                "view"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "ops_brokerage",
+          "label": "Brokerage",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "delete"
+          ],
+          "tabs": [
+            {
+              "moduleId": "ops_brokerage_financials_tab",
+              "label": "Financials",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_brokerage_info_tab",
+              "label": "Booking Info",
+              "actions": [
+                "view",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "ops_brokerage_billings_tab",
+              "label": "Billings",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "ops_brokerage_invoices_tab",
+              "label": "Invoices",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete",
+                "export"
+              ]
+            },
+            {
+              "moduleId": "ops_brokerage_collections_tab",
+              "label": "Collections",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "ops_brokerage_expenses_tab",
+              "label": "Expenses",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "ops_brokerage_comments_tab",
+              "label": "Comments",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "ops_brokerage_chrono_tab",
+              "label": "Chrono",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "ops_brokerage_attachments_tab",
+              "label": "Attachments",
+              "actions": [
+                "view",
+                "create",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "ops_brokerage_all_tab",
+              "label": "All",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_brokerage_my_tab",
+              "label": "My",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_brokerage_draft_tab",
+              "label": "Draft",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_brokerage_in_progress_tab",
+              "label": "In Progress",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_brokerage_completed_tab",
+              "label": "Completed",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_brokerage_cancelled_tab",
+              "label": "Archived",
+              "actions": [
+                "view"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "ops_trucking",
+          "label": "Trucking",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "delete"
+          ],
+          "tabs": [
+            {
+              "moduleId": "ops_trucking_financials_tab",
+              "label": "Financials",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_trucking_info_tab",
+              "label": "Booking Info",
+              "actions": [
+                "view",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "ops_trucking_billings_tab",
+              "label": "Billings",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "ops_trucking_invoices_tab",
+              "label": "Invoices",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete",
+                "export"
+              ]
+            },
+            {
+              "moduleId": "ops_trucking_collections_tab",
+              "label": "Collections",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "ops_trucking_expenses_tab",
+              "label": "Expenses",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "ops_trucking_comments_tab",
+              "label": "Comments",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "ops_trucking_chrono_tab",
+              "label": "Chrono",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "ops_trucking_attachments_tab",
+              "label": "Attachments",
+              "actions": [
+                "view",
+                "create",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "ops_trucking_all_tab",
+              "label": "All",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_trucking_my_tab",
+              "label": "My",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_trucking_draft_tab",
+              "label": "Draft",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_trucking_in_progress_tab",
+              "label": "In Progress",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_trucking_completed_tab",
+              "label": "Completed",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_trucking_cancelled_tab",
+              "label": "Archived",
+              "actions": [
+                "view"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "ops_others",
+          "label": "Others",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "delete"
+          ],
+          "tabs": [
+            {
+              "moduleId": "ops_others_financials_tab",
+              "label": "Financials",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_others_info_tab",
+              "label": "Booking Info",
+              "actions": [
+                "view",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "ops_others_billings_tab",
+              "label": "Billings",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "ops_others_invoices_tab",
+              "label": "Invoices",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete",
+                "export"
+              ]
+            },
+            {
+              "moduleId": "ops_others_collections_tab",
+              "label": "Collections",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "ops_others_expenses_tab",
+              "label": "Expenses",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "ops_others_comments_tab",
+              "label": "Comments",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "ops_others_chrono_tab",
+              "label": "Chrono",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "ops_others_attachments_tab",
+              "label": "Attachments",
+              "actions": [
+                "view",
+                "create",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "ops_others_all_tab",
+              "label": "All",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_others_my_tab",
+              "label": "My",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_others_draft_tab",
+              "label": "Draft",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_others_in_progress_tab",
+              "label": "In Progress",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_others_completed_tab",
+              "label": "Completed",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_others_cancelled_tab",
+              "label": "Archived",
+              "actions": [
+                "view"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "ops_bookings",
+          "label": "Booking Detail",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "delete"
+          ],
+          "tabs": [
+            {
+              "moduleId": "ops_bookings_info_tab",
+              "label": "Info",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_bookings_billings_tab",
+              "label": "Billing",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "ops_bookings_invoices_tab",
+              "label": "Invoices",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "ops_bookings_collections_tab",
+              "label": "Collections",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "ops_bookings_expenses_tab",
+              "label": "Expenses",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "ops_bookings_comments_tab",
+              "label": "Comments",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "ops_bookings_chrono_tab",
+              "label": "Chrono",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "ops_projects",
+          "label": "Projects",
+          "actions": [
+            "view",
+            "create"
+          ],
+          "tabs": [
+            {
+              "moduleId": "ops_projects_all_tab",
+              "label": "All",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_projects_active_tab",
+              "label": "Active",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_projects_completed_tab",
+              "label": "Completed",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_projects_info_tab",
+              "label": "Info",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_projects_quotation_tab",
+              "label": "Quotation",
+              "actions": [
+                "view",
+                "edit",
+                "export"
+              ]
+            },
+            {
+              "moduleId": "ops_projects_bookings_tab",
+              "label": "Bookings",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "ops_projects_expenses_tab",
+              "label": "Expenses",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "ops_projects_billings_tab",
+              "label": "Billings",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "ops_projects_invoices_tab",
+              "label": "Invoices",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "ops_projects_collections_tab",
+              "label": "Collections",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "ops_projects_attachments_tab",
+              "label": "Attachments",
+              "actions": [
+                "view",
+                "create",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "ops_projects_comments_tab",
+              "label": "Comments",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "ops_invoices_items_tab",
+              "label": "Builder · Items",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_invoices_details_tab",
+              "label": "Builder · Details",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_invoices_legal_tab",
+              "label": "Builder · Legal",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "ops_invoices_settings_tab",
+              "label": "Builder · Settings",
+              "actions": [
+                "view"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "accounting",
+      "label": "Accounting",
+      "modules": [
+        {
+          "moduleId": "acct_financials",
+          "label": "Finance Overview",
+          "actions": [
+            "view"
+          ],
+          "tabs": [
+            {
+              "moduleId": "accounting_financials_dashboard_tab",
+              "label": "Dashboard",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "accounting_financials_billings_tab",
+              "label": "Billings",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "accounting_financials_invoices_tab",
+              "label": "Invoices",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "accounting_financials_collections_tab",
+              "label": "Collections",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "accounting_financials_expenses_tab",
+              "label": "Expenses",
+              "actions": [
+                "view"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "acct_evouchers",
+          "label": "E-Vouchers",
+          "actions": [
+            "view",
+            "create",
+            "approve",
+            "disburse",
+            "delete"
+          ],
+          "tabs": [
+            {
+              "moduleId": "accounting_evouchers_pending_disburse_tab",
+              "label": "Pending Disbursement",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "accounting_evouchers_waiting_on_rep_tab",
+              "label": "Waiting on Liquidation",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "accounting_evouchers_pending_verification_tab",
+              "label": "Liquidated for Verification of Treasury",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "accounting_evouchers_archive_tab",
+              "label": "Archive",
+              "actions": [
+                "view"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "acct_projects",
+          "label": "Projects",
+          "actions": [
+            "view"
+          ],
+          "tabs": [
+            {
+              "moduleId": "acct_projects_all_tab",
+              "label": "All",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "acct_projects_active_tab",
+              "label": "Active",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "acct_projects_completed_tab",
+              "label": "Completed",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "acct_projects_info_tab",
+              "label": "Info",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "acct_projects_quotation_tab",
+              "label": "Quotation",
+              "actions": [
+                "view",
+                "edit",
+                "export"
+              ]
+            },
+            {
+              "moduleId": "acct_projects_bookings_tab",
+              "label": "Bookings",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "acct_projects_expenses_tab",
+              "label": "Expenses",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "acct_projects_billings_tab",
+              "label": "Billings",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "acct_projects_invoices_tab",
+              "label": "Invoices",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "acct_projects_collections_tab",
+              "label": "Collections",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "acct_projects_attachments_tab",
+              "label": "Attachments",
+              "actions": [
+                "view",
+                "create",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "acct_projects_comments_tab",
+              "label": "Comments",
+              "actions": [
+                "view",
+                "create"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "acct_contracts",
+          "label": "Contracts",
+          "actions": [
+            "view"
+          ],
+          "tabs": [
+            {
+              "moduleId": "acct_contracts_all_tab",
+              "label": "All",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "acct_contracts_active_tab",
+              "label": "Active",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "acct_contracts_expiring_tab",
+              "label": "Expiring",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "acct_contracts_financial_overview_tab",
+              "label": "Financial Overview",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "acct_contracts_quotation_tab",
+              "label": "Quotation",
+              "actions": [
+                "view",
+                "edit",
+                "export"
+              ]
+            },
+            {
+              "moduleId": "acct_contracts_rate_card_tab",
+              "label": "Rate Card",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "acct_contracts_bookings_tab",
+              "label": "Bookings",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "acct_contracts_billings_tab",
+              "label": "Billings",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "acct_contracts_invoices_tab",
+              "label": "Invoices",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "acct_contracts_collections_tab",
+              "label": "Collections",
+              "actions": [
+                "view",
+                "create",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "acct_contracts_expenses_tab",
+              "label": "Expenses",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "acct_contracts_attachments_tab",
+              "label": "Attachments",
+              "actions": [
+                "view",
+                "create",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "acct_contracts_comments_tab",
+              "label": "Comments",
+              "actions": [
+                "view",
+                "create"
+              ]
+            },
+            {
+              "moduleId": "acct_contracts_activity_tab",
+              "label": "Activity",
+              "actions": [
+                "view"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "acct_bookings",
+          "label": "Bookings",
+          "actions": [
+            "view"
+          ],
+          "tabs": [
+            {
+              "moduleId": "accounting_bookings_forwarding_tab",
+              "label": "Forwarding",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "accounting_bookings_brokerage_tab",
+              "label": "Brokerage",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "accounting_bookings_trucking_tab",
+              "label": "Trucking",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "accounting_bookings_marine_insurance_tab",
+              "label": "Marine Insurance",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "accounting_bookings_others_tab",
+              "label": "Others",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "accounting_bookings_invoices_tab",
+              "label": "Invoices",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "accounting_bookings_collections_tab",
+              "label": "Collections",
+              "actions": [
+                "view"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "acct_customers",
+          "label": "Customers",
+          "actions": [
+            "view"
+          ],
+          "tabs": [
+            {
+              "moduleId": "accounting_customer_ledger_overview_tab",
+              "label": "Overview",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "accounting_customer_ledger_projects_tab",
+              "label": "Projects",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "accounting_customer_ledger_billings_tab",
+              "label": "Billings",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "accounting_customer_ledger_collections_tab",
+              "label": "Collections",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "accounting_customer_ledger_expenses_tab",
+              "label": "Expenses",
+              "actions": [
+                "view"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "acct_catalog",
+          "label": "Catalog",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "delete"
+          ],
+          "tabs": [
+            {
+              "moduleId": "accounting_catalog_items_tab",
+              "label": "Items",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "accounting_catalog_matrix_tab",
+              "label": "Matrix",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "accounting_catalog_all_tab",
+              "label": "All",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "accounting_catalog_billing_tab",
+              "label": "Billing",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "accounting_catalog_expense_tab",
+              "label": "Expense",
+              "actions": [
+                "view"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "acct_reports",
+          "label": "Reports",
+          "actions": [
+            "view",
+            "export"
+          ],
+          "tabs": []
+        }
+      ]
+    },
+    {
+      "id": "hr",
+      "label": "HR",
+      "modules": [
+        {
+          "moduleId": "hr",
+          "label": "HR",
+          "actions": [
+            "view",
+            "edit"
+          ],
+          "tabs": []
+        }
+      ]
+    },
+    {
+      "id": "executive",
+      "label": "Executive",
+      "modules": [
+        {
+          "moduleId": "exec_performance",
+          "label": "Performance",
+          "actions": [
+            "view",
+            "edit"
+          ],
+          "tabs": []
+        },
+        {
+          "moduleId": "exec_activity_log",
+          "label": "Activity Log",
+          "actions": [
+            "view",
+            "export"
+          ],
+          "tabs": []
+        },
+        {
+          "moduleId": "exec_users",
+          "label": "Users",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "delete"
+          ],
+          "tabs": [
+            {
+              "moduleId": "admin_users_tab",
+              "label": "Users",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "admin_teams_tab",
+              "label": "Teams",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            },
+            {
+              "moduleId": "admin_access_profiles_tab",
+              "label": "Access Profiles",
+              "actions": [
+                "view",
+                "create",
+                "edit",
+                "delete"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "exec_profiling",
+          "label": "Profiling",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "delete"
+          ],
+          "tabs": [
+            {
+              "moduleId": "company_settings",
+              "label": "Company Settings",
+              "actions": [
+                "edit"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "exec_memos",
+          "label": "Memos",
+          "actions": [
+            "view",
+            "create",
+            "delete"
+          ],
+          "tabs": []
+        }
+      ]
+    },
+    {
+      "id": "inbox",
+      "label": "Inbox",
+      "modules": [
+        {
+          "moduleId": "inbox",
+          "label": "Inbox",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "delete",
+            "approve"
+          ],
+          "tabs": [
+            {
+              "moduleId": "inbox_inbox_tab",
+              "label": "Inbox",
+              "actions": [
+                "view",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "inbox_queue_tab",
+              "label": "Queue",
+              "actions": [
+                "view",
+                "edit"
+              ]
+            },
+            {
+              "moduleId": "inbox_sent_tab",
+              "label": "Sent",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "inbox_drafts_tab",
+              "label": "Drafts",
+              "actions": [
+                "view"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "inbox_entity_picker",
+          "label": "Entity Picker",
+          "actions": [
+            "view"
+          ],
+          "tabs": [
+            {
+              "moduleId": "inbox_entity_inquiry_tab",
+              "label": "Inquiry",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "inbox_entity_quotation_tab",
+              "label": "Quotation",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "inbox_entity_contract_tab",
+              "label": "Contract",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "inbox_entity_booking_tab",
+              "label": "Booking",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "inbox_entity_project_tab",
+              "label": "Project",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "inbox_entity_invoice_tab",
+              "label": "Invoice",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "inbox_entity_collection_tab",
+              "label": "Collection",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "inbox_entity_expense_tab",
+              "label": "Expense",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "inbox_entity_customer_tab",
+              "label": "Customer",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "inbox_entity_contact_tab",
+              "label": "Contact",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "inbox_entity_vendor_tab",
+              "label": "Vendor",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "inbox_entity_budget_request_tab",
+              "label": "Budget Request",
+              "actions": [
+                "view"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "personal",
+      "label": "Personal",
+      "modules": [
+        {
+          "moduleId": "calendar",
+          "label": "Calendar",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "delete"
+          ],
+          "tabs": []
+        },
+        {
+          "moduleId": "my_evouchers",
+          "label": "E-Vouchers",
+          "actions": [
+            "view",
+            "create",
+            "edit",
+            "approve",
+            "delete"
+          ],
+          "tabs": [
+            {
+              "moduleId": "my_evouchers_all_tab",
+              "label": "All",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "my_evouchers_draft_tab",
+              "label": "Draft",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "my_evouchers_pending_tab",
+              "label": "Pending",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "my_evouchers_active_tab",
+              "label": "Active",
+              "actions": [
+                "view"
+              ]
+            },
+            {
+              "moduleId": "my_evouchers_done_tab",
+              "label": "Done",
+              "actions": [
+                "view"
+              ]
+            }
+          ]
+        },
+        {
+          "moduleId": "my_scorecard",
+          "label": "My Scorecard",
+          "actions": [
+            "view"
+          ],
+          "tabs": []
+        }
+      ]
+    }
+  ],
+  "routes": [
+    {
+      "path": "/supabase-debug",
+      "element": "SupabaseDebug",
+      "line": 1055,
+      "guard": null,
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "*",
+      "element": "LoginPage",
+      "line": 1056,
+      "guard": null,
+      "dynamic": false,
+      "smokeable": false
+    },
+    {
+      "path": "/",
+      "element": "Navigate",
+      "line": 1072,
+      "guard": null,
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/dashboard",
+      "element": "DashboardPage",
+      "line": 1075,
+      "guard": null,
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/bd/contacts",
+      "element": "BDContactsPage",
+      "line": 1079,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "bd_contacts",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/bd/contacts/:contactId",
+      "element": "BDContactsPage",
+      "line": 1080,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "bd_contacts",
+        "action": "view"
+      },
+      "dynamic": true,
+      "smokeable": false
+    },
+    {
+      "path": "/bd/customers",
+      "element": "BDCustomersPage",
+      "line": 1083,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "bd_customers",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/bd/inquiries",
+      "element": "BDInquiriesPage",
+      "line": 1086,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "bd_inquiries",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/bd/inquiries/:inquiryId",
+      "element": "BDInquiriesPage",
+      "line": 1087,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "bd_inquiries",
+        "action": "view"
+      },
+      "dynamic": true,
+      "smokeable": false
+    },
+    {
+      "path": "/bd/tasks",
+      "element": "BDTasksPage",
+      "line": 1090,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "bd_tasks",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/bd/projects",
+      "element": "BDProjectsPage",
+      "line": 1093,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "bd_projects",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/bd/contracts",
+      "element": "BDContractsPage",
+      "line": 1096,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "bd_contracts",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/bd/activities",
+      "element": "BDActivitiesPage",
+      "line": 1099,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "bd_activities",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/bd/budget-requests",
+      "element": "BDBudgetRequestsPage",
+      "line": 1102,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "bd_budget_requests",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/projects",
+      "element": "ProjectsPage",
+      "line": 1106,
+      "guard": null,
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/contracts",
+      "element": "ContractsPage",
+      "line": 1109,
+      "guard": null,
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/pricing/contacts",
+      "element": "PricingContactsPage",
+      "line": 1113,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "pricing_contacts",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/pricing/customers",
+      "element": "PricingCustomersPage",
+      "line": 1116,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "pricing_customers",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/pricing/quotations",
+      "element": "PricingQuotationsPage",
+      "line": 1119,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "pricing_quotations",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/pricing/quotations/:inquiryId",
+      "element": "PricingQuotationsPage",
+      "line": 1120,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "pricing_quotations",
+        "action": "view"
+      },
+      "dynamic": true,
+      "smokeable": false
+    },
+    {
+      "path": "/pricing/projects",
+      "element": "PricingProjectsPage",
+      "line": 1123,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "pricing_projects",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/pricing/contracts",
+      "element": "PricingContractsPage",
+      "line": 1126,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "pricing_contracts",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/pricing/vendors",
+      "element": "PricingVendorsPage",
+      "line": 1129,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "pricing_network_partners",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/operations",
+      "element": "OperationsPage",
+      "line": 1134,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "ops_forwarding",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/operations/forwarding",
+      "element": "ForwardingBookingsPage",
+      "line": 1135,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "ops_forwarding",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/operations/trucking",
+      "element": "TruckingBookingsPage",
+      "line": 1138,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "ops_trucking",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/operations/brokerage",
+      "element": "BrokerageBookingsPage",
+      "line": 1141,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "ops_brokerage",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/operations/marine-insurance",
+      "element": "MarineInsuranceBookingsPage",
+      "line": 1144,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "ops_marine_insurance",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/operations/others",
+      "element": "OthersBookingsPage",
+      "line": 1147,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "ops_others",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/pricing/others",
+      "element": "OthersBookingsPage",
+      "line": 1151,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "pricing_others",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/operations/create",
+      "element": "CreateBookingPage",
+      "line": 1154,
+      "guard": {
+        "kind": "predicate",
+        "label": "bookings.create"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/operations/:bookingId",
+      "element": "BookingDetailPage",
+      "line": 1157,
+      "guard": {
+        "kind": "predicate",
+        "label": "bookings.view"
+      },
+      "dynamic": true,
+      "smokeable": false
+    },
+    {
+      "path": "/accounting/evouchers",
+      "element": "AccountingEVouchersPage",
+      "line": 1162,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "acct_evouchers",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/accounting/invoices",
+      "element": "AccountingInvoicesPage",
+      "line": 1165,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "accounting_financials_invoices_tab",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/accounting/billings",
+      "element": "AccountingBillingsPage",
+      "line": 1168,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "accounting_financials_billings_tab",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/accounting/collections",
+      "element": "AccountingCollectionsPage",
+      "line": 1171,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "accounting_financials_collections_tab",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/accounting/expenses",
+      "element": "AccountingExpensesPage",
+      "line": 1174,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "accounting_financials_expenses_tab",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/accounting/projects",
+      "element": "AccountingProjectsPage",
+      "line": 1177,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "acct_projects",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/accounting/contracts",
+      "element": "AccountingContractsPage",
+      "line": 1180,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "acct_contracts",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/accounting/customers",
+      "element": "AccountingCustomersPage",
+      "line": 1183,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "acct_customers",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/accounting/bookings",
+      "element": "AccountingBookingsPage",
+      "line": 1186,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "acct_bookings",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/accounting/reports",
+      "element": "AccountingReportsPage",
+      "line": 1189,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "acct_reports",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/accounting/catalog",
+      "element": "AccountingCatalogPage",
+      "line": 1192,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "acct_catalog",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/accounting/financials",
+      "element": "AccountingFinancialsPage",
+      "line": 1197,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "acct_financials",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/hr",
+      "element": "HRPage",
+      "line": 1202,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "hr",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/activity-log",
+      "element": "ActivityLogPageWrapper",
+      "line": 1207,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "exec_activity_log",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/admin/users",
+      "element": "UserManagementPage",
+      "line": 1212,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "exec_users",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/admin/users/new",
+      "element": "CreateUserPageWrapper",
+      "line": 1213,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "exec_users",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/admin/users/:userId",
+      "element": "UserDetailPageWrapper",
+      "line": 1214,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "exec_users",
+        "action": "view"
+      },
+      "dynamic": true,
+      "smokeable": false
+    },
+    {
+      "path": "/admin/profiling",
+      "element": "RouteWrapper",
+      "line": 1217,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "exec_profiling",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/calendar",
+      "element": "CalendarPage",
+      "line": 1223,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "calendar",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/inbox",
+      "element": "InboxPageWrapper",
+      "line": 1226,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "inbox",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/approvals",
+      "element": "ApprovalsPageWrapper",
+      "line": 1230,
+      "guard": null,
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/my-evouchers",
+      "element": "MyEVouchersPageWrapper",
+      "line": 1232,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "my_evouchers",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/my-scorecard",
+      "element": "MyScorecardPageWrapper",
+      "line": 1233,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "my_evouchers",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/performance",
+      "element": "PerformancePageWrapper",
+      "line": 1234,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "my_evouchers",
+        "action": "view"
+      },
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/performance/:userId",
+      "element": "PerformancePageWrapper",
+      "line": 1235,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "my_evouchers",
+        "action": "view"
+      },
+      "dynamic": true,
+      "smokeable": false
+    },
+    {
+      "path": "/evouchers/:id/disburse",
+      "element": "RouteWrapper",
+      "line": 1238,
+      "guard": {
+        "kind": "permission",
+        "moduleId": "acct_evouchers",
+        "action": "view"
+      },
+      "dynamic": true,
+      "smokeable": false
+    },
+    {
+      "path": "/settings",
+      "element": "SettingsPage",
+      "line": 1240,
+      "guard": null,
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/design-system",
+      "element": "DesignSystemPage",
+      "line": 1241,
+      "guard": null,
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/diagnostics",
+      "element": "DiagnosticsPage",
+      "line": 1244,
+      "guard": null,
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "/supabase-debug",
+      "element": "RouteWrapper",
+      "line": 1245,
+      "guard": null,
+      "dynamic": false,
+      "smokeable": true
+    },
+    {
+      "path": "*",
+      "element": "ErrorPage",
+      "line": 1247,
+      "guard": null,
+      "dynamic": false,
+      "smokeable": false
+    }
+  ],
+  "writes": [
+    {
+      "file": "src/components/accounting/CatalogManagementPage.tsx",
+      "line": 333,
+      "table": "catalog_items",
+      "op": "update"
+    },
+    {
+      "file": "src/components/accounting/CatalogManagementPage.tsx",
+      "line": 349,
+      "table": "catalog_categories",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/accounting/CatalogManagementPage.tsx",
+      "line": 375,
+      "table": "catalog_items",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/accounting/CatalogManagementPage.tsx",
+      "line": 406,
+      "table": "catalog_items",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/accounting/CatalogManagementPage.tsx",
+      "line": 418,
+      "table": "catalog_categories",
+      "op": "update"
+    },
+    {
+      "file": "src/components/accounting/CatalogManagementPage.tsx",
+      "line": 428,
+      "table": "catalog_categories",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/accounting/CatalogManagementPage.tsx",
+      "line": 1258,
+      "table": "catalog_categories",
+      "op": "update"
+    },
+    {
+      "file": "src/components/accounting/CatalogManagementPage.tsx",
+      "line": 1268,
+      "table": "catalog_categories",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/accounting/CatalogManagementPage.tsx",
+      "line": 1279,
+      "table": "catalog_categories",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/accounting/evouchers/DisburseEVoucherPage.tsx",
+      "line": 184,
+      "table": "evouchers",
+      "op": "update"
+    },
+    {
+      "file": "src/components/accounting/evouchers/DisburseEVoucherPage.tsx",
+      "line": 212,
+      "table": "evoucher_history",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/accounting/evouchers/EVoucherHistoryTimeline.tsx",
+      "line": 70,
+      "table": "evoucher_history",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/accounting/evouchers/EVoucherWorkflowPanel.tsx",
+      "line": 272,
+      "table": "evoucher_history",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/accounting/evouchers/EVoucherWorkflowPanel.tsx",
+      "line": 292,
+      "table": "evouchers",
+      "op": "update"
+    },
+    {
+      "file": "src/components/accounting/evouchers/EVoucherWorkflowPanel.tsx",
+      "line": 423,
+      "table": "evouchers",
+      "op": "update"
+    },
+    {
+      "file": "src/components/accounting/evouchers/EVoucherWorkflowPanel.tsx",
+      "line": 454,
+      "table": "liquidation_submissions",
+      "op": "update"
+    },
+    {
+      "file": "src/components/accounting/evouchers/EVoucherWorkflowPanel.tsx",
+      "line": 571,
+      "table": "evouchers",
+      "op": "update"
+    },
+    {
+      "file": "src/components/accounting/evouchers/EVoucherWorkflowPanel.tsx",
+      "line": 575,
+      "table": "evoucher_history",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/accounting/evouchers/LiquidationForm.tsx",
+      "line": 227,
+      "table": "liquidation_submissions",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/accounting/evouchers/LiquidationForm.tsx",
+      "line": 245,
+      "table": "evouchers",
+      "op": "update"
+    },
+    {
+      "file": "src/components/accounting/evouchers/LiquidationForm.tsx",
+      "line": 253,
+      "table": "evoucher_history",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/accounting/evouchers/LiquidationForm.tsx",
+      "line": 273,
+      "table": "evouchers",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/accounting/evouchers/LiquidationForm.tsx",
+      "line": 324,
+      "table": "evouchers",
+      "op": "update"
+    },
+    {
+      "file": "src/components/accounting/UnifiedExpensesTab.tsx",
+      "line": 192,
+      "table": "billing_line_items",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/admin/AccessConfiguration.tsx",
+      "line": 89,
+      "table": "access_profiles",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/admin/AccessConfiguration.tsx",
+      "line": 105,
+      "table": "permission_audit_log",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/admin/AccessConfiguration.tsx",
+      "line": 187,
+      "table": "access_profiles",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/AccessConfiguration.tsx",
+      "line": 197,
+      "table": "permission_audit_log",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/admin/AccessConfiguration.tsx",
+      "line": 365,
+      "table": "permission_overrides",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/AccessConfiguration.tsx",
+      "line": 376,
+      "table": "permission_overrides",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/admin/AccessConfiguration.tsx",
+      "line": 392,
+      "table": "users",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/AccessConfiguration.tsx",
+      "line": 420,
+      "table": "permission_audit_log",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/admin/AccessConfiguration.tsx",
+      "line": 843,
+      "table": "access_profiles",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/admin/AccessConfiguration.tsx",
+      "line": 850,
+      "table": "permission_audit_log",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/admin/accessProfiles/AccessProfiles.tsx",
+      "line": 279,
+      "table": "permission_overrides",
+      "op": "upsert"
+    },
+    {
+      "file": "src/components/admin/accessProfiles/AccessProfiles.tsx",
+      "line": 302,
+      "table": "users",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/accessProfiles/AccessProfiles.tsx",
+      "line": 305,
+      "table": "permission_audit_log",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/admin/accessProfiles/AccessProfiles.tsx",
+      "line": 516,
+      "table": "access_profiles",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/admin/accessProfiles/AccessProfiles.tsx",
+      "line": 523,
+      "table": "permission_audit_log",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/admin/accessProfiles/AccessProfiles.tsx",
+      "line": 799,
+      "table": "access_profiles",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/admin/accessProfiles/AccessProfiles.tsx",
+      "line": 813,
+      "table": "access_profiles",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/accessProfiles/AccessProfiles.tsx",
+      "line": 840,
+      "table": "permission_audit_log",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/admin/CreateUserPanel.tsx",
+      "line": 104,
+      "table": "users",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/OperationsTeamsSection.tsx",
+      "line": 308,
+      "table": "operational_services",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/OperationsTeamsSection.tsx",
+      "line": 337,
+      "table": "service_assignment_roles",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/admin/OperationsTeamsSection.tsx",
+      "line": 359,
+      "table": "service_assignment_roles",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/OperationsTeamsSection.tsx",
+      "line": 375,
+      "table": "service_assignment_roles",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/OperationsTeamsSection.tsx",
+      "line": 376,
+      "table": "service_assignment_roles",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/OperationsTeamsSection.tsx",
+      "line": 383,
+      "table": "service_assignment_roles",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/OperationsTeamsSection.tsx",
+      "line": 410,
+      "table": "teams",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/admin/OperationsTeamsSection.tsx",
+      "line": 1094,
+      "table": "teams",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/admin/OperationsTeamsSection.tsx",
+      "line": 1120,
+      "table": "teams",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/admin/OperationsTeamsSection.tsx",
+      "line": 1204,
+      "table": "teams",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/PermissionsMatrix.tsx",
+      "line": 200,
+      "table": "permission_overrides",
+      "op": "upsert"
+    },
+    {
+      "file": "src/components/admin/PermissionsMatrix.tsx",
+      "line": 220,
+      "table": "permission_overrides",
+      "op": "upsert"
+    },
+    {
+      "file": "src/components/admin/profiling/BankAccountsTab.tsx",
+      "line": 50,
+      "table": "bank_accounts",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/profiling/BankAccountsTab.tsx",
+      "line": 75,
+      "table": "bank_accounts",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/admin/profiling/BankAccountsTab.tsx",
+      "line": 76,
+      "table": "bank_accounts",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/profiling/CreditTermsTab.tsx",
+      "line": 45,
+      "table": "credit_terms",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/profiling/CreditTermsTab.tsx",
+      "line": 66,
+      "table": "credit_terms",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/admin/profiling/CreditTermsTab.tsx",
+      "line": 67,
+      "table": "credit_terms",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/profiling/CurrenciesTab.tsx",
+      "line": 52,
+      "table": "currencies",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/profiling/CurrenciesTab.tsx",
+      "line": 76,
+      "table": "currencies",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/admin/profiling/CurrenciesTab.tsx",
+      "line": 77,
+      "table": "currencies",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/profiling/RoutingRulesTab.tsx",
+      "line": 256,
+      "table": "routing_rules",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/profiling/RoutingRulesTab.tsx",
+      "line": 279,
+      "table": "routing_rules",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/profiling/RoutingRulesTab.tsx",
+      "line": 280,
+      "table": "routing_rules",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/admin/profiling/RoutingRulesTab.tsx",
+      "line": 290,
+      "table": "routing_rules",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/admin/profiling/RoutingRulesTab.tsx",
+      "line": 310,
+      "table": "routing_rules",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/ServicesAndRolesPage.tsx",
+      "line": 140,
+      "table": "operational_services",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/ServicesAndRolesPage.tsx",
+      "line": 166,
+      "table": "service_assignment_roles",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/admin/ServicesAndRolesPage.tsx",
+      "line": 187,
+      "table": "service_assignment_roles",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/ServicesAndRolesPage.tsx",
+      "line": 204,
+      "table": "service_assignment_roles",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/ServicesAndRolesPage.tsx",
+      "line": 208,
+      "table": "service_assignment_roles",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/ServicesAndRolesPage.tsx",
+      "line": 217,
+      "table": "service_assignment_roles",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/UserDetailPage.tsx",
+      "line": 305,
+      "table": "team_memberships",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/UserDetailPage.tsx",
+      "line": 313,
+      "table": "users",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/UserDetailPage.tsx",
+      "line": 364,
+      "table": "users",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/UserManagement.tsx",
+      "line": 692,
+      "table": "teams",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/admin/UserManagement.tsx",
+      "line": 713,
+      "table": "teams",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/admin/UserManagement.tsx",
+      "line": 815,
+      "table": "teams",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/UserManagement.tsx",
+      "line": 1214,
+      "table": "department_assignment_roles",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/UserManagement.tsx",
+      "line": 1215,
+      "table": "department_assignment_roles",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/UserManagement.tsx",
+      "line": 1222,
+      "table": "department_assignment_roles",
+      "op": "update"
+    },
+    {
+      "file": "src/components/admin/UserManagement.tsx",
+      "line": 1749,
+      "table": "teams",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/admin/UserManagement.tsx",
+      "line": 1883,
+      "table": "permission_overrides",
+      "op": "upsert"
+    },
+    {
+      "file": "src/components/admin/UserManagement.tsx",
+      "line": 1899,
+      "table": "permission_overrides",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/bd/ActivitiesList.tsx",
+      "line": 87,
+      "table": "crm_activities",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/bd/ActivityDetailInline.tsx",
+      "line": 124,
+      "table": "crm_activities",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/bd/ActivityDetailInline.tsx",
+      "line": 150,
+      "table": "crm_activities",
+      "op": "update"
+    },
+    {
+      "file": "src/components/bd/ContactDetail.tsx",
+      "line": 123,
+      "table": "tasks",
+      "op": "update"
+    },
+    {
+      "file": "src/components/bd/ContactDetail.tsx",
+      "line": 323,
+      "table": "contacts",
+      "op": "update"
+    },
+    {
+      "file": "src/components/bd/ContactDetail.tsx",
+      "line": 390,
+      "table": "contacts",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/bd/ContactDetail.tsx",
+      "line": 440,
+      "table": "customers",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/bd/ContactDetail.tsx",
+      "line": 455,
+      "table": "contacts",
+      "op": "update"
+    },
+    {
+      "file": "src/components/bd/ContactDetail.tsx",
+      "line": 1180,
+      "table": "crm_activities",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/bd/ContactDetail.tsx",
+      "line": 1462,
+      "table": "tasks",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/bd/ContactTeamsTab.tsx",
+      "line": 321,
+      "table": "assignment_profiles",
+      "op": "update"
+    },
+    {
+      "file": "src/components/bd/CreateProjectModal.tsx",
+      "line": 65,
+      "table": "projects",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/bd/CustomerAssignmentProfilesSection.tsx",
+      "line": 363,
+      "table": "assignment_profiles",
+      "op": "update"
+    },
+    {
+      "file": "src/components/bd/CustomerDetail.tsx",
+      "line": 292,
+      "table": "customers",
+      "op": "update"
+    },
+    {
+      "file": "src/components/bd/CustomerDetail.tsx",
+      "line": 1074,
+      "table": "crm_activities",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/bd/CustomerDetail.tsx",
+      "line": 1331,
+      "table": "tasks",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/bd/CustomerDetail.tsx",
+      "line": 1621,
+      "table": "contacts",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/bd/TaskDetailInline.tsx",
+      "line": 112,
+      "table": "tasks",
+      "op": "update"
+    },
+    {
+      "file": "src/components/bd/TaskDetailInline.tsx",
+      "line": 194,
+      "table": "tasks",
+      "op": "update"
+    },
+    {
+      "file": "src/components/bd/TaskDetailInline.tsx",
+      "line": 240,
+      "table": "tasks",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/bd/TaskDetailInline.tsx",
+      "line": 326,
+      "table": "tasks",
+      "op": "update"
+    },
+    {
+      "file": "src/components/bd/TaskDetailInline.tsx",
+      "line": 331,
+      "table": "crm_activities",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/bd/TasksList.tsx",
+      "line": 84,
+      "table": "tasks",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/BusinessDevelopment.tsx",
+      "line": 536,
+      "table": "quotations",
+      "op": "update"
+    },
+    {
+      "file": "src/components/BusinessDevelopment.tsx",
+      "line": 546,
+      "table": "quotations",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/BusinessDevelopment.tsx",
+      "line": 663,
+      "table": "quotations",
+      "op": "update"
+    },
+    {
+      "file": "src/components/BusinessDevelopment.tsx",
+      "line": 686,
+      "table": "quotations",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/calendar/CalendarModule.tsx",
+      "line": 68,
+      "table": "users",
+      "op": "update"
+    },
+    {
+      "file": "src/components/contracts/ContractsModule.tsx",
+      "line": 309,
+      "table": "quotations",
+      "op": "update"
+    },
+    {
+      "file": "src/components/contracts/CreateBookingFromContractPanel.tsx",
+      "line": 125,
+      "table": "bookings",
+      "op": "update"
+    },
+    {
+      "file": "src/components/contracts/InlineRateCardSection.tsx",
+      "line": 330,
+      "table": "billing_line_items",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/contracts/RateCalculationSheet.tsx",
+      "line": 208,
+      "table": "billing_line_items",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/crm/ContactsListWithFilters.tsx",
+      "line": 132,
+      "table": "contacts",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/crm/ContactsModuleWithBackend.tsx",
+      "line": 88,
+      "table": "contacts",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/crm/ContactsModuleWithBackend.tsx",
+      "line": 120,
+      "table": "contacts",
+      "op": "update"
+    },
+    {
+      "file": "src/components/crm/ContactsModuleWithBackend.tsx",
+      "line": 244,
+      "table": "quotations",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/crm/CustomersListWithFilters.tsx",
+      "line": 162,
+      "table": "customers",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/crm/CustomersListWithFilters.tsx",
+      "line": 182,
+      "table": "customers",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/feedback/FeedbackButton.tsx",
+      "line": 48,
+      "table": "feedback",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/inbox/AssignModal.tsx",
+      "line": 41,
+      "table": "ticket_assignments",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/inbox/AssignModal.tsx",
+      "line": 51,
+      "table": "ticket_participants",
+      "op": "upsert"
+    },
+    {
+      "file": "src/components/inbox/AssignModal.tsx",
+      "line": 64,
+      "table": "ticket_messages",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/inbox/AssignModal.tsx",
+      "line": 78,
+      "table": "tickets",
+      "op": "update"
+    },
+    {
+      "file": "src/components/inbox/ComposeBox.tsx",
+      "line": 158,
+      "table": "ticket_messages",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/inbox/ComposeBox.tsx",
+      "line": 172,
+      "table": "ticket_attachments",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/inbox/ComposeBox.tsx",
+      "line": 178,
+      "table": "ticket_attachments",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/inbox/ComposeBox.tsx",
+      "line": 196,
+      "table": "ticket_participants",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/inbox/ComposeBox.tsx",
+      "line": 200,
+      "table": "tickets",
+      "op": "update"
+    },
+    {
+      "file": "src/components/inbox/ComposePanel.tsx",
+      "line": 127,
+      "table": "tickets",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/inbox/ComposePanel.tsx",
+      "line": 150,
+      "table": "ticket_participants",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/inbox/ComposePanel.tsx",
+      "line": 151,
+      "table": "tickets",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/inbox/ComposePanel.tsx",
+      "line": 155,
+      "table": "ticket_messages",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/inbox/ComposePanel.tsx",
+      "line": 165,
+      "table": "ticket_attachments",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/inbox/ComposePanel.tsx",
+      "line": 172,
+      "table": "ticket_attachments",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/inbox/MessageBubble.tsx",
+      "line": 142,
+      "table": "ticket_messages",
+      "op": "update"
+    },
+    {
+      "file": "src/components/inbox/ThreadDetailPanel.tsx",
+      "line": 230,
+      "table": "ticket_messages",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/inbox/ThreadDetailPanel.tsx",
+      "line": 241,
+      "table": "tickets",
+      "op": "update"
+    },
+    {
+      "file": "src/components/inbox/ThreadDetailPanel.tsx",
+      "line": 254,
+      "table": "tickets",
+      "op": "update"
+    },
+    {
+      "file": "src/components/inbox/ThreadDetailPanel.tsx",
+      "line": 284,
+      "table": "tickets",
+      "op": "update"
+    },
+    {
+      "file": "src/components/inbox/ThreadDetailPanel.tsx",
+      "line": 315,
+      "table": "tickets",
+      "op": "update"
+    },
+    {
+      "file": "src/components/inbox/ThreadDetailPanel.tsx",
+      "line": 361,
+      "table": "tickets",
+      "op": "update"
+    },
+    {
+      "file": "src/components/inbox/ThreadDetailPanel.tsx",
+      "line": 400,
+      "table": "tickets",
+      "op": "update"
+    },
+    {
+      "file": "src/components/memos/MemoPanel.tsx",
+      "line": 514,
+      "table": "memos",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/memos/MemoPanel.tsx",
+      "line": 521,
+      "table": "memos",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/MyHomepage.tsx",
+      "line": 496,
+      "table": "todos",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/MyHomepage.tsx",
+      "line": 513,
+      "table": "todos",
+      "op": "update"
+    },
+    {
+      "file": "src/components/MyHomepage.tsx",
+      "line": 520,
+      "table": "todos",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/operations/BrokerageBookingDetails.tsx",
+      "line": 210,
+      "table": "bookings",
+      "op": "update"
+    },
+    {
+      "file": "src/components/operations/CreateBrokerageBookingPanel.tsx",
+      "line": 195,
+      "table": "bookings",
+      "op": "update"
+    },
+    {
+      "file": "src/components/operations/CreateBrokerageBookingPanel.tsx",
+      "line": 199,
+      "table": "bookings",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/operations/CreateBrokerageBookingPanel.tsx",
+      "line": 212,
+      "table": "bookings",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/operations/CreateMarineInsuranceBookingPanel.tsx",
+      "line": 173,
+      "table": "bookings",
+      "op": "update"
+    },
+    {
+      "file": "src/components/operations/CreateMarineInsuranceBookingPanel.tsx",
+      "line": 177,
+      "table": "bookings",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/operations/CreateMarineInsuranceBookingPanel.tsx",
+      "line": 190,
+      "table": "bookings",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/operations/CreateOthersBookingPanel.tsx",
+      "line": 177,
+      "table": "bookings",
+      "op": "update"
+    },
+    {
+      "file": "src/components/operations/CreateOthersBookingPanel.tsx",
+      "line": 181,
+      "table": "bookings",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/operations/CreateOthersBookingPanel.tsx",
+      "line": 194,
+      "table": "bookings",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/operations/CreateTruckingBookingPanel.tsx",
+      "line": 199,
+      "table": "bookings",
+      "op": "update"
+    },
+    {
+      "file": "src/components/operations/CreateTruckingBookingPanel.tsx",
+      "line": 203,
+      "table": "bookings",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/operations/CreateTruckingBookingPanel.tsx",
+      "line": 216,
+      "table": "bookings",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/operations/forwarding/CreateForwardingBookingPanel.tsx",
+      "line": 205,
+      "table": "bookings",
+      "op": "update"
+    },
+    {
+      "file": "src/components/operations/forwarding/CreateForwardingBookingPanel.tsx",
+      "line": 209,
+      "table": "bookings",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/operations/forwarding/CreateForwardingBookingPanel.tsx",
+      "line": 222,
+      "table": "bookings",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/operations/forwarding/ForwardingBookingDetails.tsx",
+      "line": 212,
+      "table": "bookings",
+      "op": "update"
+    },
+    {
+      "file": "src/components/operations/MarineInsuranceBookingDetails.tsx",
+      "line": 191,
+      "table": "bookings",
+      "op": "update"
+    },
+    {
+      "file": "src/components/operations/OthersBookingDetails.tsx",
+      "line": 193,
+      "table": "bookings",
+      "op": "update"
+    },
+    {
+      "file": "src/components/operations/shared/BookingCancelDeletePanel.tsx",
+      "line": 84,
+      "table": "bookings",
+      "op": "update"
+    },
+    {
+      "file": "src/components/operations/shared/BookingCancelDeletePanel.tsx",
+      "line": 110,
+      "table": "bookings",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/operations/shared/BookingInfoTab.tsx",
+      "line": 92,
+      "table": "bookings",
+      "op": "update"
+    },
+    {
+      "file": "src/components/operations/shared/saveBookingDraft.ts",
+      "line": 61,
+      "table": "bookings",
+      "op": "update"
+    },
+    {
+      "file": "src/components/operations/shared/saveBookingDraft.ts",
+      "line": 70,
+      "table": "bookings",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/operations/TruckingBookingDetails.tsx",
+      "line": 191,
+      "table": "bookings",
+      "op": "update"
+    },
+    {
+      "file": "src/components/pricing/ContractDetailView.tsx",
+      "line": 285,
+      "table": "quotations",
+      "op": "update"
+    },
+    {
+      "file": "src/components/pricing/ContractDetailView.tsx",
+      "line": 438,
+      "table": "quotations",
+      "op": "update"
+    },
+    {
+      "file": "src/components/pricing/ContractDetailView.tsx",
+      "line": 519,
+      "table": "quotations",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/pricing/ContractDetailView.tsx",
+      "line": 1016,
+      "table": "quotations",
+      "op": "update"
+    },
+    {
+      "file": "src/components/pricing/QuotationActionMenu.tsx",
+      "line": 90,
+      "table": "quotations",
+      "op": "update"
+    },
+    {
+      "file": "src/components/pricing/QuotationFileView.tsx",
+      "line": 162,
+      "table": "quotations",
+      "op": "update"
+    },
+    {
+      "file": "src/components/pricing/QuotationFileView.tsx",
+      "line": 269,
+      "table": "quotations",
+      "op": "update"
+    },
+    {
+      "file": "src/components/pricing/QuotationFileView.tsx",
+      "line": 620,
+      "table": "projects",
+      "op": "update"
+    },
+    {
+      "file": "src/components/pricing/QuotationFileView.tsx",
+      "line": 689,
+      "table": "projects",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/pricing/QuotationFileView.tsx",
+      "line": 706,
+      "table": "quotations",
+      "op": "update"
+    },
+    {
+      "file": "src/components/pricing/QuotationFileView.tsx",
+      "line": 747,
+      "table": "quotations",
+      "op": "update"
+    },
+    {
+      "file": "src/components/pricing/QuotationFileView.tsx",
+      "line": 860,
+      "table": "quotations",
+      "op": "update"
+    },
+    {
+      "file": "src/components/pricing/quotations/CategoryDropdown.tsx",
+      "line": 75,
+      "table": "catalog_categories",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/pricing/quotations/QuotationBuilderV3.tsx",
+      "line": 1157,
+      "table": "catalog_categories",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/Pricing.tsx",
+      "line": 393,
+      "table": "quotations",
+      "op": "update"
+    },
+    {
+      "file": "src/components/Pricing.tsx",
+      "line": 433,
+      "table": "quotations",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/Pricing.tsx",
+      "line": 482,
+      "table": "quotations",
+      "op": "update"
+    },
+    {
+      "file": "src/components/Pricing.tsx",
+      "line": 504,
+      "table": "quotations",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/projects/collections/CollectionCreatorPanel.tsx",
+      "line": 362,
+      "table": "invoices",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/projects/collections/CollectionCreatorPanel.tsx",
+      "line": 434,
+      "table": "collections",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/projects/CreateBookingFromProjectPanel.tsx",
+      "line": 117,
+      "table": "bookings",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/projects/CreateBookingFromProjectPanel.tsx",
+      "line": 135,
+      "table": "billing_line_items",
+      "op": "update"
+    },
+    {
+      "file": "src/components/projects/invoices/InvoiceBuilder.tsx",
+      "line": 769,
+      "table": "billing_line_items",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/projects/invoices/InvoiceBuilder.tsx",
+      "line": 918,
+      "table": "invoices",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/projects/invoices/InvoiceBuilder.tsx",
+      "line": 931,
+      "table": "billing_line_items",
+      "op": "update"
+    },
+    {
+      "file": "src/components/projects/invoices/InvoiceBuilder.tsx",
+      "line": 1012,
+      "table": "invoices",
+      "op": "update"
+    },
+    {
+      "file": "src/components/projects/invoices/InvoiceBuilder.tsx",
+      "line": 1077,
+      "table": "billing_line_items",
+      "op": "update"
+    },
+    {
+      "file": "src/components/projects/invoices/InvoiceBuilder.tsx",
+      "line": 1082,
+      "table": "invoices",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/projects/invoices/InvoiceBuilder.tsx",
+      "line": 1129,
+      "table": "invoices",
+      "op": "update"
+    },
+    {
+      "file": "src/components/projects/invoices/InvoiceBuilder.tsx",
+      "line": 1147,
+      "table": "billing_line_items",
+      "op": "update"
+    },
+    {
+      "file": "src/components/projects/ProjectDetail.tsx",
+      "line": 225,
+      "table": "quotations",
+      "op": "update"
+    },
+    {
+      "file": "src/components/projects/ProjectDetail.tsx",
+      "line": 305,
+      "table": "projects",
+      "op": "update"
+    },
+    {
+      "file": "src/components/shared/billings/UnifiedBillingsTab.tsx",
+      "line": 648,
+      "table": "billing_line_items",
+      "op": "upsert"
+    },
+    {
+      "file": "src/components/shared/billings/UnifiedBillingsTab.tsx",
+      "line": 655,
+      "table": "billing_line_items",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/shared/billings/UnifiedBillingsTab.tsx",
+      "line": 717,
+      "table": "billing_line_items",
+      "op": "update"
+    },
+    {
+      "file": "src/components/shared/billings/UnifiedBillingsTab.tsx",
+      "line": 747,
+      "table": "billing_line_items",
+      "op": "update"
+    },
+    {
+      "file": "src/components/shared/BookingChronologicalTab.tsx",
+      "line": 187,
+      "table": "booking_chronological_logs",
+      "op": "update"
+    },
+    {
+      "file": "src/components/shared/BookingChronologicalTab.tsx",
+      "line": 196,
+      "table": "booking_chronological_logs",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/shared/BookingChronologicalTab.tsx",
+      "line": 225,
+      "table": "booking_chronological_logs",
+      "op": "delete"
+    },
+    {
+      "file": "src/components/shared/BookingCommentsTab.tsx",
+      "line": 125,
+      "table": "booking_comments",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/shared/CommentsTab.tsx",
+      "line": 142,
+      "table": "comments",
+      "op": "insert"
+    },
+    {
+      "file": "src/components/shared/pricing/CatalogItemCombobox.tsx",
+      "line": 335,
+      "table": "catalog_items",
+      "op": "insert"
+    },
+    {
+      "file": "src/context/AutoCapsProvider.tsx",
+      "line": 106,
+      "table": "org_settings",
+      "op": "update"
+    },
+    {
+      "file": "src/hooks/useCalendarEvents.ts",
+      "line": 108,
+      "table": "calendar_events",
+      "op": "insert"
+    },
+    {
+      "file": "src/hooks/useCalendarEvents.ts",
+      "line": 138,
+      "table": "calendar_event_participants",
+      "op": "insert"
+    },
+    {
+      "file": "src/hooks/useCalendarEvents.ts",
+      "line": 144,
+      "table": "calendar_event_reminders",
+      "op": "insert"
+    },
+    {
+      "file": "src/hooks/useCalendarEvents.ts",
+      "line": 205,
+      "table": "calendar_events",
+      "op": "update"
+    },
+    {
+      "file": "src/hooks/useCalendarEvents.ts",
+      "line": 229,
+      "table": "calendar_events",
+      "op": "delete"
+    },
+    {
+      "file": "src/hooks/useCalendarEvents.ts",
+      "line": 260,
+      "table": "calendar_events",
+      "op": "update"
+    },
+    {
+      "file": "src/hooks/useCompanySettings.ts",
+      "line": 118,
+      "table": "company_settings",
+      "op": "upsert"
+    },
+    {
+      "file": "src/hooks/useConsignees.ts",
+      "line": 35,
+      "table": "consignees",
+      "op": "insert"
+    },
+    {
+      "file": "src/hooks/useConsignees.ts",
+      "line": 48,
+      "table": "consignees",
+      "op": "update"
+    },
+    {
+      "file": "src/hooks/useConsignees.ts",
+      "line": 61,
+      "table": "consignees",
+      "op": "delete"
+    },
+    {
+      "file": "src/hooks/useEVoucherSubmit.ts",
+      "line": 138,
+      "table": "evouchers",
+      "op": "delete"
+    },
+    {
+      "file": "src/hooks/useEVoucherSubmit.ts",
+      "line": 335,
+      "table": "evoucher_history",
+      "op": "insert"
+    },
+    {
+      "file": "src/hooks/useEVoucherSubmit.ts",
+      "line": 365,
+      "table": "evoucher_line_items",
+      "op": "insert"
+    },
+    {
+      "file": "src/hooks/useEVoucherSubmit.ts",
+      "line": 378,
+      "table": "evouchers",
+      "op": "insert"
+    },
+    {
+      "file": "src/hooks/useEVoucherSubmit.ts",
+      "line": 442,
+      "table": "evouchers",
+      "op": "insert"
+    },
+    {
+      "file": "src/hooks/useEVoucherSubmit.ts",
+      "line": 474,
+      "table": "evouchers",
+      "op": "update"
+    },
+    {
+      "file": "src/hooks/useEVoucherSubmit.ts",
+      "line": 575,
+      "table": "evouchers",
+      "op": "insert"
+    },
+    {
+      "file": "src/hooks/useEVoucherSubmit.ts",
+      "line": 623,
+      "table": "evoucher_line_items",
+      "op": "delete"
+    },
+    {
+      "file": "src/hooks/useEVoucherSubmit.ts",
+      "line": 624,
+      "table": "evoucher_history",
+      "op": "delete"
+    },
+    {
+      "file": "src/hooks/useEVoucherSubmit.ts",
+      "line": 627,
+      "table": "evouchers",
+      "op": "delete"
+    },
+    {
+      "file": "src/hooks/useInbox.ts",
+      "line": 329,
+      "table": "ticket_messages",
+      "op": "insert"
+    },
+    {
+      "file": "src/hooks/useInbox.ts",
+      "line": 346,
+      "table": "ticket_read_receipts",
+      "op": "upsert"
+    },
+    {
+      "file": "src/hooks/useInbox.ts",
+      "line": 352,
+      "table": "tickets",
+      "op": "update"
+    },
+    {
+      "file": "src/hooks/useInbox.ts",
+      "line": 366,
+      "table": "ticket_read_receipts",
+      "op": "update"
+    },
+    {
+      "file": "src/hooks/useInbox.ts",
+      "line": 372,
+      "table": "tickets",
+      "op": "update"
+    },
+    {
+      "file": "src/hooks/useNetworkPartners.ts",
+      "line": 71,
+      "table": "service_providers",
+      "op": "upsert"
+    },
+    {
+      "file": "src/hooks/useNetworkPartners.ts",
+      "line": 109,
+      "table": "service_providers",
+      "op": "insert"
+    },
+    {
+      "file": "src/hooks/useNetworkPartners.ts",
+      "line": 118,
+      "table": "service_providers",
+      "op": "update"
+    },
+    {
+      "file": "src/hooks/useNetworkPartners.ts",
+      "line": 158,
+      "table": "service_providers",
+      "op": "delete"
+    },
+    {
+      "file": "src/hooks/useThread.ts",
+      "line": 87,
+      "table": "ticket_read_receipts",
+      "op": "upsert"
+    },
+    {
+      "file": "src/hooks/useUser.tsx",
+      "line": 325,
+      "table": "users",
+      "op": "update"
+    },
+    {
+      "file": "src/supabase/functions/admin-user-actions/index.ts",
+      "line": 49,
+      "table": "users",
+      "op": "update"
+    },
+    {
+      "file": "src/supabase/functions/admin-user-actions/index.ts",
+      "line": 79,
+      "table": "users",
+      "op": "delete"
+    },
+    {
+      "file": "src/supabase/functions/admin-user-actions/index.ts",
+      "line": 89,
+      "table": "users",
+      "op": "update"
+    },
+    {
+      "file": "src/theme/themeSettings.ts",
+      "line": 56,
+      "table": "settings",
+      "op": "upsert"
+    },
+    {
+      "file": "src/utils/activityLog.ts",
+      "line": 28,
+      "table": "activity_log",
+      "op": "insert"
+    },
+    {
+      "file": "src/utils/bookings/bookingPayload.ts",
+      "line": 139,
+      "table": "bookings",
+      "op": "insert"
+    },
+    {
+      "file": "src/utils/categoryTemplates.ts",
+      "line": 30,
+      "table": "category_templates",
+      "op": "insert"
+    },
+    {
+      "file": "src/utils/categoryTemplates.ts",
+      "line": 43,
+      "table": "category_templates",
+      "op": "update"
+    },
+    {
+      "file": "src/utils/categoryTemplates.ts",
+      "line": 51,
+      "table": "category_templates",
+      "op": "delete"
+    },
+    {
+      "file": "src/utils/cleanupDuplicates.ts",
+      "line": 70,
+      "table": "contacts",
+      "op": "delete"
+    },
+    {
+      "file": "src/utils/cleanupDuplicates.ts",
+      "line": 128,
+      "table": "customers",
+      "op": "delete"
+    },
+    {
+      "file": "src/utils/collectionResolution.ts",
+      "line": 62,
+      "table": "collections",
+      "op": "update"
+    },
+    {
+      "file": "src/utils/collectionResolution.ts",
+      "line": 77,
+      "table": "evouchers",
+      "op": "update"
+    },
+    {
+      "file": "src/utils/collectionResolution.ts",
+      "line": 92,
+      "table": "evouchers",
+      "op": "update"
+    },
+    {
+      "file": "src/utils/contractAutofill.ts",
+      "line": 223,
+      "table": "quotations",
+      "op": "update"
+    },
+    {
+      "file": "src/utils/contractVersioning.ts",
+      "line": 39,
+      "table": "contract_rate_versions",
+      "op": "update"
+    },
+    {
+      "file": "src/utils/contractVersioning.ts",
+      "line": 47,
+      "table": "contract_rate_versions",
+      "op": "insert"
+    },
+    {
+      "file": "src/utils/contractVersioning.ts",
+      "line": 67,
+      "table": "contract_activity",
+      "op": "insert"
+    },
+    {
+      "file": "src/utils/departmentAssignmentRoles.ts",
+      "line": 82,
+      "table": "department_assignment_roles",
+      "op": "insert"
+    },
+    {
+      "file": "src/utils/departmentAssignmentRoles.ts",
+      "line": 94,
+      "table": "department_assignment_roles",
+      "op": "insert"
+    },
+    {
+      "file": "src/utils/departmentAssignmentRoles.ts",
+      "line": 112,
+      "table": "department_assignment_roles",
+      "op": "update"
+    },
+    {
+      "file": "src/utils/departmentAssignmentRoles.ts",
+      "line": 123,
+      "table": "department_assignment_roles",
+      "op": "update"
+    },
+    {
+      "file": "src/utils/evoucherApproval.ts",
+      "line": 74,
+      "table": "evouchers",
+      "op": "update"
+    },
+    {
+      "file": "src/utils/evoucherApproval.ts",
+      "line": 80,
+      "table": "evoucher_history",
+      "op": "insert"
+    },
+    {
+      "file": "src/utils/exchangeRates.ts",
+      "line": 141,
+      "table": "exchange_rates",
+      "op": "upsert"
+    },
+    {
+      "file": "src/utils/invoiceReversal.ts",
+      "line": 172,
+      "table": "invoices",
+      "op": "insert"
+    },
+    {
+      "file": "src/utils/invoiceReversal.ts",
+      "line": 216,
+      "table": "invoices",
+      "op": "update"
+    },
+    {
+      "file": "src/utils/invoiceReversal.ts",
+      "line": 233,
+      "table": "invoices",
+      "op": "update"
+    },
+    {
+      "file": "src/utils/pricing/catalogSync.ts",
+      "line": 63,
+      "table": "catalog_categories",
+      "op": "insert"
+    },
+    {
+      "file": "src/utils/pricing/catalogSync.ts",
+      "line": 95,
+      "table": "catalog_items",
+      "op": "insert"
+    },
+    {
+      "file": "src/utils/pricing/vendorRateCards.ts",
+      "line": 46,
+      "table": "service_providers",
+      "op": "upsert"
+    },
+    {
+      "file": "src/utils/profiles/quickCreateProfile.ts",
+      "line": 33,
+      "table": "trade_parties",
+      "op": "insert"
+    },
+    {
+      "file": "src/utils/profiles/quickCreateProfile.ts",
+      "line": 44,
+      "table": "profile_locations",
+      "op": "insert"
+    },
+    {
+      "file": "src/utils/profiles/quickCreateProfile.ts",
+      "line": 55,
+      "table": "dispatch_people",
+      "op": "insert"
+    },
+    {
+      "file": "src/utils/profiles/quickCreateProfile.ts",
+      "line": 66,
+      "table": "vehicles",
+      "op": "insert"
+    },
+    {
+      "file": "src/utils/projectAutofill.ts",
+      "line": 296,
+      "table": "bookings",
+      "op": "update"
+    },
+    {
+      "file": "src/utils/projectAutofill.ts",
+      "line": 324,
+      "table": "bookings",
+      "op": "update"
+    },
+    {
+      "file": "src/utils/teamMemberships.ts",
+      "line": 85,
+      "table": "team_memberships",
+      "op": "update"
+    },
+    {
+      "file": "src/utils/teamMemberships.ts",
+      "line": 96,
+      "table": "team_memberships",
+      "op": "update"
+    },
+    {
+      "file": "src/utils/teamMemberships.ts",
+      "line": 102,
+      "table": "team_memberships",
+      "op": "insert"
+    },
+    {
+      "file": "src/utils/teamMemberships.ts",
+      "line": 112,
+      "table": "team_role_eligibilities",
+      "op": "delete"
+    },
+    {
+      "file": "src/utils/teamMemberships.ts",
+      "line": 119,
+      "table": "team_role_eligibilities",
+      "op": "insert"
+    },
+    {
+      "file": "src/utils/teamMemberships.ts",
+      "line": 145,
+      "table": "team_memberships",
+      "op": "update"
+    },
+    {
+      "file": "src/utils/workflowTickets.ts",
+      "line": 59,
+      "table": "tickets",
+      "op": "insert"
+    },
+    {
+      "file": "src/utils/workflowTickets.ts",
+      "line": 86,
+      "table": "ticket_participants",
+      "op": "insert"
+    },
+    {
+      "file": "src/utils/workflowTickets.ts",
+      "line": 97,
+      "table": "ticket_participants",
+      "op": "insert"
+    },
+    {
+      "file": "src/utils/workflowTickets.ts",
+      "line": 106,
+      "table": "ticket_participants",
+      "op": "insert"
+    },
+    {
+      "file": "src/utils/workflowTickets.ts",
+      "line": 122,
+      "table": "ticket_participants",
+      "op": "insert"
+    },
+    {
+      "file": "src/utils/workflowTickets.ts",
+      "line": 136,
+      "table": "ticket_messages",
+      "op": "insert"
+    },
+    {
+      "file": "src/utils/workflowTickets.ts",
+      "line": 149,
+      "table": "ticket_attachments",
+      "op": "insert"
+    },
+    {
+      "file": "src/utils/workflowTickets.ts",
+      "line": 206,
+      "table": "quotations",
+      "op": "update"
+    },
+    {
+      "file": "src/utils/workflowTickets.ts",
+      "line": 213,
+      "table": "quotations",
+      "op": "update"
+    },
+    {
+      "file": "src/utils/workflowTickets.ts",
+      "line": 220,
+      "table": "bookings",
+      "op": "update"
+    }
+  ],
+  "rpcs": [
+    {
+      "file": "src/components/accounting/CatalogManagementPage.tsx",
+      "line": 231,
+      "fn": "get_catalog_usage_counts"
+    },
+    {
+      "file": "src/components/admin/profiling/ProfilingGovernanceTab.tsx",
+      "line": 33,
+      "fn": "get_manual_profile_usage"
+    },
+    {
+      "file": "src/components/ApprovalsPage.tsx",
+      "line": 278,
+      "fn": "approve_invoice"
+    },
+    {
+      "file": "src/components/bd/ContactTeamsTab.tsx",
+      "line": 121,
+      "fn": "replace_assignment_profile_atomic"
+    },
+    {
+      "file": "src/components/bd/CustomerAssignmentProfilesSection.tsx",
+      "line": 227,
+      "fn": "replace_assignment_profile_atomic"
+    },
+    {
+      "file": "src/components/kpi/MyScorecardPage.tsx",
+      "line": 189,
+      "fn": "get_kpi_scorecard"
+    },
+    {
+      "file": "src/components/kpi/MyScorecardPage.tsx",
+      "line": 190,
+      "fn": "get_kpi_score_history"
+    },
+    {
+      "file": "src/components/kpi/PerformancePage.tsx",
+      "line": 84,
+      "fn": "get_kpi_org_overview"
+    },
+    {
+      "file": "src/components/kpi/PerformancePage.tsx",
+      "line": 99,
+      "fn": "get_kpi_scorecard"
+    },
+    {
+      "file": "src/components/kpi/PerformancePage.tsx",
+      "line": 100,
+      "fn": "kpi_can_evaluate"
+    },
+    {
+      "file": "src/components/kpi/ReviewPanel.tsx",
+      "line": 67,
+      "fn": "save_kpi_manual_entry"
+    },
+    {
+      "file": "src/components/kpi/ReviewPanel.tsx",
+      "line": 86,
+      "fn": "clear_kpi_manual_entry"
+    },
+    {
+      "file": "src/components/NeuronSidebar.tsx",
+      "line": 398,
+      "fn": "get_unread_count"
+    },
+    {
+      "file": "src/components/NeuronSidebar.tsx",
+      "line": 446,
+      "fn": "current_user_is_ticket_audience"
+    },
+    {
+      "file": "src/components/pricing/ContractDetailView.tsx",
+      "line": 460,
+      "fn": "repoint_live_bookings_to_rate_version"
+    },
+    {
+      "file": "src/components/projects/invoices/InvoiceBuilder.tsx",
+      "line": 985,
+      "fn": "approve_invoice"
+    },
+    {
+      "file": "src/components/shared/billings/UnifiedBillingsTab.tsx",
+      "line": 816,
+      "fn": "send_billing_items_to_booking"
+    },
+    {
+      "file": "src/hooks/useFinancialHealthReport.ts",
+      "line": 45,
+      "fn": "get_financial_health_summary"
+    },
+    {
+      "file": "src/hooks/useInbox.ts",
+      "line": 255,
+      "fn": "get_unread_count"
+    },
+    {
+      "file": "src/hooks/useInbox.ts",
+      "line": 271,
+      "fn": "get_inbox_threads"
+    },
+    {
+      "file": "src/hooks/useNotifications.ts",
+      "line": 55,
+      "fn": "get_my_notification_counters"
+    },
+    {
+      "file": "src/hooks/useNotifications.ts",
+      "line": 76,
+      "fn": "get_my_notifications"
+    },
+    {
+      "file": "src/hooks/useNotifications.ts",
+      "line": 208,
+      "fn": "mark_entity_read"
+    },
+    {
+      "file": "src/hooks/useNotifications.ts",
+      "line": 244,
+      "fn": "get_my_unread_entity_ids"
+    },
+    {
+      "file": "src/hooks/useProfileUsageCheck.ts",
+      "line": 21,
+      "fn": "get_profile_booking_usage"
+    },
+    {
+      "file": "src/lib/dashboardFetchers.ts",
+      "line": 104,
+      "fn": "get_inbox_threads"
+    },
+    {
+      "file": "src/utils/assignments/persistBookingAssignments.ts",
+      "line": 39,
+      "fn": "replace_booking_assignments_atomic"
+    },
+    {
+      "file": "src/utils/assignments/persistBookingAssignments.ts",
+      "line": 91,
+      "fn": "replace_assignment_profile_atomic"
+    },
+    {
+      "file": "src/utils/bookingNumberUtils.ts",
+      "line": 15,
+      "fn": "generate_booking_number"
+    },
+    {
+      "file": "src/utils/bookingNumberUtils.ts",
+      "line": 38,
+      "fn": "peek_next_booking_number"
+    },
+    {
+      "file": "src/utils/contractLookup.ts",
+      "line": 44,
+      "fn": "detect_active_contracts_for_customer"
+    },
+    {
+      "file": "src/utils/contractLookup.ts",
+      "line": 148,
+      "fn": "get_contract_for_booking"
+    },
+    {
+      "file": "src/utils/evoucherApproval.ts",
+      "line": 45,
+      "fn": "ensure_billable_expense_billing_item"
+    },
+    {
+      "file": "src/utils/notifications.ts",
+      "line": 136,
+      "fn": "record_notification_event"
+    },
+    {
+      "file": "src/utils/notifications.ts",
+      "line": 177,
+      "fn": "mark_entity_read"
+    },
+    {
+      "file": "src/utils/notifications.ts",
+      "line": 196,
+      "fn": "mark_module_read"
+    }
+  ],
+  "reconciliation": {
+    "doorsWithoutRoute": [
+      {
+        "moduleId": "ops_bookings",
+        "dept": "Operations",
+        "label": "Booking Detail"
+      },
+      {
+        "moduleId": "ops_projects",
+        "dept": "Operations",
+        "label": "Projects"
+      },
+      {
+        "moduleId": "exec_performance",
+        "dept": "Executive",
+        "label": "Performance"
+      },
+      {
+        "moduleId": "exec_memos",
+        "dept": "Executive",
+        "label": "Memos"
+      },
+      {
+        "moduleId": "inbox_entity_picker",
+        "dept": "Inbox",
+        "label": "Entity Picker"
+      },
+      {
+        "moduleId": "my_scorecard",
+        "dept": "Personal",
+        "label": "My Scorecard"
+      }
+    ],
+    "ungatedRoutes": [
+      {
+        "path": "/supabase-debug",
+        "element": "SupabaseDebug",
+        "line": 1055
+      },
+      {
+        "path": "*",
+        "element": "LoginPage",
+        "line": 1056
+      },
+      {
+        "path": "/",
+        "element": "Navigate",
+        "line": 1072
+      },
+      {
+        "path": "/dashboard",
+        "element": "DashboardPage",
+        "line": 1075
+      },
+      {
+        "path": "/projects",
+        "element": "ProjectsPage",
+        "line": 1106
+      },
+      {
+        "path": "/contracts",
+        "element": "ContractsPage",
+        "line": 1109
+      },
+      {
+        "path": "/approvals",
+        "element": "ApprovalsPageWrapper",
+        "line": 1230
+      },
+      {
+        "path": "/settings",
+        "element": "SettingsPage",
+        "line": 1240
+      },
+      {
+        "path": "/design-system",
+        "element": "DesignSystemPage",
+        "line": 1241
+      },
+      {
+        "path": "/diagnostics",
+        "element": "DiagnosticsPage",
+        "line": 1244
+      },
+      {
+        "path": "/supabase-debug",
+        "element": "RouteWrapper",
+        "line": 1245
+      },
+      {
+        "path": "*",
+        "element": "ErrorPage",
+        "line": 1247
+      }
+    ],
+    "guardsWithoutDoor": []
+  }
+}
