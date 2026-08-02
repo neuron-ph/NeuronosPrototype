@@ -81,7 +81,10 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment, 
     const actions = [];
 
     // Contract lifecycle: Mark as Expired — available when contract is Active or Expiring.
-    // NEU-019 WG-28: was the only status action with no can() check.
+    // NEU-019 WG-28 added the can() check here; the Disapprove/Cancel entry below
+    // the separator was still ungated until it was brought in line too. Every
+    // status action now requires quotation-edit on one side or the other, which
+    // matches what the quotations UPDATE policy enforces server-side.
     if (normalizedStatus === "Converted to Contract" && (canActAsBD || canActAsPricing) && (quotation.contract_status === "Active" || quotation.contract_status === "Expiring")) {
       actions.push({
         label: "Mark as Expired",
@@ -349,7 +352,7 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment, 
           ))}
           
           {/* Separator + Disapproved/Cancelled — hidden if already converted to project or contract */}
-          {normalizedStatus !== "Converted to Project" && normalizedStatus !== "Converted to Contract" && normalizedStatus !== "Disapproved" && normalizedStatus !== "Cancelled" && (
+          {(canActAsBD || canActAsPricing) && normalizedStatus !== "Converted to Project" && normalizedStatus !== "Converted to Contract" && normalizedStatus !== "Disapproved" && normalizedStatus !== "Cancelled" && (
             <>
               {availableActions.length > 0 && (
                 <div style={{

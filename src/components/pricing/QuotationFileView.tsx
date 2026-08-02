@@ -190,7 +190,12 @@ export function QuotationFileView({ quotation, onBack, onEdit, userDepartment, o
           linkedRecordType: "quotation",
           linkedRecordId: quotation.id,
           linkedRecordLabel: quotationLabel,
-          resolutionAction: "set_quotation_pricing_in_progress",
+          // No resolutionAction: this ticket only says "you've been assigned".
+          // It used to carry set_quotation_pricing_in_progress, which wrote the
+          // status "Pricing in Progress" — not a canonical QuotationStatus, so
+          // normalizeQuotationStatus fell through to its default and the
+          // quotation silently read as Draft, losing Pending Pricing. Marking
+          // the assignment done shouldn't move the quotation's status at all.
           createdBy: currentUserId,
           createdByName: currentUserName,
           createdByDept: currentUserDepartment,

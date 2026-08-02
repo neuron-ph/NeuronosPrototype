@@ -208,12 +208,12 @@ export async function executeResolutionAction(
         .eq("id", linkedRecordId);
       break;
 
-    case "set_quotation_pricing_in_progress":
-      await supabase
-        .from("quotations")
-        .update({ status: "Pricing in Progress" })
-        .eq("id", linkedRecordId);
-      break;
+    // "set_quotation_pricing_in_progress" was removed: it wrote the status
+    // "Pricing in Progress", which is not a canonical QuotationStatus, so
+    // normalizeQuotationStatus mapped it back to "Draft" — resolving the ticket
+    // walked the quotation backwards. Its only caller (the pricing-assignment
+    // ticket) no longer sets a resolutionAction. Any historical ticket still
+    // carrying the string now falls through to `default` and is a no-op.
 
     case "set_booking_billed":
       await supabase
