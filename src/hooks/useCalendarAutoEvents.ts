@@ -45,13 +45,20 @@ async function fetchBookingEvents(
   startISO: string,
   endISO: string
 ): Promise<CalendarEvent[]> {
-  const { data } = await supabase
+  // `department` is not a column on bookings — selecting it made PostgREST
+  // reject the whole request with 42703, so this fetcher returned nothing and
+  // no booking ETD/ETA ever reached the calendar, for any user. It went
+  // unnoticed because the error was discarded along with the row set.
+  const { data, error } = await supabase
     .from("bookings")
-    .select(
-      "id, booking_number, customer_name, service_type, details, status, department"
-    )
+    .select("id, booking_number, customer_name, service_type, details, status")
     .not("details", "is", null);
 
+  if (error) {
+    // The sibling fetchers below still swallow their errors the same way.
+    console.error("[calendar] booking events query failed", error);
+    return [];
+  }
   if (!data) return [];
 
   const events: CalendarEvent[] = [];
@@ -68,8 +75,11 @@ async function fetchBookingEvents(
             title: `ETD: ${row.booking_number ?? "Booking"}`,
             date: etdDate,
             source: "booking",
-            department: row.department ?? "Operations",
-            deepLink: `/operations/bookings?booking=${row.booking_number}`,
+            department: "Operations",
+            // /operations/:bookingId resolves the service line and redirects.
+            // Was `/operations/bookings?booking=<number>`, which matched
+            // :bookingId with the literal "bookings" and rendered Not Found.
+            deepLink: `/operations/${row.id}`,
             metadata: {
               customer: row.customer_name,
               service: row.service_type,
@@ -89,8 +99,11 @@ async function fetchBookingEvents(
             title: `ETA: ${row.booking_number ?? "Booking"}`,
             date: etaDate,
             source: "booking",
-            department: row.department ?? "Operations",
-            deepLink: `/operations/bookings?booking=${row.booking_number}`,
+            department: "Operations",
+            // /operations/:bookingId resolves the service line and redirects.
+            // Was `/operations/bookings?booking=<number>`, which matched
+            // :bookingId with the literal "bookings" and rendered Not Found.
+            deepLink: `/operations/${row.id}`,
             metadata: {
               customer: row.customer_name,
               service: row.service_type,
