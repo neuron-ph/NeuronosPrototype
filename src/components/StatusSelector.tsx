@@ -3,6 +3,7 @@
 import { CustomDropdown } from "./bd/CustomDropdown";
 import { ExecutionStatus } from "../types/operations";
 import { getStatusOptions } from "../config/booking/bookingFieldOptions";
+import { useServiceStatusOptions } from "../hooks/useEnumOptions";
 import { getBookingStatusStyles } from "../utils/bookingStatus";
 import { cn } from "./ui/utils";
 
@@ -15,51 +16,31 @@ interface StatusSelectorProps {
   serviceType?: string;
 }
 
-const BOOKING_STATUS_TRANSITIONS: Record<ExecutionStatus, ExecutionStatus[]> = {
-  Created: ["Draft", "Ongoing", "Cancelled"],
-  Draft: ["Confirmed", "Ongoing", "Cancelled"],
-  Pending: ["Confirmed", "Cancelled"],
-  Confirmed: ["In Progress", "Ongoing", "On Hold", "Cancelled"],
-  "In Progress": ["Delivered", "On Hold", "Cancelled"],
-  Delivered: ["Completed", "Billed", "Closed"],
-  Completed: ["Billed", "Closed"],
-  "On Hold": ["Confirmed", "Cancelled"],
-  Cancelled: [],
-  Closed: [],
-  "Waiting for Arrival": ["Ongoing", "Cancelled"],
-  Ongoing: ["Delivered", "In Transit", "Issued", "Completed", "Billed", "Cancelled"],
-  "In Transit": ["Delivered", "Completed", "Cancelled"],
-  Audited: ["Billed", "Closed"],
-  "Empty Return": ["Liquidated", "Billed", "Cancelled"],
-  Liquidated: ["Billed"],
-  Issued: ["Billed", "Cancelled"],
-  Billed: ["Paid", "Cancelled"],
-  Paid: ["Audited", "Closed"],
-};
+// A BOOKING_STATUS_TRANSITIONS lifecycle map used to live here, alongside a
+// reversible-status table. Both were unreachable: every caller passes a
+// serviceType, and the service branch below returns before the map is ever
+// consulted. They were removed rather than left in place, because code that
+// reads like a transition guard but never runs is worse than none — bookings
+// have no allowed-transition rules, and that should be obvious from the source.
 
-const REVERSIBLE_BOOKING_STATUSES = new Set<ExecutionStatus>(["Completed", "Cancelled"]);
-const DEFAULT_REVERSIBLE_STATUS_OPTIONS: Partial<Record<ExecutionStatus, ExecutionStatus[]>> = {
-  Completed: ["Ongoing", "Delivered", "Billed", "Closed"],
-  Cancelled: ["Draft", "Ongoing", "Delivered", "Completed", "Billed", "Paid"],
-};
+export function getAvailableBookingStatuses(
+  status: ExecutionStatus,
+  serviceType?: string,
+  /** DB-backed list from `useServiceStatusOptions`; falls back to the static one. */
+  serviceStatusOptions?: string[],
+): ExecutionStatus[] {
+  const serviceStatuses = serviceStatusOptions?.length
+    ? serviceStatusOptions
+    : serviceType
+      ? getStatusOptions(serviceType)
+      : [];
 
-export function getAvailableBookingStatuses(status: ExecutionStatus, serviceType?: string): ExecutionStatus[] {
-  const serviceStatuses = serviceType ? getStatusOptions(serviceType) : [];
-
-  // With a service type, expose the full flat status list for that service.
   if (serviceStatuses.length > 0) {
     return Array.from(new Set(serviceStatuses as ExecutionStatus[]));
   }
 
-  // No service type: fall back to the lifecycle transition map.
-  const reversibleStatuses = DEFAULT_REVERSIBLE_STATUS_OPTIONS[status] ?? [];
-  const nextStatuses = (
-    REVERSIBLE_BOOKING_STATUSES.has(status) && reversibleStatuses.length > 0
-      ? reversibleStatuses
-      : BOOKING_STATUS_TRANSITIONS[status] ?? []
-  ).filter((s): s is ExecutionStatus => s !== status);
-
-  return Array.from(new Set(nextStatuses));
+  // No service type and no DB list — the current status is the only safe option.
+  return [status];
 }
 
 export function StatusSelector({
@@ -73,7 +54,11 @@ export function StatusSelector({
   const style = getBookingStatusStyles(status);
   const Icon = style.icon;
 
-  const availableStatuses = getAvailableBookingStatuses(status, serviceType);
+  // Read the same DB-backed list the booking form uses (profile_service_statuses,
+  // editable via Profiling) so an admin-added status appears here too. The hook
+  // falls back to the static seed before the query resolves.
+  const dbStatusOptions = useServiceStatusOptions(serviceType ?? "");
+  const availableStatuses = getAvailableBookingStatuses(status, serviceType, dbStatusOptions);
 
   // The flat service list already includes the current status; only prepend it
   // when the fallback transition list doesn't contain it (no service type).
