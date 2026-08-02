@@ -62,8 +62,22 @@ for (const d of inv.departments) {
       });
   }
 }
+// moduleId → the route a smoke test can actually visit.
+//
+// A module often has both a list route and a detail route under the same guard
+// (/bd/contacts and /bd/contacts/:contactId). Only the parameterless one can be
+// navigated to directly — visiting a literal ":contactId" matches no route and
+// bounces to the dashboard, which previously showed up as a false RouteGuard
+// contradiction in the smoke run. Prefer parameterless; fall back to the
+// parameterised path only when a module has nothing else, and never let a
+// parameterised route overwrite a parameterless one.
 const routeByModule = new Map();
-for (const r of inv.routes) if (r.guard?.moduleId) routeByModule.set(r.guard.moduleId, r.path);
+for (const r of inv.routes) {
+  if (!r.guard?.moduleId) continue;
+  const existing = routeByModule.get(r.guard.moduleId);
+  if (existing && !existing.includes(":")) continue; // keep the visitable one
+  routeByModule.set(r.guard.moduleId, r.path);
+}
 
 // ─── fetch ───────────────────────────────────────────────────────────────────
 
@@ -123,6 +137,9 @@ const personas = users.map((u) => {
   const pages = held
     .filter((h) => h.action === "view" && routeByModule.has(h.moduleId))
     .map((h) => routeByModule.get(h.moduleId))
+    // Anything still carrying a :param can't be visited without seeding a real
+    // record id — that belongs to tier 2/3, not the route smoke.
+    .filter((p) => !p.includes(":"))
     .sort();
 
   return {
