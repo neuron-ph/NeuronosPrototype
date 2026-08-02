@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../utils/supabase/client";
 import { useUser } from "./useUser";
 import { queryKeys } from "../lib/queryKeys";
+import type { TicketStatus } from "./useInbox";
 
 export interface ThreadMessage {
   id: string;
@@ -52,7 +53,7 @@ export interface ThreadDetail {
   subject: string;
   type: "fyi" | "request" | "approval";
   priority: "normal" | "urgent";
-  status: "draft" | "open" | "acknowledged" | "in_progress" | "done" | "returned" | "archived";
+  status: TicketStatus;
   created_by: string;
   created_by_name?: string;
   created_by_department?: string;

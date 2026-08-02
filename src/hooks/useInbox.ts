@@ -7,7 +7,30 @@ import { usePermission } from "../context/PermissionProvider";
 import { logStatusChange } from "../utils/activityLog";
 
 export type TicketType = "fyi" | "request" | "approval";
-export type TicketStatus = "draft" | "open" | "acknowledged" | "in_progress" | "done" | "returned" | "archived";
+/**
+ * Mirrors the `tickets_status_check` CHECK constraint exactly. This is a read
+ * type — it describes what a `tickets` row can hold, so it should track the
+ * constraint rather than the narrower set the app happens to write.
+ *
+ * Seven of the nine are written: `draft`/`open` on compose, `acknowledged`/
+ * `in_progress`/`done` by the ThreadDetailPanel stepper (STATUS_STEPS),
+ * `returned` on send-back, `archived` on archive. Reaching `done` is what fires
+ * `runResolutionAction`.
+ *
+ * `pending` and `resolved` are permitted by the constraint and written by
+ * nothing. Left in place: an over-permissive CHECK costs nothing, and a read
+ * type that can't represent a value the database may return is worse.
+ */
+export type TicketStatus =
+  | "draft"
+  | "open"
+  | "acknowledged"
+  | "in_progress"
+  | "pending"
+  | "done"
+  | "resolved"
+  | "returned"
+  | "archived";
 export type TicketPriority = "normal" | "urgent";
 
 export interface ThreadSummary {
