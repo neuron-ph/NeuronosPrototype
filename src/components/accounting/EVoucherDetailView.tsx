@@ -15,7 +15,7 @@ import { getPaymentUrgencyFor, resolveEvoucherDueDate, paymentUrgencyStyle } fro
 interface EVoucherDetailViewProps {
   evoucher: EVoucher;
   onClose: () => void;
-  currentUser?: { id: string; name: string; email: string; role?: string; department?: string; ev_approval_authority?: boolean | null };
+  currentUser?: { id: string; name: string; email: string; role?: string; department?: string };
   /** Opened via the list's "Liquidate" row action — open the form on arrival. */
   autoOpenLiquidation?: boolean;
   onStatusChange?: () => void;

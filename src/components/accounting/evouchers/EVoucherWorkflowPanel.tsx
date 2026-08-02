@@ -20,7 +20,6 @@ interface CurrentUser {
   name: string;
   department?: string;
   role?: string;
-  ev_approval_authority?: boolean;
 }
 
 interface EVoucherWorkflowPanelProps {
@@ -353,30 +352,18 @@ export function EVoucherWorkflowPanel({
   const handleTLApprove = async () => {
     setIsSubmitting(true);
     try {
-      const nextStatus = currentUser?.ev_approval_authority ? "pending_accounting" : "pending_ceo";
-      await transition(nextStatus, "Approved by Team Leader / Manager");
-      if (actor) logApproval("evoucher", evoucherId, evoucherNumber, currentStatus, nextStatus, actor, true);
-      toast.success(
-        nextStatus === "pending_accounting"
-          ? "Approved — forwarded to Accounting"
-          : "Approved — forwarded to CEO for final approval"
-      );
-      if (nextStatus === "pending_accounting" && currentUser?.id) {
-        await ensureBillableBillingItem();
-        createWorkflowTicket({
-          subject: `Disburse E-Voucher: ${evoucherNumber}`,
-          body: `${evoucherNumber} has been approved and is ready for disbursement.`,
-          type: "request",
-          priority: "normal",
-          recipientDept: "Accounting",
-          linkedRecordType: "expense",
-          linkedRecordId: evoucherId,
-          createdBy: currentUser.id,
-          createdByName: currentUser.name,
-          createdByDept: currentUser.department || "Operations",
-          autoCreated: true,
-        });
-      }
+      // The manager step always hands off to the CEO. A per-user
+      // `ev_approval_authority` flag used to let a delegated TL skip that gate,
+      // but it was client-side only (no RLS or DB function ever read it) and was
+      // never enabled for a single user in dev or prod. Removed rather than left
+      // dormant — an unenforced authority flag invites being switched on later
+      // by someone assuming the server checks it.
+      await transition("pending_ceo", "Approved by Team Leader / Manager");
+      if (actor) logApproval("evoucher", evoucherId, evoucherNumber, currentStatus, "pending_ceo", actor, true);
+      toast.success("Approved — forwarded to CEO for final approval");
+      // The billing-item / disburse-ticket side effects that used to hang off the
+      // skip-to-accounting branch are not lost: handleCEOApprove does both when
+      // the voucher actually reaches pending_accounting.
       onStatusChange?.();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to approve");

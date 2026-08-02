@@ -298,7 +298,6 @@ export function EVoucherDetailPage() {
                 name: user.name,
                 department: user.department,
                 role: user.role,
-                ev_approval_authority: user.ev_approval_authority ?? undefined,
               } : undefined}
               onStatusChange={refetchEV}
               isBillable={evoucher.is_billable === true || (evoucher as any).details?.is_billable === true}

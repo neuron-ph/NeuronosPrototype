@@ -23,7 +23,6 @@ export type UserRow = {
   created_at?: string;
   teams: { name: string } | null;
   service_type?: string | null;
-  ev_approval_authority?: boolean | null;
   team_role?: TeamRole | null;
 };
 
