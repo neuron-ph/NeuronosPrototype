@@ -121,13 +121,16 @@ were blocked from all 7 granted routes **with no error**. Prod clean, 60/60.
 `clone-prod-to-dev.mjs` so the sync can't recreate it, and it warns loudly about
 anything unmatchable. `3869bae`
 
-### B3 — The app cannot tell "no permissions" from "couldn't read permissions" · OPEN
-Both arrive at `PermissionProvider` as `{}`. B2 was invisible because of this.
+### B3 — The app cannot tell "no permissions" from "couldn't read permissions" · FIXED
+Both arrived at `PermissionProvider` as `{}`. B2 was invisible because of this.
 
-**Action.** Consider surfacing a distinct error state when the
-`permission_overrides` read returns no row at all, versus a row with no grants.
-Not urgent — B2's data cause is fixed — but it is why B2 was silent.
-**Needs Marcus.**
+**Action — done.** A signed-in user always has an overrides row (applying a
+profile materialises one), so *no row* means unreadable, not empty.
+`PermissionProvider` now returns `grantsUnreadable` alongside the grants and
+logs the account id. `RouteGuard` uses it to tell the two apart: a real missing
+grant still logs quietly, but unreadable permissions raise an explicit toast —
+"Your permissions could not be loaded" — instead of bouncing the user out of
+every page with no explanation.
 
 ---
 
@@ -184,12 +187,18 @@ navigation landed unauthenticated. A fixed 1.2s wait sampled during boot.
 **Process action:** a generated suite fails in ways indistinguishable from
 product bugs. Chase every fault to a root cause **before** reporting it.
 
-### C7 — `activity_log` FK violation for `hq@neuron.com.ph` · OPEN
-`activity_log_user_id_fkey` violated on `/accounting/billings`. Seen once, not
-chased.
+### C7 — `activity_log` FK violation discards the audit entry · FIXED
+`activity_log.user_id` references `users(id)`. An actor id that is not a live
+profile — a stale cached session, an id from another environment — made the whole
+insert fail, so **the audit record was lost entirely** and only a console error
+remained. Could not reproduce the original caller (no orphan rows exist; the FK
+prevents them), but the failure mode is the real defect.
 
-**Action.** Reproduce and diagnose. Low priority — logging only, no user-facing
-effect observed.
+**Action — done.** All six log helpers funnel through one insert. On `23503` it
+now names the rejected id and re-inserts with `user_id: null` — a legitimate row,
+since the column is `ON DELETE SET NULL` — so the entry survives, attributed by
+name. An audit trail that silently drops entries is worse than one with a gap
+it tells you about.
 
 ---
 
@@ -227,15 +236,20 @@ until they are `created_by`, `prepared_by` or `assigned_to`. In prod 13 of 50
 **Action.** None. Marcus confirmed the manager triages the queue; assignment is
 both the business act and the permission grant. **Do not "fix" this.**
 
-### E2 — Four workflow states share one label · OPEN
+### E2 — Four workflow states share one label · FIXED
 `getDisplayStatus` collapses `Draft`, `Pending Pricing`, `Priced` and
 `Needs Revision` all to **"Ongoing"**. An officer marks something Priced and the
 chip is identical before and after — no feedback that the action landed, and a
 manager scanning a list cannot tell waiting-to-be-priced from priced.
 
-**Action.** Decide whether this is deliberate simplification or an oversight. If
-the latter, `Priced` at minimum deserves its own label. **Needs Marcus.**
-Workaround in the spine test: assert on available actions, which do change.
+**It is deliberate** — `statusMapping.ts` calls it "the client's 4-status system",
+so collapsing is a requirement, not an oversight. The problem is only that the
+people doing the work are blinded by a client-facing simplification.
+
+**Action — done.** The chip keeps the four-status label and appends the internal
+state as a quiet suffix, but only where the label actually hides a distinction
+(`Ongoing · Priced`, `Ongoing · Pending Pricing`). Clients still see four
+statuses; operators can see where the quote really is.
 
 ### E3 — Assign is a two-step interaction · WATCH
 Picking a reviewer only reveals a "Price by" date and a **Confirm Assign**
@@ -268,14 +282,14 @@ swallowed. A user who scrolls further can click it normally — it is a scroll
 **Action.** Low priority. Worth a look if anyone reports "Create Project does
 nothing". The spine dispatches the click on the element to get past it.
 
-### E8 — BD cannot convert an accepted quote to a project · OPEN
+### E8 — Only Pricing converts an accepted quote · BY DESIGN
 "Create Project" is gated on `bd_projects:create || pricing_projects:create`
 (`QuotationFileView.tsx:1304`). **No Business Development user holds either**
 except `marcus@neuron.com.ph`; the entire Pricing department does. So the person
 who wins the client and records the acceptance cannot convert it — Pricing must.
 
-**Action.** Confirm this is intended, the same way the triage question was. If BD
-is meant to own conversion, they need `bd_projects:create`. **Needs Marcus.**
+**Marcus: only Pricing can.** Intended — BD owns the client relationship, Pricing
+owns turning an accepted quote into a job. **Action:** none.
 
 ### E9 — Booking-create buttons in a project file · BY DESIGN
 **Originally reported as an ungated affordance. That was wrong** — the second

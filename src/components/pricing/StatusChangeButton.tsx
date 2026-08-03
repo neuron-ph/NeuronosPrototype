@@ -206,6 +206,14 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment, 
 
   const availableActions = getAvailableActions();
 
+  // Only worth showing where the display label hides a real distinction — the
+  // four internal states that all render as "Ongoing". Everywhere else the
+  // display status already says it, so a suffix would just be noise.
+  // "Ongoing" is the only display label covering more than one internal state,
+  // and no QuotationStatus is itself called "Ongoing", so the suffix is always
+  // additive rather than a repeat of the label.
+  const internalStatusSuffix = displayStatus === "Ongoing" ? normalizedStatus : null;
+
   // Don't show status button if there are no actions available
   if (availableActions.length === 0 && (normalizedStatus === "Converted to Project" || normalizedStatus === "Converted to Contract")) {
     return null;
@@ -247,6 +255,17 @@ export function StatusChangeButton({ quotation, onStatusChange, userDepartment, 
             flexShrink: 0,
           }} />
           <span>{displayStatus}</span>
+          {/* getDisplayStatus deliberately collapses Draft / Pending Pricing /
+              Priced / Needs Revision into "Ongoing" for the client's four-status
+              system. That is fine for clients but leaves the people doing the
+              work blind: an officer marks something Priced and the chip is
+              unchanged, and a manager scanning a list cannot tell
+              waiting-to-be-priced from priced. Show the internal state as a
+              quiet suffix so the four-status system survives and the operator
+              can still see where the quote actually is. */}
+          {internalStatusSuffix && (
+            <span style={{ opacity: 0.65, fontWeight: 400 }}>· {internalStatusSuffix}</span>
+          )}
           {availableActions.length > 0 && (
             <ChevronDown size={12} style={{ color: statusStyle.color, opacity: 0.7 }} />
           )}

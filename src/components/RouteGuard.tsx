@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { usePermission } from "../context/PermissionProvider";
+import { toast } from "sonner@2.0.3";
 import { useUser } from "../hooks/useUser";
 import type { ActionId, ModuleId } from "./admin/permissionsConfig";
 
@@ -31,7 +32,7 @@ export function RouteGuard({
 }: RouteGuardProps) {
   const navigate = useNavigate();
   const { isAuthenticated, isLoading } = useUser();
-  const { can, isLoaded: permissionsLoaded } = usePermission();
+  const { can, isLoaded: permissionsLoaded, grantsUnreadable } = usePermission();
   const needsPermissions = !!requiredPermission || !!requiredPredicate;
 
   useEffect(() => {
@@ -46,10 +47,28 @@ export function RouteGuard({
       const label = requiredPermission
         ? `${requiredPermission.moduleId}.${requiredPermission.action}`
         : predicateLabel ?? "predicate";
-      console.warn(`[RouteGuard] Access denied: missing permission "${label}"`);
+
+      // Distinguish "you don't have this" from "we couldn't read your
+      // permissions at all". The second denies EVERY route, so the user is
+      // bounced from the whole app with no explanation — say so instead of
+      // reporting a missing grant they may well hold.
+      if (grantsUnreadable) {
+        console.error(
+          `[RouteGuard] denying "${label}" because no permission record could be read. ` +
+            `This blocks every guarded route — the account's permissions are unreadable, ` +
+            `not empty.`,
+        );
+        toast.error(
+          "Your permissions could not be loaded, so this page is unavailable. Please contact an administrator.",
+          { id: "permissions-unreadable" },
+        );
+      } else {
+        console.warn(`[RouteGuard] Access denied: missing permission "${label}"`);
+      }
       navigate("/dashboard", { replace: true });
     }
   }, [
+    grantsUnreadable,
     isAuthenticated,
     isLoading,
     requiredPermission,
