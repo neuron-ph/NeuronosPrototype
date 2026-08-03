@@ -40,6 +40,8 @@ const BD = "jr.businessdev02@falconslogistics-ph.com";      // BD Officer
 // visible to the manager/TL, who hold "everything".
 // Stage 3 should add the assign-a-reviewer step and swap this back to an Officer.
 const PRICING = "jr.manager03@falconslogistics-ph.com";      // Pricing Manager
+const PRICING_OFFICER = "jr.pricing01@falconslogistics-ph.com";
+const OFFICER_NAME = "Sarah May B. Baylon"; // as shown in the Assign to picker
 
 const SPINE_TAG = "E2E-SPINE";
 
@@ -142,6 +144,82 @@ test("spine: BD raises an inquiry, Pricing prices it", async ({ browser }) => {
     `Pricing cannot see ${quoteNumber} (${quotationName}) after BD submitted it — the BD→Pricing handoff is broken`
   ).toBeVisible({ timeout: 25_000 });
 
+  // ── Stage 3a — the manager triages: assign a reviewer ─────────────────────
+  // Marcus confirmed this is the intended flow: the manager owns the pending
+  // queue and hands each item to an officer. Assignment is also what makes the
+  // record visible to that officer (users_reachable_ids matches assigned_to),
+  // so this step is both the business action and the permission grant.
+  await pricing.getByText(quoteNumber).first().click();
+  await expect(pricing.getByRole("heading", { name: quotationName })).toBeVisible({
+    timeout: 20_000,
+  });
+
+  await pricing.getByRole("button", { name: /Unassigned/ }).click();
+  await pricing.waitForTimeout(1_200);
+  await pricing.getByText(OFFICER_NAME, { exact: true }).first().click({ timeout: 15_000 });
+
+  // Picking a name does NOT assign — it reveals a "Price by" date and a
+  // Confirm Assign button. Skipping the confirm leaves the record untouched
+  // and silently unassigned, which is what made this look like a broken
+  // permission rather than an unfinished interaction.
+  await pricing.getByRole("button", { name: "Confirm Assign" }).click();
+  await pricing.waitForTimeout(2_500);
+
+  // Assert the assignment actually stuck before handing off, so a failed
+  // interaction fails here rather than masquerading as a visibility bug.
+  await expect(
+    pricing.getByRole("button", { name: OFFICER_NAME }),
+    "Confirm Assign did not persist the reviewer"
+  ).toBeVisible({ timeout: 15_000 });
+
+  // ── Stage 3b — the officer, who could not see this a moment ago ───────────
+  const officerContext = await browser.newContext();
+  const officer = await signIn(officerContext, PRICING_OFFICER);
+
+  await officer.goto("/pricing/quotations", { waitUntil: "domcontentloaded" });
+  await officer.getByPlaceholder(/Search/i).first().fill(quoteNumber);
+  await officer.waitForTimeout(3_000);
+
+  // THE TRIAGE ASSERTION. Before the assignment this officer sits on the "own"
+  // visibility dial and cannot see a BD-created quotation at all. If this fails,
+  // assignment is not granting visibility and the triage flow is broken.
+  await expect(
+    officer.getByText(quoteNumber).first(),
+    `${OFFICER_NAME} cannot see ${quoteNumber} after the manager assigned it — triage does not grant visibility`
+  ).toBeVisible({ timeout: 25_000 });
+
+  await officer.getByText(quoteNumber).first().click();
+  await expect(officer.getByRole("heading", { name: quotationName })).toBeVisible({
+    timeout: 20_000,
+  });
+
+  // ── Stage 3c — the officer prices it ──────────────────────────────────────
+  // "Mark as Priced" is offered only at Pending Pricing and only to someone
+  // holding pricing_quotations:edit (StatusChangeButton). The status chip shows
+  // the DISPLAY label, which for Pending Pricing is "Ongoing".
+  await officer.getByRole("button", { name: /Ongoing/ }).click();
+  await officer.waitForTimeout(1_000);
+  await officer.getByRole("menuitem", { name: /Mark as Priced/ }).click();
+  await officer.waitForTimeout(3_000);
+
+  // The chip cannot confirm this. getDisplayStatus collapses Draft, Pending
+  // Pricing, Priced AND Needs Revision all to "Ongoing", so the label is
+  // identical before and after — an officer gets no visible feedback that
+  // pricing landed. Assert on the ACTIONS instead, which do change: at Priced,
+  // "Mark as Priced" is withdrawn and "Send to Client" becomes available.
+  await officer.getByRole("button", { name: /Ongoing/ }).click();
+  await officer.waitForTimeout(1_200);
+
+  await expect(
+    officer.getByRole("menuitem", { name: /Send to Client/ }),
+    "the officer's Mark as Priced did not take effect — Send to Client is not offered"
+  ).toBeVisible({ timeout: 20_000 });
+  await expect(
+    officer.getByRole("menuitem", { name: /Mark as Priced/ }),
+    "still offering Mark as Priced — the status did not advance"
+  ).toHaveCount(0);
+
   await bdContext.close();
   await pricingContext.close();
+  await officerContext.close();
 });
