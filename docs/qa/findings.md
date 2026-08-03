@@ -288,17 +288,38 @@ maybe.
 uses — so route, button and DB agree. **Needs verification before it is called a
 hole.**
 
-### E10 — Operations cannot see a freshly converted project · OPEN
-Both Ops users who can create forwarding bookings (`jr.supervisor07`,
-`freight@`) sit on `projects: "own"`. A project converted by Pricing has none of
-them as `created_by`/`manager_id`/`supervisor_id`/`handler_id`, so neither can
-see it. `users_reachable_ids` would also reach it via a booking — but they cannot
-create one on a project they cannot open.
+### E10 — No project has ever had a manager, supervisor or handler · OPEN
+Marcus confirmed the intended hand-off to Operations is via
+manager/supervisor/handler on the project — the analogue of the quotation
+"Assign to". The mechanism does not exist:
 
-**Action.** Establish how a project is handed to Operations — presumably by
-setting manager/supervisor/handler on it, which is the analogue of the quotation
-"Assign to". If so it is BY DESIGN like E1; if not, Ops is locked out of new work.
-**Needs Marcus.** This is the blocker for spine stage 6.
+- **Prod: 22 projects, 0 with `manager_id`, 0 with `supervisor_id`, 0 with
+  `handler_id`.** Dev: same, 0 of 15.
+- `buildProjectInsertFromQuotation` (`projectHydration.ts:230`) sets only
+  `created_by`. It never populates the three assignment columns.
+- The project file exposes no assignment control — tabs are Dashboard /
+  Operations / Accounting / Collaboration, and none of them, nor the kebab,
+  offers one.
+
+Consequence, since `users_reachable_ids('projects')` matches only
+`created_by`/`manager_id`/`supervisor_id`/`handler_id` (or a booking the user is
+on): **anyone on the `projects: "own"` dial can see only projects they personally
+created.** In prod that is 14 active users — 10 of them in Operations (2 managers,
+2 staff, 6 team leaders) — against 22 projects created by just 6 people.
+
+So Operations does not reach work through project files at all. Bookings are
+presumably created directly from the Operations lists, where the dials are much
+wider. That may be perfectly fine — but it means the project → booking path in
+the UI is unusable for the people it appears to be for.
+
+**Action.** Two questions, both for Marcus:
+1. Is the project file meant to be an Operations surface at all, or is it a
+   Pricing/BD artifact that Ops never opens?
+2. If it is meant to be, project assignment needs to exist — currently there is
+   no way to set it from the UI and nothing sets it on conversion.
+
+Spine stage 6 will use the direct Operations booking path instead, which is how
+the work appears to actually flow.
 
 ### E6 — `quotations` has `project_id` but no `project_number` · WATCH
 A query assuming the latter errored 42703. Minor; noted so it isn't rediscovered.
