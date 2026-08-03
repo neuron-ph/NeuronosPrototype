@@ -342,6 +342,19 @@ reach work this way. `users_reachable_ids('projects')` still matches on them.
 they cost nothing. Ops reaches work through the Operations booking lists, where
 the visibility dials are much wider, and that is the path spine stage 6 drives.
 
+### E11 — Booking Name is required, then discarded · OPEN
+The project booking form marks **Booking Name*** required and pre-fills it from
+the project. After saving, `details->>'booking_name'` is **null** — the value is
+collected, validated against, and dropped.
+
+Consequence: a booking cannot be found by the name the person typed. The spine
+searches by `booking_number` instead, which is the only identifier that survives.
+
+**Action.** Either persist it or stop asking for it. Requiring a field and then
+discarding it is the worst of both. **Needs Marcus** to say which the name is
+for — if it is meant to be the human label for a booking, it should be stored
+and searchable.
+
 ### E6 — `quotations` has `project_id` but no `project_number` · WATCH
 A query assuming the latter errored 42703. Minor; noted so it isn't rediscovered.
 

@@ -21,7 +21,7 @@ import { test, expect, Page, BrowserContext } from "@playwright/test";
 //   Stage 4  BD sends to client, client accepts     → Accepted        [done]
 //   Stage 5  the officer converts it to a project   → Converted       [done]
 //   Stage 6a Pricing opens the booking form from the project          [done]
-//   Stage 6b Operations picks that booking up                         [BLOCKED]
+//   Stage 6b Operations picks that booking up                         [done]
 //   Stage 7  e-voucher: raise → approve → disburse                    [todo]
 //   Stage 8  billing → invoice → collection                           [todo]
 //
@@ -59,6 +59,10 @@ const OFFICER_NAME = "Sarah May B. Baylon"; // as shown in the Assign to picker
 // rather than only what they raised. That is what makes them the right person
 // to prove the booking actually arrived in Operations.
 const OPS = "jr.supervisor07@falconslogistics-ph.com";
+// Their access profile is literally "IMPORT SUPERVISOR (FORWARDING)", which is
+// the required role slot on a forwarding booking — so naming them IS the
+// Pricing -> Ops handoff, not a convenience.
+const OPS_NAME = "Princess Marre R. Reyes";
 
 const SPINE_TAG = "E2E-SPINE";
 
@@ -86,7 +90,7 @@ async function signIn(context: BrowserContext, email: string): Promise<Page> {
   return page;
 }
 
-test("spine: BD raises an inquiry, Pricing prices it", async ({ browser }) => {
+test("spine: inquiry -> priced -> accepted -> project -> booking -> Operations", async ({ browser }) => {
   test.setTimeout(240_000);
 
   // A name unique to this run, so the Pricing actor finds this exact record and
@@ -363,24 +367,53 @@ test("spine: BD raises an inquiry, Pricing prices it", async ({ browser }) => {
   await expect(officer.getByText(quoteNumber).first()).toBeVisible({ timeout: 15_000 });
   await expect(officer.getByText(CUSTOMER).first()).toBeVisible({ timeout: 15_000 });
 
-  // STOPS HERE. Submitting returns "Please fill in all required fields" —
-  // Consignee / Shipper / Customs Entry and others sit below the fold and are
-  // not seeded from the project. Filling them is a discovery pass of its own,
-  // like Create Inquiry was. Until then stage 6b (Operations picking the
-  // booking up in their own list) cannot run, so it is not asserted rather
-  // than asserted loosely.
-  await officer.getByRole("button", { name: "Cancel" }).last().click();
-  await officer.waitForTimeout(1_500);
+  // Two required fields are not seeded from the project: Mode, and the service's
+  // supervisor role. The second one IS the handoff — naming an Operations person
+  // on the booking is what hands the job over, exactly as assigning a reviewer
+  // handed the quotation to Pricing in stage 3.
+  await officer.getByText("Select Mode...").first().click();
+  await officer.waitForTimeout(1_000);
+  await officer.getByText("FCL", { exact: true }).first().click();
+  await officer.waitForTimeout(800);
 
-  // ── Stage 6b — Operations picks it up · NOT YET RUNNING ───────────────────
-  // The real Pricing -> Ops handoff, and the reason stage 6 exists: Ops never
-  // opens the project file (E10), so the booking must reach them through their
-  // own service list or the chain is broken between departments. Blocked until
-  // the booking form can actually be submitted (above). The actor is ready:
-  // OPS holds ops_forwarding:create and sits on bookings_forwarding:"everything",
-  // so they see the whole service list rather than only what they raised.
+  await officer.getByText("— None —").first().click();
+  await officer.waitForTimeout(1_000);
+  await officer.getByText(OPS_NAME, { exact: true }).first().click({ timeout: 15_000 });
+  await officer.waitForTimeout(800);
+
+  // "Create Booking" also matches the dropdown on the page behind the modal.
+  // The modal renders last, so its submit is the final match.
+  await officer.getByRole("button", { name: "Create Booking" }).last().click();
+  await officer.waitForTimeout(6_000);
+
+  await expect(
+    officer.getByRole("heading", { name: /New Forwarding Booking/ }),
+    "the booking form did not close — a required field is still unsatisfied"
+  ).toHaveCount(0, { timeout: 20_000 });
+
+  // ── Stage 6b — Operations picks it up, in their own list ──────────────────
+  // The real Pricing -> Ops handoff. Ops never opens the project file (E10), so
+  // the booking has to reach them through their own service list or the chain
+  // is broken between departments.
+  const opsContext = await browser.newContext();
+  const ops = await signIn(opsContext, OPS);
+
+  await ops.goto("/operations/forwarding", { waitUntil: "domcontentloaded" });
+  await ops.waitForTimeout(3_000);
+  // Search by booking NUMBER, not the booking name: the name typed on the form
+  // is not persisted (details.booking_name comes back null), so the number is
+  // the only identifier that survives the save. It is also what the list
+  // searches on, same as the quotation list searching quote_number.
+  await ops.getByPlaceholder(/Search/i).first().fill(bookingNumber);
+  await ops.waitForTimeout(3_500);
+
+  await expect(
+    ops.getByText(bookingNumber).first(),
+    `Operations cannot see ${bookingNumber} after Pricing raised it from the project and named them supervisor — the Pricing -> Ops handoff is broken`
+  ).toBeVisible({ timeout: 25_000 });
 
   await bdContext.close();
   await pricingContext.close();
   await officerContext.close();
+  await opsContext.close();
 });
