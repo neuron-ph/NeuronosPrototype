@@ -685,7 +685,7 @@ who asks. CLAUDE.md documents this helper as installed on **prod** as well.
 script is unaffected. An anonymous call now returns
 `permission denied for function clone_introspect`.
 
-### H3 — Twelve SECURITY DEFINER writers check nothing at all · WATCH
+### H3 — Twelve SECURITY DEFINER writers check nothing at all · MITIGATED (272, dev)
 Beyond H2, these run as owner, are reachable by `authenticated`, write, and
 contain no caller check of any kind:
 
@@ -713,11 +713,32 @@ of PUBLIC. So every function in the table above is reachable by an
 **unauthenticated** caller, not merely by any signed-in user. None of them was
 driven to a real write, but the call path is open on both projects.
 
-The batch is therefore: `REVOKE EXECUTE ... FROM PUBLIC, anon` across every
-SECURITY DEFINER function, keeping the explicit `authenticated` /
-`service_role` grants, plus a caller check inside each writer. Worth doing on
-dev first and proving the spine and adversary still pass before proposing it for
-prod.
+**Action — done on dev (272).** `REVOKE EXECUTE ... FROM PUBLIC, anon` across
+every SECURITY DEFINER function in `public`, done as a loop that asks
+`has_function_privilege` FIRST and re-grants explicitly to whoever already had
+access. It preserves reachability exactly and narrows it only for anon:
+
+| role | before | after |
+|---|---|---|
+| `anon` | 79 of 79 | **0** |
+| `authenticated` | 77 | 77 |
+| `service_role` | 79 | 79 |
+
+The two `authenticated` never had are `clone_exec_sql` and `clone_query`, which
+were already service_role-only — the loop never grants a role something it did
+not already hold.
+
+**Verified:** adversary 23/23, the full spine end to end, and rbac-smoke. The
+spine alone signs in as seven people and exercises quotations, projects,
+bookings, the e-voucher chain, billings, invoices and collections, so an RPC
+that lost a grant it needed would have surfaced there.
+
+**This is mitigation, not a fix.** The grant is now the control because the
+functions still have no caller checks of their own. Each still needs the
+`approve_invoice` treatment — a signed-in user with any account can still call
+`save_kpi_manual_entry` for someone else. Keep the batch on the list.
+
+**Proposed for prod** as the identical migration, pending Marcus's go.
 
 ### H4 — A department string is not an authorization check · FIXED (271, dev)
 `send_billing_items_to_booking` gates on `get_my_department() IN (...)`, which
