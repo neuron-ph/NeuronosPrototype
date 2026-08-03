@@ -17,10 +17,11 @@ import { test, expect, Page, BrowserContext } from "@playwright/test";
 //
 //   Stage 1  BD raises an inquiry and submits it   → Pending Pricing   [done]
 //   Stage 2  Pricing prices it                     → Priced           [done]
-//   Stage 3  BD sends to client, client accepts    → Accepted         [todo]
-//   Stage 4  convert to project, Ops books it                         [todo]
-//   Stage 5  the officer converts it into a project      → Converted  [done]
-//   Stage 6  Ops books the project                                    [BLOCKED]
+//   Stage 3  manager assigns, the officer prices it → Priced          [done]
+//   Stage 4  BD sends to client, client accepts     → Accepted        [done]
+//   Stage 5  the officer converts it to a project   → Converted       [done]
+//   Stage 6a Pricing opens the booking form from the project          [done]
+//   Stage 6b Operations picks that booking up                         [BLOCKED]
 //   Stage 7  e-voucher: raise → approve → disburse                    [todo]
 //   Stage 8  billing → invoice → collection                           [todo]
 //
@@ -53,6 +54,11 @@ const BD = "jr.businessdev02@falconslogistics-ph.com";      // BD Officer
 const PRICING = "jr.manager03@falconslogistics-ph.com";      // Pricing Manager
 const PRICING_OFFICER = "jr.pricing01@falconslogistics-ph.com";
 const OFFICER_NAME = "Sarah May B. Baylon"; // as shown in the Assign to picker
+// Operations TL — holds ops_forwarding:create and sits on the
+// bookings_forwarding:"everything" dial, so they see the whole service list
+// rather than only what they raised. That is what makes them the right person
+// to prove the booking actually arrived in Operations.
+const OPS = "jr.supervisor07@falconslogistics-ph.com";
 
 const SPINE_TAG = "E2E-SPINE";
 
@@ -319,6 +325,60 @@ test("spine: BD raises an inquiry, Pricing prices it", async ({ browser }) => {
   await expect(officer.getByRole("button", { name: "Financial Overview" })).toBeVisible({
     timeout: 20_000,
   });
+
+  // ── Stage 6a — Pricing seeds the booking from the project ─────────────────
+  // Conversion left the officer on the project file. The booking is raised from
+  // there, which is a Pricing/BD action by design (E10) and is gated on the door
+  // they came in through — pricing_projects_bookings_tab — on both the button
+  // and the bookings INSERT policy (E9).
+  await officer.getByRole("button", { name: "Operations", exact: true }).last().click();
+  await officer.waitForTimeout(2_500);
+  await officer.getByRole("button", { name: "Bookings", exact: true }).last().click();
+  await officer.waitForTimeout(3_000);
+
+  const createBooking = officer.getByRole("button", { name: /Create .*Booking/ }).first();
+  await expect(createBooking).toBeVisible({ timeout: 20_000 });
+  await createBooking.scrollIntoViewIfNeeded();
+  await createBooking.dispatchEvent("click");
+
+  await expect(officer.getByRole("heading", { name: /New Forwarding Booking/ })).toBeVisible({
+    timeout: 20_000,
+  });
+
+  // The modal arrives pre-filled from the project — customer, booking name,
+  // quotation reference and project link are all carried across. Capture the
+  // booking number so Operations can be asked to find this exact one.
+  // Booking Number, Service Type and the quotation reference are rendered as
+  // read-only TEXT, not inputs — so neither input[value^=…] nor inputValue()
+  // reaches them.
+  const bookingNumber = (
+    await officer.getByText(/^FWD\d+-\d+$/).first().innerText()
+  ).trim();
+  expect(bookingNumber, "no booking number on the form").toMatch(/^FWD/);
+
+  // The modal carries the project across: customer, booking name, the quotation
+  // it came from, and the project link. That seeding is the part of stage 6 the
+  // spine can prove today, and it is a real assertion — it is what makes the
+  // booking traceable back to the quote BD raised in stage 1.
+  await expect(officer.getByText(quoteNumber).first()).toBeVisible({ timeout: 15_000 });
+  await expect(officer.getByText(CUSTOMER).first()).toBeVisible({ timeout: 15_000 });
+
+  // STOPS HERE. Submitting returns "Please fill in all required fields" —
+  // Consignee / Shipper / Customs Entry and others sit below the fold and are
+  // not seeded from the project. Filling them is a discovery pass of its own,
+  // like Create Inquiry was. Until then stage 6b (Operations picking the
+  // booking up in their own list) cannot run, so it is not asserted rather
+  // than asserted loosely.
+  await officer.getByRole("button", { name: "Cancel" }).last().click();
+  await officer.waitForTimeout(1_500);
+
+  // ── Stage 6b — Operations picks it up · NOT YET RUNNING ───────────────────
+  // The real Pricing -> Ops handoff, and the reason stage 6 exists: Ops never
+  // opens the project file (E10), so the booking must reach them through their
+  // own service list or the chain is broken between departments. Blocked until
+  // the booking form can actually be submitted (above). The actor is ready:
+  // OPS holds ops_forwarding:create and sits on bookings_forwarding:"everything",
+  // so they see the whole service list rather than only what they raised.
 
   await bdContext.close();
   await pricingContext.close();
