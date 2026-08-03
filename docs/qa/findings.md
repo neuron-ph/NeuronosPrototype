@@ -613,7 +613,7 @@ between a caller and the table is whatever the function checks for itself.
 
 78 of them exist. Two findings, one of them the most serious of this effort.
 
-### H2 — An unauthenticated caller can write billing lines · BUG (CRITICAL)
+### H2 — An unauthenticated caller could write billing lines · FIXED (271, prod same day)
 `send_billing_items_to_booking(p_booking_id, p_project_number, p_items)` is
 executable by **anon** — the publishable key that ships in the JS bundle, no
 login required — and inserts into `billing_line_items` as its owner.
@@ -644,20 +644,33 @@ Two things make it worse than a single function:
   (swept `pg_proc` for the pattern), but it is a shape to ban, not an instance
   to patch.
 
-**Action.**
-1. `REVOKE EXECUTE ... FROM anon` on this function — nothing anonymous should
-   reach a writer.
-2. Rewrite the guard as `IF v_department IS NULL OR v_department NOT IN (...)`,
-   or better `IF NOT current_user_has_module_permission('...','create')` — a
-   department string is not an authorization check anyway.
-3. Sweep every SECURITY DEFINER function's ACL for `anon`.
+**Action — done.** Three fixes, because any one alone is a single point of
+failure: revoked from PUBLIC and anon; the function now rejects an
+unauthenticated caller outright (`auth.uid() IS NULL`); and it checks
+`current_user_can_billings('create')` rather than a department string, which
+also closes H4. Note `CREATE OR REPLACE` resets the ACL to PUBLIC EXECUTE, so
+271 revokes both before and after the replace.
 
-**PROD IS UNVERIFIED.** I tried to read prod's `proacl` for these functions and
-the permission classifier blocked the query. This function almost certainly
-exists there with the same grants. **Someone needs to check prod before
-anything else on this list.**
+**Still outstanding — see H3.** The sweep of every definer function's ACL is the
+remaining piece, and it is now known to be a bigger job than "check for anon".
 
-### H1 — `clone_introspect()` returns the whole schema to anon · BUG
+**Prod was exposed identically** — same function, same trap, same grants — and
+was closed the same day with permission. Two revokes on prod
+(`revoke_anon_execute_on_definer_writers`, then
+`revoke_public_execute_on_definer_writers`), migration 271 on dev.
+
+**The revoke needed two passes, and that is the second lesson.** Revoking from
+`anon` alone left the function reachable: `=X/postgres` in `proacl` means
+**PUBLIC**, and every role — anon included — is a member of PUBLIC. The ACL read
+back clean of `anon=X` while the door was still open. Only
+`REVOKE ... FROM PUBLIC` closed it.
+
+**Verified after the fix, all three directions:** anon refused
+(`permission denied for function`), zero rows written, and Accounting's
+legitimate call still returns `{"inserted_count":1}`. Pinned as probes F1, F2
+and F2b.
+
+### H1 — `clone_introspect()` returned the whole schema to anon · FIXED (271, prod same day)
 The dev-clone helper (`scripts/clone-prod-to-dev.mjs`) returns the live schema
 as JSON — every table, column, key and foreign key. Its siblings `clone_exec_sql`
 and `clone_query` are correctly restricted to `postgres` + `service_role`. This
@@ -667,9 +680,10 @@ one is granted to `anon` and `authenticated`, and an anonymous call returned
 No data leaves, but it is a complete map of where the data is, handed to anyone
 who asks. CLAUDE.md documents this helper as installed on **prod** as well.
 
-**Action.** `REVOKE EXECUTE ON FUNCTION public.clone_introspect() FROM anon,
-authenticated;` on both projects. The clone script runs as service_role and is
-unaffected.
+**Action — done.** Revoked from PUBLIC and anon on both projects (271).
+`authenticated` and `service_role` keep their explicit grants, so the clone
+script is unaffected. An anonymous call now returns
+`permission denied for function clone_introspect`.
 
 ### H3 — Twelve SECURITY DEFINER writers check nothing at all · WATCH
 Beyond H2, these run as owner, are reachable by `authenticated`, write, and
@@ -693,7 +707,19 @@ open; none was driven to a real write except H2.
 **Action.** Each needs the `approve_invoice` treatment — re-check the caller
 server-side and raise — or its EXECUTE grant narrowed. Take them as one batch.
 
-### H4 — A department string is not an authorization check · WATCH
+**Worse than first written.** H2's fix revealed that `=X/postgres` (PUBLIC
+EXECUTE) is the DEFAULT on every function in this schema, and anon is a member
+of PUBLIC. So every function in the table above is reachable by an
+**unauthenticated** caller, not merely by any signed-in user. None of them was
+driven to a real write, but the call path is open on both projects.
+
+The batch is therefore: `REVOKE EXECUTE ... FROM PUBLIC, anon` across every
+SECURITY DEFINER function, keeping the explicit `authenticated` /
+`service_role` grants, plus a caller check inside each writer. Worth doing on
+dev first and proving the spine and adversary still pass before proposing it for
+prod.
+
+### H4 — A department string is not an authorization check · FIXED (271, dev)
 `send_billing_items_to_booking` gates on `get_my_department() IN (...)`, which
 means any BD, Pricing, Accounting or Executive user can insert billing lines
 **regardless of their billings grants or visibility dial**. Even with H2 fixed,
@@ -703,5 +729,8 @@ whole departments.
 Compare `evoucher_transition` (migration 270) and `approve_invoice`, which both
 ask `current_user_has_module_permission(...)`.
 
-**Action.** Fold into the H3 batch: grant checks, not department strings.
+**Action — done for this function** (271): it now asks
+`current_user_can_billings('create')`, the same question the billings policies
+ask, with the department list kept as an additional narrower condition rather
+than the only one. The principle still applies to the H3 batch.
 

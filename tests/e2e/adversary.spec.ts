@@ -610,33 +610,42 @@ test("E1 BD cannot read another department's e-voucher", async () => {
 // checks for itself.
 // ═════════════════════════════════════════════════════════════════════════════
 
-test("F1 anon can read the entire schema", async () => {
+test("F1 anon cannot read the schema", async () => {
   // clone_introspect is a dev clone helper (scripts/clone-prod-to-dev.mjs) and
-  // it returns the live schema as JSON — every table, column, key and FK. Its
-  // siblings clone_exec_sql and clone_query are correctly restricted to
-  // service_role; this one was granted to anon and authenticated.
+  // it returns the live schema as JSON — every table, column, key and FK. It
+  // used to answer an anonymous caller with 121 tables. Migration 271 revoked
+  // it from PUBLIC and anon; service_role (which is what the clone script uses)
+  // and authenticated keep their explicit grants.
   const { data, error } = await anon.rpc("clone_introspect");
   const tables = (data as { tables?: unknown[] } | null)?.tables?.length ?? 0;
   results.push({
     probe: "F1 anon reads the schema", actor: "bd",
-    got: tables > 0 ? "VISIBLE" : "HIDDEN", want: "VISIBLE",
-    note: `H1 — clone_introspect returns ${tables} tables to a caller with no account`,
+    got: tables > 0 ? "VISIBLE" : "HIDDEN", want: "HIDDEN",
+    note: "H1 fixed — revoked from PUBLIC and anon (271)",
   });
-  expect(error, "clone_introspect errored rather than returning the schema").toBeNull();
-  expect(tables, "expected the full schema back").toBeGreaterThan(0);
+  expect(error, "clone_introspect answered an anonymous caller").not.toBeNull();
+  expect(tables).toBe(0);
 });
 
-test("F2 anon can write a billing line", async () => {
-  // send_billing_items_to_booking DOES have an authorization check:
+test("F2 anon cannot write a billing line", async () => {
+  // THE ONE THAT MATTERED. send_billing_items_to_booking inserts into
+  // billing_line_items as its owner, bypassing every policy on the table, and it
+  // was reachable with no account at all. It was not unguarded:
   //
   //   IF v_department NOT IN ('Business Development','Pricing','Accounting','Executive')
   //     THEN RAISE EXCEPTION 'Not authorized...'
   //
-  // For a caller with no session, get_my_department() is NULL — and in SQL
-  // `NULL NOT IN (...)` evaluates to NULL, not TRUE. The IF never fires. The
-  // guard is invisible to exactly the caller it was written to stop, and the
-  // function then inserts straight into billing_line_items as its owner,
-  // bypassing every policy on the table.
+  // For a caller with no session get_my_department() is NULL, and in SQL
+  // `NULL NOT IN (...)` evaluates to NULL, not TRUE — so the IF never fired. The
+  // guard was invisible to exactly the caller it was written to stop. An
+  // anonymous client inserted a real row on dev before this was closed.
+  //
+  // Migration 271 fixes it three ways, because any one alone is a single point
+  // of failure: revoke from PUBLIC and anon (note `=X/postgres` in proacl means
+  // PUBLIC, and anon is a member — revoking from anon alone leaves it open);
+  // reject an unauthenticated caller explicitly; and check
+  // current_user_can_billings('create') rather than a department string, which
+  // also closes H4.
   const probeDescription = `${TAG} ANON WRITE PROBE`;
   const { error } = await anon.rpc("send_billing_items_to_booking", {
     p_booking_id: ID.booking,
@@ -651,11 +660,38 @@ test("F2 anon can write a billing line", async () => {
   const landed = (written?.length ?? 0) > 0;
   results.push({
     probe: "F2 anon writes a billing line", actor: "bd",
-    got: landed ? "BREACH" : error ? "BLOCKED_LOUD" : "BLOCKED_SILENT", want: "BREACH",
-    note: "H2 — NULL NOT IN (...) is NULL, so the department guard never fires for anon",
+    got: landed ? "BREACH" : error ? "BLOCKED_LOUD" : "BLOCKED_SILENT", want: "BLOCKED_LOUD",
+    note: "H2 fixed — revoked from PUBLIC + anon, and the NULL trap is gone (271)",
   });
-  await admin.from("billing_line_items").delete().eq("description", probeDescription);
-  expect(landed, "an unauthenticated caller could not write — H2 may be fixed, tighten this probe").toBe(true);
+  if (landed) await admin.from("billing_line_items").delete().eq("description", probeDescription);
+  expect(landed, "an unauthenticated caller wrote to the database").toBe(false);
+  expect(error, "the call did not raise — check the revoke survived a CREATE OR REPLACE").not.toBeNull();
+});
+
+test("F2b the legitimate caller can still use it", async () => {
+  // The positive control. Locking the door is only half the fix; Accounting has
+  // to still get through it, or the billings-to-booking flow is broken.
+  const okDescription = `${TAG} ACCOUNTING WRITE PROBE`;
+  const db = await as("treasury");
+  const { error } = await db.rpc("send_billing_items_to_booking", {
+    p_booking_id: ID.booking,
+    p_project_number: PROJECT_NUMBER,
+    p_items: [{
+      id: "virtual-acct-probe", is_virtual: true,
+      description: okDescription, amount: 1, currency: "PHP", status: "unbilled",
+    }],
+  });
+  const { data: written } = await admin
+    .from("billing_line_items").select("id").eq("description", okDescription);
+  const landed = (written?.length ?? 0) > 0;
+  results.push({
+    probe: "F2b Accounting still can", actor: "treasury",
+    got: landed ? "BREACH" : "BLOCKED_LOUD", want: "BREACH",
+    note: "positive control — BREACH here means the legal path still works",
+  });
+  await admin.from("billing_line_items").delete().eq("description", okDescription);
+  expect(error, "the fix broke the legitimate billings-to-booking path").toBeNull();
+  expect(landed, "Accounting can no longer send billing items to a booking").toBe(true);
 });
 
 test("F3 anon cannot read the tables directly", async () => {
