@@ -184,6 +184,7 @@ while worth having — should not be mistaken for coverage.
 | File | What it is | Regenerate with |
 |---|---|---|
 | `README.md` | this document | by hand, deliberately |
+| `findings.md` | **every finding + its action step** — start here | by hand |
 | `inventory.json` / `.md` | the capability surface | `node scripts/inventory-capabilities.mjs --md` |
 | `personas.json` | who holds which door in dev | `node scripts/inventory-personas.mjs` |
 | `workflow-chains.md` | the five verified chains + findings | by hand, re-verified on change |
