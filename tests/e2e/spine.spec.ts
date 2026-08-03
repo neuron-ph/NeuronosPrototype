@@ -24,15 +24,14 @@ import { test, expect, Page, BrowserContext } from "@playwright/test";
 //   Stage 7  e-voucher: raise → approve → disburse                    [todo]
 //   Stage 8  billing → invoice → collection                           [todo]
 //
-// Stage 6 will NOT go through the project file. That path exists in the UI
-// (project → Operations tab → Bookings → "Create Forwarding Booking") but is
-// unusable by Operations: projects are only reachable via created_by /
-// manager_id / supervisor_id / handler_id, and NO project in dev or prod has
-// ever had the latter three set — nothing populates them on conversion and the
-// UI offers no way to. Ten Operations users in prod sit on the projects:"own"
-// dial and can therefore see only projects they created themselves. Work
-// evidently reaches Ops through the Operations booking lists instead, so that
-// is the path stage 6 should drive. See findings E9 and E10.
+// Stage 6 shape, settled with Marcus: the project file is a Pricing/BD artifact
+// that Operations is not meant to see. Seeding bookings from it is therefore a
+// Pricing/BD action, and it is properly gated on both sides — the button reads
+// the door you entered through (pricing_projects_bookings_tab), and
+// current_user_can_act_on_booking ORs that same key. So the assigned Pricing
+// officer creates the booking from the project, and an Operations person then
+// picks it up from their own booking list. That second half is the real
+// Pricing → Ops handoff and is what stage 6 must assert. See E9, E10.
 //
 // WRITES TO DEV. Every record it creates is named with SPINE_TAG so the debris
 // is identifiable and can be cleaned up.

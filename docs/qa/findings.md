@@ -272,26 +272,34 @@ who wins the client and records the acceptance cannot convert it — Pricing mus
 **Action.** Confirm this is intended, the same way the triage question was. If BD
 is meant to own conversion, they need `bd_projects:create`. **Needs Marcus.**
 
-### E9 — Booking-create buttons render for someone with no booking grants · OPEN
-Inside a project file, **Operations → Bookings** offers "Create Forwarding
-Booking" and "Create Booking". `jr.pricing01` (Pricing Officer) holds **no
-`ops_forwarding` grants at all — not even `view`** — and both buttons render for
-her.
+### E9 — Booking-create buttons in a project file · BY DESIGN
+**Originally reported as an ungated affordance. That was wrong** — the second
+mis-report of this session, and from the same mistake as the first: checking the
+wrong key and concluding from its absence.
 
-Same class as A3: an affordance shown to someone who cannot use it. Whether the
-insert would succeed depends on the `bookings` RLS policy, which was **not
-checked** — so this is an ungated button for certain, an ungated action only
-maybe.
+Inside a project file, Operations → Bookings offers "Create Forwarding Booking".
+It renders for `jr.pricing01`, who holds no `ops_forwarding` grants — which
+looked ungated. It is not. `ProjectBookingsTab` gates on
+`can(permissionDoor, "create")` where `permissionDoor` is the door the user
+entered through (NEU-020 2.10b) — for Pricing that is
+`pricing_projects_bookings_tab`, which she holds with `create`.
 
-**Action.** Check the `bookings` INSERT policy, then gate the buttons on
-`canActOnBooking(can, "create")` — the same helper `/operations/create` already
-uses — so route, button and DB agree. **Needs verification before it is called a
-hole.**
+And the database agrees: `current_user_can_act_on_booking` ORs across the five
+`ops_*` service doors **and** the project/contract bookings-tab doors, including
+`pricing_projects_bookings_tab`. UI gate and RLS check the same key set.
 
-### E10 — No project has ever had a manager, supervisor or handler · OPEN
-Marcus confirmed the intended hand-off to Operations is via
-manager/supervisor/handler on the project — the analogue of the quotation
-"Assign to". The mechanism does not exist:
+This is one of the better-built parts of the system — creating a booking from a
+project obeys the cell of the door you came in through, on both sides.
+
+**Action.** None. **Lesson:** "user lacks grant X so this must be ungated" is not
+a finding until you have checked which grant the code actually reads.
+
+### E10 — Ops cannot see project files · BY DESIGN (with a residue)
+**Marcus: the project file is a Pricing/BD artifact. Operations is not supposed
+to see it unless specifically granted.** So Ops sitting on `projects: "own"` and
+seeing nothing is correct behaviour, not a lockout. Nothing to fix.
+
+The residue, recorded so it isn't rediscovered as a bug:
 
 - **Prod: 22 projects, 0 with `manager_id`, 0 with `supervisor_id`, 0 with
   `handler_id`.** Dev: same, 0 of 15.
@@ -307,19 +315,13 @@ on): **anyone on the `projects: "own"` dial can see only projects they personall
 created.** In prod that is 14 active users — 10 of them in Operations (2 managers,
 2 staff, 6 team leaders) — against 22 projects created by just 6 people.
 
-So Operations does not reach work through project files at all. Bookings are
-presumably created directly from the Operations lists, where the dials are much
-wider. That may be perfectly fine — but it means the project → booking path in
-the UI is unusable for the people it appears to be for.
+`projects.manager_id`, `supervisor_id` and `handler_id` are therefore **vestigial
+columns** — never written, no UI, and not needed now that Ops is not meant to
+reach work this way. `users_reachable_ids('projects')` still matches on them.
 
-**Action.** Two questions, both for Marcus:
-1. Is the project file meant to be an Operations surface at all, or is it a
-   Pricing/BD artifact that Ops never opens?
-2. If it is meant to be, project assignment needs to exist — currently there is
-   no way to set it from the UI and nothing sets it on conversion.
-
-Spine stage 6 will use the direct Operations booking path instead, which is how
-the work appears to actually flow.
+**Action.** None required. Consider dropping the three columns, or leave them —
+they cost nothing. Ops reaches work through the Operations booking lists, where
+the visibility dials are much wider, and that is the path spine stage 6 drives.
 
 ### E6 — `quotations` has `project_id` but no `project_number` · WATCH
 A query assuming the latter errored 42703. Minor; noted so it isn't rediscovered.
