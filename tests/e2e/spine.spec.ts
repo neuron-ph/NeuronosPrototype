@@ -425,10 +425,10 @@ test("spine: inquiry -> priced -> accepted -> project -> booking -> Operations",
 
   await ops.goto("/operations/forwarding", { waitUntil: "domcontentloaded" });
   await ops.waitForTimeout(3_000);
-  // Search by booking NUMBER, not the booking name: the name typed on the form
-  // is not persisted (details.booking_name comes back null), so the number is
-  // the only identifier that survives the save. It is also what the list
-  // searches on, same as the quotation list searching quote_number.
+  // Search by booking NUMBER — it is what this list matches on, the same way the
+  // quotation list matches quote_number. (The booking name IS persisted, to the
+  // bookings.name column via a storageKey mapping; an earlier comment here
+  // claimed otherwise and was wrong.)
   await ops.getByPlaceholder(/Search/i).first().fill(bookingNumber);
   await ops.waitForTimeout(3_500);
 

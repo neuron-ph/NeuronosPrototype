@@ -342,18 +342,27 @@ reach work this way. `users_reachable_ids('projects')` still matches on them.
 they cost nothing. Ops reaches work through the Operations booking lists, where
 the visibility dials are much wider, and that is the path spine stage 6 drives.
 
-### E11 — Booking Name is required, then discarded · OPEN
-The project booking form marks **Booking Name*** required and pre-fills it from
-the project. After saving, `details->>'booking_name'` is **null** — the value is
-collected, validated against, and dropped.
+### E11 — Booking Name "discarded" · NOT A BUG (my error)
+Reported as: the form requires Booking Name, pre-fills it, then throws it away
+because `details->>'booking_name'` is null after save.
 
-Consequence: a booking cannot be found by the name the person typed. The spine
-searches by `booking_number` instead, which is the only identifier that survives.
+**Wrong.** The name is persisted to the `bookings.name` COLUMN. The field carries
+a `storageKey` that maps `booking_name → name` (`useBookingFormState.ts:62`), and
+both spine-created bookings hold their name there correctly.
 
-**Action.** Either persist it or stop asking for it. Requiring a field and then
-discarding it is the worst of both. **Needs Marcus** to say which the name is
-for — if it is meant to be the human label for a booking, it should be stored
-and searchable.
+I checked `details.booking_name` because that is where I assumed it went.
+
+**Action.** None. **Lesson — the third instance of one mistake this session:**
+
+| # | Reported | Reality |
+|---|---|---|
+| A6 | 5 ticket statuses unreachable | grepped string literals; `ThreadDetailPanel` writes via variables |
+| E9 | booking buttons ungated | gated on `permissionDoor`, not the `ops_forwarding` key I checked |
+| E11 | booking name discarded | stored in `bookings.name` via a `storageKey`, not in `details` |
+
+Every one: concluding "X is missing" from the absence of X *where I looked*,
+instead of finding where the code actually puts it. **Before filing an absence,
+find the write.**
 
 ### E6 — `quotations` has `project_id` but no `project_number` · WATCH
 A query assuming the latter errored 42703. Minor; noted so it isn't rediscovered.
