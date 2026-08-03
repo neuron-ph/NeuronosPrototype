@@ -272,6 +272,34 @@ who wins the client and records the acceptance cannot convert it — Pricing mus
 **Action.** Confirm this is intended, the same way the triage question was. If BD
 is meant to own conversion, they need `bd_projects:create`. **Needs Marcus.**
 
+### E9 — Booking-create buttons render for someone with no booking grants · OPEN
+Inside a project file, **Operations → Bookings** offers "Create Forwarding
+Booking" and "Create Booking". `jr.pricing01` (Pricing Officer) holds **no
+`ops_forwarding` grants at all — not even `view`** — and both buttons render for
+her.
+
+Same class as A3: an affordance shown to someone who cannot use it. Whether the
+insert would succeed depends on the `bookings` RLS policy, which was **not
+checked** — so this is an ungated button for certain, an ungated action only
+maybe.
+
+**Action.** Check the `bookings` INSERT policy, then gate the buttons on
+`canActOnBooking(can, "create")` — the same helper `/operations/create` already
+uses — so route, button and DB agree. **Needs verification before it is called a
+hole.**
+
+### E10 — Operations cannot see a freshly converted project · OPEN
+Both Ops users who can create forwarding bookings (`jr.supervisor07`,
+`freight@`) sit on `projects: "own"`. A project converted by Pricing has none of
+them as `created_by`/`manager_id`/`supervisor_id`/`handler_id`, so neither can
+see it. `users_reachable_ids` would also reach it via a booking — but they cannot
+create one on a project they cannot open.
+
+**Action.** Establish how a project is handed to Operations — presumably by
+setting manager/supervisor/handler on it, which is the analogue of the quotation
+"Assign to". If so it is BY DESIGN like E1; if not, Ops is locked out of new work.
+**Needs Marcus.** This is the blocker for spine stage 6.
+
 ### E6 — `quotations` has `project_id` but no `project_number` · WATCH
 A query assuming the latter errored 42703. Minor; noted so it isn't rediscovered.
 

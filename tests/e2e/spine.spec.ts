@@ -19,8 +19,17 @@ import { test, expect, Page, BrowserContext } from "@playwright/test";
 //   Stage 2  Pricing prices it                     → Priced           [done]
 //   Stage 3  BD sends to client, client accepts    → Accepted         [todo]
 //   Stage 4  convert to project, Ops books it                         [todo]
-//   Stage 5  e-voucher: raise → approve → disburse                    [todo]
-//   Stage 6  billing → invoice → collection                           [todo]
+//   Stage 5  the officer converts it into a project      → Converted  [done]
+//   Stage 6  Ops books the project                                    [BLOCKED]
+//   Stage 7  e-voucher: raise → approve → disburse                    [todo]
+//   Stage 8  billing → invoice → collection                           [todo]
+//
+// Stage 6 is blocked on a real question, not on test plumbing. The path is
+// mapped — project file → Operations tab → Bookings sub-tab → "Create
+// Forwarding Booking" — but both Operations users who hold ops_forwarding:create
+// sit on the projects:"own" visibility dial, and a project converted by Pricing
+// names none of them as created_by / manager / supervisor / handler. Neither can
+// open it, so neither can book against it. See findings E9 and E10.
 //
 // WRITES TO DEV. Every record it creates is named with SPINE_TAG so the debris
 // is identifiable and can be cleaned up.
