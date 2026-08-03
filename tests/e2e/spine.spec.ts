@@ -22,7 +22,7 @@ import { test, expect, Page, BrowserContext } from "@playwright/test";
 //   Stage 5  the officer converts it to a project   → Converted       [done]
 //   Stage 6a Pricing opens the booking form from the project          [done]
 //   Stage 6b Operations picks that booking up                         [done]
-//   Stage 7  e-voucher: raise → approve → disburse                    [todo]
+//   Stage 7  e-voucher: raise → approve → approve → disburse          [next]
 //   Stage 8  billing → invoice → collection                           [todo]
 //
 // Stage 6 shape, settled with Marcus: the project file is a Pricing/BD artifact
@@ -33,6 +33,31 @@ import { test, expect, Page, BrowserContext } from "@playwright/test";
 // officer creates the booking from the project, and an Operations person then
 // picks it up from their own booking list. That second half is the real
 // Pricing → Ops handoff and is what stage 6 must assert. See E9, E10.
+//
+// STAGE 7 — groundwork done, form not yet driven. The cast is settled and every
+// actor is department-native, with the raiser being the same Ops supervisor the
+// booking was handed to in stage 6:
+//
+//   raise    jr.supervisor07  Princess Marre R. Reyes   my_evouchers:edit
+//   approve  jr.manager02     Mariella R. Soriano       Sr. Operations Manager
+//                             — my_evouchers:approve, and the DB ALSO enforces
+//                               that the approver's department matches the
+//                               requestor's, so an Ops manager is required here
+//   approve  inquiry@         Mark D. Javier            acct_evouchers:approve
+//   disburse treasury@        Janice D. De Villa        acct_evouchers:disburse
+//                             — one of only TWO people in the company who hold it
+//
+// The form: /my-evouchers → "New Request" → a Reimbursement Request modal
+// (sections PAYMENT VOUCHER / TRANSACTION DETAILS / LINE ITEMS / PAYMENT &
+// TERMS). Transaction Type is pre-filled; "Paid To (Vendor)" is required and
+// empty; LINE ITEMS needs at least one row added via "Add Category", which per
+// the catalog rules must come from the Expense Catalog rather than free text.
+// Submit Request stays disabled until those are satisfied. Buttons: Cancel /
+// Save Draft / Submit Request.
+//
+// Expected chain once driven (verified against the code in workflow-chains.md):
+//   draft → submit → pending_manager → approve → pending_ceo → approve
+//         → pending_accounting → disburse → disbursed
 //
 // WRITES TO DEV. Every record it creates is named with SPINE_TAG so the debris
 // is identifiable and can be cleaned up.
