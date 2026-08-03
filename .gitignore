@@ -75,3 +75,4 @@ mc-invoice-builder-items.png
 # because they carry real employee emails and their full permission maps.
 /docs/qa/personas.json
 /docs/qa/grant-prune-*.json
+/docs/qa/smoke-run.log

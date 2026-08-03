@@ -69,12 +69,30 @@ const IGNORED_CONSOLE = [
 
 const isRealError = (text: string) => !IGNORED_CONSOLE.some((re) => re.test(text));
 
+// "Am I on the login screen?" — keyed on the Sign In button, not on an Email
+// textbox. Playwright matches accessible names by SUBSTRING by default, and
+// /admin/users has a "Search name or email…" box, so an Email-textbox probe
+// reported that page as a logout. The Sign In button exists only on the login
+// screen and is matched exactly.
+const signInButton = (page: Page) => page.getByRole("button", { name: "Sign In", exact: true });
+
 async function login(page: Page, email: string) {
   await page.goto("/");
-  await page.getByRole("textbox", { name: "Email" }).fill(email);
-  await page.getByRole("textbox", { name: "Password" }).fill(PASSWORD);
-  await page.getByRole("button", { name: "Sign In" }).click();
-  await expect(page.getByRole("textbox", { name: "Email" })).toHaveCount(0, { timeout: 30_000 });
+  await page.getByRole("textbox", { name: "Email", exact: true }).fill(email);
+  await page.getByRole("textbox", { name: "Password", exact: true }).fill(PASSWORD);
+  await signInButton(page).click();
+  await expect(signInButton(page)).toHaveCount(0, { timeout: 30_000 });
+
+  // The button vanishing only means React re-rendered — Supabase may not have
+  // written the session yet. Every route visit below is a full reload that
+  // restores auth from sessionStorage, so returning too early means the first
+  // navigation lands with no session and the persona reads as logged out for
+  // the whole run. Wait for the token to actually be persisted.
+  await page.waitForFunction(
+    () => Object.keys(sessionStorage).some((k) => k.startsWith("sb-")),
+    undefined,
+    { timeout: 30_000 }
+  );
 }
 
 type RouteFault = { route: string; reason: string };
@@ -100,48 +118,61 @@ for (const persona of personas) {
 
     await login(page, persona.email);
 
-    for (const route of persona.reachableRoutes) {
+    /** One visit. Returns the fault reason, or null if the route is clean. */
+    const visit = async (route: string): Promise<string | null> => {
       consoleErrors = [];
 
       try {
         await page.goto(route, { waitUntil: "domcontentloaded", timeout: 20_000 });
       } catch (err) {
-        faults.push({ route, reason: `navigation failed: ${(err as Error).message}` });
-        continue;
+        return `navigation failed: ${(err as Error).message}`;
       }
 
-      // Let the lazy chunk resolve and the route settle.
+      // Every goto is a full reload, and the session lives in sessionStorage, so
+      // the app renders the login screen for a beat before auth restores. Poll
+      // for it to clear rather than sampling once after a fixed wait — a fixed
+      // wait lands inside that window and reports a false logout.
+      try {
+        await expect(signInButton(page)).toHaveCount(0, { timeout: 20_000 });
+      } catch {
+        return "redirected to login (session did not restore)";
+      }
+
+      // Let the lazy route chunk resolve and its first queries settle.
       await page.waitForTimeout(1_200);
-
-      // Bounced to login — the session died or the page threw during boot.
-      if (await page.getByRole("textbox", { name: "Email" }).count()) {
-        faults.push({ route, reason: "redirected to login" });
-        continue;
-      }
 
       // ErrorPage rendered (404 / 500 / Sentry boundary).
       const errored = await page
         .getByRole("heading", { name: /Page not found|Something went wrong/i })
         .count();
-      if (errored) {
-        faults.push({ route, reason: "error page rendered" });
-        continue;
-      }
+      if (errored) return "error page rendered";
 
       // RouteGuard sent them to the dashboard despite holding the view grant —
       // the grant map and the guard disagree. Not a skip; a real contradiction.
       const landed = new URL(page.url()).pathname;
       if (landed !== route && landed === "/dashboard") {
-        faults.push({ route, reason: "RouteGuard redirected to /dashboard despite a view grant" });
-        continue;
+        return "RouteGuard redirected to /dashboard despite a view grant";
       }
 
       if (consoleErrors.length) {
-        faults.push({
-          route,
-          reason: `console error: ${consoleErrors.slice(0, 2).join(" | ").slice(0, 300)}`,
-        });
+        return `console error: ${consoleErrors.slice(0, 2).join(" | ").slice(0, 300)}`;
       }
+      return null;
+    };
+
+    for (const route of persona.reachableRoutes) {
+      let reason = await visit(route);
+
+      // A console-only fault gets one retry. Transient fetch failures against
+      // the local dev server are common and would otherwise read as product
+      // faults. Deliberately NOT filtering "Failed to fetch" outright — a
+      // genuinely broken endpoint must still fail, and it will on the retry.
+      if (reason?.startsWith("console error:")) {
+        const second = await visit(route);
+        reason = second === null ? null : `${second}  (reproduced on retry)`;
+      }
+
+      if (reason) faults.push({ route, reason });
     }
 
     if (faults.length) {
