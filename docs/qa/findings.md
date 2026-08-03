@@ -755,3 +755,75 @@ ask `current_user_has_module_permission(...)`.
 ask, with the department list kept as an additional narrower condition rather
 than the only one. The principle still applies to the H3 batch.
 
+---
+
+## J. Found by phase-1 recon (before any probe ran)
+
+Six read-only mappers over the live dev schema, run in parallel to feed the
+generated probe matrices. Full detail in `docs/qa/adversary/README.md`; the
+machine-readable spec is `docs/qa/adversary/phase1-spec.json`.
+
+Three new bugs, **two of them inside fixes shipped the same day**. Both fixes
+were real; both were narrower than the problem.
+
+### J1 — `send_billing_items_to_booking` still carries the H2 shape · BUG
+Migration 271 fixed the authorization guard at the top of this function. Six
+lines below it, the cross-customer guard reads
+`IF v_booking_project_id IS NOT NULL AND v_booking_project_id <> v_project_id`.
+**230 of 239 dev bookings have `project_id` NULL**, so the AND short-circuits
+and the tenancy check never fires — a granted Accounting/Pricing/BD user can post
+revenue onto customer A's booking while naming customer B's project, through a
+SECURITY DEFINER function with RLS off.
+
+H2 was `NULL NOT IN (...)`. This is `NULL IS NOT NULL AND ...`. Same family, same
+function, survived the migration that hardened it.
+
+**Action.** Compare on `project_number` (populated) or require the booking to
+resolve to a project. Positive control: one of the 9 bookings that does carry
+`project_id` should raise today.
+
+### J2 — 270 froze `status` and left the fields that decide its route · BUG
+`evoucher_transition` routes on
+`COALESCE(pending_approver_department, details->>'requestor_department')`. Both
+are owner-writable: the `evouchers_update` owner branch has no column
+restriction, and only `status` carries a guard trigger.
+
+A requestor can null `pending_approver_department`, set
+`details.requestor_department` to her own department, and defeat the routing rule
+that exists so her own manager doesn't approve her spend.
+
+Two neighbours on the same row:
+- `details.cash_receiver_id` is a **skeleton key** — whoever is named gets read,
+  UPDATE on every column but `status`, and the liquidation edge. It sits in both
+  USING and WITH CHECK, so it is self-perpetuating.
+- `details.is_billable` fires a SECURITY DEFINER writer that mints a
+  customer-facing revenue line bypassing the billings policies, with
+  `catalog_item_id` NULL. **No billings grant required.**
+
+**Action.** Extend the 270 guard to the five fields that decide routing and
+authority, not just `status`.
+
+### J3 — Tenancy is a convention, not a boundary · BUG (structural)
+No RLS policy on `billing_line_items`, `evouchers`, `evoucher_line_items`,
+`invoices` or `collections` mentions a customer, project or booking. 15 of 22 FK
+edges have nothing enforcing same-tenant. 13 live dev billing rows already have a
+`customer_name` disagreeing with their booking — drift that has already happened
+through ordinary use. The billable-expense trigger, which propagates a cross-link
+by itself, wrote **97 of 172** billing rows on dev.
+
+**Action.** Decide whether tenancy is enforced at all; if yes it belongs in
+constraints, not forms.
+
+### J4 — `evouchers` is the only table with a status guard · WATCH
+15 other status columns across 12 tables (`invoices.status`,
+`invoices.approval_status`, `collections`, `bookings`, `quotations`,
+`billing_line_items`, `projects`, …) are plain text any grant-holder can write in
+any order. G2 was not an e-voucher problem; it was the one place we happened to
+look.
+
+Also: live values, TS constants and CHECK constraints disagree on nearly every
+one — `evouchers` has 9 live values against 26 in code.
+
+**Action.** The 270 pattern generalises. Do it per table, worst first, once the
+state-transition matrix says which orderings are actually reachable.
+
