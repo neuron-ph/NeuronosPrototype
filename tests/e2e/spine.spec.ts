@@ -265,11 +265,49 @@ test("spine: BD raises an inquiry, Pricing prices it", async ({ browser }) => {
     "Mark as Approved did not take effect"
   ).toBeVisible({ timeout: 20_000 });
 
-  // Stage 5 (convert to project) stops here. At Accepted by Client the screen
-  // offers only Edit / Export PDF / Amend as text buttons — conversion is not
-  // among them, so it sits behind one of the icon-only controls (the kebab
-  // beside Export PDF). That needs a discovery pass before it can be driven.
-  // handleAcceptAndCreateProject in QuotationFileView is the handler to land on.
+  // ── Stage 5 — conversion, which BD cannot do ──────────────────────────────
+  // "Create Project" is gated on bd_projects:create || pricing_projects:create
+  // (QuotationFileView:1304). No BD-department user holds either — the whole
+  // Pricing department does. So the person who won the client and recorded the
+  // acceptance cannot convert it; the assigned Pricing officer does, and can
+  // still see the record because they are assigned_to.
+  await officer.goto("/pricing/quotations", { waitUntil: "domcontentloaded" });
+  const completedTab = officer.getByRole("tab", { name: /Completed/ });
+  await expect(completedTab).toBeVisible({ timeout: 30_000 });
+  await completedTab.click();
+  await officer.waitForTimeout(1_500);
+  await officer.getByPlaceholder(/Search/i).first().fill(quoteNumber);
+  await officer.waitForTimeout(3_000);
+  await officer.getByText(quoteNumber).first().click();
+  await expect(officer.getByRole("heading", { name: quotationName })).toBeVisible({ timeout: 20_000 });
+
+  const createProject = officer.getByRole("button", { name: "Create Project" });
+  await expect(
+    createProject,
+    "Create Project is not offered to the assigned Pricing officer at Accepted by Client"
+  ).toBeVisible({ timeout: 20_000 });
+  // It sits at the bottom of a long detail page. toBeVisible() is satisfied by
+  // presence, not by being in the viewport, so scroll to it before clicking.
+  // Scrolling lands this button under the sticky tab bar, so a normal click is
+  // intercepted (elementFromPoint at its centre returns a bare DIV, not the
+  // button) and force:true does not help — force skips the actionability checks
+  // but the event still hits whatever is on top. Dispatch on the element; React
+  // listens at the root, so the handler fires exactly as it would for a user who
+  // scrolled it clear. Logged as finding E7.
+  await createProject.scrollIntoViewIfNeeded();
+  await officer.waitForTimeout(500);
+  await createProject.dispatchEvent("click");
+  await officer.waitForTimeout(5_000);
+
+  // Conversion drops the user straight into the new project file — the quote is
+  // now a job. "Back to Projects" and the project tabs only exist on that view.
+  await expect(
+    officer.getByRole("button", { name: "Back to Projects" }),
+    "Create Project did not convert the quotation — still on the quotation view"
+  ).toBeVisible({ timeout: 25_000 });
+  await expect(officer.getByRole("button", { name: "Financial Overview" })).toBeVisible({
+    timeout: 20_000,
+  });
 
   await bdContext.close();
   await pricingContext.close();

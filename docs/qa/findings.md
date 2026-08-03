@@ -253,6 +253,25 @@ Tabs and rows take 5–9 seconds, longer with several sessions open. Two apparen
 click's auto-wait. For the product: worth a look if users perceive the lists as
 sluggish.
 
+### E7 — "Create Project" can land under the sticky tab bar · WATCH
+On the quotation detail at Accepted by Client, scrolling to the Create Project
+button leaves it beneath the sticky tab bar: `elementFromPoint` at its centre
+returns a bare `DIV`, not the button, so a click at that scroll position is
+swallowed. A user who scrolls further can click it normally — it is a scroll
+-position artifact, not a permanently dead control.
+
+**Action.** Low priority. Worth a look if anyone reports "Create Project does
+nothing". The spine dispatches the click on the element to get past it.
+
+### E8 — BD cannot convert an accepted quote to a project · OPEN
+"Create Project" is gated on `bd_projects:create || pricing_projects:create`
+(`QuotationFileView.tsx:1304`). **No Business Development user holds either**
+except `marcus@neuron.com.ph`; the entire Pricing department does. So the person
+who wins the client and records the acceptance cannot convert it — Pricing must.
+
+**Action.** Confirm this is intended, the same way the triage question was. If BD
+is meant to own conversion, they need `bd_projects:create`. **Needs Marcus.**
+
 ### E6 — `quotations` has `project_id` but no `project_number` · WATCH
 A query assuming the latter errored 42703. Minor; noted so it isn't rediscovered.
 
