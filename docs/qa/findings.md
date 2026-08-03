@@ -479,3 +479,115 @@ Long-standing typecheck debt (`project_qa_phase5`). `UserDetailPage` alone had 2
 before this work and 25 after.
 
 **Action.** None here. Every change in this effort was verified not to add to it.
+
+---
+
+## G. Found by the adversary (tests/e2e/adversary.spec.ts)
+
+Eighteen probes, run as real signed-in people against PostgREST rather than
+through the UI, because "the button isn't rendered" and "the action is
+impossible" are different claims. Each lands in one of three buckets:
+**BLOCKED_LOUD** (the write raised), **BLOCKED_SILENT** (no error, nothing
+changed — safe, but a caller that doesn't check the affected count will tell the
+user "Saved"), **BREACH** (the write landed).
+
+Six breaches. Every one of them is a rule that exists in a form and nowhere else.
+
+**What held, and is now pinned:** routed-approver matching (A3), the disburse
+grant (A5), approval replay (A6), `approve_invoice`'s server-side approver check
+(C1), the approver's read-but-not-write sight-line (C3/C4), and the one
+line-item rule written as a CHECK constraint (A9). Those probes are the
+regression net around the parts that work.
+
+### G1 — The requestor can walk her own e-voucher to `disbursed` · BUG
+`evouchers_update` has a branch for `created_by = me AND my_evouchers:edit`, and
+that branch does not care WHICH column is being written. `status` is a column.
+
+So the person who raised the voucher can set it to `pending_ceo`,
+`pending_accounting` or `disbursed` from the console — no approver, no Treasury.
+The UI never offers it (the panel gates on `my_evouchers:approve`), which is the
+only reason this hasn't happened.
+
+There **is** a guard — `evoucher_enforce_disburse` raises when someone without
+`acct_evouchers:disburse` moves a voucher to `disbursed`/`posted`. Read its
+condition:
+
+```sql
+if old.status = 'pending_accounting' and new.status in ('disbursed','posted') ...
+```
+
+It defends exactly one doorway. Probe A2 walks from `pending_ceo` straight to
+`disbursed` and is never inspected; probe A7 runs the identical write from
+`pending_accounting` and is refused loudly. Same actor, same column, same target.
+
+**Action.** Not "add another `old.status`" — a per-transition trigger only ever
+covers the transitions someone remembered. Either make `status` un-writable by
+the owner branch (split the edit grant from the status column), or replace the
+status flips with SECURITY DEFINER functions the way `approve_invoice` already
+does.
+
+### G2 — Nothing enforces the ORDER of the approval chain · BUG
+Treasury moved a voucher sitting at `pending_ceo` straight to `disbursed` (A4).
+The policies ask *who you are*, never *where the record is*. The chain
+draft → pending_manager → pending_ceo → pending_accounting → disbursed is a
+sequence of buttons, not a state machine.
+
+**Action.** Same fix as G1 — a transition function that validates
+`(old_status, new_status, actor)` as a triple.
+
+### G3 — Operations can WRITE billing rows it can never read · BUG
+The sharp end of E15. `billing_line_items_insert` checks only
+`can_billings('create')`, which the Ops TL passes; the NULL-owner bug is in the
+SELECT policy. So her insert **lands** (B2). The UI reported failure only because
+it asks for the row back — `.insert().select()` — and the RETURNING read is what
+RLS refuses.
+
+Net effect: a charge exists on the booking that nobody in her department can
+read, edit, void or invoice, and the person who created it was told it failed.
+
+**Action.** Fold into the E15 fix; the SELECT/UPDATE/DELETE policies and the
+INSERT check must agree.
+
+### G4 — An unapproved invoice can be issued · BUG
+`handleFinalize` refuses when `approval_status !== 'approved'` — in the client.
+`invoices_update` has no such condition, so Accounting posted an invoice straight
+past the approver the routing engine chose (C2).
+
+Note the contrast one probe over: **approval** is an RPC that re-checks
+server-side and raises (C1). **Issuing** is a raw status flip. The right pattern
+is already in the codebase; it just wasn't used for the second half.
+
+**Action.** Move finalize behind a `finalize_invoice` SECURITY DEFINER function
+that asserts `approval_status = 'approved'`.
+
+### G5 — Catalog doctrine is a form convention, not a constraint · BUG
+CLAUDE.md is absolute: no `billing_line_items` insert may omit
+`catalog_item_id`, no `evoucher_line_items` insert may omit it. Both columns are
+nullable, neither has a CHECK, and both probes wrote free-text lines (D1, A8).
+
+Any caller that isn't the combobox — an import, a script, a future Edge
+Function, a stale tab — silently escapes the catalog.
+
+**Action.** `ALTER TABLE ... ADD CONSTRAINT ... CHECK (catalog_item_id IS NOT
+NULL)`, after backfilling. Note the legacy `EV-… - PORT CHARGES` billing rows
+already carry NULL, so the backfill is real work, not a formality.
+
+### G6 — A collection can exceed the invoice it settles · BUG
+`CollectionCreatorPanel` allocates against the open balance and won't over-apply.
+`collections` has no balance check, so a payment of ten times the invoice total
+posted happily (C5) and the customer ledger goes negative.
+
+**Action.** Validate the applied total against the open balance in a transition
+function, or add a constraint keyed on the invoice.
+
+### G7 — E15 is confined to one table · GOOD NEWS
+Swept every policy in the database for the NULL-owner pattern:
+
+```sql
+select c.relname, p.polname from pg_policy p join pg_class c on c.oid = p.polrelid
+where pg_get_expr(p.polqual, p.polrelid) like '%current_user_can_view_record%NULL::text%';
+```
+
+Three hits, all on `billing_line_items` (select, update, delete). Nothing else in
+the schema passes a NULL owner. The E15/G3 fix is one migration, not a sweep.
+
