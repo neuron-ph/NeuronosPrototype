@@ -78,7 +78,10 @@ export function EntityPicker({ onSelect, onClose }: EntityPickerProps) {
   const { data: quotationResults = [], isFetching: quotationFetching } = useQuery({
     queryKey: ["entity_picker", "quotation", q],
     queryFn: async () => {
-      const { data } = await supabase.from("quotations").select("id, quotation_name, customer_name").eq("quotation_type", "spot").ilike("quotation_name", `%${q}%`).limit(20);
+      // "spot" is the legacy name for what is now "project" — prod holds ZERO
+      // spot rows, so this filter matched nothing and no quotation could be
+      // attached to a ticket. Both are accepted so stale dev rows still resolve.
+      const { data } = await supabase.from("quotations").select("id, quotation_name, customer_name").in("quotation_type", ["project", "spot"]).ilike("quotation_name", `%${q}%`).limit(20);
       return (data || []).map((r) => ({ id: r.id, label: r.quotation_name || r.id, sub: r.customer_name }));
     },
     enabled: activeType === "quotation",

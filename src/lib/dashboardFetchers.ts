@@ -143,7 +143,9 @@ export async function fetchDeptQueue(dept: string, userId: string): Promise<Dept
     const [inqRes, awaitRes] = await Promise.all([
       // "New" / "Pending" / "Submitted" are not canonical QuotationStatus values
       // and exist in neither database — this tile always returned nothing.
-      supabase.from("quotations").select("id, quotation_number, customer_name, status, created_at, updated_at").eq("quotation_type", "spot").in("status", ["Draft", "Pending Pricing", "Needs Revision"]).order("created_at", { ascending: false }).limit(6),
+      // quotation_type "spot" is legacy and has ZERO rows in prod — this tile
+      // returned nothing even after its status list was corrected.
+      supabase.from("quotations").select("id, quotation_number, customer_name, status, created_at, updated_at").in("quotation_type", ["project", "spot"]).in("status", ["Draft", "Pending Pricing", "Needs Revision"]).order("created_at", { ascending: false }).limit(6),
       supabase.from("quotations").select("id, quotation_number, customer_name, status, created_at, updated_at").eq("status", "Sent to Client").order("updated_at", { ascending: false }).limit(6),
     ]);
     return { ...empty, openInquiries: (inqRes.data ?? []) as QuotationItem[], awaitingClient: (awaitRes.data ?? []) as QuotationItem[] };

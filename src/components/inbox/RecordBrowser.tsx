@@ -49,7 +49,7 @@ interface EntityDef {
   getLabel: (row: any) => string;
   getSublabel: (row: any) => string;
   searchColumn: string;
-  extraFilters?: Record<string, string>;
+  extraFilters?: Record<string, string | string[]>;
 }
 
 interface NavSection {
@@ -76,7 +76,7 @@ const NAV: NavSection[] = [
     entities: [
       { key: "bd-contacts", entityType: "contact", label: "Contacts", Icon: User, table: "contacts", columns: "id, name, title, email", getLabel: (r) => r.name, getSublabel: (r) => r.title || r.email || "", searchColumn: "name" },
       { key: "bd-customers", entityType: "customer", label: "Customers", Icon: Building, table: "customers", columns: "id, name, industry, status", getLabel: (r) => r.name, getSublabel: (r) => r.industry || "", searchColumn: "name" },
-      { key: "bd-inquiries", entityType: "quotation", label: "Inquiries", Icon: ShoppingCart, table: "quotations", columns: "id, quotation_name, quote_number, customer_name, status", getLabel: (r) => r.quote_number || r.quotation_name || "—", getSublabel: (r) => r.customer_name || "", searchColumn: "quote_number", extraFilters: { quotation_type: "spot" } },
+      { key: "bd-inquiries", entityType: "quotation", label: "Inquiries", Icon: ShoppingCart, table: "quotations", columns: "id, quotation_name, quote_number, customer_name, status", getLabel: (r) => r.quote_number || r.quotation_name || "—", getSublabel: (r) => r.customer_name || "", searchColumn: "quote_number", extraFilters: { quotation_type: ["project", "spot"] } },
       { key: "bd-projects", entityType: "project", label: "Projects", Icon: Briefcase, table: "projects", columns: "id, project_number, customer_name, status", getLabel: (r) => r.project_number || "—", getSublabel: (r) => r.customer_name || "", searchColumn: "project_number" },
       { key: "bd-contracts", entityType: "contract", label: "Contracts", Icon: Handshake, table: "quotations", columns: "id, quotation_name, quote_number, customer_name, status", getLabel: (r) => r.quote_number || r.quotation_name || "—", getSublabel: (r) => r.customer_name || "", searchColumn: "quote_number", extraFilters: { quotation_type: "contract" } },
     ],
@@ -89,7 +89,7 @@ const NAV: NavSection[] = [
     entities: [
       { key: "pricing-contacts", entityType: "contact", label: "Contacts", Icon: User, table: "contacts", columns: "id, name, title, email", getLabel: (r) => r.name, getSublabel: (r) => r.title || r.email || "", searchColumn: "name" },
       { key: "pricing-customers", entityType: "customer", label: "Customers", Icon: Building, table: "customers", columns: "id, name, industry, status", getLabel: (r) => r.name, getSublabel: (r) => r.industry || "", searchColumn: "name" },
-      { key: "pricing-quotations", entityType: "quotation", label: "Quotations", Icon: FileText, table: "quotations", columns: "id, quotation_name, quote_number, customer_name, status", getLabel: (r) => r.quote_number || r.quotation_name || "—", getSublabel: (r) => r.customer_name || "", searchColumn: "quote_number", extraFilters: { quotation_type: "spot" } },
+      { key: "pricing-quotations", entityType: "quotation", label: "Quotations", Icon: FileText, table: "quotations", columns: "id, quotation_name, quote_number, customer_name, status", getLabel: (r) => r.quote_number || r.quotation_name || "—", getSublabel: (r) => r.customer_name || "", searchColumn: "quote_number", extraFilters: { quotation_type: ["project", "spot"] } },
       { key: "pricing-projects", entityType: "project", label: "Projects", Icon: Briefcase, table: "projects", columns: "id, project_number, customer_name, status", getLabel: (r) => r.project_number || "—", getSublabel: (r) => r.customer_name || "", searchColumn: "project_number" },
       { key: "pricing-contracts", entityType: "contract", label: "Contracts", Icon: Handshake, table: "quotations", columns: "id, quotation_name, quote_number, customer_name, status", getLabel: (r) => r.quote_number || r.quotation_name || "—", getSublabel: (r) => r.customer_name || "", searchColumn: "quote_number", extraFilters: { quotation_type: "contract" } },
     ],
@@ -229,7 +229,7 @@ export function RecordBrowser({ isOpen, onClose, onLink, alreadyLinked = [] }: R
         .limit(40);
       if (activeEntity.extraFilters) {
         for (const [key, value] of Object.entries(activeEntity.extraFilters)) {
-          query = query.eq(key, value);
+          query = Array.isArray(value) ? query.in(key, value) : query.eq(key, value);
         }
       }
       if (debouncedSearch.trim()) {

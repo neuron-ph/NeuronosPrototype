@@ -15,7 +15,7 @@ interface EntityDef {
   getLabel: (row: any) => string;
   getSublabel: (row: any) => string;
   searchColumn: string;
-  extraFilter?: Record<string, string>;
+  extraFilter?: Record<string, string | string[]>;
 }
 
 interface PendingEntity {
@@ -48,7 +48,7 @@ const DRAWERS = [
         getLabel: (r: any) => r.quotation_number || "—",
         getSublabel: (r: any) => r.customer_name || "",
         searchColumn: "quotation_number",
-        extraFilter: { quotation_type: "spot" },
+        extraFilter: { quotation_type: ["project", "spot"] },
       },
       {
         entityType: "contract",
@@ -216,7 +216,7 @@ export function FileCabinet({ isOpen, onLink, onClose, alreadyLinked }: FileCabi
         .limit(40);
       if (activeEntity.extraFilter) {
         for (const [k, v] of Object.entries(activeEntity.extraFilter)) {
-          query = query.eq(k, v);
+          query = Array.isArray(v) ? query.in(k, v) : query.eq(k, v);
         }
       }
       if (debouncedSearch.trim()) {

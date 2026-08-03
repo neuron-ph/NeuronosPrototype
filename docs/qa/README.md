@@ -138,6 +138,17 @@ produced are on `dev`, unpushed. Nothing has been released.
 
 ---
 
+## Settled by Marcus
+
+- **Unassigned "Pending Pricing" quotations are invisible to Pricing Officers —
+  by design.** The manager triages the queue and assigns a reviewer; assignment
+  is what grants visibility (`users_reachable_ids` matches `created_by`,
+  `prepared_by` or `assigned_to`). In prod 13 of 50 pending quotations are
+  unassigned, which is the manager's inbox, not a leak. Do not "fix" this.
+- **`quotation_type = "spot"` is legacy.** Prod holds zero. The live values are
+  `project` (360) and `contract` (38). Five code paths still filtered on `spot`
+  and returned nothing; fixed 2026-08-03.
+
 ## Open decisions
 
 | Decision | Needed for | Status |
