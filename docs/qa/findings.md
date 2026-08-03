@@ -195,12 +195,17 @@ effect observed.
 
 ## D. Outstanding environment work
 
-### D1 — Migration 268 not applied anywhere · OPEN
-Drops `ev_approval_authority`. **Deploy order matters:** the code must ship
-first, because the previous bundle names that column in an explicit select.
+### D1 — Migration 268 · DONE (dev), OPEN for prod
+Drops `ev_approval_authority`. Deploy order mattered — the previous bundle named
+that column in an explicit select, so the code had to ship first.
 
-**Action.** Code is now on `origin/dev`. Apply 268 to dev once the preview has
-rebuilt; prod on Marcus's word only. **Needs Marcus for prod.**
+**Applied to dev 2026-08-03**, after confirming `src/` holds no live reference.
+Verified: column gone, `guard_user_privileged_columns` rebuilt without the
+clause, `trg_guard_user_privileged_columns` intact, and the Executive persona's
+39 routes still load — including `/admin/users`, the only page that named it.
+
+**Action — outstanding.** Prod on Marcus's word only, and code must ship there
+first for the same reason. **Needs Marcus.**
 
 ### D2 — Grant prune not run on prod · OPEN
 Dev only so far. Prod carries the same dead keys.
