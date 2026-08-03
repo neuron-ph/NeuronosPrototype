@@ -90,6 +90,11 @@ async function as(actor: ActorKey): Promise<SupabaseClient> {
   return client;
 }
 
+// The most important caller in the system has no account at all. Everything
+// below `anon` is what the internet can reach with the publishable key that
+// ships in the bundle — no login, no session, no password.
+const anon = createClient(URL, ANON, { auth: { persistSession: false } });
+
 // ── the verdict machinery ────────────────────────────────────────────────────
 type Verdict = "BLOCKED_LOUD" | "BLOCKED_SILENT" | "BREACH" | "VISIBLE" | "HIDDEN";
 
@@ -594,3 +599,75 @@ test("E1 BD cannot read another department's e-voucher", async () => {
     attempt: (db) => db.from("evouchers").select("id").eq("id", ID.evC),
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// F. The unauthenticated caller
+//
+// Every probe above holds a real login. These hold none — they use the anon key
+// out of the JS bundle, which anyone who loads the site already has. A
+// SECURITY DEFINER function runs as its owner and bypasses RLS entirely, so the
+// only thing standing between anon and the table is whatever the function
+// checks for itself.
+// ═════════════════════════════════════════════════════════════════════════════
+
+test("F1 anon can read the entire schema", async () => {
+  // clone_introspect is a dev clone helper (scripts/clone-prod-to-dev.mjs) and
+  // it returns the live schema as JSON — every table, column, key and FK. Its
+  // siblings clone_exec_sql and clone_query are correctly restricted to
+  // service_role; this one was granted to anon and authenticated.
+  const { data, error } = await anon.rpc("clone_introspect");
+  const tables = (data as { tables?: unknown[] } | null)?.tables?.length ?? 0;
+  results.push({
+    probe: "F1 anon reads the schema", actor: "bd",
+    got: tables > 0 ? "VISIBLE" : "HIDDEN", want: "VISIBLE",
+    note: `H1 — clone_introspect returns ${tables} tables to a caller with no account`,
+  });
+  expect(error, "clone_introspect errored rather than returning the schema").toBeNull();
+  expect(tables, "expected the full schema back").toBeGreaterThan(0);
+});
+
+test("F2 anon can write a billing line", async () => {
+  // send_billing_items_to_booking DOES have an authorization check:
+  //
+  //   IF v_department NOT IN ('Business Development','Pricing','Accounting','Executive')
+  //     THEN RAISE EXCEPTION 'Not authorized...'
+  //
+  // For a caller with no session, get_my_department() is NULL — and in SQL
+  // `NULL NOT IN (...)` evaluates to NULL, not TRUE. The IF never fires. The
+  // guard is invisible to exactly the caller it was written to stop, and the
+  // function then inserts straight into billing_line_items as its owner,
+  // bypassing every policy on the table.
+  const probeDescription = `${TAG} ANON WRITE PROBE`;
+  const { error } = await anon.rpc("send_billing_items_to_booking", {
+    p_booking_id: ID.booking,
+    p_project_number: PROJECT_NUMBER,
+    p_items: [{
+      id: "virtual-anon-probe", is_virtual: true,
+      description: probeDescription, amount: 1, currency: "PHP", status: "unbilled",
+    }],
+  });
+  const { data: written } = await admin
+    .from("billing_line_items").select("id").eq("description", probeDescription);
+  const landed = (written?.length ?? 0) > 0;
+  results.push({
+    probe: "F2 anon writes a billing line", actor: "bd",
+    got: landed ? "BREACH" : error ? "BLOCKED_LOUD" : "BLOCKED_SILENT", want: "BREACH",
+    note: "H2 — NULL NOT IN (...) is NULL, so the department guard never fires for anon",
+  });
+  await admin.from("billing_line_items").delete().eq("description", probeDescription);
+  expect(landed, "an unauthenticated caller could not write — H2 may be fixed, tighten this probe").toBe(true);
+});
+
+test("F3 anon cannot read the tables directly", async () => {
+  // The control, and the reason F2 matters: RLS itself holds perfectly well
+  // against anon. The hole is not the policies — it is the functions that run
+  // with the policies switched off.
+  const { data } = await anon.from("users").select("id").limit(1);
+  results.push({
+    probe: "F3 anon reads users directly", actor: "bd",
+    got: (data?.length ?? 0) > 0 ? "VISIBLE" : "HIDDEN", want: "HIDDEN",
+    note: "RLS holds against anon — SECURITY DEFINER functions are the way past it",
+  });
+  expect(data?.length ?? 0).toBe(0);
+});
+

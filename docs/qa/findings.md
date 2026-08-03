@@ -602,3 +602,106 @@ where pg_get_expr(p.polqual, p.polrelid) like '%current_user_can_view_record%NUL
 Three hits, all on `billing_line_items` (select, update, delete). Nothing else in
 the schema passes a NULL owner. The E15/G3 fix is one migration, not a sweep.
 
+---
+
+## H. Found by the SECURITY DEFINER audit
+
+The breaking pass was meant to start with a cheap static sweep: list every
+`SECURITY DEFINER` function and ask which ones check their caller. Those
+functions run as their owner and bypass RLS **entirely**, so the only thing
+between a caller and the table is whatever the function checks for itself.
+
+78 of them exist. Two findings, one of them the most serious of this effort.
+
+### H2 — An unauthenticated caller can write billing lines · BUG (CRITICAL)
+`send_billing_items_to_booking(p_booking_id, p_project_number, p_items)` is
+executable by **anon** — the publishable key that ships in the JS bundle, no
+login required — and inserts into `billing_line_items` as its owner.
+
+It is not unguarded. It opens with:
+
+```sql
+v_department := public.get_my_department();
+IF v_department NOT IN ('Business Development','Pricing','Accounting','Executive') THEN
+  RAISE EXCEPTION 'Not authorized to send billing items to booking';
+END IF;
+```
+
+For a caller with no session `get_my_department()` returns NULL, and in SQL
+`NULL NOT IN (...)` evaluates to **NULL, not TRUE**. The `IF` never fires. The
+check is invisible to precisely the caller it was written to stop.
+
+**Proved on dev, not inferred.** An anonymous client called it with a real
+booking and project and got `{"inserted_count":1}`; the row was then read back
+with service-role eyes and deleted. Pinned as adversary probe F2.
+
+Two things make it worse than a single function:
+
+- it bypasses the billings policies completely, so it is also a way around E15
+  and G3 — and around every visibility dial on that table;
+- the same NULL trap will silently disable **any** `IF x NOT IN (...)` guard
+  written against a nullable helper. This is the only one in the schema today
+  (swept `pg_proc` for the pattern), but it is a shape to ban, not an instance
+  to patch.
+
+**Action.**
+1. `REVOKE EXECUTE ... FROM anon` on this function — nothing anonymous should
+   reach a writer.
+2. Rewrite the guard as `IF v_department IS NULL OR v_department NOT IN (...)`,
+   or better `IF NOT current_user_has_module_permission('...','create')` — a
+   department string is not an authorization check anyway.
+3. Sweep every SECURITY DEFINER function's ACL for `anon`.
+
+**PROD IS UNVERIFIED.** I tried to read prod's `proacl` for these functions and
+the permission classifier blocked the query. This function almost certainly
+exists there with the same grants. **Someone needs to check prod before
+anything else on this list.**
+
+### H1 — `clone_introspect()` returns the whole schema to anon · BUG
+The dev-clone helper (`scripts/clone-prod-to-dev.mjs`) returns the live schema
+as JSON — every table, column, key and foreign key. Its siblings `clone_exec_sql`
+and `clone_query` are correctly restricted to `postgres` + `service_role`. This
+one is granted to `anon` and `authenticated`, and an anonymous call returned
+**121 tables**.
+
+No data leaves, but it is a complete map of where the data is, handed to anyone
+who asks. CLAUDE.md documents this helper as installed on **prod** as well.
+
+**Action.** `REVOKE EXECUTE ON FUNCTION public.clone_introspect() FROM anon,
+authenticated;` on both projects. The clone script runs as service_role and is
+unaffected.
+
+### H3 — Twelve SECURITY DEFINER writers check nothing at all · WATCH
+Beyond H2, these run as owner, are reachable by `authenticated`, write, and
+contain no caller check of any kind:
+
+| function | writes | what it would let a caller do |
+|---|---|---|
+| `link_existing_users_to_auth()` | `users.auth_id` | relink a profile to any auth account whose email matches. Harmless today only because dev has 0 rows with a NULL `auth_id` — it is a loaded gun with no round chambered. |
+| `save_kpi_manual_entry(...)` | KPI scores | score anyone, including yourself |
+| `clear_kpi_manual_entry(...)` | KPI scores | erase anyone's score |
+| `tag_charge_fault(...)` | fault attribution | assign blame for a charge to any user |
+| `record_notification_event(...)` | notifications | send any user a notification from any actor |
+| `replace_assignment_default_atomic(...)` | assignment defaults | rewrite who work routes to |
+| `replace_assignment_profile_atomic(...)` | assignment profiles | same |
+| `ensure_billable_expense_billing_item(...)` | `billing_line_items` | a second billings bypass |
+| `generate_booking_number(...)` | sequence | burn booking numbers |
+
+All reached their argument validation when probed, which proves the call path is
+open; none was driven to a real write except H2.
+
+**Action.** Each needs the `approve_invoice` treatment — re-check the caller
+server-side and raise — or its EXECUTE grant narrowed. Take them as one batch.
+
+### H4 — A department string is not an authorization check · WATCH
+`send_billing_items_to_booking` gates on `get_my_department() IN (...)`, which
+means any BD, Pricing, Accounting or Executive user can insert billing lines
+**regardless of their billings grants or visibility dial**. Even with H2 fixed,
+this function is a way around the entire billings permission model for four
+whole departments.
+
+Compare `evoucher_transition` (migration 270) and `approve_invoice`, which both
+ask `current_user_has_module_permission(...)`.
+
+**Action.** Fold into the H3 batch: grant checks, not department strings.
+
