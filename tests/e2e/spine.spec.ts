@@ -22,8 +22,8 @@ import { test, expect, Page, BrowserContext } from "@playwright/test";
 //   Stage 5  the officer converts it to a project   → Converted       [done]
 //   Stage 6a Pricing opens the booking form from the project          [done]
 //   Stage 6b Operations picks that booking up                         [done]
-//   Stage 7  e-voucher: raise → approve → approve → disburse          [next]
-//   Stage 8  billing → invoice → collection                           [todo]
+//   Stage 7  e-voucher: raise → approve → approve → disburse          [done]
+//   Stage 8  billing → invoice → collection                           [next]
 //
 // Stage 6 shape, settled with Marcus: the project file is a Pricing/BD artifact
 // that Operations is not meant to see. Seeding bookings from it is therefore a
@@ -34,42 +34,53 @@ import { test, expect, Page, BrowserContext } from "@playwright/test";
 // picks it up from their own booking list. That second half is the real
 // Pricing → Ops handoff and is what stage 6 must assert. See E9, E10.
 //
-// STAGE 7 — groundwork done, form not yet driven. The cast is settled and every
-// actor is department-native, with the raiser being the same Ops supervisor the
-// booking was handed to in stage 6:
+// STAGE 7 — the job costs money. The Ops supervisor who took the booking in
+// stage 6 raises the expense against THAT booking, and it walks the AP chain:
 //
-//   raise    jr.supervisor07  Princess Marre R. Reyes   my_evouchers:edit
-//   approve  jr.manager02     Mariella R. Soriano       Sr. Operations Manager
-//                             — my_evouchers:approve, and the DB ALSO enforces
-//                               that the approver's department matches the
-//                               requestor's, so an Ops manager is required here
+//   raise    jr.supervisor07  Princess Marre R. Reyes   my_evouchers:create/edit
+//   approve  jr.manager03     Jayson P. Nabos           PRICING Manager
+//                             — my_evouchers:approve
 //   approve  inquiry@         Mark D. Javier            acct_evouchers:approve
 //   disburse treasury@        Janice D. De Villa        acct_evouchers:disburse
 //                             — one of only TWO people in the company who hold it
 //
-// The form, fully mapped — /my-evouchers -> "New Request" -> Reimbursement
-// Request modal (PAYMENT VOUCHER / TRANSACTION DETAILS / LINE ITEMS /
-// PAYMENT & TERMS). Submit Request starts DISABLED and needs:
+// THE CAST CORRECTION (E12). The groundwork here named the Ops manager for the
+// first approval, reasoning that the DB requires the approver's department to
+// match the requestor's. It does not: evouchers_select/_update compare
+// COALESCE(pending_approver_department, details->>requestor_department) to the
+// approver's department — the MATERIALIZED approver wins, and the requestor's
+// department is only the fallback. And there is a live routing rule:
 //
-//   1. Paid To (Vendor) — required, empty. Click "Select a registered vendor";
-//      an inline panel lists real vendors by name (e.g. "YANG MING",
-//      "UTOC CORPORATION"). Same shape as the customer picker in stage 1:
-//      plain text rows, not role=option.
-//   2. At least one line item. "Add Category" opens the Expense Catalog groups
-//      — (EXP) FORWARDING / BROKERAGE - FCL / BROKERAGE - LCL/AIR / TRUCKING /
-//      FUNDS / MISCELLANEOUS — plus a "Search or type category name..." box.
-//      Picking one reveals "Add Item" and three inputs:
-//        "Select or type item..."  (the catalog item — must come from the
-//                                   Expense Catalog, never free text)
-//        "Optional description"
-//        "0.00"                    (amount)
+//   "Forwarding-job expenses -> Pricing Manager"
+//   trigger { booking_service_type: "Forwarding" } → { Pricing, manager }
 //
-// Transaction Type is pre-filled ("Reimbursement – Project and Office
-// Expense"). Footer: Cancel / Save Draft / Submit Request.
+// The voucher's lines are booked to a Forwarding booking, so the rule fires at
+// submit and stamps pending_approver_department = "Pricing". The Ops manager
+// never sees it; the Pricing Manager does — and that is Jayson, the same person
+// the rule is named after. Stage 7 asserts BOTH halves of that: it arrives with
+// Pricing, and it does NOT arrive with Operations.
 //
-// Expected chain once driven (verified against the code in workflow-chains.md):
-//   draft → submit → pending_manager → approve → pending_ceo → approve
-//         → pending_accounting → disburse → disbursed
+// The form — /my-evouchers -> "New Request" -> "Reimbursement Request" modal.
+// The personal context defaults the Transaction Type to Reimbursement (the
+// panel is shared with Operations/Accounting, which default elsewhere), and the
+// title/labels follow the type. Submit Request starts DISABLED and needs three
+// things:
+//
+//   1. Paid To (Vendor) — registry-only (NEU-046). A searchable dropdown over
+//      service_providers; one-off payees must be registered first.
+//   2. One line item from the Expense Catalog — "Add Category" (a real
+//      catalog_categories row, side=expense), which seeds an empty line, then
+//      the item itself via CatalogItemCombobox. Never free text.
+//   3. A booking on that line (D2) — enforced in handleSubmit, not by the
+//      disabled state, so a missing booking fails as a toast, not a dead button.
+//
+// The chain, verified end to end here:
+//   draft → submit → pending_manager → approve → pending_ceo → approve (CEO)
+//         → pending_accounting → disburse → posted
+//
+// The last hop is NOT "disbursed": only a true advance (cash_advance /
+// budget_request) parks in liquidation. A reimbursement settles directly — the
+// disburse page says "Disburse & Close" and lands the voucher at Posted.
 //
 // WRITES TO DEV. Every record it creates is named with SPINE_TAG so the debris
 // is identifiable and can be cleaned up.
@@ -101,6 +112,19 @@ const OPS = "jr.supervisor07@falconslogistics-ph.com";
 // Pricing -> Ops handoff, not a convenience.
 const OPS_NAME = "Princess Marre R. Reyes";
 
+// Stage 7 cast. Each holds exactly one gate in the AP chain, and no two of them
+// hold the same one — so every hop below is a real handoff between people.
+const OPS_MANAGER = "jr.manager02@falconslogistics-ph.com"; // Mariella R. Soriano, Operations
+const EXEC = "inquiry@falconslogistics-ph.com";             // Mark D. Javier, acct_evouchers:approve
+const TREASURY = "treasury@falconslogistics-ph.com";        // Janice D. De Villa, :disburse
+
+// Real rows, not "whatever is first": a registered vendor (the picker is
+// registry-only), and a category/item pair that genuinely exists in the Expense
+// Catalog — the catalog architecture forbids free text on either.
+const VENDOR = "UTOC CORPORATION";
+const EXPENSE_CATEGORY = "(EXP) FORWARDING";
+const CATALOG_ITEM = "FC (OCEAN FREIGHT)";
+
 const SPINE_TAG = "E2E-SPINE";
 
 // A real customer in the dev dataset. Chosen rather than "whatever is first"
@@ -108,6 +132,12 @@ const SPINE_TAG = "E2E-SPINE";
 // unexpected.
 const CUSTOMER = "FREIGHT CARE LOGISTICS";
 const CONTACT = "FAJNA FAJNA"; // the only contact on that customer in dev
+
+// DataTable renders the SAME rows twice — a desktop <table> and a mobile card
+// list that is hidden at this viewport (md:hidden). getByText().first() lands on
+// the hidden copy, which can never be clicked and never reads as visible, so
+// every list assertion below addresses the real table by its cells.
+const cell = (page: Page, name: string | RegExp) => page.getByRole("cell", { name }).first();
 
 const signInButton = (page: Page) => page.getByRole("button", { name: "Sign In", exact: true });
 
@@ -127,8 +157,8 @@ async function signIn(context: BrowserContext, email: string): Promise<Page> {
   return page;
 }
 
-test("spine: inquiry -> priced -> accepted -> project -> booking -> Operations", async ({ browser }) => {
-  test.setTimeout(240_000);
+test("spine: inquiry -> priced -> accepted -> project -> booking -> Operations -> e-voucher posted", async ({ browser }) => {
+  test.setTimeout(420_000);
 
   // A name unique to this run, so the Pricing actor finds this exact record and
   // the debris is attributable.
@@ -449,8 +479,217 @@ test("spine: inquiry -> priced -> accepted -> project -> booking -> Operations",
     `Operations cannot see ${bookingNumber} after Pricing raised it from the project and named them supervisor — the Pricing -> Ops handoff is broken`
   ).toBeVisible({ timeout: 25_000 });
 
+  // ── Stage 7a — the job costs money: Operations raises the e-voucher ───────
+  // Same person, same session as stage 6b. The expense is booked to the booking
+  // they just picked up, which is what makes the two stages one story rather
+  // than two unrelated records.
+  await ops.goto("/my-evouchers", { waitUntil: "domcontentloaded" });
+  await expect(ops.getByRole("heading", { name: "E-Vouchers" })).toBeVisible({ timeout: 20_000 });
+
+  await ops.getByRole("button", { name: "New Request" }).click();
+  await expect(ops.getByRole("heading", { name: "Reimbursement Request" })).toBeVisible({
+    timeout: 15_000,
+  });
+
+  // Vendor — registry-only (NEU-046). The trigger carries the field's aria-label
+  // rather than its visible text, so it is addressed by that; the label itself
+  // follows the transaction type, which here is Reimbursement.
+  await ops.getByRole("button", { name: "Paid To (Vendor)" }).click();
+  await ops.getByPlaceholder("Search registered vendors...").fill("UTOC");
+  await ops.waitForTimeout(800);
+  await ops.getByRole("button", { name: VENDOR, exact: true }).click({ timeout: 15_000 });
+  await ops.waitForTimeout(500);
+
+  // The line item, out of the Expense Catalog. Adding a category seeds one empty
+  // line, so there is no "Add Item" to click for the first one.
+  await ops.getByRole("button", { name: "Add Category" }).click();
+  await ops.getByPlaceholder("Search or type category name...").fill("FORWARDING");
+  await ops.waitForTimeout(800);
+  await ops.getByRole("button", { name: EXPENSE_CATEGORY, exact: true }).click({ timeout: 15_000 });
+  await ops.waitForTimeout(800);
+
+  const itemInput = ops.getByPlaceholder("Select or type item...").first();
+  await itemInput.click();
+  await itemInput.fill("OCEAN");
+  await ops.waitForTimeout(1_200);
+  // Exact, because the combobox also offers a quick-create button reading
+  // `Add "OCEAN"` — picking that would create a catalog item, not use one.
+  await ops.getByRole("button", { name: CATALOG_ITEM, exact: true }).click({ timeout: 15_000 });
+  await ops.waitForTimeout(500);
+
+  await ops.getByPlaceholder("0.00").first().fill("1500");
+
+  // D2: the line must name a booking. This is the link that makes the expense
+  // part of the job rather than loose office spend — and it is also the signal
+  // the routing engine reads to decide who approves.
+  await ops.getByRole("button", { name: "Line item booking" }).click();
+  await ops.getByPlaceholder("Search bookings…").fill(bookingNumber);
+  await ops.waitForTimeout(1_200);
+  await ops.getByRole("button", { name: new RegExp(bookingNumber) }).first().click({ timeout: 15_000 });
+  await ops.waitForTimeout(500);
+
+  const submitRequest = ops.getByRole("button", { name: "Submit Request" });
+  await expect(
+    submitRequest,
+    "Submit Request is still disabled — vendor, catalog line or amount did not take"
+  ).toBeEnabled({ timeout: 10_000 });
+  await submitRequest.click();
+
+  await expect(
+    ops.getByRole("heading", { name: "Reimbursement Request" }),
+    "the voucher form did not close — the submit was rejected"
+  ).toHaveCount(0, { timeout: 25_000 });
+
+  // The voucher auto-titles itself "<Type> · <booking> · <date>", and
+  // that title is stored as the purpose — which is what this list searches on.
+  // So the booking number finds the voucher raised against it.
+  await ops.getByPlaceholder(/Search by voucher number/).fill(bookingNumber);
+  await ops.waitForTimeout(3_000);
+
+  const evNumber = (await cell(ops, /^EV-\d{4}-\d{4}$/).innerText()).trim();
+  expect(evNumber, "no e-voucher number in the requestor's list").toMatch(/^EV-/);
+
+  await expect(
+    cell(ops, "Pending Manager Approval"),
+    `${evNumber} did not leave draft — submit did not advance the status`
+  ).toBeVisible({ timeout: 20_000 });
+
+  // ── Stage 7b — routing, proved from both sides ────────────────────────────
+  // Negative half first, while it is still at pending_manager: the requestor's
+  // OWN department manager must NOT have it. She holds my_evouchers:approve and
+  // Princess reports to her, so if routing were not materialized this voucher
+  // would land here.
+  const opsMgrContext = await browser.newContext();
+  const opsMgr = await signIn(opsMgrContext, OPS_MANAGER);
+  await opsMgr.goto("/approvals", { waitUntil: "domcontentloaded" });
+  await expect(opsMgr.getByRole("heading", { name: "Approvals" })).toBeVisible({ timeout: 20_000 });
+  await opsMgr.getByPlaceholder(/Search by number or requestor/).fill(evNumber);
+  await opsMgr.waitForTimeout(3_000);
+
+  await expect(
+    opsMgr.getByText(evNumber),
+    `${evNumber} reached the Operations manager — the Forwarding routing rule did not redirect it to Pricing`
+  ).toHaveCount(0);
+
+  // Positive half: it is sitting with the Pricing Manager instead, because the
+  // line is booked to a Forwarding booking. Same session as stages 2-3.
+  await pricing.goto("/approvals", { waitUntil: "domcontentloaded" });
+  await expect(pricing.getByRole("heading", { name: "Approvals" })).toBeVisible({ timeout: 20_000 });
+  await pricing.getByPlaceholder(/Search by number or requestor/).fill(evNumber);
+  await pricing.waitForTimeout(3_000);
+
+  await expect(
+    cell(pricing, evNumber),
+    `the Pricing Manager cannot see ${evNumber} — the routed approval never arrived`
+  ).toBeVisible({ timeout: 25_000 });
+
+  await cell(pricing, evNumber).click();
+  // "Approve" exactly — the CEO's button reads "Approve (CEO)" and only one of
+  // the two is ever offered, so an inexact match would hide a wrong-gate bug.
+  const managerApprove = pricing.getByRole("button", { name: "Approve", exact: true });
+  await expect(
+    managerApprove,
+    "the manager approve action is not offered at pending_manager"
+  ).toBeVisible({ timeout: 20_000 });
+  await managerApprove.click();
+  await pricing.waitForTimeout(4_000);
+
+  await expect(
+    pricing.getByText(evNumber),
+    "the voucher is still in the Pricing Manager's queue after approving"
+  ).toHaveCount(0, { timeout: 20_000 });
+
+  // ── Stage 7c — the CEO signs off ──────────────────────────────────────────
+  // A different gate entirely (acct_evouchers:approve, not my_evouchers), held
+  // by Executive. If the manager step had not advanced the status this queue
+  // would be empty, so arrival here is the assertion.
+  const execContext = await browser.newContext();
+  const exec = await signIn(execContext, EXEC);
+
+  await exec.goto("/approvals", { waitUntil: "domcontentloaded" });
+  await expect(exec.getByRole("heading", { name: "Approvals" })).toBeVisible({ timeout: 20_000 });
+  await exec.getByPlaceholder(/Search by number or requestor/).fill(evNumber);
+  await exec.waitForTimeout(3_000);
+
+  await expect(
+    cell(exec, evNumber),
+    `${evNumber} never reached the CEO after the manager approved it`
+  ).toBeVisible({ timeout: 25_000 });
+
+  await cell(exec, evNumber).click();
+  const ceoApprove = exec.getByRole("button", { name: "Approve (CEO)" });
+  await expect(ceoApprove, "the CEO approve action is not offered at pending_ceo").toBeVisible({
+    timeout: 20_000,
+  });
+  await ceoApprove.click();
+  await exec.waitForTimeout(4_000);
+
+  // ── Stage 7d — Treasury releases the cash ─────────────────────────────────
+  // The narrowest gate in the company: acct_evouchers:disburse, held by two
+  // people. Treasury works its own queue, not /approvals — the disburse step is
+  // not an approval, so it never appears there.
+  const treasuryContext = await browser.newContext();
+  const treasury = await signIn(treasuryContext, TREASURY);
+
+  await treasury.goto("/accounting/evouchers", { waitUntil: "domcontentloaded" });
+  await expect(treasury.getByRole("heading", { name: "E-Vouchers" })).toBeVisible({ timeout: 20_000 });
+  await treasury.getByPlaceholder(/Search voucher #/).fill(evNumber);
+  await treasury.waitForTimeout(3_000);
+
+  await expect(
+    cell(treasury, evNumber),
+    `${evNumber} is not in Treasury's Pending Disburse queue after CEO approval`
+  ).toBeVisible({ timeout: 25_000 });
+
+  await cell(treasury, evNumber).click();
+  const disburse = treasury.getByRole("button", { name: "Disburse", exact: true });
+  await expect(disburse, "Disburse is not offered to Treasury at pending_accounting").toBeVisible({
+    timeout: 20_000,
+  });
+  await disburse.click();
+
+  // Disbursement is its own page, not a panel action — releasing cash is
+  // deliberately not a one-click affair.
+  await expect(treasury.getByRole("heading", { name: "Disbursement Details" })).toBeVisible({
+    timeout: 25_000,
+  });
+  // Cash, so no reference number is required (Check and Bank Transfer both
+  // demand one before Confirm enables).
+  await treasury.selectOption("#disb-method", "Cash");
+  await treasury.waitForTimeout(500);
+
+  // "Disburse & Close", not "Confirm Disbursement": a reimbursement settles in
+  // one step. Only a true advance parks in liquidation.
+  const confirmDisburse = treasury.getByRole("button", { name: "Disburse & Close" });
+  await expect(
+    confirmDisburse,
+    "the disburse page did not offer the direct-settle action for a reimbursement"
+  ).toBeEnabled({ timeout: 15_000 });
+  await confirmDisburse.click();
+  await treasury.waitForTimeout(6_000);
+
+  // THE CLOSING ASSERTION. The voucher has left the live queue and is in the
+  // Archive as Posted — cash out, expense recorded, chain complete.
+  await treasury.goto("/accounting/evouchers", { waitUntil: "domcontentloaded" });
+  await treasury.getByRole("tab", { name: /Archive/ }).click({ timeout: 25_000 });
+  await treasury.waitForTimeout(1_500);
+  await treasury.getByPlaceholder(/Search voucher #/).fill(evNumber);
+  await treasury.waitForTimeout(3_000);
+
+  await expect(
+    cell(treasury, evNumber),
+    `${evNumber} did not land in the Archive — the disbursement did not post it`
+  ).toBeVisible({ timeout: 25_000 });
+  await expect(
+    cell(treasury, "Posted"),
+    `${evNumber} is in the Archive but not Posted`
+  ).toBeVisible({ timeout: 20_000 });
+
   await bdContext.close();
   await pricingContext.close();
   await officerContext.close();
   await opsContext.close();
+  await opsMgrContext.close();
+  await execContext.close();
+  await treasuryContext.close();
 });

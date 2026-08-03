@@ -364,6 +364,41 @@ Every one: concluding "X is missing" from the absence of X *where I looked*,
 instead of finding where the code actually puts it. **Before filing an absence,
 find the write.**
 
+### E12 — The AP approver is routed, not derived · BY DESIGN
+Stage 7 groundwork assumed the first e-voucher approval always goes to the
+requestor's own department manager, because the RLS "enforces that the approver's
+department matches the requestor's". It does not.
+
+`evouchers_select` / `evouchers_update` compare
+`COALESCE(pending_approver_department, details->>'requestor_department')` to the
+approver's department. The **materialized** approver wins; the requestor's
+department is only the fallback when no routing rule matched. And one rule is
+live in dev:
+
+| label | trigger | authority | priority |
+|---|---|---|---|
+| Forwarding-job expenses -> Pricing Manager | `booking_service_type: "Forwarding"` | `Pricing / manager` | 10 |
+
+So an Operations supervisor raising an expense against a **Forwarding** booking
+sends it to the **Pricing** Manager. The Ops manager — who holds
+`my_evouchers:approve` and to whom the requestor actually reports — never sees it.
+That is the routing engine working as designed (`project_routing_engine`): the
+approver is declared in data, not derived from the org chart.
+
+**Action.** None. Stage 7 now asserts both halves — it arrives with Pricing, and
+it does NOT arrive with Operations — so the rule can never be silently dropped.
+
+### E13 — DataTable renders every row twice · WATCH
+`DataTable` renders a desktop `<table className="hidden md:table">` AND a mobile
+card list (`md:hidden`) from the same data. At the test viewport the cards are
+hidden, so `getByText(x).first()` resolves to a copy that can never be clicked
+and never reads as visible — it fails as "element is hidden", which looks like a
+missing record rather than a duplicate one.
+
+**Action.** None in the app; the duplication is deliberate. Spine list assertions
+go through `getByRole("cell")` so they address the real table. Worth knowing
+before writing any new test against a `DataTable`.
+
 ### E6 — `quotations` has `project_id` but no `project_number` · WATCH
 A query assuming the latter errored 42703. Minor; noted so it isn't rediscovered.
 
