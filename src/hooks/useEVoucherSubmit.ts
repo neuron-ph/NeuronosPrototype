@@ -470,10 +470,13 @@ export function useEVoucherSubmit(
       // and go straight to the disbursement queue.
       const submittedStatus = determineSubmittedEVoucherStatus(context, actor);
 
-      const { error: submitErr } = await supabase
-        .from("evouchers")
-        .update({ status: submittedStatus, updated_at: new Date().toISOString() })
-        .eq("id", createdId);
+      // Migration 270: draft -> first approver is an edge in the transition
+      // matrix, not a column write. The row was inserted as `draft` above, so
+      // this is the submit itself. Findings G1/G2.
+      const { error: submitErr } = await supabase.rpc("evoucher_transition", {
+        p_evoucher_id: createdId,
+        p_to_status: submittedStatus,
+      });
 
       if (submitErr) throw new Error(submitErr.message);
 

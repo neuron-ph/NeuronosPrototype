@@ -283,21 +283,17 @@ export function EVoucherWorkflowPanel({
   };
 
   const transition = async (newStatus: string, action: string, notes?: string) => {
-    // Audit #4/#8: an RLS-blocked UPDATE affects 0 rows WITHOUT throwing, so the
-    // caller would otherwise report success while nothing changed. .select() lets
-    // us detect the no-op (visibility-dial / department-scope mismatch) and turn
-    // a silent false-success into an honest, actionable error.
-    const { data, error } = await supabase
-      .from("evouchers")
-      .update({ status: newStatus, updated_at: new Date().toISOString() })
-      .eq("id", evoucherId)
-      .select("id");
-    if (error) throw error;
-    if (!data || data.length === 0) {
-      throw new Error(
-        "You don't have permission to perform this action on this E-Voucher (it may belong to another department, or its status changed). Refresh and try again.",
-      );
-    }
+    // Migration 270: status is no longer a column anyone can write. Every move
+    // goes through evoucher_transition(), which validates (from, to, actor) as a
+    // triple server-side and RAISES when the edge isn't legal — so the old
+    // failure mode this code used to work around (an RLS-blocked UPDATE affects
+    // 0 rows WITHOUT throwing, and the caller reports success) can't happen here
+    // any more. Findings G1/G2.
+    const { error } = await supabase.rpc("evoucher_transition", {
+      p_evoucher_id: evoucherId,
+      p_to_status: newStatus,
+    });
+    if (error) throw new Error(error.message);
     await writeHistory(action, currentStatus, newStatus, notes);
   };
 
@@ -406,11 +402,11 @@ export function EVoucherWorkflowPanel({
     setPendingConfirm(null);
     setIsSubmitting(true);
     try {
-      const { error: updateError } = await supabase
-        .from("evouchers")
-        .update({ status: "pending_accounting", updated_at: new Date().toISOString() })
-        .eq("id", evoucherId);
-      if (updateError) throw updateError;
+      const { error: updateError } = await supabase.rpc("evoucher_transition", {
+        p_evoucher_id: evoucherId,
+        p_to_status: "pending_accounting",
+      });
+      if (updateError) throw new Error(updateError.message);
 
       if (actor) logActivity("evoucher", evoucherId, evoucherNumber, "updated", actor, { description: "Unlocked for correction" });
       await writeHistory("Unlocked for Correction", currentStatus, "pending_accounting");
@@ -554,11 +550,11 @@ Update the lines and resubmit.`,
   const handleVerifyAndPostLiquidation = async () => {
     setIsSubmitting(true);
     try {
-      const { error: closeErr } = await supabase
-        .from("evouchers")
-        .update({ status: "posted", updated_at: new Date().toISOString() })
-        .eq("id", evoucherId);
-      if (closeErr) throw closeErr;
+      const { error: closeErr } = await supabase.rpc("evoucher_transition", {
+        p_evoucher_id: evoucherId,
+        p_to_status: "posted",
+      });
+      if (closeErr) throw new Error(closeErr.message);
       await supabase.from("evoucher_history").insert({
         id: `EH-${Date.now()}`,
         evoucher_id: evoucherId,

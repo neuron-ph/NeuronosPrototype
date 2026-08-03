@@ -491,7 +491,8 @@ impossible" are different claims. Each lands in one of three buckets:
 changed — safe, but a caller that doesn't check the affected count will tell the
 user "Saved"), **BREACH** (the write landed).
 
-Six breaches. Every one of them is a rule that exists in a form and nowhere else.
+Six breaches. Every one of them is a rule that exists in a form and nowhere
+else. **G1 and G2 are now fixed (migration 270); the four below are open.**
 
 **What held, and is now pinned:** routed-approver matching (A3), the disburse
 grant (A5), approval replay (A6), `approve_invoice`'s server-side approver check
@@ -499,41 +500,51 @@ grant (A5), approval replay (A6), `approve_invoice`'s server-side approver check
 line-item rule written as a CHECK constraint (A9). Those probes are the
 regression net around the parts that work.
 
-### G1 — The requestor can walk her own e-voucher to `disbursed` · BUG
-`evouchers_update` has a branch for `created_by = me AND my_evouchers:edit`, and
-that branch does not care WHICH column is being written. `status` is a column.
+### G1 — The requestor could walk her own e-voucher to `disbursed` · FIXED (270)
+### G2 — Nothing enforced the ORDER of the approval chain · FIXED (270)
 
-So the person who raised the voucher can set it to `pending_ceo`,
-`pending_accounting` or `disbursed` from the console — no approver, no Treasury.
-The UI never offers it (the panel gates on `my_evouchers:approve`), which is the
-only reason this hasn't happened.
+**What was wrong.** `evouchers_update` has a branch for
+`created_by = me AND my_evouchers:edit`, and that branch did not care WHICH
+column was being written. `status` is a column — so the person who raised a
+voucher could set it to `pending_ceo`, `pending_accounting` or `disbursed` from
+the browser console. The UI never offered it, which is the only reason it never
+happened. And nothing checked ORDER: Treasury moved a voucher sitting at
+`pending_ceo` straight to `disbursed`, because the policies ask *who you are* and
+never *where the record is*.
 
-There **is** a guard — `evoucher_enforce_disburse` raises when someone without
-`acct_evouchers:disburse` moves a voucher to `disbursed`/`posted`. Read its
-condition:
+There WAS a guard — `enforce_evoucher_disburse_permission` — but read its
+condition: `old.status = 'pending_accounting'`. It defended exactly one doorway.
+Probe A2 walked from `pending_ceo` to `disbursed` without ever meeting it, while
+A7 ran the identical write from `pending_accounting` and was refused loudly.
 
-```sql
-if old.status = 'pending_accounting' and new.status in ('disbursed','posted') ...
-```
+**The fix (migration 270).** Two pieces:
 
-It defends exactly one doorway. Probe A2 walks from `pending_ceo` straight to
-`disbursed` and is never inspected; probe A7 runs the identical write from
-`pending_accounting` and is refused loudly. Same actor, same column, same target.
+1. `evoucher_transition(id, to_status, notes)` — SECURITY DEFINER, modelled on
+   `approve_invoice`. It holds the whole matrix of legal edges and validates
+   `(from, to, actor)` as a triple, raising on anything else. Not another
+   `old.status` branch: a per-transition trigger can only ever cover the
+   transitions someone remembered, which is how this got here.
+2. `guard_evoucher_status_change` — a BEFORE UPDATE trigger that refuses any
+   status change not made through (1), identified by a transaction-local flag.
+   Service-role writes (`auth.uid() is null`) pass, the same convention the old
+   trigger used, so seeds and clones still work.
 
-**Action.** Not "add another `old.status`" — a per-transition trigger only ever
-covers the transitions someone remembered. Either make `status` un-writable by
-the owner branch (split the edit grant from the status column), or replace the
-status flips with SECURITY DEFINER functions the way `approve_invoice` already
-does.
+Six client call sites moved onto the RPC: `EVoucherWorkflowPanel.transition()`,
+its unlock and verify-and-close handlers, `DisburseEVoucherPage`,
+`LiquidationForm` (both submissions), `approveEVInline`, `useEVoucherSubmit`, and
+the legacy collections disposition path.
 
-### G2 — Nothing enforces the ORDER of the approval chain · BUG
-Treasury moved a voucher sitting at `pending_ceo` straight to `disbursed` (A4).
-The policies ask *who you are*, never *where the record is*. The chain
-draft → pending_manager → pending_ceo → pending_accounting → disbursed is a
-sequence of buttons, not a state machine.
+**Verified.** Adversary A0–A7 now read: raw column write BLOCKED_LOUD,
+self-approve BLOCKED_LOUD, self-disburse BLOCKED_LOUD, skip-the-CEO
+BLOCKED_LOUD, disburse-without-grant BLOCKED_LOUD, replay BLOCKED_LOUD — with
+two positive controls proving it is a fix and not a wall: the routed Pricing
+manager's approval still lands (A6), and Treasury's disbursement from
+`pending_accounting` still lands (A7). The full spine still walks submit →
+manager → CEO → disburse → posted.
 
-**Action.** Same fix as G1 — a transition function that validates
-`(old_status, new_status, actor)` as a triple.
+**Note.** `enforce_evoucher_disburse_permission` was left in place. It is now
+redundant — every path it guarded runs through the transition function — but it
+is a second lock on the same door and removing it is a separate decision.
 
 ### G3 — Operations can WRITE billing rows it can never read · BUG
 The sharp end of E15. `billing_line_items_insert` checks only

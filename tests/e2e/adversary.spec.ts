@@ -244,121 +244,141 @@ async function fieldIs(table: string, id: string, column: string, value: unknown
 
 // ═════════════════════════════════════════════════════════════════════════════
 // A. The approval chain — wrong hands, wrong order
+//
+// Migration 270 turned `status` into a state machine. Two things changed here:
+// the column itself is closed to direct writes (A0), and every move now goes
+// through evoucher_transition(), which validates (from, to, actor) as a triple
+// and RAISES. So these probes attack the sanctioned path — the one the app uses
+// — rather than the column, and what used to be BLOCKED_SILENT is now loud.
 // ═════════════════════════════════════════════════════════════════════════════
 
-test("A1 the requestor can approve her own e-voucher", async () => {
-  // The UI never offers this: EVoucherWorkflowPanel gates approval on
-  // my_evouchers:approve, which she does not hold. The DATABASE offers it —
-  // evouchers_update has a branch for `created_by = me AND my_evouchers:edit`,
-  // and that branch does not care which column you are changing. Status is a
-  // column. So the requestor can walk her own voucher through the chain.
+/** The only sanctioned way to move a voucher. */
+const move = (db: SupabaseClient, id: string, to: string) =>
+  db.rpc("evoucher_transition", { p_evoucher_id: id, p_to_status: to });
+
+test("A0 the status column is closed to direct writes", async () => {
+  // Before 270 this was the whole hole: `evouchers_update` has a branch for
+  // `created_by = me AND my_evouchers:edit`, and it did not care WHICH column
+  // you wrote. Now a BEFORE UPDATE trigger refuses any status change that did
+  // not come through the transition function, so the console route is shut for
+  // everyone — owner, approver and Treasury alike.
   await writeProbe({
-    probe: "A1 self-approve own voucher",
+    probe: "A0 raw column write",
     actor: "ops",
-    want: "BREACH",
-    note: "G1 — the requestor's edit grant covers the status column",
+    want: "BLOCKED_LOUD",
+    note: "G1 fixed — guard_evoucher_status_change raises on any unsanctioned move",
     attempt: (db) => db.from("evouchers").update({ status: "pending_ceo" }).eq("id", ID.evA),
     changed: () => fieldIs("evouchers", ID.evA, "status", "pending_ceo"),
   });
 });
 
-test("A2 the requestor can mark her own e-voucher disbursed", async () => {
-  // The same hole, taken to its end: not just past her manager, but past the
-  // CEO and Treasury, to the state that means "the cash has been released".
-  // There IS a trigger meant to stop exactly this — it just never fires here,
-  // because it only inspects updates whose OLD status is pending_accounting.
-  // A7 runs the identical write from that state and gets refused. Same actor,
-  // same column, same target value, opposite outcome.
+test("A1 the requestor cannot approve her own e-voucher", async () => {
+  // The same attempt through the front door. The matrix has no edge letting the
+  // owner walk pending_manager -> pending_ceo; that edge needs
+  // my_evouchers:approve AND the routed approver's department.
+  await writeProbe({
+    probe: "A1 self-approve own voucher",
+    actor: "ops",
+    want: "BLOCKED_LOUD",
+    note: "G1 fixed — no matrix edge for the owner at pending_manager",
+    attempt: (db) => move(db, ID.evA, "pending_ceo"),
+    changed: () => fieldIs("evouchers", ID.evA, "status", "pending_ceo"),
+  });
+});
+
+test("A2 the requestor cannot mark her own e-voucher disbursed", async () => {
+  // The end the old hole reached: past her manager, past the CEO, to the state
+  // that means the cash left the building. No edge runs from pending_manager to
+  // disbursed for anyone at all, let alone for her.
   await writeProbe({
     probe: "A2 self-disburse own voucher",
     actor: "ops",
-    want: "BREACH",
-    note: "G1 — walks around evoucher_enforce_disburse, which only guards one doorway (see A7)",
-    attempt: (db) => db.from("evouchers").update({ status: "disbursed" }).eq("id", ID.evA),
+    want: "BLOCKED_LOUD",
+    note: "G1 fixed — the jump does not exist in the matrix",
+    attempt: (db) => move(db, ID.evA, "disbursed"),
     changed: () => fieldIs("evouchers", ID.evA, "status", "disbursed"),
   });
 });
 
 test("A3 the wrong department's manager cannot approve", async () => {
   // Mariella holds my_evouchers:approve and Princess reports to her — but the
-  // voucher was ROUTED to Pricing, and the RLS branch compares the materialized
-  // approver department to hers. This is E12 enforced at the database, and it
-  // is the one gate in the AP chain that genuinely holds.
+  // voucher was ROUTED to Pricing (E12), and the edge compares the materialized
+  // approver department to hers. This gate held before 270 too; what changed is
+  // that it now refuses out loud instead of silently matching no rows, so the
+  // caller cannot mistake it for success.
   await writeProbe({
     probe: "A3 wrong-dept manager approves",
     actor: "opsMgr",
-    want: "BLOCKED_SILENT",
-    note: "RLS filters the row out of the UPDATE — 0 rows, no error",
-    attempt: (db) => db.from("evouchers").update({ status: "pending_ceo" }).eq("id", ID.evD),
+    want: "BLOCKED_LOUD",
+    note: "the routed approver department is checked on the edge",
+    attempt: (db) => move(db, ID.evD, "pending_ceo"),
     changed: () => fieldIs("evouchers", ID.evD, "status", "pending_ceo"),
   });
 });
 
-test("A4 Treasury can disburse a voucher the CEO never approved", async () => {
-  // evB is at pending_ceo. Disbursement is supposed to come after CEO approval;
-  // the DB has no idea what order these states go in. Anyone holding
-  // acct_evouchers:disburse can move any voucher to any status.
+test("A4 Treasury cannot disburse a voucher the CEO never approved", async () => {
+  // THE G2 FIX. evB sits at pending_ceo. Treasury holds every disbursement grant
+  // there is — and it no longer matters, because `disbursed` is reachable only
+  // from pending_accounting. The chain is now a sequence the database knows
+  // about, rather than a sequence of screens.
   await writeProbe({
     probe: "A4 skip the CEO",
     actor: "treasury",
-    want: "BREACH",
-    note: "G2 — the AP workflow order is enforced only by which button is rendered",
-    attempt: (db) => db.from("evouchers").update({ status: "disbursed" }).eq("id", ID.evB),
+    want: "BLOCKED_LOUD",
+    note: "G2 fixed — disbursed is reachable only from pending_accounting",
+    attempt: (db) => move(db, ID.evB, "disbursed"),
     changed: () => fieldIs("evouchers", ID.evB, "status", "disbursed"),
   });
 });
 
 test("A5 a manager without the disburse grant cannot release cash", async () => {
-  // The narrow gate holds: Jayson can approve at pending_manager and nothing
-  // else. At pending_accounting he matches no branch of the update policy.
   await writeProbe({
     probe: "A5 disburse without the grant",
     actor: "pricingMgr",
-    want: "BLOCKED_SILENT",
-    note: "acct_evouchers:disburse is the only key that opens this",
-    attempt: (db) => db.from("evouchers").update({ status: "disbursed" }).eq("id", ID.evC),
+    want: "BLOCKED_LOUD",
+    note: "acct_evouchers:disburse is the only key on that edge",
+    attempt: (db) => move(db, ID.evC, "disbursed"),
     changed: () => fieldIs("evouchers", ID.evC, "status", "disbursed"),
   });
 });
 
-test("A6 approving twice does nothing the second time", async () => {
-  // The routed approver's branch is scoped to `status = 'pending_manager'`, so
-  // once the first approval moves it the same person loses the row. Replay is
-  // refused — quietly, but refused.
+test("A6 the routed approver can approve — once", async () => {
+  // Positive control first: the legal move must still work, or the fix is just a
+  // wall. Jayson IS the routed Pricing manager, and his approval lands.
   const db = await as("pricingMgr");
-  const first = await db.from("evouchers").update({ status: "pending_ceo" }).eq("id", ID.evD);
-  expect(first.error, "the routed approver could not approve at all").toBeNull();
+  const { error: first } = await move(db, ID.evD, "pending_ceo");
+  expect(first, "the routed approver could not approve at all").toBeNull();
   expect(await fieldIs("evouchers", ID.evD, "status", "pending_ceo"),
     "the routed Pricing manager's approval did not land").toBe(true);
 
+  // Then replay. From pending_ceo the next edge needs acct_evouchers:approve,
+  // which he does not hold — so approving twice is refused for exactly the same
+  // reason approving out of turn is.
   await writeProbe({
     probe: "A6 approve the same voucher twice",
     actor: "pricingMgr",
-    want: "BLOCKED_SILENT",
-    note: "the approver branch is scoped to status = pending_manager",
-    attempt: (d) => d.from("evouchers").update({ status: "pending_accounting" }).eq("id", ID.evD),
+    want: "BLOCKED_LOUD",
+    note: "the second call is a different edge, and he is not on it",
+    attempt: (d) => move(d, ID.evD, "pending_accounting"),
     changed: () => fieldIs("evouchers", ID.evD, "status", "pending_accounting"),
   });
 });
 
-test("A7 the same jump IS blocked when it starts from pending_accounting", async () => {
-  // There is a guard — `evoucher_enforce_disburse` raises when someone without
-  // acct_evouchers:disburse moves a voucher to disbursed/posted. But read its
-  // condition: `old.status = 'pending_accounting'`. It defends exactly one
-  // doorway. A2 proved the requestor walks to `disbursed` from pending_ceo
-  // without meeting it; here the identical actor, target and column are refused,
-  // loudly, because she happened to approach from the guarded state.
-  //
-  // The lesson is not "add another old.status" — it is that a trigger written
-  // per-transition can only ever cover the transitions someone thought of.
-  await writeProbe({
-    probe: "A7 disburse FROM pending_accounting",
-    actor: "ops",
-    want: "BLOCKED_LOUD",
-    note: "G1 — the guard is real but one-doorway-shaped; A2 walks around it",
-    attempt: (db) => db.from("evouchers").update({ status: "disbursed" }).eq("id", ID.evC),
-    changed: () => fieldIs("evouchers", ID.evC, "status", "disbursed"),
+test("A7 Treasury CAN disburse from pending_accounting", async () => {
+  // The other half of the positive control, and the reason A4 is a fix rather
+  // than a breakage: the legal disbursement still goes through. Same actor, same
+  // target column, same table as A4 — only the starting state differs, and that
+  // is now the thing the database checks.
+  const db = await as("treasury");
+  const { error } = await move(db, ID.evC, "posted"); // a reimbursement settles directly
+  expect(error, "Treasury can no longer disburse a properly approved voucher").toBeNull();
+  const landed = await fieldIs("evouchers", ID.evC, "status", "posted");
+  results.push({
+    probe: "A7 disburse FROM pending_accounting", actor: "treasury",
+    got: landed ? "BREACH" : "BLOCKED_LOUD", want: "BREACH",
+    note: "positive control — the legal edge still works (BREACH = allowed, as intended)",
   });
+  expect(landed, "the sanctioned disbursement did not land").toBe(true);
 });
 
 test("A8 an e-voucher line can be written with no catalog item", async () => {
@@ -382,9 +402,9 @@ test("A8 an e-voucher line can be written with no catalog item", async () => {
 });
 
 test("A9 a negative charge is refused by the database", async () => {
-  // A positive control, and proof that the constraint route works: this one rule
-  // WAS written as a CHECK, and it is the only line-item rule that cannot be
-  // walked around by talking to PostgREST directly.
+  // A positive control, and proof the constraint route works: this one rule WAS
+  // written as a CHECK, and it is the only line-item rule that cannot be walked
+  // around by talking to PostgREST directly.
   const negative = `bli-adv-${stamp}-negative`;
   await writeProbe({
     probe: "A9 negative billing amount",

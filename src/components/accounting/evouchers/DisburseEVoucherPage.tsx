@@ -178,12 +178,22 @@ export function DisburseEVoucherPage() {
         (effectiveReceiverId === evoucher.requestor_id ? evoucher.requestor_name : undefined) ||
         null;
 
-      // 2. Update evoucher
+      // 2. Update evoucher.
+      // Migration 270 (findings G1/G2): the status move is its own call — the
+      // transition function owns the column and re-checks (from, to, actor)
+      // server-side, so a disbursement can no longer be reached from a state
+      // that never passed the CEO. The payment detail columns are an ordinary
+      // update and stay here.
       const newStatus = settlesDirectly ? "posted" : "disbursed";
+      const { error: moveErr } = await supabase.rpc("evoucher_transition", {
+        p_evoucher_id: evoucher.id,
+        p_to_status: newStatus,
+      });
+      if (moveErr) throw new Error(moveErr.message);
+
       const { error: evError } = await supabase
         .from("evouchers")
         .update({
-          status: newStatus,
           disbursement_method: paymentMethod,
           disbursement_reference: reference.trim() || null,
           disbursement_date: disbDate,
