@@ -47,13 +47,25 @@ import { test, expect, Page, BrowserContext } from "@playwright/test";
 //   disburse treasury@        Janice D. De Villa        acct_evouchers:disburse
 //                             — one of only TWO people in the company who hold it
 //
-// The form: /my-evouchers → "New Request" → a Reimbursement Request modal
-// (sections PAYMENT VOUCHER / TRANSACTION DETAILS / LINE ITEMS / PAYMENT &
-// TERMS). Transaction Type is pre-filled; "Paid To (Vendor)" is required and
-// empty; LINE ITEMS needs at least one row added via "Add Category", which per
-// the catalog rules must come from the Expense Catalog rather than free text.
-// Submit Request stays disabled until those are satisfied. Buttons: Cancel /
-// Save Draft / Submit Request.
+// The form, fully mapped — /my-evouchers -> "New Request" -> Reimbursement
+// Request modal (PAYMENT VOUCHER / TRANSACTION DETAILS / LINE ITEMS /
+// PAYMENT & TERMS). Submit Request starts DISABLED and needs:
+//
+//   1. Paid To (Vendor) — required, empty. Click "Select a registered vendor";
+//      an inline panel lists real vendors by name (e.g. "YANG MING",
+//      "UTOC CORPORATION"). Same shape as the customer picker in stage 1:
+//      plain text rows, not role=option.
+//   2. At least one line item. "Add Category" opens the Expense Catalog groups
+//      — (EXP) FORWARDING / BROKERAGE - FCL / BROKERAGE - LCL/AIR / TRUCKING /
+//      FUNDS / MISCELLANEOUS — plus a "Search or type category name..." box.
+//      Picking one reveals "Add Item" and three inputs:
+//        "Select or type item..."  (the catalog item — must come from the
+//                                   Expense Catalog, never free text)
+//        "Optional description"
+//        "0.00"                    (amount)
+//
+// Transaction Type is pre-filled ("Reimbursement – Project and Office
+// Expense"). Footer: Cancel / Save Draft / Submit Request.
 //
 // Expected chain once driven (verified against the code in workflow-chains.md):
 //   draft → submit → pending_manager → approve → pending_ceo → approve
