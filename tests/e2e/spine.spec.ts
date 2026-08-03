@@ -219,6 +219,58 @@ test("spine: BD raises an inquiry, Pricing prices it", async ({ browser }) => {
     "still offering Mark as Priced — the status did not advance"
   ).toHaveCount(0);
 
+  // ── Stage 4 — back to BD: send it, close it, convert it ───────────────────
+  // The client relationship is BD's, so BD carries the priced quote out and
+  // records the outcome. BD can see it throughout because they created it.
+  await bd.goto("/bd/inquiries", { waitUntil: "domcontentloaded" });
+  await bd.waitForTimeout(2_000);
+
+  // Pricing's work has already moved it: the page tabs split by lifecycle
+  // (Inquiries = Draft/Pending Pricing/Needs Revision, Quotations = Priced/Sent
+  // to Client, Completed = terminal). Now that it is Priced it has left the
+  // Inquiries tab, so BD picks it up under Quotations.
+  // role=tab, labelled with its count ("Quotations 121"). The list is slow to
+  // populate — the tabs do not exist for several seconds after navigation — so
+  // wait for it explicitly rather than relying on click's default timeout.
+  const quotationsTab = bd.getByRole("tab", { name: /Quotations/ });
+  await expect(quotationsTab).toBeVisible({ timeout: 30_000 });
+  await quotationsTab.click();
+  await bd.waitForTimeout(1_500);
+  await bd.getByPlaceholder(/Search/i).first().fill(quoteNumber);
+  await bd.waitForTimeout(3_000);
+  await bd.getByText(quoteNumber).first().click();
+  await expect(bd.getByRole("heading", { name: quotationName })).toBeVisible({ timeout: 20_000 });
+
+  // Priced → Sent to Client
+  await bd.getByRole("button", { name: /Ongoing/ }).click();
+  await bd.waitForTimeout(1_000);
+  await bd.getByRole("menuitem", { name: /Send to Client/ }).click();
+  await bd.waitForTimeout(3_000);
+
+  // "Waiting Approval" is the display label for Sent to Client — the one point
+  // in this chain where the chip actually changes.
+  await expect(
+    bd.getByRole("button", { name: /Waiting Approval/ }),
+    "Send to Client did not take effect"
+  ).toBeVisible({ timeout: 20_000 });
+
+  // Client accepts → Accepted by Client
+  await bd.getByRole("button", { name: /Waiting Approval/ }).click();
+  await bd.waitForTimeout(1_000);
+  await bd.getByRole("menuitem", { name: /Mark as Approved/ }).click();
+  await bd.waitForTimeout(3_000);
+
+  await expect(
+    bd.getByRole("button", { name: /Approved/ }),
+    "Mark as Approved did not take effect"
+  ).toBeVisible({ timeout: 20_000 });
+
+  // Stage 5 (convert to project) stops here. At Accepted by Client the screen
+  // offers only Edit / Export PDF / Amend as text buttons — conversion is not
+  // among them, so it sits behind one of the icon-only controls (the kebab
+  // beside Export PDF). That needs a discovery pass before it can be driven.
+  // handleAcceptAndCreateProject in QuotationFileView is the handler to land on.
+
   await bdContext.close();
   await pricingContext.close();
   await officerContext.close();
