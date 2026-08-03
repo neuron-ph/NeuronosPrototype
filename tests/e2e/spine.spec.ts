@@ -23,7 +23,7 @@ import { test, expect, Page, BrowserContext } from "@playwright/test";
 //   Stage 6a Pricing opens the booking form from the project          [done]
 //   Stage 6b Operations picks that booking up                         [done]
 //   Stage 7  e-voucher: raise → approve → approve → disburse          [done]
-//   Stage 8  billing → invoice → collection                           [next]
+//   Stage 8  billing → invoice → approve → issue → collection        [done]
 //
 // Stage 6 shape, settled with Marcus: the project file is a Pricing/BD artifact
 // that Operations is not meant to see. Seeding bookings from it is therefore a
@@ -82,6 +82,38 @@ import { test, expect, Page, BrowserContext } from "@playwright/test";
 // budget_request) parks in liquidation. A reimbursement settles directly — the
 // disburse page says "Disburse & Close" and lands the voucher at Posted.
 //
+// STAGE 8 — the job earns money, and the receivable closes:
+//
+//   bill     treasury@        Janice D. De Villa      acct_projects_billings_tab
+//   invoice  treasury@        Janice D. De Villa      acct_projects_invoices_tab
+//   approve  jr.manager02     Mariella R. Soriano     OPERATIONS Manager
+//   issue    treasury@        Janice D. De Villa      finalize (blocked until approved)
+//   collect  treasury@        Janice D. De Villa      acct_projects_collections_tab
+//
+// THE ROUTING ENGINE, POINTING THE OTHER WAY. Stage 7 sent an Ops-raised expense
+// to the PRICING manager. Here the invoice rule ("Invoice approval → Operations
+// manager", a catch-all trigger) sends an Accounting-raised invoice to the
+// OPERATIONS manager — so Mariella, deliberately not the approver of the
+// e-voucher, is the approver of the invoice. Two domains, one engine, opposite
+// directions, and neither derivable from the org chart.
+//
+// WHY ACCOUNTING RAISES THE CHARGE AND NOT OPERATIONS (E15). This should be
+// Operations' step: they hold ops_forwarding_billings_tab create/edit/delete and
+// the Billings tab is on their booking. It does not work. Every
+// billing_line_items policy calls current_user_can_view_record('billings', NULL)
+// — a literal NULL owner — and that returns false for own/team/department. Only
+// org_wide/everything passes. In dev that is all 17 Accounting/Executive users
+// and none of the 41 in BD/Pricing/Operations: the UI lets an Ops supervisor
+// fill the row, the DB refuses the insert. When E15 is fixed, stage 8a should
+// move back to the booking where it belongs.
+//
+// Two surfaces of the same table behave differently, which is why the steps look
+// asymmetric (E14): the BOOKING view groups by category, so "Add Item" inside a
+// category is the way in and the header's "Add Billing" files the row under an
+// undisplayed one; the PROJECT view groups by service, so "Add Billing" is the
+// only way in and naming the service re-groups the row into a collapsed group
+// mid-edit. Both surfaces can hide the row you just added.
+//
 // WRITES TO DEV. Every record it creates is named with SPINE_TAG so the debris
 // is identifiable and can be cleaned up.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -125,6 +157,12 @@ const VENDOR = "UTOC CORPORATION";
 const EXPENSE_CATEGORY = "(EXP) FORWARDING";
 const CATALOG_ITEM = "FC (OCEAN FREIGHT)";
 
+// Stage 8 works the revenue side of the same job. The charge comes from the
+// Billing Catalog (side=revenue) exactly as the expense came from the Expense
+// Catalog — free text is forbidden on both.
+const BILLING_ITEM = "CRATING FEE";
+const BILLING_AMOUNT = 25000;
+
 const SPINE_TAG = "E2E-SPINE";
 
 // A real customer in the dev dataset. Chosen rather than "whatever is first"
@@ -157,8 +195,8 @@ async function signIn(context: BrowserContext, email: string): Promise<Page> {
   return page;
 }
 
-test("spine: inquiry -> priced -> accepted -> project -> booking -> Operations -> e-voucher posted", async ({ browser }) => {
-  test.setTimeout(420_000);
+test("spine: inquiry -> quote -> project -> booking -> e-voucher posted -> invoice collected", async ({ browser }) => {
+  test.setTimeout(600_000);
 
   // A name unique to this run, so the Pricing actor finds this exact record and
   // the debris is attributable.
@@ -396,6 +434,12 @@ test("spine: inquiry -> priced -> accepted -> project -> booking -> Operations -
   await expect(officer.getByRole("button", { name: "Financial Overview" })).toBeVisible({
     timeout: 20_000,
   });
+
+  // The project number is the handle Accounting reaches this job by in stage 8 —
+  // they never see the quotation and never open the booking (E10), so this is
+  // the only reference that crosses into their module.
+  const projectNumber = (await officer.getByText(/^PRJ-\d{6}$/).first().innerText()).trim();
+  expect(projectNumber, "no project number on the converted project").toMatch(/^PRJ-/);
 
   // ── Stage 6a — Pricing seeds the booking from the project ─────────────────
   // Conversion left the officer on the project file. The booking is raised from
@@ -684,6 +728,209 @@ test("spine: inquiry -> priced -> accepted -> project -> booking -> Operations -
     cell(treasury, "Posted"),
     `${evNumber} is in the Archive but not Posted`
   ).toBeVisible({ timeout: 20_000 });
+
+  // ── Stage 8a — the job earns money: the charge is raised ─────────────────
+  // Doctrinally this is Operations' step — they know what the job cost the
+  // client, they hold ops_forwarding_billings_tab create/edit/delete, and the
+  // Billings tab is right there on their booking. It does not work: every
+  // billing_line_items policy calls current_user_can_view_record('billings',
+  // NULL), and a NULL owner returns false for every dial except org_wide /
+  // everything. Princess is on "team", so the DB refuses the insert — "new row
+  // violates row-level security policy" — after the UI let her fill the row.
+  // In dev that locks all 41 BD/Pricing/Operations users out of billings and
+  // leaves the 17 in Accounting/Executive. See E15.
+  //
+  // So Accounting raises it, from the project file — the only container they can
+  // reach (E10 keeps them out of the Operations booking). When E15 is fixed this
+  // step should move back to the booking, where it belongs.
+  await treasury.goto("/accounting/projects", { waitUntil: "domcontentloaded" });
+  await treasury.waitForTimeout(2_500);
+  await treasury.getByPlaceholder(/Search projects/).fill(projectNumber);
+  await treasury.waitForTimeout(3_000);
+  await expect(
+    treasury.getByText(projectNumber).first(),
+    `Accounting cannot see ${projectNumber} — the project never reached their module`
+  ).toBeVisible({ timeout: 25_000 });
+  await treasury.getByText(projectNumber).first().click();
+
+  // Project file tabs are two-tier: category, then the tab itself.
+  await treasury.getByRole("button", { name: "Accounting", exact: true }).last().click();
+  await treasury.waitForTimeout(2_000);
+  await treasury.getByRole("button", { name: "Billings", exact: true }).last().click();
+  await treasury.waitForTimeout(3_000);
+
+  // In the PROJECT view the table groups by service, not by category, so the
+  // header's "Add Billing" is the only way in — there are no category headers to
+  // hang an "Add Item" off. (In the BOOKING view it is the reverse, and there
+  // "Add Billing" files the row under an undisplayed category — see E14.)
+  await treasury.getByRole("button", { name: "Add Billing" }).click();
+  await treasury.waitForTimeout(1_500);
+
+  // The row edits in place — no modal. The charge name is a CatalogItemCombobox
+  // over the Billing Catalog (side=revenue), the mirror of the expense side.
+  const billingItemInput = treasury.getByPlaceholder("Item description").first();
+  await billingItemInput.click();
+  await billingItemInput.fill("CRATING");
+  await treasury.waitForTimeout(1_200);
+  await treasury.getByRole("button", { name: BILLING_ITEM, exact: true }).click({ timeout: 15_000 });
+  await treasury.waitForTimeout(500);
+
+  await treasury.getByPlaceholder("Price").first().fill(String(BILLING_AMOUNT));
+  await treasury.waitForTimeout(500);
+
+  // Naming the service is LAST on purpose. At project level the booking is
+  // resolved FROM the service — a line whose service matches no linked booking
+  // is refused at save ("Every billing row must be assigned to a real booking"),
+  // which is D1 enforced in the client. But setting it re-groups the row into a
+  // service group that was never expanded, so the row vanishes from view mid-edit
+  // (E14). Filling it in first sidesteps that; the value still saves.
+  await treasury.getByRole("button", { name: "General", exact: true }).last().click();
+  await treasury.waitForTimeout(800);
+  await treasury.getByRole("button", { name: "Forwarding", exact: true }).first().click({ timeout: 15_000 });
+  await treasury.waitForTimeout(800);
+
+  await treasury.getByRole("button", { name: "Save Changes" }).click();
+  await treasury.waitForTimeout(5_000);
+
+  // Saved means the pending-changes bar is gone and the charge is a real row.
+  await expect(
+    treasury.getByRole("button", { name: "Save Changes" }),
+    "the billing row did not save — the pending-changes bar is still up"
+  ).toHaveCount(0, { timeout: 20_000 });
+  // The saved row sits inside the Forwarding service group, which is collapsed
+  // (it did not exist when the table decided what to expand), so open it before
+  // looking for the charge.
+  await treasury.getByText("1 item").first().click({ timeout: 20_000 });
+  await treasury.waitForTimeout(1_000);
+  // The charge name lives in an input (the row stays editable), so it is a VALUE,
+  // not text. And the group header now carries the link the whole chain depends
+  // on: this charge belongs to the booking Operations picked up in stage 6.
+  await expect(
+    treasury.getByPlaceholder("Item description").first(),
+    `${BILLING_ITEM} is not on the project after saving`
+  ).toHaveValue(BILLING_ITEM, { timeout: 20_000 });
+  await expect(
+    treasury.getByText(new RegExp(`Linked to ${bookingNumber}`)).first(),
+    `the charge saved but is not linked to ${bookingNumber}`
+  ).toBeVisible({ timeout: 20_000 });
+
+  // ── Stage 8b — Accounting turns the charge into an invoice ───────────────
+  // Still Janice, one tab across. The invoice is built FROM the unbilled charge:
+  // picking it is what claims it (the line flips to `invoiced` and is frozen), so
+  // the same money can never be billed twice.
+  await treasury.getByRole("button", { name: "Invoices", exact: true }).last().click();
+  await treasury.waitForTimeout(3_000);
+  await treasury.getByRole("button", { name: "New Invoice" }).click();
+  await treasury.waitForTimeout(3_000);
+
+  // The charge reads as plain text here, not an input — the builder lists what is
+  // billable, it does not edit it. Clicking the row selects it.
+  await treasury.getByText(BILLING_ITEM).first().click({ timeout: 20_000 });
+  await treasury.waitForTimeout(1_500);
+
+  // D1: an invoice must be booking-linked. The project has exactly one booking —
+  // the one from stage 6 — so the builder pins it rather than asking.
+  const saveDraft = treasury.getByRole("button", { name: "Save as Draft" });
+  await expect(
+    saveDraft,
+    "Save as Draft is disabled — no charge selected, or the invoice has no booking to link to"
+  ).toBeEnabled({ timeout: 15_000 });
+  await saveDraft.click();
+  await treasury.waitForTimeout(7_000);
+
+  // Numbering is derived from the booking: <booking>-001. That is the reference
+  // the approver and the collection both work from.
+  const invoiceNumber = (
+    await treasury.getByText(new RegExp(`^${bookingNumber}-\\d{3}$`)).first().innerText()
+  ).trim();
+  expect(invoiceNumber, "no invoice number after saving the draft").toContain(bookingNumber);
+
+  // ── Stage 8c — the invoice is approved by the OPERATIONS manager ─────────
+  // The routing engine again, pointing the other way. The evoucher rule sent an
+  // Ops-raised expense to Pricing; the invoice rule ("Invoice approval →
+  // Operations manager") sends an Accounting-raised invoice to Operations. So
+  // Mariella, who was deliberately not the approver in stage 7, is the approver
+  // here — and until she acts the invoice cannot be finalized.
+  await opsMgr.goto("/approvals", { waitUntil: "domcontentloaded" });
+  await opsMgr.waitForTimeout(2_500);
+  await opsMgr.getByPlaceholder(/Search by number or requestor/).fill(invoiceNumber);
+  await opsMgr.waitForTimeout(3_000);
+
+  await expect(
+    cell(opsMgr, invoiceNumber),
+    `${invoiceNumber} never reached the Operations manager — the invoice routing rule did not fire`
+  ).toBeVisible({ timeout: 25_000 });
+  await cell(opsMgr, invoiceNumber).click();
+
+  const approveInvoice = opsMgr.getByRole("button", { name: "Approve Invoice" });
+  await expect(
+    approveInvoice,
+    "the invoice review drawer did not offer Approve Invoice"
+  ).toBeVisible({ timeout: 20_000 });
+  await approveInvoice.click();
+  await opsMgr.waitForTimeout(4_000);
+
+  // Count CELLS, not text: the success toast quotes the invoice number, so a
+  // plain text count never reaches zero while it is still on screen.
+  await expect(
+    opsMgr.getByRole("cell", { name: invoiceNumber }),
+    "the invoice is still in the Operations manager's queue after approving"
+  ).toHaveCount(0, { timeout: 20_000 });
+
+  // ── Stage 8d — Accounting issues the approved invoice ────────────────────
+  // Approval and issuing are two different acts by two different people: the
+  // approver says the number is right, Accounting sends it. Finalize is blocked
+  // outright until approval lands, so reaching Posted proves stage 8c took.
+  await treasury.reload({ waitUntil: "domcontentloaded" });
+  await treasury.waitForTimeout(4_000);
+  await treasury.getByRole("button", { name: "Accounting", exact: true }).last().click();
+  await treasury.waitForTimeout(1_500);
+  await treasury.getByRole("button", { name: "Invoices", exact: true }).last().click();
+  await treasury.waitForTimeout(3_000);
+  await cell(treasury, invoiceNumber).click({ timeout: 25_000 });
+
+  const finalize = treasury.getByRole("button", { name: "Finalize Invoice" });
+  await expect(
+    finalize,
+    "Finalize Invoice is not offered — the invoice is still pending approval"
+  ).toBeVisible({ timeout: 25_000 });
+  await finalize.click();
+  await treasury.waitForTimeout(6_000);
+
+  // ── Stage 8e — the client pays ───────────────────────────────────────────
+  // The last hop of the whole spine. A collection is recorded against the open
+  // invoice; entering the amount auto-applies it to the oldest open balance,
+  // which is what settles the receivable.
+  await treasury.getByRole("button", { name: "Collections", exact: true }).last().click();
+  await treasury.waitForTimeout(3_000);
+  await treasury.getByRole("button", { name: "Record Collection" }).click();
+  await treasury.waitForTimeout(3_000);
+
+  await treasury.getByPlaceholder("0.00").first().fill(String(BILLING_AMOUNT));
+  await treasury.waitForTimeout(1_500);
+
+  const saveCollection = treasury.getByRole("button", { name: "Save & Close" });
+  await expect(
+    saveCollection,
+    "Save & Close is disabled — the amount received did not register"
+  ).toBeEnabled({ timeout: 15_000 });
+  await saveCollection.click();
+  await treasury.waitForTimeout(7_000);
+
+  // THE CLOSING ASSERTION FOR THE WHOLE SPINE. Back on Invoices, the receivable
+  // is settled: the money BD won in stage 1 has been billed, approved, issued
+  // and collected against the booking Operations ran.
+  await treasury.getByRole("button", { name: "Invoices", exact: true }).last().click();
+  await treasury.waitForTimeout(4_000);
+
+  await expect(
+    cell(treasury, invoiceNumber),
+    `${invoiceNumber} is not on the project's invoice list after collection`
+  ).toBeVisible({ timeout: 25_000 });
+  await expect(
+    cell(treasury, "Paid"),
+    `${invoiceNumber} did not settle — the collection was not applied to it`
+  ).toBeVisible({ timeout: 25_000 });
 
   await bdContext.close();
   await pricingContext.close();

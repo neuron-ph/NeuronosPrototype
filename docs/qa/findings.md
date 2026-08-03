@@ -399,6 +399,67 @@ missing record rather than a duplicate one.
 go through `getByRole("cell")` so they address the real table. Worth knowing
 before writing any new test against a `DataTable`.
 
+### E15 — Nobody outside Accounting can touch a billing line · BUG
+Every policy on `billing_line_items` calls
+`current_user_can_view_record('billings', NULL)` — a **literal NULL owner**:
+
+```
+billing_line_items_select  USING  current_user_can_view_record('billings', NULL)
+billing_line_items_update  USING  can_billings('edit')   AND current_user_can_view_record('billings', NULL)
+billing_line_items_delete  USING  can_billings('delete') AND current_user_can_view_record('billings', NULL)
+```
+
+`current_user_can_view_record` returns `true` for `everything`/`org_wide`, then
+`if p_owner_id is null then return false`. So **every dial below org_wide reads
+as deny** — own, team and department can never match a NULL owner.
+
+Effect in dev, by `billings` dial:
+
+| dial | users | departments |
+|---|---|---|
+| everything / org_wide | 17 | Accounting, Executive |
+| own / team / null | 41 | BD, Pricing, Operations |
+
+The Ops supervisor in the spine holds `ops_forwarding_billings_tab`
+create + edit + delete, sees the Billings tab on her own booking, can add a row
+and fill it — and the save dies with *"new row violates row-level security
+policy for table billing_line_items"*. (The INSERT check passes; the row cannot
+be read back, and nothing she saves is ever visible to her.)
+
+The tab grants promise a capability the database will not honour. Either the
+policies should pass a real owner column (`created_by`) so the dials mean
+something, or the billings tabs should not be grantable outside Accounting.
+
+**Action.** Decide which. Until then stage 8a is performed by Accounting on the
+project file, with a comment to move it back to the booking once this is fixed.
+
+### E14 — Both billing tables can hide the row you just added · BUG (minor)
+Same component, two surfaces, two different failure modes:
+
+- **Booking view** (groups by category): the header's **Add Billing** files the
+  new row under `"Uncategorized"`, which is not in `activeCategories` on an empty
+  booking — so the row is added to state and never rendered. The only way in is
+  **Add Item** inside a category, which is what the empty state tells you.
+- **Project view** (groups by service): there are no category headers, so
+  **Add Billing** is the only way in — and then setting the row's Service moves it
+  into a service group that did not exist when the table decided what to expand,
+  so the row **collapses out of view mid-edit**.
+
+Neither loses data (the row is still in `localItems` and saves correctly), but
+both read as "the button did nothing".
+
+**Action.** Add the new row's category to `activeCategories`, and expand a group
+the moment a row moves into it.
+
+### E16 — Stages 1–4 flake under load · WATCH
+Two consecutive runs failed in the quotation stages — once the submitted inquiry
+had not appeared in BD's list within 25s, once "Send to Client" did not take
+(the chip stayed on `Ongoing`). Both passed on re-run, and both are the same
+shape as E5: the list/menu is driven before the data has landed.
+
+**Action.** None yet. If it recurs, replace the fixed `waitForTimeout` before
+each status-menu interaction with a wait on the menu item itself.
+
 ### E6 — `quotations` has `project_id` but no `project_number` · WATCH
 A query assuming the latter errored 42703. Minor; noted so it isn't rediscovered.
 
