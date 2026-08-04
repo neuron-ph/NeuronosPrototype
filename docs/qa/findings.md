@@ -1012,3 +1012,113 @@ really one dead password.
 `beforeAll` and **aborts the run** listing every failure, rather than proceeding
 with a partial roster. A missing actor is a broken run, not a quiet gap.
 
+---
+
+## M. Found by the delete, concurrency and storage passes
+
+Three passes run autonomously against tagged fixtures. 32 breaches. One of them
+is worse than anything else in this document, and it is live on prod.
+
+### M1 — The `attachments` bucket is public. 424 real client documents are on the open internet · BUG (CRITICAL, PROD)
+`storage.buckets.attachments.public = true`, on **dev and prod**. Its two
+policies check nothing but the bucket name:
+
+```sql
+attachments_public_read      SELECT to anon           USING bucket_id = 'attachments'
+attachments_authenticated_all  ALL  to authenticated  USING bucket_id = 'attachments'
+```
+
+No path check. No department check. No owner check. No record check.
+
+**Fetched anonymously over the internet, with only the publishable key that ships
+in the bundle** — all HTTP 200, full bytes:
+
+| document | size |
+|---|---|
+| air waybill / FINAL AWB — the air-freight bill of lading | 1,675,619 B |
+| customer BIR 2303 — a PH government tax-registration certificate | 904,855 B |
+| booking Official Receipt | 96,622 B |
+| e-voucher Proof of Payment | 86,046 B |
+
+And the tree is **listable** by anon: the root returns all ten folders
+(`bookings`, `customers`, `evouchers`, `liquidations`, `quotations`, …), so the
+UUID in each filename is not protection — you can walk to it.
+
+**Prod: 424 objects in that bucket.** (Dev, being a clone, holds the same
+documents.)
+
+It is also a write hole, not only a read one: `attachments_authenticated_all`
+grants INSERT, UPDATE and DELETE bucket-wide, so **any logged-in user can plant,
+overwrite or delete any other department's documents.** The pass proved the
+upload half against a fixture path; overwrite/delete of a real foreign document
+was not executed on purpose, but it is the same policy.
+
+Contrast `ticket-files`, which is private and gated on
+`current_user_can_view_ticket(...)`, and `avatars`, whose writes are scoped to
+the owner's folder. Somebody knew how to do this. `attachments` just never got it.
+
+**Action — needs a decision, not a quiet fix.** Setting `public = false` is the
+only thing that closes anonymous access (a public bucket serves
+`/object/public/...` without consulting RLS at all). But the app uses
+`getPublicUrl` for every attachment and stores that permanent URL on the row, so
+flipping the flag **breaks every attachment link in the product** until the code
+moves to signed URLs. Leak versus broken links is Marcus's call, and it is the
+only finding in this document where waiting is itself a decision.
+
+### M2 — Deleting a booking orphans its entire money trail · BUG (CRITICAL)
+The key delete probe, measured by census before and after:
+
+| table | before | after |
+|---|---|---|
+| billing_line_items | 5 rows, 0 with NULL booking_id | 5 rows, **4 NULL** |
+| invoices | 2 rows, 0 NULL | 2 rows, **2 NULL** |
+| collections | 3 rows, 0 NULL | 3 rows, **3 NULL** |
+
+**Nine money rows orphaned by one click.** Nothing deleted, nothing raised. This
+is L2 realised: `ON DELETE SET NULL` means the booking vanishes and its revenue,
+receivables and cash receipts survive with no booking — and therefore no customer
+and no project — to attach them to.
+
+Eleven more delete breaches around it, of which the sharpest:
+
+- **A requestor can delete their own DISBURSED e-voucher.** Migration 270 froze
+  the status column so nobody can walk a voucher backwards. DELETE is not a
+  transition. She cannot un-disburse her cash advance; she can erase the record
+  that the cash ever left.
+- **Accounting can delete anyone's voucher at any stage**, and
+  `evoucher_line_items` cascades — the lines are destroyed, not orphaned, while a
+  billing line that referenced the voucher has its `evoucher_id` silently nulled.
+- **An invoiced billing line can be deleted**, leaving the invoice header
+  claiming a total its lines no longer sum to.
+- **An invoice with a posted collection can be deleted**; the collection stays
+  `posted = true` with a NULL `invoice_id` — cash applied to nothing.
+
+None of the delete policies consults a status, a child row, or a posting state.
+
+### M3 — Concurrency: eleven races, and two number generators that collide · BUG
+- **`quotation_number` and `collection_number` collide under parallel creation.**
+  Neither is unique-constrained.
+- **Double approval succeeds twice** — two approvers, or one approver in two
+  tabs, both write history and fire the workflow ticket.
+- **TOCTOU on the transition guard:** Treasury disburses while the owner cancels,
+  and the payout columns land on a voucher that is now cancelled. The guard
+  protects the *column*, not the *decision*.
+- **Lost updates on `details` JSONB** in both `bookings` and `evouchers` — the
+  app's read-modify-write pattern (fetch, spread, update) silently drops the
+  loser's field.
+- **`evoucher_history.id` is `EH-${Date.now()}`** — a millisecond timestamp.
+  Two events in the same millisecond collide on the primary key.
+
+**Action.** Unique constraints on the number columns; `FOR UPDATE` or a
+conditional `WHERE status = <expected>` in the transition functions; a real UUID
+for history ids; and `jsonb_set` server-side instead of read-modify-write.
+
+### M4 — Edge Functions: classified, not probed · GATE
+Read-only recon only — those functions hold the service role key and exist to do
+admin auth work, so probing one blind could reset a password or delete an account
+for real. The classification (purpose, side effects, auth guard, what a
+no-token/wrong-role call would do, and whether it is safe to probe) is in
+`docs/qa/adversary/phase3-passes.json` → `edgeFunctions`.
+
+**Action.** Marcus signs off which are safe to probe before anything is invoked.
+
