@@ -12,6 +12,39 @@ finding, newest section last. Status values:
 Evidence for each is in `workflow-chains.md` (chains) or the commit named.
 Started 2026-08-03.
 
+## Where the register stands
+
+**96 findings across 15 passes. 32 fixed and verified on `dev`, 4 mitigated,
+30 still open as bugs, 10 on watch.** Nothing is fixed on prod — see the gate
+at the bottom of Wave 0.
+
+| § | pass | n | still open |
+|---|---|---|---|
+| [A](#a-found-by-reading-the-workflow-chains) | reading the workflow chains | 10 | — |
+| [B](#b-found-in-the-permission-data) | the permission data | 3 | — |
+| [C](#c-found-by-the-tier-1-route-smoke) | tier-1 route smoke | 7 | — |
+| [D](#d-outstanding-environment-work) | environment work | 2 | 1 |
+| [E](#e-found-by-the-spine-multi-person-workflow) | the spine (multi-person workflow) | 16 | 2 bugs, 7 watch |
+| [F](#f-pre-existing-untouched) | pre-existing, untouched | 2 | 2 watch |
+| [G](#g-found-by-the-adversary-testse2eadversaryspects) | the adversary | 7 | 4 |
+| [H](#h-found-by-the-security-definer-audit) | SECURITY DEFINER audit | 4 | 1 mitigated |
+| [J](#j-found-by-phase-1-recon-before-any-probe-ran) | phase-1 recon | 9 | 4 |
+| [K](#k-found-in-the-test-harness-itself) | the test harness itself | 3 | 1 mitigated |
+| [M](#m-found-by-the-delete-concurrency-and-storage-passes) | delete, concurrency, storage | 4 | 1 + the prod gate |
+| [N](#n-found-by-the-edge-function-and-persona-passes) | Edge Functions & personas | 7 | 1 watch |
+| [O](#o-found-by-the-misuse-pass--the-careless-user) | misuse — the careless user | 12 | 10 |
+| [P](#p-wave-1--are-the-numbers-right) | **Wave 1 — are the numbers right?** | 10 | 9 |
+
+Sections A–O answer *what could someone do to the data*. **Section P answers
+*what are the screens saying today*** — and it is the only pass where the damage
+does not require anyone to do anything wrong.
+
+Three things need a decision from Marcus before their findings can move:
+**L3** (does `project_number` hold booking numbers on purpose — blocks P3),
+**P7** (what should an unmeasurable period score on a KPI), and
+**the prod gate** (none of Wave 0 is deployed; the prod attachments bucket is
+still open).
+
 ---
 
 ## A. Found by reading the workflow chains
