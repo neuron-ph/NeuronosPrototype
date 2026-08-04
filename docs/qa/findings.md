@@ -14,8 +14,8 @@ Started 2026-08-03.
 
 ## Where the register stands
 
-**96 findings across 15 passes. 32 fixed and verified on `dev`, 4 mitigated,
-30 still open as bugs, 10 on watch.** Nothing is fixed on prod — see the gate
+**105 findings across 16 passes. 32 fixed and verified on `dev`, 4 mitigated,
+37 still open as bugs, 12 on watch.** Nothing is fixed on prod — see the gate
 at the bottom of Wave 0.
 
 | § | pass | n | still open |
@@ -34,10 +34,13 @@ at the bottom of Wave 0.
 | [N](#n-found-by-the-edge-function-and-persona-passes) | Edge Functions & personas | 7 | 1 watch |
 | [O](#o-found-by-the-misuse-pass--the-careless-user) | misuse — the careless user | 12 | 10 |
 | [P](#p-wave-1--are-the-numbers-right) | **Wave 1 — are the numbers right?** | 10 | 9 |
+| [Q](#q-wave-2--the-documents-that-leave-the-building) | **Wave 2 — the documents that leave the building** | 9 | 7 |
 
-Sections A–O answer *what could someone do to the data*. **Section P answers
-*what are the screens saying today*** — and it is the only pass where the damage
-does not require anyone to do anything wrong.
+Sections A–O answer *what could someone do to the data*. **P answers *what are
+the screens saying today*** — the only pass where the damage does not require
+anyone to do anything wrong. **Q follows the same numbers out of the door**, to
+the point where they stop being a screen and become a document a customer
+holds.
 
 Three things need a decision from Marcus before their findings can move:
 **L3** (does `project_number` hold booking numbers on purpose — blocks P3),
@@ -1676,4 +1679,209 @@ exist. A filter naming statuses nobody writes. That is what makes them tractable
 radius. P3 waits on the L3 decision (the `project_number` column). P7 needs a
 product call — what *should* an unmeasurable period score? — and until then the
 scorecards should not be shown to anyone.
+
+---
+
+## Q. Wave 2 — the documents that leave the building
+
+Wave 1 asked whether the screens are right. This asks the harder version of the
+same question: **when a number becomes a PDF and goes to a customer, is it still
+right — and is it still the number the database holds?**
+
+Nine findings. Every one measured against live dev rows, not inferred from
+reading the code.
+
+The engine itself is good, and that is worth saying plainly: one resolver per
+document type produces a normalized `PrintableDocument`, and two renderers
+(`PrintableDocumentHtml`, `PrintableDocumentPdf`) consume the same model, so
+preview and download stay in step. Grouping, subtotals, empty-field suppression
+and the display toggles all work. The failures below are at the seams — what
+the resolver reads, what gets overwritten after normalization, and what nobody
+reconciles.
+
+### Q1 — Company Settings does not control the documents · BUG (HIGH)
+`applyBrandedDesign()` runs **after** the resolver has already normalized the
+document, and unconditionally replaces the contact footer with a hardcoded
+constant:
+
+```ts
+return { ...doc, contactFooter: BRANDED_CONTACT_FOOTER, brandedLetterheadImage: ... }
+```
+
+| | Company Settings (dev) | what the PDF prints |
+|---|---|---|
+| address | Unit 301, Great Wall Bldg., 136 Yakal St., Makati City | Suite 400, 4/F Ermita Center Building, Roxas Blvd, Manila |
+| phones | +63 (2) 5310 4083 · 7004 7583 · 935 981 6652 | +63 (2) 8283 8046 · 7000 1665 · 920 2821730 |
+| email | inquiries@neuron-os.com | inquiry@falconslogistics-ph.com |
+
+The hardcoded values are almost certainly the *right* ones for A Plus Falcons —
+so this is not "the PDF prints the wrong address". It is that **the branding is
+compiled in, the Settings page that appears to control it is decorative, and
+`getDocumentDesign()` returns `"branded"` unconditionally in production**, so
+there is no path in which Settings takes effect.
+
+Collateral: **96 quotations carry a `contact_footer_override`** in their
+details, saved through the print sidebar. Every one is discarded by the same
+line. The user sets a per-document footer, sees it in the sidebar, and the PDF
+ignores it.
+
+The display *toggle* is fine — both renderers correctly honour
+`options.showContactFooter`, so switching the footer off does hide it. It is
+only the contents that cannot be changed.
+
+### Q2 — An invoice can print a six-figure TOTAL DUE with no line items · BUG (CRITICAL)
+`buildTotals()` takes the subtotal from the header and the grand total from
+`total_amount`, independently, and asserts no relationship between them. The
+line table renders separately. Nothing checks that they describe the same
+document.
+
+Four live invoices — **SIM-INV01 through 04, the same four that P2 showed are
+invisible in every report** — would render:
+
+```
+  (table)      No items on this invoice.
+  Subtotal     ₱0.00
+  TOTAL DUE    ₱120,000.00
+```
+
+₱485,000 across the four. A document demanding six figures, showing a zero
+subtotal, and listing nothing it is for. There is no invariant anywhere in the
+resolver that would refuse to produce it.
+
+### Q3 — A printed invoice bills for a line that no longer exists · BUG (HIGH)
+Invoice **INV-MQ4ONUIU** (draft, ₱28,000):
+
+| | |
+|---|---|
+| `metadata.line_items` (what the PDF prints) | 2 lines, **₱28,000** |
+| `billing_item_ids` on the header | 2 ids |
+| rows actually in `billing_line_items` | **1 line, ₱14,000** |
+
+The second id — `53361015-…`, "EV-2026-0072 · PORT CHARGES", ₱14,000 — is not
+in `billing_line_items` at all. It was snapshotted into the invoice and then
+deleted underneath it.
+
+The invoice header still says ₱28,000, the PDF still prints the vanished
+charge, and the customer is still billed for it. **The snapshot is never
+reconciled against the relational rows, and nothing warns on either side.**
+
+Migration 275 (`ON DELETE RESTRICT` + a delete policy that refuses invoiced
+lines) stops this happening again. It does not detect the one that already did,
+and no code path compares a snapshot to its source.
+
+### Q4 — The invoice resolver reads eleven columns that do not exist · BUG (HIGH)
+`resolveInvoicePrintableDocument` reads `invoice.line_items`, `credit_terms`,
+`customer_address`, `customer_tin`, `bl_number`, `consignee`,
+`commodity_description`, `booking_number`, `service_type`, `created_by_name`
+and `amount`. **None of them are columns on `invoices`.** Every one resolves to
+`undefined` and survives only through the `metadata.zone_a` mirror.
+
+Measured on the 15 dev invoices:
+
+- **Booking No. prints blank on 7 of 15 — while all 15 have a `booking_id`.**
+  The field is on the row; the resolver reads a metadata copy of it instead.
+- **The service label is unresolvable on all 15** (`service_type` is not a
+  column; the real one is `service_types`, an array; no invoice has
+  `zone_a.service_type`). So the NEU-058 grouped subtotals always read
+  "**Service** Charge (VAT)" and never "Sea Freight Charge (VAT)". The feature
+  is shipped and inert.
+- **Terms reads the wrong copy.** The fallback chain ends at
+  `metadata.payment_terms` — populated on **0** invoices — while the real
+  `invoices.payment_terms` column is populated on **11** and never read. It
+  only prints today because `zone_a.credit_terms` happens to duplicate it. Two
+  copies of the same fact, and the PDF reads the copy: edit payment terms
+  through any path that does not also rewrite `zone_a` and the document keeps
+  printing the old terms.
+- **4 invoices have no `zone_a` at all** — blank Bill To address, blank TIN,
+  blank B/L, consignee and commodity. The same four as Q2.
+
+### Q5 — `show_letterhead` is dead plumbing · WATCH
+Threaded through eight files, typed in three interfaces, persisted to
+`details.pdf_show_letterhead`, copied into `options.showLetterhead` by both
+resolvers — and **read by neither renderer, and applied by neither
+`normalizePrintableDocument` nor `applyBrandedDesign`**. It also appears in no
+toggle list, so nobody can flip it from the UI.
+
+Zero rows have it set to false, so the impact today is zero. It is inert code
+that looks live, which is the reason it is worth writing down rather than the
+reason to hurry.
+
+### Q6 — Preview and PDF are not quite the same document · WATCH
+`pageFooterText` — the "invoice number · date" line pinned to the foot of every
+page — is rendered by `PrintableDocumentPdf` and **never** by
+`PrintableDocumentHtml`. The on-screen preview is missing a line the downloaded
+file has.
+
+Also unread by both renderers: `kind`, `reference`, `footerFields`. Dead fields
+on the model.
+
+### Q7 — The payslip is a mockup that prints · BUG (HIGH)
+`PayrollPayslipsModal` is reachable from HR and renders from
+**`MOCK_PAYROLL_DATA`** — six named employees at three companies, with
+hand-written peso figures (`sssContribution: 581.3`, `philHealth: 725.59`,
+`netPay: 14476.75`). It contains **zero Supabase calls**.
+
+There is no real data behind it and no way for there to be: **no
+payroll / payslip / salary / compensation table exists in the schema at all.**
+
+- **Print** calls `window.print()` — so a payslip for a person who does not
+  work here can be put on paper in two clicks.
+- **Download Excel** fires `toast.success("Downloading Excel...")` and
+  downloads nothing. The same pattern is in `HR.tsx:369` —
+  `toast.success("Exporting...")`, also doing nothing.
+
+Two buttons that report success for work they never do.
+
+### Q8 — `window.print()` with no print stylesheet · BUG (MEDIUM)
+`ReportsModule` (the accounting reports) and `PayrollPayslipsModal` both print
+via `window.print()`. **Neither file contains a single `@media print` rule or a
+`print:hidden` / `no-print` class** — the global stylesheet offers only
+`.print\:block`. The sidebar, top bar and tab strip go on the page with the
+report.
+
+The other document surfaces get this right (`InvoicePDFScreen`,
+`QuotationPDFScreen`, `ExpenseFileView`, `PrintableDocumentHtml` all carry
+print CSS), so this is two files that missed the pattern rather than a missing
+pattern.
+
+Worth stating the join to Wave 1: the accounting reports being printed here are
+the same ones P1, P2, P3 and P6 showed are wrong. **The print button is how a
+wrong number stops being a screen and becomes a filed document.**
+
+### Q9 — The quotation FX conversion is skipped whenever an amount is stored · BUG (LOW today)
+```ts
+function effectiveItemAmount(item) {
+  if (item.amount != null && item.amount !== 0) return Number(item.amount);   // no rate
+  return Number(unitPrice) * Number(item.quantity ?? 1) * Number(item.forex_rate || 1);
+}
+```
+The "converted to PHP" amount applies `forex_rate` **only on the fallback
+branch**. For any line that carries a stored `amount`, the converted value and
+the original value come out identical — so a foreign-currency quotation prints
+a conversion line reading `USD 10,000 = PHP 10,000`.
+
+**Zero impact today: 0 of 315 quotations are non-PHP**, and `exchange_rates`
+holds a single row. This is the quotation-side twin of P8, and it lands the
+first time somebody quotes in dollars.
+
+### What this pass says overall
+
+The document engine is the best-built thing QA has looked at — a single
+normalized model, two renderers in step, toggles that work, empty-field
+suppression that works. **Nothing here is a rendering bug.**
+
+Every failure is at a seam:
+- something overwritten *after* normalization (Q1),
+- an invariant nobody asserts (Q2),
+- a snapshot nobody reconciles (Q3),
+- a resolver reading names the table does not have (Q4),
+- plumbing that goes nowhere (Q5, Q6),
+- and a surface that was never wired up at all (Q7).
+
+**Recommended order:** Q2 and Q3 first — they are the two that put a wrong
+number in front of a customer, and Q2 is a guard clause. Q4 is mechanical once
+someone decides whether `zone_a` or the columns are authoritative. Q1 needs a
+product call: should Company Settings drive the documents, or should the
+Settings page stop pretending it does? Q7 should be hidden behind a flag until
+payroll exists.
 
