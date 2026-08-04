@@ -827,18 +827,103 @@ now attempts `"Executive"`, which is also the valuable target:
 `resolveSubmitTarget` sends Executive requestors straight past both approval
 steps to `pending_accounting`.
 
-### J3 — Tenancy is a convention, not a boundary · BUG (structural)
-No RLS policy on `billing_line_items`, `evouchers`, `evoucher_line_items`,
-`invoices` or `collections` mentions a customer, project or booking. 15 of 22 FK
-edges have nothing enforcing same-tenant. 13 live dev billing rows already have a
-`customer_name` disagreeing with their booking — drift that has already happened
-through ordinary use. The billable-expense trigger, which propagates a cross-link
-by itself, wrote **97 of 172** billing rows on dev.
+### J3 — Tenancy is a convention, not a boundary · CONFIRMED (structural); my data claim CORRECTED
+**The structural claim is now proved rather than inferred: nine cross-tenant
+writes were attempted and nine landed.** Not one raised, not one was silently
+filtered — as an Accounting manager, as an Ops team leader, and again at the
+Executive ceiling, so it is not a visibility-dial artefact. A charge sitting on
+three different customers at once; a billable e-voucher that auto-minted revenue
+on a foreign booking through a SECURITY DEFINER trigger with no billings grant
+held; a charge attached to another customer's invoice; cash credited to the wrong
+ledger; a live booking re-parented onto another customer's project.
 
-**Action.** Decide whether tenancy is enforced at all; if yes it belongs in
-constraints, not forms.
+**MY DATA CLAIM WAS WRONG, AND I REPEATED IT SEVERAL TIMES.** I said "13 live
+billing rows already have a customer disagreeing with their booking — drift that
+has already happened through ordinary use." Literally true, semantically
+misleading. All 13 sit on ONE booking and are the single pair `Garden Barn Inc.`
+vs `GARDEN BARN INC`. Normalise case and punctuation and there are **zero** hard
+cross-customer rows anywhere in the money graph — not in billing lines, invoices,
+collections, e-vouchers, line items or bookings.
 
-### J4 — `evouchers` is the only table with a status guard · WATCH
+It cuts both ways. Good: a same-customer constraint keyed on the FK'd columns
+rejects **zero** existing rows. Corrective: nothing has actually gone wrong yet.
+This is a hole, not an incident, and I presented it as an incident.
+
+**Action.** Marcus's call is to refuse mismatched links. Ranked proposals are in
+`docs/qa/adversary/phase2-sweep.json`. Four apply today with zero backfill:
+`billing_line_items.booking_id NOT NULL`, the `evoucher_line_items` parent-match
+trigger, the collection-to-invoice customer match, and the invoice-to-booking
+customer match. **Express every rule through `booking_id`, never through
+`customer_name`** — see L3, and note that `bookings` is the only clean root of
+truth (100% of billing rows resolve to a booking that has a `customer_id`).
+
+Caveat the survey raised and I am keeping: this measured *disagreement between
+populated fields*, not *correctness*. A billing line pointed at entirely the
+wrong booking reads as perfectly consistent, because every denormalised field is
+copied from that same wrong booking. Consistency is not correctness.
+
+### L1 — The e-voucher writer stopped populating header `booking_id` · BUG (live regression)
+`evouchers.booking_id` is NULL on 20 of 264 rows — and on **7 of the 7 vouchers
+created since 2026-07-28**. The last voucher with a header booking is from
+2026-07-18. Tenancy moved to the line items (D2) without the header being
+backfilled or the writer updated.
+
+Two consequences. Any "an e-voucher must resolve to a booking" rule would reject
+100% of what the product writes today. And
+`ensure_billable_expense_billing_item()` returns early on `no_booking_id`, so a
+billable expense raised today **may mint no receivable at all** — revenue quietly
+not raised.
+
+**Action.** Read the writer before shipping any tenancy migration. This is the
+one finding in this batch that may be losing money right now, rather than merely
+allowing someone else to.
+
+### L2 — The schema manufactures orphans · BUG
+Every money-graph FK is `ON DELETE SET NULL`: `billing_line_items.booking_id`,
+`project_id`, `invoice_id`, `evoucher_id`; `evouchers.booking_id`, `project_id`,
+`customer_id`; `invoices.*`; `collections.*`. Deleting a booking does not refuse
+— it silently converts that booking's revenue lines and vouchers into untenanted
+money.
+
+The schema does not merely fail to prevent the violation J3 forbids. It creates
+it.
+
+**Action.** `ON DELETE RESTRICT` on the money-graph edges. Zero rows affected —
+it constrains future deletes, not existing data.
+
+### L3 — `project_number` holds booking numbers · BUG (naming)
+On `billing_line_items`, 83 of the 86 non-empty values are the booking number of
+their own booking. On `evouchers`, 249 of 249 are. None resolve to
+`projects.project_number` except three legitimate `PRJ-` values on billing lines.
+
+A "must resolve to a project" CHECK would reject 83 billing rows and 249
+e-vouchers — an outage, not a fix. The column wants renaming, or dropping in
+favour of deriving from `booking_id`; the 87 empty strings should become NULL in
+the same migration.
+
+**Action.** Rename to `booking_number_snapshot`, or drop. Do NOT constrain it.
+
+### L4 — `users.status` is the unprotected twin of `is_active` · BUG
+`guard_user_privileged_columns` raises on `access_profile_id`, `role`,
+`department`, `team_id` and `is_active`. `status` is absent from that list.
+Combined with the "Users can update own profile" policy (`auth_id = auth.uid()`),
+**any authenticated user can rewrite their own `users.status` to any string.**
+
+**Action.** Add `status` to the guard's distinct-from list. One line.
+
+### L5 — A VIEW grant confers UPDATE on every column · BUG
+`projects_update` reads `USING (bd_projects:view OR pricing_projects:view OR
+ops_projects:view OR acct_projects:view) AND can_view_record_v2(...)` — and its
+`WITH CHECK` is literally `true`. So a *view* grant on any one of four modules
+lets you write every column of every project you can see. `transactions_update`
+has the identical shape (latent: the table is empty).
+
+A transition guard will not fix this. It is a write-authority bug wearing a
+status bug's clothes.
+
+**Action.** `WITH CHECK` must test an edit grant, not `true`.
+
+### J4 — `evouchers` is the only table with a status guard · CONFIRMED (14 breaches)
 15 other status columns across 12 tables (`invoices.status`,
 `invoices.approval_status`, `collections`, `bookings`, `quotations`,
 `billing_line_items`, `projects`, …) are plain text any grant-holder can write in
@@ -848,8 +933,30 @@ look.
 Also: live values, TS constants and CHECK constraints disagree on nearly every
 one — `evouchers` has 9 live values against 26 in code.
 
-**Action.** The 270 pattern generalises. Do it per table, worst first, once the
-state-transition matrix says which orderings are actually reachable.
+**Proved rather than assumed — 14 illegitimate jumps landed:**
+
+| document | what a signed-in user did |
+|---|---|
+| invoice | posted one still `pending_approval` (**G4**); approved one by raw column write, bypassing the RPC; un-posted a posted invoice; jumped straight to paid |
+| collection | resolved a pending one straight to credited; un-posted a posted one |
+| booking | closed one outright skipping the whole ops chain; re-opened a completed one; declared one billed with no invoice behind it; resurrected a cancelled one |
+| quotation | accepted a draft with no pricing step; converted a draft straight to a project; revived a client-rejected one; un-converted a converted one |
+
+Two controls behaved — a non-status column write bounced for the same users — so
+these are real transitions, not a broken harness.
+
+**Action.** Marcus's call is all fifteen. But **three of the fifteen are dead
+tables**: `expenses`, `transactions` and `budget_requests` have zero rows and zero
+writers in `src/`, so a guard there is unverifiable and should not be counted as
+coverage. Twelve are real. Ranked matrices, with the authority required per edge,
+are in `docs/qa/adversary/phase2-sweep.json`. Start with invoices (ranks 1-2),
+which is also where G4 lives.
+
+Two traps the survey flagged for whoever writes it: `billing_line_items` needs the
+guard on **INSERT** as well as UPDATE, because two SECURITY DEFINER functions
+insert rows a BEFORE UPDATE trigger will never see; and `bookings.status` must
+explicitly admit `'Created'`, which is written on insert and offered by no
+selector — miss it and 128 of 240 rows strand.
 
 ---
 
