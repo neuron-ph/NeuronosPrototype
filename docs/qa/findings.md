@@ -1122,3 +1122,135 @@ no-token/wrong-role call would do, and whether it is safe to probe) is in
 
 **Action.** Marcus signs off which are safe to probe before anything is invoked.
 
+---
+
+## N. Found by the Edge Function and persona passes
+
+The last two passes. One found the worst privilege hole in the system; the other
+found almost nothing, which is itself the result.
+
+### N1 — A Business Development manager can mint a super-admin · BUG (CRITICAL)
+`create-user` reads `role`, `department` and `access_profile_id` **straight from
+the request body**, and nothing caps the new user's authority against the
+caller's own.
+
+Proved, not reasoned. Signed in as `bd@neuron.com.ph` — a **Business Development
+manager**, not an executive — and called it with `role: "executive"`,
+`department: "Executive"`. HTTP 200. Service-role reads afterwards:
+
+- an `auth.users` row exists
+- a `public.users` row exists with `role = executive`, `department = Executive`
+- a `permission_overrides` row exists with `scope = 'all'` carrying **1,611 true
+  grants**, seeded verbatim from the fallback profile `Baseline — Executive`
+- and the account signs in **with the password the caller chose**
+
+So the whole RBAC system — every dial, every grant, all of section B's careful
+work — is bypassable by anyone holding `exec_users:create`, of whom the caller
+here is a BD manager. He does not escalate his own account; he mints a new one
+above himself and logs into it.
+
+**Action.** `create-user` must cap the created role/department against the
+caller's own authority, and must never take the grant matrix from caller-supplied
+JSON. Related latent bug: the fallback-profile selector orders
+`target_department DESC`, and Postgres DESC is NULLS FIRST, so the *generic*
+profile sorts ahead of a department-specific one — the opposite of the evident
+intent.
+
+### N2 — `resetPassword` is account takeover behind a checkbox labelled "edit" · BUG (CRITICAL)
+`ACTION_TO_GRANT` maps `resetPassword` to the coarse `edit` grant, and the only
+relationship guard in the whole file (`userId === callerProfile.id`) defends
+`deleteUser` **only**. `resetPassword` and `updateStatus` have no target check at
+all — no department match, no seniority, and the visibility dial is never
+consulted.
+
+Proved end to end against a throwaway: `bd@` reset its password and I signed in
+as it with the new one. Complete takeover.
+
+**And nothing is written down.** `activity_log` rows naming who reset it: **0
+before, 0 after.**
+
+An admin reading your RBAC matrix sees a checkbox that reads *"can change a
+user's name and department"*. It is in fact *"can take over any account in the
+organisation, silently"*.
+
+**Action.** Account takeover needs its own grant key, a target scope, and an
+audit row. Three separate gaps, one checkbox.
+
+### N3 — `send-feedback-email` has no auth guard at all · BUG (HIGH)
+Not an evaporating check like H2 — the `Authorization` header is simply never
+read. Confirmed reachable by an anonymous caller with no header at all.
+
+It sends DKIM/SPF-signed mail **from `noreply@neuron.com.ph` to the hardcoded
+real mailbox `hq@neuron.com.ph`**, with `title`, `description`, `user_name` and
+`user_email` interpolated **raw** into the HTML. That is a phishing primitive
+aimed at your own inbox, from your own domain, plus unmetered Resend quota burn.
+
+**Deliberately not fully demonstrated.** Reachability was proved with a malformed
+body that throws before the send. No real email was sent — it delivers to a live
+human mailbox, and that is outward-facing.
+
+**Action.** Read the header and verify the JWT like the other two functions do,
+and escape the interpolated fields.
+
+### N4 — `deleteUser` is not atomic · BUG (HIGH)
+It deletes `public.users` first, **ignores the result**, then deletes the auth
+account. A failure between the two strands an auth account with no profile that
+409s forever on re-create. The happy path was observed; the stranding is reasoned
+from the ignored return, not forced.
+
+### N5 — The deny paths all held · GOOD NEWS
+Ten probes, ten `BLOCKED_LOUD`. Both `create-user` and `admin-user-actions`
+genuinely verify the token — no header, garbage bearer, expired bearer, and the
+anon publishable key as a bearer are all refused before anything is constructed,
+and a low-privilege signed-in caller gets a clean 403 **before** the body is
+read. Verified by service-role reads, not by the HTTP status.
+
+The problem in those two functions is not authentication. It is that
+authorisation, once passed, is unbounded.
+
+### N6 — The persona pass: 31 of 35 job steps work · MOSTLY GOOD NEWS
+Six people driven through their actual day in a real browser — Ops supervisor,
+Pricing manager, Pricing staff, Treasury, AR staff, BD staff. Specs committed at
+`tests/e2e/personas/`.
+
+**Nothing lied about saving.** Not one `LIES_SAYS_SAVED` across 35 steps — every
+write that reported success was confirmed landed with service-role eyes. Treasury
+went 8 for 8, AR 5 for 5, Pricing 10 for 10.
+
+**All four failures belong to one person, and they say one thing: Operations
+cannot see or touch the money on the job it runs.**
+
+| step | outcome |
+|---|---|
+| read the Billings tab | **EMPTY_PAGE** — service-role sees the charge, she sees "0 items" |
+| read the Invoices tab | **EMPTY_PAGE** — different cause: `invoices_select` keys on `created_by`, and Accounting created it |
+| add a charge | **BLOCKED_SAVE_FAILS** — E15, reproduced three consecutive runs |
+| (BD) convert to project | **BLOCKED_NO_BUTTON** — correct per E8, but silent |
+
+E15 is now confirmed in the UI, not just at the API — and its face is worse than
+this register described. She holds `ops_forwarding_billings_tab` view + create +
+edit + delete, opens the tab, sees an empty list where a ₱25,000 charge exists,
+fills the row from the Billing Catalog, and the save is refused.
+
+**The last row is a smaller finding worth keeping.** Johnna's missing "Create
+Project" button is *correct* — she holds neither `bd_projects:create` nor
+`pricing_projects:create` (E8). The finding is the **silence**: nothing tells her
+why the action she expects is absent, or who to ask. That is the difference
+between a permission system and a locked door with no sign on it.
+
+**Action.** Nothing new to fix here beyond E15/G3 — but this is the pass that
+proves the product genuinely works for the people who should be using it, and it
+is the baseline to re-run after the fixes land.
+
+### N7 — The persona specs are too slow to be a routine baseline · WATCH
+`tests/e2e/personas/` carries 53 `waitForTimeout` calls, mostly 4-5 seconds, and
+every test sets a 10-minute cap. My verification run took 3.1 hours and ended
+with `ERR_NETWORK_IO_SUSPENDED` — the machine suspended under it, not a product
+failure — so 3 passed and the fourth died to the environment.
+
+They are correct and they are evidence, but at this speed nobody will run them.
+
+**Action.** Trim the fixed sleeps to waits on real conditions, the way
+`spine.spec.ts` does, before these become the post-fix baseline they are meant to
+be. Until then, run them one file at a time and expect minutes, not seconds.
+
