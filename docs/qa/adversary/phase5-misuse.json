@@ -1,0 +1,339 @@
+[
+  {
+    "findings": [
+      {
+        "what": "Typing a centavo amount one keystroke at a time destroys it: \"0\" makes the value falsy, the controlled input is rewritten to empty, and the digits after the decimal point land in a blank field. \"0.05\" becomes ₱5.00 (100x), \"0.001\" becomes ₱1.00 (1000x). Confirmed to the row, not just the screen.",
+        "where": "e-voucher panel — /my-evouchers → New Request → Line Items → amount (AddRequestForPaymentPanel.tsx:1437, value={item.amount || \"\"} + parseFloat(e.target.value) || 0)",
+        "typed": "0.05",
+        "landed": "evouchers.amount = 5.00 (and evoucher_line_items[0].amount = 5). No error, no warning, voucher saved as EV-2026-xxxx",
+        "cost": "silent_corruption",
+        "severity": "critical"
+      },
+      {
+        "what": "A negative price silently becomes positive. The leading \"-\" is momentarily an invalid number, so React writes 0 back into the field, and \"500\" appends to it as \"0500\". A ₱500 credit note to the customer is stored as a ₱500 charge, and the project's gross billings go UP by 500 instead of down.",
+        "where": "billing line editor — project Billings tab → Add Billing → Price (UniversalPricingRow.tsx:477, value={data.final_price}, no `|| \"\"` so the field can never be emptied)",
+        "typed": "-500",
+        "landed": "billing_line_items.amount = 500.00; project total moved ₱25,000.00 → ₱25,500.00",
+        "cost": "silent_corruption",
+        "severity": "critical"
+      },
+      {
+        "what": "Same field, exponent notation from a spreadsheet: the \"e\" keystroke resets the field to 0 and the \"6\" appends. One million becomes six. The field also cannot be cleared at all — 20 backspaces leave the old digits in place, and typing after that concatenates onto them (clear-then-type \"-500\" produced -50006).",
+        "where": "billing line editor — project Billings tab → Price",
+        "typed": "1e6 (1,000,000)",
+        "landed": "field reads \"06\" = 6; UI total ₱6.00",
+        "cost": "silent_corruption",
+        "severity": "high"
+      },
+      {
+        "what": "The per-row Remarks box on a billing line is bound to `data.remarks` but the column is `notes` — the mapping is lost in the writer. Save Changes reports success, the pending-changes bar clears, updated_at moves, and the sentence the user typed is simply not there. Reproduced on both an insert and an update of an existing row.",
+        "where": "billing line editor — project Billings tab → row → \"Add optional notes...\" (Remarks)",
+        "typed": "E2E-MISUSE credit note, see attached",
+        "landed": "billing_line_items.notes = NULL",
+        "cost": "data_loss",
+        "severity": "high"
+      },
+      {
+        "what": "Both invoice date fields are bare <input type=\"date\"> with no min, no max and no relationship to each other. Fat-fingering the segments rolls the year past 9999, and a due date years before the invoice date is accepted without a murmur — the invoice is born ~6 years overdue and will sit at the top of every aging bucket forever.",
+        "where": "invoice builder — project Invoices tab → New Invoice → DETAILS → Invoice Date / Due Date (InvoiceBuilder.tsx:1703, 1712)",
+        "typed": "invoice date keyed as 13452026; due date 2020-01-01",
+        "landed": "invoices.invoice_date = 52026-04-13T00:00:00+00:00, invoices.due_date = 2020-01-01T00:00:00+00:00 — and the printed invoice preview renders \"INVOICE DATE: Apr 13, 52026 / DUE DATE: Jan 1, 2020\"",
+        "cost": "silent_corruption",
+        "severity": "high"
+      },
+      {
+        "what": "The customer form does not trim and does not look for a duplicate. Saving a name padded with spaces creates a SECOND company that is visually identical to the existing one in every list and every picker — the only thing that distinguishes them is the row id. Dev (a prod clone) already carries 13 untrimmed names, including the exact 'FREIGHT CARE LOGISTICS ' this duplicates, so invoices and receivables for one customer will split across two masters.",
+        "where": "BD → Customers → Add Customer → Company Name (CustomersListWithFilters.tsx:182 inserts {...customerData} raw)",
+        "typed": "\"  FREIGHT CARE LOGISTICS  \" (two leading + two trailing spaces)",
+        "landed": "customers.name = \"  FREIGHT CARE LOGISTICS  \" verbatim (26 chars); the list search for \"FREIGHT CARE LOGISTICS\" now returns two identical-looking rows",
+        "cost": "silent_corruption",
+        "severity": "high"
+      },
+      {
+        "what": "The e-voucher attach box is <input type=\"file\" multiple> with no accept filter, no size cap and no name check. A Windows executable uploads cleanly into the `attachments` bucket — which is public (M1) — and is then served to a completely unauthenticated fetch. Your own domain now hosts and distributes an .exe that any logged-in user can plant.",
+        "where": "e-voucher panel — /my-evouchers → New Request → Attachments (AddRequestForPaymentPanel.tsx:1739)",
+        "typed": "E2E-MISUSE-payload.exe (MZ header)",
+        "landed": "storage.objects: evouchers/<uuid>/<uuid>-E2E-MISUSE-payload.exe, mimetype application/x-msdownload; anonymous GET of the public URL returned HTTP 200 application/x-msdownload with full bytes",
+        "cost": "silent_corruption",
+        "severity": "critical"
+      },
+      {
+        "what": "The collection Amount Received box carries the identical parseFloat(...) || 0 shape, and reproduces the same collapse in the UI. UI-level only — the project I probed had no open balance, so I did not force a collection row and am NOT claiming the DB landing for this specific form.",
+        "where": "collection panel — project Collections tab → Record Collection → Amount Received (CollectionCreatorPanel.tsx:635)",
+        "typed": "0.05 / 0.001 / -500",
+        "landed": "field reads 5 / 1 / -500 (a negative collection is accepted by the field)",
+        "cost": "silent_corruption",
+        "severity": "high"
+      },
+      {
+        "what": "A required field takes the two characters every hurried person reaches for, and the pattern is already live: real prod-cloned customer rows carry '-' and 'N/A' in registered_address today. Nothing downstream can tell a genuine address from a shrug.",
+        "where": "BD → Customers → Add Customer → Registered Address (marked required *)",
+        "typed": "N/A",
+        "landed": "customers.registered_address = 'N/A'; Create Customer enabled, saved without complaint",
+        "cost": "cosmetic",
+        "severity": "medium"
+      },
+      {
+        "what": "Uploads to the `attachments` bucket intermittently die with the browser's bare \"Failed to fetch\" — twice across four runs, once for a 165-character filename and once for the .exe. When it dies the voucher row is never created, the user gets a toast that names no remedy, and any file that uploaded BEFORE the failure is left in the public bucket with no record to own it (an orphan I had to sweep by hand). Not deterministic, so recorded rather than asserted.",
+        "where": "e-voucher panel — Attachments → Save Draft",
+        "typed": "E2E-MISUSE-xxx…(165 chars).pdf alongside the .exe",
+        "landed": "run A: 'Failed to upload …: Failed to fetch', zero evouchers rows created, .exe already in storage as an orphan. runs B–D: both files uploaded and stored under their full names",
+        "cost": "blocked_work",
+        "severity": "medium"
+      },
+      {
+        "what": "The Applied To column prints a raw booking UUID next to the invoice number instead of the booking number.",
+        "where": "project Collections tab — collections list, APPLIED TO column",
+        "typed": "n/a (display of an existing posted collection)",
+        "landed": "\"FWD202608-062-001 | a2dc0ba4-7134-4fdf-9ccb-0b8559a41bf8\"",
+        "cost": "cosmetic",
+        "severity": "low"
+      }
+    ],
+    "handledWell": [
+      "The way Filipinos actually write pesos survives intact. \"1,500.00\", \"PHP25,000\", \"25000.00 PHP\", \"25 000\" and a value pasted out of Excel with a trailing tab all reach the row as the right number — the browser's number input discards the separators and the currency word before React ever sees them. The feared outcome (a comma truncating 1,500 to 1) does not happen anywhere I tested.",
+      "HTML is escaped, not rendered. A <b> tag and an <img src=x onerror=...> stored in an e-voucher note and a customer note came back as literal text in the list, the detail panel and the voucher panel — zero <b> elements, the handler never fired. React's default escaping holds where send-feedback-email's raw interpolation (N3) does not. (One caveat: RichTextDisplay in QuotationBuilderV3 renders quotation Scope of Services and Terms & Conditions through dangerouslySetInnerHTML with no sanitizer — MemoPanel uses DOMPurify and MessageBubble sanitizes, that one does not. Not reachable by a careless user typing, since tiptap escapes what you type, so not counted as a finding here.)",
+      "Emoji, Chinese and right-to-left Arabic round-trip byte-for-byte and do not wreck layout — the customer detail page with an Arabic phrase mid-sentence had scrollWidth exactly equal to innerWidth, no horizontal scroll, no column blow-out.",
+      "A 10,000-character note is stored whole (10,095 chars in, 10,095 out) and rendered without truncating or crashing the detail page.",
+      "The date fields that matter most are calendar-only, so the classic bad-date strings cannot be typed into them at all: the e-voucher Payment Due Date and the booking ETD / ETA / cut-off fields are custom pickers rendered as buttons, not text inputs. \"31/02/2026\", \"2026-13-45\" and \"N/A\" have nowhere to go.",
+      "Leading zeros are handled correctly on the common path — \"00042\" lands as 42 in every amount field tested.",
+      "The vendor and catalog pickers held the line: no free text reached a line item anywhere. Vendor is registry-only, the expense line demanded a real catalog category and item, and the billing line demanded a Billing Catalog item — the catalog doctrine survives careless typing even though it is only a form convention at the API (G5).",
+      "Every write that reported success and that I could check WAS in the database. Nothing in this pass produced a LIES_SAYS_SAVED of the N6 kind — the failures here are wrong values honestly saved, not saves that never happened."
+    ],
+    "specFile": "C:/Users/Marcus/Documents/Neuron Development/NeuronosPrototype/tests/e2e/misuse/bad-values.spec.ts",
+    "cleanedUp": true,
+    "unmeasured": [
+      "A 200MB upload. I did not push one — the bucket is public and prod-cloned, and a quarter-gigabyte of junk in it is a worse outcome than the finding is worth. What IS established by reading: the e-voucher attach input has no size check whatsoever, while LiquidationForm caps at 10MB and the inbox composers cap at 25MB, so the money form is the one with no ceiling.",
+      "ETD after ETA on a booking. No cross-field validation exists anywhere in the codebase (grepped), but both fields are calendar pickers rather than text inputs and driving two of them to prove it would have cost more than it returned. Claiming it without forcing it would be exactly the K-class mistake this effort keeps making, so it is listed here, not in the findings.",
+      "The DB landing for the collection Amount Received field. The field reproduces the 0.05 → 5 collapse in the UI, but PRJ-291528's only invoice was already fully paid, so there was no open balance to apply against and Save & Close had nothing to allocate. The identical handler shape is DB-confirmed one table over (e-vouchers), which is suggestive, not proof.",
+      "Whether the 0.0x collapse also reaches the QUOTATION line-item forms. AddLineItemModal, BrokerageFormV2, MarineInsuranceFormV2 and FinancialSummaryPanel all carry a placeholder=\"0.00\" number input; I only read them, I did not drive them.",
+      "A 300-character filename. Windows refused to create the file, so the test uses 165 characters — long enough to overflow the attachment list visually, short enough that the filesystem allowed it.",
+      "Real clipboard paste (Ctrl+V from the OS clipboard) as distinct from keyboard insertText. Chrome's number input sanitises both the same way in my probes, but I could not get a genuine OS-level paste through the harness to be certain.",
+      "Double-submit / duplicate_money. Nothing in this pass produced two vouchers or two invoices from one action — but I did not hunt for it either, and M3 already owns that ground. No finding in this pass carries the duplicate_money cost."
+    ],
+    "notes": "The centre of gravity of this pass is a single line, repeated across every money form in the product:\n\n    onChange={e => onChange(parseFloat(e.target.value) || 0)}\n\non an <input type=\"number\">. It looks defensive. It is the opposite. Chrome reports an intermediate invalid value — \"0.0\", \"-\", \"1e\" — as the empty string; parseFloat(\"\") is NaN; `|| 0` turns that into 0; and React writes the 0 back into the controlled field, destroying the characters already typed. The digits the user types next land in a field that no longer says what they think it says. Nothing errors. Nothing is red. The number is just wrong, and it is wrong by a factor of 100 or 1000 or by its sign.\n\nTwo variants, and they fail differently:\n  value={x || \"\"}      (e-voucher, collections) — the field BLANKS, so 0.05 → 5\n  value={x}            (billing price)          — the field STICKS at 0 and can\n                                                  never be cleared, so -500 → 500\n\nThat is why \"type it, don't paste it\" is load-bearing in the spec, and why every probe uses page.keyboard.type with a delay. Pasting the same strings whole misses the bug completely — the value arrives in one event, parseFloat sees a valid number, and everything looks fine. Any future harness that fills these fields with .fill() will report a clean sweep over a broken product. That is the K1 shape again, in a new place.\n\nThe second thing worth saying: the scariest input in this system is not a comma. It is a decimal point after a zero, and a minus sign. Both are things a real accounting person types every week — centavo-level VASP and processing fees are already in this dataset at ₱10, ₱50, ₱61.60, and a credit line on a billing tab is ordinary work. Neither is an attack. Neither produces a complaint.\n\nThird: the two findings that compound with what is already on the register. The .exe upload is M1 with a weapon in it — the bucket was already known to be world-readable, but nobody had put an executable in it and fetched it back anonymously. And the padded customer name is not a curiosity: dev already has 13 untrimmed names cloned verbatim from prod, so the duplicate-master problem is not hypothetical, it is live, and the form that creates it neither trims nor warns.\n\nOn honesty: three things I could have written up and did not. The long-filename upload failure is intermittent (2 of 4 runs) and is recorded as such in the spec rather than asserted. The collection panel's DB landing is unproven and is listed as unmeasured, not as a finding. And the ETD/ETA claim has no validation in the code but was never forced through the UI, so it stays in the unmeasured list. A probe that lies is worse than no probe.\n\nThe spec is five tests, ~2.6 minutes, all green, and its assertions are phrased so that they fail when the bugs are FIXED as well as if the bugs get worse — each one carries a message saying which. It is a characterisation harness for the current behaviour, not a wall of red. Everything it creates carries E2E-MISUSE and is removed in afterAll including the storage object, and I verified zero leftovers by service-role census after the final run. A second agent was writing E2E-MISUSE-tagged vouchers to dev at the same time; I identified my own rows by actor and content and left theirs alone.\n\nScreenshots: docs/qa/misuse/ (P1 the 0.05→5 field, P2 the sign flip, P4 the year-52026 invoice with a 2020 due date, P5 the two identical customers, P6 the accepted .exe, plus the raw-HTML/RTL note and the 10k-character note pages)."
+  },
+  {
+    "findings": [
+      {
+        "what": "The customer search is a plain substring match, so the company's own legal name — typed the way it is printed, with the full stop — returns nothing while the row exists. This is the entry point to the duplicate-customer corruption path: the operator reasonably concludes the customer is not in the system.",
+        "where": "BD → Customers → \"Search customers...\"",
+        "typed": "\"Garden Barn Inc.\"  (also tried \"gardenbarn\", \"GARDEN  BARN INC\")",
+        "landed": "0 results, no \"did you mean\", no fuzzy suggestion — while CUST-1780468254106 \"GARDEN BARN INC\" is live. Exact string \"GARDEN BARN INC\" → 1 hit, \"Garden Barn\" → 1 hit.",
+        "cost": "silent_corruption",
+        "severity": "high"
+      },
+      {
+        "what": "Creating a customer whose name is character-for-character identical to an existing one is accepted with no warning, no suggestion and no block. The new row is immediately a first-class, spendable customer — indistinguishable in every downstream picker from the real one.",
+        "where": "BD → Customers → Add Customer (AddCustomerPanel)",
+        "typed": "company_name = \"GARDEN BARN INC\" (identical to the live CUST-1780468254106)",
+        "landed": "SERVICE-ROLE: 2 rows in public.customers with name = 'GARDEN BARN INC'; the new one is id=CUST-1785837449339, status='Prospect'. Zero warning text on screen before or after save. Dev already carries 8 such duplicate-name pairs, including the near-miss pair 'FOCUS GLOBAL INC.' / 'FOCUS GLOBAL INC'.",
+        "cost": "silent_corruption",
+        "severity": "high"
+      },
+      {
+        "what": "The e-voucher line-item booking picker offers bookings in ANY status — Cancelled, Completed and Billed included — with no status shown next to the option. AddRequestForPaymentPanel.tsx:310 selects bookings with no status filter, and nothing downstream re-checks. The expense entered the approval chain charged to a booking that was cancelled.",
+        "where": "E-Vouchers → New Request → line item → \"Line item booking\"",
+        "typed": "searched \"BRK-2026-0041\" (bookings.status = 'Cancelled'), ₱1,234 on an (EXP) FORWARDING catalog line",
+        "landed": "SERVICE-ROLE: evoucher_line_items row with booking_id = the cancelled booking; parent voucher EV-2026-0626 at status='pending_manager' — live in the AP chain, charged to a dead booking. No warning at pick time or submit time.",
+        "cost": "silent_corruption",
+        "severity": "high"
+      },
+      {
+        "what": "Finding L3's root cause, reproduced from the UI in one click and with the operator typing nothing at all. Raising an expense from a BOOKING's Expenses tab stamps the BOOKING number into evouchers.project_number, because ExpensesTab.tsx:129 passes projectNumber={bookingNumber} into the panel. Nobody put the wrong value in the field; the call site is mislabelled. This is how 249 of 249 vouchers got booking numbers in a column named project_number.",
+        "where": "Operations → Forwarding → booking → Expenses tab → Add Expense",
+        "typed": "nothing — no project reference was entered anywhere on the form",
+        "landed": "SERVICE-ROLE: evouchers.project_number = \"FWD202608-062\" (the booking number). The booking's ACTUAL project is PRJ-291528, which appears nowhere on the voucher. Same one-line cause writes booking numbers into billing_line_items.project_number (UnifiedExpensesTab.tsx:195), which is L3's other 83 rows.",
+        "cost": "silent_corruption",
+        "severity": "high"
+      },
+      {
+        "what": "Finding L1 confirmed live, and isolated to the surface that causes it. A voucher raised from /my-evouchers (no locked booking) is written with a NULL header booking_id even though its line item names a booking — so anything reading evouchers.booking_id sees untenanted money. ensure_billable_expense_billing_item() returns early on no_booking_id, so a billable expense raised this way can mint no receivable at all.",
+        "where": "E-Vouchers (personal) → New Request → submit",
+        "typed": "one line item explicitly booked to BRK-2026-0041",
+        "landed": "SERVICE-ROLE: evouchers.booking_id = NULL and evouchers.project_number = NULL on EV-2026-0626, while evoucher_line_items.booking_id is populated. The same voucher raised from a booking's Expenses tab DOES get a header booking_id — so this is one surface, not the writer as a whole.",
+        "cost": "silent_corruption",
+        "severity": "critical"
+      }
+    ],
+    "handledWell": [
+      "A client-rejected quotation is genuinely terminal, and it is guarded by ABSENCE OF AFFORDANCE rather than by a validation message — the only kind of guard a hurried person cannot argue with. Opened QUO2605221401 (Rejected by Client) as the Pricing manager (quotations dial = 'everything', so the row was truly reachable): \"Create Project\" is not rendered at all (QuotationFileView.tsx:1304 requires normalizedStatus === 'Accepted by Client'), and the status chip's menu offers exactly one entry — \"Disapproved / Cancelled\", terminal-to-terminal. There is no route back to Accepted, Sent to Client, Priced or Draft. Service-role re-read confirms status and project_id unchanged.",
+      "The voucher raised from a booking's Expenses tab DOES carry a correct header booking_id matching its line — the L1 regression is confined to the personal /my-evouchers surface, not the writer in general. Worth knowing before anyone 'fixes' the writer.",
+      "Add Customer will not save a half-formed record: the Create Customer button stays disabled until company_name, industry, registered_address AND owner are all present (AddCustomerPanel isFormValid). The gap is duplicate detection, not required-field discipline.",
+      "The expense line-item form held the catalog line: category and item both had to come from the Expense Catalog, and the submit stayed disabled until vendor + catalog item + amount were all real. No free text reached the line."
+    ],
+    "specFile": "C:\\Users\\Marcus\\Documents\\Neuron Development\\NeuronosPrototype\\tests\\e2e\\misuse\\confused-model.spec.ts",
+    "cleanedUp": true,
+    "unmeasured": [
+      "SHIPPER/CONSIGNEE SWAP — not performed, but the shape is confirmed and the live data already shows the damage. On the booking form both fields are the same control ('Select customer first' until a customer is chosen), both draw from the same party list, and neither is validated against the other or against the customer. SERVICE-ROLE read of all 240 bookings: 16 carry the SAME party as both shipper and consignee (physically impossible for a real shipment), 64 have consignee = customer_name, 6 have shipper = customer_name. I did not drive the swap because completing New Booking needs a customer picker I ran out of budget to map; the observation stands on the data, not on a run.",
+      "ETD AFTER ETA — not driven. Both are 'Select date…' pickers on the booking form with no visible relationship. Live data shows 0 of 79 bookings with etd > eta, so this one genuinely needs performing rather than reading.",
+      "INVOICE DUE DATE BEFORE INVOICE DATE — read but not driven. InvoiceBuilder.tsx:1702-1717 renders both as bare <input type=\"date\"> with no min attribute and no comparison anywhere in handleSave; effectiveDueDate is only ever DERIVED from invoiceDate when dueDate is empty. Almost certainly accepted silently, but I did not prove it: it needs an uninvoiced billing line and dev currently has none on any project-linked booking.",
+      "INVOICING THE SAME BILLING LINE TWICE VIA TWO SCREENS (project Invoices tab vs booking Invoices tab) — the duplicate_money scenario, unattempted. It needs a fresh billing line created first (spine stage 8a), which did not fit the budget. This is the highest-value remaining item in this tier.",
+      "LIQUIDATE MORE THAN THE ADVANCE — unattempted. A live target exists (EV-2026-0250, Disbursed ₱240, with a Liquidate action offered) but it is another user's row, so it would need a self-owned cash advance walked to Disbursed first.",
+      "COLLECTION IN USD AGAINST A PHP INVOICE — unattempted; needs an issued invoice.",
+      "OFFICE EXPENSE MARKED BILLABLE MINTING A RECEIVABLE (J2/L1 territory) — unattempted. Note the interaction with the L1 finding above: on the /my-evouchers path booking_id is NULL, so trg_ensure_billable_expense_billing_on_approval would return early and mint NOTHING. Both outcomes are findings and neither is measured.",
+      "PICK A SERVICE TYPE, ADD LINE ITEMS, THEN CHANGE THE SERVICE TYPE — unattempted.",
+      "EXPENSE CATALOG ITEM ON A REVENUE LINE (or vice versa) — unattempted; I did not establish whether either combobox can reach the wrong side at all.",
+      "VENDOR NAME IN THE CUSTOMER FIELD — unattempted."
+    ],
+    "notes": "HOW TO READ THIS PASS. Every verdict below came from typing in the UI and then reading the row back with the service-role key (K1) — no toast, no HTTP 200 and no 'no error' was taken as evidence. The spec prints, for each step, what was typed and what landed, side by side. Verdicts are graded STOPPED / WARNED / WROTE_IT_DOWN / BLOCKED_WRONGLY, and WROTE_IT_DOWN — the system cheerfully accepting nonsense — is the finding, not the error.\n\nTHE SPEC RUNS GREEN: 4 tests, all passing, verified on two consecutive full runs (~2.1 min). One intermediate run had a single flake in the booking-expenses test (the same test passes in isolation in 46s); the dev server was shared with at least one other agent writing E2E-MISUSE fixtures at the time, which is the E5/E16 slowness already on record. Screenshots land in test-results/misuse/.\n\nCLEANUP IS VERIFIED, NOT ASSUMED. afterAll deletes every row this file creates, pass or fail. Post-run service-role check: customers named 'GARDEN BARN INC' back to 1; zero customers carrying this file's notes tag; zero evoucher_line_items against BRK-2026-0041; zero vouchers naming FWD202608-062. Nothing pre-existing was written to — the only rows touched are ones this file created. Dev only (oqermaidggvanahumjmj); supabase-prod was never opened.\n\nTWO NOTES ON METHOD, both of which nearly produced false results.\n1. K3 in a new costume: scenario 4 originally used the BD officer, who could not surface the rejected quotation at all — which would have read as 'the guard held' when it was really 'she cannot see the row'. Re-cast to the Pricing manager (quotations dial = 'everything') so the pass means what it says.\n2. My first 'the guard held' assertion was almost inverted by a regex: the status menu's single entry 'Disapproved / Cancelled' matched /approv/. Terminal-to-terminal is not a way back. The filter now excludes it explicitly, and the spec prints the whole menu so the next reader can judge rather than trust.\n\nTHE THROUGH-LINE. Three of the five findings are the same shape: a field whose NAME promises one thing and whose VALUE is quietly something else — project_number holding a booking number, a header booking link left empty while the line has one, a customer row that is the second copy of itself. None of them involve a user doing anything wrong. Two of the three are caused by a single mislabelled prop (ExpensesTab.tsx:129), which is the closest thing this pass found to a one-line fix for a 249-row condition."
+  },
+  {
+    "findings": [
+      {
+        "what": "Three click events dispatched in a single tick each run handleSubmit to completion, producing three separate numbered, approvable e-vouchers. `busy = isSaving || isUploading` and isSaving is react-query's isPending, which only becomes true AFTER handleSubmit has awaited the attachment upload — so the button's disabled attribute is set at least two async hops after the click that should have set it. Nothing between the click and the INSERT is idempotent.",
+        "where": "My E-Vouchers → New Request → Reimbursement Request → Submit Request (AddRequestForPaymentPanel.tsx:1839)",
+        "typed": "one reimbursement for PHP 2,500 (vendor UTOC, FC (OCEAN FREIGHT), booked to the fixture booking)",
+        "landed": "3 rows in `evouchers`: EV-2026-0658, EV-2026-0659, EV-2026-0660 — each PHP 2,500, each at status pending_manager, each a live claim on cash. Reproduced on 3 consecutive runs.",
+        "cost": "duplicate_money",
+        "severity": "high"
+      },
+      {
+        "what": "Two tabs open the same voucher, both edit `details`, both save. The app writes the JSONB whole (fetch, spread, update) with no jsonb_set and no optimistic-lock predicate, so the second write overwrites the first. Neither tab is told anything — both PostgREST calls return success.",
+        "where": "Any surface that edits an e-voucher's `details` JSONB (two tabs, same record)",
+        "typed": "tab A adds `tab_a_note`, tab B adds `tab_b_note`, both click Save",
+        "landed": "Only tab B's note is in the row. Tab A: error=none. Tab B: error=none. Tab A's user saw a success and her edit is not there. (This is M3's lost-update finding as the user actually experiences it.)",
+        "cost": "silent_corruption",
+        "severity": "high"
+      },
+      {
+        "what": "A browser refresh in the middle of the voucher form discards everything — roughly fifteen interactions across four widget idioms — with no draft, no autosave and no beforeunload warning.",
+        "where": "My E-Vouchers → New Request → Reimbursement Request modal",
+        "typed": "vendor UTOC CORPORATION + catalog category (EXP) FORWARDING + item FC (OCEAN FREIGHT) + line booking + PHP 1,500",
+        "landed": "Form closed. Zero rows persisted (service-role count before == after). Every field gone, nothing warned her.",
+        "cost": "data_loss",
+        "severity": "medium"
+      },
+      {
+        "what": "A stale approvals page reports a successful approval that it did not perform. The panel keeps offering Approve after the voucher has moved on underneath it; clicking it shows the success toast. The DATABASE is correct — evoucher_transition validates (from, to, actor) so the hop is not re-run — but the approver is told she approved something she did not.",
+        "where": "/approvals → e-voucher approval panel, left open while the record advances",
+        "typed": "click Approve on a voucher that moved from pending_manager to pending_ceo while the tab sat open",
+        "landed": "Toast: \"Approved — forwarded to CEO for final approval\". Actual status: pending_ceo, unchanged by her click. She believes she signed off; she did not.",
+        "cost": "silent_corruption",
+        "severity": "medium"
+      },
+      {
+        "what": "A record deleted underneath an open list stays on screen indefinitely, and clicking the ghost row does nothing at all — no toast, no \"this no longer exists\", no refresh. The list simply does not know.",
+        "where": "My E-Vouchers list (record removed by another actor while the list was open)",
+        "typed": "click the voucher row the list is currently showing",
+        "landed": "Row still rendered after the delete (2 → 2 nodes, no refresh). Click produced no toast, no panel, no navigation, and no uncaught page errors. Mildest possible expression of M2.",
+        "cost": "cosmetic",
+        "severity": "low"
+      },
+      {
+        "what": "Changing the Transaction Type at the very end silently changes what the voucher MEANS — reimbursement (money already spent, settled at disburse) becomes cash advance (money handed over before the expense exists, parked in liquidation) — with no confirmation and no re-validation. The line data survives correctly, but the catalog item combobox is no longer rendered for a cash advance, so she cannot see what she is advancing against.",
+        "where": "Reimbursement Request → Transaction Type CustomDropdown, changed after vendor/category/item/booking/amount were filled",
+        "typed": "FC (OCEAN FREIGHT) @ 1500, filled as a Reimbursement, then switched to Cash Advance",
+        "landed": "Saved as transaction_type=cash_advance at pending_manager, header amount 1500, 1 line: amount=1500, catalog_item_id=ci-1779684041912, booking_id set. Doctrine held; the meaning change was silent and the line became invisible on screen.",
+        "cost": "cosmetic",
+        "severity": "low"
+      }
+    ],
+    "handledWell": [
+      "Real-mouse triple-click on Submit (three down/up pairs, 40ms apart) creates exactly ONE voucher — the modal unmounts on the first success so clicks two and three land on nothing. Guarded by the close rather than by the button, but genuinely guarded. This is the case a real hand produces; only the same-tick variant breaks.",
+      "Amount field, \"1,500.00\" — the one everybody predicts will break. type=\"number\" makes the browser discard the separator before React sees it, so parseFloat gets a clean string and 1500.00 lands. Not the classic comma bug.",
+      "Amount field, \"N/A\" — refused by the input type; the empty string falls through `parseFloat(...) || 0` to a clean zero.",
+      "Type 2500 into the amount, delete it, try to submit empty — Submit stays disabled. An empty amount is 0 and 0 fails isFormValid.",
+      "Negative amount \"-500\" — the character is accepted by the number input, but Submit stays disabled, so no negative expense line can reach the AP chain.",
+      "Submit on a completely empty form — button disabled, nothing reachable.",
+      "Deep-link straight to /evouchers/:id/disburse for a pending_manager voucher — refused with the best message in the product: \"This voucher is not pending disbursement (status: pending_manager).\" plus a \"← Back to Voucher\" link. It names the state AND offers the way out. Screenshot: docs/qa/misuse-deeplink-disburse.png",
+      "The stale-page approval did NOT re-run the transition — evoucher_transition validates (from, to, actor) as a triple, so M3's double-approval race does not reproduce through the UI. The money state stayed correct; only the message lied.",
+      "Deleting a record underneath an open list caused zero uncaught page errors — no crash, no white screen.",
+      "The catalog doctrine survives a mid-form transaction-type switch: catalog_item_id and booking_id both persisted onto the saved line."
+    ],
+    "specFile": "C:/Users/Marcus/Documents/Neuron Development/NeuronosPrototype/tests/e2e/misuse/abused-flow.spec.ts",
+    "cleanedUp": true,
+    "unmeasured": [
+      "Enter in a form text field — NOT REPRODUCIBLE and therefore deliberately not asserted. The Submit button is type=submit inside <form onSubmit={handleSubmit}>, so Enter in any text input IS a native submit. One full-suite run recorded exactly that: a row created, the panel still open with every field filled, no toast — which would be the worst finding in this pass, because she would then click Submit and raise a second voucher. Two isolated runs of the same probe recorded nothing. Either the keystroke races the combobox that owns focus, or that run's extra row came from elsewhere in the window and the probe misattributed it. Needs a dedicated run with network capture before it is called a finding.",
+      "Browser BACK after converting a quotation to a project, then FORWARD. Not run — reaching the conversion point costs the whole spine (stages 1-5, ~4 minutes of form driving) before the probe can even start.",
+      "THREE tabs of the disburse page for one voucher, Confirm in all three. Not run — needs a fixture parked at pending_accounting plus three authenticated contexts; the same-tick duplicate found in probe 1b suggests this is the highest-value remaining probe.",
+      "Sort or filter a list, then act on the row that WAS in that position.",
+      "Select a catalog item, then edit the description to something unrelated — the catalog_snapshot doctrine break. Probe 4 showed the saved line's description is EMPTY rather than carrying the catalog name, which makes this worth a dedicated look.",
+      "Log out mid-approval; navigate away mid-save.",
+      "Press every button on a detail page in order and note anything that errors, does nothing, or does something surprising.",
+      "Whether the stale-page Approve click wrote a duplicate evoucher_history row. The status was correct, but M3 recorded that double approval 'both write history' — the audit trail was not read back here.",
+      "Submit clicked BEFORE a dropdown finishes loading — attempted only as the empty-form case (3a), not as a genuine mid-load race."
+    ],
+    "notes": "HARNESS HONESTY, because two false findings nearly shipped and both are the K-class shape.\n\nFALSE FINDING 1: the first run of probe 1 reported \"5 vouchers from 3 clicks\" — duplicate_money, critical. It was 4 fixture vouchers plus one real one. The readback window was created_by=OpsTL AND created_at >= RUN_START, and the fixture vouchers are ALSO created_by the Ops TL and ALSO inserted after RUN_START. Fixed by excluding the fixture ids explicitly; the honest result is that the real-mouse triple-click HOLDS and only the same-tick variant breaks. The dramatic version of this finding was wrong.\n\nFALSE FINDING 2: probe 4 originally called `selectOption()` on `locator(\"select\")` for the Transaction Type. That control is a CustomDropdown (portalled, position:fixed), not a native select — the call matched nothing, threw into a .catch(), and the probe reported \"the lines survived the type switch\" while measuring an interaction that never happened. Same shape as K1: an unanswerable probe reading as a clean pass. It now asserts the panel title changed to \"Cash Advance Request\" before believing anything about the lines.\n\nFALSE FINDING 3 (smaller): probe 8's queue search used the MISUSE tag. The approvals search box says \"by number or requestor\" and means it — it does not match `purpose`. The click failed, was swallowed by a .catch(), and \"Approve is not offered\" was reported as a clean result. It now looks up the evoucher_number with service-role and asserts the panel is open and armed BEFORE disturbing the record.\n\nAlso confirmed live in passing: finding L1 is real. A voucher raised through the form lands with header booking_id = NULL even though its line carries the link — which is why the readback in this file cannot be keyed on booking_id at all.\n\nEvery probe types in the UI, saves, and reads the row back with service-role (the supabase-js service client, not the actor's own session). Nine tests, all green, three consecutive clean runs. Fixtures tagged E2E-MISUSE and swept in afterAll; verified zero residue afterwards (evouchers / lines / bookings / projects / orphan lines all 0). Dev only, ref oqermaidggvanahumjmj — prod never touched, no migrations, no policy edits.\n\nScreenshots: docs/qa/misuse-deeplink-disburse.png (the refusal message, which is exemplary), docs/qa/misuse-stale-approve.png (the false \"Approved\" toast), docs/qa/misuse-deleted-underneath.png (the ghost row), docs/qa/misuse-double-submit.png.\n\nThe two assertions written as CURRENT TRUTH rather than desired truth (the adversary convention) are probe 1b (expects >1 voucher) and probe 6 (expects exactly 1 note to survive). When either is fixed the test goes RED — that is the signal to update the expectation and strike the finding, not to loosen it."
+  },
+  {
+    "findings": [
+      {
+        "what": "The inquiry insert is awaited and its error is caught; the handoff ticket that follows is fire-and-forget (`createWorkflowTicket(...).catch(console.error)`). Made only the tickets endpoint fail: the quotation landed, the user was told \"Inquiry created.\", and the ticket that is the entire mechanism by which Pricing learns the job exists was never written. Nobody is told, nobody looks. This does not need a hostile network — a policy denial or an FK error does it too, and the same pattern (`void recordNotificationEvent(...)`) sits on the e-voucher and invoice paths.",
+        "where": "BD > Inquiries > Create Inquiry > Submit Project Inquiry to Pricing (src/components/BusinessDevelopment.tsx handleSaveInquiry)",
+        "typed": "one inquiry submitted to Pricing, tickets endpoint returning 500",
+        "landed": "quotations row created; tickets rows for that quotation = 0; UI toast read \"Inquiry created.\"",
+        "cost": "silent_corruption",
+        "severity": "high"
+      },
+      {
+        "what": "F5 with a filled inquiry form. No beforeunload warning is offered, the builder is not restored, and the user is dumped back on the Inquiries list with every field gone. Nothing is drafted anywhere — the form is pure component state.",
+        "where": "BD > Inquiries > Create Project Inquiry (whole form)",
+        "typed": "\"E2E-MISUSE REFRESH 1785837056341\" plus customer, contact and service, never submitted",
+        "landed": "beforeunload warning shown: false; form restored: false; field afterwards: form not restored at all; still signed in",
+        "cost": "data_loss",
+        "severity": "medium"
+      },
+      {
+        "what": "Same form, navigate away in-app and press Back. The builder pushes no history entry, so Back does not return to it — the filled form is gone with no warning and no draft.",
+        "where": "BD > Inquiries > Create Project Inquiry, then browser Back",
+        "typed": "\"E2E-MISUSE BACKBTN 1785837077077\" typed, navigated away, Back pressed",
+        "landed": "form restored: false; field afterwards: form not restored",
+        "cost": "data_loss",
+        "severity": "medium"
+      },
+      {
+        "what": "Session dies mid-form (sb-* cleared from sessionStorage, save refused 401 JWT expired). The typing survives, which is good — but NOTHING is shown. No toast, no bounce to login, no indication the save was refused. Compare the 500 case on the same button, which says \"Error saving inquiry: internal server error\". A person clicks Submit, sees the form sit there unchanged, and clicks again.",
+        "where": "BD > Inquiries > Create Project Inquiry > Submit (VITE_SESSION_STORAGE_AUTH=true)",
+        "typed": "1 sb-* key cleared, then Submit clicked",
+        "landed": "quotations rows: 0; toasts captured during the whole attempt: none at all; bounced to login: false; name field still filled",
+        "cost": "blocked_work",
+        "severity": "medium"
+      },
+      {
+        "what": "The quote number is built in the browser from local date (`new Date().getFullYear()/getMonth()/getDate()` in QuotationBuilderV3.generateQuoteNumber) while created_at is `toISOString()` (UTC). On a laptop set behind UTC the human-facing document number is dated a day before the record. Both directions were run because at any instant only one is across the boundary — UTC+14 agreed, UTC-11 did not.",
+        "where": "BD > Inquiries > Create Project Inquiry, quote number stamp",
+        "typed": "browser-local date 2026-08-03 (Pacific/Midway, UTC-11); document number QUO2608034478",
+        "landed": "stored created_at (UTC) 2026-08-04; the number says the 3rd, the row says the 4th",
+        "cost": "silent_corruption",
+        "severity": "medium"
+      },
+      {
+        "what": "Two browser sessions on the same login (the shared-account case that is Tuesday in a PH SME) filled the identical inquiry — same customer, same name — and submitted simultaneously. Two quotations were created with two different quote numbers and no duplicate warning of any kind. Pricing now has the same job queued twice.",
+        "where": "BD > Inquiries > Create Project Inquiry, two contexts, one account",
+        "typed": "identical customer + identical inquiry name, submitted at the same moment from two sessions",
+        "landed": "2 quotations rows: QUO2608043117 and QUO2608048607; duplicate warning shown: false",
+        "cost": "duplicate_money",
+        "severity": "medium"
+      },
+      {
+        "what": "The offline error toast interpolates the raw exception: \"Error saving inquiry: TypeError: Failed to fetch\". The behaviour underneath is correct (loud, form preserved, no row) — the wording is not something an ops person can act on; it does not say \"you are offline\".",
+        "where": "BD > Inquiries > Create Project Inquiry > Submit, network down",
+        "typed": "Submit clicked with context.setOffline(true)",
+        "landed": "toast: \"Error saving inquiry: TypeError: Failed to fetch\"",
+        "cost": "cosmetic",
+        "severity": "low"
+      }
+    ],
+    "handledWell": [
+      "OFFLINE MID-SAVE IS CORRECT, which is the headline good news given the brief. The save errored loudly, the form stayed filled with every field intact, and the database had zero rows — during the outage and again after reconnecting. Nothing replayed, nothing queued, no phantom success message. The worst outcome in the brief (a success toast with no row) did not happen here.",
+      "A 500 ON THE WRITE IS ALSO CORRECT. \"Error saving inquiry: internal server error\", still on the form, name field intact, zero rows. The UI does not claim success it did not get.",
+      "DOUBLE-SUBMIT ON A SLOW LINK IS GUARDED. Delayed the insert 4s and clicked Submit again 1.2s in: exactly one quotation row. `isSavingRef` in handleSaveInquiry catches it. Worth noting the guard is invisible — the button stays enabled and the label never changes to a busy state — so the user has no reason not to click again; but the data is safe.",
+      "UNICODE FROM WORD SURVIVES BYTE-IDENTICAL. Curly quotes, en-dash, em-dash and ellipsis all came back exactly as pasted. The name is uppercased, but that is AutoCapsProvider — a deliberate org-wide setting (org_settings.auto_caps_enabled, default ON) that rewrites every input value via the native setter — not corruption. Checking the source before reporting it is what kept this out of the findings list.",
+      "1366x768 AND THAT SCREEN AT 200% ZOOM BOTH HOLD. The action bar is sticky at the top, so Submit sits at y=32 of 768 and y=106 of 384, in the viewport without scrolling, and elementFromPoint at its own centre returns the button itself — not the E7 shape where a bare DIV intercepts the click. Screenshots in docs/qa/misuse-shots/.",
+      "A LAPTOP SET AHEAD OF UTC (UTC+14) agreed with the stored date on this run — only the behind-UTC direction skews. Recorded because it is what makes the single-timezone version of this test worthless."
+    ],
+    "specFile": "C:\\Users\\Marcus\\Documents\\Neuron Development\\NeuronosPrototype\\tests\\e2e\\misuse\\hostile-env.spec.ts",
+    "cleanedUp": true,
+    "unmeasured": [
+      "ONLY ONE FORM WAS DRIVEN. Every condition here was applied to the BD inquiry form. It was chosen because its save path is representative — one awaited insert whose error is caught and toasted, then un-awaited follow-up writes whose errors are not — but the e-voucher, invoice and collection forms were NOT put through offline / 500 / session-expiry / double-submit. The half-save finding in particular should be re-run against the e-voucher, where the un-awaited write is the approval routing.",
+      "SESSION EXPIRY WAS SIMULATED, NOT AGED. The sb-* keys were cleared and the write was refused with a synthetic 401 PGRST301. A genuinely expired JWT would also exercise supabase-js's refresh path, which this did not. The observed silence may be the app's or the client's.",
+      "THE FIRE-AND-FORGET NOTIFICATION WRITE was not intercepted separately from the ticket write, so it is unknown whether recordNotificationEvent fails the same silent way. It is the same shape in the same function.",
+      "BFCACHE PROPER WAS NEVER EXERCISED. The builder pushes no history entry, so Back left the module entirely rather than restoring a stale form. The nastier half of that scenario — a stale form restored and then saved over newer data — could not be reached from this form and remains untested.",
+      "TWO SESSIONS ON THE SAME EXISTING RECORD was not run. Both sessions created new inquiries; neither edited a shared row, so the lost-update-on-details-JSONB case (M3) was not re-confirmed from the UI side.",
+      "THROTTLING WAS PER-REQUEST ROUTE DELAY, not a bandwidth profile — enough to open a real double-click window, not enough to test render-blocking or partial-response behaviour.",
+      "CONCURRENT-AGENT INTERFERENCE. Another agent ran its own specs against the same dev database and dev server mid-pass. It created a second customer named \"FREIGHT CARE LOGISTICS\" with no contacts, which broke three of my scenarios until the picker was hardened, and its Playwright runs twice wiped test-results/ (screenshots now go to docs/qa/misuse-shots/). Timings and any load-sensitive result from this pass should be treated as noisy."
+    ],
+    "notes": "TWO HARNESS LIES WERE CAUGHT AND FIXED BEFORE THEY BECAME FINDINGS. Both are the K1/K3 pattern in new costumes and are documented in the spec so the next pass inherits them.\n\n(1) THE FIRST RUN LOOKED UP THE ROW BY `quotation_name = what I typed`, found nothing, and reported the control save as data_loss. The insert had in fact returned 201 and the row was there — under a name AutoCapsProvider had uppercased. Matching on what you typed cannot distinguish \"no row\" from \"row, wrong value\", which is exactly the distinction this tier exists to make. Every lookup now keys on a bare-digit run stamp and compares the full value afterwards.\n\n(2) EVERY SCENARIO IN THE SECOND RUN CAME BACK \"(no toast)\" — including the control save, which definitely toasts \"Inquiry created.\". Sonner dismisses at ~4s; I read at 10s. \"No error was shown\" was a property of my harness, not the product, and had I shipped it I would have reported the offline and 500 cases as silent failures when both are actually correct and loud. Toasts are now recorded as they appear by an in-page poller installed before the click.\n\nTHE SHAPE OF THE RESULT. The awaited write is honest everywhere I pushed it — offline, 500, and (data-wise) session expiry all end with no row and no false success. What is not honest is everything the app does AFTER the awaited write: the handoff ticket, the notification. Those are un-awaited, their failures are swallowed, and the user is told the whole thing succeeded. That is the one finding here that is genuinely dangerous, and it is a pattern, not an instance.\n\nThe rest is the cost of a form that holds all its state in memory: refresh, Back, or a second person on the same login, and there is no draft, no warning and no conflict detection anywhere.\n\nDELIVERABLES. Spec at tests/e2e/misuse/hostile-env.spec.ts (10 tests, all currently green — they RECORD outcomes rather than assert them, except one control assertion that fails loudly if the fixture path breaks). Screenshots at docs/qa/misuse-shots/ (after-refresh.png is the clearest single piece of evidence: the whole form gone, back on the list, no warning). Run logs at /tmp/misuse-run2.log and /tmp/misuse-run3.log. All E2E-MISUSE fixtures deleted — verified 0 rows remaining by service-role read."
+  }
+]

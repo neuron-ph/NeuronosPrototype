@@ -1254,3 +1254,157 @@ They are correct and they are evidence, but at this speed nobody will run them.
 `spine.spec.ts` does, before these become the post-fix baseline they are meant to
 be. Until then, run them one file at a time and expect minutes, not seconds.
 
+---
+
+## O. Found by the misuse pass — the careless user
+
+Four agents driving the real UI as people who do not understand the system, are
+in a hurry, and are clicking through a form on a Tuesday afternoon. Specs at
+`tests/e2e/misuse/`. Full detail in `docs/qa/adversary/phase5-misuse.json`.
+
+29 findings: **16 silent corruption, 4 data loss, 2 duplicate money, 2 blocked
+work, 5 cosmetic.**
+
+Everything before this pass tested competence — the right person doing the right
+thing, or an attacker doing the wrong thing deliberately. This is the first pass
+where the finding is usually **"it worked"**, and it is the class that costs a
+business every day rather than once.
+
+### O1 — Typing a centavo amount multiplies it by 100 · BUG (CRITICAL)
+The amount input is `value={item.amount || ""}` with
+`parseFloat(e.target.value) || 0`. Type `0.05` one keystroke at a time: the `0`
+is falsy, so React rewrites the controlled input to **empty**, and the digits
+after the decimal point land in a blank field.
+
+| typed | stored |
+|---|---|
+| `0.05` | **₱5.00** — 100× |
+| `0.001` | **₱1.00** — 1000× |
+
+No error. No warning. The voucher saves and enters the approval chain at the
+wrong number. Same shape in the collection panel's Amount Received.
+
+### O2 — A negative price silently becomes positive · BUG (CRITICAL)
+Billing line Price. The leading `-` is momentarily an invalid number, React
+writes `0` back, and `500` appends to it. **A ₱500 credit note to the customer is
+stored as a ₱500 charge** — the project's gross billings move ₱25,000 → ₱25,500,
+in the wrong direction.
+
+Same field, same cause: `1e6` pasted from a spreadsheet becomes **6**. And the
+field cannot be cleared at all — twenty backspaces leave the digits in place, and
+typing afterwards concatenates onto them.
+
+### O3 — An .exe uploads to the public bucket and is served to the internet · BUG (CRITICAL)
+The attachment input has no `accept` filter, no size cap and no name check. A
+Windows executable uploaded cleanly into `attachments` — which is public (M1) —
+and an anonymous GET returned **HTTP 200, `application/x-msdownload`, full
+bytes**.
+
+Your domain hosts and distributes an executable that any logged-in user can
+plant. This is M1 with a delivery mechanism attached.
+
+### O4 — The billing-line Remarks box writes to nothing · BUG (HIGH, data loss)
+The field is bound to `data.remarks`; the column is `notes`. The mapping is lost
+in the writer. Save reports success, the pending-changes bar clears, `updated_at`
+moves — and the sentence the user typed is simply **not there**. Reproduced on
+both insert and update.
+
+Somebody explaining a credit note in that box loses the explanation and never
+knows.
+
+### O5 — Invoice dates accept anything · BUG (HIGH)
+Both date fields are bare `<input type="date">` with no min, no max and no
+relationship to each other. Fat-fingering the segments produced
+`invoice_date = 52026-04-13` — **the year 52026** — and a due date of 2020 was
+accepted against a 2026 invoice, so it is born six years overdue and sits at the
+top of every aging bucket forever. The printed preview renders both cheerfully.
+
+### O6 — Duplicate customers are trivially easy and invisible · BUG (HIGH)
+No trim, no duplicate check. Saving `"  FREIGHT CARE LOGISTICS  "` creates a
+**second company that is visually identical** in every list and every picker —
+only the row id differs. Dev already carries 13 untrimmed names including that
+exact one.
+
+And the search is too strict to prevent it: searching `Garden Barn Inc.` returns
+**zero results** while `GARDEN BARN INC` is live. No "did you mean". So the user
+concludes it does not exist and creates it again — which is exactly how the two
+spellings already in your data got there. Receivables then split across two
+masters.
+
+### O7 — Three submits, three live claims on cash · BUG (HIGH, duplicate money)
+Three click events dispatched in one tick each run `handleSubmit` to completion:
+**three separate numbered, approvable e-vouchers**, ₱2,500 each. `busy` is
+derived from a react-query flag that has not flipped yet.
+
+Honest nuance: a **real mouse** triple-click produces exactly one, because the
+modal unmounts on the first success and clicks two and three land on nothing. So
+the guard is the unmount, not the button — which holds for a hand and fails for
+anything faster.
+
+The two-sessions-one-login case is worse and needs no speed at all: the same
+account in two browsers submitted the same inquiry and produced **two
+quotations**. In a PH SME, one shared login is Tuesday.
+
+### O8 — A refresh eats the whole form · BUG (HIGH, data loss)
+F5 mid-form discards roughly fifteen interactions across four widget types. No
+draft, no autosave, no `beforeunload` warning. Same for navigating away in-app —
+the builder pushes no history entry, so Back does not return to it.
+
+And when the session expires mid-form the typing survives but **nothing is
+shown**: no toast, no bounce to login, no indication the save was refused. The
+user keeps typing into a form that can no longer save.
+
+### O9 — A failed ticket write is reported as success · BUG (HIGH)
+With the tickets endpoint returning 500: the quotation row is created, **zero
+ticket rows exist**, and the UI says "Inquiry created." The workflow hand-off
+that makes the inquiry visible to Pricing silently did not happen.
+
+### O10 — Two tabs, one record, one silent loser · BUG (HIGH)
+Tab A and tab B each add a note to a voucher's `details`; both report success;
+only B's survives. This is M3's lost update seen from the UI, and neither user is
+told anything. The app's read-modify-write on JSONB has no conflict detection.
+
+### O11 — Where L1 and L3 actually come from · DIAGNOSTIC
+Two earlier findings now have their cause:
+
+- **L1 is confined to `/my-evouchers`.** A voucher raised from a booking's
+  Expenses tab *does* carry a correct header `booking_id`. Only the personal
+  surface leaves it NULL while the line carries it. Anyone fixing the writer
+  should know that before changing both.
+- **L3 is written by the form.** The booking Expenses tab sets
+  `project_number` = the **booking number**, with no project reference anywhere
+  on the form. That is how 249 of 249 e-vouchers got a booking number in a
+  project column.
+
+### O12 — What held, and it is a lot · GOOD NEWS
+Worth reading before anyone panics about the list above.
+
+- **The comma bug everyone predicts does not exist.** `1,500.00`, `PHP25,000`,
+  `25000.00 PHP`, `25 000`, and a value pasted from Excel with a trailing tab all
+  land as the right number. The browser's number input discards separators before
+  React sees them.
+- **HTML is escaped.** A `<b>` tag and an `<img onerror=…>` stored in notes came
+  back as literal text everywhere. React's default escaping holds where
+  `send-feedback-email` (N3) does not. *Caveat: `RichTextDisplay` renders
+  quotation Scope of Services and Terms through `dangerouslySetInnerHTML` — not
+  tested, worth a look.*
+- **Offline mid-save is correct**, which given the brief is the headline good
+  news: it errors loudly, the form stays filled, and the database has zero rows
+  during and after. No phantom success. A forced 500 behaves the same way.
+- **Double-submit on a slow link is guarded** by `isSavingRef` — though the guard
+  is invisible, since the button never changes to a busy state.
+- **Emoji, Chinese and RTL Arabic** round-trip byte-for-byte without breaking
+  layout. A 10,000-character note stores and renders whole.
+- **The catalog doctrine survives careless typing.** No free text reached a line
+  item anywhere — vendor is registry-only, and both expense and revenue lines
+  demanded real catalog items. It even survives a mid-form transaction-type
+  switch.
+- **The best error message in the product** is on the disburse deep-link: *"This
+  voucher is not pending disbursement (status: pending_manager)"* plus a way
+  back. It names the state and offers the exit. That is the standard the rest of
+  the app's silent gates should be held to.
+- **1366×768 and 200% zoom both hold** — no repeat of E7.
+- **A client-rejected quotation is genuinely terminal**, guarded by absence of
+  affordance rather than a validation message — the only kind of guard a hurried
+  person cannot argue with.
+
