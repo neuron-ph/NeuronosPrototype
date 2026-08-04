@@ -862,7 +862,7 @@ populated fields*, not *correctness*. A billing line pointed at entirely the
 wrong booking reads as perfectly consistent, because every denormalised field is
 copied from that same wrong booking. Consistency is not correctness.
 
-### L1 — The e-voucher writer stopped populating header `booking_id` · BUG (live regression)
+### L1 — The e-voucher writer stopped populating header `booking_id` · FIXED (274, dev) — and I overstated it
 `evouchers.booking_id` is NULL on 20 of 264 rows — and on **7 of the 7 vouchers
 created since 2026-07-28**. The last voucher with a header booking is from
 2026-07-18. Tenancy moved to the line items (D2) without the header being
@@ -874,9 +874,30 @@ Two consequences. Any "an e-voucher must resolve to a booking" rule would reject
 billable expense raised today **may mint no receivable at all** — revenue quietly
 not raised.
 
-**Action.** Read the writer before shipping any tenancy migration. This is the
-one finding in this batch that may be losing money right now, rather than merely
-allowing someone else to.
+**I OVERSTATED THE IMPACT AND SHOULD SAY SO.** I called this "may be losing
+money right now". The mechanism is real; the incidence is not. Measured before
+fixing:
+
+| billable vouchers | 166 |
+|---|---|
+| at `pending_accounting`, receivable minted | 87 of 87 — correct |
+| at `pending_ceo`, no receivable | 65 — **also correct**, the trigger fires later |
+| header `booking_id` NULL | **1** — `EV-2026-0001`, 4 May, the oldest row in the system |
+
+One instance, almost certainly a seed record. And the path people actually use —
+a booking's Expenses tab — sets the header correctly (O11). This is a latent gap
+in one code path.
+
+That is the second time in this effort I inferred impact from a mechanism without
+counting incidence (the first was J3's "13 rows"). Worth naming as a habit to
+watch: a mechanism tells you something *can* happen, never how often it *has*.
+
+**Action — done (274), in both layers, no backfill.**
+`ensure_billable_expense_billing_item()` now falls back to the line items when
+the header is NULL, heals the header on the row it is processing, and returns
+`ambiguous_booking` rather than guessing when the lines span several bookings.
+`useEVoucherSubmit` derives the header from the lines by the same rule, so new
+vouchers carry it. Historical rows are left alone deliberately.
 
 ### L2 — The schema manufactures orphans · BUG
 Every money-graph FK is `ON DELETE SET NULL`: `billing_line_items.booking_id`,
@@ -1019,7 +1040,7 @@ with a partial roster. A missing actor is a broken run, not a quiet gap.
 Three passes run autonomously against tagged fixtures. 32 breaches. One of them
 is worse than anything else in this document, and it is live on prod.
 
-### M1 — The `attachments` bucket is public. 424 real client documents are on the open internet · BUG (CRITICAL, PROD)
+### M1 — The `attachments` bucket is public. 424 real client documents are on the open internet · MITIGATED on dev (274); PROD STILL OPEN
 `storage.buckets.attachments.public = true`, on **dev and prod**. Its two
 policies check nothing but the bucket name:
 
@@ -1057,13 +1078,32 @@ Contrast `ticket-files`, which is private and gated on
 `current_user_can_view_ticket(...)`, and `avatars`, whose writes are scoped to
 the owner's folder. Somebody knew how to do this. `attachments` just never got it.
 
-**Action — needs a decision, not a quiet fix.** Setting `public = false` is the
-only thing that closes anonymous access (a public bucket serves
-`/object/public/...` without consulting RLS at all). But the app uses
-`getPublicUrl` for every attachment and stores that permanent URL on the row, so
-flipping the flag **breaks every attachment link in the product** until the code
-moves to signed URLs. Leak versus broken links is Marcus's call, and it is the
-only finding in this document where waiting is itself a decision.
+**Action — MITIGATED on dev (274). The real fix still needs a decision.**
+
+Setting `public = false` is the only thing that closes anonymous access — a
+public bucket serves `/object/public/...` without consulting RLS at all. The app
+calls `getPublicUrl` in six places and stores the permanent URL on the row, so
+flipping the flag breaks every attachment link until those move to signed URLs.
+That refactor is scoped but not written.
+
+What 274 *does* buy, and it is the difference between a leak and a catastrophe:
+
+| | before | after |
+|---|---|---|
+| anon lists the root | all 10 folders | **0** |
+| anon walks `bookings/` | 6 entity folders | **0** |
+| employee lists (the app needs this) | works | works |
+| employee deletes another dept's document | **succeeds** | **refused** |
+
+An attacker must now guess a UUID rather than read the index. Verified by probe,
+not by reading the policy.
+
+Applied through the Supabase migration runner rather than the repo helper —
+`storage.objects` is owned by `supabase_storage_admin`, so `clone_exec_sql`
+cannot alter it ("must be owner of relation objects"). Worth knowing before
+anyone tries to script a storage change.
+
+**PROD IS STILL OPEN.** The same two policies, the same 424 documents.
 
 ### M2 — Deleting a booking orphans its entire money trail · BUG (CRITICAL)
 The key delete probe, measured by census before and after:
