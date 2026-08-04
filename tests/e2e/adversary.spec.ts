@@ -147,8 +147,11 @@ const ID = {
   evD: `ev-adv-${stamp}-d`,
   billing: `bli-adv-${stamp}`,
   invoice: `inv-adv-${stamp}`,
+  foreignProject: `prj-adv-${stamp}-other`,
+  foreignBooking: `bk-adv-${stamp}-other`,
 };
 const PROJECT_NUMBER = `PRJ-ADV-${String(stamp).slice(-6)}`;
+const FOREIGN_PROJECT_NUMBER = `PRJ-ADV-${String(stamp).slice(-6)}-X`;
 const BOOKING_NUMBER = `ADV${String(stamp).slice(-8)}`;
 const users: Record<ActorKey, { id: string; name: string; department: string }> = {} as never;
 
@@ -204,6 +207,25 @@ test.beforeAll(async () => {
     booking_id: ID.booking, catalog_item_id: CATALOG_EXPENSE_ITEM,
   });
 
+  // A SECOND customer's job, so the cross-tenant probes have somewhere wrong to
+  // point. Tenancy in this system is denormalised (customer_id / customer_name /
+  // project_number / booking_id), so the foreign job carries all of them.
+  await ins("projects", {
+    id: ID.foreignProject, project_number: FOREIGN_PROJECT_NUMBER,
+    customer_name: `${TAG} OTHER CUSTOMER`,
+    status: "Active", service_type: "Forwarding", created_by: users.pricingMgr.id,
+  });
+  await ins("bookings", {
+    id: ID.foreignBooking, booking_number: `${BOOKING_NUMBER}-X`,
+    name: `${TAG} FOREIGN ${stamp}`, service_type: "Forwarding",
+    // No project_id and no customer_id — deliberately the shape that used to
+    // slip through: 230 of 239 dev bookings look exactly like this, and the old
+    // guard's `IS NOT NULL AND` evaporated for every one of them. The tenancy
+    // link therefore has to be established from customer_name or not at all.
+    project_id: null, customer_name: `${TAG} OTHER CUSTOMER`,
+    status: "Created", created_by: users.pricingMgr.id,
+  });
+
   await ins("billing_line_items", {
     id: ID.billing, description: `${TAG} CRATING FEE`, amount: 25000, currency: "PHP",
     status: "unbilled", service_type: "Forwarding", booking_id: ID.booking,
@@ -230,8 +252,9 @@ test.afterAll(async () => {
   await admin.from("evoucher_history").delete().in("evoucher_id", evIds);
   await admin.from("evoucher_line_items").delete().in("evoucher_id", evIds);
   await admin.from("evouchers").delete().in("id", evIds);
-  await admin.from("bookings").delete().eq("id", ID.booking);
-  await admin.from("projects").delete().eq("id", ID.project);
+  await admin.from("billing_line_items").delete().eq("booking_id", ID.foreignBooking);
+  await admin.from("bookings").delete().in("id", [ID.booking, ID.foreignBooking]);
+  await admin.from("projects").delete().in("id", [ID.project, ID.foreignProject]);
 
   const width = Math.max(...results.map((r) => r.probe.length));
   const lines = results.map((r) =>
@@ -705,5 +728,188 @@ test("F3 anon cannot read the tables directly", async () => {
     note: "RLS holds against anon — SECURITY DEFINER functions are the way past it",
   });
   expect(data?.length ?? 0).toBe(0);
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// J. The holes the recon found in the same day's fixes
+// ═════════════════════════════════════════════════════════════════════════════
+
+test("J1 the tenancy guard fires when the booking has no project link", async () => {
+  // Migration 271 fixed the AUTHORIZATION guard at the top of this function.
+  // Six lines below it sat the cross-customer guard, carrying the same shape:
+  //
+  //   IF v_booking_project_id IS NOT NULL AND v_booking_project_id <> v_project_id
+  //
+  // 230 of 239 dev bookings have project_id NULL, so the AND short-circuited and
+  // the tenancy check never fired. H2 was `NULL NOT IN (...)`; this was
+  // `NULL IS NOT NULL AND ...`. Both read as a check; neither ran.
+  //
+  // 273 makes the guard FAIL CLOSED: project link, else customer id, else
+  // normalised customer name, else refuse. The fixture's foreign booking has no
+  // project_id — exactly the row that used to slip through.
+  const probeDescription = `${TAG} CROSS-TENANT PROBE`;
+  await writeProbe({
+    probe: "J1 post revenue to another customer's booking",
+    actor: "treasury",
+    want: "BLOCKED_LOUD",
+    note: "J1 fixed (273) — the guard no longer evaporates when project_id is NULL",
+    attempt: (db) => db.rpc("send_billing_items_to_booking", {
+      p_booking_id: ID.foreignBooking,          // customer B's booking
+      p_project_number: PROJECT_NUMBER,         // customer A's project
+      p_items: [{
+        id: "virtual-cross-tenant", is_virtual: true,
+        description: probeDescription, amount: 250000, currency: "PHP",
+      }],
+    }),
+    changed: async () => {
+      const { data } = await admin
+        .from("billing_line_items").select("id").eq("description", probeDescription);
+      if ((data?.length ?? 0) > 0) {
+        await admin.from("billing_line_items").delete().eq("description", probeDescription);
+        return true;
+      }
+      return false;
+    },
+  });
+});
+
+test("J1b the same call still works within one customer", async () => {
+  // Positive control. A fail-closed guard is easy to write and easy to make
+  // useless — this proves the legitimate path is untouched.
+  const okDescription = `${TAG} SAME-TENANT PROBE`;
+  const db = await as("treasury");
+  const { error } = await db.rpc("send_billing_items_to_booking", {
+    p_booking_id: ID.booking,
+    p_project_number: PROJECT_NUMBER,
+    p_items: [{
+      id: "virtual-same-tenant", is_virtual: true,
+      description: okDescription, amount: 1, currency: "PHP",
+    }],
+  });
+  const { data } = await admin
+    .from("billing_line_items").select("id").eq("description", okDescription);
+  const landed = (data?.length ?? 0) > 0;
+  results.push({
+    probe: "J1b same-customer send still works", actor: "treasury",
+    got: landed ? "BREACH" : "BLOCKED_LOUD", want: "BREACH",
+    note: "positive control — BREACH here means the legal path survived the fix",
+  });
+  await admin.from("billing_line_items").delete().eq("description", okDescription);
+  expect(error, "the J1 fix broke the legitimate same-customer path").toBeNull();
+  expect(landed).toBe(true);
+});
+
+test("J2 the requestor cannot re-route her own approval", async () => {
+  // Migration 270 froze `status` and left the fields that DECIDE status's route.
+  // evoucher_transition compares
+  //   COALESCE(pending_approver_department, details->>'requestor_department')
+  // to the caller's department, and the owner branch of evouchers_update placed
+  // no column restriction — so the requestor could null the first, set the
+  // second to her own department, and have her own manager approve the spend
+  // that the routing rule exists to keep at arm's length.
+  //
+  // A lock on the door beside an open window. 273 widens the guard to the fields
+  // that decide the route.
+  await writeProbe({
+    probe: "J2 re-point the approver department",
+    actor: "ops",
+    want: "BLOCKED_LOUD",
+    note: "J2 fixed (273) — routing columns are Accounting's, not the requestor's",
+    attempt: (db) => db.from("evouchers")
+      .update({ pending_approver_department: "Operations" }).eq("id", ID.evA),
+    changed: () => fieldIs("evouchers", ID.evA, "pending_approver_department", "Operations"),
+  });
+});
+
+test("J2b the requestor cannot rewrite the routing fallback in details", async () => {
+  // The JSONB half of the same hole: with pending_approver_department nulled,
+  // details->>'requestor_department' is what the COALESCE falls back to.
+  const db = await as("ops");
+  const { data: before } = await admin
+    .from("evouchers").select("details").eq("id", ID.evA).maybeSingle();
+  // "Executive", not "Operations": the fixture's requestor IS Operations, so
+  // writing that value back is not a change and the guard correctly ignores it.
+  // The probe has to attempt a real rewrite — and Executive is the valuable one,
+  // since resolveSubmitTarget sends Executive requestors straight past both
+  // approval steps to pending_accounting.
+  const details = { ...(before?.details as Record<string, unknown>), requestor_department: "Executive" };
+  await writeProbe({
+    probe: "J2b rewrite details.requestor_department",
+    actor: "ops",
+    want: "BLOCKED_LOUD",
+    note: "J2 fixed (273) — the routing fallback is a fact, not an editable field",
+    attempt: (d) => d.from("evouchers").update({ details }).eq("id", ID.evA),
+    changed: async () => {
+      const { data } = await admin
+        .from("evouchers").select("details").eq("id", ID.evA).maybeSingle();
+      return (data?.details as Record<string, string> | null)?.requestor_department === "Executive";
+    },
+  });
+  expect(db).toBeTruthy();
+});
+
+test("J2c the requestor cannot appoint a cash receiver", async () => {
+  // cash_receiver_id is a skeleton key — whoever is named gets read visibility,
+  // UPDATE on every column but status, and the right to walk the liquidation
+  // edge. It sits in both USING and WITH CHECK, so the holder can keep it.
+  // Naming one is Treasury's act, at payout.
+  const { data: before } = await admin
+    .from("evouchers").select("details").eq("id", ID.evA).maybeSingle();
+  const details = { ...(before?.details as Record<string, unknown>), cash_receiver_id: users.ops.id };
+  await writeProbe({
+    probe: "J2c self-appoint as cash receiver",
+    actor: "ops",
+    want: "BLOCKED_LOUD",
+    note: "J2 fixed (273) — only acct_evouchers:disburse may name the receiver",
+    attempt: (d) => d.from("evouchers").update({ details }).eq("id", ID.evA),
+    changed: async () => {
+      const { data } = await admin
+        .from("evouchers").select("details").eq("id", ID.evA).maybeSingle();
+      return (data?.details as Record<string, string> | null)?.cash_receiver_id === users.ops.id;
+    },
+  });
+});
+
+test("J2d the requestor cannot flip the billable flag", async () => {
+  // Flipping is_billable fires ensure_billable_expense_billing_item, a SECURITY
+  // DEFINER writer that mints a customer-facing revenue line on the linked
+  // booking — bypassing the billings policies entirely, with no catalog item.
+  // A user with NO billings grant could plant a billable charge through the
+  // expense side.
+  const { data: before } = await admin
+    .from("evouchers").select("details").eq("id", ID.evA).maybeSingle();
+  const details = { ...(before?.details as Record<string, unknown>), is_billable: true };
+  await writeProbe({
+    probe: "J2d flip details.is_billable",
+    actor: "ops",
+    want: "BLOCKED_LOUD",
+    note: "J2 fixed (273) — the flag that mints revenue is set at creation or not at all",
+    attempt: (d) => d.from("evouchers").update({ details }).eq("id", ID.evA),
+    changed: async () => {
+      const { data } = await admin
+        .from("evouchers").select("details").eq("id", ID.evA).maybeSingle();
+      return (data?.details as Record<string, unknown> | null)?.is_billable === true;
+    },
+  });
+});
+
+test("J2e Treasury CAN still name the cash receiver", async () => {
+  // Positive control for the whole J2 guard: the disbursement flow names a cash
+  // receiver on every advance, and it has to keep working.
+  const { data: before } = await admin
+    .from("evouchers").select("details").eq("id", ID.evB).maybeSingle();
+  const details = { ...(before?.details as Record<string, unknown>), cash_receiver_id: users.ops.id };
+  const db = await as("treasury");
+  const { error } = await db.from("evouchers").update({ details }).eq("id", ID.evB);
+  const { data: after } = await admin
+    .from("evouchers").select("details").eq("id", ID.evB).maybeSingle();
+  const landed = (after?.details as Record<string, string> | null)?.cash_receiver_id === users.ops.id;
+  results.push({
+    probe: "J2e Treasury names the receiver", actor: "treasury",
+    got: landed ? "BREACH" : "BLOCKED_LOUD", want: "BREACH",
+    note: "positive control — the disbursement flow must survive the J2 guard",
+  });
+  expect(error, "the J2 guard broke Treasury's disbursement flow").toBeNull();
+  expect(landed).toBe(true);
 });
 

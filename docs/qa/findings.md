@@ -766,7 +766,7 @@ machine-readable spec is `docs/qa/adversary/phase1-spec.json`.
 Three new bugs, **two of them inside fixes shipped the same day**. Both fixes
 were real; both were narrower than the problem.
 
-### J1 — `send_billing_items_to_booking` still carries the H2 shape · BUG
+### J1 — `send_billing_items_to_booking` still carried the H2 shape · FIXED (273, dev)
 Migration 271 fixed the authorization guard at the top of this function. Six
 lines below it, the cross-customer guard reads
 `IF v_booking_project_id IS NOT NULL AND v_booking_project_id <> v_project_id`.
@@ -778,11 +778,16 @@ SECURITY DEFINER function with RLS off.
 H2 was `NULL NOT IN (...)`. This is `NULL IS NOT NULL AND ...`. Same family, same
 function, survived the migration that hardened it.
 
-**Action.** Compare on `project_number` (populated) or require the booking to
-resolve to a project. Positive control: one of the 9 bookings that does carry
-`project_id` should raise today.
+**Action — done (273).** The guard now FAILS CLOSED rather than patching the
+instance: project link if there is one, else `customer_id`, else a normalised
+`customer_name`, else refuse outright. If the relationship cannot be
+established, no money moves.
 
-### J2 — 270 froze `status` and left the fields that decide its route · BUG
+Pinned as probes J1 (cross-customer post → BLOCKED_LOUD, on a booking with no
+`project_id`, which is the shape 230 of 239 dev bookings have) and J1b (the
+same-customer call still works).
+
+### J2 — 270 froze `status` and left the fields that decide its route · FIXED (273, dev)
 `evoucher_transition` routes on
 `COALESCE(pending_approver_department, details->>'requestor_department')`. Both
 are owner-writable: the `evouchers_update` owner branch has no column
@@ -800,8 +805,27 @@ Two neighbours on the same row:
   customer-facing revenue line bypassing the billings policies, with
   `catalog_item_id` NULL. **No billings grant required.**
 
-**Action.** Extend the 270 guard to the five fields that decide routing and
-authority, not just `status`.
+**Action — done (273).** `guard_evoucher_status_change` is replaced by
+`guard_evoucher_privileged_fields`, which freezes the whole set:
+
+| field | rule |
+|---|---|
+| `status` | only through `evoucher_transition()` (270) |
+| `pending_approver_department` / `_role` | Accounting only (`acct_evouchers:approve` or `:disburse`) |
+| `details.requestor_department` | immutable — a fact about who raised it |
+| `details.is_billable` | immutable — set at creation or not at all |
+| `details.cash_receiver_id` | Treasury only (`acct_evouchers:disburse`) |
+
+Pinned as J2, J2b, J2c, J2d — all BLOCKED_LOUD — plus J2e, the positive control
+proving Treasury can still name a cash receiver at payout, which is the one
+legitimate write in that set.
+
+**One probe was wrong before the guard was.** J2b initially read BREACH because
+it wrote `requestor_department: "Operations"` onto a voucher whose requestor is
+already Operations — not a change, so the guard correctly ignored it. The probe
+now attempts `"Executive"`, which is also the valuable target:
+`resolveSubmitTarget` sends Executive requestors straight past both approval
+steps to `pending_accounting`.
 
 ### J3 — Tenancy is a convention, not a boundary · BUG (structural)
 No RLS policy on `billing_line_items`, `evouchers`, `evoucher_line_items`,
