@@ -851,3 +851,57 @@ one — `evouchers` has 9 live values against 26 in code.
 **Action.** The 270 pattern generalises. Do it per table, worst first, once the
 state-transition matrix says which orderings are actually reachable.
 
+---
+
+## K. Found in the test harness itself
+
+Two of these cost real time and one nearly shipped a false all-clear. They are
+recorded here because a probe that lies is worse than no probe: it produces
+confidence, and confidence is the thing this whole effort exists to earn.
+
+### K1 — A denied SELECT does not error, so the read matrix measured nothing · FIXED
+The first run of `tests/e2e/matrix.spec.ts` reported **3,684 cells, 0
+unexpected**. It looked like a clean sweep. 1,116 of those cells — the entire
+read matrix — measured nothing at all.
+
+PostgREST answers a policy-denied `SELECT` with **HTTP 200 and an empty set**,
+not an error. Verified directly: an anonymous client selecting from `evouchers`,
+which every policy denies, gets `error: null, count: 0`. The harness read "no
+error" as "allowed", so every cell recorded `allow`, and every assertion that
+happened to expect `allow` passed.
+
+**Zero unexpected across a thousand cells is what a broken probe looks like from
+the outside.** It is indistinguishable from success, and it arrives with a number
+attached, which makes it more convincing than a vague result.
+
+**Action — done.** Read visibility is now measured against what service-role can
+see: rows visible → allow; none visible where service-role sees some → deny;
+table empty on dev → **unanswerable**, recorded and excluded rather than counted
+as a pass. That third bucket matters — without it, every empty table would have
+padded the pass count.
+
+### K2 — A no-op write reads as a breach · FIXED
+Adversary probe J2b reported BREACH against a guard that was working correctly.
+It attempted to set `details.requestor_department` to `"Operations"` on a voucher
+whose requestor was already Operations. Not a change, so the trigger correctly
+ignored it, the write succeeded, and the checker read the value back and called
+it a hole.
+
+At hand-written scale this is one confusing hour. At generated scale — thousands
+of probes writing values that may already be present — it manufactures findings
+in bulk.
+
+**Action — done.** Every write probe now asserts a value the row does not
+already hold, and the move matrix skips `from === to` outright. The rule is
+stated at the top of `matrix.spec.ts` so the next generator inherits it.
+
+### K3 — A failed login reads as "denied everywhere" · MITIGATED
+Three of the twelve roster accounts had not signed in for months
+(`hrmanager@` never). If any of them failed to authenticate, every cell in their
+row would record `deny` and the matrix would report a wall of findings that are
+really one dead password.
+
+**Action — done.** `matrix.spec.ts` signs the whole roster in during
+`beforeAll` and **aborts the run** listing every failure, rather than proceeding
+with a partial roster. A missing actor is a broken run, not a quiet gap.
+
