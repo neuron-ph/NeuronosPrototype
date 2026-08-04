@@ -1105,7 +1105,7 @@ anyone tries to script a storage change.
 
 **PROD IS STILL OPEN.** The same two policies, the same 424 documents.
 
-### M2 — Deleting a booking orphans its entire money trail · BUG (CRITICAL)
+### M2 — Deleting a booking orphans its entire money trail · FIXED (275, dev)
 The key delete probe, measured by census before and after:
 
 | table | before | after |
@@ -1169,7 +1169,7 @@ no-token/wrong-role call would do, and whether it is safe to probe) is in
 The last two passes. One found the worst privilege hole in the system; the other
 found almost nothing, which is itself the result.
 
-### N1 — A Business Development manager can mint a super-admin · BUG (CRITICAL)
+### N1 — A Business Development manager can mint a super-admin · FIXED (dev, create-user v14)
 `create-user` reads `role`, `department` and `access_profile_id` **straight from
 the request body**, and nothing caps the new user's authority against the
 caller's own.
@@ -1196,7 +1196,7 @@ JSON. Related latent bug: the fallback-profile selector orders
 profile sorts ahead of a department-specific one — the opposite of the evident
 intent.
 
-### N2 — `resetPassword` is account takeover behind a checkbox labelled "edit" · BUG (CRITICAL)
+### N2 — `resetPassword` is account takeover behind a checkbox labelled "edit" · FIXED (dev, admin-user-actions v7)
 `ACTION_TO_GRANT` maps `resetPassword` to the coarse `edit` grant, and the only
 relationship guard in the whole file (`userId === callerProfile.id`) defends
 `deleteUser` **only**. `resetPassword` and `updateStatus` have no target check at
@@ -1216,7 +1216,7 @@ organisation, silently"*.
 **Action.** Account takeover needs its own grant key, a target scope, and an
 audit row. Three separate gaps, one checkbox.
 
-### N3 — `send-feedback-email` has no auth guard at all · BUG (HIGH)
+### N3 — `send-feedback-email` has no auth guard at all · FIXED (dev, v4)
 Not an evaporating check like H2 — the `Authorization` header is simply never
 read. Confirmed reachable by an anonymous caller with no header at all.
 
@@ -1232,7 +1232,7 @@ human mailbox, and that is outward-facing.
 **Action.** Read the header and verify the JWT like the other two functions do,
 and escape the interpolated fields.
 
-### N4 — `deleteUser` is not atomic · BUG (HIGH)
+### N4 — `deleteUser` is not atomic · FIXED (dev, admin-user-actions v7)
 It deletes `public.users` first, **ignores the result**, then deletes the auth
 account. A failure between the two strands an auth account with no profile that
 409s forever on re-create. The happy path was observed; the stranding is reasoned
@@ -1447,4 +1447,38 @@ Worth reading before anyone panics about the list above.
 - **A client-rejected quotation is genuinely terminal**, guarded by absence of
   affordance rather than a validation message — the only kind of guard a hurried
   person cannot argue with.
+
+---
+
+## Wave 0 — what was fixed, and how it was verified
+
+Marcus's call: fix the criticals before finding more. Dev only; **prod carries
+every one of these and has had none of them.**
+
+| finding | fix | verified by |
+|---|---|---|
+| **M1** storage | mitigated — anon can no longer list; writes scoped to the uploader | anon root listing 10 folders → **0**; employee delete of a foreign doc **refused** |
+| **L1** billable expense | trigger falls back to the line items and heals the header; client derives it too | measured first — the damage was 1 row, not a bleed |
+| **N1** escalation | a caller may not create above their own rank, nor outside their department, nor assign a profile more senior than theirs | bd@ role=executive → **403**; bd@ role=staff in his own dept → **200**, then cleaned |
+| **N2** takeover | every action target-scoped through one shared rule, plus an audit row | bd@ → Executive: refused *"more senior than your own"*; bd@ → Accounting: refused *"only your own department"* |
+| **N3** open mailer | reads and verifies the Authorization header; every interpolated field escaped | no header → **401**; garbage bearer → **401**; no email sent |
+| **N4** non-atomic delete | auth account deleted first, profile only if that succeeded | reasoned + deployed |
+| **M2** deletes | booking/invoice FK edges `ON DELETE RESTRICT`; delete policies consult status and children | disbursed voucher, invoiced line, invoice-with-collection, booking-carrying-the-lot — **all four refused, zero orphans** |
+
+**One rule shared, not two written.** `targetScope.ts` is used by both admin
+functions on purpose. They had already drifted apart once on how they resolve
+grants — `create-user` overlays the access profile, `admin-user-actions` reads the
+override alone — and a security rule implemented twice is a security rule
+implemented once and forgotten once.
+
+**Seniority is ranked the way the data models it, not the way the types claim.**
+`users.role` only ever holds staff / team_leader / manager; 'executive' exists in
+validation lists and in nobody's row. Rank therefore reads the DEPARTMENT too, or
+the CEO would sort as the peer of a pricing manager.
+
+**Two things deliberately left undone.** `resetPassword` still maps to the coarse
+`edit` grant — splitting it needs a new grant key and a seeding migration, and the
+damage is now bounded by scoping and the audit row. And the storage fix is a
+mitigation: only `public = false` closes anonymous reads, and that breaks every
+attachment link until the app moves off `getPublicUrl`.
 

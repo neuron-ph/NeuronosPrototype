@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 import { hasAdminUsersGrant } from "./adminUsersPermissions.ts";
+import { refuseTargetReason, rankOf } from "./targetScope.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -109,6 +110,14 @@ serve(async (req) => {
     };
     const canCreateUsers = hasAdminUsersGrant(callerModuleGrants, "create", "users");
 
+    // Parsed here rather than further down: the authority questions below have
+    // to be answered before anything else looks at this payload.
+    const {
+      name, email, password, department, role, team_id,
+      position, service_type, team_role, status, is_active,
+      access_profile_id,
+    } = await req.json();
+
     if (!canCreateUsers) {
       return new Response(
         JSON.stringify({ success: false, error: "You do not have permission to create users" }),
@@ -116,11 +125,25 @@ serve(async (req) => {
       );
     }
 
-    const {
-      name, email, password, department, role, team_id,
-      position, service_type, team_role, status, is_active,
-      access_profile_id,
-    } = await req.json();
+    // N1 — THE CEILING. Holding exec_users:create used to mean "create anyone",
+    // and `role` and `department` arrive in the request body. A Business
+    // Development manager called this with role="executive" and minted an
+    // account carrying 1,611 grants at visibility_scope 'all', with a password
+    // he chose, then signed into it. He did not escalate his own account; he
+    // built one above himself.
+    //
+    // Nobody may create an account more senior than their own, and nobody
+    // outside Executive may create outside their own department.
+    const ceilingRefusal = refuseTargetReason(
+      { role: callerProfile.role, department: callerProfile.department },
+      { role, department },
+    );
+    if (ceilingRefusal) {
+      return new Response(
+        JSON.stringify({ success: false, error: ceilingRefusal }),
+        { status: 403, headers: { ...cors, "Content-Type": "application/json" } }
+      );
+    }
 
     if (!name || !email || !password || !department || !role) {
       return new Response(
@@ -149,6 +172,27 @@ serve(async (req) => {
 
     // Validate access profile if provided
     let profileData: AccessProfileRow | null = null;
+    // The ceiling again, by the other door: the grant matrix is seeded from an
+    // access profile, so handing over a profile that TARGETS a more senior role
+    // is the same escalation wearing a different hat.
+    if (access_profile_id) {
+      const { data: requestedProfile } = await adminClient
+        .from("access_profiles")
+        .select("target_role, target_department")
+        .eq("id", access_profile_id)
+        .maybeSingle();
+      if (requestedProfile) {
+        const callerRank = rankOf(callerProfile.role, callerProfile.department);
+        const profileRank = rankOf(requestedProfile.target_role, requestedProfile.target_department);
+        if (profileRank > callerRank) {
+          return new Response(
+            JSON.stringify({ success: false, error: "You cannot assign an access profile more senior than your own" }),
+            { status: 403, headers: { ...cors, "Content-Type": "application/json" } }
+          );
+        }
+      }
+    }
+
     if (access_profile_id) {
       const { data: profile, error: pfErr } = await adminClient
         .from("access_profiles")
