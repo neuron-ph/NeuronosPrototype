@@ -1482,3 +1482,165 @@ damage is now bounded by scoping and the audit row. And the storage fix is a
 mitigation: only `public = false` closes anonymous reads, and that breaks every
 attachment link until the app moves off `getPublicUrl`.
 
+---
+
+## P. Wave 1 — are the numbers right?
+
+Four agents recomputed every headline figure from source rows and diffed it
+against what the product reports. Detail in `docs/qa/adversary/wave1-numbers.json`.
+
+**73 figures checked. 42 agree. 31 do not. 55 discrepancies, 44 label problems.**
+
+This is the worst section in the register, and not because the bugs are more
+sophisticated — most are a column name that does not exist. It is the worst
+because **a wrong number has no error, no toast and no failed request. It is
+simply believed.** Every other finding in this document describes something
+someone *could* do. These describe what your reports are telling you today.
+
+### P1 — The Unbilled Revenue report shows ₱0.00. There is ₱2.8M unbilled · BUG (CRITICAL)
+`useUnbilledRevenueReport` selects three columns that do not exist —
+`billing_line_items.total_amount`, `invoices.invoice_type`,
+`invoices.reversal_for`. PostgREST returns **400 / 42703**, react-query yields
+`undefined`, the hook returns `rows: []`, and the component never reads `error`.
+
+The page renders *"No unbilled bookings this period."*
+
+Truth: **₱2,803,905.99 across 30 bookings.** The report is not wrong about a
+number — it is silently blank about its entire subject.
+
+### P2 — Four invoices worth ₱485,000 are invisible in every report · BUG (CRITICAL)
+`ACTIVE_INVOICE_STATUSES` is a hardcoded allow-list:
+`{draft, posted, approved, paid, open, partial, sent}`. Four dev invoices carry
+status **`Issued`** — not in the set, and there is no fallback branch.
+
+They vanish from the Sales Report, Booking Cash Flow, Receivables Aging and every
+Financials tab, in every scope.
+
+| figure | app says | truth |
+|---|---|---|
+| Total Billed | ₱141,121.60 | **₱626,121.60** |
+| Outstanding AR | ₱7,500.00 | **₱492,500.00** |
+| Collection Rate | 94.68% | **21.34%** |
+
+That last one is the shape of the danger: a healthy-looking 95% collection rate
+that is really 21%, because three-quarters of the receivable book is filtered out
+of both halves of the fraction.
+
+### P3 — Financial Health reports ₱0 cost and a 100% margin on every project · BUG (CRITICAL)
+`get_financial_health_summary` joins `billing_line_items.project_number` and
+`evouchers.project_number` to `projects.project_number`. Per finding L3 that
+column holds **booking numbers** — 83 of 88 non-empty billing values, and 249 of
+249 on e-vouchers.
+
+So: Total Billings ₱125,000 against a true ₱2,967,027.59 (**2.9% of the money**),
+Total Expenses **₱0.00** against ₱4.5M, and therefore a **100% gross margin on
+all five projects**, rendered green with an upward arrow.
+
+A report that says every project is perfectly profitable is worse than one that
+says nothing.
+
+### P4 — The Financials module is blank for 42 of 60 users · BUG (CRITICAL)
+`applyScope` filters on `created_by` / `assigned_to`. `billing_line_items` has
+**neither column**; invoices, collections and evouchers have `created_by` but no
+`assigned_to`. For any user whose financials dial is own/team/department, every
+one of the 16 KPIs reads ₱0.00 and all four tables are empty — **no error, no
+toast.**
+
+Forty-two of sixty dev users resolve to a breaking dial. They are not seeing a
+restricted view. They are seeing a working-looking view of nothing.
+
+### P5 — Expenses are 5× overstated; "Pending Approval" can never be non-zero · BUG (HIGH)
+The Expenses tab sums **all 267 e-vouchers at every lifecycle stage** —
+₱4,697,989.70 — including 227 unapproved *requests* (₱3.68M), 8 drafts and 2
+cancelled. Actually spent: **₱934,290.25**.
+
+Meanwhile the "Pending Approval" KPI tests `status === 'pending'`, which is not a
+value this system has ever written. It reads **0, "all clear"**, while 227
+vouchers worth ₱3.68M sit waiting.
+
+The same tab therefore counts pending vouchers as money spent *and* reports that
+nothing is pending.
+
+Related: the expense mapper reads `expense_category`, `request_date`,
+`total_amount`, `voucher_number` — **none of which exist on `evouchers`**. Every
+expense is dated when it was keyed, named by raw UUID, and filed under a single
+category called "General".
+
+### P6 — The cost filter names statuses that do not exist · BUG (CRITICAL)
+`['approved','posted','paid','partial']` appears in **five places**. Of those,
+only `posted` is a live e-voucher status. `disbursed` — cash actually out the
+door, ₱350,307.25 — is not in the list.
+
+Cost of Sales reads ₱360,743 against a true ₱727,050.25. **Half the cost is
+missing, so gross profit is overstated by exactly that much**, everywhere it
+appears.
+
+### P7 — The KPI engine scores an empty result set as perfect · BUG (CRITICAL)
+Zero-incident KPIs return `actual = 0` for an empty set, which the rating ladder
+reads as flawless. **33 of 39 people scored exactly 100.0 "Outstanding"** — on
+periods where they had no measurable activity at all. Twenty-two brokerage staff
+received 30 of their 100 points for "no demurrage due to internal fault" in a
+month when no charge lines existed.
+
+And the sign flips by KPI type: rate-based KPIs read the *same* empty set as
+`actual = 0` → **20.0 "Poor"**. Absence of evidence is being scored as evidence,
+in whichever direction the metric happens to point.
+
+Compounding it: `kpi_suggest_rating` awards rating 4 only on **exact** equality
+with 100, so a Pricing officer who is perfect on every KPI and exactly on quota
+tops out at **87.0** — "Outstanding" is unreachable through flawless execution on
+four of five scorecards. And 15 of 42 KPI definitions declare a `metric_key` with
+no resolver function behind it.
+
+### P8 — Multi-currency is wired but not connected · BUG (CRITICAL)
+Zero impact today — every live row is PHP at rate 1 — and a landmine the first
+time a USD invoice is raised.
+
+- **`InvoiceBuilder` defaults `exchangeRate` to 1 and never consults
+  `exchange_rates`.** A USD 10,000 invoice saves `base_amount = 10,000` instead
+  of 580,000 at the rate on file. Every downstream aggregate trusts
+  `base_amount`, so the error propagates everywhere silently.
+- `send_billing_items_to_booking()` defaults a missing foreign rate to 1, where
+  the TypeScript equivalent throws.
+- The P&L trend chart and the expense tile bypass `base_amount` entirely — a USD
+  bar would plot at 1/58 of its height, with no number beside it to sanity-check.
+- Six of seven selectable currencies have **no rate on file at all**, and the
+  precise error explaining that is swallowed by `.catch(() => undefined)`.
+- Realized FX gain/loss account codes are declared and **never posted anywhere**.
+- The collection panel hardcodes `₱` on six figures while offering a currency
+  selector.
+
+### P9 — Time, scope and status: the quieter arithmetic · BUG (HIGH)
+- **Receivables Aging filters invoices by `created_at` within the selected
+  period.** An aging report scoped to issue date structurally cannot populate its
+  own 61-90 and 91+ buckets. Under "This Month" the 41-day-overdue invoice
+  vanishes.
+- **Invoice balances are computed from date-scoped collections**, so narrowing the
+  window makes a paid invoice read OVERDUE with its full balance.
+- **Draft and void invoices count as receivable** on the dashboard — ₱36,000 of
+  never-issued drafts in Outstanding, and a ₱123,000 void document that
+  FinancialsModule excludes and the dashboard does not. **The same figure differs
+  by ₱123,000 between two screens.**
+- **Collections are fetched with a `.gte` and no `.lte`** — every scope leaks
+  payments from after the period end.
+- **Financial Health compares a Manila-clock month against a UTC `to_char`** —
+  eight hours a day where the two disagree — and applies no date filter to the
+  billings at all, so a project created in August accumulates billings forever
+  and they all land in the August column.
+
+### What this changes about the plan
+
+Sections G through O describe things people *could* do to your data. **P
+describes what your reports are saying right now.** If someone priced a job,
+chased a receivable or rated an employee off these screens this quarter, they did
+it on the wrong number.
+
+Most of these are not deep. `Issued` missing from a list. A column that does not
+exist. A filter naming statuses nobody writes. That is what makes them tractable
+— and it is also why they survived: nothing errors, so nothing drew attention.
+
+**Recommended order:** P1, P2, P4 and P6 are small edits with the widest blast
+radius. P3 waits on the L3 decision (the `project_number` column). P7 needs a
+product call — what *should* an unmeasurable period score? — and until then the
+scorecards should not be shown to anyone.
+
