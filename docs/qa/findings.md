@@ -14,8 +14,8 @@ Started 2026-08-03.
 
 ## Where the register stands
 
-**111 findings across 17 passes. 32 fixed and verified on `dev`, 4 mitigated,
-42 still open as bugs, 12 on watch.** Nothing is fixed on prod — see the gate
+**118 findings across 18 passes. 32 fixed and verified on `dev`, 4 mitigated,
+47 still open as bugs, 13 on watch.** Nothing is fixed on prod — see the gate
 at the bottom of Wave 0.
 
 | § | pass | n | still open |
@@ -36,6 +36,7 @@ at the bottom of Wave 0.
 | [P](#p-wave-1--are-the-numbers-right) | **Wave 1 — are the numbers right?** | 10 | 9 |
 | [Q](#q-wave-2--the-documents-that-leave-the-building) | **Wave 2 — the documents that leave the building** | 9 | 7 |
 | [R](#r-wave-3--contracts-and-the-other-service-lines) | **Wave 3 — contracts and the other service lines** | 6 | 5 |
+| [S](#s-wave-4--notifications-the-inbox-tickets-and-approval-routing) | **Wave 4 — notifications, inbox, tickets, routing** | 7 | 5 |
 
 Sections A–O answer *what could someone do to the data*. **P answers *what are
 the screens saying today*** — the only pass where the damage does not require
@@ -2052,4 +2053,191 @@ the company to a rate it no longer honours. R5 next, as two NOT NULL
 constraints *after* deciding what to do with the 197 rows that would violate
 them (that decision is yours; I have not touched data). R3 is a scoping clause.
 R1 is one line. R4 is a matrix change, not a code change.
+
+---
+
+## S. Wave 4 — notifications, the inbox, tickets and approval routing
+
+The question for this pass: **when the system needs to tell someone something,
+does the message reach a person who can act on it — and does acting on it do
+anything?**
+
+Unlike Trucking in Wave 3, this surface is genuinely exercised: 1,874
+notification events, 8,021 recipient rows, 1,487 tickets, 1,560 messages. There
+is plenty here to be wrong.
+
+Seven findings, two of them good news.
+
+### S1 — Every notification badge is inflated, and nothing can ever correct it · BUG (HIGH)
+`notification_counters` is a denormalized per-user × module × sub-section unread
+count. I recomputed all 196 buckets from `notification_recipients` where
+`read_at is null`, matching the trigger's own two-level scheme (a module roll-up
+stored under `sub_section = ''`, plus one row per real sub-section):
+
+| | |
+|---|---|
+| buckets | 196 |
+| **agree** | **11** |
+| **disagree** | **185 (94%)** |
+| counter total | **30,756** |
+| true unread | **16,042** |
+| worst single overstatement | **+356** |
+| worst understatement | **0** |
+
+**The counters are 92% too high, and they never run low — only high.**
+
+What makes this permanent rather than transient: the trigger
+`_on_recipient_change` is *correct*. It increments on insert, decrements on
+read, re-increments on unread, decrements on delete, symmetrically. So the drift
+did not come from the logic that is there now — and **there is no reconciliation
+path at all.** I searched for it: no function matching `%rebuild%`,
+`%reconcile%` or `%recount%` exists, and no job recomputes the table.
+
+Whatever caused the divergence — an earlier trigger version, a seeding script,
+a backfill — the counters have no way back. They are a running total that has
+been wrong since some past event and will stay wrong forever.
+
+A badge that says 356 when 0 items are waiting trains people to ignore badges.
+That is the actual cost: not the number, the habit it creates.
+
+### S2 — 79% of resolvable tickets name an action the executor does not handle · BUG (HIGH)
+`executeResolutionAction()` is a `switch` with exactly **two** live cases:
+`set_quotation_priced` and `set_booking_billed`. Everything else hits
+`default:` → `console.warn` → **nothing**.
+
+| `resolution_action` | tickets | already resolved | handler |
+|---|---|---|---|
+| `set_quotation_pricing_in_progress` | **159** | 4 | falls through — no-op |
+| `set_quotation_priced` | 37 | 11 | handled |
+| `set_booking_billed` | 5 | 0 | handled |
+| `mark_collection_gl_posted` | **2** | 0 | falls through — no-op |
+
+**161 of 203 tickets carrying a resolution action (79%) will do nothing when
+resolved.** Four of them have already been marked resolved: someone clicked
+Done, a warning went to a console nobody reads, and the quotation never moved.
+
+Two different problems wearing the same shape:
+
+- `set_quotation_pricing_in_progress` was **deliberately** removed — the code
+  comment explains it wrote a non-canonical status that normalized back to
+  Draft, walking the quotation backwards. That was the right call. But 159 live
+  tickets still carry the string, and the UI gives no sign that resolving them
+  is inert.
+- `mark_collection_gl_posted` is not explained anywhere and appears in **no**
+  switch case and **no** grant map. It looks like a gap, not a decision.
+
+And the two compound, because of this:
+
+```ts
+const grants = RESOLUTION_ACTION_GRANTS[action];
+if (!grants) return true;        // unmapped action → permission check passes
+```
+
+**An action string the system does not recognise skips the permission check
+entirely and then does nothing.** Unknown means both "allowed" and "inert".
+
+### S3 — Accepting an approval ticket changes nothing but a badge · BUG (MEDIUM)
+Tickets have `approval_result`, `approval_decided_by`, `approval_decided_at`,
+and a ticket `type` of `approval`. Tracing every reader of those columns:
+they appear only in `ThreadDetailPanel` — once to decide whether to show the
+Accept/Decline buttons, once to write the answer back, and four times to paint
+a green or red badge.
+
+**No linked record is touched.** Accepting an approval on a ticket linked to a
+booking, invoice, collection, expense or quotation updates the ticket row and
+nothing else.
+
+Live impact today is small — only 2 approval-type tickets exist and neither has
+been decided (`approval_result` is null on all 1,487 rows). But the mechanism is
+presented to the user as an approval, and it is a comment with styling.
+
+### S4 — Anyone can post a ticket as anyone, including as the system · BUG (HIGH)
+```sql
+tickets_insert  [INSERT]  with_check: true
+```
+No column restrictions, and **no trigger on `tickets`** — I checked; the table
+has none. `created_by` and `auto_created` are ordinary client-supplied columns
+with nothing validating them.
+
+So an authenticated user can insert a ticket that claims to be from a colleague,
+or claims to be system-generated, linked to any record id they choose. It then
+lands in the recipients' inbox looking exactly like the real thing — and the
+"real thing" is the common case: **1,439 of 1,487 tickets are `auto_created`**,
+so that flag is precisely what a reader would rely on to trust a message.
+
+Contrast `tickets_update`, which is carefully written — creator, or a `to`
+participant, or an inbox edit/approve grant plus visibility. The insert side got
+none of that care.
+
+*Evidence note: this is confirmed from the policy, the absence of a trigger and
+the column defaults. I did not execute a forged insert against dev — the schema
+is conclusive and a live probe would have left debris in the inbox.*
+
+### S5 — The inbox does not empty · DIAGNOSTIC
+| | |
+|---|---|
+| tickets total | 1,487 |
+| **open** | **1,447 (97.3%)** |
+| archived | 38 (2.6%) |
+| auto-created | 1,439 |
+| `ticket_assignments` rows | **0** (while `AssignModal.tsx` exists) |
+| notification recipients with `read_at` set | **0 of 8,021** |
+
+Not one of 8,021 notification rows has ever been marked read. The read path is
+wired correctly — `mark_entity_read` and `mark_module_read` both exist in the
+database, both are called by `useNotifications` — so the most likely reading is
+that this data was seeded and the inbox was never opened, which makes it a
+**coverage gap rather than a defect**.
+
+But it does mean something QA should say plainly: **the read, archive and assign
+paths of the inbox have never been executed by anything — not a test, not a
+persona pass, not a seed.** S1's counter drift lives in exactly that unexercised
+territory, and `ticket_assignments` being empty while an assign modal ships is
+the same smell.
+
+### S6 — The routing engine works, and has two rules · WATCH
+The engine is sound: `resolveRouting` reads active rules by priority, first
+trigger match wins, returns null when nothing matches so the caller keeps its
+own default. Rules are data, exactly as the architecture intended.
+
+There are **two rows**:
+
+| domain | trigger | authority | priority |
+|---|---|---|---|
+| evoucher | `{"booking_service_type": "Forwarding"}` | Pricing manager | 10 |
+| invoice | `{}` (matches everything) | Operations manager | 10 |
+
+The e-voucher rule fires only for **Forwarding — 20 of 243 bookings, 8%**.
+Brokerage (142) and Trucking (81) e-vouchers match no rule and fall back to
+hardcoded default authority. That is not a bug; it is the engine being switched
+on for one eighth of the traffic while the doctrine says routing should be
+declared, not derived.
+
+### S7 — The notification and routing permissions are correct · GOOD NEWS
+Worth recording, because this campaign has found the opposite so often:
+
+- RLS is enabled on all nine tables in this surface.
+- `notification_recipients` and `notification_counters` are strictly self-scoped
+  (`user_id = get_my_profile_id()`) on both SELECT and UPDATE, so you cannot
+  read or mark-read another person's notifications. `mark_module_read` takes a
+  `p_user_id` argument and is **not** SECURITY DEFINER — which reads like a hole
+  until you notice RLS makes it a no-op for anyone else's rows. That is the
+  right shape.
+- `notification_events` is readable only through a recipient row.
+- `routing_rules` write paths are all gated on `exec_profiling` create / edit /
+  delete. Only SELECT is open to any authenticated user, which is appropriate —
+  approval routing is not a secret.
+
+### What this pass says overall
+
+The plumbing is well built and the permissions are right. What is missing is the
+**far end of every wire**: a counter with no reconciler, a resolution action with
+no handler, an approval with no consequence, an assign modal with no rows.
+
+**Recommended order:** S2 first — 159 tickets that lie about doing something,
+and the `if (!grants) return true` line is a one-word fix. S1 next: it needs a
+reconciliation function, which is worth writing regardless of what caused the
+drift, because nothing else will ever repair the table. S4 is a `with_check`
+clause. S3 and S6 are product calls — should an approval ticket move the record,
+and should routing cover the other 92% of bookings.
 

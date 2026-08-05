@@ -1,0 +1,148 @@
+{
+  "pass": "wave-4",
+  "question": "When the system needs to tell someone something, does the message reach a person who can act on it — and does acting on it do anything?",
+  "date": "2026-08-06",
+  "environment": "dev (oqermaidggvanahumjmj)",
+  "surface_is_exercised": {
+    "notification_events": 1874,
+    "notification_recipients": 8021,
+    "notification_counters": 196,
+    "tickets": 1487,
+    "ticket_messages": 1560,
+    "ticket_participants": 2809,
+    "ticket_assignments": 0,
+    "routing_rules": 2,
+    "tasks": 4,
+    "memos": 2,
+    "feedback": 0,
+    "events_with_zero_recipients": 0,
+    "tickets_with_no_participants": 1
+  },
+
+  "findings": [
+    {
+      "id": "S1",
+      "severity": "HIGH",
+      "title": "Every notification badge is inflated, and nothing can ever correct it",
+      "method": "Recomputed all 196 counter buckets from notification_recipients where read_at is null, matching the trigger's own two-level scheme: a module roll-up stored under sub_section='' plus one row per real sub-section.",
+      "measured": {
+        "buckets": 196,
+        "agree": 11,
+        "disagree": 185,
+        "disagree_pct": 94,
+        "counter_total": 30756,
+        "true_unread_total": 16042,
+        "overstatement": 14714,
+        "overstatement_pct": 92,
+        "worst_single_overstatement": 356,
+        "worst_understatement": 0
+      },
+      "why_permanent": "The trigger _on_recipient_change is symmetric and correct — increments on insert, decrements on read, re-increments on unread, decrements on delete. The drift did not come from the logic now present, and no reconciliation path exists: no function matching %rebuild%, %reconcile% or %recount%, and no job recomputes the table.",
+      "cost": "A badge reading 356 against 0 waiting items trains people to ignore badges."
+    },
+    {
+      "id": "S2",
+      "severity": "HIGH",
+      "title": "79% of resolvable tickets name an action the executor does not handle",
+      "file": "src/utils/workflowTickets.ts:198-227",
+      "handled_cases": ["set_quotation_priced", "set_booking_billed"],
+      "measured": [
+        {"resolution_action": "set_quotation_pricing_in_progress", "tickets": 159, "already_resolved": 4, "handler": "falls through to no-op"},
+        {"resolution_action": "set_quotation_priced", "tickets": 37, "already_resolved": 11, "handler": "handled"},
+        {"resolution_action": "set_booking_billed", "tickets": 5, "already_resolved": 0, "handler": "handled"},
+        {"resolution_action": "mark_collection_gl_posted", "tickets": 2, "already_resolved": 0, "handler": "falls through to no-op"}
+      ],
+      "totals": {"tickets_with_resolution_action": 203, "inert": 161, "inert_pct": 79, "already_resolved_while_inert": 4},
+      "two_distinct_problems": {
+        "set_quotation_pricing_in_progress": "Deliberately removed — the code comment explains it wrote a non-canonical status that normalized back to Draft. Correct decision, but 159 live tickets still carry the string and the UI gives no sign that resolving them is inert.",
+        "mark_collection_gl_posted": "Appears in no switch case and no grant map, and is explained nowhere. Looks like a gap, not a decision."
+      },
+      "compounding_defect": {
+        "code": "const grants = RESOLUTION_ACTION_GRANTS[action]; if (!grants) return true;",
+        "effect": "An unrecognised action string skips the permission check entirely and then does nothing. Unknown means both 'allowed' and 'inert'."
+      }
+    },
+    {
+      "id": "S3",
+      "severity": "MEDIUM",
+      "title": "Accepting an approval ticket changes nothing but a badge",
+      "measured": {
+        "readers_of_approval_result": "ThreadDetailPanel only — button visibility, the write-back, and four badge-styling references",
+        "linked_records_updated": 0,
+        "approval_type_tickets": 2,
+        "tickets_with_approval_result_set": 0,
+        "linked_record_types_in_use": ["booking", "collection", "expense", "invoice", "quotation"]
+      },
+      "note": "Live impact today is small; the defect is that a styled comment is presented to the user as an approval."
+    },
+    {
+      "id": "S4",
+      "severity": "HIGH",
+      "title": "Anyone can post a ticket as anyone, including as the system",
+      "policy": "tickets_insert [INSERT] with_check: true",
+      "measured": {
+        "triggers_on_tickets": 0,
+        "created_by_validated": false,
+        "auto_created_validated": false,
+        "auto_created_tickets": 1439,
+        "total_tickets": 1487
+      },
+      "effect": "An authenticated user can insert a ticket claiming to be from a colleague or system-generated, linked to any record id, and it lands in recipients' inboxes indistinguishable from the real thing — and 97% of real tickets ARE auto-created, so that flag is what a reader would rely on.",
+      "contrast": "tickets_update is carefully written (creator, or a 'to' participant, or an inbox edit/approve grant plus visibility). The insert side got none of that care.",
+      "evidence_note": "Confirmed from the policy, the absence of any trigger, and the column defaults. No forged insert was executed against dev — the schema is conclusive and a live probe would have left debris in the inbox."
+    },
+    {
+      "id": "S5",
+      "severity": "DIAGNOSTIC",
+      "title": "The inbox does not empty — and its read/archive/assign paths have never run",
+      "measured": {
+        "tickets_open": 1447,
+        "tickets_open_pct": 97.3,
+        "tickets_archived": 38,
+        "ticket_assignments_rows": 0,
+        "assign_modal_ships": "src/components/inbox/AssignModal.tsx",
+        "notification_recipients_with_read_at": 0,
+        "notification_recipients_total": 8021
+      },
+      "fair_reading": "The read path is wired correctly — mark_entity_read and mark_module_read both exist in the database and both are called by useNotifications. The likeliest explanation is seeded data that was never opened, making this a coverage gap rather than a defect.",
+      "but": "It means the read, archive and assign paths have never been executed by a test, a persona pass or a seed — which is exactly the territory S1's counter drift lives in."
+    },
+    {
+      "id": "S6",
+      "severity": "WATCH",
+      "title": "The routing engine works, and has two rules",
+      "engine": "resolveRouting reads active rules by priority, first trigger match wins, returns null when nothing matches so the caller keeps its own default. Rules are data, as the architecture intended.",
+      "rules": [
+        {"domain": "evoucher", "trigger": {"booking_service_type": "Forwarding"}, "authority": {"role": "manager", "department": "Pricing"}, "priority": 10},
+        {"domain": "invoice", "trigger": {}, "authority": {"role": "manager", "department": "Operations"}, "priority": 10}
+      ],
+      "coverage": {"forwarding_bookings": 20, "total_bookings": 243, "pct": 8, "unmatched": "Brokerage (142) and Trucking (81) e-vouchers fall back to hardcoded default authority"},
+      "not_a_bug": "The engine is switched on for one eighth of the traffic while the doctrine says routing should be declared, not derived."
+    },
+    {
+      "id": "S7",
+      "severity": "GOOD NEWS",
+      "title": "The notification and routing permissions are correct",
+      "verified": [
+        "RLS enabled on all nine tables in this surface.",
+        "notification_recipients and notification_counters are strictly self-scoped (user_id = get_my_profile_id()) on both SELECT and UPDATE.",
+        "mark_module_read takes a p_user_id argument and is NOT SECURITY DEFINER — which looks like a hole until you notice RLS makes it a no-op against anyone else's rows. That is the right shape.",
+        "notification_events is readable only through a recipient row.",
+        "routing_rules INSERT/UPDATE/DELETE are all gated on exec_profiling create/edit/delete; only SELECT is open to authenticated users, which is appropriate."
+      ]
+    }
+  ],
+
+  "verdict": "The plumbing is well built and the permissions are right. What is missing is the far end of every wire: a counter with no reconciler, a resolution action with no handler, an approval with no consequence, an assign modal with no rows.",
+
+  "recommended_order": [
+    "S2 — 159 tickets that lie about doing something; the `if (!grants) return true` line is a one-word fix",
+    "S1 — needs a reconciliation function, worth writing regardless of what caused the drift because nothing else will ever repair the table",
+    "S4 — a with_check clause on tickets_insert",
+    "S3 — product call: should an approval ticket move the linked record?",
+    "S6 — product call: should routing cover the other 92% of bookings?"
+  ],
+
+  "no_code_changed": true,
+  "no_data_changed": true
+}
