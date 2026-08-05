@@ -14,9 +14,14 @@ Started 2026-08-03.
 
 ## Where the register stands
 
-**118 findings across 18 passes. 32 fixed and verified on `dev`, 4 mitigated,
-47 still open as bugs, 13 on watch.** Nothing is fixed on prod — see the gate
+**124 findings across 19 passes. 32 fixed and verified on `dev`, 4 mitigated,
+51 still open as bugs, 14 on watch.** Nothing is fixed on prod — see the gate
 at the bottom of Wave 0.
+
+> **T1 is live on production and needs no login.** `access_cascade_edges` has
+> RLS disabled and grants `anon` full INSERT / UPDATE / DELETE / TRUNCATE on the
+> 609 rules that drive permission cascade. Proven with an anonymous insert
+> against dev. It is two SQL statements to close, and prod needs your go-ahead.
 
 | § | pass | n | still open |
 |---|---|---|---|
@@ -37,6 +42,7 @@ at the bottom of Wave 0.
 | [Q](#q-wave-2--the-documents-that-leave-the-building) | **Wave 2 — the documents that leave the building** | 9 | 7 |
 | [R](#r-wave-3--contracts-and-the-other-service-lines) | **Wave 3 — contracts and the other service lines** | 6 | 5 |
 | [S](#s-wave-4--notifications-the-inbox-tickets-and-approval-routing) | **Wave 4 — notifications, inbox, tickets, routing** | 7 | 5 |
+| [T](#t-wave-5--access-configuration-hr-tasks-calendar-crm-profiling) | **Wave 5 — Access Config, HR, Calendar, CRM, Profiling** | 6 | 4 + **1 live prod breach** |
 
 Sections A–O answer *what could someone do to the data*. **P answers *what are
 the screens saying today*** — the only pass where the damage does not require
@@ -2240,4 +2246,182 @@ reconciliation function, which is worth writing regardless of what caused the
 drift, because nothing else will ever repair the table. S4 is a `with_check`
 clause. S3 and S6 are product calls — should an approval ticket move the record,
 and should routing cover the other 92% of bookings.
+
+---
+
+## T. Wave 5 — Access Configuration, HR, Tasks, Calendar, CRM, Profiling
+
+The last sweep: everything the earlier waves left alone. It found the single
+worst thing in this entire register, and it is live on production right now.
+
+### T1 — An anonymous stranger can rewrite your permission cascade · BREACH (CRITICAL — LIVE ON PROD)
+
+`public.access_cascade_edges` holds the 609 rules that decide which grants imply
+which other grants:
+
+```
+parent_key                  child_key
+acct_bookings:view      →   accounting_bookings_brokerage_tab:view
+acct_bookings:view      →   accounting_bookings_collections_tab:view
+...
+```
+
+| | |
+|---|---|
+| RLS | **disabled** |
+| policies | **0** |
+| `anon` privileges | **SELECT, INSERT, UPDATE, DELETE, TRUNCATE** |
+| `authenticated` privileges | SELECT, INSERT, UPDATE, DELETE, TRUNCATE |
+| rows | 609 |
+| **on prod** | **identical — RLS off, same anon grants, same 609 rows** |
+
+Every other table in this surface has RLS on. This one was missed.
+
+**Proven, not inferred.** Using nothing but the publishable anon key — no login,
+no session, no account:
+
+```
+--- ANON SELECT (dev) ---
+[{"parent_key":"acct_bookings:view","child_key":"accounting_bookings_brokerage_tab:view"}, ...]
+
+--- ANON INSERT (dev) ---
+[{"parent_key":"QA_PROBE_WAVE5:view","child_key":"QA_PROBE_WAVE5_CHILD:view"}]   ← accepted
+
+--- DELETE --- http=204      --- verify gone --- []
+```
+
+The probe row was removed immediately; dev is clean. **No write of any kind was
+made against prod** — the prod row above is a read-only check of RLS, grants and
+row count.
+
+**Why an editable lookup table is an escalation.** Migration 198 puts a
+`BEFORE INSERT OR UPDATE` trigger on both `permission_overrides` and
+`access_profiles`:
+
+```sql
+new.module_grants := public.materialize_grant_cascade(new.module_grants);
+```
+
+and that function reads this table — for every edge whose `parent_key` is
+present in the blob and whose `child_key` is absent, it **copies the parent's
+value onto the child**.
+
+So the attack is: insert one edge from a grant everybody already holds to a
+grant you want, then wait. The next time an administrator applies a profile or
+edits anyone's access — an ordinary, legitimate action — the cascade
+materializes the planted grant onto that user's row. Nothing in the audit trail
+shows an attacker; it shows an admin doing their job.
+
+Writing to `permission_overrides` directly still needs
+`current_user_can_manage_admin_users()`, so this is a *staged* escalation rather
+than a one-shot. That is the only thing keeping it from being instant.
+
+And there is a second, blunter vector: **`anon` holds TRUNCATE.** Emptying the
+table grants nothing, but it silently removes every cascade rule, so every
+subsequent profile application produces grants missing all their children.
+Users lose tabs one by one, and nobody would connect it to a lookup table
+nobody knew was writable.
+
+This is the same shape as the Wave 0 anon findings (H1/H2) — a table that was
+never meant to be reachable, reachable. It was not caught then because Wave 0
+swept the business tables; this one is infrastructure.
+
+**Fix: `alter table public.access_cascade_edges enable row level security;` plus
+`revoke all ... from anon, authenticated;`** — reads happen inside a SECURITY
+DEFINER function, so nothing legitimate needs direct access. Prod needs it too,
+and prod needs your say-so.
+
+### T2 — The entire HR module is a mockup · BUG (HIGH)
+Wave 2 found the payslip was mock (Q7). It is not just the payslip.
+
+| file | Supabase calls |
+|---|---|
+| `HR.tsx` | **0** |
+| `EmployeesList.tsx` | **0** |
+| `EmployeeProfileModal.tsx` | **0** |
+| `EmployeeFileModal.tsx` | **0** |
+| `EmployeeRosterExcel.tsx` | **0** |
+| `CreatePayrollModal.tsx` | **0** |
+| `PayrollDetailsModal.tsx` | **0** |
+| `PayrollPayslipsModal.tsx` | **0** |
+| `EditableTimekeepingCell.tsx` | **0** |
+
+**Nine files, zero database calls between them**, and no `employees`,
+`payroll`, `leave`, `attendance`, `salary` or `compensation` table exists in the
+schema to call. The roster, the profiles, the timekeeping grid, the payroll run
+and the payslips are all hardcoded fixtures.
+
+Four users hold the `hr` grant, so four people can open it and see invented
+employees presented as records.
+
+This is not a defect in the sense the rest of this document uses the word —
+nothing is computed wrongly, because nothing is computed. It is a demo shell
+mounted in a production navigation tree, and it should be behind a flag.
+
+### T3 — Calendar reminders are stored and never delivered · BUG (MEDIUM)
+33 rows in `calendar_event_reminders`, attached to 36 events, none orphaned —
+the data model is sound.
+
+There is **no delivery path**. No client code sends, fires or polls them; there
+is no Edge Function for it; and `pg_cron` is not installed on this project
+(established in Wave 4 while looking for contract expiry). A reminder is a row
+that nothing ever reads.
+
+### T4 — Built, mounted, never exercised · DIAGNOSTIC
+A pattern that recurs across this whole wave and the last one:
+
+| feature | UI that writes it | rows |
+|---|---|---|
+| CRM activities | **7 components** read/write `crm_activities` | **0** |
+| Calendar participants | invite UI in `CalendarModule` | **0** (36 events exist) |
+| Ticket assignments | `AssignModal.tsx` ships | **0** (Wave 4) |
+| Notification reads | `mark_entity_read` / `mark_module_read` wired | **0 of 8,021** (Wave 4) |
+
+Every one of these is plumbed correctly and has never run. `calendar` is granted
+to **all 60 users** and has produced zero participant rows.
+
+This is the honest headline of Wave 5: **the modules outside the money spine are
+not broken, they are untouched.** Which is also why nobody has found the bugs in
+them — including T1, which sat in an unexercised corner of the RBAC machinery.
+
+### T5 — The KPI tables barely exist · WATCH
+`kpi_definitions` 42 · `kpi_periods` **3** · `kpi_scores` **5**.
+
+Wave 1's P7 showed the engine scores an empty result set as perfect and hands
+out 100.0 "Outstanding". This is the other half of that picture: there is almost
+no stored scoring data for it to work from. The scorecards P7 warned about are
+computing from near-emptiness, which is exactly the condition that produces the
+false 100s.
+
+### T6 — Access Configuration is internally consistent · GOOD NEWS
+Two checks that came back clean, recorded because they were the ones most likely
+to be dirty:
+
+- **No orphan grant keys.** Every one of the 317 distinct doors granted to at
+  least one user is declared in `accessSchema.ts` / `permissionsConfig.ts`.
+  Nobody holds a grant for a door that no longer exists. (My first extraction
+  suggested 21 orphans; that was my regex missing the parent-module helper, not
+  a real gap — all 21 are declared.)
+- **The RBAC backup tables fail closed.**
+  `_rbac_backup_access_profiles` (56), `_rbac_backup_permission_overrides` (60)
+  and `permission_grant_archive` (56) all have RLS **enabled with zero
+  policies** — deny-all for everyone but service role. Historical snapshots of
+  the entire permission system, correctly sealed. That is the exact treatment
+  `access_cascade_edges` should have had.
+
+### What this pass says overall
+
+Wave 5 was supposed to be the quiet one — the leftovers after the money, the
+documents, the contracts and the messaging. Instead it found the only
+**unauthenticated write to production** in the whole campaign, sitting in a
+two-column lookup table that nobody thought of as data.
+
+The reason is the same reason the rest of this wave is mostly empty rows: **this
+territory has never been walked.** T1 has presumably been open since migration
+198 shipped, because nothing anyone did would ever have surfaced it.
+
+**Recommended order:** T1 immediately, on dev and then — with your explicit
+go-ahead — on prod, where it is live right now. It is two statements. Everything
+else here can wait: T2 behind a flag, T3 needs a delivery mechanism decision,
+T4 and T5 are coverage rather than defects.
 
