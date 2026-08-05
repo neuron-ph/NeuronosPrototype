@@ -14,8 +14,8 @@ Started 2026-08-03.
 
 ## Where the register stands
 
-**105 findings across 16 passes. 32 fixed and verified on `dev`, 4 mitigated,
-37 still open as bugs, 12 on watch.** Nothing is fixed on prod — see the gate
+**111 findings across 17 passes. 32 fixed and verified on `dev`, 4 mitigated,
+42 still open as bugs, 12 on watch.** Nothing is fixed on prod — see the gate
 at the bottom of Wave 0.
 
 | § | pass | n | still open |
@@ -35,12 +35,14 @@ at the bottom of Wave 0.
 | [O](#o-found-by-the-misuse-pass--the-careless-user) | misuse — the careless user | 12 | 10 |
 | [P](#p-wave-1--are-the-numbers-right) | **Wave 1 — are the numbers right?** | 10 | 9 |
 | [Q](#q-wave-2--the-documents-that-leave-the-building) | **Wave 2 — the documents that leave the building** | 9 | 7 |
+| [R](#r-wave-3--contracts-and-the-other-service-lines) | **Wave 3 — contracts and the other service lines** | 6 | 5 |
 
 Sections A–O answer *what could someone do to the data*. **P answers *what are
 the screens saying today*** — the only pass where the damage does not require
 anyone to do anything wrong. **Q follows the same numbers out of the door**, to
 the point where they stop being a screen and become a document a customer
-holds.
+holds. **R leaves Forwarding** — the 8% of traffic every test has walked — for
+contracts and the service lines that carry the other 92%.
 
 Three things need a decision from Marcus before their findings can move:
 **L3** (does `project_number` hold booking numbers on purpose — blocks P3),
@@ -1884,4 +1886,170 @@ someone decides whether `zone_a` or the columns are authoritative. Q1 needs a
 product call: should Company Settings drive the documents, or should the
 Settings page stop pretending it does? Q7 should be hidden behind a flag until
 payroll exists.
+
+---
+
+## R. Wave 3 — contracts and the other service lines
+
+Waves 1 and 2 followed the money. This one asks a different question: **the spine
+was proved on a Forwarding booking — does the rest of the business work?**
+
+It turns out Forwarding is the *smallest* service line on dev. Brokerage carries
+142 bookings and Trucking 81; Forwarding has 20. The line that every e2e test
+and every manual pass has exercised is 8% of the traffic.
+
+Six findings.
+
+### R0 — First, the honest correction: the other service lines are wired · GOOD NEWS
+Trucking shows **81 bookings, 0 billing lines, 0 e-vouchers, 1 invoice**, and
+that pattern looks damning until you read the code. Every service line has its
+own detail component (`BrokerageBookingDetails`, `TruckingBookingDetails`,
+`MarineInsuranceBookingDetails`, `OthersBookingDetails`,
+`forwarding/ForwardingBookingDetails`), and each one wires the same
+`UnifiedBillingsTab` / `UnifiedExpensesTab` / `UnifiedInvoicesTab` /
+`UnifiedCollectionsTab` with its own permission door.
+
+**The trucking accounting path is built and simply has not been walked.** That
+is missing test coverage, not a broken feature — worth stating plainly, because
+the empty columns invite the opposite conclusion.
+
+| service | bookings | with billing | with e-voucher | with invoice | contract-linked |
+|---|---|---|---|---|---|
+| Brokerage | 142 | 32 | 51 | 8 | 100 |
+| Trucking | 81 | **0** | **0** | 1 | 79 |
+| Forwarding | 20 | 5 | 4 | 6 | 3 |
+
+### R1 — The type filter hides every spot quotation · BUG (MEDIUM)
+`quotation_type` has **three** live values, not the two CLAUDE.md documents:
+`project` (263), `contract` (34), **`spot` (18)**.
+
+The list filter offers *All Types / Project / Contract*:
+
+```ts
+if (typeFilter === "Contract")      filtered = filter(t === "contract");
+else if (typeFilter === "Project")  filtered = filter(!t || t === "project");
+```
+
+`spot` matches neither branch. **All 18 spot quotations are reachable only when
+the filter is left on "All Types"** — narrow to either named type and they are
+gone, with no indication anything was dropped.
+
+### R2 — Contract expiry is a label nobody flips · BUG (HIGH)
+`ContractStatusSelector` declares five statuses — Draft, Active, Expiring,
+Expired, Renewed. Only two have ever been written: **Active and Draft**.
+
+There is **no trigger on `quotations` that touches contract status, and pg_cron
+is not installed.** Nothing moves a contract to Expired when its end date
+passes. `ContractsList` computes `daysRemaining <= 0 ? "Expired"` — but only as
+a display string; the stored status never changes.
+
+And the gate that decides whether a contract can back a new booking reads the
+label, never the date:
+
+```sql
+-- detect_active_contracts_for_customer
+where q.quotation_type = 'contract'
+  and q.contract_status in ('Active', 'Expiring')     -- no date comparison
+```
+
+Live on dev: **contract `CQ2605251999` ended 2026-05-01, is still marked Active,
+and is still offered for booking three months later.** `fetchFullContract` and
+`CreateBookingFromContractPanel` add no validity check of their own — I looked;
+there is no `contract_end_date` comparison anywhere in either path.
+
+A contract term that expires only if a human remembers to change a dropdown is
+not a term.
+
+### R3 — `get_contract_for_booking` ignores the visibility dial · BUG (HIGH)
+The customer-search RPC is properly scoped. Its by-id sibling is not:
+
+```sql
+create function get_contract_for_booking(p_contract_id text) ...
+  if not current_user_can_detect_contracts() then return null; end if;
+  select * into v_row from quotations
+   where id = p_contract_id and quotation_type = 'contract';
+  return to_jsonb(v_row);          -- the whole row
+```
+
+No customer scoping, no department check, **no visibility dial** — the one
+control that migration 217 established as the sole lock on reading a row. Any
+contract id returns the complete record: `total_buying`, `total_selling`,
+`internal_notes`, and `details.rate_matrices`. All 34 contracts carry rate
+matrices and buying prices.
+
+The entry gate is wide by design — `current_user_can_detect_contracts()` passes
+on any one of six grants (`pricing_quotations`, `pricing_contracts`,
+`bd_contracts`, `bd_inquiries`, any booking view, `acct_bookings`), which is
+roughly everyone in BD, Pricing, Ops or Accounting.
+
+**The buying-price exposure is not the finding** — internal financials are
+deliberately not role-gated, per your own instruction. The finding is that a
+user whose visibility dial is *own* can read any contract in the system by id,
+which is exactly what the dial is supposed to prevent. The comment above the
+call site describes this RPC's sibling as "customer-scoped, header fields only";
+this one got neither property.
+
+### R4 — The per-booking Financials tab is granted to 3 of 60 users · BUG (MEDIUM)
+`ops_<line>_financials_tab` is declared correctly in all four places —
+`permissionsConfig.ts`, `accessSchema.ts`, `actionApplicability.ts`, and the
+components that call `can(...)`. Then:
+
+| door | users granted `view` |
+|---|---|
+| `ops_brokerage_financials_tab` | 2 |
+| `ops_forwarding_financials_tab` | 1 |
+| `ops_marine_insurance_financials_tab` | **0** |
+| `ops_trucking_financials_tab` | **0** (key absent from the matrix entirely) |
+| `ops_others_financials_tab` | **0** |
+| `pricing_others_financials_tab` | **0** |
+
+The tab is annotated "Accounting-only per-booking financial dashboard", so a
+tight grant is intended. Three people system-wide is not a tight grant, it is an
+unfinished one — and **nobody at all can open the per-booking financials for
+Trucking, Marine Insurance or Others**, including Accounting, including on the
+81 trucking bookings.
+
+Consistent with the standing doctrine: a tab is invisible until it is checked in
+the Access Configuration matrix. These were built and never checked.
+
+### R5 — The catalog doctrine is enforced by convention only · BUG (HIGH)
+CLAUDE.md lists these as non-negotiable:
+
+> No `billing_line_items` insert may omit `catalog_item_id`
+> No `evoucher_line_items` insert may omit `catalog_item_id`
+> Every catalog write must include `catalog_snapshot` from `buildCatalogSnapshot()`
+
+The database enforces none of it. The only check constraints on either table are
+`billing_line_items_amount_nonnegative` and
+`evoucher_line_items_fault_class_check`. **Neither `catalog_item_id` nor
+`catalog_snapshot` is NOT NULL on either table**, and no trigger validates them.
+
+| table | rows | no `catalog_item_id` | no / empty `catalog_snapshot` |
+|---|---|---|---|
+| `billing_line_items` | 175 | **125 (71%)** | 97 empty `{}`, 1 null |
+| `evoucher_line_items` | 277 | **72 (26%)** | 70 null |
+
+And this is not only old seed data — rows missing `catalog_item_id` were written
+in **2026-05 (28), 2026-06 (95) and 2026-07 (2)** on billings, and 13 / 57 / 2
+on e-voucher lines.
+
+A rule written in the project's own constitution, restated in every code review,
+and violated by 71% of the rows in the table it governs. The catalog is the
+mechanism that makes revenue and cost comparable across service lines; two
+thirds of the billing rows are outside it.
+
+### What this pass says overall
+
+Contracts are the weakest area QA has examined — not because the code is bad,
+but because **the parts that are supposed to be automatic are manual**. A
+contract expires when someone changes a dropdown. A catalog rule holds when
+someone remembers it. A tab becomes visible when someone ticks a box, and for
+three service lines nobody did.
+
+**Recommended order:** R2 first — it is a `and contract_end_date >= now()` in
+one RPC plus a status backfill, and it is the one where the wrong answer signs
+the company to a rate it no longer honours. R5 next, as two NOT NULL
+constraints *after* deciding what to do with the 197 rows that would violate
+them (that decision is yours; I have not touched data). R3 is a scoping clause.
+R1 is one line. R4 is a matrix change, not a code change.
 
