@@ -1,0 +1,104 @@
+{
+  "pass": "wave-5",
+  "question": "Everything the earlier waves left alone: Access Configuration, HR, Tasks, Calendar, CRM, Profiling.",
+  "date": "2026-08-06",
+  "environment": "dev (oqermaidggvanahumjmj); one read-only check against prod (ubspbukgcxmzegnomlgi)",
+
+  "findings": [
+    {
+      "id": "T1",
+      "severity": "CRITICAL",
+      "verdict": "BREACH",
+      "live_on_prod": true,
+      "title": "An anonymous stranger can rewrite the permission cascade",
+      "table": "public.access_cascade_edges",
+      "purpose": "609 rules of the form parent_key -> child_key deciding which grants imply which other grants",
+      "measured_dev": {"rls": false, "policies": 0, "rows": 609,
+        "anon_privileges": ["SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"],
+        "authenticated_privileges": ["SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"]},
+      "measured_prod": {"rls": false, "policies": 0, "rows": 609, "anon_privileges_identical": true,
+        "note": "READ-ONLY check of RLS state, grants and row count. No write of any kind was made against prod."},
+      "proof": {
+        "method": "PostgREST calls with only the publishable anon key — no login, no session, no account",
+        "anon_select": "returned rows, e.g. acct_bookings:view -> accounting_bookings_brokerage_tab:view",
+        "anon_insert": "ACCEPTED — {\"parent_key\":\"QA_PROBE_WAVE5:view\",\"child_key\":\"QA_PROBE_WAVE5_CHILD:view\"} returned as representation",
+        "cleanup": "DELETE http=204, verified gone; dev is clean"
+      },
+      "escalation_mechanism": {
+        "migration": "198_grant_cascade_materialization.sql",
+        "trigger": "BEFORE INSERT OR UPDATE OF module_grants on permission_overrides AND access_profiles -> trg_materialize_grant_cascade",
+        "function": "materialize_grant_cascade(grants jsonb) reads access_cascade_edges and copies the parent grant's value onto any child key absent from the blob",
+        "attack": "Insert one edge from a grant everybody holds to a grant you want, then wait. The next legitimate admin profile-apply or access edit materializes the planted grant onto that user's row. The audit trail shows an admin doing their job.",
+        "what_slows_it": "Direct writes to permission_overrides still require current_user_can_manage_admin_users(), so this is staged rather than one-shot.",
+        "second_vector": "anon holds TRUNCATE. Emptying the table grants nothing but silently strips every cascade rule from all future grant applications — users lose tabs and nobody connects it to a lookup table."
+      },
+      "fix": ["alter table public.access_cascade_edges enable row level security;", "revoke all on public.access_cascade_edges from anon, authenticated;"],
+      "fix_note": "Reads happen inside a SECURITY DEFINER function, so nothing legitimate needs direct table access. Prod needs the same and prod needs explicit permission.",
+      "why_missed_before": "Wave 0 swept the business tables. This is infrastructure, in a corner nothing exercises."
+    },
+    {
+      "id": "T2",
+      "severity": "HIGH",
+      "title": "The entire HR module is a mockup",
+      "measured": {
+        "files_checked": 9,
+        "supabase_calls_total": 0,
+        "per_file": {"HR.tsx": 0, "EmployeesList.tsx": 0, "EmployeeProfileModal.tsx": 0, "EmployeeFileModal.tsx": 0, "EmployeeRosterExcel.tsx": 0, "CreatePayrollModal.tsx": 0, "PayrollDetailsModal.tsx": 0, "PayrollPayslipsModal.tsx": 0, "EditableTimekeepingCell.tsx": 0},
+        "hr_tables_in_schema": 0,
+        "searched_for": ["employee", "payroll", "payslip", "leave", "attendance", "salary", "compensation"],
+        "users_holding_hr_grant": 4
+      },
+      "framing": "Not a defect in the sense this document usually means — nothing is computed wrongly because nothing is computed. It is a demo shell mounted in a production navigation tree and should be behind a flag.",
+      "extends": "Q7 (Wave 2) found the payslip was mock; it is the whole module."
+    },
+    {
+      "id": "T3",
+      "severity": "MEDIUM",
+      "title": "Calendar reminders are stored and never delivered",
+      "measured": {"calendar_event_reminders": 33, "calendar_events": 36, "orphaned_reminders": 0,
+        "client_delivery_code": "none", "edge_function": "none", "pg_cron_installed": false}
+    },
+    {
+      "id": "T4",
+      "severity": "DIAGNOSTIC",
+      "title": "Built, mounted, never exercised",
+      "measured": [
+        {"feature": "CRM activities", "ui": "7 components read/write crm_activities", "rows": 0},
+        {"feature": "Calendar participants", "ui": "invite UI in CalendarModule", "rows": 0, "events_existing": 36, "calendar_grant_holders": 60},
+        {"feature": "Ticket assignments", "ui": "AssignModal.tsx ships", "rows": 0, "from": "Wave 4"},
+        {"feature": "Notification reads", "ui": "mark_entity_read / mark_module_read wired", "rows": "0 of 8021", "from": "Wave 4"}
+      ],
+      "headline": "The modules outside the money spine are not broken, they are untouched — which is also why nobody found the bugs in them, including T1."
+    },
+    {
+      "id": "T5",
+      "severity": "WATCH",
+      "title": "The KPI tables barely exist",
+      "measured": {"kpi_definitions": 42, "kpi_periods": 3, "kpi_scores": 5},
+      "links_to": "P7 — the engine scores an empty result set as perfect. This is the other half: there is almost no stored data for it to work from, which is exactly the condition that produces the false 100s."
+    },
+    {
+      "id": "T6",
+      "severity": "GOOD NEWS",
+      "title": "Access Configuration is internally consistent",
+      "verified": [
+        "No orphan grant keys: every one of the 317 distinct doors granted to at least one user is declared in accessSchema.ts / permissionsConfig.ts.",
+        "The RBAC backup tables fail closed: _rbac_backup_access_profiles (56), _rbac_backup_permission_overrides (60) and permission_grant_archive (56) all have RLS ENABLED with ZERO policies — deny-all for everyone but service role. That is the exact treatment access_cascade_edges should have had."
+      ],
+      "self_correction": "My first extraction reported 21 orphan doors. That was a regex missing the parent-module helper in accessSchema.ts, not a real gap — all 21 are declared. Recorded so the number is not repeated as fact."
+    }
+  ],
+
+  "verdict": "Wave 5 was supposed to be the quiet one. Instead it found the only unauthenticated write to production in the whole campaign, in a two-column lookup table nobody thought of as data. T1 has presumably been open since migration 198 shipped, because nothing anyone did would ever have surfaced it.",
+
+  "recommended_order": [
+    "T1 immediately on dev, and on prod with explicit go-ahead — it is two statements and it is live now",
+    "T2 behind a feature flag",
+    "T3 needs a delivery-mechanism decision",
+    "T4 and T5 are coverage gaps, not defects"
+  ],
+
+  "no_code_changed": true,
+  "no_data_changed": true,
+  "prod_writes": 0
+}
