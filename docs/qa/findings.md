@@ -14,9 +14,14 @@ Started 2026-08-03.
 
 ## Where the register stands
 
-**124 findings across 19 passes. 33 fixed and verified on `dev`, 4 mitigated,
+**124 findings across 19 passes. 34 fixed and verified on `dev`, 3 mitigated,
 50 still open as bugs, 14 on watch.** Nothing is fixed on prod — see the gate
 at the bottom of Wave 0.
+
+> **Both live prod exposures are now closed on `dev` and verified by probe:**
+> U1 (the cascade table) and M1 (the attachments bucket). **Neither has been
+> applied to prod.** U1 is a migration; M1 is a code deploy followed by a bucket
+> flag, in that order.
 
 > **U1 is still live on production.** `access_cascade_edges` has RLS disabled and
 > grants `anon` full INSERT / UPDATE / DELETE / TRUNCATE on the 609 rules that
@@ -1087,7 +1092,7 @@ with a partial roster. A missing actor is a broken run, not a quiet gap.
 Three passes run autonomously against tagged fixtures. 32 breaches. One of them
 is worse than anything else in this document, and it is live on prod.
 
-### M1 — The `attachments` bucket is public. 424 real client documents are on the open internet · MITIGATED on dev (274); PROD STILL OPEN
+### M1 — The `attachments` bucket is public. 424 real client documents are on the open internet · FIXED on dev; PROD STILL OPEN
 `storage.buckets.attachments.public = true`, on **dev and prod**. Its two
 policies check nothing but the bucket name:
 
@@ -1151,6 +1156,46 @@ cannot alter it ("must be owner of relation objects"). Worth knowing before
 anyone tries to script a storage change.
 
 **PROD IS STILL OPEN.** The same two policies, the same 424 documents.
+
+---
+
+**FIXED ON DEV — the refactor is written and the bucket is private.**
+
+The register said "six call sites." It undersold it: five writers persisted the
+permanent URL into **12 columns across 12 tables**, so flipping the flag would
+have killed every attachment link in the product. The fix is therefore code
+first, flag last.
+
+`src/utils/attachmentUrl.ts` — `toStoragePath()` normalises whatever is on the
+row, and `resolveAttachmentUrl()` signs it (1h TTL). `src/hooks/useAttachmentUrl.ts`
+wraps it for anything rendered inline. **No backfill:** extraction ignores the
+host, so the ~424 legacy rows — which carry the *prod* project ref even on dev,
+because dev is a clone — resolve exactly like a row written today.
+
+Writers now store the bucket path: `crmAttachments.ts`, `EntityAttachmentsTab`,
+`CommentsTab`, `BookingCommentsTab`, `LiquidationForm`. Readers resolve:
+those five plus `EVoucherDetailView` and `AddRequestForPaymentPanel`.
+`Settings.tsx` still calls `getPublicUrl` and should — that is `avatars`, which
+stays public and whose writes are already owner-scoped.
+
+**Verified on dev, in this order:**
+
+| check | result |
+|---|---|
+| baseline, bucket still public (`probeAttachmentsBucket.mjs`) | anon fetch **HTTP 200** — the hole, reproduced |
+| after `public = false` | anon fetch **HTTP 400**, signed URL still serves bytes, root still unlistable |
+| every legacy row, flat + jsonb (`probeLegacyAttachmentUrls.mjs --all`) | **94/95 open** |
+| the app itself, real browser (`tests/e2e/attachments-signed-urls.spec.ts`) | download works; **0 requests to `/object/public/`** |
+| a fresh upload through the UI | row stores `bookings/<id>/<ts>-<name>`, not a URL |
+
+The one legacy row that did not open —
+`quotations/QUO-1782711428779/…viber_image….jpg` — is **not a regression**: the
+object exists on prod and was never copied to dev. A gap in the last storage
+clone, worth knowing before anyone reads that 94/95 as data loss.
+
+**Prod needs two things, in this order: deploy the code, then flip the flag.**
+Flipping first kills every attachment in the product until the deploy lands.
+Prod also still carries the pre-274 policies, so those ship with it.
 
 ### M2 — Deleting a booking orphans its entire money trail · FIXED (275, dev)
 The key delete probe, measured by census before and after:

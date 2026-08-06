@@ -4,6 +4,11 @@ export interface CrmAttachment {
   name: string;
   size: number;
   type: string;
+  /**
+   * Storage path within the `attachments` bucket. Rows written before M1 hold a
+   * full public URL here instead — always read this through
+   * `resolveAttachmentUrl()`, never straight into an href or src.
+   */
   url?: string;
 }
 
@@ -45,12 +50,14 @@ export async function uploadCrmAttachments(
     const { error } = await supabase.storage.from("attachments").upload(filePath, file);
     if (error) throw new Error(`Failed to upload ${file.name}: ${error.message}`);
 
-    const { data } = supabase.storage.from("attachments").getPublicUrl(filePath);
     uploaded.push({
       name: file.name,
       size: file.size,
       type: file.type || "application/octet-stream",
-      url: data.publicUrl,
+      // M1: the storage path, not a public URL. The bucket is private; readers
+      // mint a signed URL via resolveAttachmentUrl(), which also accepts the
+      // full public URLs written before this change.
+      url: filePath,
     });
   }
 

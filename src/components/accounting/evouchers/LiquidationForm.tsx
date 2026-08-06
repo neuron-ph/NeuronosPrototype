@@ -8,6 +8,7 @@ import { SidePanel } from "../../common/SidePanel";
 import { CatalogItemCombobox } from "../../shared/pricing/CatalogItemCombobox";
 import { CustomDropdown } from "../../bd/CustomDropdown";
 import type { LiquidationLineItem } from "../../../types/evoucher";
+import { useAttachmentUrls } from "../../../hooks/useAttachmentUrl";
 
 interface LiquidationFormProps {
   isOpen: boolean;
@@ -68,6 +69,9 @@ export function LiquidationForm({
 }: LiquidationFormProps) {
   const [lineItems, setLineItems] = useState<LiquidationLineItem[]>([newLineItem()]);
   const [receipts, setReceipts] = useState<Record<string, ReceiptMeta>>({});
+  // M1: receipt.url holds a storage path (or a legacy public URL on older
+  // liquidations). The bucket is private, so both have to be signed to render.
+  const receiptUrls = useAttachmentUrls(Object.values(receipts).map((r) => r.url));
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [unusedReturn, setUnusedReturn] = useState<string>("");
   const [isFinal, setIsFinal] = useState(false);
@@ -142,14 +146,13 @@ export function LiquidationForm({
         .from("attachments")
         .upload(path, file, { cacheControl: "3600", upsert: false });
       if (uploadError) throw uploadError;
-      const { data: urlData } = supabase.storage.from("attachments").getPublicUrl(path);
-
+      // M1: store the storage path, not a public URL — the bucket is private.
       setReceipts((prev) => ({
         ...prev,
-        [lineId]: { url: urlData.publicUrl, name: file.name, type: file.type, size: file.size },
+        [lineId]: { url: path, name: file.name, type: file.type, size: file.size },
       }));
       setLineItems((prev) =>
-        prev.map((item) => (item.id === lineId ? { ...item, receipt_url: urlData.publicUrl } : item))
+        prev.map((item) => (item.id === lineId ? { ...item, receipt_url: path } : item))
       );
       toast.success("Receipt attached");
     } catch (err) {
@@ -724,7 +727,7 @@ export function LiquidationForm({
                         }}
                       >
                         {isImage ? (
-                          <img src={receipt.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          <img src={receiptUrls[receipt.url]} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                         ) : (
                           <FileText size={16} />
                         )}
@@ -738,7 +741,7 @@ export function LiquidationForm({
                         </div>
                       </div>
                       <a
-                        href={receipt.url}
+                        href={receiptUrls[receipt.url]}
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label="Open receipt"
