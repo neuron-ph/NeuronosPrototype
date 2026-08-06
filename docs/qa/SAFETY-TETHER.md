@@ -35,6 +35,15 @@ is part of testing. Changing the code so the defect stops happening is not.
 Local environment files (`compose.yaml` pins, `.env`) sit on the allowed side —
 they configure *your* machine, not the product.
 
+**QA tooling sits on the allowed side too**, provided it lives in its own
+directory (`scripts/qa/`) and the product cannot import it. Probes, sweeps,
+guards and loaders are how the test gets arranged. The test is that nothing you
+add changes what the product does when QA is not running.
+
+**Guards must be proven in both directions before they are trusted** — refuse
+what they should refuse, and allow what they should allow. A guard that silently
+never fires is worse than none (E4).
+
 ### Fixing requires a named, in-turn grant
 
 Finding a defect does not grant permission to repair it. Neither does proving it
