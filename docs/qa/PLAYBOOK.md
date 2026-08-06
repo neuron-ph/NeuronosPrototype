@@ -12,6 +12,10 @@ that is **not** this one. Neuron Main is the first intended target.
 
 **It is five questions and one discipline.**
 
+> **To actually run this, use `ATTACK-SUITE.md`** — the same campaign expressed
+> as nineteen executable attacks with procedures and pass/fail criteria. This
+> file is why and how to think; that one is what to do.
+
 It is deliberately *not* a checklist of the 124 things we found. A checklist
 would be worth a fraction of this, for a reason worth stating up front:
 
