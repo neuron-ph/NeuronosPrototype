@@ -10,9 +10,10 @@ import { test, expect, Page } from "@playwright/test";
 const PASSWORD = "devpassword123";
 const ADMIN = "test@neuron.com.ph";
 
-// BR202606-106 on dev — five legacy attachments, all stored as full public URLs
-// from before the fix. The hardest case: old rows, new code, private bucket.
-const BOOKING_ID = "78d7cecf-3629-490b-99fb-42913fcc8623";
+// BR202607-156 — 20 real attachments carried down from prod by `npm run sync:dev`,
+// every one stored as a full public URL from before the fix. The hardest case:
+// old rows, new code, private bucket. Re-point this after a fresh sync.
+const BOOKING_ID = "ece3eb2c-8774-4927-8a57-ac70c16332bc";
 
 async function login(page: Page, email: string) {
   await page.goto("/");

@@ -1189,9 +1189,23 @@ stays public and whose writes are already owner-scoped.
 | a fresh upload through the UI | row stores `bookings/<id>/<ts>-<name>`, not a URL |
 
 The one legacy row that did not open —
-`quotations/QUO-1782711428779/…viber_image….jpg` — is **not a regression**: the
-object exists on prod and was never copied to dev. A gap in the last storage
-clone, worth knowing before anyone reads that 94/95 as data loss.
+`quotations/QUO-1782711428779/…viber_image….jpg` — was **not a regression**: the
+object existed on prod and had never been copied to dev. A gap in that day's
+storage clone, not data loss.
+
+**Re-run against a fresh `npm run sync:dev` — dev now mirrors prod verbatim
+(116/116 tables, 41,957 rows, all 424 attachment files):**
+
+| check | result |
+|---|---|
+| every attachment row on real prod data | **379/379 open** |
+| anon fetch of a public URL | HTTP 400 |
+| the app, real browser, on prod's own bookings | download works, 0 public requests |
+| a fresh upload | still stores a path |
+
+That closes the "dev is not a faithful rehearsal" gap. The refactor has now been
+proven against the exact data prod holds — including the 257 booking attachments
+the earlier dev clone never had.
 
 **Prod needs two things, in this order: deploy the code, then flip the flag.**
 Flipping first kills every attachment in the product until the deploy lands.
