@@ -76,3 +76,7 @@ mc-invoice-builder-items.png
 /docs/qa/personas.json
 /docs/qa/grant-prune-*.json
 /docs/qa/smoke-run.log
+
+# Playwright artifacts from the Main spine (attack A5)
+test-results/
+.playwright-mcp/
