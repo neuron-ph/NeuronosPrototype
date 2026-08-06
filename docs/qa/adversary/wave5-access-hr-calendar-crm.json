@@ -6,7 +6,7 @@
 
   "findings": [
     {
-      "id": "T1",
+      "id": "U1",
       "severity": "CRITICAL",
       "verdict": "BREACH",
       "live_on_prod": true,
@@ -37,7 +37,7 @@
       "why_missed_before": "Wave 0 swept the business tables. This is infrastructure, in a corner nothing exercises."
     },
     {
-      "id": "T2",
+      "id": "U2",
       "severity": "HIGH",
       "title": "The entire HR module is a mockup",
       "measured": {
@@ -52,14 +52,14 @@
       "extends": "Q7 (Wave 2) found the payslip was mock; it is the whole module."
     },
     {
-      "id": "T3",
+      "id": "U3",
       "severity": "MEDIUM",
       "title": "Calendar reminders are stored and never delivered",
       "measured": {"calendar_event_reminders": 33, "calendar_events": 36, "orphaned_reminders": 0,
         "client_delivery_code": "none", "edge_function": "none", "pg_cron_installed": false}
     },
     {
-      "id": "T4",
+      "id": "U4",
       "severity": "DIAGNOSTIC",
       "title": "Built, mounted, never exercised",
       "measured": [
@@ -68,17 +68,17 @@
         {"feature": "Ticket assignments", "ui": "AssignModal.tsx ships", "rows": 0, "from": "Wave 4"},
         {"feature": "Notification reads", "ui": "mark_entity_read / mark_module_read wired", "rows": "0 of 8021", "from": "Wave 4"}
       ],
-      "headline": "The modules outside the money spine are not broken, they are untouched — which is also why nobody found the bugs in them, including T1."
+      "headline": "The modules outside the money spine are not broken, they are untouched — which is also why nobody found the bugs in them, including U1."
     },
     {
-      "id": "T5",
+      "id": "U5",
       "severity": "WATCH",
       "title": "The KPI tables barely exist",
       "measured": {"kpi_definitions": 42, "kpi_periods": 3, "kpi_scores": 5},
       "links_to": "P7 — the engine scores an empty result set as perfect. This is the other half: there is almost no stored data for it to work from, which is exactly the condition that produces the false 100s."
     },
     {
-      "id": "T6",
+      "id": "U6",
       "severity": "GOOD NEWS",
       "title": "Access Configuration is internally consistent",
       "verified": [
@@ -89,13 +89,13 @@
     }
   ],
 
-  "verdict": "Wave 5 was supposed to be the quiet one. Instead it found the only unauthenticated write to production in the whole campaign, in a two-column lookup table nobody thought of as data. T1 has presumably been open since migration 198 shipped, because nothing anyone did would ever have surfaced it.",
+  "verdict": "Wave 5 was supposed to be the quiet one. Instead it found the only unauthenticated write to production in the whole campaign, in a two-column lookup table nobody thought of as data. U1 has presumably been open since migration 198 shipped, because nothing anyone did would ever have surfaced it.",
 
   "recommended_order": [
-    "T1 immediately on dev, and on prod with explicit go-ahead — it is two statements and it is live now",
-    "T2 behind a feature flag",
-    "T3 needs a delivery-mechanism decision",
-    "T4 and T5 are coverage gaps, not defects"
+    "U1 immediately on dev, and on prod with explicit go-ahead — it is two statements and it is live now",
+    "U2 behind a feature flag",
+    "U3 needs a delivery-mechanism decision",
+    "U4 and U5 are coverage gaps, not defects"
   ],
 
   "no_code_changed": true,

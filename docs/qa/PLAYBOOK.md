@@ -92,7 +92,7 @@ Say so in the probe, or someone will "fix" the test instead of reading it.
 
 ### Rule 6 — Prove breaches live, but leave nothing behind.
 
-The production breach (T1) was proven with a real anonymous insert, then deleted
+The production breach (U1) was proven with a real anonymous insert, then deleted
 in the same command, then verified gone. That transcript is why it is credible.
 
 Constraints that made it safe:
@@ -246,7 +246,7 @@ diverge.
 The register is the deliverable. It must stay usable at 100+ findings.
 
 **One file, sections in pass order, newest last.** Each finding gets a stable id
-(`P2`, `T1`), a severity, a one-line title, the cause, and **the measurement**.
+(`P2`, `U1`), a severity, a one-line title, the cause, and **the measurement**.
 
 **Status vocabulary:** `FIXED` · `MITIGATED` · `BY DESIGN` · `OPEN` · `WATCH` ·
 `DIAGNOSTIC` · `GOOD NEWS` · `BREACH`
@@ -304,7 +304,7 @@ Not arbitrary:
 ### The Supabase / Postgres-RLS adapter *(this codebase)*
 
 - Enumerate RLS state per table. **Any table with RLS off is a finding until
-  proven otherwise** — that is T1, and it was the last table anyone looked at.
+  proven otherwise** — that is U1, and it was the last table anyone looked at.
 - Audit `SECURITY DEFINER` functions: what do they gate on, and do they scope
   the row? A definer function that filters only on type and returns `to_jsonb(row)`
   bypasses every visibility rule you have.
@@ -326,11 +326,11 @@ services, not the database — so the database tells you much less and the code
 must tell you more.
 
 - **Enumerate every controller route and assert each has an auth guard.** This is
-  the direct analogue of the RLS sweep, and it is where the T1-shaped bug lives:
+  the direct analogue of the RLS sweep, and it is where the U1-shaped bug lives:
   the route nobody remembered was a route.
 - Check guards for **row scoping**, not just authentication. "Is this user logged
   in" and "may this user read *this row*" are different questions and the second
-  is usually missing. T1's cousin: a by-id endpoint that authenticates and then
+  is usually missing. U1's cousin: a by-id endpoint that authenticates and then
   returns the whole record.
 - Raw SQL means **no schema-level safety net at all**. Q3's "the doctrine is
   enforced by convention only" will be *more* true, not less. Go straight to

@@ -14,14 +14,16 @@ Started 2026-08-03.
 
 ## Where the register stands
 
-**124 findings across 19 passes. 32 fixed and verified on `dev`, 4 mitigated,
-51 still open as bugs, 14 on watch.** Nothing is fixed on prod — see the gate
+**124 findings across 19 passes. 33 fixed and verified on `dev`, 4 mitigated,
+50 still open as bugs, 14 on watch.** Nothing is fixed on prod — see the gate
 at the bottom of Wave 0.
 
-> **T1 is live on production and needs no login.** `access_cascade_edges` has
-> RLS disabled and grants `anon` full INSERT / UPDATE / DELETE / TRUNCATE on the
-> 609 rules that drive permission cascade. Proven with an anonymous insert
-> against dev. It is two SQL statements to close, and prod needs your go-ahead.
+> **U1 is still live on production.** `access_cascade_edges` has RLS disabled and
+> grants `anon` full INSERT / UPDATE / DELETE / TRUNCATE on the 609 rules that
+> drive permission cascade — no login needed. **Closed on dev by 276 and verified
+> by probe; prod is untouched and needs your go-ahead.** It was four statements,
+> not two — see U1 for why the original one-line fix would have broken access
+> administration.
 
 | § | pass | n | still open |
 |---|---|---|---|
@@ -42,7 +44,7 @@ at the bottom of Wave 0.
 | [Q](#q-wave-2--the-documents-that-leave-the-building) | **Wave 2 — the documents that leave the building** | 9 | 7 |
 | [R](#r-wave-3--contracts-and-the-other-service-lines) | **Wave 3 — contracts and the other service lines** | 6 | 5 |
 | [S](#s-wave-4--notifications-the-inbox-tickets-and-approval-routing) | **Wave 4 — notifications, inbox, tickets, routing** | 7 | 5 |
-| [T](#t-wave-5--access-configuration-hr-tasks-calendar-crm-profiling) | **Wave 5 — Access Config, HR, Calendar, CRM, Profiling** | 6 | 4 + **1 live prod breach** |
+| [U](#u-wave-5--access-configuration-hr-tasks-calendar-crm-profiling) | **Wave 5 — Access Config, HR, Calendar, CRM, Profiling** | 6 | 3 + **1 fixed on dev, still live on prod** |
 
 Sections A–O answer *what could someone do to the data*. **P answers *what are
 the screens saying today*** — the only pass where the damage does not require
@@ -2249,12 +2251,12 @@ and should routing cover the other 92% of bookings.
 
 ---
 
-## T. Wave 5 — Access Configuration, HR, Tasks, Calendar, CRM, Profiling
+## U. Wave 5 — Access Configuration, HR, Tasks, Calendar, CRM, Profiling
 
 The last sweep: everything the earlier waves left alone. It found the single
 worst thing in this entire register, and it is live on production right now.
 
-### T1 — An anonymous stranger can rewrite your permission cascade · BREACH (CRITICAL — LIVE ON PROD)
+### U1 — An anonymous stranger can rewrite your permission cascade · FIXED (276, dev) — LIVE ON PROD
 
 `public.access_cascade_edges` holds the 609 rules that decide which grants imply
 which other grants:
@@ -2326,12 +2328,49 @@ This is the same shape as the Wave 0 anon findings (H1/H2) — a table that was
 never meant to be reachable, reachable. It was not caught then because Wave 0
 swept the business tables; this one is infrastructure.
 
-**Fix: `alter table public.access_cascade_edges enable row level security;` plus
-`revoke all ... from anon, authenticated;`** — reads happen inside a SECURITY
-DEFINER function, so nothing legitimate needs direct access. Prod needs it too,
-and prod needs your say-so.
+**FIXED on dev (276). PROD STILL OPEN — it needs your say-so.**
 
-### T2 — The entire HR module is a mockup · BUG (HIGH)
+**The fix originally written here was wrong, and would have broken access
+administration.** It said reads happen inside a SECURITY DEFINER function, so
+nothing legitimate needs direct access. They don't: `materialize_grant_cascade`
+was SECURITY **INVOKER**, so the trigger reads the table as the calling
+administrator — the `authenticated` role. Revoking from `authenticated` without
+fixing that first turns every access edit into `permission denied for table
+access_cascade_edges`.
+
+What 276 actually does, in this order:
+
+1. `materialize_grant_cascade(jsonb)` becomes SECURITY DEFINER with a pinned
+   `search_path`.
+2. `revoke execute` on that function from `public, anon` — **step 1 creates a new
+   hole if this is skipped.** EXECUTE was granted to PUBLIC and anon (272's
+   definer sweep passed over this function because it was still INVOKER at the
+   time), so a definer function readable by anon just trades a writable table for
+   a readable one: feed it one `parent_key` at a time and read the cascade back
+   out of the return value. Only the trigger needs it.
+3. `revoke all on public.access_cascade_edges from anon, authenticated`.
+4. `enable row level security`, zero policies.
+
+Nothing in `src/` reads the table. The only readers are three service-role
+scripts (`copyEdgesToProd.mjs`, `genGrantCascadeMigration.ts`, `probeProd.mjs`),
+and the service role bypasses both grants and RLS.
+
+**Verified on dev, by probe, not by reading the migration:**
+
+| check | result |
+|---|---|
+| anon SELECT / INSERT / DELETE (`scripts/probeCascadeEdges.mjs`) | all three **refused** |
+| `authenticated` calls the definer fn (`scripts/verifyCascadeStillWorks.mjs`) | works, all 7 children materialize |
+| a real admin UPDATE on `permission_overrides` | succeeds, cascade fires on write |
+| rows | 609 before, 609 after |
+
+One thing deliberately left alone: `materialize_grant_cascade` is declared
+`IMMUTABLE` while reading a table, which is a lie to the planner and pre-dates
+this work. Correcting it to `STABLE` is a behaviour change — it would stop the
+planner constant-folding cascade results — and belongs in its own commit, not in
+a breach fix. **Open, needs a decision.**
+
+### U2 — The entire HR module is a mockup · BUG (HIGH)
 Wave 2 found the payslip was mock (Q7). It is not just the payslip.
 
 | file | Supabase calls |
@@ -2358,7 +2397,7 @@ This is not a defect in the sense the rest of this document uses the word —
 nothing is computed wrongly, because nothing is computed. It is a demo shell
 mounted in a production navigation tree, and it should be behind a flag.
 
-### T3 — Calendar reminders are stored and never delivered · BUG (MEDIUM)
+### U3 — Calendar reminders are stored and never delivered · BUG (MEDIUM)
 33 rows in `calendar_event_reminders`, attached to 36 events, none orphaned —
 the data model is sound.
 
@@ -2367,7 +2406,7 @@ is no Edge Function for it; and `pg_cron` is not installed on this project
 (established in Wave 4 while looking for contract expiry). A reminder is a row
 that nothing ever reads.
 
-### T4 — Built, mounted, never exercised · DIAGNOSTIC
+### U4 — Built, mounted, never exercised · DIAGNOSTIC
 A pattern that recurs across this whole wave and the last one:
 
 | feature | UI that writes it | rows |
@@ -2382,9 +2421,9 @@ to **all 60 users** and has produced zero participant rows.
 
 This is the honest headline of Wave 5: **the modules outside the money spine are
 not broken, they are untouched.** Which is also why nobody has found the bugs in
-them — including T1, which sat in an unexercised corner of the RBAC machinery.
+them — including U1, which sat in an unexercised corner of the RBAC machinery.
 
-### T5 — The KPI tables barely exist · WATCH
+### U5 — The KPI tables barely exist · WATCH
 `kpi_definitions` 42 · `kpi_periods` **3** · `kpi_scores` **5**.
 
 Wave 1's P7 showed the engine scores an empty result set as perfect and hands
@@ -2393,7 +2432,7 @@ no stored scoring data for it to work from. The scorecards P7 warned about are
 computing from near-emptiness, which is exactly the condition that produces the
 false 100s.
 
-### T6 — Access Configuration is internally consistent · GOOD NEWS
+### U6 — Access Configuration is internally consistent · GOOD NEWS
 Two checks that came back clean, recorded because they were the ones most likely
 to be dirty:
 
@@ -2417,11 +2456,11 @@ documents, the contracts and the messaging. Instead it found the only
 two-column lookup table that nobody thought of as data.
 
 The reason is the same reason the rest of this wave is mostly empty rows: **this
-territory has never been walked.** T1 has presumably been open since migration
+territory has never been walked.** U1 has presumably been open since migration
 198 shipped, because nothing anyone did would ever have surfaced it.
 
-**Recommended order:** T1 immediately, on dev and then — with your explicit
+**Recommended order:** U1 immediately, on dev and then — with your explicit
 go-ahead — on prod, where it is live right now. It is two statements. Everything
-else here can wait: T2 behind a flag, T3 needs a delivery mechanism decision,
-T4 and T5 are coverage rather than defects.
+else here can wait: U2 behind a flag, U3 needs a delivery mechanism decision,
+U4 and U5 are coverage rather than defects.
 
