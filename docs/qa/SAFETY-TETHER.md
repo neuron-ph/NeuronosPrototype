@@ -16,39 +16,44 @@ where. That is the point — a rule with no scar is a rule nobody follows.
 **This is the first section because it is the one that turns a QA campaign into
 an incident.**
 
-### The default is OBSERVE ONLY
+### The line is WHAT you touch, not HOW MUCH
 
-> **We are testing. We are not authorised to fix.**
+> **Arranging the test is allowed. Repairing the system is not.**
 
-Finding a defect does not grant permission to repair it. Proving it is real does
-not either. Neither does the fix being small, obvious, or clearly correct.
+To break a system you must be able to set up the conditions — a user who holds
+the right grant, a table with rows in it, a booking in the right state. That work
+is part of testing. Changing the code so the defect stops happening is not.
 
-**Record it and move on.** The owner decides what gets fixed and when.
+| you MAY | you MAY NOT |
+|---|---|
+| **seed** data — fixtures, demo rows, whatever a pass needs to be answerable | change **any source file** |
+| **sync / migrate** data in from another environment | change **schema** — migrations, constraints, triggers |
+| **grant / revoke permissions** on test users to reach a code path | change configuration that ships (feature flags, seeded defaults) |
+| create, edit and delete **records** through the app or the database | "improve" anything you noticed on the way past |
+| stand up and tear down **local infrastructure** — containers, caches, storage | push anything to a shared remote |
 
-### The three levels, declared per target
+Local environment files (`compose.yaml` pins, `.env`) sit on the allowed side —
+they configure *your* machine, not the product.
 
-Every campaign names its level in the target's board before the first attack:
+### Fixing requires a named, in-turn grant
 
-| level | may do | may not do |
-|---|---|---|
-| **OBSERVE** *(default)* | read code, read data, run probes that clean up after themselves | change any source file, change any schema, leave any row behind |
-| **PROBE** | all of OBSERVE, plus writes to a **local/dev** database that are reverted in the same command | touch shared/staging data, change source |
-| **REPAIR** | all of PROBE, plus source changes — **only for the specific findings named in that grant** | anything not named; anything beyond the named fix |
+Finding a defect does not grant permission to repair it. Neither does proving it
+is real, nor the fix being small, obvious or clearly correct.
 
-**REPAIR is granted per finding, in the turn, and expires.** "Fix M1 and M2" is
-not standing permission to fix M5. Approval of a plan is never approval to apply
-it.
+A repair grant is **per finding, in the turn, and expires**: *"fix M1 and M2"* is
+not permission to fix M5. Approval of a plan is never approval to apply it.
+
+**Default: record it and move on.** The owner decides what gets fixed and when.
 
 ### Production is a separate axis
 
-Independent of level, and never assumed:
+Independent of everything above, and never assumed:
 
-- **No write to production. Ever. Under any level.**
+- **No write to production. Ever.**
 - A production **read** requires explicit permission **in that turn**, and runs
   inside an explicitly read-only transaction.
-- Approval to read once is not approval to read again.
-- Record every production access in the board's session log: what was read, when,
-  and who authorised it.
+- Permission to read once is not permission to read again.
+- Log every production access in the board: what was read, when, who authorised it.
 
 ### If a change was made and the level did not allow it
 
@@ -179,7 +184,7 @@ Kept because a rule without its scar gets ignored.
 
 | rule | what happened |
 |---|---|
-| **§1 Authority** | Source changes were made to a target we had no standing authority to modify. Authorised in the turn, but no level had been declared, so nothing distinguished "fix these two" from "fix things". |
+| **§1 Authority** | Source changes were made to a target we had no standing authority to modify. Authorised in the turn, but nothing had been declared, so nothing distinguished "fix these two" from "fix things". Reverted once the line was drawn — the change had never left the machine. |
 | **§1 Production** | A production read was needed mid-campaign. It went well only because permission was asked for in the turn and the transaction was explicitly read-only. Nothing in the process required either. |
 | **D1** | After a context compaction, 19 rounds of testing were described to the owner as "five rounds". The board had it right; memory did not. |
 | **D3** | Repeatedly stopped to ask "fix this or continue?" until the owner said plainly: record it and move on. |
