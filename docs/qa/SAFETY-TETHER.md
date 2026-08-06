@@ -55,7 +55,7 @@ Independent of everything above, and never assumed:
 - Permission to read once is not permission to read again.
 - Log every production access in the board: what was read, when, who authorised it.
 
-### If a change was made and the level did not allow it
+### If a change was made that was not allowed
 
 Do not quietly revert and do not quietly keep it. **Surface it**: what was
 changed, whether it left the machine, and what the options are. The owner
@@ -73,8 +73,8 @@ memory disagree, **the file wins**.
 pass. A finding held in your head is a finding that will be misremembered.
 
 **D3 · Record and move.** Do not stop after each finding to ask whether to fix
-it. Under OBSERVE there is nothing to ask. Every unnecessary decision point turns
-a campaign into a negotiation.
+it. Absent a repair grant there is nothing to ask. Every unnecessary decision
+point turns a campaign into a negotiation.
 
 **D4 · One pass at a time, in order.** Each pass aims the next. Parallelising
 loses the sequencing, and the sequencing is where most of the value is.
@@ -168,7 +168,7 @@ transcript. Overstating once costs you every finding after it.
 At the top, before anything else:
 
 - **Status** — where the campaign is
-- **Authority level** for this target, and any live REPAIR grant
+- **Authority** for this target — what may be touched, and any live repair grant
 - **Current pass** and **next action**
 - **Blocked on** — and whether it is blocked on a person or a thing
 - **Last updated**
