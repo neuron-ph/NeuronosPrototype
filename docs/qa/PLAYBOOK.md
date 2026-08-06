@@ -36,6 +36,10 @@ without touching the method.
 
 ## 1. The evidence discipline
 
+> The authoritative, consolidated rules — authority levels, anti-drift,
+> evidence, probe safety, communication — now live in **`SAFETY-TETHER.md`**.
+> This section is kept as the narrative explanation of the evidence half.
+
 This comes first because it is what makes the findings trustworthy. Without it
 you produce a list of things that are *probably* wrong, which nobody can act on
 and everybody learns to ignore.

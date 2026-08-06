@@ -27,7 +27,13 @@ Run the attack; record whatever it surfaces.
 bug did not travel between systems, keep that as its own clearly-labelled pass.
 Do not let it become the suite.
 
-### The evidence rules (full text in `PLAYBOOK.md` §1)
+### Rules of engagement — full text in `SAFETY-TETHER.md`
+
+**Check the authority level for this target before running anything.** The
+default is OBSERVE: read, probe with cleanup, change nothing. Finding a defect
+does not grant permission to fix it.
+
+The evidence rules in short:
 
 1. A mechanism says something **can** happen. It never says how often it **has**.
    Report both, separately.
