@@ -12,6 +12,7 @@ import { formatMoney } from "../../utils/accountingCurrency";
 import { toast } from "../ui/toast-utils";
 import { supabase } from "../../utils/supabase/client";
 import { usePermission } from "../../context/PermissionProvider";
+import { isEvoucherSpent } from "../../utils/evoucherSpendStatuses";
 // Expenses received here are raw Supabase evoucher rows, not the OperationsExpense type
 const str = (v: unknown): string => (v == null ? "" : String(v));
 const num = (v: unknown): number => Number(v ?? 0);
@@ -95,8 +96,6 @@ export function UnifiedExpensesTab({
   const [conversionBillingItemName, setConversionBillingItemName] = useState("");
   const [conversionBillingItemId, setConversionBillingItemId] = useState<string | undefined>(undefined);
 
-  const BILLABLE_ELIGIBLE_STATUSES = ["approved", "posted", "paid", "partial"];
-
   // Set of source voucher-ids already tracked in billing_line_items. NEU-109: a
   // multi-booking billable voucher is billed as one row PER booking with source_id
   // `${voucherId}::${bookingId}`, so strip the booking suffix to detect conversion
@@ -115,7 +114,7 @@ export function UnifiedExpensesTab({
     expenses.forEach(e => {
       if (
         e.isBillable &&
-        BILLABLE_ELIGIBLE_STATUSES.includes(str(e.status)) &&
+        isEvoucherSpent(e.status) &&
         !billedVoucherIds.has(str(e.id))
       ) {
         ids.add(str(e.id));

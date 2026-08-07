@@ -11,6 +11,7 @@ import { calculateFinancialTotals } from "../utils/financialCalculations";
 import { isInScope, getDateScopeQueryRange } from "../components/accounting/aggregate/types";
 import type { DateScope } from "../components/accounting/aggregate/types";
 import { queryKeys } from "../lib/queryKeys";
+import { SPENT_EVOUCHER_STATUSES_FOR_QUERY } from "../utils/evoucherSpendStatuses";
 
 export interface BookingCashFlowRow {
   bookingId: string;
@@ -98,7 +99,7 @@ export function useBookingCashFlowReport(scope: DateScope) {
           .select("*")
           .in("booking_id", bookingIds)
           .in("transaction_type", ["expense", "budget_request"])
-          .in("status", ["approved", "posted", "paid", "partial"]),
+          .in("status", SPENT_EVOUCHER_STATUSES_FOR_QUERY),
         supabase
           .from("invoices")
           .select("*")

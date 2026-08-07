@@ -1,6 +1,7 @@
 import type { FinancialTotalsV2 } from "../types/financials";
 import { isCollectionAppliedToInvoice } from "./collectionResolution";
 import { isInvoiceFinanciallyActive } from "./invoiceReversal";
+import { isEvoucherSpent } from "./evoucherSpendStatuses";
 
 export type FinancialTotals = FinancialTotalsV2;
 
@@ -70,11 +71,7 @@ export const calculateFinancialTotals = (
   const bookedCharges = invoicedAmount + unbilledCharges;
 
   // Canonical expense status filter — matches mapEvoucherExpensesForScope in financialSelectors.ts
-  const APPROVED_EXPENSE_STATUSES = ["approved", "posted", "paid", "partial"];
-
-  const approvedExpenses = expenses.filter(item =>
-    APPROVED_EXPENSE_STATUSES.includes(str(item.status))
-  );
+  const approvedExpenses = expenses.filter(item => isEvoucherSpent(item.status));
 
   const directCost = approvedExpenses.reduce((sum, item) => sum + baseAmt(item), 0);
 
@@ -151,7 +148,7 @@ export const mergeBillableExpenses = (
   const billableExpenses = expenses
     .filter((e) =>
       e.is_billable &&
-      ["approved", "posted", "paid", "partial"].includes(str(e.status)) &&
+      isEvoucherSpent(e.status) &&
       !existingSourceIds.has((e.evoucher_id || e.id) as string)
     )
     .map((e): RawRow => ({

@@ -1,4 +1,5 @@
 import { isInvoiceVisibleDocument } from "./invoiceReversal";
+import { isEvoucherSpent } from "./evoucherSpendStatuses";
 
 /** Raw DB row type — used for Supabase query results */
 type RawRow = Record<string, unknown>;
@@ -160,7 +161,7 @@ export const mapExpenseRowsForScope = (
       const status = ((row.status as string) || "").toLowerCase();
       const isRelevant = hasBookingMatch(row, bookingIds) || hasLegacyContainerMatch(row, containerReference);
       if (!isRelevant) return false;
-      return ["approved", "posted", "paid", "partial"].includes(status);
+      return isEvoucherSpent(status);
     })
     .map((row): RawRow => ({
       id: row.id,
@@ -203,7 +204,7 @@ export const mapEvoucherExpensesForScope = (
       const isRelevant = hasBookingMatch(row, bookingIds) || hasLegacyContainerMatch(row, containerReference);
       if (!isRelevant) return false;
 
-      return ["approved", "posted", "paid", "partial"].includes(status);
+      return isEvoucherSpent(status);
     })
     .map((row): RawRow => ({
       id: row.id,
