@@ -1622,7 +1622,12 @@ because **a wrong number has no error, no toast and no failed request. It is
 simply believed.** Every other finding in this document describes something
 someone *could* do. These describe what your reports are telling you today.
 
-### P1 — The Unbilled Revenue report shows ₱0.00. There is ₱2.8M unbilled · BUG (CRITICAL)
+> **P1, P2, P4, P5 and P6 are FIXED and on PRODUCTION (2026-08-07).** The
+> figures below were measured on the older dev clone; where production differs,
+> each finding now records both. P3 still waits on the L3 decision, P7 on a
+> product call, and P8/P9 are untouched.
+
+### P1 — The Unbilled Revenue report shows ₱0.00. There is ₱2.8M unbilled · FIXED (dev + PROD)
 `useUnbilledRevenueReport` selects three columns that do not exist —
 `billing_line_items.total_amount`, `invoices.invoice_type`,
 `invoices.reversal_for`. PostgREST returns **400 / 42703**, react-query yields
@@ -1633,7 +1638,7 @@ The page renders *"No unbilled bookings this period."*
 Truth: **₱2,803,905.99 across 30 bookings.** The report is not wrong about a
 number — it is silently blank about its entire subject.
 
-### P2 — Four invoices worth ₱485,000 are invisible in every report · BUG (CRITICAL)
+### P2 — Four invoices worth ₱485,000 are invisible in every report · FIXED (dev + PROD)
 `ACTIVE_INVOICE_STATUSES` is a hardcoded allow-list:
 `{draft, posted, approved, paid, open, partial, sent}`. Four dev invoices carry
 status **`Issued`** — not in the set, and there is no fallback branch.
@@ -1664,7 +1669,7 @@ all five projects**, rendered green with an upward arrow.
 A report that says every project is perfectly profitable is worse than one that
 says nothing.
 
-### P4 — The Financials module is blank for 42 of 60 users · BUG (CRITICAL)
+### P4 — The Financials module is blank for 42 of 60 users · FIXED (dev + PROD, migration 277)
 `applyScope` filters on `created_by` / `assigned_to`. `billing_line_items` has
 **neither column**; invoices, collections and evouchers have `created_by` but no
 `assigned_to`. For any user whose financials dial is own/team/department, every
@@ -1674,7 +1679,7 @@ toast.**
 Forty-two of sixty dev users resolve to a breaking dial. They are not seeing a
 restricted view. They are seeing a working-looking view of nothing.
 
-### P5 — Expenses are 5× overstated; "Pending Approval" can never be non-zero · BUG (HIGH)
+### P5 — Expenses are 5× overstated; "Pending Approval" can never be non-zero · FIXED (dev + PROD)
 The Expenses tab sums **all 267 e-vouchers at every lifecycle stage** —
 ₱4,697,989.70 — including 227 unapproved *requests* (₱3.68M), 8 drafts and 2
 cancelled. Actually spent: **₱934,290.25**.
@@ -1691,7 +1696,7 @@ Related: the expense mapper reads `expense_category`, `request_date`,
 expense is dated when it was keyed, named by raw UUID, and filed under a single
 category called "General".
 
-### P6 — The cost filter names statuses that do not exist · BUG (CRITICAL)
+### P6 — The cost filter names statuses that do not exist · FIXED (dev + PROD)
 `['approved','posted','paid','partial']` appears in **five places**. Of those,
 only `posted` is a live e-voucher status. `disbursed` — cash actually out the
 door, ₱350,307.25 — is not in the list.
