@@ -15,20 +15,24 @@ Started 2026-08-03.
 ## Where the register stands
 
 **124 findings across 19 passes. 34 fixed and verified on `dev`, 3 mitigated,
-50 still open as bugs, 14 on watch.** Nothing is fixed on prod — see the gate
-at the bottom of Wave 0.
+50 still open as bugs, 14 on watch.** The prod gate at the bottom of Wave 0 is
+partly lifted — see the release note below for exactly what shipped and what
+did not.
 
-> **Both live prod exposures are now closed on `dev` and verified by probe:**
-> U1 (the cascade table) and M1 (the attachments bucket). **Neither has been
-> applied to prod.** U1 is a migration; M1 is a code deploy followed by a bucket
-> flag, in that order.
+> **BOTH LIVE PROD EXPOSURES ARE CLOSED ON PRODUCTION** as of 2026-08-07 —
+> U1 (the cascade table) and M1 (the attachments bucket), each verified against
+> prod with the real publishable key rather than inferred from the migration.
+> Shipped alongside them: 270/273 (the e-voucher state machine and the widened
+> privileged-field guard), the 274 storage policies, and all three Edge Functions
+> (N1–N4). **Still not on prod: 275**, the delete guards — see M2.
 
-> **U1 is still live on production.** `access_cascade_edges` has RLS disabled and
-> grants `anon` full INSERT / UPDATE / DELETE / TRUNCATE on the 609 rules that
-> drive permission cascade — no login needed. **Closed on dev by 276 and verified
-> by probe; prod is untouched and needs your go-ahead.** It was four statements,
-> not two — see U1 for why the original one-line fix would have broken access
-> administration.
+> **U1 is closed everywhere (2026-08-07).** `access_cascade_edges` had RLS
+> disabled and granted `anon` full INSERT / UPDATE / DELETE / TRUNCATE on the 609
+> rules that drive permission cascade, with no login needed. Migration 276 is on
+> dev and prod; the anon probe is refused on SELECT, INSERT and DELETE against
+> production, and an `authenticated` caller still materializes the cascade. It
+> was four statements, not two — see U1 for why the original one-line fix would
+> have broken access administration.
 
 | § | pass | n | still open |
 |---|---|---|---|
@@ -1092,7 +1096,7 @@ with a partial roster. A missing actor is a broken run, not a quiet gap.
 Three passes run autonomously against tagged fixtures. 32 breaches. One of them
 is worse than anything else in this document, and it is live on prod.
 
-### M1 — The `attachments` bucket is public. 424 real client documents are on the open internet · FIXED on dev; PROD STILL OPEN
+### M1 — The `attachments` bucket is public. 424 real client documents are on the open internet · FIXED (dev + PROD)
 `storage.buckets.attachments.public = true`, on **dev and prod**. Its two
 policies check nothing but the bucket name:
 
@@ -1207,9 +1211,21 @@ That closes the "dev is not a faithful rehearsal" gap. The refactor has now been
 proven against the exact data prod holds — including the 257 booking attachments
 the earlier dev clone never had.
 
-**Prod needs two things, in this order: deploy the code, then flip the flag.**
-Flipping first kills every attachment in the product until the deploy lands.
-Prod also still carries the pre-274 policies, so those ship with it.
+**CLOSED ON PRODUCTION 2026-08-07**, in the required order: the resolver code
+merged to `main` and deployed, then the 274 policies, then the flag. Flipping
+first would have killed every attachment in the product until the build landed.
+
+Measured on prod either side of the flip, with a request carrying no credentials
+at all — a real house bill of lading, `bookings/a2b9d517…/…2607-412 HBL.pdf`:
+
+| | before | after |
+|---|---|---|
+| anon GET of the public URL | **HTTP 200, 579,420 bytes** | **HTTP 400** |
+| anon list of the bucket root | (already shut by the policies) | 0 entries |
+| anon `createSignedUrl` | — | refused |
+
+That 200 is what this finding was always about, and it is the last time it will
+return one.
 
 ### M2 — Deleting a booking orphans its entire money trail · FIXED (275, dev)
 The key delete probe, measured by census before and after:
@@ -2315,7 +2331,7 @@ and should routing cover the other 92% of bookings.
 The last sweep: everything the earlier waves left alone. It found the single
 worst thing in this entire register, and it is live on production right now.
 
-### U1 — An anonymous stranger can rewrite your permission cascade · FIXED (276, dev) — LIVE ON PROD
+### U1 — An anonymous stranger can rewrite your permission cascade · FIXED (276, dev + PROD)
 
 `public.access_cascade_edges` holds the 609 rules that decide which grants imply
 which other grants:
