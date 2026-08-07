@@ -24,7 +24,10 @@ did not.
 > prod with the real publishable key rather than inferred from the migration.
 > Shipped alongside them: 270/273 (the e-voucher state machine and the widened
 > privileged-field guard), the 274 storage policies, and all three Edge Functions
-> (N1–N4). **Still not on prod: 275**, the delete guards — see M2.
+> (N1–N4). **275 followed the same day** — the delete guards are on prod too:
+> six `ON DELETE RESTRICT` edges and three status-aware delete policies, applied
+> against a money graph verified to hold zero dangling references first. All of
+> Wave 0 is now on production.
 
 > **U1 is closed everywhere (2026-08-07).** `access_cascade_edges` had RLS
 > disabled and granted `anon` full INSERT / UPDATE / DELETE / TRUNCATE on the 609
@@ -1227,7 +1230,7 @@ at all — a real house bill of lading, `bookings/a2b9d517…/…2607-412 HBL.pd
 That 200 is what this finding was always about, and it is the last time it will
 return one.
 
-### M2 — Deleting a booking orphans its entire money trail · FIXED (275, dev)
+### M2 — Deleting a booking orphans its entire money trail · FIXED (275, dev + PROD)
 The key delete probe, measured by census before and after:
 
 | table | before | after |
