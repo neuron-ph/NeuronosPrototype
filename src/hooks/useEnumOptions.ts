@@ -21,6 +21,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../utils/supabase/client';
 import { queryKeys } from '../lib/queryKeys';
+import { SERVICE_STATUS_OPTIONS } from '../config/booking/bookingFieldOptions';
 
 // ---------------------------------------------------------------------------
 // Kind → table mapping (must match profileRegistry sources)
@@ -113,13 +114,11 @@ export const ENUM_SEEDS: Record<EnumKind, string[]> = {
 };
 
 // Per-service-type seed for service_status.
-const SERVICE_STATUS_SEEDS: Record<string, string[]> = {
-  Brokerage: ['Draft', 'Waiting for Arrival', 'Ongoing', 'Delivered', 'Billed', 'Paid', 'Audited', 'Cancelled'],
-  Forwarding: ['Draft', 'Ongoing', 'In Transit', 'Delivered', 'Completed', 'Billed', 'Paid', 'Cancelled'],
-  Trucking: ['Draft', 'Ongoing', 'Delivered', 'Empty Return', 'Liquidated', 'Billed', 'Paid', 'Cancelled'],
-  'Marine Insurance': ['Draft', 'Ongoing', 'Issued', 'Billed', 'Paid', 'Cancelled'],
-  Others: ['Draft', 'Ongoing', 'Completed', 'Billed', 'Paid', 'Cancelled'],
-};
+// Deliberately NOT a second copy — this used to duplicate SERVICE_STATUS_OPTIONS
+// verbatim, giving the app three separate status vocabularies (this seed, the
+// static list, and profile_service_statuses in the DB) with nothing keeping them
+// in sync. The DB table stays authoritative; this is only the pre-fetch fallback.
+const SERVICE_STATUS_SEEDS: Record<string, string[]> = SERVICE_STATUS_OPTIONS;
 
 // ---------------------------------------------------------------------------
 // Public API

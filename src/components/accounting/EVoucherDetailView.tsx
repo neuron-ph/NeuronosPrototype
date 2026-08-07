@@ -11,11 +11,12 @@ import { SidePanel } from "../common/SidePanel";
 import type { EVoucher } from "../../types/evoucher";
 import { evoucherTypeLabelFor } from "../../utils/evoucherTransactionType";
 import { getPaymentUrgencyFor, resolveEvoucherDueDate, paymentUrgencyStyle } from "../../utils/evoucherUrgency";
+import { useAttachmentUrls } from "../../hooks/useAttachmentUrl";
 
 interface EVoucherDetailViewProps {
   evoucher: EVoucher;
   onClose: () => void;
-  currentUser?: { id: string; name: string; email: string; role?: string; department?: string; ev_approval_authority?: boolean | null };
+  currentUser?: { id: string; name: string; email: string; role?: string; department?: string };
   /** Opened via the list's "Liquidate" row action — open the form on arrival. */
   autoOpenLiquidation?: boolean;
   onStatusChange?: () => void;
@@ -67,6 +68,11 @@ export function EVoucherDetailView({
   // Read the lines straight from the table: the list queries that feed this
   // panel don't join evoucher_line_items, so the prop is usually empty.
   const [lineBookingNumbers, setLineBookingNumbers] = useState<string[]>([]);
+  // M1: attachment `url` holds a storage path (or a legacy public URL on older
+  // vouchers). The bucket is private — sign both before rendering a link.
+  const attachmentUrls = useAttachmentUrls(
+    (Array.isArray(evoucher.attachments) ? evoucher.attachments : []).map((a: { url?: string }) => a.url),
+  );
   useEffect(() => {
     let cancelled = false;
     void supabase
@@ -610,7 +616,7 @@ export function EVoucherDetailView({
               {evoucher.attachments.map((att, idx) => (
                 <a
                   key={idx}
-                  href={att.url}
+                  href={att.url ? attachmentUrls[att.url] : undefined}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{

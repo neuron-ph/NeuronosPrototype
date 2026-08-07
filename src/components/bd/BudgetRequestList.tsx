@@ -134,9 +134,12 @@ export function BudgetRequestList() {
     queryKey: [...queryKeys.evouchers.list("bd"), "filter-options"],
     staleTime: 60_000,
     queryFn: async () => {
+      // `requestor_name` is not a column on evouchers — it lives in the `details`
+      // JSONB. Naming it here made PostgREST reject the whole request with
+      // 42703, so every filter dropdown on this page came back empty.
       const { data, error } = await supabase
         .from("evouchers")
-        .select("gl_sub_category, customer_name, requestor_name, vendor_name")
+        .select("gl_sub_category, customer_name, vendor_name, details")
         .eq("source_module", "bd")
         .eq("transaction_type", "budget_request");
       if (error) throw error;
@@ -144,7 +147,7 @@ export function BudgetRequestList() {
       return {
         categories: uniq((data ?? []).map((r: any) => r.gl_sub_category)),
         customers: uniq((data ?? []).map((r: any) => r.customer_name)),
-        requestors: uniq((data ?? []).map((r: any) => r.requestor_name)),
+        requestors: uniq((data ?? []).map((r: any) => r.details?.requestor_name)),
         vendors: uniq((data ?? []).map((r: any) => r.vendor_name)),
       };
     },

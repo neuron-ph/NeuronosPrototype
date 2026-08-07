@@ -1,0 +1,409 @@
+{
+  "edgeFunctions": {
+    "probes": [
+      {
+        "name": "S1 send-feedback-email — unauthenticated reachability, malformed body",
+        "fn": "send-feedback-email",
+        "actor": "anon (no Authorization header, bundle anon key only)",
+        "verdict": "BREACH",
+        "evidence": "Handler executed with NO Authorization header and threw on req.json() BEFORE the Resend call (HTTP 500, JSON parse error). No DB/auth writes exist in this function to read back; the finding is that a verify_jwt:false function with ZERO auth guard (Authorization is never read) ran for an anonymous caller. No email sent.",
+        "severity": "high"
+      },
+      {
+        "name": "C-A create-user — no Authorization",
+        "fn": "create-user",
+        "actor": "anon",
+        "verdict": "BLOCKED_LOUD",
+        "evidence": "HTTP 401 'Missing authorization'. Service-role SELECT users WHERE email=payload -> no row. Guard is the first statement; body never read.",
+        "severity": "none"
+      },
+      {
+        "name": "C-B create-user — tampered bearer",
+        "fn": "create-user",
+        "actor": "anon (garbage JWT)",
+        "verdict": "BLOCKED_LOUD",
+        "evidence": "HTTP 401 'Invalid authorization token'. adminClient.auth.getUser() rejects via GoTrue. No user minted (service-role confirmed).",
+        "severity": "none"
+      },
+      {
+        "name": "C-C create-user — anon key as bearer",
+        "fn": "create-user",
+        "actor": "anon publishable key",
+        "verdict": "BLOCKED_LOUD",
+        "evidence": "HTTP 401 'Invalid authorization token' — the anon key carries no user sub, GoTrue rejects it. Fail-closed; nothing created.",
+        "severity": "none"
+      },
+      {
+        "name": "C-D create-user — low-privilege roster caller",
+        "fn": "create-user",
+        "actor": "jr.supervisor07@ (Ops TL, no exec_users:create)",
+        "verdict": "BLOCKED_LOUD",
+        "evidence": "HTTP 403 'You do not have permission to create users'. Service-role SELECT users WHERE email=throwaway -> no row: the 403 returns before req.json(), so nothing was minted (K1 verified by DB read, not the HTTP body).",
+        "severity": "none"
+      },
+      {
+        "name": "C-E-safe create-user — bd@ clears the auth gate (invalid dept)",
+        "fn": "create-user",
+        "actor": "bd@neuron.com.ph (BD manager, exec_users:create)",
+        "verdict": "BLOCKED_LOUD",
+        "evidence": "HTTP 400 'Invalid department or role value' — that validation sits BELOW the 403 authorization gate, so reaching it proves bd@ (a BD manager, not an executive) passed the create-users authorization check. Service-role confirms no auth.users/public.users row for the invalid-dept payload.",
+        "severity": "high"
+      },
+      {
+        "name": "A-A admin-user-actions — no Authorization",
+        "fn": "admin-user-actions",
+        "actor": "anon",
+        "verdict": "BLOCKED_LOUD",
+        "evidence": "HTTP 401 'Missing authorization' before the admin client is used. No mutation reachable.",
+        "severity": "none"
+      },
+      {
+        "name": "A-B admin-user-actions — tampered bearer",
+        "fn": "admin-user-actions",
+        "actor": "anon (garbage JWT)",
+        "verdict": "BLOCKED_LOUD",
+        "evidence": "HTTP 401 'Invalid authorization token' from GoTrue signature/exp validation.",
+        "severity": "none"
+      },
+      {
+        "name": "A-C admin-user-actions — unknown action",
+        "fn": "admin-user-actions",
+        "actor": "jr.supervisor07@ (low-priv, signed in)",
+        "verdict": "BLOCKED_LOUD",
+        "evidence": "HTTP 400 'Unknown action' — a low-privilege signed-in caller reaches the function, but the action switch returns before the grant check and before every mutation. Zero side effects.",
+        "severity": "none"
+      },
+      {
+        "name": "A-D admin-user-actions — low-priv updateStatus -> suspended",
+        "fn": "admin-user-actions",
+        "actor": "jr.supervisor07@ (no exec_users:edit)",
+        "verdict": "BLOCKED_LOUD",
+        "evidence": "HTTP 403. Fixture user (created by me, tagged) held status='active' BEFORE (K2: targeted a value it did not hold) and service-role read AFTER still returns 'active' — the write did not land. Denial verified by DB read, not HTTP body (K1).",
+        "severity": "none"
+      },
+      {
+        "name": "E1 escalation gate — a BD manager mints a full executive",
+        "fn": "create-user",
+        "actor": "bd@neuron.com.ph (BD manager, exec_users:create — NOT an executive)",
+        "verdict": "BREACH",
+        "evidence": "HTTP 200 and it LANDED. Service-role reads: auth.users row exists; public.users row exists with role='executive', department='Executive'; permission_overrides row exists with scope='all' carrying 1611 TRUE grants, seeded verbatim from the fallback profile 'Baseline — Executive'. Signed in as the new account using the CALLER-CHOSEN password: success. A BD manager minted a super-admin with a password he picked.",
+        "severity": "critical"
+      },
+      {
+        "name": "E2 resetPassword — full account takeover of a throwaway",
+        "fn": "admin-user-actions",
+        "actor": "bd@neuron.com.ph (exec_users:edit == coarse 'edit')",
+        "verdict": "BREACH",
+        "evidence": "HTTP 200. Proven end-to-end: signed in as the fixture user with the NEW password bd@ chose — success, complete takeover. activity_log rows naming who reset it: 0 before and 0 after for the target (service-role count) — NO audit trail is written. ACTION_TO_GRANT maps resetPassword->'edit' with no target scoping, so the RBAC matrix's coarse edit checkbox is in fact 'take over any account'.",
+        "severity": "critical"
+      },
+      {
+        "name": "E3 deleteUser — non-atomic ordering strands auth on failure",
+        "fn": "admin-user-actions",
+        "actor": "bd@neuron.com.ph (exec_users:delete)",
+        "verdict": "BREACH",
+        "evidence": "HTTP 200. Service-role before: public=true, auth=true; after: public=false, auth=false (verified via getUserById, not the HTTP body). Code order is public.users.delete() FIRST with its result IGNORED (no error check), THEN auth.admin.deleteUser — not transactional. An auth-delete failure after the profile delete would strand an auth account with no profile that 409s forever on re-create. The happy-path delete both-succeeds; the stranding is reasoned from the ignored-result ordering.",
+        "severity": "high"
+      },
+      {
+        "name": "S2 send real email — NOT PERFORMED",
+        "fn": "send-feedback-email",
+        "actor": "anon (would be)",
+        "verdict": "UNANSWERABLE",
+        "evidence": "Deliberately NOT sent — it delivers DKIM/SPF-signed mail from noreply@neuron.com.ph to the hardcoded real mailbox hq@neuron.com.ph with title/description/user_name/user_email interpolated RAW into HTML. S1 proves the handler is reachable unauthenticated with zero side effects; the phishing/HTML-injection primitive and unmetered Resend burn are reasoned from code. No real email was sent.",
+        "severity": "high"
+      }
+    ],
+    "breachCount": 4,
+    "cleanedUp": true,
+    "notSent": true,
+    "unmeasured": [
+      "S2 actual email delivery + live HTML-injection rendering in the received message — not performed by design (real human mailbox).",
+      "resetPassword / deleteUser / updateStatus against a REAL roster account (e.g. bd@ resetting hq@/CEO, or suspending an executive for org-wide lockout) — only own throwaway fixtures were touched; the roster-victim impact is reasoned from code, not executed.",
+      "The deleteUser failure BETWEEN the two deletes could not be forced — the auth-delete succeeded in the happy path, so the stranded-auth-account outcome is inferred from the ignored-result ordering, not observed.",
+      "Divergent grant resolution between create-user (access_profile overlaid on override) and admin-user-actions (override-only) was not driven to a live divergence — today it fails closed; confirmed by code reading only.",
+      "The create-user fallback-profile ordering inversion (Postgres DESC NULLS FIRST puts the generic Executive profile ahead of a department-specific one) is reasoned from code; not probed with a second generic profile.",
+      "The 500ms double-UPDATE retry loop in create-user was not stressed for a non-idempotent side effect.",
+      "updateStatus as a legitimate grant-holder (bd@) suspending an account was not run — only the low-priv denial (A-D) was measured."
+    ],
+    "notes": "Ran all 10 safeToProbe items plus the 3 approved destructive probes (E1/E2/E3) and the explicit S1-only proof for send-feedback-email. Every outcome verified with service-role eyes per K1 (DB reads / getUserById / permission_overrides counts), never the HTTP body. K2 honored on A-D (fixture status was 'active', probed toward 'suspended'). K3 honored: both load-bearing logins (bd@neuron.com.ph and jr.supervisor07@) verified before any probe; run would have aborted on failure.\n\nHEADLINE: the ten deny-path probes all held BLOCKED_LOUD — both create-user and admin-user-actions genuinely verify the JWT via GoTrue and fail closed (no NULL-trap of the H2/J1 family). But the three approved probes confirm the classification's sharpest claims exactly:\n- E1: bd@ — a Business Development MANAGER, not an executive — minted a full super-admin (role=executive, scope='all', 1611 true grants seeded verbatim from 'Baseline — Executive') with a password he chose. The endpoint reads role/department from caller JSON and caps the new user's authority against nothing.\n- E2: the coarse exec_users:edit grant is 'reset anyone's password' with NO target scoping and NO audit row (activity_log count for the target stayed 0/0). Proven end-to-end by signing in as the fixture with bd@'s chosen password.\n- E3: deleteUser deletes public.users first (result ignored) then auth — non-transactional; a failure between the two strands an auth account with no profile.\n\nCLEANUP: 4 accounts created (3 service-role fixtures + 1 exec minted via the endpoint; the delete fixture was consumed by E3). Cleanup order permission_overrides -> public.users -> auth.admin.deleteUser via service role. Independent post-run sweep: 0 residual public.users, 0 permission_overrides, 0 auth.users matching qa-p4-* (auth checked via listUsers, not just getUserById). No real email sent. No prod tool touched. Temp scripts removed from the repo (git clean); recon/probe scripts live only in scratchpad."
+  },
+  "personas": [
+    {
+      "personas": [
+        {
+          "email": "jr.supervisor07@falconslogistics-ph.com",
+          "role": "Operations team_leader (Princess Marre R. Reyes, user-3b72a9b7)",
+          "jobSteps": [
+            {
+              "step": "open her forwarding booking list (/operations/forwarding)",
+              "outcome": "WORKS",
+              "evidence": "17 rows rendered; SERVICE-ROLE counts 17 Forwarding bookings. Her bookings_forwarding dial is \"everything\", so the whole service list is correct.",
+              "severity": "none"
+            },
+            {
+              "step": "open a booking (FWD202608-062)",
+              "outcome": "WORKS",
+              "evidence": "Detail view opened with the full tab bar (Booking Information / Billings / Invoices / Collections / Expenses / Comments / Chrono / Attachments).",
+              "severity": "none"
+            },
+            {
+              "step": "read the Billings tab",
+              "outcome": "EMPTY_PAGE",
+              "evidence": "SERVICE-ROLE sees 1 billing_line_items row (CRATING FEE, PHP 25,000) on this booking. After 18s of polling the tab renders \"General 0 items — No items in this category\". She holds ops_forwarding_billings_tab:view, so she SHOULD see it. Cause: billing_line_items_select is current_user_can_view_record('billings', NULL) — a literal NULL owner, which the function short-circuits to false for every dial below org_wide. Her billings dial is \"team\". This is the READ half of E15, now confirmed in the UI. Screenshot: test-results/personas-ops-pricing/princess-read-billings-tab.png",
+              "severity": "high"
+            },
+            {
+              "step": "read the Invoices tab",
+              "outcome": "EMPTY_PAGE",
+              "evidence": "SERVICE-ROLE sees invoice FWD202608-062-001 on her booking. The tab renders \"No invoices found matching your filters\". She holds ops_forwarding_invoices_tab create+delete+edit+export+view. DIFFERENT cause from billings: invoices_select is current_user_can_view_record('invoices', created_by); the invoice was raised by Janice D. De Villa (Accounting, in no team) and Princess's invoices dial is \"team\" (she is in ONE TEAM - FORWARDING). So the dial is working as written, but the effect is that the receivable for the job she runs is invisible to her. Screenshot: princess-read-invoices-tab.png",
+              "severity": "high"
+            },
+            {
+              "step": "read the Collections tab",
+              "outcome": "WORKS",
+              "evidence": "Tab renders; SERVICE-ROLE also sees 0 collections on this booking, so there is nothing that could be hidden. Not a pass on visibility — unanswerable on this fixture, recorded as no-finding rather than counted as proof.",
+              "severity": "none"
+            },
+            {
+              "step": "read the Expenses tab",
+              "outcome": "WORKS",
+              "evidence": "SERVICE-ROLE sees 1 evoucher_line_items row booked to this booking, and the tab renders it. The only money tab of the four that she can actually read.",
+              "severity": "none"
+            },
+            {
+              "step": "add a charge on the Billings tab (the E15 confirmation)",
+              "outcome": "BLOCKED_SAVE_FAILS",
+              "evidence": "Reproduced three consecutive runs. Entry is \"Add Item\" inside the General category (the header's \"Add Billing\" files the row under a category the booking view never renders — E14 — so it reads as a dead button). The row fills correctly from the Billing Catalog: CRATING FEE, qty 1, PHP 1234. On Save Changes the ONLY thing she sees is a toast reading \"Saving changes...\" that never resolves to success OR error; the Cancel / Save Changes bar stays up indefinitely and the filled row stays on screen looking saved. SERVICE-ROLE: billing_line_items on FWD202608-062 still 1 — nothing was written. She holds ops_forwarding_billings_tab create+edit+delete and sits on the billings \"team\" dial. This is E15/G3 end to end in the UI, and the silent never-resolving spinner is worse than a plain error: it is indistinguishable from success until she reloads and her work is gone. Screenshot: princess-add-a-charge.png",
+              "severity": "critical"
+            },
+            {
+              "step": "update the booking status",
+              "outcome": "WORKS",
+              "evidence": "K2 respected — targeted \"Ongoing\", a value the row did not hold (it was \"Created\"). SERVICE-ROLE: bookings.status \"Created\" -> \"Ongoing\". Restored to \"Created\" in cleanup.",
+              "severity": "none"
+            },
+            {
+              "step": "add a comment",
+              "outcome": "WORKS",
+              "evidence": "SERVICE-ROLE: booking_comments row present with the E2E-PERSONA text. Deleted in cleanup.",
+              "severity": "none"
+            },
+            {
+              "step": "upload an attachment",
+              "outcome": "WORKS",
+              "evidence": "SERVICE-ROLE: booking_attachments row for E2E-PERSONA-<ts>.txt. Deleted in cleanup. (Note: this lands in the `attachments` storage bucket, which is finding M1 — public and world-readable. The upload path itself works.)",
+              "severity": "none"
+            },
+            {
+              "step": "raise an e-voucher for the job and submit it",
+              "outcome": "WORKS",
+              "evidence": "Full form driven: registered vendor UTOC CORPORATION, Expense Catalog category (EXP) FORWARDING, catalog item FC (OCEAN FREIGHT), PHP 1750, line booked to FWD202608-062. SERVICE-ROLE: EV-2026-05xx created at status=pending_manager, routed to Pricing/manager — the Forwarding routing rule (E12) fired correctly. Deleted in cleanup.",
+              "severity": "none"
+            }
+          ]
+        },
+        {
+          "email": "jr.manager03@falconslogistics-ph.com",
+          "role": "Pricing manager (Jayson P. Nabos, user-c1fbae71)",
+          "jobSteps": [
+            {
+              "step": "work the pending-pricing queue (/pricing/quotations)",
+              "outcome": "WORKS",
+              "evidence": "List reports \"Showing 1–25 of 129\" on the Inquiries tab; SERVICE-ROLE counts 58 Pending Pricing quotations. His quotations dial is \"everything\", which is what lets him triage the unassigned ones (E1).",
+              "severity": "none"
+            },
+            {
+              "step": "find the unassigned quotation to triage",
+              "outcome": "WORKS",
+              "evidence": "QUO2606303954 (\"FQR000059 CAMPING DE PAAL...\"), Pending Pricing with assigned_to NULL per SERVICE-ROLE, is visible in his queue.",
+              "severity": "none"
+            },
+            {
+              "step": "assign a reviewer",
+              "outcome": "WORKS",
+              "evidence": "Picked Sarah May B. Baylon, then the separate Confirm Assign step (E3 — picking the name alone does nothing). SERVICE-ROLE: quotations.assigned_to = user-ef8325fb. Restored to NULL in cleanup.",
+              "severity": "none"
+            },
+            {
+              "step": "reopen the quotation after it was priced",
+              "outcome": "WORKS",
+              "evidence": "Pricing MOVES the record between lifecycle tabs (E4) — once Priced it leaves Inquiries. Found under the Quotations tab. Not a bug; recorded because looking on the default tab reads as a disappearance.",
+              "severity": "none"
+            },
+            {
+              "step": "send the quotation to the client",
+              "outcome": "WORKS",
+              "evidence": "SERVICE-ROLE: quotations.status \"Priced\" -> \"Sent to Client\".",
+              "severity": "none"
+            },
+            {
+              "step": "convert an accepted quotation to a project",
+              "outcome": "WORKS",
+              "evidence": "Marked Approved, then Create Project. E7 applies — the button lands under the sticky tab bar and a normal click is intercepted, so the event is dispatched on the element. SERVICE-ROLE: quotations.project_id populated, status \"Converted to Project\". Project deleted and project_id nulled in cleanup.",
+              "severity": "none"
+            },
+            {
+              "step": "approve the e-voucher routed to him",
+              "outcome": "WORKS",
+              "evidence": "The voucher Princess raised arrived in HIS Approvals queue (not the Ops manager's) because the line is booked to a Forwarding booking — the routing rule from E12. Approve offered and taken. SERVICE-ROLE: EV-2026-05xx \"pending_manager\" -> \"pending_ceo\".",
+              "severity": "none"
+            }
+          ]
+        },
+        {
+          "email": "jr.pricing01@falconslogistics-ph.com",
+          "role": "Pricing staff (Sarah May B. Baylon, user-ef8325fb)",
+          "jobSteps": [
+            {
+              "step": "find work assigned to her",
+              "outcome": "WORKS",
+              "evidence": "QUO2606303954 visible in her list immediately after Jayson's assignment; SERVICE-ROLE confirms assigned_to=user-ef8325fb. She sits on the quotations \"own\" dial, which matches assigned_to — so assignment is both the business act and the permission grant (E1), and it works.",
+              "severity": "none"
+            },
+            {
+              "step": "price it",
+              "outcome": "WORKS",
+              "evidence": "\"Mark as Priced\" offered at Pending Pricing. SERVICE-ROLE: quotations.status \"Pending Pricing\" -> \"Priced\". Note the chip label does not change (E2) — the DB is the only honest confirmation.",
+              "severity": "none"
+            },
+            {
+              "step": "manager-only step: approve the routed e-voucher (must be correctly absent)",
+              "outcome": "WORKS",
+              "evidence": "CORRECT ABSENCE. She holds my_evouchers view+create+edit but NOT :approve (Jayson holds approve). The voucher routed to the Pricing MANAGER does not appear in her Approvals queue. A missing action for someone without the grant is right behaviour, not a finding — verified against her actual permission_overrides rather than assumed.",
+              "severity": "none"
+            }
+          ]
+        }
+      ],
+      "blockedCount": 3,
+      "notes": "SPEC: tests/e2e/personas/ops-pricing-personas.spec.ts — 4 tests, serial, committed-ready. Last 3 consecutive runs: 4 passed, identical outcomes. Screenshots + results.json in test-results/personas-ops-pricing/.\n\nHEADLINE. 15 of 18 steps work. All three failures sit on the Operations supervisor's OWN booking, and together they say one thing: Operations cannot see or touch the money on the job it runs.\n\n1. E15/G3 CONFIRMED END TO END IN THE UI, and its face is worse than the findings register describes. The register says the save \"dies with 'new row violates row-level security policy'\". It does not. What Princess actually sees is a toast reading \"Saving changes...\" that NEVER resolves — no success, no error — with the Cancel / Save Changes bar still up and her filled row still on screen. SERVICE-ROLE confirms nothing was written. There is no moment at which the product tells her the charge did not save. It is indistinguishable from success until she reloads. (Screenshot: princess-add-a-charge.png.) Reproduced three runs.\n\n2. The read half of E15 is equally real: the CRATING FEE charge that service-role sees on her booking renders as \"General 0 items\" for her.\n\n3. NEW, and a different cause from E15 — the Invoices tab. invoices_select scopes on created_by, not on a NULL owner. The invoice raised against her booking was created by Accounting (in no team), and her invoices dial is \"team\". So the policy is behaving exactly as written, but the outcome is that the receivable for her own job is invisible while she holds ops_forwarding_invoices_tab create+delete+edit+export+view. E15 says the billings tab grants promise a capability the DB will not honour; this is the same shape one table over, reached by a different route. Worth folding into the same decision: either the ops_forwarding_*_tab grants scope by BOOKING, or they should not be grantable outside Accounting.\n\nCORRECTION I MADE MID-RUN, recorded so it is not repeated: I first read users.team_id (NULL for all 58 active users) and nearly filed \"the team dial collapses to own for everyone\". Wrong — team membership lives in team_memberships (51 active rows, 38 users). Princess is in ONE TEAM - FORWARDING. This is the E11 mistake again: concluding from the absence of X where I looked instead of finding where the code actually reads it. I checked current_user_team_ids() before writing anything.\n\nTHREE HARNESS TRAPS, each of which produced a false finding in the first run, now fixed and documented in the spec header:\n- Playwright's locator.isVisible({timeout}) does NOT wait — the timeout option is silently ignored. On a still-loading page it returns false instantly, which reads exactly like BLOCKED_NO_BUTTON. It manufactured four fake failures in run 1 (including \"/my-evouchers did not render\" and \"/pricing/quotations did not render\", both of which render fine). Every check now uses waitFor.\n- The Pricing quotation list SEARCHES on quotation_number but RENDERS the quotation NAME — the number is in no cell. A locator keyed on the number never resolves, which is indistinguishable from \"this person cannot see the record\". It produced a fake EMPTY_PAGE for both Jayson and Sarah.\n- That list is not a DataTable: rows carry no role=row, so a row count is 0 whether it is full or empty. It now reads the list's own \"Showing 1–25 of 129\" footer, and polls for it (E5).\n\nK-RULES. K1: every read verdict is measured against what service-role can see, and a tab with genuinely 0 rows is recorded as no-finding rather than counted as a pass (Collections). K2: the status write targeted \"Ongoing\" against a row holding \"Created\". K3: all three logins verified by token AND by the profile chip rendering the right name/department; no step proceeded on an unverified session.\n\nWRITES TO DEV: all tagged E2E-PERSONA and cleaned. Verified clean after the final run — billing_line_items back to 1, booking status restored to \"Created\", 0 E2E-PERSONA comments, 0 attachments, 0 e-vouchers or projects created in the last hour, and the triaged quotation restored to Pending Pricing / unassigned / no project.\n\nNOT COVERED: pricing a quotation here means the \"Mark as Priced\" status act, not entering rate line items — same scope as the spine. Collections visibility for Princess is unanswerable on this fixture (no collections exist on the booking); it should be re-run against a booking that has one."
+    },
+    {
+      "personas": [
+        {
+          "email": "treasury@falconslogistics-ph.com",
+          "role": "Accounting manager / Treasury (acct_evouchers:disburse, acct_projects_billings/invoices/collections tabs, accounting_financials_* view, evouchers/billings/invoices/collections all org_wide)",
+          "jobSteps": [
+            {
+              "step": "sign in",
+              "outcome": "WORKS",
+              "evidence": "K3 verified twice: sb-* token persisted in sessionStorage AND the Sign In button is gone. Landed as Janice D. De Villa, Accounting · Manager.",
+              "severity": "none"
+            },
+            {
+              "step": "work the Pending Disburse queue",
+              "outcome": "WORKS",
+              "evidence": "/accounting/evouchers rendered 151 rows; service-role count at status='pending_accounting' = 149. Queue is not hiding work.",
+              "severity": "none"
+            },
+            {
+              "step": "disburse a voucher",
+              "outcome": "WORKS",
+              "evidence": "Fixture EV (tagged E2E-PERSONA, seeded at pending_accounting on FWD202608-062) found by search, Disburse offered, Disbursement Details page, method Cash, 'Disburse & Close'. SERVICE-ROLE readback: status='posted', disbursed_by_name='Janice D. De Villa'. Not a toast — the row.",
+              "severity": "none"
+            },
+            {
+              "step": "open a project and raise a billing",
+              "outcome": "WORKS",
+              "evidence": "PRJ-291528 → Accounting → Billings → Add Billing → catalog item CRATING FEE → price 4321 → service Forwarding → Save Changes. SERVICE-ROLE readback: billing_line_items row on booking FWD202608-062 with amount 4321. (This is the step E15/G3 kills for Operations; for Accounting org_wide it lands.)",
+              "severity": "none"
+            },
+            {
+              "step": "build an invoice from the billing",
+              "outcome": "WORKS",
+              "evidence": "Invoices tab → New Invoice → picked the unbilled CRATING FEE line → Save as Draft. SERVICE-ROLE readback: invoice FWD202608-062-002, total 4321, status=draft, approval_status=pending_approval.",
+              "severity": "none"
+            },
+            {
+              "step": "finalize the invoice",
+              "outcome": "WORKS",
+              "evidence": "SETUP STATED PLAINLY: the approver is the Operations manager (another agent's persona), so service role stamped approval_status='approved' — nothing here claims Janice approved her own invoice. Janice then clicked Finalize Invoice in her own browser; SERVICE-ROLE readback: status='posted'. Finalize is correctly offered only once approved.",
+              "severity": "none"
+            },
+            {
+              "step": "record a collection",
+              "outcome": "WORKS",
+              "evidence": "Collections tab → Record Collection → amount 4321 → Save & Close. SERVICE-ROLE readback: collections row @ 4321 with invoice_id = FWD202608-062-002.",
+              "severity": "none"
+            },
+            {
+              "step": "open Financials and read every tab",
+              "outcome": "WORKS",
+              "evidence": "/accounting/financials: all five tabs (Dashboard, Billings, Invoices, Collections, Expenses) offered and rendered with data; page heading re-asserted after each click so a navigate-away could not read as a missing tab. No tab declared an empty state while service-role saw rows.",
+              "severity": "none"
+            }
+          ]
+        },
+        {
+          "email": "accountreceivables@falconslogistics-ph.com",
+          "role": "Accounting staff — MARYCRIS P. MAGCALAS. Wide grants (billings/invoices/collections create+edit, acct_evouchers view/create/approve/delete) but NO acct_evouchers:disburse",
+          "jobSteps": [
+            {
+              "step": "sign in",
+              "outcome": "WORKS",
+              "evidence": "K3 verified: token persisted, login form gone, landed as MARYCRIS P. MAGCALAS, Accounting.",
+              "severity": "none"
+            },
+            {
+              "step": "find unpaid invoices",
+              "outcome": "WORKS",
+              "evidence": "Financials → Invoices offered and populated. The seeded unpaid, 45-day-overdue receivable was NOT visible in the tab's default 'This Month' date scope (01/08–31/08/2026) and appeared only after widening the scope to All Time. Not a bug — the control is right there — but the default window hides exactly the aged receivables an AR clerk is looking for.",
+              "severity": "low"
+            },
+            {
+              "step": "read the receivables aging",
+              "outcome": "WORKS",
+              "evidence": "Financials → Dashboard renders 'Receivables Aging' with buckets (Current … 90+). Visible to her without any extra grant.",
+              "severity": "none"
+            },
+            {
+              "step": "record a collection",
+              "outcome": "WORKS",
+              "evidence": "PRJ-899414 → Accounting → Collections → Record Collection → 7500 → Save & Close. SERVICE-ROLE readback: collections row @ 7500 against the fixture invoice's id. Her acct_projects_collections_tab:create is honoured by the database, not just the form.",
+              "severity": "none"
+            },
+            {
+              "step": "confirm the AP action she must NOT have is absent",
+              "outcome": "WORKS",
+              "evidence": "Opened a real voucher at pending_accounting: no Disburse button. Correct — she holds acct_evouchers view/create/approve/delete but not :disburse. Stated honestly: an absent Approve on that same panel proves nothing either way, because at pending_accounting the outstanding act is disbursement, not approval.",
+              "severity": "none"
+            }
+          ]
+        },
+        {
+          "email": "jr.businessdev02@falconslogistics-ph.com",
+          "role": "BD staff — Johnna P. C. Aceveda. bd_inquiries create/edit/view/delete/export, bd_projects:view only (no bd_projects:create, no pricing_projects:create)",
+          "jobSteps": [
+            {
+              "step": "sign in",
+              "outcome": "WORKS",
+              "evidence": "K3 verified: token persisted, login form gone, landed as Johnna Philipian C. Aceveda, Business Development.",
+              "severity": "none"
+            },
+            {
+              "step": "create an inquiry and submit it to Pricing",
+              "outcome": "WORKS",
+              "evidence": "Create Inquiry → Project Inquiry → customer FREIGHT CARE LOGISTICS, contact FAJNA FAJNA, name tagged E2E-PERSONA, service Forwarding → Submit Project Inquiry to Pricing. SERVICE-ROLE readback: quotations row for the stamped QUO number at status='Pending Pricing'. It genuinely reached Pricing.",
+              "severity": "none"
+            },
+            {
+              "step": "track it through to Accepted",
+              "outcome": "WORKS",
+              "evidence": "SETUP STATED PLAINLY: Johnna holds no pricing_quotations grant and cannot mark her own inquiry Priced, so service role performed the Pricing hop (status→'Priced'). The two steps that ARE hers were driven in her browser: Quotations tab → Send to Client → Mark as Approved. SERVICE-ROLE readback: status='Accepted by Client'.",
+              "severity": "none"
+            },
+            {
+              "step": "convert it to a project",
+              "outcome": "BLOCKED_NO_BUTTON",
+              "evidence": "'Create Project' is absent from the whole DOM on her Accepted-by-Client quotation. That is CORRECT (E8): the button is gated on bd_projects:create || pricing_projects:create and she holds neither — her grants show bd_projects:view only. THE FINDING IS THE SILENCE: the accepted quote offers no next action and no explanation anywhere on the page (checked the full rendered body for any 'only Pricing / awaiting Pricing / not authorized' wording — none). The BD user who won the deal and recorded the client's acceptance is left at a dead end with no indication that Pricing must now convert it. Screenshot: test-results/personas/johnna-convert-to-a-project-must-be-refused-and-say-so-.png",
+              "severity": "low"
+            }
+          ]
+        }
+      ],
+      "blockedCount": 1,
+      "notes": "SPEC: C:\\Users\\Marcus\\Documents\\Neuron Development\\NeuronosPrototype\\tests\\e2e\\personas\\accounting-and-bd.spec.ts — one file, three tests, committed-ready. Final run: 3 passed, 17 job steps, 16 WORKS, 1 not-WORKS (Johnna's expected E8 gate). Two consecutive full runs gave identical results; the AR test was re-run a third time after an edit. Run with `npx playwright test tests/e2e/personas/accounting-and-bd.spec.ts`.\n\nHEADLINE: no E15-class failure exists for these three people. Nothing lied about saving. Every write was verified with SERVICE-ROLE eyes (K1) — the e-voucher reaching 'posted', the billing line, the invoice, the finalize, both collections, the quotation status — never from a toast or an HTTP code. Every write targeted a value the row did not already hold (K2), and every sign-in was proved twice before any conclusion was drawn from an absence (K3).\n\nTHE HARNESS LIED THREE TIMES AND EACH WAS CHASED TO ROOT CAUSE BEFORE REPORTING (C6 discipline). All three initially produced findings that were false:\n1. \"Janice: 4 of 5 Financials tabs not offered\" — FALSE. The Financials tab bar is plain <button>s carrying the same words as the left sidebar; .first() clicked the SIDEBAR 'Dashboard', navigated off /accounting/financials, and every later tab then read as missing. Fixed by scoping to <main> and re-asserting the Financials heading after each click.\n2. \"Janice: Financials Collections tab is empty while the db has 6 rows\" — FALSE. The regex /no data/ matched a badge on the 'Avg Days to Collect' stat tile of a Collections tab showing PHP 75.0K. Tightened to require a real empty-state phrase.\n3. \"Johnna: the customer picker never unlocks the contact field\" — FALSE. The dropdown option text also exists in the inquiry list rendered behind the form, so an unscoped getByText().first() clicked outside the form and dismissed it. Fixed by scoping the option to the dropdown panel (ancestor::div[3] of its search box). Note spine.spec.ts uses the same unscoped click and is exposed to the same flake.\nAlso added openProjectTab(): a project file's two-tier tabs swallow a click made before hydration, which reads as \"the tab isn't offered\" (E5 shape). It retries up to 3x.\n\nWRITES TO DEV / CLEANUP: everything tagged E2E-PERSONA and deleted in afterAll. Verified clean with service role afterwards — 0 tagged e-vouchers, 0 fixture invoices, 0 tagged quotations, 0 billing lines @ 4321, 0 recent collections, 0 orphaned evoucher_history rows. dev has no journal/ledger tables, so the disbursement left no orphaned GL rows. Two hops were performed by service role as environment setup and are labelled as such in the spec and above: the Operations manager's invoice approval, and the Pricing 'Priced' hop on Johnna's quotation. Neither is asserted as a persona action.\n\nONE OBSERVATION NOT REPORTED AS A FINDING: on the Financials → Expenses tab the seeded voucher grouped under a raw booking UUID header while its REF# column showed the booking number. It may be an artifact of my service-role fixture (project_number set to the booking number, project_id null — the L3 shape), so I did not chase it and do not claim it as a product defect.\n\nWHAT I COULD NOT DETERMINE: whether AR staff holding acct_evouchers:approve is offered the CEO approval on a pending_ceo voucher. Her job does not include it and it is the 'should not' direction another pass owns, so I did not probe it — but the grant is real in permission_overrides and worth someone's attention."
+    }
+  ]
+}

@@ -25,7 +25,7 @@ export function logActivity(
   actor: ActivityActor,
   details?: ActivityDetails,
 ): void {
-  supabase.from("activity_log").insert({
+  const row = {
     entity_type: entityType,
     entity_id: entityId,
     entity_name: entityName,
@@ -36,8 +36,32 @@ export function logActivity(
     user_name: actor.name,
     user_department: actor.department,
     metadata: details?.description ? { description: details.description } : {},
-  }).then(({ error }) => {
-    if (error) console.error("[ActivityLog] Insert failed:", error.message);
+  };
+
+  supabase.from("activity_log").insert(row).then(({ error }) => {
+    if (!error) return;
+
+    // 23503 = foreign_key_violation. activity_log.user_id references users(id),
+    // so an actor id that is not a live profile — a stale cached session, an id
+    // from another environment — throws the whole insert away and the audit
+    // entry is lost entirely. The column is ON DELETE SET NULL, so a null actor
+    // is a legitimate row: keep the record, attribute it by name, and say
+    // loudly which id was rejected so the caller can be found.
+    if (error.code === "23503") {
+      console.error(
+        `[ActivityLog] actor id "${row.user_id}" is not a users.id — ` +
+          `re-logging "${actionType} ${entityType}" without an actor link.`,
+      );
+      void supabase
+        .from("activity_log")
+        .insert({ ...row, user_id: null })
+        .then(({ error: retryError }) => {
+          if (retryError) console.error("[ActivityLog] Retry failed:", retryError.message);
+        });
+      return;
+    }
+
+    console.error("[ActivityLog] Insert failed:", error.message);
   });
 }
 

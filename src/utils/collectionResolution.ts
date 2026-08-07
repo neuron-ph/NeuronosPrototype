@@ -73,30 +73,31 @@ export async function resolveCollectionDisposition({
 
     const evoucherId = data?.evoucher_id || collection?.evoucher_id;
     if (evoucherId) {
-      const { error: evoucherError } = await supabase
-        .from("evouchers")
-        .update({
-          status: nextStatus,
-          notes: nextNotes,
-          updated_at: nextUpdatedAt,
-        })
-        .eq("id", evoucherId);
+      // Migration 270: credited/refunded are legacy AR dispositions, and they
+      // are edges in the transition matrix like any other move.
+      const { error: evoucherError } = await supabase.rpc("evoucher_transition", {
+        p_evoucher_id: evoucherId,
+        p_to_status: nextStatus,
+        p_notes: nextNotes,
+      });
 
-      if (evoucherError) throw evoucherError;
+      if (evoucherError) throw new Error(evoucherError.message);
     }
 
     return data;
   }
 
+  const { error: moveError } = await supabase.rpc("evoucher_transition", {
+    p_evoucher_id: collection.id,
+    p_to_status: nextStatus,
+    p_notes: nextNotes,
+  });
+  if (moveError) throw new Error(moveError.message);
+
   const { data, error } = await supabase
     .from("evouchers")
-    .update({
-      status: nextStatus,
-      notes: nextNotes,
-      updated_at: nextUpdatedAt,
-    })
-    .eq("id", collection.id)
     .select()
+    .eq("id", collection.id)
     .single();
 
   if (error) throw error;

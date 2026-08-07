@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { hasAdminUsersGrant, type AdminUsersAction } from "./adminUsersPermissions.ts";
+import { refuseTargetReason } from "./targetScope.ts";
 
 const ALLOWED_ORIGIN_RE = /^https?:\/\/(localhost(:\d+)?|127\.0\.0\.1(:\d+)?|[\w-]+\.vercel\.app|([\w-]+\.)*neuron\.com\.ph)$/;
 function buildCors(req: Request) {
@@ -13,6 +14,11 @@ function buildCors(req: Request) {
   };
 }
 
+// N2: `edit` is doing far too much work here. Resetting a password is account
+// takeover, and an admin reading the RBAC matrix sees a checkbox that reads "can
+// change a user's name and department". Splitting it needs a new grant key and a
+// migration to seed it, so for now the coarse mapping stays and the DAMAGE is
+// bounded by target scoping + an audit row below. The key is still worth adding.
 const ACTION_TO_GRANT: Record<string, AdminUsersAction> = {
   resetPassword: "edit",
   updateStatus: "edit",
@@ -50,7 +56,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: callerProfile, error: profileError } = await adminClient
       .from("users")
-      .select("id, role")
+      .select("id, name, role, department")
       .eq("auth_id", callerAuthId)
       .maybeSingle();
 
@@ -87,14 +93,50 @@ Deno.serve(async (req: Request) => {
       return data.auth_id;
     };
 
+    // N2: the ONLY relationship check in this file used to be
+    // `userId === callerProfile.id`, and it defended deleteUser alone.
+    // resetPassword and updateStatus had no target check whatsoever — no
+    // department, no seniority, no visibility dial. Every action now passes
+    // through here first.
+    const guardTarget = async (userId: string) => {
+      const { data: target, error } = await adminClient
+        .from("users")
+        .select("id, name, role, department")
+        .eq("id", userId)
+        .maybeSingle();
+      if (error || !target) return { error: respond({ error: "Target user not found" }, 404) };
+      const reason = refuseTargetReason(callerProfile, target);
+      if (reason) return { error: respond({ error: reason }, 403) };
+      return { target };
+    };
+
+    // N2: nothing was written down. Zero activity_log rows named who reset a
+    // password, before or after. An account takeover that leaves no trace is
+    // worse than one that does.
+    const audit = async (verb: string, target: { id: string; name?: string | null }, detail?: string) => {
+      await adminClient.from("activity_log").insert({
+        entity_type: "user",
+        entity_id: target.id,
+        entity_name: target.name ?? target.id,
+        action: verb,
+        user_id: callerProfile.id,
+        user_name: callerProfile.name ?? callerProfile.id,
+        description: detail ?? null,
+        created_at: new Date().toISOString(),
+      });
+    };
+
     if (action === "resetPassword") {
       const { userId, newPassword } = params as { userId: string; newPassword: string };
       if (!userId || !newPassword || typeof newPassword !== "string" || newPassword.length < 8) {
         return respond({ error: "userId and newPassword (min 8 chars) required" }, 400);
       }
+      const guard = await guardTarget(userId);
+      if (guard.error) return guard.error;
       const authId = await getAuthId(userId);
       const { error } = await adminClient.auth.admin.updateUserById(authId, { password: newPassword });
       if (error) throw error;
+      await audit("password_reset", guard.target!, "Password reset by an administrator");
       return respond({ success: true });
     }
 
@@ -104,10 +146,18 @@ Deno.serve(async (req: Request) => {
       if (userId === callerProfile.id) {
         return respond({ error: "Cannot delete your own account" }, 400);
       }
+      const guard = await guardTarget(userId);
+      if (guard.error) return guard.error;
       const authId = await getAuthId(userId);
-      await adminClient.from("users").delete().eq("id", userId);
+      // N4: this used to delete the profile first and IGNORE the result, then
+      // delete the auth account — so a failure between the two stranded an auth
+      // account with no profile that 409s forever on re-create. Auth goes first
+      // now, and the profile delete is only reached if it succeeded.
       const { error: authError } = await adminClient.auth.admin.deleteUser(authId);
       if (authError) throw authError;
+      const { error: profileDeleteError } = await adminClient.from("users").delete().eq("id", userId);
+      if (profileDeleteError) throw profileDeleteError;
+      await audit("deleted", guard.target!, "User account deleted by an administrator");
       return respond({ success: true });
     }
 
@@ -119,11 +169,14 @@ Deno.serve(async (req: Request) => {
       if (!userId || !["active", "inactive", "suspended"].includes(status)) {
         return respond({ error: "userId and valid status required" }, 400);
       }
+      const guard = await guardTarget(userId);
+      if (guard.error) return guard.error;
       const { error } = await adminClient
         .from("users")
         .update({ status, is_active: status === "active" })
         .eq("id", userId);
       if (error) throw error;
+      await audit("status_changed", guard.target!, `Status set to ${status} by an administrator`);
       return respond({ success: true });
     }
 

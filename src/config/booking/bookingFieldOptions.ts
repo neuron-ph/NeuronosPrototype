@@ -1,4 +1,5 @@
 import type { ServiceType } from './bookingFieldTypes';
+import type { ExecutionStatus } from '../../types/operations';
 
 export const SERVICE_STATUS_OPTIONS: Record<ServiceType, string[]> = {
   Brokerage: ['Draft', 'Waiting for Arrival', 'Ongoing', 'Delivered', 'Billed', 'Paid', 'Audited', 'Cancelled'],
@@ -7,6 +8,53 @@ export const SERVICE_STATUS_OPTIONS: Record<ServiceType, string[]> = {
   'Marine Insurance': ['Draft', 'Ongoing', 'Issued', 'Billed', 'Paid', 'Cancelled'],
   Others: ['Draft', 'Ongoing', 'Completed', 'Billed', 'Paid', 'Cancelled'],
 };
+
+/**
+ * Which list tab a booking status belongs to.
+ *
+ * Colocated with SERVICE_STATUS_OPTIONS on purpose: the tabs used to filter on
+ * hardcoded strings ("In Progress", "Completed") that no service actually
+ * offers, so ~92% of bookings — including every submitted one, which is written
+ * as "Created" — matched no tab at all. Keeping the vocabulary and its buckets
+ * in one file is what stops that drifting again.
+ *
+ * Every ExecutionStatus must appear in exactly one bucket.
+ * `bookingStatusBuckets.test.ts` fails if one is added and not bucketed.
+ */
+export const BOOKING_STATUS_BUCKETS = {
+  draft: ['Draft'],
+  inProgress: [
+    'Created',
+    'Pending',
+    'Confirmed',
+    'In Progress',
+    'On Hold',
+    'Waiting for Arrival',
+    'Ongoing',
+    'In Transit',
+    'Empty Return',
+    'Issued',
+  ],
+  completed: ['Delivered', 'Completed', 'Liquidated', 'Billed', 'Paid', 'Audited'],
+  archived: ['Cancelled', 'Closed'],
+} as const satisfies Record<string, readonly ExecutionStatus[]>;
+
+export type BookingStatusBucket = keyof typeof BOOKING_STATUS_BUCKETS;
+
+/**
+ * Statuses that are NOT "in progress".
+ *
+ * The In Progress tab filters by exclusion rather than inclusion, so a status
+ * that exists but isn't listed above still shows up somewhere instead of
+ * vanishing. That matters because `profile_service_statuses` is admin-editable
+ * through Profiling — a status can be added at runtime that this file has never
+ * heard of, which is exactly how "Created" came to match no tab at all.
+ */
+export const BOOKING_STATUS_NOT_IN_PROGRESS: readonly string[] = [
+  ...BOOKING_STATUS_BUCKETS.draft,
+  ...BOOKING_STATUS_BUCKETS.completed,
+  ...BOOKING_STATUS_BUCKETS.archived,
+];
 
 export const MODE_OPTIONS = ['FCL', 'LCL', 'Air Freight'];
 export const MOVEMENT_OPTIONS = ['Import', 'Export'];

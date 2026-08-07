@@ -1,0 +1,619 @@
+[
+  {
+    "domain": "tenancy",
+    "survey": {
+      "findings": [
+        {
+          "subject": "HEADLINE CORRECTION — the 13 'cross-customer' billing rows J3 cites are not cross-customer",
+          "measurement": "billing_line_items = 173 rows. 72 have a non-empty customer_name. 13 of those 72 differ from their booking's customer_name by exact string. After normalisation (upper + strip non-alphanumeric), HARD mismatches = 0 of 72. All 13 sit on ONE booking (15ab53ca-b825-40d0-94e7-1846dbbb6a38 / BR202606-073) and are the single pair 'Garden Barn Inc.' vs 'GARDEN BARN INC'. Examples: BIL-1780890866622-t47k2twa, BIL-1780970539809-yayj1j06, BIL-1780973999352-c1fmq9vw.",
+          "interpretation": "DRIFT, and cosmetic only. J3 says '13 billing rows have a customer_name that disagrees with their booking — drift that happened through ordinary use.' Literally true, semantically misleading: it is a casing/punctuation difference on one customer, not money on the wrong tenant. There are ZERO hard cross-customer rows in billing_line_items on dev today."
+        },
+        {
+          "subject": "Cross-parent customer disagreement across the whole money graph",
+          "measurement": "billing_line_items -> booking (normalised customer_name): 0 of 72. billing_line_items -> evoucher (booking_id equality): 0 of 97. billing_line_items -> invoice (booking_id equality): 0 of 13. billing_line_items -> invoice (normalised customer_name vs booking): 0 of 13. invoices -> booking (customer_id): 0 of 9; (normalised customer_name): 0 of 13. collections -> invoice (customer_id): 0 of 6; (customer_name): 0 of 6. evoucher_line_items -> evoucher (booking_id, both non-null): 0 of 254. bookings -> customers (normalised name): 0 of 235. bookings -> projects (customer_id): 0 of 10.",
+          "interpretation": "BY DESIGN-adjacent good news. Not one hard cross-tenant link exists in live dev data. A same-customer constraint expressed on the FK'd columns would reject ZERO existing rows. J3's structural claim (nothing enforces it) is confirmed; its data claim (it has already happened) is not."
+        },
+        {
+          "subject": "billing_line_items.project_number is a wrong-namespace string, not a project reference",
+          "measurement": "173 rows: 87 are the empty string '', 0 are NULL, 86 are non-empty. Of the 86, 83 fail to resolve against projects.project_number, and all 83 are exactly the booking_number of their own booking_id. The 3 that DO resolve (PRJ-899414, PRJ-550146, PRJ-291528) all point at a project whose customer_id matches the booking's — 0 mismatches. Same shape on evouchers: 249 of 264 have a non-empty project_number, 0 resolve to projects.project_number, 244 equal their own booking's booking_number, and 0 disagree with their own booking's number.",
+          "interpretation": "PATTERN, and it is a naming bug rather than a tenancy breach. The column holds booking numbers under a project-shaped name. A 'project_number must resolve to projects' CHECK would reject 83 of 173 billing rows and 249 of 264 e-vouchers. The correct fix is renaming/relocating the column, not constraining it."
+        },
+        {
+          "subject": "Writer attribution on billing_line_items — the dominant writer is exactly the one that omits tenancy",
+          "measurement": "97 of 173 rows carry evoucher_id (written by ensure_billable_expense_billing_item; confirmed by reading pg_get_functiondef — it inserts id, booking_id, project_number, evoucher_id, source_*, description, service_type, amount, currency, status, category and NOTHING else). Those 97: customer_name populated 0, catalog_item_id populated 0, project_number non-empty 83 of which 83 unresolvable. Date range 2026-06-30..2026-07-19. The other 76 rows (app / send_billing_items_to_booking): customer_name 72, project_number non-empty 3 of which 3 valid PRJ-*, catalog_item_id 48. Date range 2026-05-08..2026-08-04.",
+          "interpretation": "PATTERN, and it confirms the recon's warning shape. A NOT NULL / same-customer rule written on customer_name would break the dominant revenue writer for 97 of 173 rows. A rule written on booking_id would not touch it — the trigger copies booking_id verbatim off the parent e-voucher, so it can never mismatch."
+        },
+        {
+          "subject": "LIVE REGRESSION — the current e-voucher writer has stopped populating header booking_id",
+          "measurement": "evouchers.booking_id NULL on 20 of 264. Every e-voucher created on or after 2026-07-28 has a NULL booking_id: 7 of 7. The most recent e-voucher WITH a booking_id was created 2026-07-18. Separately, 6 evoucher_line_items carry a booking_id while their parent e-voucher's is NULL (all 6 parents are status='posted', EV-2026-0263, -0264, -0265, -0298, -0311, -0336, first seen 2026-07-31). Zero line items disagree with a non-null parent.",
+          "interpretation": "PATTERN, and it is new. Tenancy has migrated from the header to the line without the header being backfilled. This is the single biggest obstacle to any 'e-voucher must resolve to a booking' rule: such a rule would reject 100% of what the product writes today."
+        },
+        {
+          "subject": "Money with no resolvable tenancy at all (orphans)",
+          "measurement": "5 e-vouchers have NULL booking_id AND a non-empty project_number that resolves to neither a project nor a booking: EV-2026-0001 (project_number 'BR202605-001', status disbursed), EV-2026-0062 ('FWD202605-335', pending_accounting), EV-2026-0085 ('FWD202605-309', cancelled), EV-2026-0087 ('FWD202605-309', pending_accounting), EV-2026-0119 ('FWD202605-349', pending_accounting). One invoice carries a third-namespace reference: INV-MPM84S7W has project_number 'CQ2605131084' (quotation-shaped) which matches no project, no booking and no quotation; its own customer_id/customer_name do agree with its booking (DAFFID INDUSTRIES INC).",
+          "interpretation": "DRIFT. Small, old, and the disbursed one (EV-2026-0001) is cash paid against a string that points nowhere. These are the rows a fail-closed rule would strand, and they need a human decision (relink or void), not an automated backfill."
+        },
+        {
+          "subject": "bookings is a clean root of truth — the join every rule must be expressed against",
+          "measurement": "240 rows. customer_id populated 235, dangling 0, normalised customer_name vs customers.name mismatches 0. The 5 NULL customer_id rows are 4 KPI simulation fixtures (SIM-BK01..04) plus one cancelled booking with an empty customer_name (BRK-2026-0041); all 5 have 0 billing rows and 0 e-vouchers. project_id populated on only 10 of 240 (the recon said 9 of 239; one booking was added since). Every one of the 173 billing rows resolves to a booking that HAS a customer_id — 173 of 173.",
+          "interpretation": "BY DESIGN. Tenancy is derivable for 100% of billing rows and 244 of 264 e-vouchers by walking booking_id -> bookings.customer_id. That makes a booking-keyed constraint cheap and a customer_name-keyed one expensive."
+        },
+        {
+          "subject": "Nothing anywhere enforces tenancy — confirmed at both layers",
+          "measurement": "Across billing_line_items, invoices, collections, evouchers, evoucher_line_items and expenses: 30 RLS policies total, 0 whose USING or WITH CHECK expression mentions customer / project_number / booking. CHECK constraints on those tables number 2 in total (billing_line_items_amount_nonnegative, evoucher_line_items_fault_class_check) and neither is tenancy-related. Additionally EVERY money-graph FK is ON DELETE SET NULL: billing_line_items.booking_id/project_id/invoice_id/evoucher_id, evouchers.booking_id/project_id/customer_id, invoices.booking_id/customer_id/project_id/evoucher_id, collections.*. The only CASCADE is evoucher_line_items.evoucher_id.",
+          "interpretation": "BY DESIGN (structural), and worse than stated. ON DELETE SET NULL means deleting a booking silently converts its billing lines and e-vouchers into untenanted money rather than refusing. The schema does not merely fail to prevent orphans, it manufactures them."
+        },
+        {
+          "subject": "Tables the recon listed or missed, by row count",
+          "measurement": "billing_line_items 173, evouchers 264, evoucher_line_items 274, invoices 13, collections 6, bookings 240, projects 15, customers 147, quotations 312. EMPTY (0 rows): expenses, transactions, budget_requests, project_bookings, contract_bookings. liquidation_submissions 6 (evoucher_id only, no independent tenancy columns).",
+          "interpretation": "BY DESIGN. expenses/transactions/budget_requests are UNANSWERABLE on dev — no rows, so nothing can be measured about their tenancy and no probe against them proves anything. project_bookings and contract_bookings being empty means the many-to-many project<->booking link the schema offers is entirely unused; project_id on bookings (10 of 240) is the only live link."
+        },
+        {
+          "subject": "Multi-booking invoices and the rival customer column — unexercised, not proven safe",
+          "measurement": "invoices.booking_ids: 0 of 13 rows contain more than one booking. collections.customer_id_alt: 0 of 6 rows populated (customer_id populated 6 of 6). collections.booking_id: 0 of 6 populated. collections.project_id: 0 of 6. Two of the 6 collections settle the same invoice (a27d9c58-036a-49a5-91b6-6e1deebb32fd, BRK-2026-0031-001).",
+          "interpretation": "UNANSWERABLE. The cross-customer multi-booking invoice case cannot be measured because no row exercises it. Any rule about booking_ids is being written blind. customer_id_alt is dead in the data — I could not determine from data alone which column the app intends."
+        },
+        {
+          "subject": "Consequence of the header-booking regression on the billable-expense trigger — flagged, unproven",
+          "measurement": "ensure_billable_expense_billing_item returns early with reason 'no_booking_id' when the e-voucher's booking_id is NULL. Since 2026-07-28 all 7 new e-vouchers have NULL booking_id. But the most recent e-voucher with details->>'is_billable' = 'true' was EV-2026-0257, created 2026-07-15, booking_id populated, and it DID mint its billing row (1 row). There are zero billable e-vouchers after that date.",
+          "interpretation": "UNANSWERABLE on data, and it is the follow-up worth running. If the current form still writes header booking_id NULL, a billable expense will mint no receivable and the revenue is silently lost — but no live row exercises it, so I am reporting the mechanism, not a confirmed leak."
+        },
+        {
+          "subject": "Catalog doctrine (G5) counted while I was in the tables — context for sequencing",
+          "measurement": "billing_line_items.catalog_item_id NULL on 125 of 173 (of which 97 are the trigger's, which never sets it). evoucher_line_items.catalog_item_id NULL on 72 of 274.",
+          "interpretation": "PATTERN. Not tenancy, but it shares the blocker: the same dominant writer defeats both the catalog CHECK and any customer_name rule. Whoever fixes the trigger should fix both in one pass rather than backfilling twice."
+        }
+      ],
+      "proposals": [
+        {
+          "target": "billing_line_items.booking_id",
+          "rule": "NOT NULL — every revenue line must name a booking. This is the tenancy key that is actually reliable (the FK'd one), and it is the join every other rule should be expressed through rather than through denormalised strings.",
+          "appliesToday": true,
+          "backfillRows": 0,
+          "rank": 1
+        },
+        {
+          "target": "billing_line_items.booking_id / evouchers.booking_id / invoices.booking_id / collections.booking_id — FK ON DELETE",
+          "appliesToday": true,
+          "rule": "Change ON DELETE SET NULL to ON DELETE RESTRICT on the money-graph booking/customer/invoice edges. Today deleting a booking silently converts its revenue lines and e-vouchers into untenanted money; the schema manufactures the very violation J3 wants to forbid. Zero rows are affected because this constrains future deletes, not existing data.",
+          "backfillRows": 0,
+          "rank": 2
+        },
+        {
+          "target": "evoucher_line_items.booking_id vs evouchers.booking_id",
+          "rule": "Trigger: a line's booking_id, when non-null, must equal its parent e-voucher's booking_id. Zero of the 254 rows where both are populated violate this.",
+          "appliesToday": true,
+          "backfillRows": 0,
+          "rank": 3
+        },
+        {
+          "target": "collections.customer_id vs invoices.customer_id",
+          "rule": "Trigger: a collection's customer must equal the customer on the invoice it settles. All 6 rows already comply. WARNING: this is a 6-row sample — the rule is right but the evidence is thin.",
+          "appliesToday": true,
+          "backfillRows": 0,
+          "rank": 4
+        },
+        {
+          "target": "invoices.customer_id / customer_name vs bookings",
+          "rule": "Trigger: an invoice's customer must equal its booking's customer, compared on customer_id where present and on a NORMALISED name (upper, strip non-alphanumeric) otherwise. All 13 rows already comply on both axes.",
+          "appliesToday": true,
+          "backfillRows": 0,
+          "rank": 5
+        },
+        {
+          "target": "billing_line_items.customer_name vs bookings.customer_name",
+          "rule": "Trigger: when non-empty, must NORMALISE-equal the booking's customer_name. Zero hard violations. If written as an EXACT string comparison instead, it rejects 13 rows (all on booking BR202606-073, 'Garden Barn Inc.' vs 'GARDEN BARN INC') — so the normalisation is what makes this free. Better still: stop denormalising and derive the name from the booking, since 101 of 173 rows have it NULL anyway.",
+          "appliesToday": true,
+          "backfillRows": 13,
+          "rank": 6
+        },
+        {
+          "target": "billing_line_items.customer_id (new column)",
+          "rule": "Add a real FK'd customer_id and backfill it from bookings.customer_id. Every one of the 173 billing rows resolves to a booking that has a customer_id, so the backfill is 100% mechanical and total. This replaces the unreliable customer_name string with the boundary J3 actually wants, and it is what a same-customer CHECK should key on.",
+          "appliesToday": false,
+          "backfillRows": 173,
+          "rank": 7
+        },
+        {
+          "target": "evouchers.booking_id",
+          "rule": "NOT NULL. DO NOT DO THIS YET — 20 of 264 rows fail, and critically 7 of the 7 e-vouchers created since 2026-07-28 fail, i.e. 100% of what the product writes today. Fix the writer first (it moved the booking link from the header to the line items), backfill the 6 headers whose own line items already name a booking, then decide individually about the 14 remaining — including EV-2026-0001, which is disbursed cash against a reference that resolves to nothing.",
+          "appliesToday": false,
+          "backfillRows": 20,
+          "rank": 8
+        },
+        {
+          "target": "collections.booking_id",
+          "rule": "Backfill from invoices.booking_id (all 6 collections have a resolvable invoice, all 6 invoices have a booking_id), then constrain to equal the settled invoice's booking. Cash is currently linked to a customer string and to an invoice, and not to the booking at all.",
+          "appliesToday": false,
+          "backfillRows": 6,
+          "rank": 9
+        },
+        {
+          "target": "billing_line_items.project_number and evouchers.project_number",
+          "rule": "Do NOT add a resolves-to-projects CHECK. The column does not hold project numbers: 83 of 86 non-empty billing values and 249 of 249 e-voucher values are BOOKING numbers, and each equals its own booking's number (0 internal disagreements). Rename the column to booking_number_snapshot, or drop it and derive from booking_id. A resolves-to-projects constraint would reject 83 billing rows and 249 e-vouchers — an outage, not a fix. Also normalise the 87 empty strings on billing_line_items to NULL as part of the same migration.",
+          "appliesToday": false,
+          "backfillRows": 332,
+          "rank": 10
+        },
+        {
+          "target": "ensure_billable_expense_billing_item()",
+          "rule": "Make the trigger set customer_id (and catalog_item_id) from the booking it already reads, instead of copying evouchers.project_number verbatim. It wrote 97 of 173 billing rows with customer_name NULL, catalog_item_id NULL and 83 wrong-namespace project_numbers — it is the single writer standing between the data and every rule above. It also returns early with 'no_booking_id', which means under the current e-voucher writer (header booking_id NULL on all 7 recent rows) a billable expense may mint no receivable at all. Verify that before shipping any tenancy migration.",
+          "appliesToday": true,
+          "backfillRows": 97,
+          "rank": 11
+        }
+      ],
+      "blockers": [
+        "The samples for invoices (13 rows) and collections (6 rows) are too small to call anything proven. Zero violations across 13 and 6 rows is consistent with a real invariant and equally consistent with nobody having exercised the path. Treat the invoice and collection rules as low-risk-to-apply but not as evidence that the code is correct.",
+        "expenses, transactions, budget_requests, project_bookings and contract_bookings are all EMPTY on dev (0 rows). Their tenancy is UNANSWERABLE — I measured nothing about them and no count from them should be quoted. expenses in particular carries the full FK set (booking_id, project_id, evoucher_id, catalog_item_id) and is entirely unused.",
+        "Multi-booking invoices are UNEXERCISED: 0 of 13 invoices have more than one entry in booking_ids. The cross-customer multi-booking case — the obvious way to smuggle two tenants onto one invoice — cannot be measured on live data. Any rule about booking_ids is being written without evidence.",
+        "collections.customer_id_alt is populated on 0 of 6 rows, so I could not determine from data which of customer_id / customer_id_alt the app writes. That needs a code read, not a query.",
+        "Whether the current e-voucher form still leaves header booking_id NULL is a code question I did not answer. It matters more than anything else in this survey: it determines whether proposal 8 is a backfill of 20 historical rows or an ongoing bleed, and whether billable expenses are currently minting receivables at all.",
+        "This survey measured DISAGREEMENT between populated tenancy fields. It did not and could not measure whether a populated field is CORRECT — e.g. a billing line whose booking_id points at the wrong customer's booking entirely would read as perfectly consistent here, because every denormalised field is copied from that same wrong booking. Consistency is not correctness; only the booking is a root of truth, and nothing audits the bookings themselves."
+      ],
+      "notes": "The short version for whoever writes the migration.\n\nThe constraint J3 asks for is CHEAPER than J3 implies, and the reason is that J3's one piece of data evidence does not survive inspection. The \"13 billing rows whose customer_name disagrees with their booking\" are 13 rows on ONE booking for ONE customer, differing by \"Garden Barn Inc.\" vs \"GARDEN BARN INC\". Normalise the string and the count is zero. Across the entire money graph — 173 billing lines, 264 e-vouchers, 274 e-voucher lines, 13 invoices, 6 collections, 240 bookings — there is not one hard cross-customer link on dev today. A same-customer rule keyed on booking_id would reject nothing.\n\nWhat actually blocks a strict constraint is not corruption, it is two naming/population problems:\n\n  1. project_number is not a project number. On billing_line_items 83 of 86 non-empty values are booking numbers; on evouchers it is 249 of 249. Every one of them equals its OWN booking's number, so the data is internally consistent — it is the column name that lies. A resolves-to-projects CHECK is an outage (332 rows), a rename is free.\n\n  2. evouchers.booking_id has gone dark in the current code path. 20 of 264 are NULL overall, but 7 of the 7 e-vouchers created since 2026-07-28 are NULL, and the last one with a booking_id was 2026-07-18. The link moved to the line items (6 line items now carry a booking_id their parent header does not). So the single most obvious rule — \"an e-voucher must name a booking\" — would today reject 100% of what the product writes. That is exactly the failure mode the task warned about, and it is a live regression, not legacy debt.\n\nThe dominant-writer risk the recon flagged is real and I confirmed its shape by reading the function. ensure_billable_expense_billing_item wrote 97 of 173 billing rows; it sets booking_id and project_number and nothing else — customer_name NULL on all 97, catalog_item_id NULL on all 97, and it is the sole source of all 83 wrong-namespace project_numbers. Any rule keyed on customer_name or catalog_item_id breaks it; any rule keyed on booking_id does not touch it, because it copies booking_id verbatim off the parent voucher and therefore cannot mismatch. That is the whole argument for expressing tenancy through booking_id and deriving everything else.\n\nOne thing nobody has written down: every FK in the money graph is ON DELETE SET NULL. Delete a booking and its revenue lines, e-vouchers and invoices quietly become untenanted money rather than the delete being refused. The schema does not merely fail to prevent the violation J3 describes — it has a button that creates it. RESTRICT on those edges costs zero rows and should go in the same migration as anything else.\n\nOrder I would ship: (1) fix the e-voucher writer so booking_id lands on the header again, and confirm whether billable expenses are still minting receivables — the trigger returns early on a NULL booking_id, so they may not be. (2) Ship the zero-backfill rules: billing_line_items.booking_id NOT NULL, FK RESTRICT, line-vs-parent booking equality, collection-vs-invoice customer, invoice-vs-booking customer. (3) Add and backfill billing_line_items.customer_id from the booking — 173 of 173 resolve, it is fully mechanical, and it gives the constraint a real key instead of a string. (4) Rename project_number. (5) Only then revisit e-voucher booking_id NOT NULL, and handle the 5 orphan vouchers — one of them, EV-2026-0001, is disbursed cash against a reference that resolves to nothing — as individual human decisions rather than a backfill.\n\nHarness rules: K1 did not bite here (this was a service-role survey, so denied-SELECT-returns-empty was not in play), but K1's cousin was everywhere — an empty table reads exactly like a clean table. expenses, transactions and budget_requests all have 0 rows and I have reported them as UNANSWERABLE rather than counting them as clean, and the same caution applies to the 13-row invoices and 6-row collections samples."
+    },
+    "attack": {
+      "probes": [
+        {
+          "name": "P2 (rank 2) direct billing line whose booking, project_number and customer_name are three different customers",
+          "actor": "treasury@falconslogistics-ph.com (Janice, Accounting manager, sign-in verified)",
+          "attempt": "PostgREST insert into billing_line_items with booking_id = customer A's booking, project_number = customer B's project number, customer_name = 'E2E-TENANCY CUSTOMER C', amount 250000, with the anon key + her session",
+          "verdict": "BREACH",
+          "evidence": "Service-role read: row exists, booking=bk-ten-...-a (A), project_number=PRJ-TEN-250018B (B), customer_name=E2E-TENANCY CUSTOMER C (C), amount=250000. No error raised. Deleted."
+        },
+        {
+          "name": "P3 (rank 3) billable e-voucher on a foreign booking auto-mints revenue there",
+          "actor": "jr.supervisor07@falconslogistics-ph.com (Princess, Ops TL / requestor, sign-in verified)",
+          "attempt": "Insert an evoucher with booking_id = customer B's booking (she works customer A), details.is_billable = true, amount 50000, status pending_accounting",
+          "verdict": "BREACH",
+          "evidence": "Service-role read: voucher landed on booking B at pending_accounting, AND trg_ensure_billable_expense_billing_on_approval auto-minted 1 billing_line_items row against booking B — amount 50000, customer_name NULL, catalog_item_id NULL. The cross-link propagated itself through a SECURITY DEFINER writer with no billings grant held. Both rows deleted."
+        },
+        {
+          "name": "P4 (rank 4) e-voucher line item charging a booking its parent voucher has nothing to do with",
+          "actor": "jr.supervisor07@falconslogistics-ph.com (Princess, Ops TL, owner of the parent voucher)",
+          "attempt": "Insert evoucher_line_items with evoucher_id = her voucher on booking A but booking_id = customer B's booking, catalog_item_id = a real expense item, amount 40000",
+          "verdict": "BREACH",
+          "evidence": "Service-role read: line d478dff3-... parent=ev-ten-...-a (booking A) but booking_id=bk-ten-...-b (B), amount=40000. Cost lands on the wrong customer's P&L while the voucher header still reads correctly. Deleted."
+        },
+        {
+          "name": "P5 (rank 5) attach an unbilled charge to another customer's invoice",
+          "actor": "treasury@falconslogistics-ph.com (Janice, Accounting manager)",
+          "attempt": "UPDATE billing_line_items SET invoice_id = customer B's invoice WHERE id = the line on customer A's booking (invoice_id was NULL beforehand, so this is a real change — K2 respected)",
+          "verdict": "BREACH",
+          "evidence": "Service-role read: line bli-ten-...-a (booking A / E2E-TENANCY CUSTOMER A) now carries invoice_id = inv-ten-...-b, customer B's invoice. Customer B is billed for customer A's work. Deleted."
+        },
+        {
+          "name": "P6 (rank 6) cash receipt applied to a customer that is not the invoice's",
+          "actor": "treasury@falconslogistics-ph.com (Janice, Accounting manager)",
+          "attempt": "Insert a collections row with invoice_id = customer A's invoice but customer_id/customer_name = customer B, project_number = 'TOTALLY-UNRELATED-REF', booking_id NULL, amount 25000",
+          "verdict": "BREACH",
+          "evidence": "Service-role read: collection exists, invoice=inv-ten-...-a (customer A) credited to customer_id=cus-ten-...-b / E2E-TENANCY CUSTOMER B, project_number='TOTALLY-UNRELATED-REF', amount=25000. Both AR ledgers wrong in opposite directions, totals still reconcile. Deleted."
+        },
+        {
+          "name": "P7a (rank 7) re-parent a live booking onto another customer's project — Ops TL",
+          "actor": "jr.supervisor07@falconslogistics-ph.com (Princess, Ops TL, bookings_forwarding=everything)",
+          "attempt": "UPDATE bookings SET project_id = customer B's project WHERE id = customer A's booking (was customer A's project — from !== to)",
+          "verdict": "BREACH",
+          "evidence": "Service-role read: booking A project_id = prj-ten-...-b while customer_id still cus-ten-...-a. Nothing compares bookings.customer_id to projects.customer_id. Restored to prj-...-a, then the whole fixture deleted."
+        },
+        {
+          "name": "P7b (rank 7) rename a booking's customer while customer_id stays with the original — Ops TL",
+          "actor": "jr.supervisor07@falconslogistics-ph.com (Princess, Ops TL)",
+          "attempt": "UPDATE bookings SET customer_name = 'E2E-TENANCY REPARENTED NAME' WHERE id = customer A's booking (was 'E2E-TENANCY CUSTOMER A')",
+          "verdict": "BREACH",
+          "evidence": "Service-role read: customer_name = 'E2E-TENANCY REPARENTED NAME' while customer_id = cus-ten-...-a. No trigger keeps customer_id and customer_name in step. Restored, then deleted."
+        },
+        {
+          "name": "P7a (rank 7) re-parent repeated at the Executive ceiling",
+          "actor": "inquiry@falconslogistics-ph.com (Mark, Executive manager, 663 grants, 'everything' on all 21 record types — sign-in verified)",
+          "attempt": "Same UPDATE bookings SET project_id = customer B's project on customer A's booking, run after restoring the row",
+          "verdict": "BREACH",
+          "evidence": "Service-role read: identical result — project_id moved to prj-ten-...-b, customer_id unchanged. Running it at the ceiling as well as at the Ops floor proves the hole is structural (no constraint/trigger anywhere), not a visibility-dial artefact. Restored, then deleted."
+        },
+        {
+          "name": "P7b (rank 7) customer rename repeated at the Executive ceiling",
+          "actor": "inquiry@falconslogistics-ph.com (Mark, Executive manager)",
+          "attempt": "Same UPDATE bookings SET customer_name = 'E2E-TENANCY REPARENTED NAME'",
+          "verdict": "BREACH",
+          "evidence": "Service-role read: customer_name changed, customer_id untouched. Same structural conclusion as P7a. Restored, then deleted."
+        },
+        {
+          "name": "J1 (re-verification, NOT re-attacked as new) send_billing_items_to_booking across customers via a NULL-project_id booking",
+          "actor": "treasury@falconslogistics-ph.com (Janice, Accounting manager)",
+          "attempt": "rpc send_billing_items_to_booking with p_booking_id = customer B's booking whose project_id is NULL (the shape 230 of 239 dev bookings have) and p_project_number = customer A's project number, one virtual item at 250000",
+          "verdict": "BLOCKED_LOUD",
+          "evidence": "Raised: 'Booking bk-ten-...-b and project PRJ-TEN-250018A belong to different customers'. Service-role read of billing_line_items by that description: 0 rows. Migration 273's fail-closed guard is STILL CLOSED — J1 confirmed fixed, and it now catches the case via customer_id fallback because the booking has no project link at all."
+        },
+        {
+          "name": "J1b positive control — the same-customer send still works",
+          "actor": "treasury@falconslogistics-ph.com (Janice, Accounting manager)",
+          "attempt": "Same RPC with p_booking_id = customer A's booking and p_project_number = customer A's project number",
+          "verdict": "BREACH",
+          "evidence": "Row landed as intended. This is the POSITIVE CONTROL, not a finding: 'BREACH' here means the legitimate same-customer path survived the 273 fix. Excluded from breachCount. Deleted."
+        }
+      ],
+      "breachCount": 9,
+      "cleanedUp": true,
+      "notes": "SCOPE. Probe 1 (send_billing_items_to_booking cross-customer via the NULL project_id skip) was NOT re-attacked as an open hole — as instructed it was re-verified and is STILL CLOSED (BLOCKED_LOUD, with the same-customer positive control still passing). The six worked probes are ranks 2-7 from phase1-spec.json -> fks.probes; rank 7 was run twice (Ops TL and the Executive ceiling) and each half of it (project re-parent, customer rename) counted separately, which is why 9 breaches come out of 6 ranked probes.\n\nHEADLINE. Every cross-tenant write attempted landed. Not one raised, not one was silently filtered. Nine for nine. J3's structural claim is now empirically confirmed, not inferred: the database enforces tenancy nowhere on the money graph — not by RLS, not by CHECK, not by trigger, not by FK.\n\nMETHOD, against K1/K2/K3.\n- K3: all three actors (treasury@, jr.supervisor07@, inquiry@) were signed in and their auth uid captured BEFORE any probe; the driver throws on a failed sign-in rather than proceeding. Re-verified independently afterwards — treasury uid b203e835…, supervisor07 uid 3b72a9b7…, inquiry uid 29e857a0…. No login failed, so no verdict here rests on a dead password.\n- K1: no verdict was taken from the absence of an error. Every probe read the row back with the service-role client and compared the actual stored value. BREACH means service-role SAW the change.\n- K2: every write targeted a value the row did not already hold. P5's invoice_id was NULL before being pointed at customer B's invoice; P7a moved project_id from A's project to B's; P7b changed customer_name from 'E2E-TENANCY CUSTOMER A'. No from === to probes. The P7 pair was restored between the Ops and Executive runs so the Executive attempt was also a genuine change, not a no-op reading as success.\n\nTHE TWO RESULTS THAT ARE WORSE THAN THE RANKING SUGGESTS.\n1. P3 is the one that propagates. The Ops TL — who holds no billings grant — inserted one e-voucher against another customer's booking with is_billable true, and trg_ensure_billable_expense_billing_on_approval minted a 50,000 customer-facing receivable on that foreign booking by itself, through a SECURITY DEFINER function, with customer_name NULL and catalog_item_id NULL. One AP write on the wrong booking becomes revenue on the wrong client with no second actor involved. Note this trigger fires on INSERT as well as UPDATE, and status was set directly in the insert — the 270/273 status guard is a BEFORE UPDATE trigger and does not see a row created at pending_accounting.\n2. P7 breached identically for the Ops team leader and for the Executive account that holds 'everything' on all 21 record types. When the ceiling and the floor get the same answer, the absence is structural. Re-parenting is also the lever that decides whether the J1 guard can resolve a tenancy relationship at all — anyone who can move a booking's project_id or rewrite its customer_name can change what the one guard that DOES work is comparing.\n\nWHAT I DID NOT DETERMINE.\n- Whether these writes are reachable through the app's own UI. The probes deliberately went at PostgREST with the anon key plus a real session, which is what a browser console, a stale tab or a copied bearer token has. 'The form does not offer it' remains untested and is a different claim.\n- Whether any of these have downstream ledger effects (journal entries, AR aging). P3's voucher sat at pending_accounting and was never disbursed, so no cash moved and no JE was inspected.\n- Ranks 8+ (invoice header naming a different customer, the unexercised booking_ids array form, project_number free text, booking citing another customer's contract) were out of scope for this pass and remain unprobed.\n- P2, P5 and P6 were run as Accounting (treasury@). I did not establish the minimum grant that suffices for each — only that a plausible legitimate grant-holder succeeds. A narrower actor might succeed too.\n\nCLEANUP. Everything written was tagged E2E-TENANCY in a description/name/notes field. Fixture and probe rows were deleted child-first (collections, billing lines incl. the trigger-minted one via source_id, evoucher_history, evoucher_line_items, evouchers, invoices, bookings, projects, customers). The two bookings mutated by P7 were restored to their original values before deletion. A residue sweep across billing_line_items, evouchers, evoucher_line_items, collections, invoices, bookings, projects and customers — by id prefix, by tag, and by foreign-key reference — returns 0 rows in every table. The two temporary driver scripts were removed from the repo; git status on scripts/ is clean. Nothing was run against prod; the driver refuses to start unless VITE_SUPABASE_URL contains oqermaidggvanahumjmj."
+    }
+  },
+  {
+    "domain": "state",
+    "survey": {
+      "findings": [
+        {
+          "subject": "Scope check — the 15 columns vs. what actually has data",
+          "measurement": "12 of 15 columns carry live rows on dev. expenses (0 rows), transactions (0 rows), budget_requests (0 rows) are empty AND have zero write sites in src/ (grep of `.from(\"expenses\"|\"transactions\"|\"budget_requests\")` returns only 2 read sites in EntityPicker.tsx and 1 in bookingCancellation.ts:65). Their live value sets are UNANSWERABLE, not empty-and-therefore-clean.",
+          "interpretation": "pattern — 3 of the 15 targets are dead tables; a guard there is unverifiable and worthless. Do not count them as covered."
+        },
+        {
+          "subject": "CHECK constraints on status across all 15 columns",
+          "measurement": "Exactly ONE: bookings_billing_status_check = CHECK (billing_status IN ('unbilled','billed','partial')). Verified by querying pg_constraint contype='c' over all 13 tables — the only other CHECKs found were users_department_check, users_role_check, users_service_type_check. invoices, collections, bookings.status, quotations (both), billing_line_items, projects, customers, users.status, tasks have NO status CHECK.",
+          "interpretation": "by-design (nobody ever added one) — confirms recon note 5 exactly."
+        },
+        {
+          "subject": "Triggers on the 12 tables",
+          "measurement": "29 non-internal triggers enumerated from pg_trigger. NONE inspects a status column. They are: update_updated_at (12), set_created_by_from_auth (5), enforce_exec_confidentiality + log_confidentiality_change (4 tables), capture_booking_milestones (fires on details only), set_quotation_number, guard_customer_delete, guard_user_privileged_columns.",
+          "interpretation": "by-design — confirms evouchers is the only guarded status column in the schema."
+        },
+        {
+          "subject": "users.status is NOT covered by trg_guard_user_privileged_columns (recon's open question 7, now answered)",
+          "measurement": "Read guard_user_privileged_columns prosrc: it raises only when access_profile_id, role, department, team_id or is_active change. `status` is absent from the list. Combined with RLS policy \"Users can update own profile\" (qual AND with_check = auth_id = auth.uid()), any authenticated user can write their own users.status to any string.",
+          "interpretation": "drift — the guard was written for the privileged set and status was added/left outside it. is_active is protected, status is its unprotected twin."
+        },
+        {
+          "subject": "projects.status — recon said 'no app-side status write found'. There are two.",
+          "measurement": "src/components/projects/ProjectDetail.tsx:305 handleUpdateProjectStatus writes .update({status:newStatus}), gated only by `showActions = can(ids.root,'edit')` client-side (line 243, backstop at 299). AND src/components/pricing/QuotationFileView.tsx:626 writes projects.status='Cancelled' as a cascade when a quotation goes to Rejected by Client / Disapproved / Cancelled. TS type ProjectStatus (src/types/pricing.ts:378) = Active|Completed|On Hold|Cancelled, not the single 'Active' the recon reported.",
+          "interpretation": "drift — recon undercounted. The cascade writer matters: a user holding only quotation grants changes a project's status."
+        },
+        {
+          "subject": "projects_update RLS is the weakest policy of the 15",
+          "measurement": "qual = (bd_projects:view OR pricing_projects:view OR ops_projects:view OR acct_projects:view) AND current_user_can_view_record_v2(...); with_check = literally `true`. A VIEW grant on any of four modules confers UPDATE on every column of projects, including status.",
+          "interpretation": "drift — a view grant writing rows is not a transition problem, it is a write-authority problem the transition guard will not fix on its own."
+        },
+        {
+          "subject": "transactions_update RLS has the same shape",
+          "measurement": "qual = (acct_financials:view OR acct_journal:view) AND current_user_can_view_record('transactions', created_by); with_check = true. Table has 0 rows on dev and no src writer, so nothing is exploitable today.",
+          "interpretation": "pattern — same view-grants-write shape as projects. Latent, not live."
+        },
+        {
+          "subject": "invoices.status — live values with counts vs. what code writes",
+          "measurement": "Live: posted 6, Issued 4, draft 2, void 1 (13 rows). Written by src/: 'draft' (InvoiceBuilder.tsx:545 preview, :890 insert), 'posted' (:1013), 'void' (:1131), 'reversed' (invoiceReversal.ts:218), 'reversal_posted' (:235). UNDECLARED IN CODE: 'Issued' (4 rows, capital I) — no write site anywhere. DEAD IN CODE: 'issued','voided','paid','overdue' — harvested string literals with no writer ('paid' is only READ, useReceivablesAgingReport.ts:77 .neq('status','paid')). There is NO InvoiceStatus TS union — verified `grep 'type InvoiceStatus'` returns nothing.",
+          "interpretation": "drift — 4 of 13 invoices sit in a value the product cannot produce and the aging report filters against a value nothing writes."
+        },
+        {
+          "subject": "invoices.approval_status — the default undoes NEU-103",
+          "measurement": "Live: 'approved' 13, 'pending_approval' 0. Column default is 'approved'. InvoiceBuilder.tsx:890 explicitly inserts 'pending_approval'; approve_invoice() (SECURITY DEFINER, re-checks is_invoice_approver_of and RAISEs) is the only sanctioned writer to 'approved'. But invoices_update (with_check = current_user_can_invoices('edit')) permits writing the column directly, and the finalize gate at InvoiceBuilder.tsx:1015 is client-side: `if (((viewInvoice as any).approval_status ?? \"approved\") !== \"approved\") return`.",
+          "interpretation": "drift — three independent bypasses of one approval: the DB default, the raw column write, and a client-side `?? \"approved\"` fallback that treats a missing value as approved."
+        },
+        {
+          "subject": "collections.status",
+          "measurement": "Live: posted 5, credited 1 (6 rows). Writers: CollectionCreatorPanel.tsx:452 inserts 'posted'; collectionResolution.ts:63 updates to 'credited'|'refunded' and then calls evoucher_transition for the linked voucher. Column default 'pending' is never written by any code path. DEAD: 'cleared','deposited' (literals, no writer). No CollectionStatus TS union exists.",
+          "interpretation": "pattern — a 3-edge state machine (insert→posted, posted→credited, posted→refunded) already, just unenforced."
+        },
+        {
+          "subject": "billing_line_items.status",
+          "measurement": "Live: unbilled 160, invoiced 13 (173 rows). Writers: 'invoiced' at InvoiceBuilder.tsx:933 (on draft-invoice creation); 'unbilled' at :1078 (delete draft) and :1148 (void invoice); 'voided' at UnifiedBillingsTab.tsx:748. Plus TWO SECURITY DEFINER inserters: ensure_billable_expense_billing_item() hardcodes 'unbilled', and send_billing_items_to_booking() takes status FROM THE p_items JSONB PAYLOAD — caller-controlled.",
+          "interpretation": "drift — one insert path lets the client choose the status of a revenue row. No writer exists for invoiced→voided, so a voided invoice's items can only be released back to unbilled."
+        },
+        {
+          "subject": "bookings.status — the vocabulary the selector offers vs. the vocabulary in the table",
+          "measurement": "Live 240 rows: Created 128, Delivered 26, Waiting for Arrival 22, Ongoing 21, Empty Return 20, Draft 13, Completed 3, Billed 3, Cancelled 3, Liquidated 1. ExecutionStatus TS union has 19 values. SERVICE_STATUS_OPTIONS (bookingFieldOptions.ts:4-10) never offers 'Created' for ANY of the 5 service types, yet 128 of 240 bookings (53%) hold it — it is written on insert. DEAD in code: Pending, Confirmed, In Progress, On Hold, Closed, In Transit, Audited, Issued, Paid — 9 of 19 union values have zero live rows.",
+          "interpretation": "drift — the client whitelist is not a description of the live vocabulary. A guard keyed to SERVICE_STATUS_OPTIONS would strand 128 rows."
+        },
+        {
+          "subject": "bookings.status — the one real from-state rule in the whole codebase",
+          "measurement": "src/utils/bookingCancellation.ts: CANCELLABLE_STATUSES = ['Created','Draft','Pending','Confirmed','In Progress','On Hold']; canTransitionBookingToCancelled(status,state) additionally requires state.hasFinancialRecords === false, computed by assessBookingFinancialState() which counts linked invoices, collections, expenses and evouchers. Enforced client-side only, at BrokerageBookingDetails.tsx:200 and BookingCancelDeletePanel.tsx:75. The other four service detail views (Forwarding:212, Trucking:191, MarineInsurance:191, Others:193) call `.update({status:newStatus})` — I confirmed Brokerage has the guard; the others share the handler shape.",
+          "interpretation": "pattern — the product already knows one edge is dangerous and defends it in the browser. That rule is the template for the server-side edge."
+        },
+        {
+          "subject": "bookings.billing_status",
+          "measurement": "Live: unbilled 240, billed 0, partial 0. Exactly ONE writer: workflowTickets.ts:221 executeResolutionAction('set_booking_billed') → .update({billing_status:'billed'}), gated by canExecuteResolutionAction (WG-03, client-side). The CHECK permits 'partial', which nothing writes. No writer ever moves it back to 'unbilled' — voiding an invoice (InvoiceBuilder.tsx:1148) releases the line items but leaves the booking 'billed'.",
+          "interpretation": "drift — a one-way flag with a declared value ('partial') no code produces and a missing reverse edge."
+        },
+        {
+          "subject": "quotations.status",
+          "measurement": "Live 309 rows: Priced 116, Draft 71, Pending Pricing 58, Converted to Contract 29, Converted to Project 15, Disapproved 9, Accepted by Client 6, Cancelled 5, Rejected by Client 2, Sent to Client 1. CANONICAL_QUOTATION_STATUSES (quotationStatus.ts:11) has 11 values; all 10 live values are in it. DEAD: 'Needs Revision' — 0 live rows AND no write site found (only read, dashboardFetchers.ts:148,159,190). Writers: QuotationFileView.tsx:444 (generic handleStatusChange — accepts ANY normalized value from ANY current state, no from-check whatsoever), :626 'Cancelled', :700 'Converted to Project', :748 'Converted to Contract' + contract_status 'Active'; workflowTickets.ts:207 'Priced'.",
+          "interpretation": "pattern — the vocabulary is clean; the ordering (CANONICAL_QUOTATION_STATUS_ORDER) exists in TS and is enforced nowhere."
+        },
+        {
+          "subject": "quotations.contract_status",
+          "measurement": "Live: NULL 281, Active 28, Draft 3. Cross-tabbed by quotation_type: contract-type rows = Active 28 / Draft 3 / NULL 3; project-type = 260 all NULL; spot = 18 all NULL. Writers: ContractDetailView.tsx:1016 (ContractStatusSelector, readOnly={!canEditContract}, writes any value the selector offers); QuotationFileView.tsx:748 'Active' on activation; QuotationFileView.tsx:419 'Expired' via onUpdate. DEAD in code: 'Sent','Expiring','Renewed' — 0 rows, no writer for 'Sent'.",
+          "interpretation": "drift — 3 contract-type quotations carry NULL contract_status, a state the matrix has no from-edge for."
+        },
+        {
+          "subject": "users.status",
+          "measurement": "Live: active 54, Active 4, inactive 1, suspended 1 (60 rows). 4 rows carry a capitalised 'Active' against a lowercase UserStatus type (UserDetailPage.tsx:20, UserManagement.tsx:55 = 'active'|'inactive'|'suspended'). Column default is 'Active' (capitalised) — it disagrees with the type. Writers: CreateUserPanel.tsx:108 insert; supabase/functions/admin-user-actions/index.ts:50 (sets 'active' on link) and :90 (updateStatus) — BOTH service-role, called from UserDetailPage.tsx:346 via callAdminAction. No direct client write site.",
+          "interpretation": "drift — the column default itself produced the 4 mismatched rows."
+        },
+        {
+          "subject": "customers.status and tasks.status",
+          "measurement": "customers: Active 101, Prospect 43, Inactive 3 (147 rows); CustomerStatus (types/bd.ts:16) = Prospect|Active|Inactive — exact match, 0 drift. Writer: CustomerDetail.tsx:292 whole-payload .update() incl. status; ContactDetail.tsx:445 inserts 'Active'. tasks: Pending 4 (4 rows); TaskStatus (types/bd.ts:32) = Ongoing|Pending|Completed|Cancelled; column default 'Ongoing' is never written (inserts hardcode 'Pending' at CustomerDetail.tsx:1336, ContactDetail.tsx:1469). Writers: TaskDetailInline.tsx:194 `.update(editedTask)` (whole row) and :326 →'Completed'.",
+          "interpretation": "by-design — these two are the cleanest of the fifteen and the least worth guarding. Note both write the WHOLE row, so a status guard trigger fires on every ordinary save."
+        },
+        {
+          "subject": "Non-UI status writers a guard will break first",
+          "measurement": "7 identified. (1) ensure_billable_expense_billing_item() — SECURITY DEFINER, INSERTs billing_line_items with status 'unbilled'; per recon it wrote 97 of 172 billing rows, the dominant writer. (2) send_billing_items_to_booking() — SECURITY DEFINER, INSERTs billing_line_items with status taken from the p_items payload. (3) approve_invoice() — SECURITY DEFINER, UPDATEs invoices.approval_status. (4) admin-user-actions Edge Function — service-role writes users.status. (5) Column DEFAULTS that contradict the app: invoices.approval_status 'approved' vs app-written 'pending_approval'; collections.status 'pending' (never written); tasks.status 'Ongoing' (never written); bookings.status 'Draft' while inserts write 'Created'. (6) scripts/clone-prod-to-dev.mjs — service-role, truncates and rewrites every table verbatim. (7) QuotationFileView.tsx:626 cross-module cascade into projects.status.",
+          "interpretation": "pattern — every one of these is either an INSERT (a BEFORE UPDATE guard never sees it) or a service-role write (auth.uid() IS NULL). Migration 270's `if auth.uid() is not null` escape hatch covers 4, 6 and part of 3; it does NOT cover the two definer INSERTers, which run as authenticated callers."
+        },
+        {
+          "subject": "Reference point — evouchers, the one guarded column, measured today",
+          "measurement": "Live 264 rows: pending_accounting 148, pending_ceo 77, posted 13, disbursed 13, draft 8, cancelled 2, Approved 1, pending_liquidation 1, pending_manager 1 — 9 distinct values against 26 in the TS union (src/types/evoucher.ts) and 13 in the 270 matrix. The 1 'Approved' row (capitalised legacy) has no from-edge in evoucher_transition except the unconstrained credited/refunded branch.",
+          "interpretation": "drift — even the guarded table has a row the state machine cannot move. Every matrix below must be paired with a stranded-row query before it ships."
+        }
+      ],
+      "proposals": [
+        {
+          "target": "invoices.status",
+          "rule": "invoice_transition(p_invoice_id, p_to_status, p_reason) SECURITY DEFINER + BEFORE UPDATE guard on the column, modelled verbatim on 270. Edges: (INSERT)->'draft' requires current_user_can_invoices('create'); 'draft'->'posted' requires current_user_can_invoices('edit') AND the row's approval_status='approved' (move the InvoiceBuilder.tsx:1015 client check server-side, and drop the `?? \"approved\"` fallback); 'posted'->'void' requires current_user_can_invoices('delete') AND zero rows in collections where invoice_id = this invoice (move the InvoiceBuilder.tsx:1110 client check server-side); 'posted'->'reversed' requires invoices:edit AND a sibling invoice exists with metadata->>'reversal_of_invoice_id' = this id AND zero linked collections; 'draft'->'reversal_posted' requires invoices:edit AND metadata->>'reversal_of_invoice_id' IS NOT NULL. 'void','reversed','reversal_posted' are terminal — no outbound edges. Reject 'issued','voided','paid','overdue' outright: no writer produces them. Service-role bypass when auth.uid() IS NULL, as in 270.",
+          "appliesToday": true,
+          "backfillRows": 4,
+          "rank": 1
+        },
+        {
+          "target": "invoices.approval_status",
+          "rule": "Forbid ALL direct writes to approval_status via a BEFORE UPDATE trigger; approve_invoice() is the sole door (it already re-checks is_invoice_approver_of and RAISEs). Single edge: 'pending_approval'->'approved' by the materialized approver. Additionally ALTER COLUMN SET DEFAULT 'pending_approval' — today's default 'approved' means any INSERT that omits the column lands pre-approved, which defeats NEU-103 without touching the status column at all. Add a rejection edge only if the product grows one; none exists today (0 live rows are pending).",
+          "appliesToday": true,
+          "backfillRows": 0,
+          "rank": 2
+        },
+        {
+          "target": "collections.status",
+          "rule": "collection_transition() + BEFORE UPDATE guard. Edges: (INSERT)->'posted' requires current_user_can_collections('create'); 'posted'->'credited' and 'posted'->'refunded' require current_user_can_collections('edit') (collectionResolution.ts:63 already pairs each with an evoucher_transition call, so the two machines stay in step). 'credited' and 'refunded' are terminal. Reject 'cleared' and 'deposited' — dead literals. Also change the column default from 'pending' to 'posted', or add 'pending' as a legal insert state; today the default is a value the product never produces and the matrix would have no from-edge for.",
+          "appliesToday": true,
+          "backfillRows": 0,
+          "rank": 3
+        },
+        {
+          "target": "billing_line_items.status",
+          "rule": "Guard must cover INSERT as well as UPDATE — two SECURITY DEFINER functions insert rows and a BEFORE UPDATE trigger will never see them. On INSERT: status must be 'unbilled' (pin it in send_billing_items_to_booking rather than reading it from p_items — that payload is caller-controlled). On UPDATE: 'unbilled'->'invoiced' requires current_user_can_invoices('edit') AND invoice_id IS NOT NULL in the same statement; 'invoiced'->'unbilled' requires invoices:edit or invoices:delete AND invoice_id set to NULL in the same statement (the two release paths, InvoiceBuilder.tsx:1078 and :1148, both already do this); 'unbilled'->'voided' requires current_user_can_billings('edit') AND invoice_id IS NULL. No 'invoiced'->'voided' edge — void the invoice first. 'voided' is terminal. NOTE: billing_line_items_update's USING clause calls current_user_can_view_record('billings', NULL) — the E15/G3/G7 NULL-owner bug — so the grant side of this is broken independently of the matrix.",
+          "appliesToday": true,
+          "backfillRows": 0,
+          "rank": 4
+        },
+        {
+          "target": "bookings.billing_status",
+          "rule": "BEFORE UPDATE guard alongside the existing CHECK (the CHECK constrains the value, not the edge). Edges: 'unbilled'->'billed' requires current_user_can_invoices('edit') (today's only writer, workflowTickets.ts:221, runs on ticket resolution behind a client-side canExecuteResolutionAction); 'unbilled'->'partial' and 'partial'->'billed' same authority — but note NOTHING writes 'partial' today, so either add the writer or drop the value from the CHECK; 'billed'->'unbilled' requires invoices:delete — this edge does not exist in code and SHOULD: voiding an invoice releases the line items but leaves the booking flagged billed.",
+          "appliesToday": true,
+          "backfillRows": 0,
+          "rank": 5
+        },
+        {
+          "target": "bookings.status",
+          "rule": "booking_transition() + BEFORE UPDATE guard. Three layers. (a) Value: must be in SERVICE_STATUS_OPTIONS[service_type] UNION {'Created'} — 'Created' is written on insert and offered by no selector, so it must be admitted explicitly or 128 of 240 rows strand. (b) The cancel edge, lifted server-side from src/utils/bookingCancellation.ts: ->'Cancelled' requires from IN ('Created','Draft','Pending','Confirmed','In Progress','On Hold') AND zero linked rows in invoices, collections, expenses, evouchers (booking_id = id OR booking_ids @> array[id]). (c) Everything else requires current_user_can_act_on_booking('edit') AND the value be legal for the row's service_type. 'Cancelled' and 'Closed' terminal. Side effect to preserve: writing 'Completed' fires fireBillingTicketOnCompletion. Per-service orderings from bookingFieldOptions.ts:5-9 give the natural forward chains (e.g. Brokerage: Draft->Waiting for Arrival->Ongoing->Delivered->Billed->Paid->Audited).",
+          "appliesToday": true,
+          "backfillRows": 128,
+          "rank": 6
+        },
+        {
+          "target": "quotations.status",
+          "rule": "quotation_transition() + BEFORE UPDATE guard. Edges (from the actual writers, not the TS list): 'Draft'->'Pending Pricing' requires bd_quotations:edit AND caller is prepared_by/created_by; 'Pending Pricing'->'Priced' requires pricing_quotations:edit (workflowTickets.ts:207); 'Pending Pricing'->'Needs Revision' and 'Priced'->'Needs Revision' require pricing_quotations:edit — NOTE no write site produces 'Needs Revision' today, so either wire it or drop it; 'Needs Revision'->'Pending Pricing' bd_quotations:edit; 'Priced'->'Sent to Client' bd_quotations:edit; 'Sent to Client'->'Accepted by Client' and ->'Rejected by Client' bd_quotations:edit; 'Accepted by Client'->'Converted to Project' requires bd_quotations:edit AND project_id IS NOT NULL (QuotationFileView.tsx:700); 'Priced'|'Accepted by Client'->'Converted to Contract' requires quotation_type='contract' (:748); 'Priced'->'Disapproved' requires an approve grant; any of Draft|Pending Pricing|Priced|Needs Revision|Sent to Client ->'Cancelled' by the owner or bd_quotations:edit (:626). Terminal: Converted to Project, Converted to Contract, Cancelled, Rejected by Client, Disapproved. The generic handler at QuotationFileView.tsx:444 accepts any canonical value from any state and is what this replaces. Second-order: that same handler cascades projects.status='Cancelled' — that cascade must be re-expressed as a projects edge, not a raw write.",
+          "appliesToday": true,
+          "backfillRows": 0,
+          "rank": 7
+        },
+        {
+          "target": "quotations.contract_status",
+          "rule": "Same trigger as quotations.status, separate branch. First rule is a shape rule, not an edge: contract_status must be NULL when quotation_type <> 'contract' (278 of 309 rows are already NULL and correct) and NOT NULL when quotation_type='contract'. Edges: NULL->'Draft' on contract creation; 'Draft'->'Active' requires pricing_contracts:edit (QuotationFileView.tsx:748 writes this alongside status='Converted to Contract' — the two must move together); 'Active'->'Expiring' and 'Active'|'Expiring'->'Expired' (QuotationFileView.tsx:419); 'Expired'->'Renewed' requires pricing_contracts:edit. Reject 'Sent' — declared in TS, no writer, 0 rows. Note ContractDetailView.tsx:1016 currently writes whatever ContractStatusSelector offers with only a readOnly={!canEditContract} prop between the user and the column.",
+          "appliesToday": true,
+          "backfillRows": 3,
+          "rank": 8
+        },
+        {
+          "target": "projects.status",
+          "rule": "BEFORE UPDATE guard. Edges: 'Active'->'On Hold' and 'On Hold'->'Active' require an edit grant on a projects module; 'Active'|'On Hold'->'Completed' requires the same; 'Active'|'On Hold'->'Cancelled' requires the same OR arrives as a cascade from a quotation moving to Rejected by Client|Disapproved|Cancelled (QuotationFileView.tsx:626 — today that write carries only the caller's quotation grants). 'Completed' and 'Cancelled' terminal. Value set pinned to ProjectStatus = Active|Completed|On Hold|Cancelled. IMPORTANT: the transition guard is the second-order fix here. The first-order problem is that projects_update's WITH CHECK is literally `true` and its USING needs only a VIEW grant — fix the policy in the same migration or the guard protects one column on a table anyone who can see it can rewrite.",
+          "appliesToday": true,
+          "backfillRows": 0,
+          "rank": 9
+        },
+        {
+          "target": "users.status",
+          "rule": "Two changes, only one of which is a matrix. (1) Add `status` to guard_user_privileged_columns' distinct-from list — it already covers access_profile_id, role, department, team_id, is_active and omits status, which is why the self-update policy (auth_id = auth.uid()) lets any user rewrite their own. (2) Matrix, gated on exec_users:edit: 'active'<->'inactive', 'active'<->'suspended', 'suspended'->'active'. Normalise the value set to lowercase and ALTER COLUMN SET DEFAULT 'active' — the current default 'Active' is what produced the 4 capitalised rows. Must NO-OP when auth.uid() IS NULL or the admin-user-actions Edge Function (index.ts:50, :90 — service role) breaks user activation.",
+          "appliesToday": true,
+          "backfillRows": 4,
+          "rank": 10
+        },
+        {
+          "target": "customers.status",
+          "rule": "BEFORE UPDATE guard, value pinned to CustomerStatus = Prospect|Active|Inactive (already a perfect match to live data). Edges: (INSERT)->'Prospect' or 'Active'; 'Prospect'->'Active' and 'Active'->'Inactive' and 'Inactive'->'Active' require bd_customers:edit OR pricing_customers:edit (matching customers_update). No 'Active'->'Prospect' edge — nothing walks it back. Low value: the writer (CustomerDetail.tsx:292) sends the whole edited payload, so the guard will fire on every ordinary customer save; make sure OLD.status IS DISTINCT FROM NEW.status is the entry condition or every save pays for the check.",
+          "appliesToday": true,
+          "backfillRows": 0,
+          "rank": 11
+        },
+        {
+          "target": "tasks.status",
+          "rule": "BEFORE UPDATE guard, value pinned to TaskStatus = Ongoing|Pending|Completed|Cancelled. Edges: 'Pending'|'Ongoing'->'Completed' (TaskDetailInline.tsx:326) and ->'Cancelled', 'Pending'<->'Ongoing', all requiring bd_tasks:edit AND owner_id or assigned_to visibility (matching tasks_update). Terminal: Completed, Cancelled. Lowest-value guard of the twelve live ones: 4 rows, all 'Pending', internal only, no money. Same whole-row-update caveat as customers (TaskDetailInline.tsx:194 sends the entire edited task). Also fix the default: 'Ongoing' is never written by any insert site.",
+          "appliesToday": true,
+          "backfillRows": 0,
+          "rank": 12
+        },
+        {
+          "target": "expenses.status",
+          "rule": "DO NOT WRITE A MATRIX. 0 rows on dev, 0 write sites in src/ (the only reference is a COUNT in bookingCancellation.ts:65). The live value set is UNANSWERABLE — an empty table cannot tell you which values are legal, and the column default 'active' is the only evidence of intent. If a guard ships anyway, make it value-only (status = 'active') and revisit when the table has writers. The recon explicitly listed this among the six columns whose writers it never traced.",
+          "appliesToday": false,
+          "backfillRows": 0,
+          "rank": 13
+        },
+        {
+          "target": "transactions.status",
+          "rule": "DO NOT WRITE A MATRIX — but DO fix the policy. 0 rows, 0 write sites, default 'completed', value set UNANSWERABLE. However transactions_update has with_check = true and a USING clause that requires only acct_financials:view OR acct_journal:view, so the moment this table carries journal data a view grant becomes a write grant. Ship the policy fix (require an edit grant, tighten WITH CHECK) without the transition guard.",
+          "appliesToday": false,
+          "backfillRows": 0,
+          "rank": 14
+        },
+        {
+          "target": "budget_requests.status",
+          "rule": "DO NOT WRITE A MATRIX. 0 rows, 0 write sites, default 'Pending', value set UNANSWERABLE. budget_requests_update at least requires bd_budget_requests:edit OR :approve on both sides, so it is not dangerous the way transactions is. Note evouchers.transaction_type carries a 'budget_request' value and the e-voucher machine handles that flow — this table appears to be superseded by evouchers and may be a delete candidate rather than a guard candidate.",
+          "appliesToday": false,
+          "backfillRows": 0,
+          "rank": 15
+        }
+      ],
+      "blockers": [
+        "expenses.status, transactions.status and budget_requests.status are UNANSWERABLE, not clean. All three tables have 0 rows on dev AND 0 write sites in src/. I cannot state a real value set, a writer, or a from-state for any of them. 3 of the 15 columns Marcus wants guarded cannot be specified from dev. Ranked 13-15 with appliesToday=false; do not let them be counted as covered.",
+        "This survey is static analysis plus live value counts. I performed NO writes and ran NO probes. Every 'what gates it' claim about RLS is read from pg_policies text, not demonstrated by a denied write. Per K1, a policy that reads as restrictive has not been shown to restrict anything until something bounces off it.",
+        "Prod was never queried (out of scope, per instruction). Every backfillRows count is a DEV count. Prod almost certainly carries values dev does not — dev's 4 'Issued' invoices and 4 capitalised 'Active' users are exactly the kind of legacy residue that is worse in prod. Each matrix must be re-run as a stranded-row query against prod BEFORE the migration, or the guard will lock rows nobody can move.",
+        "'Needs Revision' is declared in CANONICAL_QUOTATION_STATUSES, read by three dashboard queries, has 0 live rows, and I found no write site. I cannot tell whether it is reachable through a UI dropdown fed from a source I did not grep (e.g. an admin-editable options table like profile_service_statuses, which bookingFieldOptions.ts:49 warns can inject statuses at runtime). Do not declare it dead without checking that path.",
+        "bookings.status has 5 near-identical handleStatusUpdate handlers. I read Brokerage (BrokerageBookingDetails.tsx:195-210) in full and confirmed it carries the cancel from-state check. I did NOT read Forwarding:212, Trucking:191, MarineInsurance:191 or Others:193 line by line — the recon calls them 'the same shape'. If any of the four omits the check, that is a live hole today, independent of the guard.",
+        "tickets.status is a 16th status column, has a CHECK constraint, and has live writers (ThreadDetailPanel.tsx:255,285,401; useInbox.ts:375,395; ComposePanel.tsx:128). It is not in the 15 and I did not survey it. Flagging it so it is a deliberate exclusion rather than an oversight.",
+        "A BEFORE UPDATE guard modelled on 270 will not see INSERTs. Two SECURITY DEFINER functions INSERT billing_line_items (ensure_billable_expense_billing_item, the dominant revenue writer, and send_billing_items_to_booking, which takes status from a caller-controlled JSONB payload). Both run as the authenticated caller, so 270's `auth.uid() IS NULL` escape hatch does NOT cover them. billing_line_items needs an INSERT-side value rule or the guard is decorative."
+      ],
+      "notes": "METHOD. Everything measured against dev (oqermaidggvanahumjmj) by read-only SELECT: distinct status values WITH counts for all 15 columns in one query, pg_constraint contype='c' over 13 tables, pg_trigger (29 non-internal triggers), information_schema.columns for defaults, pg_policies for UPDATE/ALL, and pg_proc.prosrc for guard_user_privileged_columns, approve_invoice, ensure_billable_expense_billing_item and repoint_live_bookings_to_rate_version. No writes. supabase-prod never touched. Code side: grepped src/ for every .from(<table>).update/.insert touching a status column and read each call site in context for its gate.\n\nWHAT THE RECON GOT WRONG, VERIFIED. Three corrections. (1) projects.status — recon says \"no app-side status write found\"; there are two, ProjectDetail.tsx:305 and the cross-module cascade at QuotationFileView.tsx:626, and a real ProjectStatus union of 4 values, not 1. (2) users.status — recon's open question 7 asked whether trg_guard_user_privileged_columns protects it. It does not; the function's distinct-from list is access_profile_id, role, department, team_id, is_active. Status is the unprotected twin of is_active, and the self-update policy (auth_id = auth.uid()) makes it self-writable. (3) bookings live count is 240 not 239, and Created is 128 not 127 — one booking was added since the recon.\n\nWHAT THE RECON GOT RIGHT, CONFIRMED INDEPENDENTLY. evouchers is the only guarded status column (29 triggers enumerated, none status-aware). Exactly one status CHECK among the 15 (bookings.billing_status). No InvoiceStatus and no CollectionStatus TS union exists — the recon's codeValues for those two are harvested literals and must not be treated as declared vocabularies. 'Issued' (4 invoices) and 'Approved' (1 evoucher) are the two capitalised-legacy residues.\n\nTHE SHAPE THAT REPEATS ACROSS ALL FIFTEEN. Every write site is `.update({status: X})` with X chosen by a dropdown and the authority check living in a React `if`. The only from-state logic anywhere in src/ is bookingCancellation.ts, and it runs in the browser. The database is asked WHO you are (via the RLS grant helpers) and never WHERE the record is — the exact sentence migration 270 was written to falsify for one table.\n\nTHE SECOND-ORDER PROBLEM, WHICH MATTERS MORE THAN SOME OF THE MATRICES. Two policies make a transition guard beside the point. projects_update has WITH CHECK = true and a USING clause satisfied by any of four VIEW grants: a view-grant holder rewrites every column of a project. transactions_update has the same shape (WITH CHECK true, view-only USING) and is only harmless because the table is empty. Guarding projects.status while leaving that policy is 270's own lesson repeated — the lock on the door beside the open window.\n\nORDER OF WORK I'D RECOMMEND. Ranks 1-4 (invoices.status, invoices.approval_status, collections.status, billing_line_items.status) are one migration: they are the money chain, their matrices are small and fully derived from real writers, and three of the four have zero backfill. Rank 2 is the cheapest real win in the whole survey — it is one ALTER COLUMN SET DEFAULT plus a trigger that forbids direct writes, and it closes three independent bypasses of the same approval. Ranks 5-9 are a second migration and need the stranded-row queries run against prod first (bookings.status strands 128 dev rows unless 'Created' is admitted explicitly). Rank 10 (users.status) is a two-line addition to an existing trigger and should ride along with whichever migration ships first. Ranks 11-12 are cosmetic; write them only if the fifteen-column completeness matters more than the churn on every customer and task save. Ranks 13-15 should not ship as guards at all — for transactions, ship the policy fix instead.\n\nTWO THINGS EVERY MIGRATION MUST CARRY, from 270's own header. First, the `if auth.uid() is not null` bypass, or the clone script (scripts/clone-prod-to-dev.mjs, service-role, truncate-and-rewrite) and the admin-user-actions Edge Function both break. Second, an OLD.status IS DISTINCT FROM NEW.status entry condition — customers, tasks and quotations are all written by whole-row updates, and without it every ordinary save is a transition attempt. This is also K2 in trigger form: a write that sets a column to the value it already holds must be a no-op, not an edge.\n\nSTRANDED-ROW QUERY TO RUN BEFORE EACH MIGRATION. For each target: SELECT status, count(*) FROM &lt;table&gt; WHERE status NOT IN (&lt;every value that appears as a `from` OR a `to` in the proposed matrix&gt;) GROUP BY 1. On dev today that returns rows for exactly four columns: invoices.status (Issued, 4), bookings.status (Created, 128 — unless admitted), quotations.contract_status (NULL on 3 contract-type rows), users.status (Active, 4). Everything else is 0. Those four numbers are the backfillRows figures above."
+    },
+    "attack": {
+      "probes": [
+        {
+          "name": "G4 — post an invoice whose approval_status is still pending_approval",
+          "actor": "treasury@falconslogistics-ph.com (Accounting, manager)",
+          "attempt": "invoices.status 'draft' -> 'posted' while approval_status = 'pending_approval'",
+          "verdict": "BREACH",
+          "evidence": "service-role reads invoices.status = 'posted', approval_status still 'pending_approval'; PostgREST returned no error. G4 is measured, not assumed."
+        },
+        {
+          "name": "Post an unapproved invoice (BD)",
+          "actor": "jr.businessdev02@ (Business Development, staff)",
+          "attempt": "invoices.status 'draft' -> 'posted'",
+          "verdict": "BLOCKED_SILENT",
+          "evidence": "service-role reads invoices.status = 'draft'. NOT a status guard — the paired control (same actor writing invoices.customer_name on a row she created) was also BLOCKED_SILENT, so she has no UPDATE on invoices at all."
+        },
+        {
+          "name": "Approve an invoice by raw column write, bypassing the approve_invoice RPC",
+          "actor": "treasury@falconslogistics-ph.com (Accounting, manager)",
+          "attempt": "invoices.approval_status 'pending_approval' -> 'approved'",
+          "verdict": "BREACH",
+          "evidence": "service-role reads invoices.approval_status = 'approved'. approve_invoice() is SECURITY DEFINER and re-checks the approver; the raw column write reaches the same end state with no check at all."
+        },
+        {
+          "name": "Approve an invoice by raw column write (BD)",
+          "actor": "jr.businessdev02@ (Business Development, staff)",
+          "attempt": "invoices.approval_status 'pending_approval' -> 'approved'",
+          "verdict": "BLOCKED_SILENT",
+          "evidence": "service-role reads 'pending_approval'. Same actor-level block as above (no invoices UPDATE), not an approval guard."
+        },
+        {
+          "name": "Un-post a posted invoice (backwards from a terminal-ish state)",
+          "actor": "treasury@falconslogistics-ph.com",
+          "attempt": "invoices.status 'posted' -> 'draft'",
+          "verdict": "BREACH",
+          "evidence": "service-role reads invoices.status = 'draft'. A posted invoice returns to draft with a single PATCH."
+        },
+        {
+          "name": "Jump an invoice straight to paid",
+          "actor": "treasury@falconslogistics-ph.com",
+          "attempt": "invoices.status 'draft' -> 'paid'",
+          "verdict": "BREACH",
+          "evidence": "service-role reads invoices.status = 'paid'. Note 'paid' has no writer anywhere in src/ — it is only READ (useReceivablesAgingReport.ts:77 .neq('status','paid')), so this write silently removes the invoice from the receivables aging report."
+        },
+        {
+          "name": "Resolve a pending collection straight to credited",
+          "actor": "treasury@falconslogistics-ph.com",
+          "attempt": "collections.status 'pending' -> 'credited'",
+          "verdict": "BREACH",
+          "evidence": "service-role reads collections.status = 'credited'. The sanctioned path (collectionResolution.ts:63) writes 'credited' and then calls evoucher_transition for the linked voucher; the raw write reaches the state and skips the voucher entirely."
+        },
+        {
+          "name": "Un-post a posted collection (BD)",
+          "actor": "jr.businessdev02@ (Business Development, staff)",
+          "attempt": "collections.status 'posted' -> 'pending'",
+          "verdict": "BLOCKED_SILENT",
+          "evidence": "service-role reads 'posted'. Actor-level: BD holds no collections edit authority. The same jump succeeded for Treasury on an identical fixture, so nothing about the state is guarded."
+        },
+        {
+          "name": "Un-post a posted collection (Treasury)",
+          "actor": "treasury@falconslogistics-ph.com",
+          "attempt": "collections.status 'posted' -> 'pending'",
+          "verdict": "BREACH",
+          "evidence": "service-role reads collections.status = 'pending' — back to a value no code path ever writes (the 'pending' default is dead in src/)."
+        },
+        {
+          "name": "Refund a posted collection (Ops TL)",
+          "actor": "jr.supervisor07@ (Operations, team_leader)",
+          "attempt": "collections.status 'posted' -> 'refunded'",
+          "verdict": "BLOCKED_SILENT",
+          "evidence": "service-role reads 'posted'. Her collections dial is 'team' and the fixture's created_by is the BD user, so the row was filtered out of the UPDATE's USING clause — a visibility block, not a transition block."
+        },
+        {
+          "name": "BD closes a booking outright, skipping the whole ops chain",
+          "actor": "jr.businessdev02@ (Business Development, staff)",
+          "attempt": "bookings.status 'Created' -> 'Completed'",
+          "verdict": "BREACH",
+          "evidence": "service-role reads bookings.status = 'Completed'. A BD staffer moved a booking from creation to done in one PATCH."
+        },
+        {
+          "name": "Re-open a completed booking",
+          "actor": "jr.supervisor07@ (Operations, team_leader)",
+          "attempt": "bookings.status 'Completed' -> 'Created'",
+          "verdict": "BREACH",
+          "evidence": "service-role reads bookings.status = 'Created'."
+        },
+        {
+          "name": "Declare a booking billed with no invoice behind it",
+          "actor": "jr.supervisor07@ (Operations, team_leader)",
+          "attempt": "bookings.billing_status 'unbilled' -> 'billed'",
+          "verdict": "BREACH",
+          "evidence": "service-role reads bookings.billing_status = 'billed'. This is the ONE status column in the whole survey that carries a CHECK constraint (bookings_billing_status_check) — and the constraint only restricts the vocabulary, not who may write it or from where. 'billed' was accepted with zero invoices linked."
+        },
+        {
+          "name": "Resurrect a cancelled booking (Treasury)",
+          "actor": "treasury@falconslogistics-ph.com",
+          "attempt": "bookings.status 'Cancelled' -> 'Ongoing'",
+          "verdict": "BLOCKED_SILENT",
+          "evidence": "service-role reads 'Cancelled'. Actor-level: the paired control (Treasury writing bookings.name) was also BLOCKED_SILENT, so she has no bookings UPDATE at all."
+        },
+        {
+          "name": "Resurrect a cancelled booking (Ops TL — the actor who does hold booking edit)",
+          "actor": "jr.supervisor07@ (Operations, team_leader)",
+          "attempt": "bookings.status 'Cancelled' -> 'Ongoing'",
+          "verdict": "BREACH",
+          "evidence": "service-role reads bookings.status = 'Ongoing'. This is the disambiguation of the Treasury result: the cancelled terminal state is not defended, Treasury simply cannot write bookings."
+        },
+        {
+          "name": "A draft quotation is accepted by the client with no pricing step",
+          "actor": "jr.businessdev02@ (Business Development, staff)",
+          "attempt": "quotations.status 'Draft' -> 'Accepted by Client'",
+          "verdict": "BREACH",
+          "evidence": "service-role reads quotations.status = 'Accepted by Client'. Pending Pricing / Priced / Sent to Client all skipped. CANONICAL_QUOTATION_STATUS_ORDER (src/utils/quotationStatus.ts) is client-side only."
+        },
+        {
+          "name": "A draft quotation converts straight to a project",
+          "actor": "jr.businessdev02@ (Business Development, staff)",
+          "attempt": "quotations.status 'Draft' -> 'Converted to Project'",
+          "verdict": "BREACH",
+          "evidence": "service-role reads quotations.status = 'Converted to Project' — the status a BD user reaches without ever going through Pricing (contradicts E8, 'Only Pricing converts an accepted quote', which turns out to be a UI fact)."
+        },
+        {
+          "name": "Revive a client-rejected quotation",
+          "actor": "jr.manager03@ (Pricing, manager)",
+          "attempt": "quotations.status 'Rejected by Client' -> 'Accepted by Client'",
+          "verdict": "BREACH",
+          "evidence": "service-role reads quotations.status = 'Accepted by Client'."
+        },
+        {
+          "name": "Un-convert a converted quotation",
+          "actor": "jr.manager03@ (Pricing, manager)",
+          "attempt": "quotations.status 'Converted to Project' -> 'Draft'",
+          "verdict": "BREACH",
+          "evidence": "service-role reads quotations.status = 'Draft', while the converted project still exists — the conversion cascade (QuotationFileView.tsx:626 writes projects.status='Cancelled' on the reverse path) does not fire on a raw column write."
+        },
+        {
+          "name": "CONTROL — BD writes a non-status column on an invoice she created",
+          "actor": "jr.businessdev02@ (Business Development, staff)",
+          "attempt": "invoices.customer_name 'E2E-STATE CUSTOMER' -> 'E2E-STATE CUSTOMER CHANGED'",
+          "verdict": "BLOCKED_SILENT",
+          "evidence": "service-role reads the original value. Proves her invoice probes were blocked by write authority, not by anything status-aware."
+        },
+        {
+          "name": "CONTROL — Treasury writes a non-status column on a booking",
+          "actor": "treasury@falconslogistics-ph.com",
+          "attempt": "bookings.name 'E2E-STATE bk5' -> 'E2E-STATE bk5 CHANGED'",
+          "verdict": "BLOCKED_SILENT",
+          "evidence": "service-role reads the original value. Proves her booking probe was blocked by write authority, not by the Cancelled state."
+        }
+      ],
+      "breachCount": 14,
+      "cleanedUp": true,
+      "notes": "SCOPE. 19 attack probes + 2 controls, run as four verified real sign-ins against PostgREST on dev (oqermaidggvanahumjmj). Fixtures were created by SERVICE ROLE in a normal starting state and tagged E2E-STATE, so no probe tested its own ability to create the row.\n\nHEADLINE: 14 distinct illegitimate jumps succeeded, across all four tables. ZERO probes were BLOCKED_LOUD. Nothing in the database raised on a status write, ever.\n\nCOMPACT TABLE (table | from | to | actor | verdict):\ninvoices | draft | posted (approval_status=pending_approval) | treasury | BREACH  <- G4, measured\ninvoices | draft | posted | bd | BLOCKED_SILENT (actor-level)\ninvoices | pending_approval | approved (approval_status) | treasury | BREACH\ninvoices | pending_approval | approved | bd | BLOCKED_SILENT (actor-level)\ninvoices | posted | draft | treasury | BREACH\ninvoices | draft | paid | treasury | BREACH\ncollections | pending | credited | treasury | BREACH\ncollections | posted | pending | treasury | BREACH\ncollections | posted | pending | bd | BLOCKED_SILENT (actor-level)\ncollections | posted | refunded | ops | BLOCKED_SILENT (dial: team vs created_by)\nbookings | Created | Completed | bd | BREACH\nbookings | Completed | Created | ops | BREACH\nbookings | unbilled | billed (billing_status) | ops | BREACH\nbookings | Cancelled | Ongoing | ops | BREACH\nbookings | Cancelled | Ongoing | treasury | BLOCKED_SILENT (actor-level)\nquotations | Draft | Accepted by Client | bd | BREACH\nquotations | Draft | Converted to Project | bd | BREACH\nquotations | Rejected by Client | Accepted by Client | pricingMgr | BREACH\nquotations | Converted to Project | Draft | pricingMgr | BREACH\n\nTHE FIVE BLOCKED_SILENT RESULTS ARE NOT GUARDS. Every one is the actor failing to reach the row at all, and I proved it rather than assuming it:\n  - BD on invoices: the control write to invoices.customer_name on a row SHE created was also BLOCKED_SILENT -> no invoices UPDATE authority whatsoever.\n  - Treasury on bookings: the control write to bookings.name was also BLOCKED_SILENT -> no bookings UPDATE authority.\n  - Ops on collections: her collections dial is 'team' and the fixture's created_by is the BD user, so the row falls outside USING. The identical jump landed for Treasury.\n  - The Cancelled->Ongoing pair is the cleanest demonstration: BLOCKED_SILENT for Treasury, BREACH for Ops on an identical fixture. The state is not defended; only some actors can reach it.\nSo the correct before-picture is: on these four tables, if you can UPDATE the row at all, you can write any status string into it, from any state, in any direction. There is no from-state, no ordering, no approval gate, and no actor-vs-state pairing anywhere in the database.\n\nSPECIFIC THINGS WORTH FLIPPING INTO EXPECTATIONS:\n  1. G4 CONFIRMED, and it is worse than recorded. The finding says an unapproved invoice can be posted. It can also be APPROVED by a raw column write — Treasury moved approval_status pending_approval -> approved directly, so approve_invoice()'s SECURITY DEFINER approver check is one of two doors and the other one is unlocked. The client-side fallback noted by the survey (`(viewInvoice as any).approval_status ?? \"approved\"`) means a row with a NULL approval_status is also treated as approved by the finalize gate. Three bypasses of one approval, all live.\n  2. invoices 'paid' is reachable and is a data-integrity hole, not just a vocabulary one: nothing writes 'paid', but useReceivablesAgingReport.ts:77 filters `.neq('status','paid')`. Writing it hides the invoice from the aging report permanently.\n  3. bookings.billing_status is the ONLY status column in the survey with a CHECK constraint, and the constraint bought nothing. 'billed' is in the allowed vocabulary, so an Ops TL declared a booking billed with zero invoices against it. A vocabulary CHECK is not a transition guard; do not let its presence read as coverage.\n  4. quotations contradicts finding E8 (\"Only Pricing converts an accepted quote — BY DESIGN\"). A BD staffer wrote 'Converted to Project' onto a Draft quote directly. E8 is a UI fact, not a system fact, and should be re-labelled.\n  5. Un-converting a quotation (Converted to Project -> Draft) leaves the created project untouched. The reverse cascade at QuotationFileView.tsx:626 lives in the client, so the raw write desynchronises quotation and project.\n\nHARNESS DISCIPLINE APPLIED: every probe asserted a value the row did not already hold and no probe ran from === to (K2); every verdict was read back with SERVICE-ROLE eyes rather than inferred from the absence of a PostgREST error (K1); all four sign-ins were verified to the point of resolving a users row from auth_id before any probe ran, and the run was set to abort on any failure (K3). No UNANSWERABLE results — every fixture was confirmed to be in its declared from-state before the attempt.\n\nCLEANUP: all fixtures deleted in both passes, verified twice — once by the scripts re-selecting their own id lists (leftovers: none), and once independently via SQL sweeping projects/bookings/quotations/invoices/collections/billing_line_items for the E2E-STATE tag and the fixture number prefixes. All six counts are 0. Probe scripts were run from the repo root (for node_modules resolution) and then removed from the repo; they live at C:\\Users\\Marcus\\AppData\\Local\\Temp\\claude\\C--Users-Marcus-Documents-Neuron-Development-NeuronosPrototype\\624d4784-bab2-44dd-ac10-0eefaab0b776\\scratchpad\\state-probe.mjs and state-probe2.mjs. Nothing was written to prod; no supabase-prod tool was called.\n\nNOT DETERMINED: I did not probe the remaining 8 live status columns (projects.status, quotations.contract_status, billing_line_items, customers, users.status, tasks) — out of the requested top-4 scope. The survey's claim that any authenticated user can write their own users.status is untested here and should not be counted as verified."
+    }
+  }
+]

@@ -1,0 +1,109 @@
+{
+  "pass": "wave-3",
+  "question": "The spine was proved on a Forwarding booking. Does the rest of the business work — contracts, and the other service lines?",
+  "date": "2026-08-06",
+  "environment": "dev (oqermaidggvanahumjmj)",
+  "framing": "Forwarding is the smallest service line on dev (20 bookings). Brokerage carries 142 and Trucking 81. Every e2e test and manual pass so far has exercised 8% of the traffic.",
+
+  "service_line_coverage": {
+    "Brokerage": {"bookings": 142, "with_billing": 32, "with_evoucher": 51, "with_invoice": 8, "with_project": 2, "contract_linked": 100},
+    "Trucking": {"bookings": 81, "with_billing": 0, "with_evoucher": 0, "with_invoice": 1, "with_project": 0, "contract_linked": 79},
+    "Forwarding": {"bookings": 20, "with_billing": 5, "with_evoucher": 4, "with_invoice": 6, "with_project": 11, "contract_linked": 3}
+  },
+
+  "findings": [
+    {
+      "id": "R0",
+      "severity": "GOOD NEWS",
+      "title": "The other service lines are wired — Trucking is untested, not broken",
+      "evidence": "Every service line has its own detail component wiring the same UnifiedBillingsTab / UnifiedExpensesTab / UnifiedInvoicesTab / UnifiedCollectionsTab with a per-line permission door: BrokerageBookingDetails, TruckingBookingDetails:400, MarineInsuranceBookingDetails, OthersBookingDetails, forwarding/ForwardingBookingDetails.",
+      "conclusion": "Trucking's 0 billing lines and 0 e-vouchers are missing test coverage, not a missing feature. Stated explicitly because the empty columns invite the opposite conclusion."
+    },
+    {
+      "id": "R1",
+      "severity": "MEDIUM",
+      "title": "The type filter hides every spot quotation",
+      "file": "src/components/pricing/QuotationsListWithFilters.tsx:483-487",
+      "cause": "The filter offers All Types / Project / Contract. 'Contract' keeps quotation_type === 'contract'; 'Project' keeps !quotation_type || === 'project'. The third live value, 'spot', matches neither branch.",
+      "measured": {"quotation_type_project": 263, "quotation_type_contract": 34, "quotation_type_spot": 18, "documented_in_claude_md": ["spot", "contract"]},
+      "effect": "All 18 spot quotations are reachable only on 'All Types'. Narrowing to either named type drops them with no indication."
+    },
+    {
+      "id": "R2",
+      "severity": "HIGH",
+      "title": "Contract expiry is a label nobody flips",
+      "cause": "No trigger on quotations touches contract status; pg_cron is not installed. detect_active_contracts_for_customer gates on contract_status in ('Active','Expiring') and never compares a date. fetchFullContract and CreateBookingFromContractPanel add no validity check.",
+      "measured": {
+        "declared_statuses": ["Draft", "Active", "Expiring", "Expired", "Renewed"],
+        "statuses_ever_written": ["Active", "Draft"],
+        "triggers_on_quotations": ["quotations_stamp_creator", "trg_conf_audit", "trg_conf_enforce", "trg_set_quotation_number", "trg_quotations_updated_at"],
+        "none_of_which_touch_contract_status": true,
+        "pg_cron_installed": false,
+        "live_case": "CQ2605251999 — contract_end_date 2026-05-01, contract_status 'Active', still returned by the booking-detection RPC on 2026-08-06"
+      },
+      "note": "ContractsList:593 renders 'Expired' when daysRemaining <= 0, but that is a display string only; the stored status is unchanged and the RPC reads the stored status."
+    },
+    {
+      "id": "R3",
+      "severity": "HIGH",
+      "title": "get_contract_for_booking ignores the visibility dial",
+      "cause": "The by-id RPC filters only on quotation_type='contract' after a wide capability gate, then returns to_jsonb of the entire row. No customer scoping, no department check, no visibility dial.",
+      "gate": "current_user_can_detect_contracts() passes on any of pricing_quotations:view, pricing_contracts:view, bd_contracts:view, bd_inquiries:view, current_user_can_act_on_booking('view'), acct_bookings:view — roughly everyone in BD, Pricing, Ops or Accounting.",
+      "returned": ["total_buying", "total_selling", "internal_notes", "contract_notes", "details.rate_matrices"],
+      "measured": {"contracts_with_rate_matrices": 34, "contracts_with_buying_price": 34, "contracts_total": 34},
+      "explicitly_not_the_finding": "Buying-price exposure to internal staff is by design — internal financials are deliberately not role-gated per Marcus's standing instruction. The finding is that a user whose visibility dial is 'own' can read any contract in the system by id, which is what migration 217 established the dial to prevent.",
+      "contrast": "The sibling RPC detect_active_contracts_for_customer IS customer-scoped and returns header fields only. The call-site comment describes that behaviour; the by-id function has neither property."
+    },
+    {
+      "id": "R4",
+      "severity": "MEDIUM",
+      "title": "The per-booking Financials tab is granted to 3 of 60 users",
+      "declared_correctly_in": ["src/components/admin/permissionsConfig.ts:69", "src/config/access/accessSchema.ts:300-415", "src/config/access/actionApplicability.ts:215-220", "the can() calls in each BookingDetails component"],
+      "measured_grants_view": {
+        "ops_brokerage_financials_tab": 2,
+        "ops_forwarding_financials_tab": 1,
+        "ops_marine_insurance_financials_tab": 0,
+        "ops_trucking_financials_tab": 0,
+        "ops_others_financials_tab": 0,
+        "pricing_others_financials_tab": 0
+      },
+      "note": "ops_trucking_financials_tab does not appear as a key in permission_overrides or access_profiles at all.",
+      "effect": "Nobody — including Accounting — can open per-booking financials for Trucking (81 bookings), Marine Insurance or Others. Consistent with the standing doctrine that a tab is invisible until checked in the Access Configuration matrix.",
+      "fix_type": "matrix change, not code change"
+    },
+    {
+      "id": "R5",
+      "severity": "HIGH",
+      "title": "The catalog doctrine is enforced by convention only",
+      "doctrine": "CLAUDE.md, non-negotiable: no billing_line_items or evoucher_line_items insert may omit catalog_item_id; every catalog write must include catalog_snapshot from buildCatalogSnapshot().",
+      "database_enforcement": {
+        "check_constraints_present": ["billing_line_items_amount_nonnegative", "evoucher_line_items_fault_class_check"],
+        "not_null_on_catalog_item_id": false,
+        "not_null_on_catalog_snapshot": false,
+        "validating_triggers": 0
+      },
+      "measured": {
+        "billing_line_items": {"rows": 175, "no_catalog_item_id": 125, "pct": 71, "empty_snapshot": 97, "null_snapshot": 1},
+        "evoucher_line_items": {"rows": 277, "no_catalog_item_id": 72, "pct": 26, "null_snapshot": 70}
+      },
+      "recency": {
+        "billing_missing_by_month": {"2026-05": 28, "2026-06": 95, "2026-07": 2},
+        "evoucher_missing_by_month": {"2026-05": 13, "2026-06": 57, "2026-07": 2}
+      },
+      "why_it_matters": "The catalog is the mechanism that makes revenue and cost comparable across service lines. Two thirds of billing rows sit outside it."
+    }
+  ],
+
+  "verdict": "Contracts are the weakest area QA has examined — not because the code is bad, but because the parts meant to be automatic are manual. A contract expires when someone changes a dropdown. A catalog rule holds when someone remembers it. A tab becomes visible when someone ticks a box, and for three service lines nobody did.",
+
+  "recommended_order": [
+    "R2 — one date comparison in detect_active_contracts_for_customer plus a status backfill; the one where a wrong answer holds the company to a rate it no longer honours",
+    "R5 — two NOT NULL constraints, AFTER a decision on the 197 existing violating rows (no data touched)",
+    "R3 — a scoping clause on get_contract_for_booking",
+    "R1 — one line in the list filter",
+    "R4 — an Access Configuration matrix change, not code"
+  ],
+
+  "no_code_changed": true,
+  "no_data_changed": true
+}

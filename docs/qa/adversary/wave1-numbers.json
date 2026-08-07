@@ -1,0 +1,1367 @@
+[
+  {
+    "figures": [
+      {
+        "name": "Sales Report — Total Billed",
+        "where": "src/components/accounting/reports/SalesReport.tsx:186-188 (KPI \"Total Billed\", table footer, \"Revenue Summary\" card)",
+        "appFormula": "Σ pickReportingAmount(inv) over invoices passing isInvoiceFinanciallyActive(), scoped per booking. Active = status ∉ {draft, void, reversed} AND lower(status) ∈ {draft,posted,approved,paid,open,partial,sent}; the payment_status fallback branch is dead (invoices has no payment_status column).",
+        "appValue": "PHP 141,121.60 (8 invoices, status='posted' only)",
+        "myValue": "PHP 626,121.60 — posted (8 × 141,121.60) + 'Issued' (4 × 485,000.00). Verified: select status,count(*),sum(total_amount) from invoices → draft 2/36,000; Issued 4/485,000; posted 8/141,121.60; void 1/123,000",
+        "agrees": false
+      },
+      {
+        "name": "Sales Report — Cost of Sales",
+        "where": "src/components/accounting/reports/SalesReport.tsx:196; filter in src/hooks/useReportsData.ts:86-87",
+        "appFormula": "evouchers WHERE transaction_type IN ('expense','budget_request') AND status IN ('approved','posted','paid','partial') — then re-filtered client-side by the same status list in mapEvoucherExpensesForScope + calculateFinancialTotals.",
+        "appValue": "PHP 360,743.00 (6 rows — only status='posted', transaction_type='expense', booking-linked)",
+        "myValue": "PHP 727,050.25 — booking-linked expense e-vouchers actually realized: posted 6 rows/360,743.00 + disbursed 9 rows/350,307.25 + legacy 'Approved' 1 row/16,000.00",
+        "agrees": false
+      },
+      {
+        "name": "Sales Report — Total Collected",
+        "where": "src/components/accounting/reports/SalesReport.tsx:201-203",
+        "appFormula": "Σ pickReportingAmount(c) over collections whose invoice_id ∈ this booking's active invoice ids, excluding statuses {draft,cancelled,voided,void,credited,refunded}.",
+        "appValue": "PHP 133,621.60 (7 receipts)",
+        "myValue": "PHP 133,621.60 — select sum(amount) from collections where status='posted' → 133,621.60; the one 'credited' 500.00 correctly excluded",
+        "agrees": true
+      },
+      {
+        "name": "Sales Report — Gross Profit / Gross Margin",
+        "where": "src/components/accounting/reports/SalesReport.tsx:216, 249 (footer \"Gross Margin\")",
+        "appFormula": "billedAmount − costOfSales; margin = GP / billedAmount",
+        "appValue": "PHP −219,621.40; margin −155.6%",
+        "myValue": "PHP −100,928.65; margin −16.1% (626,121.60 − 727,050.25)",
+        "agrees": false
+      },
+      {
+        "name": "Sales Report — Outstanding AR",
+        "where": "src/components/accounting/reports/SalesReport.tsx:219",
+        "appFormula": "max(0, billedAmount − collectedAmount) per booking, summed",
+        "appValue": "PHP 7,500.00",
+        "myValue": "PHP 492,500.00 — 626,121.60 issued/posted less 133,621.60 applied receipts. (The arithmetic is correct; the input 'billed' is the understated one.)",
+        "agrees": false
+      },
+      {
+        "name": "Sales Report — Collection Rate",
+        "where": "src/components/accounting/reports/SalesReport.tsx:247",
+        "appFormula": "collected / billed",
+        "appValue": "94.68%",
+        "myValue": "21.34% (133,621.60 / 626,121.60)",
+        "agrees": false
+      },
+      {
+        "name": "Booking Cash Flow — Total Booked Charges",
+        "where": "src/hooks/useBookingCashFlowReport.ts:210 → financialCalculations.ts:71-77; KPI \"Total Booked\"",
+        "appFormula": "invoicedAmount (active invoices) + Σ base_amount of billing_line_items with status='unbilled'",
+        "appValue": "PHP 2,945,027.59 (141,121.60 + 2,803,905.99)",
+        "myValue": "PHP 2,945,027.59 — select sum(base_amount) from billing_line_items where status='unbilled' → 2,803,905.99 (160 rows); + posted invoices 141,121.60",
+        "agrees": true
+      },
+      {
+        "name": "Booking Cash Flow — Outstanding AR",
+        "where": "src/hooks/useBookingCashFlowReport.ts:213; formula at src/utils/financialCalculations.ts:112-115 + baseRemainingBalance():36-49",
+        "appFormula": "Σ baseRemainingBalance(inv) over active invoices where payment_status ∉ {paid,cleared}. baseRemainingBalance reads inv.remaining_balance — THE COLUMN DOES NOT EXIST on invoices — so `row.remaining_balance == null` is always true and it returns baseAmt(row), the FULL invoice amount. payment_status also does not exist, so the skip never fires.",
+        "appValue": "PHP 141,121.60 (identical to Total Invoiced; collections never subtracted)",
+        "myValue": "PHP 7,500.00 — posted invoices 141,121.60 less applied collections 133,621.60. Only INV-MPM84S7W (7,000) and BRK-2026-0031-001 (500) carry a real balance.",
+        "agrees": false
+      },
+      {
+        "name": "Booking Cash Flow — Total Direct Cost / Avg Gross Margin",
+        "where": "src/hooks/useBookingCashFlowReport.ts:214,216-217; KPI sub-label \"Avg margin\"",
+        "appFormula": "directCost = Σ base_amount of the 4-status e-voucher set; avgGrossMargin = (bookedCharges − directCost)/bookedCharges",
+        "appValue": "Direct cost PHP 360,743.00; avg gross margin 87.75%",
+        "myValue": "Direct cost PHP 727,050.25; margin on the same booked-charge base = 75.31%",
+        "agrees": false
+      },
+      {
+        "name": "Receivables Aging — Total Outstanding",
+        "where": "src/hooks/useReceivablesAgingReport.ts:145 + 178; KPI \"Total Outstanding\", card footer",
+        "appFormula": "invoices .neq('status','paid') .gte/.lte(created_at, scope) → filter isInvoiceFinanciallyActive → outstanding = max(0, pickReportingAmount(inv) − Σ applied collections)",
+        "appValue": "PHP 7,500.00 across 2 invoices",
+        "myValue": "PHP 492,500.00 across 6 invoices — 7,000.00 (INV-MPM84S7W) + 500.00 (BRK-2026-0031-001) + 485,000.00 across SIM-INV01..04 (status 'Issued')",
+        "agrees": false
+      },
+      {
+        "name": "Receivables Aging — bucket split (Current / 31-60 / 61-90 / 91+)",
+        "where": "src/hooks/useReceivablesAgingReport.ts:43-48, 180-184",
+        "appFormula": "daysOld = floor((today − (due_date ?? invoice_date ?? created_at)) / 86400000), clamped at 0; ≤30 current, ≤60 '31-60', ≤90 '61-90', else '91+'",
+        "appValue": "Current 500.00 · 31-60 7,000.00 · 61-90 0.00 · 91+ 0.00",
+        "myValue": "Current 365,500.00 · 31-60 127,000.00 · 61-90 0.00 · 91+ 0.00 (SIM-INV01 inv_date 2026-07-03 → 33d; SIM-INV02/03/04 → 29d/25d/22d; all four have due_date NULL)",
+        "agrees": false
+      },
+      {
+        "name": "Receivables Aging — Invoices Tracked / Customers with AR",
+        "where": "src/hooks/useReceivablesAgingReport.ts:190-191",
+        "appFormula": "computedRows.length; distinct customerName over rows",
+        "appValue": "2 invoices",
+        "myValue": "6 invoices with a live balance",
+        "agrees": false
+      },
+      {
+        "name": "Collections Report — Total Collected / Receipts / Average / Largest",
+        "where": "src/hooks/useCollectionsReport.ts:161-170; all four KPI cards",
+        "appFormula": "collections in [fromIso,toIso] on created_at, then isCollectionAppliedToInvoice, then isInScope(collection_date ?? created_at); Σ pickReportingAmount",
+        "appValue": "PHP 133,621.60 · 7 receipts · avg PHP 19,088.80 · largest PHP 25,000.00",
+        "myValue": "PHP 133,621.60 · 7 · 19,088.80 · 25,000.00 — matches exactly at scope 'All'",
+        "agrees": true
+      },
+      {
+        "name": "Unbilled Revenue — Total Unbilled",
+        "where": "src/hooks/useUnbilledRevenueReport.ts:69-79 (both queries); KPI \"Total Unbilled\", table, all summary cards",
+        "appFormula": "Nothing is computed. The hook selects billing_line_items(...,total_amount,...) and invoices(...,invoice_type,reversal_for) — none of those three columns exist. PostgREST returns 400/42703, queryFn throws, react-query yields undefined, the hook silently returns rows:[] and a zeroed summary. The component never reads `error`.",
+        "appValue": "PHP 0.00 — table shows \"No unbilled bookings this period.\"",
+        "myValue": "PHP 2,803,905.99 across 30 bookings (160 billing_line_items with status='unbilled')",
+        "agrees": false
+      },
+      {
+        "name": "Unbilled Revenue — Bookings Affected / At Risk / Total Booked",
+        "where": "src/components/accounting/reports/UnbilledRevenueReport.tsx:178-207",
+        "appFormula": "same dead query path",
+        "appValue": "0 bookings · 0 at risk · PHP 0.00 booked",
+        "myValue": "30 bookings · PHP 2,967,027.59 total booked charges (2,803,905.99 unbilled + 163,121.60 invoiced)",
+        "agrees": false
+      },
+      {
+        "name": "Financial Health — Total Billings",
+        "where": "src/hooks/useFinancialHealthReport.ts:74 → RPC get_financial_health_summary, billing_agg CTE",
+        "appFormula": "SUM(billing_line_items.amount) GROUP BY billing_line_items.project_number, INNER-ish LEFT JOIN to projects.project_number. No date filter on the billings themselves.",
+        "appValue": "PHP 125,000.00 (5 projects)",
+        "myValue": "PHP 2,967,027.59 of non-void billing line items exist. Only 5 of 88 non-empty bli.project_number values match a real projects.project_number; 83 of 88 hold BOOKING numbers, so 95.8% of billings never join.",
+        "agrees": false
+      },
+      {
+        "name": "Financial Health — Total Expenses / Admin 3% / Gross Profit",
+        "where": "src/hooks/useFinancialHealthReport.ts:65-67, 81; RPC expense_agg CTE",
+        "appFormula": "expensesTotal = SUM(evouchers.amount) WHERE project_number joins a project AND transaction_type IN ('expense','budget_request') AND status IN ('approved','posted','paid','partial'); adminCost = expensesTotal × 0.03; grossProfit = billingTotal − (expensesTotal × 1.03)",
+        "appValue": "Expenses PHP 0.00 · Admin PHP 0.00 · Gross Profit PHP 125,000.00 (100.0% margin)",
+        "myValue": "PHP 801,050.25 of realized booking-linked e-voucher spend exists (249 e-vouchers carry a non-empty project_number). On the same all-billings basis GP = 2,967,027.59 − 801,050.25×1.03 = PHP 2,141,945.83.",
+        "agrees": false
+      },
+      {
+        "name": "Executive dashboard — Open Tickets",
+        "where": "src/lib/dashboardFetchers.ts:192 (count: APPROX_COUNT = 'planned')",
+        "appFormula": "PostgREST Prefer: count=planned — the query planner's row ESTIMATE, not a count",
+        "appValue": "1,513 (planner estimate at time of measurement)",
+        "myValue": "1,449 exact — delta +64 (+4.4%)",
+        "agrees": false
+      },
+      {
+        "name": "Executive dashboard — Pending E-Vouchers",
+        "where": "src/lib/dashboardFetchers.ts:193",
+        "appFormula": "planned count over status IN (pending_manager,pending_ceo,pending_accounting)",
+        "appValue": "233 (planner estimate)",
+        "myValue": "226 exact — delta +7 (+3.1%)",
+        "agrees": false
+      },
+      {
+        "name": "Executive dashboard — In-Progress Quotations",
+        "where": "src/lib/dashboardFetchers.ts:190",
+        "appFormula": "planned count over status IN ('Draft','Needs Revision')",
+        "appValue": "73 (planner estimate)",
+        "myValue": "71 exact — delta +2 (+2.8%). 'Needs Revision' has 0 rows; the tile is Draft-only.",
+        "agrees": false
+      },
+      {
+        "name": "Executive dashboard — Active Bookings",
+        "where": "src/lib/dashboardFetchers.ts:191",
+        "appFormula": "planned count over status NOT IN ('Completed','Cancelled')",
+        "appValue": "235 (planner estimate)",
+        "myValue": "237 exact — delta −2 (−0.8%)",
+        "agrees": false
+      },
+      {
+        "name": "Executive dashboard — Open Inquiries",
+        "where": "src/lib/dashboardFetchers.ts:189",
+        "appFormula": "planned count over status IN ('Pending Pricing')",
+        "appValue": "58",
+        "myValue": "58 exact — matched on this run",
+        "agrees": true
+      }
+    ],
+    "discrepancies": [
+      {
+        "figure": "Unbilled Revenue Report — every figure on the page",
+        "appValue": "PHP 0.00 / 0 bookings / \"No unbilled bookings this period.\"",
+        "trueValue": "PHP 2,803,905.99 unbilled across 30 bookings",
+        "delta": "−PHP 2,803,905.99 (100% of the report's subject matter)",
+        "cause": "src/hooks/useUnbilledRevenueReport.ts:69-79 selects columns that do not exist: billing_line_items.total_amount, invoices.invoice_type, invoices.reversal_for. Verified live against dev PostgREST — HTTP 400, {\"code\":\"42703\",\"message\":\"column billing_line_items.total_amount does not exist\"} and the same for invoices.invoice_type. queryFn throws; the hook destructures only {data, isLoading} and never surfaces `error`, so rows=[] and a summary of zeros render as a legitimate, confident, fully-formatted report with a signature block on it.",
+        "severity": "critical"
+      },
+      {
+        "figure": "Booking Cash Flow — \"Outstanding AR\"",
+        "appValue": "PHP 141,121.60",
+        "trueValue": "PHP 7,500.00",
+        "delta": "+PHP 133,621.60 overstated (18.8× the true balance)",
+        "cause": "src/utils/financialCalculations.ts:36-49 baseRemainingBalance() reads row.remaining_balance and row.ewt_total and treats null as \"no balance recorded → use the full invoice amount\". invoices has NO remaining_balance column at all (confirmed via information_schema), so the null branch fires on 100% of rows and Outstanding is hard-wired to equal Total Invoiced. Every applied collection in the system is ignored. The same function's payment_status guard (line 113) is also dead — no payment_status column exists — so a fully settled invoice can never drop out. Note the Sales Report computes the same concept correctly (billed − collected), so the two reports disagree with each other by 133,621.60 on the same data.",
+        "severity": "critical"
+      },
+      {
+        "figure": "Every revenue/AR figure across Sales Report, Booking Cash Flow and Receivables Aging",
+        "appValue": "Billed PHP 141,121.60 · AR PHP 7,500.00",
+        "trueValue": "Billed PHP 626,121.60 · AR PHP 492,500.00",
+        "delta": "−PHP 485,000.00 (77.5% of billings, 98.5% of AR silently invisible)",
+        "cause": "isInvoiceFinanciallyActive (src/utils/invoiceReversal.ts:5,38-52) matches lower(status) against ACTIVE_INVOICE_STATUSES = {draft,posted,approved,paid,open,partial,sent}. Four dev invoices carry status 'Issued' — not in the set. The only fallback (ACTIVE_INVOICE_PAYMENT_STATUSES.has(payment_status)) is dead because invoices has no payment_status column. So SIM-INV01..04, PHP 485,000.00, are classified as financially inactive and dropped from billed revenue, from AR aging, and from the invoiced leg of booked charges. No warning, no row, no count.",
+        "severity": "critical"
+      },
+      {
+        "figure": "Financial Health — Total Billings / Total Expenses / Gross Profit",
+        "appValue": "Billings PHP 125,000.00 · Expenses PHP 0.00 · GP PHP 125,000.00 (100% margin) · 5 projects",
+        "trueValue": "PHP 2,967,027.59 of non-void billings and PHP 801,050.25 of realized booking-linked spend exist",
+        "delta": "−PHP 2,842,027.59 billings (95.8%); −PHP 801,050.25 expenses (100%)",
+        "cause": "get_financial_health_summary joins billing_line_items.project_number and evouchers.project_number to projects.project_number. Measured on dev: 88 billing rows have a non-empty project_number, only 5 match a real project, 83 match a BOOKING number (the L3 shape). Expenses additionally hit the phantom-status filter, landing on exactly zero rows. The page then prints Gross Profit = 125,000.00 at a 100.0% margin — a freight forwarder with no cost of sales — and an 'Admin 3%' column of PHP 0.00, and neither reads as an error.",
+        "severity": "critical"
+      },
+      {
+        "figure": "Cost of Sales / Direct Cost (Sales Report, Booking Cash Flow, Financial Health)",
+        "appValue": "PHP 360,743.00",
+        "trueValue": "PHP 727,050.25 (booking-linked, expense-type, realized)",
+        "delta": "−PHP 366,307.25 (50.4% of cost of sales missing) → gross profit overstated by the same amount",
+        "cause": "The status filter ['approved','posted','paid','partial'] appears in five places (useReportsData.ts:87, useBookingCashFlowReport.ts:101, financialSelectors.ts mapExpenseRowsForScope + mapEvoucherExpensesForScope, financialCalculations.ts:79, and the RPC's expense_agg). Live e-voucher statuses on dev are: pending_accounting 148, pending_ceo 77, draft 8, posted 16, disbursed 13, cancelled 2, pending_liquidation 1, pending_manager 1, plus one legacy 'Approved'. 'approved', 'paid' and 'partial' match ZERO rows. 'disbursed' — cash physically out the door, 9 booking-linked expense rows worth PHP 350,307.25 — is not in the list. The legacy capital-A 'Approved' row (PHP 16,000) is dropped at the DB layer because .in() is case-sensitive, even though the client-side re-filter lowercases. transaction_type 'budget_request' matches zero rows and is dead weight.",
+        "severity": "critical"
+      },
+      {
+        "figure": "Receivables Aging — the whole report under any non-'All' scope",
+        "appValue": "Only invoices whose created_at falls inside the selected period",
+        "trueValue": "AR aging must show every open receivable regardless of when it was raised",
+        "delta": "Under 'This Month' (Aug 2026) the report shows 5 invoices; the 41-day-overdue INV-MPM84S7W (created 2026-05-26, PHP 7,000 open) vanishes entirely",
+        "cause": "src/hooks/useReceivablesAgingReport.ts:71-73 filters invoices by .gte/.lte on created_at, then again by isInScope(inv.created_at). An aging report scoped to issue date structurally cannot populate its own 61-90 and 91+ buckets for any month-or-shorter scope — an invoice cannot be both 91 days old and created inside a 31-day window. The two right-hand KPI cards are dead by construction.",
+        "severity": "critical"
+      },
+      {
+        "figure": "Financial Health — month selector",
+        "appValue": "Month computed as to_char(projects.created_at,'YYYY-MM') under the DB session TimeZone",
+        "trueValue": "UI asks for the month per the browser's local (Manila, UTC+8) clock via getCurrentMonth()",
+        "delta": "An 8-hour window every single day at each month boundary where the two disagree",
+        "cause": "Confirmed: current_setting('TimeZone') on dev = 'UTC'. FinancialHealthPage.tsx:36-38 builds 'YYYY-MM' from new Date() in browser-local time; the RPC compares it against a UTC to_char. Any project created between 00:00 and 08:00 Manila on the 1st of a month is stamped to the PREVIOUS month by the RPC and disappears from the month the user selected — and reappears in a month the user isn't looking at. Same class of error applies to project_date rendering.",
+        "severity": "high"
+      },
+      {
+        "figure": "Collections leaked from outside the period (Sales Report, Booking Cash Flow)",
+        "appValue": "Includes collections created at any time AFTER the period start, with no upper bound",
+        "trueValue": "Should be bounded by the period end",
+        "delta": "Not quantifiable on dev (all 8 collections fall inside every scope tested), but the bug is unconditional in code",
+        "cause": "useReportsData.ts:96-99 and useBookingCashFlowReport.ts:110-113 issue collections.select('*').gte('created_at', fromIso) with NO .lte(toIso), then merge those rows into the per-booking collected total. For a 'This Week' or 'This Month' scope, a receipt banked after period-end still reduces that period's Outstanding. Separately, the companion query .in('booking_id', bookingIds) returns ZERO rows on dev — all 8 collections have booking_id NULL — so the unbounded date query is doing all the work.",
+        "severity": "high"
+      },
+      {
+        "figure": "Executive dashboard — Open Tickets / Pending EVs / Active Bookings / In-Progress Quotations",
+        "appValue": "1,513 · 233 · 235 · 73",
+        "trueValue": "1,449 · 226 · 237 · 71",
+        "delta": "+64 (+4.4%) · +7 (+3.1%) · −2 (−0.8%) · +2 (+2.8%)",
+        "cause": "dashboardFetchers.ts:7 sets APPROX_COUNT = 'planned' and lines 189-193 pass it to five head:true count queries. PostgREST count=planned returns the query planner's Plan Rows estimate straight from pg_class statistics, not a count. Measured by running EXPLAIN (FORMAT JSON) on the identical predicates. These are rendered as bare integers with no ~ or 'approx' marker, and they change after every autovacuum/ANALYZE without any data changing — the same dashboard shows a different number on refresh.",
+        "severity": "medium"
+      },
+      {
+        "figure": "\"Open Inquiries\" — BD dashboard vs Executive dashboard",
+        "appValue": "BD tile: quotation_type IN (project,spot) AND status IN (Draft, Pending Pricing, Needs Revision) → 128 qualifying rows. Exec tile: status = 'Pending Pricing' → 58.",
+        "trueValue": "One label should mean one thing",
+        "delta": "128 vs 58 — the same words on two screens differ by 70 rows (2.2×)",
+        "cause": "dashboardFetchers.ts:148 vs :189. Both are titled from the same concept but use different predicates. The BD tile also excludes the one contract-type 'Pending Pricing' quotation via its quotation_type filter, while the Exec tile includes it. A manager comparing their tile to the CEO's tile has no way to know why.",
+        "severity": "medium"
+      },
+      {
+        "figure": "Financial Health — billings are not filtered by the selected month",
+        "appValue": "Total Billings for 'August 2026' = every billing line ever recorded against projects that were CREATED in August 2026",
+        "trueValue": "Billings raised during August 2026",
+        "delta": "Unbounded — a project created in August accumulates billings forever and they all land in the August column",
+        "cause": "The RPC's billing_agg, expense_agg and collection_agg CTEs carry no date predicate whatsoever; p_month filters only projects.created_at. The page header says 'August 2026' and the column says 'Billing Total'.",
+        "severity": "high"
+      }
+    ],
+    "labelProblems": [
+      {
+        "label": "\"Outstanding AR\" — Booking Cash Flow KPI card and REVENUE SUMMARY card",
+        "implies": "Money the customer still owes",
+        "actuallyIs": "The full invoiced amount, with collections never deducted (remaining_balance column does not exist). On dev it is byte-identical to the \"Total Invoiced\" KPI sitting two cards to its left — PHP 141,121.60 in both — which is itself the tell nobody would read as a bug.",
+        "severity": "critical"
+      },
+      {
+        "label": "\"Total Billed (Invoiced)\" / \"Total Billed (Revenue)\" — Sales Report breakdown cards",
+        "implies": "Everything billed to customers in the period",
+        "actuallyIs": "Only invoices whose status string happens to be in a hardcoded 7-value allowlist. Status 'Issued' — the plain-English word for 'we billed them' — is excluded, taking PHP 485,000.00 (77.5%) with it. There is no 'excluded N invoices' note anywhere on the page.",
+        "severity": "critical"
+      },
+      {
+        "label": "\"Gross Profit\" / \"Gross Margin\" — Booking Cash Flow MARGIN SUMMARY",
+        "implies": "Revenue minus cost of sales",
+        "actuallyIs": "(invoiced + UNBILLED line items) − cost. PHP 2,803,905.99 of the PHP 2,945,027.59 base (95.2%) has never been invoiced to anyone and may never be. This is a pipeline margin, not a gross margin, and it is printed on a document with a signature block.",
+        "severity": "high"
+      },
+      {
+        "label": "\"Gross Profit\" — Financial Health table column and summary card",
+        "implies": "Billings − cost of sales",
+        "actuallyIs": "billingTotal − (expensesTotal × 1.03). A synthetic 3% administrative overhead (ADMIN_COST_PCT, useFinancialHealthReport.ts:36) is baked in, making this a contribution margin. The RPC's own gross_profit column is computed correctly and then discarded by the client. Compounding it: expensesTotal is 0.00 on every row, so the label currently reads 100% margin.",
+        "severity": "high"
+      },
+      {
+        "label": "\"Current (0 – 30 days)\" / \"Past Due 31 – 60 days\" — Receivables Aging buckets",
+        "implies": "Invoice age — the universal AR convention",
+        "actuallyIs": "Days past DUE date (useReceivablesAgingReport.ts:159, agingRef = due_date first). INV-MPM84S7W is 71 days old but sits in the '31-60' bucket because it is 41 days past due. Meanwhile the table column over the same number is headed \"DAYS OVERDUE\" — so the identical figure is labelled as age in one place and as overdue-days in the other, on the same screen. Invoices with a NULL due_date silently switch to invoice_date and are aged on a different basis than their neighbours.",
+        "severity": "high"
+      },
+      {
+        "label": "Receivables Aging report header: \"Outstanding accounts receivable by age · <period>\"",
+        "implies": "All open AR as of the period",
+        "actuallyIs": "Only receivables whose invoice was CREATED inside the period. Under any month scope the 61-90 and 91+ buckets are arithmetically unreachable, so the report will always show a clean aging profile no matter how bad the book is.",
+        "severity": "critical"
+      },
+      {
+        "label": "\"No unbilled bookings this period.\" — Unbilled Revenue empty state",
+        "implies": "Verified: nothing is unbilled",
+        "actuallyIs": "Both underlying queries returned HTTP 400. The message is indistinguishable from a genuine clean result, and it is the most reassuring possible rendering of a total failure. PHP 2.8M is unbilled.",
+        "severity": "critical"
+      },
+      {
+        "label": "Executive dashboard counts (5 tiles)",
+        "implies": "Exact counts — rendered as bare integers",
+        "actuallyIs": "Query-planner estimates (count=planned). Off by up to +4.4% measured, non-deterministic across refreshes, and they drift whenever autovacuum re-analyzes even with zero data change.",
+        "severity": "medium"
+      },
+      {
+        "label": "\"Total Billings\" / month selector — Financial Health",
+        "implies": "Billings for the selected month",
+        "actuallyIs": "Lifetime billings of projects whose creation date falls in that month (in UTC, while the selector is built in browser-local time).",
+        "severity": "high"
+      },
+      {
+        "label": "\"In Progress Quotations\" — Executive dashboard",
+        "implies": "Draft + Needs Revision",
+        "actuallyIs": "Draft only. 'Needs Revision' has zero rows in the live vocabulary; the code comment at dashboardFetchers.ts:144-147 documents that earlier status lists were phantom, but 'Needs Revision' survived the cleanup and is still phantom.",
+        "severity": "low"
+      },
+      {
+        "label": "\"Active Bookings\" — Executive dashboard and Operations queue",
+        "implies": "Bookings being worked",
+        "actuallyIs": "Everything except Completed/Cancelled — which sweeps in 13 Draft, 3 Billed and 1 Liquidated booking (17 of 237, 7.2%) as active operational work.",
+        "severity": "low"
+      }
+    ],
+    "thinEvidence": [
+      "dev is genuinely small and several 'agrees' verdicts are weak evidence. Collections Report matched on 7 receipts (one table, one payment method 'Bank Transfer', one currency). That is a pass, not a proof — the by-method breakdown, the multi-currency path and the linked_billings split-application path are all untested because no such row exists.",
+      "Every single row in invoices, collections, billing_line_items and evouchers on dev is PHP. base_amount == amount everywhere. So the pickReportingAmount / baseAmt / baseRemainingBalance FX-translation logic is completely unexercised — I could confirm which field each aggregate reads, but not whether the translation is right. Two live currency hazards I can see by reading only: (a) useUnbilledRevenueReport.ts:127 sums Number(bl.total_amount) || Number(bl.amount) — raw currency, never base_amount — and useUnbilledRevenueReport.ts:133 sums inv.total_amount raw; both would add a USD invoice straight onto a PHP one. (b) get_financial_health_summary sums bli.amount, ev.amount and col.amount raw with no base_amount anywhere. Neither can be demonstrated on dev data.",
+      "The 61-90 and 91+ aging buckets are PHP 0.00 in both the app and my recomputation. That agreement is meaningless — there is no invoice on dev older than 71 days with a balance. The buckets have never rendered a non-zero number.",
+      "Only ONE e-voucher carries the legacy capital-A 'Approved' status (PHP 16,000). The case-sensitivity finding is real and provable but its financial weight on dev is small; on prod, where the legacy corpus is larger, it could be materially bigger. Worth re-measuring against prod read-only.",
+      "invoices has 15 rows total. Every conclusion about invoice status handling rests on 4 'Issued' + 8 'posted' + 2 draft + 1 void. Directionally certain, magnitude not generalizable.",
+      "I could not exercise the Executive dashboard counts through the real authenticated path — the anon key is blocked by RLS, so I measured the planner estimate server-side with EXPLAIN (FORMAT JSON), which is exactly what PostgREST count=planned returns, but WITHOUT the RLS predicate a signed-in user would carry. Under RLS the estimate typically degrades further, so +4.4% is a floor, not a ceiling.",
+      "No dev row has collection_date diverging from created_at, so the Collections Report's double date filter (fetch on created_at, then isInScope on collection_date) could not be shown to drop a row. The code path is plainly capable of it: a receipt dated in-period but recorded after period-end is never fetched, and one recorded in-period but dated outside is fetched then discarded."
+    ],
+    "notes": "SCOPE AND METHOD. All app figures reconstructed by reading the fetcher/hook/RPC and evaluating its exact predicates; all true figures recomputed independently in SQL against dev oqermaidggvanahumjmj. Read-only throughout — no writes, no DDL, prod never touched. Reference date 2026-08-05; headline comparisons at scope preset \"All\" (2000-01-01 → 2100-01-01) because \"This Month\" on dev is 6 bookings and 5 invoices and would not support a conclusion.\n\nWHAT THE PASS FOUND. Seven of the eight financial surfaces are wrong, and the wrongness is invisible by construction — no toast, no error boundary, no failed request, no \"N rows excluded\" note anywhere. Five distinct root causes, all upstream of the arithmetic:\n\n1. THREE COLUMNS THE CODE READS DO NOT EXIST. invoices has no remaining_balance and no payment_status; billing_line_items has no total_amount; invoices has no invoice_type and no reversal_for. Confirmed against information_schema and, for the PostgREST paths, against the live REST endpoint (HTTP 400, 42703). Two consequences: baseRemainingBalance() silently returns the full invoice amount so Booking Cash Flow's \"Outstanding AR\" can never fall below \"Total Invoiced\"; and the entire Unbilled Revenue Report 400s and renders PHP 0.00 with the words \"No unbilled bookings this period.\" while PHP 2,803,905.99 sits unbilled. Reading `data.total_amount` off an object that never had the key returns undefined, not an error — that is why this survived.\n\n2. A PHANTOM STATUS ALLOWLIST, IN SIX PLACES. ['approved','posted','paid','partial'] — three of those four match zero e-voucher rows on dev. What is missing is 'disbursed': PHP 350,307.25 of booking-linked expense where the cash has physically left the company. Cost of sales is understated 50.4% and gross profit overstated by the identical amount. The DB-layer .in() is also case-sensitive, so the legacy 'Approved' row is dropped before the client-side lowercasing can save it. Note the code comments at dashboardFetchers.ts:144-147 show someone already found and fixed this class of bug for quotations — the same audit was never run against e-vouchers.\n\n3. AN INVOICE STATUS ALLOWLIST THAT OMITS 'Issued'. PHP 485,000.00 — 77.5% of billings, 98.5% of AR — classified as financially inactive and dropped from three reports. The single fallback that would have caught it tests payment_status, a column that does not exist.\n\n4. A JOIN ON A COLUMN THAT HOLDS THE WRONG KIND OF IDENTIFIER. get_financial_health_summary joins billing_line_items.project_number → projects.project_number. 83 of 88 non-empty values are BOOKING numbers (the known L3 shape). 5 of 88 join. Financial Health reports PHP 125,000.00 of billings against PHP 2,967,027.59 actual, PHP 0.00 of expenses against PHP 801,050.25 actual, and a 100.0% gross margin for a freight forwarder.\n\n5. PERIOD LOGIC. The DB session TimeZone is UTC (verified) while FinancialHealthPage builds its 'YYYY-MM' from the browser's local Manila clock — an 8-hour disagreement window every day at every month boundary. Receivables Aging scopes by invoice created_at, which makes its own 61-90 and 91+ buckets structurally unreachable under any month scope. And both booking-financials hooks fetch collections with .gte(fromIso) and no upper bound, so post-period cash reduces in-period outstanding.\n\nTWO REAL MATCHES, REPORTED AS RESULTS. Collections Report agrees to the centavo (PHP 133,621.60 / 7 receipts / avg 19,088.80 / largest 25,000.00) and correctly excludes the one 'credited' receipt — though on 7 rows of single-currency data that is a pass rather than a proof. Booking Cash Flow's \"Total Booked Charges\" also agrees exactly at PHP 2,945,027.59 given its own definition; the problem there is the label, not the sum.\n\nTHE MOST DANGEROUS ONE. If only one thing gets fixed first, make it the Unbilled Revenue Report. Every other figure here is wrong by a margin; that one is a fully-formatted, signature-blocked document asserting PHP 0.00 against a PHP 2.8M reality, and its empty state is worded as reassurance. A manager who opens it learns something false and has no signal at all that anything failed.\n\nCROSS-REPORT INCONSISTENCY WORTH FLAGGING SEPARATELY. Sales Report and Booking Cash Flow both display \"Outstanding AR\" on the same dataset and disagree by PHP 133,621.60 (7,500.00 vs 141,121.60) — the Sales Report derives it as billed−collected, Booking Cash Flow via the dead remaining_balance path. Likewise \"Open Inquiries\" means 128 rows on the BD dashboard and 58 on the Executive dashboard. Two screens, one word, different numbers, no footnote.\n\nFOLLOW-UP I COULD NOT COMPLETE ON DEV. The FX/base_amount paths are entirely unexercised (all dev rows are PHP) yet two aggregates — useUnbilledRevenueReport and the whole Financial Health RPC — demonstrably sum raw amount rather than base_amount. That is a live mixed-currency defect waiting on the first USD invoice. Recommend re-running items 2 and 5 read-only against prod, where the legacy status corpus and any non-PHP documents will be larger."
+  },
+  {
+    "figures": [
+      {
+        "name": "Billings — Total Charges (default scope: This Month = Aug 2026)",
+        "where": "src/components/accounting/FinancialsModule.tsx:485 (KPI strip, Billings tab)",
+        "appFormula": "sum(pickReportingAmount(row)) over scopedBillingItems minus status in (voided|cancelled|void); pickReportingAmount = base_amount ?? total_amount ?? amount. Rows fetched with created_at between local-month bounds.",
+        "appValue": "PHP 125,000.00 / 5 items",
+        "myValue": "PHP 125,000.00 / 5 items (SQL: sum(coalesce(base_amount,amount)) where created_at in [2026-07-31T16:00Z, 2026-08-31T15:59:59Z])",
+        "agrees": true
+      },
+      {
+        "name": "Billings — Total Charges (scope = All)",
+        "where": "src/components/accounting/FinancialsModule.tsx:485",
+        "appFormula": "same",
+        "appValue": "PHP 2,967,027.59 / 175 items",
+        "myValue": "PHP 2,967,027.59 / 175 items",
+        "agrees": true
+      },
+      {
+        "name": "Billings — Unbilled (scope = All)",
+        "where": "src/components/accounting/FinancialsModule.tsx:486-487",
+        "appFormula": "filter lower(status)=='unbilled', sum pickReportingAmount",
+        "appValue": "PHP 2,803,905.99 / 160 items (94.5% of charges)",
+        "myValue": "PHP 2,803,905.99 / 160 items",
+        "agrees": true
+      },
+      {
+        "name": "Billings — Items / unique bookings / Avg per Booking (All)",
+        "where": "src/components/accounting/FinancialsModule.tsx:488-489",
+        "appFormula": "items.length; new Set(booking_id).size; total/uniqueBookings",
+        "appValue": "175 items, 37 bookings, PHP 80,189.93 avg",
+        "myValue": "175 items, 37 distinct non-empty booking_id, 2,967,027.59/37 = 80,189.93",
+        "agrees": true
+      },
+      {
+        "name": "Invoices — Total Invoiced (This Month)",
+        "where": "src/components/accounting/FinancialsModule.tsx:793-803",
+        "appFormula": "scopedInvoices where settlement status not in (void,reversed), sum(base_amount ?? total_amount ?? amount)",
+        "appValue": "PHP 125,000.00 / 5 invoices",
+        "myValue": "PHP 125,000.00 / 5 (the five FWD202608-06x invoices, base_amount 25,000 each)",
+        "agrees": true
+      },
+      {
+        "name": "Invoices — Total Invoiced (scope = All)",
+        "where": "src/components/accounting/FinancialsModule.tsx:803",
+        "appFormula": "same, over the 11 invoices that survive isInvoiceVisibleDocument()",
+        "appValue": "PHP 177,121.60 / 10 invoices",
+        "myValue": "PHP 177,121.60 over the 10 non-void visible rows — but the invoices table holds 15 rows totalling PHP 662,121.60 non-void. 4 rows (status 'Issued', PHP 485,000) are dropped by the fetcher's allow-list.",
+        "agrees": true
+      },
+      {
+        "name": "Invoices — Outstanding (scope = All)",
+        "where": "src/components/accounting/FinancialsModule.tsx:795,805-806",
+        "appFormula": "sum of calculateInvoiceBalance(inv, collections).balanceBase where > 0.01; void/reversed zeroed; drafts NOT zeroed",
+        "appValue": "PHP 43,500.00 / 4 unpaid",
+        "myValue": "PHP 43,500.00 (7,000 + 28,000 + 8,000 + 500). Of this PHP 36,000 across 2 rows are status='draft' — never issued to a customer.",
+        "agrees": true
+      },
+      {
+        "name": "Invoices — Overdue (scope = All)",
+        "where": "src/components/accounting/FinancialsModule.tsx:808-811",
+        "appFormula": "balanceBase > 0.01 AND getAgingDays(inv) > 0, where getAgingDays = (now - due_date) and returns 0 when due_date is null",
+        "appValue": "PHP 43,000.00 / 3 past due",
+        "myValue": "PHP 43,000.00 arithmetically — but 2 of the 3 rows (PHP 36,000) carry a DRAFT status chip in the same table, and any invoice without a due_date can never enter this KPI however old it is.",
+        "agrees": true
+      },
+      {
+        "name": "Invoices — Collection Rate (This Month / All)",
+        "where": "src/components/accounting/FinancialsModule.tsx:813-817",
+        "appFormula": "scoped collections total (all statuses, base_amount) / totalInvoiced * 100",
+        "appValue": "100.0% (Aug) / 75.7% (All)",
+        "myValue": "125,000/125,000 = 100.0%; 134,121.60/177,121.60 = 75.723%",
+        "agrees": true
+      },
+      {
+        "name": "Invoices — Aging strip buckets (scope = All)",
+        "where": "src/components/accounting/FinancialsModule.tsx:752-787",
+        "appFormula": "unpaid rows bucketed by (now - due_date) days; amount = balanceBase",
+        "appValue": "Current 500.00/1; 1-30 36,000.00/2; 31-60 7,000.00/1; 61-90 0; 90+ 0 — total 43,500.00",
+        "myValue": "identical; total equals the Outstanding KPI exactly (43,500.00)",
+        "agrees": true
+      },
+      {
+        "name": "calculateInvoiceBalance — BRK-2026-0031-001 (hand-recomputed)",
+        "where": "src/utils/accounting-math.ts:35-123 via FinancialsModule.tsx:720",
+        "appFormula": "total_amount(1121.60) − applied collections − ewt_total(0); collections with status credited/refunded/draft/void excluded by isCollectionAppliedToInvoice",
+        "appValue": "balance PHP 500.00, status 'partial'",
+        "myValue": "1,121.60 − 621.60 (collection a0b36ec3, posted) − 0 = 500.00. The 500.00 collection 2901ce12 is status 'credited' and correctly excluded. partial is correct.",
+        "agrees": true
+      },
+      {
+        "name": "calculateInvoiceBalance — BR202606-126-001 (hand-recomputed)",
+        "where": "src/utils/accounting-math.ts:35-123",
+        "appFormula": "same; linked_billings[].id matches the INVOICE id so the direct-invoice_id branch is skipped (no double count)",
+        "appValue": "balance PHP 0.00, status 'paid'",
+        "myValue": "8,000.00 − 8,000.00 (collection 798d1340, posted, both invoice_id AND linked_billings point at it) = 0.00",
+        "agrees": true
+      },
+      {
+        "name": "Collections — Total Collected (This Month / All)",
+        "where": "src/components/accounting/FinancialsModule.tsx:1064",
+        "appFormula": "sum(pickReportingAmount) over ALL scoped collections regardless of status",
+        "appValue": "PHP 125,000.00 / 5 (Aug); PHP 134,121.60 / 8 (All)",
+        "myValue": "Aug matches. All: cash actually applied to receivables is PHP 133,621.60 — the PHP 500.00 'credited' row is counted here but excluded everywhere settlement is computed.",
+        "agrees": false
+      },
+      {
+        "name": "Collections — This Month",
+        "where": "src/components/accounting/FinancialsModule.tsx:1067-1072",
+        "appFormula": "collection_date local-month == today's local month, sum base_amount",
+        "appValue": "PHP 125,000.00 / 5",
+        "myValue": "PHP 125,000.00 / 5",
+        "agrees": true
+      },
+      {
+        "name": "Collections — Avg Days to Collect",
+        "where": "src/components/accounting/FinancialsModule.tsx:1075-1085,1113-1118",
+        "appFormula": "(collection_date − c.invoice_date) averaged; c.invoice_date is read off the COLLECTION row",
+        "appValue": "\"N/A\" / \"no data\" — always, in every scope",
+        "myValue": "0.6 days (5 days on one collection, 0 on the other seven) via join to invoices.invoice_date. collections has no invoice_date column, so countWithDates is structurally 0.",
+        "agrees": false
+      },
+      {
+        "name": "Collections — Collection Rate (All)",
+        "where": "src/components/accounting/FinancialsModule.tsx:1087-1095",
+        "appFormula": "totalCollected / sum(pickReportingAmount) over scoped non-void invoices",
+        "appValue": "75.7%",
+        "myValue": "134,121.60 / 177,121.60 = 75.723%",
+        "agrees": true
+      },
+      {
+        "name": "Expenses — Total Expenses (This Month / All)",
+        "where": "src/components/accounting/FinancialsModule.tsx:1297",
+        "appFormula": "sum(pickReportingAmount(mapped expense)) — the mapper drops base_amount, so this is evouchers.amount raw, all statuses",
+        "appValue": "PHP 9,000.00 / 6 (Aug); PHP 4,697,989.70 / 267 (All)",
+        "myValue": "9,000.00 / 6 and 4,697,989.70 / 267 — arithmetic matches. Actual money out (posted + disbursed) is PHP 934,290.25; the rest is 227 unapproved requests, 8 drafts and 2 cancelled vouchers.",
+        "agrees": true
+      },
+      {
+        "name": "Expenses — Pending Approval",
+        "where": "src/components/accounting/FinancialsModule.tsx:1299-1300,1327-1333",
+        "appFormula": "count(status.toLowerCase() === 'pending')",
+        "appValue": "0 — subtext \"all clear\" — in every scope",
+        "myValue": "227 vouchers, PHP 3,684,843.57 awaiting action (pending_accounting 148 / pending_ceo 77 / pending_manager 1 / pending_liquidation 1). The literal value 'pending' does not exist in the table.",
+        "agrees": false
+      },
+      {
+        "name": "Expenses — Top Category",
+        "where": "src/components/accounting/FinancialsModule.tsx:1303-1312",
+        "appFormula": "group by (ev.expense_category || ev.category || 'General') — neither column exists on evouchers",
+        "appValue": "\"General\", PHP 4,697,989.70",
+        "myValue": "\"(EXP) BROKERAGE - FCL\", PHP 1,456,435.85 (65 vouchers) using evouchers.gl_category, the column that actually holds the category",
+        "agrees": false
+      },
+      {
+        "name": "Expenses — Billable Ratio (All)",
+        "where": "src/components/accounting/FinancialsModule.tsx:1315-1317",
+        "appFormula": "sum where details.is_billable truthy / total * 100",
+        "appValue": "40.4% — 166 of 267 billable",
+        "myValue": "1,898,841.49 / 4,697,989.70 = 40.418%; 166 rows with details->'is_billable' = jsonb true (values are real booleans, so no truthy-string trap)",
+        "agrees": true
+      },
+      {
+        "name": "Month boundary — a row created 2026-08-01T00:30:00+08:00",
+        "where": "src/components/accounting/aggregate/types.ts:25-88 (createDateScope / getDateScopeQueryRange / isInScope)",
+        "appFormula": "query range = local midnight .toISOString() → 2026-07-31T16:00:00Z; isInScope compares local calendar Y/M/D",
+        "appValue": "AUGUST",
+        "myValue": "AUGUST — correct for a browser in Manila. The scope is computed in browser-local time throughout, so it is right for the intended market and wrong for anyone else (see label findings).",
+        "agrees": true
+      },
+      {
+        "name": "KPI strip vs the rows beneath it (all four tabs)",
+        "where": "FinancialsModule.tsx:483-522 vs 667-696; 790-851 vs 1005-1044; 1062-1127 vs 1246-1278; 1295-1349 vs 1464-1490",
+        "appFormula": "KPI aggregates the scoped set; group subtotals aggregate the filtered set with the same pickReportingAmount",
+        "appValue": "Billings 125,000.00 = 125,000.00; Invoices 177,121.60 = 177,121.60; Collections 134,121.60 = 134,121.60; Expenses 4,697,989.70 = 4,697,989.70",
+        "myValue": "Every KPI total equals the sum of its group subtotals with no filter applied. The one structural divergence (KPI excludes voided billings, table does not) has 0 qualifying rows on dev.",
+        "agrees": true
+      }
+    ],
+    "discrepancies": [
+      {
+        "figure": "EVERY figure on EVERY tab, for any user whose financials visibility dial is own / team / department",
+        "appValue": "PHP 0.00 across all 16 KPIs, 0 rows in all four tables, no error, no toast",
+        "trueValue": "the real figures (e.g. PHP 125,000.00 Total Charges for August)",
+        "delta": "100% — total silent blanking. 42 of 60 dev users resolve to a breaking dial.",
+        "cause": "applyScope (FinancialsModule.tsx:273-278) filters on created_by / assigned_to. billing_line_items has NEITHER column; invoices, collections and evouchers have created_by but NO assigned_to. Verified live against dev PostgREST: GET /billing_line_items?created_by=in.(...) → HTTP 400 42703 'column billing_line_items.created_by does not exist'; GET /invoices?or=(created_by.eq...,assigned_to.eq...) → HTTP 400 42703 'column invoices.assigned_to does not exist'. The queryFn then swallows every error into an empty array (lines 308-346: `(!e1 && billingRows) ? ... : []`), so the module renders a fully-populated, entirely zero financial picture. useDataScope defaults to {type:'own'} fail-closed, so a user with no dial set gets this too.",
+        "severity": "critical"
+      },
+      {
+        "figure": "Expenses — Pending Approval",
+        "appValue": "0, subtext \"all clear\"",
+        "trueValue": "227 vouchers, PHP 3,684,843.57",
+        "delta": "227 vouchers / PHP 3,684,843.57 invisible — the KPI can never be non-zero",
+        "cause": "FinancialsModule.tsx:1299 tests status === 'pending'. evouchers' live vocabulary is pending_accounting (148), pending_ceo (77), posted (16), disbursed (13), draft (8), cancelled (2), pending_liquidation (1), pending_manager (1), 'Approved' (1). No row is ever literally 'pending'. Same defect in EXPENSES_STATUS_OPTIONS (1356-1362): draft matches 8 of 267, approved matches 1, pending and rejected and posted-vs-real match 0/0/16 — three of five dropdown options filter to an empty table.",
+        "severity": "critical"
+      },
+      {
+        "figure": "Invoices — every figure, when 'Issued' invoices exist",
+        "appValue": "10 invoices, PHP 177,121.60 Total Invoiced (scope All)",
+        "trueValue": "14 non-void invoices, PHP 662,121.60",
+        "delta": "4 invoices / PHP 485,000.00 — 73% of the receivable book — never appear on any tab, in any scope, in any total",
+        "cause": "The fetcher filters through isInvoiceVisibleDocument (FinancialsModule.tsx:319-321 → src/utils/invoiceReversal.ts:5,50-57). ACTIVE_INVOICE_STATUSES is a hardcoded allow-list of draft/posted/approved/paid/open/partial/sent; 'issued' is not in it, and the fallback branch reads invoice.payment_status — a column that does not exist on the invoices table at all, so it is always ''. Any status outside the seven-word list is silently deleted from the module. On dev that is 4 rows worth PHP 485,000.",
+        "severity": "critical"
+      },
+      {
+        "figure": "Invoices — Outstanding / Overdue",
+        "appValue": "Outstanding PHP 43,500.00 (4 unpaid); Overdue PHP 43,000.00 (3 past due)",
+        "trueValue": "issued receivable outstanding PHP 7,500.00 (2 rows); genuinely overdue issued receivable PHP 7,000.00 (1 row)",
+        "delta": "PHP 36,000.00 of unissued DRAFT invoices counted as receivable — 82.8% of Outstanding and 83.7% of Overdue",
+        "cause": "settlementOf (FinancialsModule.tsx:719-732) zeroes balance/balanceBase only for void and reversed. A draft passes its status through for the chip but keeps its full balance, so lines 805-811 count it in Outstanding and Overdue. The table beside the KPI shows those same two rows with a grey DRAFT chip.",
+        "severity": "high"
+      },
+      {
+        "figure": "Invoices — Overdue KPI vs the OVERDUE status chips in its own table",
+        "appValue": "KPI counts 3 rows; 2 of them are chipped DRAFT and 0 of the rows chipped OVERDUE by the status column are guaranteed to be counted",
+        "trueValue": "one consistent definition of overdue",
+        "delta": "two different overdue tests on the same screen",
+        "cause": "The chip uses calculateInvoiceBalance's isOverdue (accounting-math.ts:95-101), which falls back to created_at + 30 days when due_date is null. The KPI and the aging strip use getAgingDays (FinancialsModule.tsx:735-741), which returns 0 when due_date is null and therefore files a null-due-date invoice under 'Current' forever. On dev the 4 rows that would expose this (the 'Issued' ones, all due_date NULL, all PHP 485,000) are already filtered out upstream — so the disagreement is live in code and hidden by a second bug.",
+        "severity": "high"
+      },
+      {
+        "figure": "Invoices — Outstanding / Balance column, whenever the scope is narrower than the payment history",
+        "appValue": "scope Jul 1–Jul 17 shows INV BR202606-126-001 as OVERDUE, balance PHP 8,000.00",
+        "trueValue": "PHP 0.00 — paid in full on 2026-07-18",
+        "delta": "PHP 8,000.00, and a wrong status, from one demonstrable scope choice",
+        "cause": "settlementOf (line 720) passes `collections` — the DATE-SCOPED fetch (line 304, created_at bounded by the same scope) — into calculateInvoiceBalance. Any payment that landed outside the selected window is invisible, so the invoice reads unpaid. Every custom range and every this-week/this-month view that cuts between invoice and payment overstates Outstanding and Overdue. Balance must be computed against ALL collections, never the scoped slice.",
+        "severity": "critical"
+      },
+      {
+        "figure": "Collections — Total Collected",
+        "appValue": "PHP 134,121.60 (8 collections)",
+        "trueValue": "PHP 133,621.60 cash applied (7 collections)",
+        "delta": "PHP 500.00 (0.37% on dev; unbounded in general)",
+        "cause": "Line 1064 sums every scoped collection regardless of status, while calculateInvoiceBalance excludes draft/cancelled/voided/void/credited/refunded via isCollectionAppliedToInvoice. The same PHP 500.00 row is 'collected' on the Collections tab and 'not collected' on the Invoices tab. The status dropdown at 1136-1142 explicitly offers voided and refunded, so the two are meant to coexist.",
+        "severity": "high"
+      },
+      {
+        "figure": "Expenses — Total Expenses",
+        "appValue": "PHP 4,697,989.70",
+        "trueValue": "PHP 934,290.25 actually spent (posted 464,243.00 + disbursed 470,047.25)",
+        "delta": "PHP 3,763,699.45 — 5.03x overstated",
+        "cause": "Line 1297 sums all 267 e-vouchers at every lifecycle stage: 227 unapproved requests (3,684,843.57), 8 drafts (50,510.88) and 2 cancelled vouchers (12,345.00) are all counted as expense. Nothing on the tab distinguishes a request from a payment.",
+        "severity": "high"
+      },
+      {
+        "figure": "Expenses — Top Category",
+        "appValue": "\"General\", PHP 4,697,989.70",
+        "trueValue": "\"(EXP) BROKERAGE - FCL\", PHP 1,456,435.85 (65 vouchers)",
+        "delta": "the KPI names a category that does not exist and attributes 100% of spend to it",
+        "cause": "The evoucher→expense mapper (line 332) reads ev.expense_category || ev.category; neither column exists on evouchers. Every row therefore falls to the literal 'General'. The real column is gl_category. The same dead mapping poisons the Category table column (1392-1396) and the category branch of the expenses search (1457).",
+        "severity": "high"
+      },
+      {
+        "figure": "Expenses — Date column and expense scoping",
+        "appValue": "created_at for every row",
+        "trueValue": "the voucher's own request/expense date",
+        "delta": "the Expenses tab is scoped and dated by row-creation time, not by when the money was spent",
+        "cause": "Line 333 reads ev.request_date || ev.expense_date || ev.created_at; neither of the first two columns exists on evouchers. A voucher raised in September for an August expense lands in September on every KPI.",
+        "severity": "medium"
+      },
+      {
+        "figure": "Collections — Invoice # column and invoice search",
+        "appValue": "\"—\" on all 8 rows",
+        "trueValue": "every one of the 8 collections carries a resolvable invoice_id",
+        "delta": "100% of the column is blank; searching an invoice number on the Collections tab returns nothing",
+        "cause": "Line 1162-1166 reads c.invoice_number and line 1235 searches it. collections has no invoice_number column — only invoice_id. The invoice is one map lookup away (invoiceById already exists at line 366).",
+        "severity": "medium"
+      },
+      {
+        "figure": "Invoices / Billings / Expenses — Amount column vs the KPI above it",
+        "appValue": "the row's raw amount, always rendered with the PHP symbol (invoices tab hardcodes it: line 920 calls formatCurrencyFull with no currency argument, which defaults to PHP)",
+        "trueValue": "for a USD document the KPI counts base_amount (PHP) while the row shows the USD figure labelled ₱",
+        "delta": "0 on dev — all 175 billing rows, 15 invoices, 8 collections and 267 e-vouchers are PHP. The mismatch is latent, not live.",
+        "cause": "KPIs go through pickReportingAmount (base_amount first) but the cell renderers use the raw amount. The evoucher→expense mapper (line 326-345) drops base_amount and base_currency entirely, so once a non-PHP voucher exists the Expenses KPIs will add raw foreign amounts to PHP ones with nothing to convert them.",
+        "severity": "medium"
+      },
+      {
+        "figure": "Any row whose document date and creation date straddle a month boundary",
+        "appValue": "the row appears in NO month at all",
+        "trueValue": "it belongs to the month of its invoice_date / collection_date",
+        "delta": "0 rows on dev today — no invoice or collection currently straddles a month end",
+        "cause": "The fetch filters created_at (line 293) but every tab then re-filters on invoice_date (451,710), collection_date (453,1057) or expenseDate (454,1290). An invoice dated 2026-08-01 but created 2026-07-28 is excluded from August by the fetch and from July by isInScope. Structural, latent, and it will bite on the first back-dated invoice.",
+        "severity": "medium"
+      },
+      {
+        "figure": "Billings — status filter options vs the live status vocabulary",
+        "appValue": "selecting Billed, Paid or Voided empties the table",
+        "trueValue": "15 rows are status 'invoiced' (PHP 163,121.60) and 160 are 'unbilled'",
+        "delta": "3 of the 4 filter options match 0 of 175 rows; the 15 invoiced rows also render with the amber default chip, visually identical to unbilled",
+        "cause": "BILLINGS_STATUS_OPTIONS (536-541) declares unbilled/billed/paid/voided; the table only ever contains unbilled and invoiced. The chip colour map (617-628) has no 'invoiced' key either.",
+        "severity": "medium"
+      }
+    ],
+    "labelProblems": [
+      {
+        "label": "\"Total Expenses\" (Expenses tab KPI)",
+        "implies": "money the company has spent",
+        "actuallyIs": "the face value of every e-voucher ever raised, at any lifecycle stage — 227 unapproved requests, 8 drafts and 2 cancelled vouchers included. PHP 4,697,989.70 against PHP 934,290.25 actually disbursed or posted.",
+        "severity": "high"
+      },
+      {
+        "label": "\"Outstanding\" (Invoices tab KPI)",
+        "implies": "receivable a customer owes",
+        "actuallyIs": "includes never-issued DRAFT invoices — PHP 36,000 of the PHP 43,500 shown. It also silently excludes any invoice whose status word is outside a seven-item allow-list.",
+        "severity": "high"
+      },
+      {
+        "label": "\"Total Collected\" (Collections tab KPI)",
+        "implies": "cash received",
+        "actuallyIs": "every collection row regardless of status, including 'credited' and 'refunded' dispositions that the settlement engine explicitly does not treat as payment.",
+        "severity": "high"
+      },
+      {
+        "label": "\"Collection Rate\" (on both the Invoices and Collections tabs)",
+        "implies": "the share of what we billed this period that we have been paid",
+        "actuallyIs": "period collections / period invoices — two unrelated cohorts. Collections settling last quarter's invoices inflate it above 100%; invoices billed on the 31st deflate it. On dev it reads a flattering 100.0% for August purely because each August invoice happened to be paid the same day.",
+        "severity": "medium"
+      },
+      {
+        "label": "\"Overdue\" (Invoices tab KPI) and the OVERDUE status chip",
+        "implies": "the same thing",
+        "actuallyIs": "two different tests on one screen. The chip falls back to created_at + 30 days when due_date is null; the KPI and the aging strip file a null-due-date invoice under 'Current' forever and never count it as overdue.",
+        "severity": "high"
+      },
+      {
+        "label": "\"Pending Approval\" / \"all clear\" (Expenses tab KPI)",
+        "implies": "nothing is waiting on anyone",
+        "actuallyIs": "a test for a status string that does not exist in the table. 227 vouchers worth PHP 3,684,843.57 are waiting on Accounting, the CEO, a manager or a liquidation.",
+        "severity": "critical"
+      },
+      {
+        "label": "\"Top Category\" = General (Expenses tab KPI)",
+        "implies": "the largest expense category",
+        "actuallyIs": "a hardcoded fallback. Neither column the mapper reads exists, so every voucher is 'General'. The real answer is (EXP) BROKERAGE - FCL at PHP 1,456,435.85.",
+        "severity": "high"
+      },
+      {
+        "label": "\"Avg Days to Collect\" (Collections tab KPI)",
+        "implies": "days from invoice to payment",
+        "actuallyIs": "permanently \"N/A / no data\" — it reads invoice_date off the collection row and collections has no such column. The real figure is 0.6 days on dev.",
+        "severity": "medium"
+      },
+      {
+        "label": "\"This Month\" (Collections tab KPI) and every scope preset",
+        "implies": "the Manila business month",
+        "actuallyIs": "the browser's local month. It is correct for a Manila browser — verified: a row at 2026-08-01T00:30+08:00 is placed in August — but every date-only value (invoice_date, collection_date, due_date) is stored at UTC midnight, so any viewer west of UTC sees those rows shift one calendar day earlier, and every month boundary moves with them.",
+        "severity": "medium"
+      },
+      {
+        "label": "\"Financials — System-wide view of billings, invoices, collections, and expenses\" (page subtitle, line 1523)",
+        "implies": "a company-wide picture",
+        "actuallyIs": "owner-scoped, and for 42 of 60 dev users the underlying query 400s and the whole page reports zero. Nothing on the page says which rows it is showing you or that a fetch failed.",
+        "severity": "critical"
+      },
+      {
+        "label": "Expenses tab (whole surface)",
+        "implies": "expenses",
+        "actuallyIs": "the evouchers table — an AP request/approval workflow. An e-voucher is not an expense until it is disbursed or posted (project doctrine already records this).",
+        "severity": "medium"
+      },
+      {
+        "label": "Billings \"Total Charges\"",
+        "implies": "billable revenue",
+        "actuallyIs": "correct as computed today (tax_amount is 0.00 across all 175 rows and there is no total_amount column), but it sums the pre-tax `amount` only — if VAT is ever populated the figure becomes net-of-tax while reading as gross.",
+        "severity": "low"
+      }
+    ],
+    "thinEvidence": [
+      "dev holds 15 invoices (4 of which the module discards), 8 collections, 175 billing lines and 267 e-vouchers. Two invoice balances were hand-recomputed and both matched exactly — that is 2 of 11 visible invoices and is not evidence that calculateInvoiceBalance is right in general.",
+      "Every row in all four tables is PHP. Currency mixing, base_amount-vs-amount divergence, the dropped base_amount in the evoucher mapper and the hardcoded ₱ in the invoice Amount column are therefore UNTESTABLE on dev — they are code findings with a zero live delta, not measured discrepancies.",
+      "ewt_total is null or 0.00 on all 15 invoices. The NEU-069 EWT fold-in in calculateInvoiceBalance (lines 82-91) is exercised by zero rows on dev; its unit tests are the only evidence it works.",
+      "No invoice on dev has status reversed, reversal_draft or reversal_posted, so the void/reversed zeroing branch of settlementOf is exercised by exactly one row (the PHP 123,000 void).",
+      "No billing line has status voided/cancelled/void, so the divergence between the Billings KPI set (which excludes them) and the Billings table (which does not) has 0 qualifying rows — it is a structural finding only.",
+      "The scoped-collections settlement bug was demonstrated by computing what a Jul 1–17 custom range would show; it was not clicked through in a browser. The arithmetic is unambiguous (0 collections fetched → balance = full invoice) but it is a reasoned result, not an observed screenshot.",
+      "The 42-of-60 user count for the broken applyScope query resolves the visibility dial the same way useDataScope does, but does not check whether each of those 42 also holds the Financials tab grant. The HTTP 400s themselves were confirmed live against dev PostgREST.",
+      "The 4 'Issued' invoices are kpi-sim-* fixture rows, so the PHP 485,000 is seeded data. The defect — a hardcoded seven-word status allow-list, plus a fallback reading a column that does not exist — is real regardless of whose rows tripped it."
+    ],
+    "notes": "Scope of the pass: every figure rendered by src/components/accounting/FinancialsModule.tsx (4 KPI strips = 16 cards, 1 aging strip = 5 buckets, 4 grouped tables and their subtotals), recomputed independently in SQL against dev (oqermaidggvanahumjmj). Read-only throughout; no writes, no prod contact. \"Today\" for all aging arithmetic is 2026-08-05 and the default landing scope is This Month = August 2026.\n\nThe good news, stated plainly because a match is a result: the arithmetic inside this file is almost entirely correct. Every KPI total equals the sum of the rows beneath it. The aging strip sums to the Outstanding KPI to the centavo (PHP 43,500.00). calculateInvoiceBalance is right on both invoices I recomputed by hand, correctly excludes 'credited' collections, and correctly avoids double-counting a collection that carries both invoice_id and a linked_billings entry pointing at the same invoice. The file's headline claim — that invoices.status is a document lifecycle and settlement must come from collections — is true, and every figure on the invoices tab does route through settlementOf/calculateInvoiceBalance rather than status. And the month boundary is handled correctly for Manila: a row at 2026-08-01T00:30+08:00 is placed in August, because getDateScopeQueryRange builds the range from local midnight and .toISOString()s it while isInScope compares local calendar days.\n\nSo the failures here are not arithmetic failures. They are input failures — the numbers are computed correctly over the wrong set of rows, and there is nothing on the screen that could tell you.\n\nThree are severe enough to act on before anything else:\n\n1. applyScope filters on columns that do not exist. billing_line_items has neither created_by nor assigned_to; the other three tables have created_by but no assigned_to. Confirmed live: HTTP 400 / 42703 from dev PostgREST. The queryFn swallows the error into an empty array, so 42 of 60 dev users see a fully-rendered Financials module reporting PHP 0.00 everywhere, with no error and no empty state. useDataScope's fail-closed default is {type:'own'}, so this is also what a brand-new user gets.\n\n2. settlementOf computes balances against the DATE-SCOPED collections, not all of them. Narrow the scope to a window that cuts between an invoice and its payment and the invoice reappears as unpaid and overdue. Demonstrable on real dev data: a Jul 1–17 range shows BR202606-126-001 as OVERDUE PHP 8,000.00, an invoice that was settled in full on Jul 18. Outstanding and Overdue are wrong by construction for every scope narrower than \"all\".\n\n3. Two status vocabularies are simply wrong. isInvoiceVisibleDocument's seven-word allow-list deletes 4 invoices worth PHP 485,000 from every total in every scope (and its payment_status fallback reads a column the invoices table does not have). The Expenses \"Pending Approval\" KPI tests for a literal 'pending' that no e-voucher has ever carried, so it reads 0 / \"all clear\" while PHP 3,684,843.57 across 227 vouchers sits in an approval queue.\n\nBelow that sits a cluster of dead field mappings in the evoucher→expense mapper (expense_category, category, request_date, expense_date, voucher_number, total_amount — six reads, six non-existent columns), which is why Top Category is permanently \"General\"; the same class of defect gives the Collections tab a permanently blank Invoice # column and a permanently \"N/A\" Avg Days to Collect.\n\nSuggested order of work: (a) fix applyScope — drop assigned_to, and skip owner-filtering billing_line_items entirely since it has no owner column, letting RLS do the cut; (b) surface fetch errors instead of coercing them to [] — a failed query must never render as PHP 0.00; (c) fetch collections unscoped for settlement; (d) replace both hardcoded status allow-lists with the live vocabulary; (e) exclude drafts from Outstanding/Overdue, and split the Expenses total into requested vs disbursed."
+  },
+  {
+    "figures": [
+      {
+        "name": "Outstanding AR (Financial Dashboard vital sign)",
+        "where": "src/components/accounting/dashboard/FinancialDashboard.tsx:203-213 (+259 label) — Accounting → Financials → Dashboard tab",
+        "appFormula": "invoices.map(inv => calculateInvoiceBalance(inv, collections).balanceBase).filter(b => b > 0.01).sum() — ALL invoices, not scope-filtered, no document-status filter at all",
+        "appValue": "PHP 651,500.00",
+        "myValue": "PHP 651,500.00",
+        "agrees": true
+      },
+      {
+        "name": "Outstanding (Financials → Invoices KPI strip)",
+        "where": "src/components/accounting/FinancialsModule.tsx:803-806 via settlementOf() at :719-732",
+        "appFormula": "same balanceBase, but settlementOf() forces balanceBase = 0 when status is 'void'/'reversed', AND the set is scope-filtered (default preset 'this-month')",
+        "appValue": "PHP 0.00 for the default Aug-2026 scope; PHP 528,500.00 if the scope is widened to 'all'",
+        "myValue": "PHP 0.00 (Aug scope) / PHP 528,500.00 (all)",
+        "agrees": true
+      },
+      {
+        "name": "Per-invoice open balance (all 15 invoices, recomputed from collections)",
+        "where": "src/utils/accounting-math.ts:35-118 calculateInvoiceBalance",
+        "appFormula": "balanceBase = max(0, round2(pickReportingAmount(inv) - Σ(linked_billings.amount × invoice.exchange_rate) - ewt_total × rate)); collections with status in draft/cancelled/voided/void/credited/refunded are skipped",
+        "appValue": "INV-MPM84S7W 7,000.00 · INV-MQ4ONUIU 28,000.00 · SIM-INV01 120,000.00 · SIM-INV02 95,000.00 · INV-MREFREHA 8,000.00 · SIM-INV03 60,000.00 · SIM-INV04 210,000.00 · BR202606-126-001 0.00 · BR202606-121-001 123,000.00 · BRK-2026-0031-001 500.00 · FWD202608-060/061/062/063/065 0.00 each",
+        "myValue": "identical row for row (SQL over invoices ⟕ jsonb_array_elements(collections.linked_billings), same status exclusion list)",
+        "agrees": true
+      },
+      {
+        "name": "Net Revenue (dashboard hero, this-month = Aug 2026)",
+        "where": "src/components/accounting/dashboard/FinancialDashboard.tsx:148-160",
+        "appFormula": "Σ pickReportingAmount(invoice) over invoices whose invoice_date is in scope  +  Σ pickReportingAmount(billing_line_item) over lines with status='unbilled' and created_at in scope",
+        "appValue": "PHP 125,000.00 (125,000.00 invoiced + 0.00 unbilled)",
+        "myValue": "PHP 125,000.00 — 5 invoices dated 2026-08-03/04 at 25,000.00 each; 0 unbilled billing lines created in Aug",
+        "agrees": true
+      },
+      {
+        "name": "Total Expenses (dashboard hero, Aug 2026)",
+        "where": "src/components/accounting/dashboard/FinancialDashboard.tsx:176-179, fed by FinancialsModule.tsx:325-340",
+        "appFormula": "Σ pickReportingAmount(mappedExpense) where the mapper builds {amount: ev.total_amount || ev.amount || 0} from evouchers and DROPS base_amount/exchange_rate; date field is ev.request_date || ev.expense_date || ev.created_at",
+        "appValue": "PHP 9,000.00 over 6 e-vouchers",
+        "myValue": "PHP 9,000.00 over 6 e-vouchers created in Aug 2026 (base_amount sum identical, all PHP)",
+        "agrees": true
+      },
+      {
+        "name": "Net Profit / margin (dashboard hero, Aug 2026)",
+        "where": "src/components/accounting/dashboard/FinancialDashboard.tsx:186-188",
+        "appFormula": "netRevenue - totalExpenses; margin = netProfit/netRevenue × 100",
+        "appValue": "PHP 116,000.00 · 92.8% margin",
+        "myValue": "PHP 116,000.00 · 92.80%",
+        "agrees": true
+      },
+      {
+        "name": "Cash Collected + collection rate (dashboard, Aug 2026)",
+        "where": "src/components/accounting/dashboard/FinancialDashboard.tsx:191-198",
+        "appFormula": "Σ pickReportingAmount(c) over in-scope collections passing isCollectionAppliedToInvoice(); rate = collected/invoicedRevenue",
+        "appValue": "PHP 125,000.00 · 100% of invoiced",
+        "myValue": "PHP 125,000.00 over 5 collections dated 2026-08-03/04 · 100.00%",
+        "agrees": true
+      },
+      {
+        "name": "Collection rate (Financials → Invoices KPI) — same label, different filter",
+        "where": "src/components/accounting/FinancialsModule.tsx:814-818",
+        "appFormula": "Σ pickReportingAmount(c) over in-scope collections with NO isCollectionAppliedToInvoice() filter / totalInvoiced",
+        "appValue": "PHP 125,000.00 / 125,000.00 = 100% for Aug; over 'all' it counts the credited COL-1785479661450 (500.00) that the dashboard excludes",
+        "myValue": "Aug: identical. All-time: 134,121.60 here vs 133,621.60 on the dashboard — delta PHP 500.00",
+        "agrees": false
+      },
+      {
+        "name": "DSO (subtext under Outstanding AR)",
+        "where": "src/components/accounting/dashboard/FinancialDashboard.tsx:214-217",
+        "appFormula": "round(outstandingAR / netRevenue × daysInPeriod), where outstandingAR is ALL-TIME and netRevenue is SCOPE-ONLY",
+        "appValue": "156d",
+        "myValue": "651,500 / 125,000 × 30 = 156.36 → 156d — arithmetically reproduced, but the ratio has no meaning: an all-time numerator over a one-month denominator",
+        "agrees": true
+      },
+      {
+        "name": "Total Invoiced (Financials → Invoices KPI, Aug 2026)",
+        "where": "src/components/accounting/FinancialsModule.tsx:801, 819-826",
+        "appFormula": "Σ (inv.base_amount ?? inv.total_amount ?? inv.amount ?? 0) over in-scope invoices whose settlementOf().status is not void/reversed",
+        "appValue": "PHP 125,000.00 over 5 invoices",
+        "myValue": "PHP 125,000.00 over 5 invoices",
+        "agrees": true
+      },
+      {
+        "name": "FX consistency: base_amount vs round(amount × exchange_rate)",
+        "where": "whole DB — invoices, collections, evouchers, billing_line_items",
+        "appFormula": "base_amount should equal round(amount × exchange_rate, 2)",
+        "appValue": "0 rows violate it",
+        "myValue": "0 rows violate it, across 15 invoices, 8 collections, 267 e-vouchers, 175 billing lines. Trivially true: every stored rate is 1.00000000 or NULL and every currency is PHP.",
+        "agrees": true
+      },
+      {
+        "name": "E-voucher header amount vs sum of its line items",
+        "where": "evouchers.amount vs Σ evoucher_line_items.amount",
+        "appFormula": "header amount should equal the line total",
+        "appValue": "n/a (not displayed as a reconciliation anywhere)",
+        "myValue": "264 vouchers with lines, 0 mismatched, total absolute delta PHP 0.00",
+        "agrees": true
+      },
+      {
+        "name": "roundMoney() half-away-from-zero contract",
+        "where": "src/utils/accountingCurrency.ts:70-74 — used by toBaseAmount, buildFxMetadata, every FX posting",
+        "appFormula": "(sign × Math.round(|amount| × 100)) / 100",
+        "appValue": "claims half-away-from-zero",
+        "myValue": "At rate 58.25: 5,126 of 200,000 amounts (0.01–2,000.00 in 1-centavo steps) round 1 centavo LOW vs exact decimal. At 56.375: 1,858 of 200,000. At integer rate 58 and at 52.115: 0. First cases: $0.06 × 58.25 → 3.49 (exact 3.50); $0.30 → 17.47 (exact 17.48); $1.38 → 80.38 (exact 80.39). Max error 0.01.",
+        "agrees": false
+      }
+    ],
+    "discrepancies": [
+      {
+        "figure": "Outstanding AR — dashboard vs Financials Invoices KPI",
+        "appValue": "PHP 651,500.00 (dashboard)",
+        "trueValue": "PHP 528,500.00 (the receivable excluding the voided document)",
+        "delta": "PHP 123,000.00 — exactly invoice BR202606-121-001, status 'void'",
+        "cause": "FinancialsModule wraps calculateInvoiceBalance in settlementOf() (FinancialsModule.tsx:719-732) which forces balanceBase=0 for void/reversed. FinancialDashboard.tsx:203-213 calls calculateInvoiceBalance directly, and that function has no status awareness whatsoever. Two screens one click apart, same rows, PHP 123,000 apart, with nothing on either screen disclosing which definition it uses. The dashboard tile is the one a manager looks at.",
+        "severity": "critical"
+      },
+      {
+        "figure": "Outstanding AR — draft invoices counted as receivable",
+        "appValue": "PHP 651,500.00 includes INV-MQ4ONUIU 28,000.00 and INV-MREFREHA 8,000.00, both status 'draft'",
+        "trueValue": "PHP 615,500.00 if drafts are excluded (and 492,500.00 excluding void as well)",
+        "delta": "PHP 36,000.00",
+        "cause": "calculateInvoiceBalance ignores document status entirely. A draft invoice has not been issued to anybody and cannot be collected, yet it sits in Outstanding AR, in the DSO numerator, and in the aging buckets. FinancialsModule's settlementOf() passes 'draft' through to the status label but does NOT zero its balance, so even the safer screen carries the drafts.",
+        "severity": "high"
+      },
+      {
+        "figure": "Total Expenses / Net Profit — expense mapper strips FX metadata",
+        "appValue": "Σ over {amount: ev.total_amount || ev.amount} — base_amount and exchange_rate are not copied into the mapped object",
+        "trueValue": "should be Σ base_amount (PHP) per src/utils/accountingCurrency.ts:pickReportingAmount's own doctrine",
+        "delta": "PHP 0.00 today (all 267 e-vouchers are PHP at rate 1). For one USD 1,000 voucher at the on-file rate 58.00 the tile would understate expenses by PHP 57,000.00 — a 58× error, in the direction that flatters profit.",
+        "cause": "FinancialsModule.tsx:325-340 constructs OperationsExpense objects with only {amount, currency}. pickReportingAmount then finds no base_amount and no total_amount and falls through to the raw original-currency amount (accountingCurrency.ts:236-252). The currency code is carried alongside and then thrown away. This feeds Total Expenses, Net Profit, profit margin, the expenses KPI strip and SalesReport's cost of sales.",
+        "severity": "critical"
+      },
+      {
+        "figure": "P&L Trend chart — revenue and expense series bypass base_amount entirely",
+        "appValue": "Number(inv.total_amount) || Number(inv.amount) and Number(exp.amount)",
+        "trueValue": "pickReportingAmount(inv) / base_amount",
+        "delta": "PHP 0.00 today; a USD 10,000 invoice at 58.00 would plot as 10,000 instead of 580,000 — the bar would be 1/58 of its true height and the margin line would be nonsense",
+        "cause": "src/components/accounting/dashboard/PLTrendCard.tsx:98, 103, 133, 139. Four separate reductions, none of them uses the shared helper that the rest of the dashboard uses. This is a chart, so the wrongness has no number next to it to sanity-check.",
+        "severity": "high"
+      },
+      {
+        "figure": "Overdue amount in the dashboard Attention panel",
+        "appValue": "Σ calculateInvoiceBalance(inv).balance — the INVOICE-CURRENCY field",
+        "trueValue": "Σ .balanceBase — the PHP field, which exists on the same returned object",
+        "delta": "PHP 0.00 today; with any non-PHP invoice this is a literal sum of USD and PHP presented as one peso figure",
+        "cause": "FinancialDashboard.tsx:293-300 picks .balance where every other consumer picks .balanceBase. accounting-math.ts:8-11 comments the field as 'Legacy — denominated in the invoice's own currency'. The FX-correct value was computed and the legacy one was displayed.",
+        "severity": "high"
+      },
+      {
+        "figure": "send_billing_items_to_booking() defaults a foreign rate to 1",
+        "appValue": "v_rate := COALESCE(NULLIF(item->>'exchange_rate','')::NUMERIC, 1); and the ELSE branch sets v_base_amount := v_amount",
+        "trueValue": "resolvePostingRate() in TypeScript THROWS for a non-PHP currency without a positive rate; the SQL silently substitutes 1",
+        "delta": "a USD 1,000 line inserted through the RPC lands as amount 1,000 / exchange_rate 1 / base_amount 1,000 — PHP 57,000 short at the seeded rate of 58",
+        "cause": "The client (UnifiedBillingsTab.tsx:770-814) collects missingFxItems and refuses; the SECURITY DEFINER function it calls does not repeat the check. Anyone calling the RPC directly — and it is callable by Accounting/Pricing/BD/Executive per its own guard — writes a poisoned base_amount. The guard is in the form, not in the writer.",
+        "severity": "high"
+      },
+      {
+        "figure": "ensure_billable_expense_billing_item() inherits a NULL rate as 1",
+        "appValue": "COALESCE(v_ev.exchange_rate, 1) and COALESCE(v_ev.base_amount, v_ev.amount, 0)",
+        "trueValue": "a voucher with a foreign currency and a NULL rate should refuse to mint a revenue line, not invent one at par",
+        "delta": "1 e-voucher on dev today has currency PHP with exchange_rate NULL and base_amount NULL, so the damage is 0. Had it been USD the customer would be billed 1/58 of the cost.",
+        "cause": "This trigger is the dominant writer of revenue on dev (97 of 175 billing rows per finding J3). It re-derives FX from a header that four other findings have already shown to be unreliable, and its fallbacks are silent.",
+        "severity": "medium"
+      },
+      {
+        "figure": "InvoiceBuilder ships a non-PHP invoice at rate 1 by default",
+        "appValue": "useState(1) for exchangeRate, useState(project.currency || 'PHP') for targetCurrency; resolvePostingRate('USD', 1) returns 1 without complaint",
+        "trueValue": "the rate should be seeded from exchange_rates (58.00 on file) or the save should refuse",
+        "delta": "a USD 10,000 invoice saves with exchange_rate 1.00 and base_amount 10,000.00 instead of 580,000.00 — PHP 570,000 understated, and every downstream aggregate inherits it because base_amount is the field they all trust",
+        "cause": "src/components/projects/invoices/InvoiceBuilder.tsx:154 and :831. The whole invoice path never imports resolveExchangeRate — the exchange_rates table is never consulted. resolvePostingRate only rejects <= 0 and non-finite, so the default 1 sails through the guard that exists precisely to stop this. The e-voucher and collection panels DO seed from the table; the invoice builder does not.",
+        "severity": "critical"
+      },
+      {
+        "figure": "Line-level FX in the invoice preview falls back to no conversion",
+        "appValue": "if (!Number.isFinite(rate) || rate <= 0) { finalAmount = originalAmount; }  and the USD→EUR branch 'pass through'",
+        "trueValue": "refuse, or convert",
+        "delta": "subtotal becomes a sum of two different currencies with no marker; total_amount, tax_amount and the printed invoice all inherit it",
+        "cause": "InvoiceBuilder.tsx:478-493. Three of the four branches convert; the invalid-rate branch and the cross-non-PHP branch add the foreign amount straight into `subtotal`. The user is shown 'Conversion Active' text (line 1913) whether or not conversion actually happened.",
+        "severity": "high"
+      },
+      {
+        "figure": "Six of seven selectable currencies cannot be posted, and the reason is swallowed",
+        "appValue": "currencies table offers PHP, USD, EUR, CNY, INR, JPY, SGD (7 active); exchange_rates holds exactly 1 row: USD→PHP 58.00000000 dated 2026-05-03",
+        "trueValue": "resolveExchangeRate throws a precise message ('No exchange rate on file for EUR -> PHP…')",
+        "delta": "n/a — the message is discarded by `.catch(() => undefined)`",
+        "cause": "AddRequestForPaymentPanel.tsx:183-193 and :2011-2020 both swallow the rejection. The user picks EUR, the rate box stays blank with no explanation, and the failure only surfaces at submit as a generic 'Invalid exchange rate' toast. The one rate on file is 94 days stale as of 2026-08-05 and is returned as authoritative with no staleness warning; resolveExchangeRate is also called with rateDate: new Date() rather than the document date, so a backdated voucher gets today's lookup.",
+        "severity": "high"
+      },
+      {
+        "figure": "Realized FX gain/loss is declared and never posted",
+        "appValue": "FX_REALIZED_GAIN_CODE '4510', FX_REALIZED_LOSS_CODE '7010', FX_UNREALIZED_GAIN_CODE '4530', FX_UNREALIZED_LOSS_CODE '7030'",
+        "trueValue": "n/a — grep across all of src/ finds these four constants referenced only in accountingCurrency.ts itself and in accountingCurrency.test.ts",
+        "delta": "a USD voucher locked at 58.00 and disbursed when the rate is 60.00 loses PHP 2.00 per dollar with no journal entry anywhere",
+        "cause": "DisburseEVoucherPage.tsx:245-215 writes disbursement_method/reference/date/by and never re-rates; there is no disbursement_exchange_rate column on evouchers at all. The header comment at accountingCurrency.ts:29-31 describes a period-end revaluation mechanism that has no implementation.",
+        "severity": "high"
+      },
+      {
+        "figure": "roundMoney ties round down, contradicting its own docstring",
+        "appValue": "5,126 of 200,000 tested amounts at rate 58.25 land 1 centavo below the exact decimal result",
+        "trueValue": "half-away-from-zero as documented at accountingCurrency.ts:67-69",
+        "delta": "PHP 0.01 per affected posting; 0 affected rows on dev because every rate is 1",
+        "cause": "Math.round(|x| × 100) inherits binary float error — 0.06 × 58.25 = 3.4949999999999997 in IEEE-754, so the exact tie 3.495 rounds to 3.49. Only bites rates with 2+ decimal places; an integer rate like the seeded 58 is exact.",
+        "severity": "low"
+      },
+      {
+        "figure": "Expense period attribution reads three columns that do not exist",
+        "appValue": "expenseDate: ev.request_date || ev.expense_date || ev.created_at; amount: ev.total_amount || ev.amount; expenseName: ev.voucher_number || ev.expense_name; expenseCategory: ev.expense_category || ev.category || 'General'",
+        "trueValue": "evouchers has none of request_date, expense_date, total_amount, voucher_number, expense_name, expense_category, category — verified against information_schema",
+        "delta": "every expense is dated by created_at (when it was keyed, not when it was incurred), named by raw UUID, and categorised 'General' — so the dashboard's expense-by-category breakdown is one bucket of 267",
+        "cause": "FinancialsModule.tsx:325-340 was written against a different shape than the table has. The || chains mean each wrong column is silently skipped rather than erroring.",
+        "severity": "high"
+      },
+      {
+        "figure": "Collection panel renders every amount as pesos regardless of currency",
+        "appValue": "a local formatCurrency at CollectionCreatorPanel.tsx:507-512 hardcodes currency: 'PHP'",
+        "trueValue": "the panel has a live collectionCurrency selector and writes collections.currency from it",
+        "delta": "a USD 1,000 receipt displays as '₱1,000.00' in Total Received, Amount to Apply, Amount to Credit and the per-invoice columns",
+        "cause": "The file imports formatMoney from accountingCurrency (line 19) and then shadows it with a hardcoded-PHP local. Six call sites use the wrong one.",
+        "severity": "high"
+      },
+      {
+        "figure": "Unapplied-credit note is computed across currencies",
+        "appValue": "amountToCredit = amountReceived (collection currency) − totalApplied (invoice currency), interpolated into the saved note text",
+        "trueValue": "both sides must be converted to a common currency first",
+        "delta": "the note on a cross-currency receipt reads a number that is not money in any currency",
+        "cause": "CollectionCreatorPanel.tsx:391-395 for the persisted note, and a second, differently-clamped copy at :514 for the on-screen figure (Math.max(0, …) there, unclamped in the writer). The ±0.05 reconciliation guard at :411-420 is genuinely correct and blocks the corrupt save — but the note text is built before it.",
+        "severity": "medium"
+      }
+    ],
+    "labelProblems": [
+      {
+        "label": "\"Outstanding AR\" (dashboard vital sign)",
+        "implies": "money customers owe us",
+        "actuallyIs": "the balance of every invoice row in the table including drafts that were never issued and a voided document — PHP 651,500.00 against a defensible PHP 492,500.00. It is also the only tile on a scope-bar-driven dashboard that ignores the scope, which is defensible for a balance-sheet figure but is disclosed nowhere on screen.",
+        "severity": "critical"
+      },
+      {
+        "label": "\"Net Revenue\"",
+        "implies": "revenue",
+        "actuallyIs": "invoiced gross + unbilled gross billing lines. Gross, not net — it includes reimbursable pass-throughs: 97 of 175 billing rows carry source_type='billable_expense' and are minted by a trigger from expense vouchers, so the same peso is counted once as revenue here and once as expense in the Total Expenses tile beside it. Nothing is netted despite the word 'Net'.",
+        "severity": "high"
+      },
+      {
+        "label": "\"Net Profit\" / \"92.8% margin\"",
+        "implies": "profit",
+        "actuallyIs": "gross billings minus e-voucher requests. The expense side counts vouchers at every status (no filter on draft/rejected/cancelled) and misses nothing that was ever recorded outside the e-voucher module — the `expenses` table holds 0 rows. On dev the tile currently reads PHP 116,000.00 at 92.8% margin for a freight forwarder, which is the shape of a number nobody should believe.",
+        "severity": "high"
+      },
+      {
+        "label": "\"DSO: 156d\"",
+        "implies": "days sales outstanding",
+        "actuallyIs": "an all-time AR balance divided by one month's revenue times the days in that month. Change the scope preset and the same receivable produces a wildly different 'DSO'. It is not a DSO.",
+        "severity": "high"
+      },
+      {
+        "label": "\"Cash Collected — 100% of invoiced\"",
+        "implies": "the period's invoices are fully paid",
+        "actuallyIs": "period collections over period invoices, with no requirement that the collections settle those invoices. Two screens compute it with different filters — the dashboard excludes credited/refunded collections, FinancialsModule.tsx:814 does not, a PHP 500.00 divergence on today's data.",
+        "severity": "medium"
+      },
+      {
+        "label": "\"Conversion Active: Items not in {currency} will be converted using rate {rate}\" (invoice builder)",
+        "implies": "conversion happened",
+        "actuallyIs": "shown whenever the currencies differ, including the two branches (invalid rate, cross non-PHP pair) where the code explicitly passes the amount through unconverted",
+        "severity": "high"
+      },
+      {
+        "label": "Currency picker offering PHP/USD/EUR/CNY/INR/JPY/SGD",
+        "implies": "the system trades in seven currencies",
+        "actuallyIs": "exactly one rate pair exists (USD→PHP, 58.00, dated 2026-05-03). Six of the seven cannot be posted at all, and the refusal reaches the user as a blank field rather than a message. JPY additionally has no zero-decimal handling — roundMoney forces 2 decimals on a currency that has none.",
+        "severity": "medium"
+      },
+      {
+        "label": "invoices.original_currency",
+        "implies": "the currency the underlying charges were denominated in",
+        "actuallyIs": "set equal to the invoice's own currency at InvoiceBuilder.tsx:879-880, so it can never disagree with `currency` and carries no information about the source lines",
+        "severity": "low"
+      },
+      {
+        "label": "\"Total Received\" / \"Amount to Apply\" / \"Amount to Credit\" (collection panel)",
+        "implies": "pesos, as the ₱ glyph states",
+        "actuallyIs": "the raw number in whatever currency the panel's own selector is set to, formatted with a hardcoded PHP symbol",
+        "severity": "high"
+      }
+    ],
+    "thinEvidence": [
+      "THE HEADLINE CAVEAT: dev contains ZERO non-PHP rows. Every one of 15 invoices, 8 collections, 267 e-vouchers, 175 billing line items and 315 quotations is currency='PHP'. Every stored exchange_rate is either 1.00000000 or NULL. Therefore NO multi-currency arithmetic was exercised by data — every FX finding below is read from the code path, not observed in a row, and every 'agrees' on an FX-consistency check is agreement on the degenerate case rate=1. Multi-currency in this product is untested, not working.",
+      "The `exchange_rates` table holds exactly ONE row: USD→PHP 58.00000000, rate_date 2026-05-03, source 'manual', notes 'Seed rate for dev/staging'. As of 2026-08-05 that is 94 days stale, and resolveExchangeRate() returns it with fromTable:true and no staleness check.",
+      "136 of 175 billing_line_items have base_amount NULL and exchange_rate NULL (the pre-FX-migration rows). 4 of 15 invoices and 1 of 267 e-vouchers likewise. All are PHP so pickReportingAmount's fallback to raw amount is currently harmless — but it means 78% of billing rows have no FX metadata to check against, so the 'zero inconsistencies' result covers only 39 rows.",
+      "0 rows anywhere have currency <> 'PHP'. The specific check asked for — rows where currency is foreign but exchange_rate is 1 or NULL or base_amount = amount — returns 0 because the population is 0, not because the writers prevent it. Two writers (send_billing_items_to_booking, ensure_billable_expense_billing_item) provably CREATE exactly that shape, and one client path (InvoiceBuilder) provably ships it.",
+      "The `expenses` table has 0 rows and is not read by the financial dashboard at all — expenses are mapped from `evouchers`. Any conclusion about 'expense' figures is a conclusion about e-vouchers.",
+      "The cross-currency collection case (a receipt in one currency against an invoice in another) could not be exercised: 8 collections, all PHP, 7 of them one-to-one against a single PHP invoice. The ±0.05 reconciliation guard at CollectionCreatorPanel.tsx:411-420 reads as correct on inspection and I could not make it fire.",
+      "The roundMoney drift result is a synthetic sweep (800,000 amount×rate combinations against exact integer-scaled arithmetic), not observed data — no posting on dev uses a fractional rate.",
+      "'0 discrepancies across 264 e-voucher header-vs-line reconciliations' is a real result and the largest sample in this pass, but it tests only that a single-currency sum adds up. evoucher_line_items has no currency column at all, so a foreign-currency voucher's lines carry bare numbers whose currency lives only on the header."
+    ],
+    "notes": "METHOD. I read each figure's fetcher/reducer, wrote down what it computes rather than what it is labelled, then recomputed from source rows in SQL without reusing the app's query. Where the numbers agree I say so; where the population is empty I say the check was vacuous rather than passed.\n\nTHE ONE SENTENCE. The arithmetic on this data is right almost everywhere — and that is not reassuring, because the data is 100% PHP at rate 1, which is the one case where every wrong formula produces the right answer.\n\nWHAT IS ACTUALLY BROKEN TODAY, IN PHP, WITH NO FX INVOLVED:\nThe same receivable is PHP 651,500.00 on the Financials dashboard and PHP 528,500.00 one tab across. The gap is exactly one voided invoice, BR202606-121-001, PHP 123,000.00. FinancialsModule.tsx:719-732 wraps the shared helper in a status check; FinancialDashboard.tsx:203-213 calls the helper raw. calculateInvoiceBalance itself has no concept of a dead document — the guard lives in one caller, so every other caller inherits the bug. Two more callers do: the aging strip on the dashboard, and the Attention panel (which additionally reads .balance, the invoice-currency field, instead of .balanceBase). Add the two draft invoices and PHP 36,000 more is receivable that nobody has been asked to pay.\n\nTHE FX ARCHITECTURE IS GENUINELY WELL DESIGNED AND ONLY PARTLY WIRED IN.\naccountingCurrency.ts is careful: toBaseAmount and resolvePostingRate both throw rather than default a foreign posting to 1, and the comment says so explicitly. exchangeRates.ts is careful too — resolveExchangeRate throws when no rate is on file. The e-voucher panel and the collection panel both use them properly, seed from the table, and the collection panel adds a ±0.05 PHP reconciliation guard that is the single best piece of money code I read in this pass.\n\nThen three paths route around all of it.\n1. InvoiceBuilder never imports exchangeRates at all. exchangeRate is useState(1). resolvePostingRate('USD', 1) returns 1 — it only rejects zero and non-finite — so the guard designed to stop exactly this waves it through. Pick USD in the dropdown, do not touch the rate box, save: a USD 10,000 invoice with base_amount 10,000.00 instead of 580,000.00, and base_amount is the field every aggregate trusts.\n2. send_billing_items_to_booking() COALESCEs a missing rate to 1 in SQL. The client calling it refuses first (UnifiedBillingsTab.tsx:770-814 — a real, correct guard), but the RPC is SECURITY DEFINER and callable directly by four departments. Guard in the form, not in the writer.\n3. FinancialsModule.tsx:325-340 maps e-vouchers to expenses and drops base_amount and exchange_rate on the floor, keeping the currency code beside a raw foreign amount. pickReportingAmount then does exactly what its fallback chain says and returns the unconverted number. That mapper feeds Total Expenses, Net Profit, profit margin, the expenses KPI strip and SalesReport's cost of sales. The same file also reads four columns that do not exist on evouchers (request_date, expense_date, total_amount, voucher_number/expense_name, expense_category) — which is why every expense is dated by keystroke and categorised 'General'.\n\nTHE FX GAIN/LOSS MECHANISM DOES NOT EXIST. Four account codes are declared with a comment describing realized-on-settlement and unrealized-at-period-end posting. Grep finds them in the declaring file and its unit test, nowhere else. Disbursement carries the creation-time rate forward and there is no disbursement_exchange_rate column to carry anything else. A USD advance locked at 58 and paid at 60 loses PHP 2 per dollar into no account.\n\nON THE MANILA/UTC QUESTION you flagged: isInScope (aggregate/types.ts:67-74) normalises with local-time getters, so on a Manila browser it is correct — dates are stored as midnight UTC, which is 08:00 Manila, same day. It breaks for a browser west of UTC, and PLTrendCard's month keys ('2026-08' parsed by new Date) shift a full month there. Not the eight-hours-a-day-wrong shape you predicted; a whose-laptop shape instead. I did not pursue it further since the surface is currency.\n\nA GOOD-NEWS ITEM WORTH THE SAME WEIGHT AS THE BUGS. UnifiedBillingsTab has a genuine pre-save FX guard that names the offending rows, refuses, and explains why in the code comment ('We do NOT fall back to the raw foreign amount for missing rates — that would silently poison PHP aggregates'). Somebody understood this problem exactly. The finding is that they fixed it in one file and the other three paths never learned.\n\nWHAT WOULD MAKE THIS PASS CONCLUSIVE. Seed dev with a handful of USD documents — one invoice, one collection against it, one e-voucher, one billing line — at a rate other than 1, and re-run this. Until then the correct statement is that multi-currency is unexercised, and that the code paths I read say it would not survive first contact."
+  },
+  {
+    "figures": [
+      {
+        "name": "Financial Health · \"Total Billings\" tile",
+        "where": "src/hooks/useFinancialHealthReport.ts:87 (summary.totalBillings) → src/components/accounting/reports/FinancialHealthPage.tsx:184; RPC billing_agg in get_financial_health_summary",
+        "appFormula": "SUM(billing_line_items.amount) GROUP BY billing_line_items.project_number, INNER-matched to projects.project_number via LEFT JOIN, status NOT IN ('voided','void','cancelled'), then summed in JS across returned rows",
+        "appValue": "₱125,000.00 across 5 rows (both for p_month='2026-08', the page's default, and for All Time)",
+        "myValue": "₱2,967,027.59 across 175 live billing_line_items rows (0 are voided). Only 5 rows carry a project_number that exists in projects; 83 carry a BOOKING number; 87 carry empty string.",
+        "agrees": false
+      },
+      {
+        "name": "Financial Health · per-project Billing Total (join arithmetic itself)",
+        "where": "get_financial_health_summary billing_agg; rendered FinancialHealthPage.tsx:117-122",
+        "appFormula": "SUM(amount) per matching project_number",
+        "appValue": "PRJ-458411 / 451530 / 291528 / 550146 / 899414 = ₱25,000.00 each",
+        "myValue": "₱25,000.00 each (1 billing row per project, verified individually)",
+        "agrees": true
+      },
+      {
+        "name": "Financial Health · \"Total Expenses\" tile",
+        "where": "useFinancialHealthReport.ts:67-69,88; RPC expense_agg",
+        "appFormula": "SUM(evouchers.amount) WHERE transaction_type IN ('expense','budget_request') AND status IN ('approved','posted','paid','partial'), joined on evouchers.project_number = projects.project_number, then ×1.03 for \"Admin 3%\"",
+        "appValue": "₱0.00 (every project, every month)",
+        "myValue": "₱4,534,208.82 of non-draft, non-cancelled expense-bearing vouchers (expense ₱3,148,963.96 + direct_expense ₱540,003.16 + reimbursement ₱845,241.70). Under the RPC's own type+status filter but ignoring the broken join: ₱365,243.00 (7 of 267 vouchers).",
+        "agrees": false
+      },
+      {
+        "name": "Financial Health · \"Gross Profit\" tile",
+        "where": "useFinancialHealthReport.ts:82,90 → FinancialHealthPage.tsx:205",
+        "appFormula": "billingTotal − (expensesTotal × 1.03). NOTE the RPC also returns its own gross_profit column (billing − expenses, no overhead); the hook discards it and recomputes under the same name.",
+        "appValue": "₱125,000.00 — i.e. a 100.0% margin on all 5 projects",
+        "myValue": "Not computable at project level from this data: ₱0 of the ₱4.53M of live expense vouchers resolves to any project. The displayed figure is gross billings relabelled.",
+        "agrees": false
+      },
+      {
+        "name": "Financial Health · \"Collected\" tile",
+        "where": "useFinancialHealthReport.ts:89; RPC collection_agg",
+        "appFormula": "SUM(collections.amount) JOIN invoices ON id=invoice_id WHERE invoices.project_number IS NOT NULL AND collections.status NOT IN ('draft','cancelled','voided','void','credited','refunded')",
+        "appValue": "₱125,000.00",
+        "myValue": "₱133,621.60 (7 posted collections; the 1 'credited' ₱500 row is correctly excluded)",
+        "agrees": false
+      },
+      {
+        "name": "My Scorecard · Overall Score — Sarah May B. Baylon, 2026-07",
+        "where": "get_kpi_scorecard → src/components/kpi/MyScorecardPage.tsx:286",
+        "appFormula": "score = SUM(weight_pct × rating / 5) / SUM(weight_pct of non-excluded KPIs) × 100",
+        "appValue": "61.2 / 100 · band \"Needs Improvement\" · coverage 100%",
+        "myValue": "14.00 + 9.00 + 12.00 + 15.00 + 4.80 + 6.40 = 61.20; included weight 35+15+15+15+12+8 = 100; 61.20/100×100 = 61.2",
+        "agrees": true
+      },
+      {
+        "name": "My Scorecard · Overall Score — Sarah May B. Baylon, 2026-06",
+        "where": "get_kpi_scorecard via get_kpi_score_history → MyScorecardPage.tsx trend",
+        "appFormula": "same weighted-mean-of-rating formula, denominator = included weight only",
+        "appValue": "70.0 / 100 · \"Satisfactory\" · coverage 70%",
+        "myValue": "14.00 + 15.00 + 12.00 + 8.00 = 49.00; included weight 35+15+12+8 = 70; 49/70×100 = 70.0",
+        "agrees": true
+      },
+      {
+        "name": "KPI \"Quotation (All Types)\" actual — Sarah, 2026-07",
+        "where": "kpi_metric_quotation_tat, rendered MyScorecardPage.tsx:374 as \"8 of 10 within turnaround\"",
+        "appFormula": "100 × count(on_time) / count(*) over activity_log status_change rows Pending Pricing→Priced in period, threshold = min(service TAT hours)",
+        "appValue": "80.0% → suggested rating 2 → 14.00 of 35 points",
+        "myValue": "Recomputed independently from activity_log: 10 priced events in July, all attributable to this user, all with a resolvable start; 2 breached (SIM-Q03 30.0h vs 24h, SIM-Q10 20.0h vs 12h) → 8/10 = 80.0%",
+        "agrees": true
+      },
+      {
+        "name": "KPI \"Billing\" actual — Sarah, 2026-07 (\"4 of 4 billed within 24 hrs\")",
+        "where": "kpi_metric_billing_tat_24h, rendered MyScorecardPage.tsx:374",
+        "appFormula": "100 × count(WHERE (invoice_date::date − date_delivered::date) <= 1) / count(*) — a CALENDAR-DAY difference, not hours",
+        "appValue": "100.0% → rating 4 → 12.00 of 15 points",
+        "myValue": "Elapsed hours from start of delivery day: SIM-INV01 7.0h, SIM-INV02 26.0h, SIM-INV03 25.0h, SIM-INV04 9.0h. Only 2 of 4 are inside 24 hours → 50.0% → attainment 50 → rating 1 → 3.00 points.",
+        "agrees": false
+      },
+      {
+        "name": "My Scorecard · \"Points Forfeited\" tile",
+        "where": "MyScorecardPage.tsx:220-221,292-298",
+        "appFormula": "SUM over NON-EXCLUDED kpis of (weight_pct − weighted_score); rendered with suffix \"/ 100\"",
+        "appValue": "38.8 / 100 (Sarah, 2026-07)",
+        "myValue": "100 − 61.2 = 38.8 — correct here only because her coverage happens to be 100%. For ALYSSA CALATRAVA (coverage 30) the same tile can read at most 30 while still claiming \"/ 100\".",
+        "agrees": true
+      },
+      {
+        "name": "Performance · \"Company Median\" tile",
+        "where": "PerformancePage.tsx:149,273",
+        "appFormula": "median of scores of people who are scored AND not provisional (coverage ≥ 50%)",
+        "appValue": "61.2 / 100",
+        "myValue": "61.2 — but the set is exactly ONE person (Sarah). 38 of 39 people are provisional. \"People Measured\" correctly reads 1 / 39.",
+        "agrees": true
+      },
+      {
+        "name": "Performance · org score distribution, 2026-07",
+        "where": "get_kpi_org_overview → PerformancePage.tsx roster",
+        "appValue": "33 of 39 people score exactly 100.0 \"Outstanding\" (coverage 15–30%); 5 score exactly 20.0 \"Poor\" (coverage 20%); 1 scores 61.2",
+        "myValue": "Reproduced exactly. The 100.0s are entirely zero-incident KPIs returning 0 because NO source rows matched the person; the 20.0s are rate KPIs returning 0 because no source rows matched the person. Same condition, opposite verdict.",
+        "appFormula": "per-person get_kpi_scorecard, then provisional = coverage < 50",
+        "agrees": true
+      },
+      {
+        "name": "KPI \"Demurrage / Detention / Storage Charges\" — every brokerage user, 2026-07",
+        "where": "kpi_metric_charge_class via kpi_metric_charge_demurrage/detention/storage",
+        "appFormula": "if (blended lines + untagged lines) > 0 → NULL (excluded, \"awaiting fault review\"); else → SUM(amount WHERE fault_class='internal'), which is 0 when no rows matched at all",
+        "appValue": "actual 0, display \"None due to internal fault\", rating 5 — 30 of 100 weight, for all 22 brokerage staff",
+        "myValue": "There are ZERO charge-class evoucher_line_items dated in July 2026 (all 30 fall between 2026-05-28 and 2026-06-29). The 5 is awarded for an empty set. In June the same function correctly returns NULL/excluded for the same people (e.g. ALYSSA: \"1 awaiting fault review · 4 on blended catalog items\").",
+        "agrees": false
+      },
+      {
+        "name": "My Scorecard · \"Scorecard Measured\" (scored_on_pct / coverage)",
+        "where": "get_kpi_scorecard v_incl_wt → MyScorecardPage.tsx:309, PerformancePage.tsx:233",
+        "appFormula": "SUM(weight_pct) of non-excluded KPIs, presented as a percentage",
+        "appValue": "100% (Sarah), 30% (brokerage), 15% (most pricing), 20% (BDD)",
+        "myValue": "Matches. Legitimate as a percentage because every scorecard_key's definitions sum to exactly 100 (verified: bdd/brokerage/forwarding/pricing/trucking all = 100).",
+        "agrees": true
+      },
+      {
+        "name": "My Scorecard · \"▼ 8.8 points vs last period\" and the −12.6% trend arrow",
+        "where": "MyScorecardPage.tsx:225-228,288,321",
+        "appFormula": "deltaPoints = score − previous comparable score; deltaPct = (score − previous)/previous × 100; \"comparable\" = coverage ≥ 50%",
+        "appValue": "−8.8 points, −12.6%",
+        "myValue": "61.2 − 70.0 = −8.8; −8.8/70 = −12.57%. Arithmetically right, but 70.0 was computed on 70 points of weight and 61.2 on 100 — the 50% comparability gate is too loose to catch it.",
+        "agrees": true
+      },
+      {
+        "name": "Scorecard rating scale ceiling",
+        "where": "kpi_suggest_rating; footer text MyScorecardPage.tsx:413-415",
+        "appFormula": "attain>100→5; attain=100→at_target(4); attain>=90→3; attain>=70→2; else 1. zero_incidents: 0→5; <2→3; <3→2; else 1.",
+        "appValue": "Rating 4 is returned only on EXACT equality with target; 99.9% of target returns 3",
+        "myValue": "For a capped-percentage KPI (on-time %, max 100 against target 100) the best possible rating is 4 and 5 is unreachable. A Pricing officer who is perfect on every KPI and exactly meets quota scores 28+15+12+12+12+8 = 87.0 → \"Very Satisfactory\". \"Outstanding\" (≥90) requires exceeding sales quota; flawless delivery alone cannot reach it. Rating 4 is unreachable on all zero_incidents KPIs.",
+        "agrees": false
+      }
+    ],
+    "discrepancies": [
+      {
+        "figure": "Financial Health · Total Billings",
+        "appValue": "₱125,000.00 (5 rows)",
+        "trueValue": "₱2,967,027.59 (175 live rows)",
+        "delta": "−₱2,842,027.59 · the report sees 2.9% of the money and 2.9% of the rows",
+        "cause": "billing_agg groups by billing_line_items.project_number and LEFT JOINs it to projects.project_number. Per finding L3/O11 that column actually holds BOOKING numbers on 83 rows and empty string on 87. `WHERE bli.project_number IS NOT NULL` does not exclude '' , so the empty-string rows are aggregated into a phantom group and then dropped by the join. Booking→project rescue is impossible: only 13 of 243 bookings carry a project_id.",
+        "severity": "critical"
+      },
+      {
+        "figure": "Financial Health · Total Expenses",
+        "appValue": "₱0.00",
+        "trueValue": "₱4,534,208.82 of non-draft expense-bearing vouchers (₱365,243.00 even under the RPC's own type/status filter)",
+        "delta": "−₱4,534,208.82 · the report shows zero cost for the entire company, in every month",
+        "cause": "Four compounding defects. (1) transaction_type IN ('expense','budget_request') — 'budget_request' matches 0 rows and the filter excludes direct_expense (₱540,003.16), reimbursement (₱845,241.70) and cash_advance (₱100,925) entirely. (2) status IN ('approved','posted','paid','partial') — 'paid' and 'partial' match 0 rows; 'approved' misses the 1 row stored as 'Approved' (capital A); 'disbursed', the state in which cash has actually left, is not in the list (10 rows, ₱460,307.25). Only status='posted' survives. (3) the surviving 7 rows then fail the project join — 0 of 267 evouchers carry a project_number that exists in projects; 244 carry booking numbers. (4) evouchers has 9 live status values; the filter names 4, of which 1 matches.",
+        "severity": "critical"
+      },
+      {
+        "figure": "Financial Health · Gross Profit",
+        "appValue": "₱125,000.00 — 100.0% margin on all 5 projects",
+        "trueValue": "Unknown; not derivable from the data as joined",
+        "delta": "Margin overstated by the whole of cost",
+        "cause": "Direct consequence of expenses being 0. Because billing − 0×1.03 = billing, every project in this report shows a 100% margin and the tile is coloured green with a TrendingUp icon (FinancialHealthPage.tsx:207-209). A wrong number here is dressed as good news.",
+        "severity": "critical"
+      },
+      {
+        "figure": "KPI \"Billing\" — 100% billed within 24 hrs",
+        "appValue": "100.0% → rating 4 → 12.00 of 15 points",
+        "trueValue": "50.0% by a real 24-hour clock → rating 1 → 3.00 points",
+        "delta": "−9.00 points on the scorecard; Sarah's overall score 61.2 → 52.2, band \"Needs Improvement\" → \"Poor\"",
+        "cause": "kpi_metric_billing_tat_24h computes `(i.invoice_date::date - date_delivered::date) <= 1`, a calendar-day difference, while the definition_text, target_text and actual_display all say \"within 24 hrs\". The predicate admits anything up to 47h59m and also admits negative values (invoice dated before delivery). Demonstrated on live dev rows: SIM-INV02 is 26.0h and SIM-INV03 is 25.0h after the start of the delivery day, both counted on time. Underlying cause is that bookings.details->>'date_delivered' is a bare DATE, so an hours-based target has no hours to measure against.",
+        "severity": "high"
+      },
+      {
+        "figure": "KPI Demurrage / Detention / Storage — rating 5, \"None due to internal fault\"",
+        "appValue": "actual 0, rating 5, 30 of 100 weight, all 22 brokerage staff, July 2026",
+        "trueValue": "No charge lines existed in July at all — the metric measured nothing",
+        "delta": "30 points of every brokerage scorecard awarded for an empty result set; drives 22 people to exactly 100.0 \"Outstanding\"",
+        "cause": "kpi_metric_charge_class's guard (`blended + untagged > 0 → NULL`) fires only when rows match. With zero matching rows the tally is 0/0/0, internal_total is 0, and the CASE falls through to 'None due to internal fault' → rating 5. The function cannot distinguish \"measured, and the answer is zero\" from \"nothing matched this person\". Compounded by attribution fragility: 5 of the 23 blended lines resolve to no owner at all via kpi_booking_owner, so those charges are attributed to nobody and appear on no scorecard.",
+        "severity": "critical"
+      },
+      {
+        "figure": "Org overview — 33 of 39 people scored 100.0 \"Outstanding\"",
+        "appValue": "33 × 100.0 Outstanding, 5 × 20.0 Poor",
+        "trueValue": "38 of 39 people have no measurable activity in the period; the correct answer is \"not scored\", not a score",
+        "delta": "Absence of evidence is scored as evidence, and the sign flips depending on which KPI type happens to be on the card",
+        "cause": "Zero-incident KPIs return actual=0 for an empty set → rating 5 → 100.0 \"Outstanding\". Rate KPIs (BDD \"New Customer\") return actual=0 for the same empty set → attainment 0 → rating 1 → 20.0 \"Poor\". Verified on ALYSSA CALATRAVA (100.0 on three empty charge KPIs) and BD Neuron (20.0 on one empty New Customer KPI). The provisional flag mutes the colour but the number, the band and the roster row still say Outstanding / Poor.",
+        "severity": "critical"
+      },
+      {
+        "figure": "Financial Health · Collected",
+        "appValue": "₱125,000.00",
+        "trueValue": "₱133,621.60",
+        "delta": "−₱8,621.60 · 5 of 7 posted collections shown",
+        "cause": "collection_agg joins collections→invoices and requires invoices.project_number IS NOT NULL. Collections settling an invoice with no project_number are silently dropped even though collections has its own project_number and booking_id columns.",
+        "severity": "high"
+      },
+      {
+        "figure": "Rating 4 / \"Outstanding\" reachability",
+        "appValue": "Sarah's Billing at exactly 100.0% → 4; Sales Quota at 120% → 5",
+        "trueValue": "A Pricing officer perfect on every KPI and exactly on quota tops out at 87.0",
+        "delta": "\"Outstanding\" (≥90) is unreachable through flawless execution alone on 4 of 5 scorecards",
+        "cause": "kpi_suggest_rating returns at_target (4) only on `v_attain = 100` — exact numeric equality — and drops straight to 3 for anything in [90,100). For KPIs whose actual is a percentage capped at 100 against a target of 100 (65 weight points on the pricing card, 40 on brokerage, 35 on forwarding, 43 on trucking, 57 on bdd), 5 is arithmetically impossible and 4 requires an exact hit. zero_incidents has no 4 at all (0→5, 1→3).",
+        "severity": "high"
+      },
+      {
+        "figure": "Fault attribution (kpi_propose_fault / tag_charge_fault)",
+        "appValue": "Both RPCs exist, are SECURITY DEFINER, and are granted to `authenticated`",
+        "trueValue": "Neither is called from anywhere in src/",
+        "delta": "The mechanism that clears \"awaiting fault review\" is unreachable from the product",
+        "cause": "grep across src/ for tag_charge_fault and kpi_propose_fault returns only permissionsConfig.ts / accessSchema.ts / actionApplicability.ts (permission keys) and migration files. ReviewPanel.tsx:50 filters to source 'logged' | 'judgment', so the `proposed` charge KPIs never appear in the only evaluator surface. Consequence: in any month with charges the three charge KPIs are permanently excluded, and in any month without them they are permanently 5. They are never actually measured.",
+        "severity": "high"
+      },
+      {
+        "figure": "KPI definitions with no resolver",
+        "appValue": "Rendered as rows with actual \"Awaiting evaluation\" / \"Not yet measurable\"",
+        "trueValue": "15 of 42 definitions declare a metric_key for which no kpi_metric_* function exists",
+        "delta": "Weight with no server-side resolver: bdd 60, trucking 46, forwarding 35, brokerage 30, pricing 20 (out of 100 each)",
+        "cause": "metric_keys attendance_punctuality (×5), incident_penalty (×5), crm_calls, crm_emails, meetings_held, incident_damage, trip_doc_accuracy, vehicle_pms have no function. kpi-bdd-meetings is source='auto' with no function, so get_kpi_scorecard writes 'Not yet measurable' and it can never be filled — an auto KPI that no human may type into (save_kpi_manual_entry rejects an actual on source='auto') and no machine computes. It is permanently dead weight, 13 of BDD's 100 points.",
+        "severity": "high"
+      },
+      {
+        "figure": "Period boundaries — every KPI metric and the Financial Health month filter",
+        "appValue": "Windows evaluated in UTC",
+        "trueValue": "The business runs on Asia/Manila (UTC+8)",
+        "delta": "Every period window is shifted 8 hours late; 8 hours of every day land in the wrong month",
+        "cause": "DB TimeZone = 'UTC' (verified). All resolvers use `al.created_at >= p_start AND al.created_at < (p_end + 1)` with DATE bounds, which cast to UTC midnight — so the July window is 2026-07-01 08:00 to 2026-08-01 08:00 Manila. get_financial_health_summary filters on `to_char(p.created_at,'YYYY-MM')`, also UTC, while the page's getCurrentMonth() (FinancialHealthPage.tsx:34-37) is browser-local Manila. No dev row currently crosses a boundary (0 of 18 projects, 0 of 175 billing rows, 0 of 15 invoices), so this is structural, not yet observed.",
+        "severity": "medium"
+      },
+      {
+        "figure": "get_financial_health_summary invoice list",
+        "appValue": "Excludes 'reversed','reversal_draft','reversal_posted','draft'",
+        "trueValue": "'void' is a live invoice status in dev (1 invoice, ₱123,000)",
+        "delta": "A voided invoice number can be printed as a live invoice on the report row",
+        "cause": "The status exclusion list was written against a vocabulary that does not match the data. Separately, invoice_agg excludes draft invoices while collection_agg does NOT filter invoice status at all, so cash collected against a draft invoice would count while the invoice itself is hidden — the two CTEs disagree about which invoices exist.",
+        "severity": "medium"
+      },
+      {
+        "figure": "base_amount as a currency-normalised column",
+        "appValue": "Aggregates use raw `amount` / `total_selling`, never base_amount",
+        "trueValue": "base_amount is unpopulated or divergent on most rows",
+        "delta": "billing_line_items: SUM(amount)=₱2,967,027.59 vs SUM(base_amount)=₱865,863.47 (136 of 175 rows differ, all NULL); invoices: ₱785,121.60 vs ₱300,121.60 (4 of 15 differ)",
+        "cause": "Every row in dev is currency='PHP', so no live mixed-currency error exists today and using `amount` is currently the safer choice. But kpi_metric_sales_quota sums q.total_selling across quotations while emitting per-row 'currency' in its own evidence, with no conversion — the first USD quotation silently adds to a PHP quota. And any future aggregate that switches to base_amount would understate billings by ₱2,101,164.12.",
+        "severity": "medium"
+      },
+      {
+        "figure": "kpi_metric_sales_quota period attribution",
+        "appValue": "Evidence field is labelled 'won_at'",
+        "trueValue": "The value is q.updated_at",
+        "delta": "Any edit to an accepted quotation moves its full value into the month of the edit",
+        "cause": "The `won` CTE filters `q.updated_at >= p_start AND q.updated_at < p_end+1`. There is no won/accepted timestamp. Touching a two-year-old accepted quote today credits its whole value against this month's quota. Also: only 1 user_target row exists org-wide, so 38 of 39 people get 'No quota set' → the KPI excludes itself, removing 15–20 points of coverage from nearly every card.",
+        "severity": "medium"
+      },
+      {
+        "figure": "get_financial_health_summary access",
+        "appValue": "SECURITY DEFINER, EXECUTE granted to `authenticated`, no permission check in the body",
+        "trueValue": "Every logged-in user can read every project's billings, expenses, collections and margin",
+        "delta": "n/a (access, not arithmetic)",
+        "cause": "Unlike get_kpi_scorecard (which gates on kpi_can_read_others) and get_kpi_org_overview, the financial RPC has no guard at all. Noting it here because this pass is about who believes which number. The KPI RPCs' auth.uid() IS NULL bypass is NOT reachable — none of them are granted to anon.",
+        "severity": "medium"
+      }
+    ],
+    "labelProblems": [
+      {
+        "label": "\"Total Billings\" / \"Total Expenses\" / \"Gross Profit\" on a page titled Financial Health, with a footer reading \"5 Containers\"",
+        "implies": "The company's billings, cost and margin for the selected month",
+        "actuallyIs": "Only the 5 billing rows whose project_number literally matches a projects row — 2.9% of live billing value — with cost fixed at zero. The rows are PROJECTS, not containers; FinancialHealthPage.tsx:255 and :349 both call them containers.",
+        "severity": "critical"
+      },
+      {
+        "label": "\"Gross Profit\" (two different figures share the name)",
+        "implies": "Revenue less direct cost",
+        "actuallyIs": "The RPC returns gross_profit = billing − expenses. useFinancialHealthReport.ts:82 discards it and computes billing − expenses×1.03, i.e. after a hardcoded, unsourced 3% admin overhead (ADMIN_COST_PCT). Two different definitions, one label, and the CSV export (line 239) ships the second.",
+        "severity": "high"
+      },
+      {
+        "label": "KPI \"Billing — 100% billed within 24 hrs\" / actual_display \"4 of 4 billed within 24 hrs\"",
+        "implies": "An invoice was raised inside 24 hours of delivery",
+        "actuallyIs": "invoice_date::date − date_delivered::date <= 1, which admits up to 47h59m and also admits invoices dated before the delivery. Two of the four dev rows are 25.0h and 26.0h.",
+        "severity": "high"
+      },
+      {
+        "label": "\"None due to internal fault\" with a rating of 5",
+        "implies": "We looked at this person's demurrage/detention/storage charges and found none caused by us",
+        "actuallyIs": "No charge line matched this person in this period at all. Identical wording and identical rating for \"measured zero\" and \"measured nothing\".",
+        "severity": "critical"
+      },
+      {
+        "label": "\"Points Forfeited — 38.8 / 100\"",
+        "implies": "38.8 of 100 available points were lost",
+        "actuallyIs": "Sum over NON-EXCLUDED KPIs only. When coverage is 30%, the maximum this tile can ever show is 30, still against a \"/ 100\" suffix. It is the only headline tile on My Scorecard that is not normalised the way the score is.",
+        "severity": "high"
+      },
+      {
+        "label": "Falcons scale footnote: \"5 exceeds target, 4 fully meets it, 3 is 90 to 99 percent\"",
+        "implies": "A continuous ladder where meeting target earns 4",
+        "actuallyIs": "4 is returned only on exact numeric equality with target. 99.99% earns 3. On capped-percentage KPIs 5 is unreachable, so 4 is the ceiling; on zero_incidents KPIs 4 is unreachable entirely (0→5, 1→3).",
+        "severity": "high"
+      },
+      {
+        "label": "The \"Actual\" column on My Scorecard and the Review panel",
+        "implies": "A measured figure, uniform across the table",
+        "actuallyIs": "20 of Sarah's 100 weight points (Punctuality 12, Behavior 8) were typed by a supervisor. `source` is fetched into KpiRow (MyScorecardPage.tsx:30) and never rendered. `actual_source` ('manual' vs computed) is stored in kpi_scores and is NEVER returned by get_kpi_scorecard, so the UI could not show it even if it wanted to. The only marker is the `*`, which appears solely when the typed RATING disagrees with the suggested one — Sarah's Punctuality (a typed \"2 late arrivals\") shows no marker at all.",
+        "severity": "high"
+      },
+      {
+        "label": "\"Outstanding\" / \"Poor\" band, and the score number itself, at 15–30% coverage",
+        "implies": "A performance verdict",
+        "actuallyIs": "33 people read 100.0 Outstanding and 5 read 20.0 Poor purely because nothing matched them. PerformancePage mutes the colour and appends \"· provisional\", and MyScorecardPage refuses the delta arrow — but get_kpi_scorecard and get_kpi_score_history both hand out band='Outstanding' with no provisional flag of their own, so any future consumer inherits the claim.",
+        "severity": "critical"
+      },
+      {
+        "label": "Month navigation \"August 2026\" on Financial Health",
+        "implies": "The business month, Manila time",
+        "actuallyIs": "getCurrentMonth() is browser-local (Manila); the RPC filter to_char(created_at,'YYYY-MM') runs in UTC. Rows created between 00:00 and 08:00 Manila on the 1st are filed under the previous month. Not yet observable in dev (0 of 18 projects flip), but true 8 hours of every day.",
+        "severity": "medium"
+      },
+      {
+        "label": "Systemic flags: \"N of M below target\"",
+        "implies": "People missing an agreed standard",
+        "actuallyIs": "PerformancePage.tsx:139 counts rating < 4 as below target. Since 4 is reachable only at exact equality and unreachable on zero_incidents KPIs, a rating of 3 — which the footnote calls \"90 to 99 percent of target\" — is counted as a miss. The flag would fire on departments performing at 99%.",
+        "severity": "medium"
+      },
+      {
+        "label": "KPI evidence field \"won_at\"",
+        "implies": "The date the deal was won",
+        "actuallyIs": "quotations.updated_at — the date the row was last touched.",
+        "severity": "medium"
+      },
+      {
+        "label": "Trend chart / \"▼ 8.8 points vs last period\"",
+        "implies": "Performance fell 8.8 points",
+        "actuallyIs": "70.0 measured on 70 weight points vs 61.2 measured on 100. The code comments at MyScorecardPage.tsx:201-203 identify exactly this hazard and set the guard at 50% coverage, which is too loose to catch a 70-vs-100 comparison.",
+        "severity": "medium"
+      }
+    ],
+    "thinEvidence": [
+      "kpi_scores has 5 rows in total, covering 2 people across 2 periods. Every statement about how stored/overridden ratings render is drawn from those 5 rows.",
+      "Only 1 person (Sarah Baylon) has coverage above 50% in any period, so \"Company Median 61.2\" and \"Below Satisfactory 1 / 1\" are single-observation figures. The Performance page's distribution charts, band composition and systemic detection have effectively no data to work on: `rated.length < 3` suppresses every systemic check.",
+      "user_targets has exactly 1 row org-wide. Everything about kpi_metric_sales_quota beyond its SQL is inference, and the observed 120% is a seeded fixture.",
+      "Financial Health returns 5 rows. \"0 discrepancies across 5 rows\" for the per-project arithmetic is not evidence the aggregation is right — it is evidence that 170 of 175 rows never reached it.",
+      "Currency is PHP on 100% of rows in billing_line_items (175), evouchers (267), invoices (15), collections (8) and quotations (315). The mixed-currency risk in kpi_metric_sales_quota and in the financial RPC is therefore structural and unexercised — I could not produce a wrong number from it on dev.",
+      "evoucher_line_items has ZERO fault-tagged rows (fault_class IS NOT NULL: 0 of 277). Every claim about how tagged fault feeds kpi_metric_charge_class is read from the SQL, not observed.",
+      "Only 30 evoucher_line_items carry a kpi_charge_class at all, across 9 catalog items, and none fall in July 2026. The June behaviour I verified (guard correctly returning \"awaiting fault review\") comes from 6 people.",
+      "No kpi_period has status='locked'. The entire snapshot path in get_kpi_scorecard (`IF v_period.status = 'locked' AND v_stored.id IS NOT NULL`) is unexercised, which also means every historical score in the trend chart is recomputed live and can change retroactively.",
+      "There is no kpi_period for 2026-08 even though today is 2026-08-05. Both KPI pages default to periods[0] = 2026-07, so the product silently shows last month with a \"· live\" suffix. I did not create one to test.",
+      "No row in projects, billing_line_items or invoices currently straddles a Manila/UTC month boundary, so the timezone finding is proven from the code and the server setting (TimeZone='UTC', verified) rather than from a wrong number on screen."
+    ],
+    "notes": "METHOD. Every RPC body was read from pg_proc, the formula written down, then recomputed with independent SQL that does not reuse the app's joins. All work was read-only against dev (oqermaidggvanahumjmj). Nothing was written. supabase-prod was not touched.\n\nWHAT MATCHED — and it is worth saying plainly. The scorecard's core arithmetic is sound. I recomputed two full scorecards by hand (Sarah Baylon, 2026-06 and 2026-07) and both agree to the decimal: weighted = weight × rating / 5, score = Σweighted / Σincluded-weight × 100, giving 70.0 and 61.2. Every scorecard_key's definitions sum to exactly 100, so `scored_on_pct` really is a percentage. The exclusion model is honest — excluded KPIs are left out rather than counted as zero, and the denominator shrinks with them. get_kpi_org_overview's provisional flag uses `->>` not `->` (there is a comment in the function about the bug that caused), and its defaults (50/60) match the client's hardcoded PROVISIONAL_COVERAGE_PCT. get_kpi_score_history returns the right three periods in the right order. Quotation TAT recomputed independently from activity_log gives exactly 8 of 10. And in June, where charge lines actually exist, kpi_metric_charge_class correctly refuses to score and says \"1 awaiting fault review · 4 on blended catalog items\". The engine is well built. What is wrong is almost entirely at the edges where it meets missing data.\n\nTHE SHAPE OF THE PROBLEM. Two failures repeat across both surfaces and account for nearly every finding.\n\n(1) An empty result set is scored instead of excluded. Zero-incident KPIs return 0 for \"no rows matched you\" and are rewarded with a 5; rate KPIs return 0 for the same condition and are punished with a 1. That single asymmetry produces 33 people at exactly 100.0 \"Outstanding\" and 5 at exactly 20.0 \"Poor\" in the same month, from the same underlying fact — that nothing was recorded. The provisional flag mutes the colour but not the number, and both RPCs still emit band='Outstanding'.\n\n(2) A join to a column that does not contain what its name says. Finding L3 is not a naming annoyance — it is the reason the Financial Health report shows ₱125,000 of billings against ₱2,967,027.59 live, and ₱0.00 of expenses against ₱4,534,208.82. That report's headline is a 100% gross margin, rendered in green with an upward arrow. It is the single most dangerous number in this surface: it has no error, it looks like good news, and it is off by the entire cost base.\n\nTWO THINGS THAT EXIST BUT ARE NOT WIRED. kpi_propose_fault and tag_charge_fault are complete, permissioned, SECURITY DEFINER functions that nothing in src/ ever calls — ReviewPanel.tsx:50 filters to source 'logged'|'judgment' and so never shows the `proposed` charge KPIs. Consequently the \"awaiting fault review\" state can never be cleared through the product, and 30 points of the brokerage card oscillate between permanently-excluded and unearned-5. Conversely, 15 of 42 kpi_definitions name a metric_key with no resolver function; kpi-bdd-meetings is source='auto' with no function, which means no machine computes it and save_kpi_manual_entry refuses to let a human type it — 13 of BDD's 100 points are permanently unreachable by any route.\n\nONE SMALLER TRUST ITEM worth fixing cheaply: ReviewPanel.tsx:74 sends `p_override_reason: d.reason ?? k.override_reason ?? null`. Change a rating from 4 to 1 without typing a new reason and the server's \"a differing rating needs a reason\" guard is satisfied by the justification written for the previous, different decision.\n\nFILES: C:/Users/Marcus/Documents/Neuron Development/NeuronosPrototype/src/hooks/useFinancialHealthReport.ts, .../src/components/accounting/reports/FinancialHealthPage.tsx, .../src/components/kpi/MyScorecardPage.tsx, .../src/components/kpi/PerformancePage.tsx, .../src/components/kpi/ReviewPanel.tsx, .../src/supabase/migrations/013_financial_summary_rpc.sql, .../src/supabase/migrations/256_kpi_scorecard_rpc.sql, .../src/supabase/migrations/264_kpi_operational_resolvers.sql, .../src/supabase/migrations/265_kpi_manual_entry.sql, .../src/supabase/migrations/266_kpi_charge_fault.sql"
+  }
+]

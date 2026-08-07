@@ -70,12 +70,14 @@ export async function approveEVInline(
     ? "Approved by CEO / Executive"
     : "Approved by Team Leader / Manager";
 
-  const { error } = await supabase
-    .from("evouchers")
-    .update({ status: nextStatus, updated_at: new Date().toISOString() })
-    .eq("id", ev.id);
+  // Migration 270: the status column is closed to direct writes; the transition
+  // function re-checks (from, to, actor) server-side and raises. Findings G1/G2.
+  const { error } = await supabase.rpc("evoucher_transition", {
+    p_evoucher_id: ev.id,
+    p_to_status: nextStatus,
+  });
 
-  if (error) throw error;
+  if (error) throw new Error(error.message);
 
   await supabase.from("evoucher_history").insert({
     id: `EH-${Date.now()}`,

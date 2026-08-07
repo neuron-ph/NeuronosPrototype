@@ -20,7 +20,6 @@ interface CurrentUser {
   name: string;
   department?: string;
   role?: string;
-  ev_approval_authority?: boolean;
 }
 
 interface EVoucherWorkflowPanelProps {
@@ -284,21 +283,17 @@ export function EVoucherWorkflowPanel({
   };
 
   const transition = async (newStatus: string, action: string, notes?: string) => {
-    // Audit #4/#8: an RLS-blocked UPDATE affects 0 rows WITHOUT throwing, so the
-    // caller would otherwise report success while nothing changed. .select() lets
-    // us detect the no-op (visibility-dial / department-scope mismatch) and turn
-    // a silent false-success into an honest, actionable error.
-    const { data, error } = await supabase
-      .from("evouchers")
-      .update({ status: newStatus, updated_at: new Date().toISOString() })
-      .eq("id", evoucherId)
-      .select("id");
-    if (error) throw error;
-    if (!data || data.length === 0) {
-      throw new Error(
-        "You don't have permission to perform this action on this E-Voucher (it may belong to another department, or its status changed). Refresh and try again.",
-      );
-    }
+    // Migration 270: status is no longer a column anyone can write. Every move
+    // goes through evoucher_transition(), which validates (from, to, actor) as a
+    // triple server-side and RAISES when the edge isn't legal — so the old
+    // failure mode this code used to work around (an RLS-blocked UPDATE affects
+    // 0 rows WITHOUT throwing, and the caller reports success) can't happen here
+    // any more. Findings G1/G2.
+    const { error } = await supabase.rpc("evoucher_transition", {
+      p_evoucher_id: evoucherId,
+      p_to_status: newStatus,
+    });
+    if (error) throw new Error(error.message);
     await writeHistory(action, currentStatus, newStatus, notes);
   };
 
@@ -353,30 +348,18 @@ export function EVoucherWorkflowPanel({
   const handleTLApprove = async () => {
     setIsSubmitting(true);
     try {
-      const nextStatus = currentUser?.ev_approval_authority ? "pending_accounting" : "pending_ceo";
-      await transition(nextStatus, "Approved by Team Leader / Manager");
-      if (actor) logApproval("evoucher", evoucherId, evoucherNumber, currentStatus, nextStatus, actor, true);
-      toast.success(
-        nextStatus === "pending_accounting"
-          ? "Approved — forwarded to Accounting"
-          : "Approved — forwarded to CEO for final approval"
-      );
-      if (nextStatus === "pending_accounting" && currentUser?.id) {
-        await ensureBillableBillingItem();
-        createWorkflowTicket({
-          subject: `Disburse E-Voucher: ${evoucherNumber}`,
-          body: `${evoucherNumber} has been approved and is ready for disbursement.`,
-          type: "request",
-          priority: "normal",
-          recipientDept: "Accounting",
-          linkedRecordType: "expense",
-          linkedRecordId: evoucherId,
-          createdBy: currentUser.id,
-          createdByName: currentUser.name,
-          createdByDept: currentUser.department || "Operations",
-          autoCreated: true,
-        });
-      }
+      // The manager step always hands off to the CEO. A per-user
+      // `ev_approval_authority` flag used to let a delegated TL skip that gate,
+      // but it was client-side only (no RLS or DB function ever read it) and was
+      // never enabled for a single user in dev or prod. Removed rather than left
+      // dormant — an unenforced authority flag invites being switched on later
+      // by someone assuming the server checks it.
+      await transition("pending_ceo", "Approved by Team Leader / Manager");
+      if (actor) logApproval("evoucher", evoucherId, evoucherNumber, currentStatus, "pending_ceo", actor, true);
+      toast.success("Approved — forwarded to CEO for final approval");
+      // The billing-item / disburse-ticket side effects that used to hang off the
+      // skip-to-accounting branch are not lost: handleCEOApprove does both when
+      // the voucher actually reaches pending_accounting.
       onStatusChange?.();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to approve");
@@ -419,11 +402,11 @@ export function EVoucherWorkflowPanel({
     setPendingConfirm(null);
     setIsSubmitting(true);
     try {
-      const { error: updateError } = await supabase
-        .from("evouchers")
-        .update({ status: "pending_accounting", updated_at: new Date().toISOString() })
-        .eq("id", evoucherId);
-      if (updateError) throw updateError;
+      const { error: updateError } = await supabase.rpc("evoucher_transition", {
+        p_evoucher_id: evoucherId,
+        p_to_status: "pending_accounting",
+      });
+      if (updateError) throw new Error(updateError.message);
 
       if (actor) logActivity("evoucher", evoucherId, evoucherNumber, "updated", actor, { description: "Unlocked for correction" });
       await writeHistory("Unlocked for Correction", currentStatus, "pending_accounting");
@@ -567,11 +550,11 @@ Update the lines and resubmit.`,
   const handleVerifyAndPostLiquidation = async () => {
     setIsSubmitting(true);
     try {
-      const { error: closeErr } = await supabase
-        .from("evouchers")
-        .update({ status: "posted", updated_at: new Date().toISOString() })
-        .eq("id", evoucherId);
-      if (closeErr) throw closeErr;
+      const { error: closeErr } = await supabase.rpc("evoucher_transition", {
+        p_evoucher_id: evoucherId,
+        p_to_status: "posted",
+      });
+      if (closeErr) throw new Error(closeErr.message);
       await supabase.from("evoucher_history").insert({
         id: `EH-${Date.now()}`,
         evoucher_id: evoucherId,

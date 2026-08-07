@@ -8,6 +8,7 @@ import { SidePanel } from "../../common/SidePanel";
 import { CatalogItemCombobox } from "../../shared/pricing/CatalogItemCombobox";
 import { CustomDropdown } from "../../bd/CustomDropdown";
 import type { LiquidationLineItem } from "../../../types/evoucher";
+import { useAttachmentUrls } from "../../../hooks/useAttachmentUrl";
 
 interface LiquidationFormProps {
   isOpen: boolean;
@@ -68,6 +69,9 @@ export function LiquidationForm({
 }: LiquidationFormProps) {
   const [lineItems, setLineItems] = useState<LiquidationLineItem[]>([newLineItem()]);
   const [receipts, setReceipts] = useState<Record<string, ReceiptMeta>>({});
+  // M1: receipt.url holds a storage path (or a legacy public URL on older
+  // liquidations). The bucket is private, so both have to be signed to render.
+  const receiptUrls = useAttachmentUrls(Object.values(receipts).map((r) => r.url));
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [unusedReturn, setUnusedReturn] = useState<string>("");
   const [isFinal, setIsFinal] = useState(false);
@@ -142,14 +146,13 @@ export function LiquidationForm({
         .from("attachments")
         .upload(path, file, { cacheControl: "3600", upsert: false });
       if (uploadError) throw uploadError;
-      const { data: urlData } = supabase.storage.from("attachments").getPublicUrl(path);
-
+      // M1: store the storage path, not a public URL — the bucket is private.
       setReceipts((prev) => ({
         ...prev,
-        [lineId]: { url: urlData.publicUrl, name: file.name, type: file.type, size: file.size },
+        [lineId]: { url: path, name: file.name, type: file.type, size: file.size },
       }));
       setLineItems((prev) =>
-        prev.map((item) => (item.id === lineId ? { ...item, receipt_url: urlData.publicUrl } : item))
+        prev.map((item) => (item.id === lineId ? { ...item, receipt_url: path } : item))
       );
       toast.success("Receipt attached");
     } catch (err) {
@@ -241,11 +244,17 @@ export function LiquidationForm({
 
       // 2. If final submission, transition EV to pending_verification
       if (isFinal) {
-        const { error: evError } = await supabase
+        // Migration 270: the move is the transition function's; liquidated_at is
+        // an ordinary column and stays a normal update.
+        const { error: evError } = await supabase.rpc("evoucher_transition", {
+          p_evoucher_id: evoucherId,
+          p_to_status: "pending_verification",
+        });
+        if (evError) throw new Error(evError.message);
+        await supabase
           .from("evouchers")
-          .update({ status: "pending_verification", liquidated_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+          .update({ liquidated_at: new Date().toISOString(), updated_at: new Date().toISOString() })
           .eq("id", evoucherId);
-        if (evError) throw evError;
 
         const actor = { id: currentUser.id, name: currentUser.name, department: "" };
         logStatusChange("evoucher", evoucherId, evoucherNumber, "pending_liquidation", "pending_verification", actor);
@@ -319,12 +328,14 @@ export function LiquidationForm({
         });
         toast.success("Liquidation submitted for Accounting review");
       } else {
-        // Incremental submission — ensure EV is in pending_liquidation
-        await supabase
-          .from("evouchers")
-          .update({ status: "pending_liquidation", updated_at: new Date().toISOString() })
-          .eq("id", evoucherId)
-          .in("status", ["disbursed", "pending_liquidation"]); // safe: only transitions from valid states
+        // Incremental submission — ensure EV is in pending_liquidation.
+        // The `.in("status", [...])` guard this used to carry is now the
+        // transition matrix's job (migration 270); a call from any other state
+        // raises rather than quietly matching no rows.
+        await supabase.rpc("evoucher_transition", {
+          p_evoucher_id: evoucherId,
+          p_to_status: "pending_liquidation",
+        });
 
         toast.success("Receipts saved. Add more anytime, or submit as final when done.");
       }
@@ -716,7 +727,7 @@ export function LiquidationForm({
                         }}
                       >
                         {isImage ? (
-                          <img src={receipt.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          <img src={receiptUrls[receipt.url]} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                         ) : (
                           <FileText size={16} />
                         )}
@@ -730,7 +741,7 @@ export function LiquidationForm({
                         </div>
                       </div>
                       <a
-                        href={receipt.url}
+                        href={receiptUrls[receipt.url]}
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label="Open receipt"

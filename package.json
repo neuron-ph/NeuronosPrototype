@@ -86,6 +86,7 @@
     "test:watch": "vitest",
     "sync:dev": "node --env-file=.env.local scripts/clone-prod-to-dev.mjs",
     "rbac:guard": "node --env-file=.env.local scripts/rbac-guard.mjs",
+    "clean:spine": "node --env-file=.env.local scripts/clean-spine-debris.mjs",
     "test:e2e": "playwright test"
   }
 }

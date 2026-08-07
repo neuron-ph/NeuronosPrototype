@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../utils/supabase/client";
 import { usePaginatedList } from "./usePaginatedList";
 import { sanitizeSearch } from "../utils/pagination";
+import { BOOKING_STATUS_BUCKETS, BOOKING_STATUS_NOT_IN_PROGRESS } from "../config/booking/bookingFieldOptions";
 import type { DataScope } from "./useDataScope";
 import type { AssignmentVisibilityIndex } from "../utils/assignments/applyAssignmentVisibility";
 
@@ -19,7 +20,8 @@ import type { AssignmentVisibilityIndex } from "../utils/assignments/applyAssign
  * `manager_name` / `handler_name` columns.
  */
 
-const ARCHIVED_STATUSES = ["Cancelled", "Closed", "Paid"];
+/** PostgREST `in`-list literal — values contain spaces, so each is quoted. */
+const NOT_IN_PROGRESS_LIST = `(${BOOKING_STATUS_NOT_IN_PROGRESS.map((s) => `"${s}"`).join(",")})`;
 
 /** Booking ids where any of `userIds` is assigned via booking_assignments. */
 function assignedBookingIds(index: AssignmentVisibilityIndex, userIds: string[]): string[] {
@@ -119,13 +121,13 @@ function applyBookingFilters(b: any, p: BookingsQueryParams): any {
   if (p.tab === "my" && p.currentUserName) {
     b = b.or(`manager_name.eq.${q(p.currentUserName)},handler_name.eq.${q(p.currentUserName)}`);
   } else if (p.tab === "draft") {
-    b = b.eq("status", "Draft");
+    b = b.in("status", BOOKING_STATUS_BUCKETS.draft);
   } else if (p.tab === "in-progress") {
-    b = b.eq("status", "In Progress");
+    b = b.not("status", "in", NOT_IN_PROGRESS_LIST);
   } else if (p.tab === "completed") {
-    b = b.eq("status", "Completed");
+    b = b.in("status", BOOKING_STATUS_BUCKETS.completed);
   } else if (p.tab === "cancelled") {
-    b = b.in("status", ARCHIVED_STATUSES);
+    b = b.in("status", BOOKING_STATUS_BUCKETS.archived);
   }
 
   // Status dropdown
@@ -218,10 +220,10 @@ export function useBookingTabCounts(params: {
         currentUserName
           ? scoped().or(`manager_name.eq.${q(currentUserName)},handler_name.eq.${q(currentUserName)}`)
           : scoped().eq("id", "__none__"),
-        scoped().eq("status", "Draft"),
-        scoped().eq("status", "In Progress"),
-        scoped().eq("status", "Completed"),
-        scoped().in("status", ARCHIVED_STATUSES),
+        scoped().in("status", BOOKING_STATUS_BUCKETS.draft),
+        scoped().not("status", "in", NOT_IN_PROGRESS_LIST),
+        scoped().in("status", BOOKING_STATUS_BUCKETS.completed),
+        scoped().in("status", BOOKING_STATUS_BUCKETS.archived),
       ]);
       return {
         all: all.count ?? 0,

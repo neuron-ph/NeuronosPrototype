@@ -232,6 +232,56 @@ async function cloneAuthUsers() {
   console.log(`  created ${created}, skipped ${skipped} (already in dev)`);
 }
 
+/**
+ * Re-point public.users.auth_id at the auth row that actually exists in dev.
+ *
+ * cloneAuthUsers skips any prod user whose EMAIL is already present in dev, to
+ * avoid clobbering pre-existing dev logins. But public.users is copied verbatim
+ * from prod, so it arrives carrying prod's auth_id. When dev already had an
+ * account for that email under a different id, the profile ends up pointing at
+ * an auth row that does not exist here.
+ *
+ * That failure is silent and total: get_my_profile_id() resolves auth.uid() via
+ * users.auth_id, so it returns NULL, the RLS policy on permission_overrides
+ * denies the read, PermissionProvider receives {} and every can() returns false.
+ * The user signs in fine and then sees an app with no permissions at all and no
+ * error explaining why. bd@neuron.com.ph was in exactly this state.
+ */
+async function relinkAuthIds() {
+  console.log('\nRelinking public.users.auth_id to dev auth rows...');
+
+  const { data: authList, error: aErr } = await dev.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  if (aErr) { console.error(`  listUsers failed: ${aErr.message}`); return; }
+  const authIdByEmail = new Map(
+    authList.users.filter(u => u.email).map(u => [u.email.toLowerCase(), u.id])
+  );
+  const authIds = new Set(authList.users.map(u => u.id));
+
+  const { data: profiles, error: pErr } = await dev.from('users').select('id,email,auth_id');
+  if (pErr) { console.error(`  users read failed: ${pErr.message}`); return; }
+
+  let relinked = 0;
+  const orphans = [];
+  for (const p of profiles) {
+    const wanted = p.email ? authIdByEmail.get(p.email.toLowerCase()) : undefined;
+    if (wanted && p.auth_id !== wanted) {
+      const { error } = await dev.from('users').update({ auth_id: wanted }).eq('id', p.id);
+      if (error) { console.error(`  failed ${p.email}: ${error.message}`); continue; }
+      console.log(`    ${p.email}`);
+      relinked += 1;
+    } else if (!wanted && (!p.auth_id || !authIds.has(p.auth_id))) {
+      orphans.push(p.email || p.id);
+    }
+  }
+  console.log(`  relinked ${relinked}`);
+
+  if (orphans.length) {
+    console.log(`  WARNING: ${orphans.length} profile(s) have no matching auth row.`);
+    console.log('  They cannot sign in, and if they could they would have NO permissions:');
+    for (const e of orphans) console.log(`    ${e}`);
+  }
+}
+
 async function resetSequences(tables) {
   console.log('\nResetting sequences...');
   for (const t of tables) {
@@ -375,6 +425,7 @@ async function main() {
 
   await cloneAuthUsers();
   await restoreSelf(snapshot);
+  await relinkAuthIds();
   await resetSequences(order);
 
   if (!NO_STORAGE) await syncStorage();

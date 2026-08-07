@@ -14,6 +14,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../utils/supabase/client";
 import { queryKeys } from "../../lib/queryKeys";
 import { toast } from "../ui/toast-utils";
+import { openAttachment } from "../../utils/attachmentUrl";
 
 interface EntityAttachmentsTabProps {
   entityId: string;
@@ -105,16 +106,15 @@ export function EntityAttachmentsTab({ entityId, entityType, currentUser, canUpl
 
           if (uploadError) throw new Error(`Failed to upload ${file.name}`);
 
-          const { data: urlData } = supabase.storage.from('attachments').getPublicUrl(filePath);
-
-          // Save attachment record
+          // Save attachment record. M1: file_url holds the storage path now, not
+          // a public URL — the bucket is private and readers sign at click time.
           await supabase.from(table).insert({
             id: crypto.randomUUID(),
             [fkColumn]: entityId,
             file_name: file.name,
             file_size: file.size,
             file_type: file.type,
-            file_url: urlData.publicUrl,
+            file_url: filePath,
             uploaded_by_name: currentUser.name,
           });
         } catch (error) {
@@ -163,13 +163,8 @@ export function EntityAttachmentsTab({ entityId, entityType, currentUser, canUpl
   // Handle file download
   const handleDownload = async (attachment: Attachment) => {
     try {
-      const link = document.createElement('a');
-      link.href = attachment.file_url;
-      link.download = attachment.file_name;
-      link.target = '_blank';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const opened = await openAttachment(attachment.file_url, attachment.file_name);
+      if (!opened) toast.error("Failed to download file");
     } catch (error) {
       console.error("Error downloading file:", error);
       toast.error("Failed to download file");

@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../utils/supabase/client';
 import { useUser } from '../hooks/useUser';
@@ -23,18 +23,25 @@ interface PermissionContextType {
    */
   hasExplicitGrant: (moduleId: ModuleId, action: ActionId) => boolean;
   isLoaded: boolean;
+  /**
+   * True when the permission_overrides row could not be READ, as opposed to the
+   * user genuinely holding no grants. Both look like an empty grant set to
+   * can(), so callers that want to explain themselves must ask for this.
+   */
+  grantsUnreadable: boolean;
 }
 
 const PermissionContext = createContext<PermissionContextType>({
   can: () => false,
   hasExplicitGrant: () => false,
   isLoaded: false,
+  grantsUnreadable: false,
 });
 
 export function PermissionProvider({ children }: { children: ReactNode }) {
   const { user } = useUser();
 
-  const { data, isLoading } = useQuery<{ moduleGrants: ModuleGrants }>({
+  const { data, isLoading } = useQuery<{ moduleGrants: ModuleGrants; unreadable: boolean }>({
     queryKey: ['permission_profile_grants', user?.id ?? ''],
     enabled: !!user,
     // Permission edits are admin-driven and rare, but an open session caches
@@ -44,7 +51,7 @@ export function PermissionProvider({ children }: { children: ReactNode }) {
     staleTime: 60 * 1000,
     refetchOnWindowFocus: true,
     queryFn: async () => {
-      if (!user) return { moduleGrants: {} };
+      if (!user) return { moduleGrants: {}, unreadable: false };
 
       // The user's flat matrix is the sole source of truth (permission_overrides).
       // RLS (overrides_select) lets a user read its own row. No profile, no merge.
@@ -54,12 +61,32 @@ export function PermissionProvider({ children }: { children: ReactNode }) {
         .eq('user_id', user.id)
         .maybeSingle();
       if (oErr) console.warn('[PermissionProvider] matrix fetch failed:', oErr.message);
+
+      // A signed-in user ALWAYS has an overrides row — applying an access
+      // profile materialises one. Getting no row back therefore does not mean
+      // "no permissions", it means the row could not be read: the RLS policy
+      // resolves auth.uid() -> users.auth_id -> user_id, so a broken auth_id
+      // link returns nothing and every can() then answers false. That is
+      // indistinguishable from a genuinely empty grant set unless we say so —
+      // and it is exactly how bd@neuron.com.ph came to sign in, see a
+      // dashboard, and be blocked from all 7 of its granted routes in silence.
+      const unreadable = !oErr && ovr === null;
       const moduleGrants = ((ovr as { module_grants: ModuleGrants | null } | null)?.module_grants ?? {}) as ModuleGrants;
-      return { moduleGrants };
+      return { moduleGrants, unreadable };
     },
   });
 
   const moduleGrants = data?.moduleGrants ?? {};
+  const grantsUnreadable = data?.unreadable ?? false;
+
+  useEffect(() => {
+    if (!grantsUnreadable || !user) return;
+    console.error(
+      `[PermissionProvider] no permission_overrides row readable for "${user.id}". ` +
+        `Every permission check will fail. Usually a users.auth_id that does not ` +
+        `match the signed-in auth account.`,
+    );
+  }, [grantsUnreadable, user]);
 
   const can = useMemo(() => {
     return (moduleId: ModuleId, action: ActionId): boolean =>
@@ -67,8 +94,8 @@ export function PermissionProvider({ children }: { children: ReactNode }) {
   }, [moduleGrants]);
 
   const value = useMemo<PermissionContextType>(
-    () => ({ can, hasExplicitGrant: can, isLoaded: !isLoading }),
-    [can, isLoading],
+    () => ({ can, hasExplicitGrant: can, isLoaded: !isLoading, grantsUnreadable }),
+    [can, isLoading, grantsUnreadable],
   );
 
   return (

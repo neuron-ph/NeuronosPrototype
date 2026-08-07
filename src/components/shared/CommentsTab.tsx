@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../utils/supabase/client";
 import { toast } from "sonner@2.0.3";
 import { recordNotificationEvent, type NotifModule, type NotifSubSection, type NotifEntityType } from "../../utils/notifications";
+import { useAttachmentUrls } from "../../hooks/useAttachmentUrl";
 
 // Map a comment's entity_type to its sidebar module + sub_section
 function entityTarget(entityType: string): { module: NotifModule; sub: NotifSubSection; entity: NotifEntityType } | null {
@@ -92,6 +93,13 @@ export function CommentsTab({
     staleTime: 30_000,
   });
 
+  // M1: the attachments bucket is private, so every stored value has to be
+  // signed before it can be rendered. Handles both shapes — the storage paths
+  // written now, and the full public URLs on older comments.
+  const attachmentUrls = useAttachmentUrls(
+    comments.flatMap((c) => (c.attachments ?? []).map((f) => f.file_url)),
+  );
+
   // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
@@ -126,10 +134,10 @@ export function CommentsTab({
             throw new Error(`Failed to upload ${file.name}`);
           }
 
-          const { data: urlData } = supabase.storage.from('attachments').getPublicUrl(filePath);
           uploadedAttachments.push({
             file_name: file.name,
-            file_url: urlData.publicUrl,
+            // M1: storage path, not a public URL — the bucket is private.
+            file_url: filePath,
             file_type: file.type,
             file_size: file.size,
           });
@@ -342,13 +350,13 @@ export function CommentsTab({
                           // Image Preview
                           <a
                             key={idx}
-                            href={file.file_url}
+                            href={attachmentUrls[file.file_url]}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="block w-fit max-w-md rounded-lg overflow-hidden border border-[var(--theme-border-default)] hover:border-[var(--theme-action-primary-bg)] transition-colors group"
                           >
                             <img
-                              src={file.file_url}
+                              src={attachmentUrls[file.file_url]}
                               alt={file.file_name}
                               className="max-w-full h-auto max-h-80 object-contain bg-[var(--theme-bg-page)]"
                             />
@@ -367,7 +375,7 @@ export function CommentsTab({
                           // Non-image File
                           <a
                             key={idx}
-                            href={file.file_url}
+                            href={attachmentUrls[file.file_url]}
                             download={file.file_name}
                             target="_blank"
                             rel="noopener noreferrer"

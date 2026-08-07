@@ -22,6 +22,7 @@ import {
 import { resolveExchangeRate } from "../../utils/exchangeRates";
 import { TRANSACTION_TYPE_OPTIONS, evoucherTypeLabel } from "../../utils/evoucherTransactionType";
 import { uploadCrmAttachments, formatAttachmentSize, type CrmAttachment } from "../../utils/crmAttachments";
+import { useAttachmentUrls } from "../../hooks/useAttachmentUrl";
 import { useCurrencies } from "../../hooks/useCurrencies";
 import { useNetworkPartners } from "../../hooks/useNetworkPartners";
 
@@ -163,6 +164,9 @@ export function AddRequestForPaymentPanel({
   const [notes, setNotes] = useState("");
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [existingAttachments, setExistingAttachments] = useState<CrmAttachment[]>([]);
+  // M1: attachment `url` holds a storage path (or a legacy public URL on older
+  // rows). The bucket is private — sign both before rendering a link.
+  const attachmentUrls = useAttachmentUrls(existingAttachments.map((a) => a.url));
   const [isUploading, setIsUploading] = useState(false);
 
   // Multi-currency. Defaults to PHP; user picks USD when needed and either
@@ -1662,7 +1666,7 @@ export function AddRequestForPaymentPanel({
                   {existingAttachments.map((att, idx) => (
                     <a
                       key={`existing-${idx}`}
-                      href={att.url}
+                      href={att.url ? attachmentUrls[att.url] : undefined}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{

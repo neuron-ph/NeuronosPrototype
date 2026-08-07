@@ -12,7 +12,6 @@ import {
   UserCheck, UserX, UserMinus, Pencil, Shield,
   ChevronDown, ChevronUp, Activity,
 } from "lucide-react";
-import { Switch } from "../ui/switch";
 import { CustomDropdown } from "../bd/CustomDropdown";
 import { NeuronModal } from "../ui/NeuronModal";
 
@@ -221,7 +220,7 @@ export function UserDetailPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("users")
-        .select("id, email, name, department, role, service_type, is_active, status, avatar_url, created_at, phone, last_seen_at, ev_approval_authority, position")
+        .select("id, email, name, department, role, service_type, is_active, status, avatar_url, created_at, phone, last_seen_at, position")
         .eq("id", userId!)
         .maybeSingle();
       if (error) throw error;
@@ -355,23 +354,6 @@ export function UserDetailPage() {
     }
   };
 
-  const handleEvAuthorityToggle = async (value: boolean) => {
-    if (!user) return;
-    queryClient.setQueryData(["users", "detail", userId], (old: any) =>
-      old ? { ...old, ev_approval_authority: value } : old
-    );
-    const { error } = await supabase
-      .from("users")
-      .update({ ev_approval_authority: value })
-      .eq("id", user.id);
-    if (error) {
-      toast.error("Failed to update approval authority");
-      queryClient.invalidateQueries({ queryKey: ["users", "detail", userId] });
-    } else {
-      toast.success(value ? "Approval authority granted" : "Approval authority removed");
-    }
-  };
-
   const handleResetPassword = async () => {
     if (!newPw.trim()) { toast.error("Enter a new password"); return; }
     if (newPw.length < 8) { toast.error("Password must be at least 8 characters"); return; }
@@ -441,7 +423,6 @@ export function UserDetailPage() {
   const teamName = teamNames.join(", ");
   const phone: string | null     = (user as any).phone ?? null;
   const lastSeenAt               = (user as any).last_seen_at ?? null;
-  const evAuthority: boolean     = (user as any).ev_approval_authority ?? false;
   const position: string | null  = (user as any).position ?? null;
   const lastSeen                 = formatLastSeen(lastSeenAt);
   const deptTokens               = getDeptTokens(user.department);
@@ -712,15 +693,6 @@ export function UserDetailPage() {
                     );
                   })}
                 </div>
-              </div>
-
-              {/* EV Approval Authority */}
-              <div style={{ marginBottom: 20, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-                <div>
-                  <p style={{ fontSize: 13, fontWeight: 500, color: "var(--neuron-ink-primary)", margin: "0 0 2px" }}>E-Voucher Approval</p>
-                  <p style={{ fontSize: 12, color: "var(--neuron-ink-muted)", margin: 0 }}>Can approve and post e-vouchers</p>
-                </div>
-                <Switch checked={evAuthority} onCheckedChange={handleEvAuthorityToggle} disabled={!canEditUsers} />
               </div>
 
               {/* Reset Password */}

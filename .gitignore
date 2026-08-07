@@ -69,3 +69,14 @@ mc-invoice-builder-items.png
 /Forwarding-Field-Guide-for-Raph.*
 /Freight-Forwarding-Field-Guide.*
 /*.pdf
+
+# QA artifacts derived from the dev database, not from source. Regenerate with
+# scripts/inventory-personas.mjs / scripts/prune-dead-grants.mjs. Kept out of git
+# because they carry real employee emails and their full permission maps.
+/docs/qa/personas.json
+/docs/qa/grant-prune-*.json
+/docs/qa/smoke-run.log
+
+# Playwright artifacts from the Main spine (attack A5)
+test-results/
+.playwright-mcp/

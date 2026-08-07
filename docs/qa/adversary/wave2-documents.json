@@ -1,0 +1,181 @@
+{
+  "pass": "wave-2",
+  "question": "When a number becomes a PDF and leaves the building, is it still right — and is it still what the database holds?",
+  "date": "2026-08-05",
+  "environment": "dev (oqermaidggvanahumjmj)",
+  "method": "Read every document resolver and both renderers, then measured each claim against live dev rows. No finding here is inferred from code alone.",
+
+  "surfaces_examined": [
+    "src/utils/documents/invoiceDocumentResolver.ts",
+    "src/utils/documents/quotationDocumentResolver.ts",
+    "src/utils/documents/printableDocumentNormalize.ts",
+    "src/utils/documents/documentSettings.ts",
+    "src/utils/documentDesign.ts",
+    "src/components/documents/PrintableDocumentPdf.tsx",
+    "src/components/documents/PrintableDocumentHtml.tsx",
+    "src/components/projects/invoices/InvoicePDFRenderer.tsx",
+    "src/components/projects/invoices/InvoiceDocument.tsx",
+    "src/components/pricing/QuotationPDFRenderer.tsx",
+    "src/components/projects/invoices/screen/InvoicePDFScreen.tsx",
+    "src/components/projects/quotation/screen/QuotationPDFScreen.tsx",
+    "src/components/hr/PayrollPayslipsModal.tsx",
+    "src/components/accounting/reports/ReportsModule.tsx",
+    "src/components/ExpenseFileView.tsx"
+  ],
+
+  "what_works": [
+    "One resolver per document type produces a normalized PrintableDocument; both renderers consume the same model, so preview and download stay in step on structure, grouping and subtotals.",
+    "Display toggles show_bank_details / show_notes / show_tax_summary / show_signatories / show_contact_footer are all honoured (normalize applies four, both renderers gate on showContactFooter).",
+    "Empty-field, empty-section, empty-column and empty-table suppression all behave as documented, including the 0-and-false-are-printable rule.",
+    "Print CSS is present and correct on InvoicePDFScreen, QuotationPDFScreen, ExpenseFileView and PrintableDocumentHtml.",
+    "downloadInvoicePDF and printInvoicePDF share one blob, so the printed page is byte-identical to the downloaded file."
+  ],
+
+  "findings": [
+    {
+      "id": "Q1",
+      "severity": "HIGH",
+      "title": "Company Settings does not control the documents",
+      "cause": "applyBrandedDesign() runs after the resolver has normalized the document and unconditionally replaces contactFooter with the hardcoded BRANDED_CONTACT_FOOTER. getDocumentDesign() returns 'branded' unconditionally when import.meta.env.PROD.",
+      "file": "src/utils/documentDesign.ts:57-80",
+      "measured": {
+        "company_settings_dev": {
+          "company_name": "Neuron Logistics Inc.",
+          "address": "Unit 301, Great Wall Bldg., 136 Yakal St., San Antonio Village, Makati City",
+          "phones": ["+63 (2) 5310 4083", "+63 (2) 7004 7583", "+63 935 981 6652"],
+          "email": "inquiries@neuron-os.com"
+        },
+        "hardcoded_in_pdf": {
+          "address": "Suite 400, 4/F Ermita Center Building, 1350 Roxas Boulevard, Ermita, Manila",
+          "phones": ["+63 (2) 8283 8046", "+63 (2) 7000 1665", "+63 920 2821730"],
+          "email": "inquiry@falconslogistics-ph.com"
+        },
+        "quotations_with_contact_footer_override_discarded": 96,
+        "quotations_total": 315
+      },
+      "fair_reading": "The hardcoded values are almost certainly correct for A Plus Falcons. The defect is not the address — it is that the branding is compiled in, the Settings page that appears to control it is decorative, and 96 saved per-document overrides are silently discarded.",
+      "not_a_bug": "The show_contact_footer toggle itself works correctly in both renderers."
+    },
+    {
+      "id": "Q2",
+      "severity": "CRITICAL",
+      "title": "An invoice can print a six-figure TOTAL DUE with no line items and a zero subtotal",
+      "cause": "buildTotals() sources subtotal from the header and grandTotal from total_amount independently; the line table renders separately. No invariant relates them.",
+      "file": "src/utils/documents/invoiceDocumentResolver.ts:203-257",
+      "measured": {
+        "affected_invoices": [
+          {"invoice_number": "SIM-INV01", "status": "Issued", "lines": 0, "subtotal": 0.0, "total_amount": 120000.0},
+          {"invoice_number": "SIM-INV02", "status": "Issued", "lines": 0, "subtotal": 0.0, "total_amount": 95000.0},
+          {"invoice_number": "SIM-INV03", "status": "Issued", "lines": 0, "subtotal": 0.0, "total_amount": 60000.0},
+          {"invoice_number": "SIM-INV04", "status": "Issued", "lines": 0, "subtotal": 0.0, "total_amount": 210000.0}
+        ],
+        "total_exposure_php": 485000.0,
+        "rendered_output": "table: 'No items on this invoice.' / Subtotal ₱0.00 / TOTAL DUE ₱120,000.00"
+      },
+      "links_to": "P2 — the same four Issued invoices that are invisible in every report."
+    },
+    {
+      "id": "Q3",
+      "severity": "HIGH",
+      "title": "A printed invoice bills for a billing line that no longer exists",
+      "cause": "The invoice snapshots line items into metadata.line_items and is never reconciled against billing_line_items. A snapshotted line was deleted underneath it.",
+      "measured": {
+        "invoice_number": "INV-MQ4ONUIU",
+        "status": "draft",
+        "snapshot_lines": 2,
+        "snapshot_sum_php": 28000.0,
+        "billing_item_ids_on_header": 2,
+        "rows_present_in_billing_line_items": 1,
+        "db_sum_php": 14000.0,
+        "missing_id": "53361015-eee6-49c0-8a07-e6abf3cba5c3",
+        "missing_description": "EV-2026-0072 - PORT CHARGES",
+        "missing_amount_php": 14000.0
+      },
+      "mitigation_already_shipped": "Migration 275 adds ON DELETE RESTRICT and a delete policy refusing invoiced lines, so this cannot recur. It does not detect the existing divergence, and no code path compares a snapshot to its source.",
+      "links_to": "M2, L2 — delete orphaning, now visible on a customer-facing document."
+    },
+    {
+      "id": "Q4",
+      "severity": "HIGH",
+      "title": "The invoice resolver reads eleven columns that do not exist on invoices",
+      "cause": "Fields are read off the Invoice object that have no backing column; they survive only via the metadata.zone_a mirror.",
+      "file": "src/utils/documents/invoiceDocumentResolver.ts",
+      "nonexistent_columns_read": ["line_items", "credit_terms", "customer_address", "customer_tin", "bl_number", "consignee", "commodity_description", "booking_number", "service_type", "created_by_name", "amount"],
+      "measured": {
+        "invoices_total": 15,
+        "booking_no_prints_blank": 7,
+        "invoices_with_a_real_booking_id": 15,
+        "service_label_resolvable": 0,
+        "service_label_actually_printed": "Service Charge (VAT) — NEU-058 grouped subtotals never show the real service",
+        "invoices_payment_terms_column_populated": 11,
+        "metadata_payment_terms_populated": 0,
+        "invoices_with_no_zone_a_at_all": 4
+      },
+      "latent": "Terms only prints because zone_a.credit_terms duplicates invoices.payment_terms. Any edit path that does not rewrite zone_a leaves the document printing stale terms."
+    },
+    {
+      "id": "Q5",
+      "severity": "WATCH",
+      "title": "show_letterhead is dead plumbing",
+      "cause": "Threaded through 8 files, typed in 3 interfaces, persisted to details.pdf_show_letterhead, copied into options.showLetterhead by both resolvers — read by neither renderer, applied by neither normalizePrintableDocument nor applyBrandedDesign, and present in no UI toggle list.",
+      "measured": {"quotations_with_letterhead_off": 0, "live_impact": "none"}
+    },
+    {
+      "id": "Q6",
+      "severity": "WATCH",
+      "title": "Preview and PDF are not quite the same document",
+      "measured": {
+        "pageFooterText": "rendered by PrintableDocumentPdf, never by PrintableDocumentHtml",
+        "model_fields_read_by_neither_renderer": ["kind", "reference", "footerFields"]
+      }
+    },
+    {
+      "id": "Q7",
+      "severity": "HIGH",
+      "title": "The payslip is a mockup that prints",
+      "file": "src/components/hr/PayrollPayslipsModal.tsx",
+      "measured": {
+        "supabase_calls_in_file": 0,
+        "payroll_payslip_salary_compensation_tables_in_schema": 0,
+        "mock_employees": 6,
+        "mock_companies": 3,
+        "reachable_from": "src/components/HR.tsx:695",
+        "print_button": "window.print() — a payslip for a person who does not work here can be put on paper",
+        "download_excel_button": "toast.success('Downloading Excel...') and downloads nothing",
+        "sibling_fake_button": "src/components/HR.tsx:369 — toast.success('Exporting...'), also does nothing"
+      }
+    },
+    {
+      "id": "Q8",
+      "severity": "MEDIUM",
+      "title": "window.print() with no print stylesheet",
+      "measured": {
+        "files_calling_window_print_without_print_css": ["src/components/accounting/reports/ReportsModule.tsx:153", "src/components/hr/PayrollPayslipsModal.tsx:521"],
+        "media_print_rules_in_those_files": 0,
+        "print_hidden_or_no_print_classes_in_those_files": 0,
+        "global_print_css_available": ".print\\:block only",
+        "files_that_get_it_right": ["InvoicePDFScreen", "QuotationPDFScreen", "ExpenseFileView", "PrintableDocumentHtml", "QuotationPrintView"]
+      },
+      "links_to": "P1, P2, P3, P6 — the reports being printed here are the ones Wave 1 showed are wrong. The print button is how a wrong number becomes a filed document."
+    },
+    {
+      "id": "Q9",
+      "severity": "LOW today",
+      "title": "The quotation FX conversion is skipped whenever an amount is stored",
+      "cause": "effectiveItemAmount() returns item.amount unmodified when it is non-zero, and applies forex_rate only on the fallback branch — so converted and original come out identical for any line carrying a stored amount.",
+      "file": "src/utils/documents/quotationDocumentResolver.ts:86-92",
+      "measured": {"quotations_non_php": 0, "quotations_total": 315, "exchange_rates_rows": 1, "live_impact": "none"},
+      "links_to": "P8 — the same shape on the invoice side."
+    }
+  ],
+
+  "verdict": "The document engine is the best-built subsystem QA has examined. Nothing here is a rendering bug. Every failure is at a seam: overwritten after normalization (Q1), an invariant nobody asserts (Q2), a snapshot nobody reconciles (Q3), a resolver reading names the table does not have (Q4), plumbing that goes nowhere (Q5, Q6), and a surface never wired up at all (Q7).",
+
+  "recommended_order": [
+    "Q2 — a guard clause; refuse to render a total that its own lines do not support",
+    "Q3 — reconcile snapshot against billing_line_items, and warn on divergence",
+    "Q4 — mechanical, once someone decides whether zone_a or the columns are authoritative",
+    "Q1 — needs a product call: should Company Settings drive the documents, or stop pretending to?",
+    "Q7 — hide behind a flag until payroll exists"
+  ]
+}

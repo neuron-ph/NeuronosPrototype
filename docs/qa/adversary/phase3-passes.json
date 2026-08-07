@@ -1,0 +1,481 @@
+{
+  "deletes": {
+    "probes": [
+      {
+        "name": "1a Owner deletes own e-voucher — draft",
+        "actor": "hrmanager@falconslogistics-ph.com (HR manager, staff-tier delete surface: only my_evouchers:delete + calendar:delete)",
+        "attempt": "DELETE FROM evouchers WHERE id = <own draft voucher, PHP7,500, 1 line item, booking-linked>",
+        "verdict": "BREACH",
+        "evidence": "Service-role SELECT after the call returns no row. The voucher is gone. evouchers_delete USING = (acct_evouchers:delete OR (created_by = me AND my_evouchers:delete)) AND current_user_can_view_record('evouchers', created_by) — there is NO status predicate anywhere in the policy, and pg_trigger shows no BEFORE DELETE trigger on evouchers (the three guards present are all tgtype 19 = BEFORE UPDATE ROW).",
+        "severity": "medium"
+      },
+      {
+        "name": "1b Owner deletes own e-voucher — pending_manager",
+        "actor": "hrmanager@falconslogistics-ph.com",
+        "attempt": "DELETE FROM evouchers WHERE id = <own voucher already routed to an approver>",
+        "verdict": "BREACH",
+        "evidence": "Row gone under service-role eyes. A voucher sitting in someone's approval queue is destroyed by the requestor mid-flight; the approver's inbox item silently evaporates.",
+        "severity": "high"
+      },
+      {
+        "name": "1c Owner deletes own e-voucher — pending_accounting",
+        "actor": "hrmanager@falconslogistics-ph.com",
+        "attempt": "DELETE FROM evouchers WHERE id = <own voucher awaiting Treasury>",
+        "verdict": "BREACH",
+        "evidence": "Row gone under service-role eyes.",
+        "severity": "high"
+      },
+      {
+        "name": "1d Owner deletes own e-voucher — DISBURSED",
+        "actor": "hrmanager@falconslogistics-ph.com",
+        "attempt": "DELETE FROM evouchers WHERE id = <own voucher in status 'disbursed'>",
+        "verdict": "BREACH",
+        "evidence": "Row gone under service-role eyes. Migration 270 froze the status COLUMN behind a transition matrix so nobody can walk a voucher backwards — but DELETE is not a transition. The requestor cannot un-disburse her own cash advance; she can erase the record that the cash left the building. Confirmed a second time in the collateral pass with a 3-line disbursed voucher.",
+        "severity": "critical"
+      },
+      {
+        "name": "1e Accounting deletes another user's e-voucher — all four stages (draft, pending_manager, pending_accounting, disbursed)",
+        "actor": "treasury@falconslogistics-ph.com (Accounting manager, acct_evouchers:delete + :approve + :disburse)",
+        "attempt": "DELETE FROM evouchers WHERE id = <voucher created_by the Ops TL> — repeated once per stage",
+        "verdict": "BREACH",
+        "evidence": "All four rows gone under service-role eyes; four separate probes, four breaches. The acct_evouchers:delete branch is likewise unconditioned on status. Collateral pass: a disbursed voucher with 3 evoucher_line_items went from 3 lines to 0 (evoucher_line_items_evoucher_id_fkey is ON DELETE CASCADE — the lines are DESTROYED, not orphaned), and a billing_line_item that pointed at it had its evoucher_id silently set to NULL.",
+        "severity": "critical"
+      },
+      {
+        "name": "1f Non-grant-holder deletes e-vouchers (implicit control)",
+        "actor": "jr.supervisor07@falconslogistics-ph.com (Ops TL — the spine's actual requestor; holds NO my_evouchers:delete)",
+        "attempt": "not run as a probe — her vouchers were the targets of 1e",
+        "verdict": "UNANSWERABLE",
+        "evidence": "Recorded as unmeasured rather than passed. See `unmeasured`: the roster's real requestor persona has no delete grant at all, so the owner-branch had to be probed through hrmanager@ instead.",
+        "severity": "none"
+      },
+      {
+        "name": "2a Delete a billing line that is already INVOICED",
+        "actor": "treasury@falconslogistics-ph.com (billings delete via accounting_financials_billings_tab:delete etc., billings dial org_wide)",
+        "attempt": "DELETE FROM billing_line_items WHERE id = <status 'invoiced', invoice_id set, PHP25,000, catalog-linked>",
+        "verdict": "BREACH",
+        "evidence": "Row gone under service-role eyes. billing_line_items_delete USING = current_user_can_billings('delete') AND current_user_can_view_record('billings', NULL) — no status check, no invoice_id check. The UI calls invoiced lines immutable; the database does not. The invoice header total is left unchanged, so the invoice now claims PHP25,000 against lines that no longer sum to it.",
+        "severity": "critical"
+      },
+      {
+        "name": "2b Delete an invoiced billing line — Ops TL",
+        "actor": "jr.supervisor07@falconslogistics-ph.com (holds ops_forwarding_billings_tab:delete, billings dial = 'team')",
+        "attempt": "DELETE FROM billing_line_items WHERE id = <status 'invoiced'>",
+        "verdict": "BLOCKED_SILENT",
+        "evidence": "No error raised; service-role confirms the row is still present and unchanged. Blocked by the E15 NULL-owner half of the policy (current_user_can_view_record('billings', NULL)), not by any invoiced-state rule. Note the failure mode: PostgREST returned success, so a client that does not check the affected count would tell her 'Deleted'.",
+        "severity": "low"
+      },
+      {
+        "name": "2c Delete an invoiced billing line — low-privilege control",
+        "actor": "hrmanager@falconslogistics-ph.com",
+        "attempt": "DELETE FROM billing_line_items WHERE id = <status 'invoiced'>",
+        "verdict": "BLOCKED_SILENT",
+        "evidence": "Row still present under service-role eyes, no error. Positive control that the harness distinguishes actors: the same call as a grant-holder (2a) landed.",
+        "severity": "none"
+      },
+      {
+        "name": "3a Delete an invoice that has a collection applied",
+        "actor": "inquiry@falconslogistics-ph.com (Executive dept, near-total delete grants incl. every ops_*_invoices_tab:delete)",
+        "attempt": "DELETE FROM invoices WHERE id = <status 'posted', approval_status 'approved', PHP25,000, one posted PHP25,000 collection against it>",
+        "verdict": "BREACH",
+        "evidence": "Row gone under service-role eyes. Collateral pass measured the wreckage directly: the collection's invoice_id went from the invoice id to NULL while its status stayed 'posted' and posted stayed true; the billing line's invoice_id went to NULL while its status stayed the string 'invoiced'. invoices_delete USING = current_user_can_invoices('delete') AND current_user_can_view_record('invoices', created_by) — nothing consults collections, posting state or approval_status.",
+        "severity": "critical"
+      },
+      {
+        "name": "3b Delete an invoice with a collection — Ops TL",
+        "actor": "jr.supervisor07@falconslogistics-ph.com",
+        "attempt": "DELETE FROM invoices WHERE id = <posted invoice with collection>",
+        "verdict": "BLOCKED_SILENT",
+        "evidence": "Row still present under service-role eyes, no error. Her invoices dial is 'team' and the invoice was created_by Treasury, so current_user_can_view_record filtered it out — a visibility accident, not an integrity rule.",
+        "severity": "low"
+      },
+      {
+        "name": "3c Delete an invoice with a collection — low-privilege control",
+        "actor": "hrmanager@falconslogistics-ph.com",
+        "attempt": "DELETE FROM invoices WHERE id = <posted invoice with collection>",
+        "verdict": "BLOCKED_SILENT",
+        "evidence": "Row still present under service-role eyes, no error.",
+        "severity": "none"
+      },
+      {
+        "name": "4 THE KEY PROBE — delete a booking carrying billing lines, e-vouchers, invoices and collections",
+        "actor": "jr.supervisor07@falconslogistics-ph.com (Ops TL, ops_forwarding:delete, bookings_forwarding dial = 'everything')",
+        "attempt": "DELETE FROM bookings WHERE id = <Forwarding booking, project-linked, customer-linked, carrying the full money graph>",
+        "verdict": "BREACH",
+        "evidence": "Row gone under service-role eyes. Census immediately before vs immediately after, measured with the service role over rows tagged E2E-DELETE: billing_line_items 5 total / 0 with NULL booking_id  ->  5 total / 4 with NULL booking_id; invoices 2 total / 0 NULL  ->  2 total / 2 NULL; collections 3 total / 0 NULL  ->  3 total / 3 NULL. NINE MONEY ROWS ORPHANED BY ONE CLICK (4 billing lines + 2 invoices + 3 collections). Not one row was deleted and not one error was raised. This is L2 realized: every money-graph FK is ON DELETE SET NULL, so the booking vanishes and its revenue, its receivables and its cash receipts survive as untenanted money with no booking, and therefore no customer and no project, to attach them to.",
+        "severity": "critical"
+      },
+      {
+        "name": "4b Delete a booking with money on it — low-privilege control",
+        "actor": "hrmanager@falconslogistics-ph.com",
+        "attempt": "DELETE FROM bookings WHERE id = <second Forwarding booking carrying a billing line and an e-voucher>",
+        "verdict": "BLOCKED_SILENT",
+        "evidence": "Booking still present under service-role eyes, no error; the follow-up census was byte-identical to the previous one (5/4, 1/0, 2/2, 3/3), proving nothing moved.",
+        "severity": "none"
+      },
+      {
+        "name": "5a Delete a customer that has bookings",
+        "actor": "jr.manager03@falconslogistics-ph.com (Pricing manager, pricing_customers:delete)",
+        "attempt": "DELETE FROM customers WHERE id = <customer with 1 project, 2 bookings, 3 invoices, 3 collections, 8 e-vouchers>",
+        "verdict": "BLOCKED_LOUD",
+        "evidence": "Raised P0001: 'Cannot delete customer \"E2E-DELETE CUSTOMER A 14463936\": it still has 7 linked record(s) ...'. Service-role confirms the customer row survived. trg_guard_customer_delete FIRES and is the ONLY BEFORE DELETE guard anywhere in the money graph. Caveat on its accuracy: it counts strictly by customer_id across quotations/projects/bookings/invoices/collections/evouchers, so any child linked only by the denormalised customer_name (which L3/J3 show is the common shape on dev) is invisible to it and would not stop the delete.",
+        "severity": "none"
+      },
+      {
+        "name": "5b Delete a customer with bookings — low-privilege control",
+        "actor": "hrmanager@falconslogistics-ph.com",
+        "attempt": "DELETE FROM customers WHERE id = <second customer with a booking>",
+        "verdict": "BLOCKED_SILENT",
+        "evidence": "Customer still present under service-role eyes, no error — stopped by RLS before the trigger was ever reached, so this cell proves the grant gate, not the guard.",
+        "severity": "none"
+      },
+      {
+        "name": "6a Delete a catalog item that billing lines reference",
+        "actor": "treasury@falconslogistics-ph.com (acct_catalog:delete)",
+        "attempt": "DELETE FROM catalog_items WHERE id = <fixture item referenced by 2 billing lines and 8 e-voucher line items>",
+        "verdict": "BREACH",
+        "evidence": "Row gone under service-role eyes. catalog_items_delete USING = current_user_has_module_permission('acct_catalog','delete') — a bare grant check, no usage check, and get_catalog_usage_counts() is never consulted. Collateral pass measured the effect on a referencing line: billing_line_items.catalog_item_id went from the item id to NULL (billing_line_items_catalog_item_id_fkey is ON DELETE SET NULL). This manufactures exactly the state the catalog doctrine forbids — a billing line with catalog_item_id NULL — through a supported UI action. acct_catalog:delete is held by 8 of the 10 roster accounts I inspected, including two staff-tier users.",
+        "severity": "high"
+      },
+      {
+        "name": "6b Delete a referenced catalog item — low-privilege control",
+        "actor": "hrmanager@falconslogistics-ph.com",
+        "attempt": "DELETE FROM catalog_items WHERE id = <second fixture item referenced by a billing line>",
+        "verdict": "BLOCKED_SILENT",
+        "evidence": "Item still present under service-role eyes, no error.",
+        "severity": "none"
+      },
+      {
+        "name": "7 Low-privilege actor attempts the full set",
+        "actor": "hrmanager@falconslogistics-ph.com",
+        "attempt": "the same six deletes: e-voucher (own, 4 stages), invoiced billing line, invoice with collection, booking with money graph, customer with bookings, referenced catalog item",
+        "verdict": "BREACH",
+        "evidence": "Five of six BLOCKED_SILENT — but the sixth landed, four times over. Her entire delete surface is two keys (calendar:delete, my_evouchers:delete), and my_evouchers:delete alone was enough to destroy her own e-vouchers at every stage INCLUDING disbursed. The narrowest grant on the roster still reaches cash-out records. Note also that every one of her five denials was SILENT: no error, HTTP success, nothing changed.",
+        "severity": "critical"
+      }
+    ],
+    "breachCount": 12,
+    "cleanedUp": true,
+    "unmeasured": [
+      "The owner-branch e-voucher delete could only be probed through hrmanager@ — the spine's real requestor persona (jr.supervisor07@, Princess) holds NO my_evouchers:delete at all. So 'the requestor deletes her own disbursed voucher' is proven for a grant shape that exists on the roster, not necessarily for the person who actually raises vouchers in the spine. Whether the standard Ops requestor profile ships with my_evouchers:delete is a grant-config question I did not resolve.",
+      "E-voucher statuses beyond the four named. I probed draft, pending_manager, pending_accounting and disbursed. 'liquidated', 'completed', 'cancelled', 'rejected' and the rest of the 9 live / 26 declared values were not probed — though since the DELETE policy contains no status predicate at all, there is no mechanism by which they could differ.",
+      "Direct DELETE on evoucher_line_items. Its policy is USING (EXISTS (SELECT 1 FROM evouchers ev WHERE ev.id = evoucher_line_items.evoucher_id)) — no grant key, no ownership test, no status test. It reduces to 'can you SELECT the parent voucher'. That means anyone who can merely SEE a voucher may be able to delete its lines and silently change its amount composition. I did not probe it; I flag it as the highest-value target for the next pass.",
+      "projects_delete. Its USING clause is four VIEW grants OR'd together (bd_projects:view OR pricing_projects:view OR ops_projects:view OR acct_projects:view) AND can_view_record_v2 — the same shape as L5, but on DELETE rather than UPDATE. A view grant would confer the right to delete a project, and projects are the parent of bookings, billing lines, invoices, collections and e-vouchers via SET NULL FKs. Read from pg_policies, never probed.",
+      "Unfiltered / bulk deletes. Every probe used .eq('id', ...). I did not test DELETE with a wide or absent filter, which is where a single call could orphan hundreds of rows rather than nine.",
+      "The anon role. No delete was attempted with the publishable key and no session.",
+      "Deletes routed through SECURITY DEFINER RPCs rather than PostgREST tables. H3 catalogued twelve definer writers that check nothing; whether any of them deletes was not examined.",
+      "Cascade blast radius on booking delete beyond the money tables. booking_assignments, booking_attachments, booking_milestones and contract_bookings are all ON DELETE CASCADE from bookings, so probe 4 also destroyed those rows outright. I did not count them — the census covered only billing_line_items, evouchers, invoices and collections.",
+      "Whether the application UI ever offers these deletes. This pass measured the database only, per the adversary's standing premise. A breach here means the action is possible with a bearer token; it does not by itself mean a button exists."
+    ],
+    "notes": "HEADLINE: 20 probes, 12 breaches, and deletion is the weakest verb in the system by a wide margin. Only ONE of the six delete surfaces raised an error. trg_guard_customer_delete is the sole BEFORE DELETE guard in the entire money graph — pg_trigger confirms every other trigger on bookings, invoices, collections, billing_line_items and evouchers is BEFORE INSERT or BEFORE UPDATE. Migration 270 built a state machine for evouchers.status and DELETE walks straight past it, because DELETE is not a transition.\n\nWHAT A REAL USER LOSES, breach by breach:\n\n* Booking delete (probe 4, the key probe). One Ops team leader with ops_forwarding:delete removed a booking and orphaned NINE money rows in a single call — 4 billing lines, 2 invoices, 3 collections, all with booking_id now NULL, none deleted, no error. That job's revenue, its receivables and its recorded cash are still in the ledger but no longer belong to any customer, any project or any job. They will not appear on the customer's statement, will not reconcile to a booking, and there is no field left that says where they came from. This is finding L2 not as a schema observation but as a measured outcome, and it is the single most destructive thing I have been able to do to this database.\n\n* Disbursed e-voucher delete (probes 1d, 1e). Both branches — the owner via my_evouchers:delete and Accounting via acct_evouchers:delete — destroy a voucher whose cash has already left the building, at any status, with its evoucher_line_items CASCADE-deleted alongside it (measured: 3 lines -> 0). The AP audit trail for that disbursement ceases to exist. The requestor can do this to her own voucher. That is the shape of an expense fraud with no residue.\n\n* Invoice-with-collection delete (probe 3a). Measured collateral: the collection survived with invoice_id NULL and status still 'posted'; the billing line survived with invoice_id NULL and status still the string 'invoiced'. A customer's PHP25,000 payment is now recorded against nothing, and a revenue line still claims to be invoiced by an invoice that does not exist. AR ages forever and cannot be matched.\n\n* Invoiced billing line delete (probe 2a). Accounting removed a line already billed to a customer. The invoice header total was not recalculated, so the invoice claims a figure its lines no longer support — the customer was billed for something the system can no longer itemise.\n\n* Catalog item delete (probe 6a). A bare acct_catalog:delete with no usage check, and the SET NULL FK converts referencing billing lines to catalog_item_id NULL — the exact state the catalog doctrine declares non-negotiable, produced by a supported action. get_catalog_usage_counts() exists and the delete path never calls it.\n\nTHE HARNESS RULES, HONOURED: K1 — every verdict was read back with the service role, never from the actor's own view; a delete that returned HTTP success but left the row present is recorded BLOCKED_SILENT, not blocked-loud and not a pass. K2 — deletion has no from===to failure mode, but the analogous trap was avoided by checking each fixture row EXISTS before probing it; had it been absent the cell would have been recorded UNANSWERABLE rather than counted as a breach. K3 — all five actors were signed in up front and the run would have aborted on any failure; all five authenticated, including hrmanager@, which the recon flagged as never having signed in.\n\nSEVEN OF THE EIGHT DENIALS WERE SILENT. Only the customer guard spoke. Every other refusal returned HTTP success with zero rows affected, so any caller that does not inspect the affected count will report 'Deleted' to a user whose delete never happened — and, worse, the same code path cannot tell that outcome apart from a real one.\n\nA NOTE ON THE DENIALS THAT DID HOLD: not one of them held for the right reason. The Ops TL could not delete the invoiced billing line because of the E15 NULL-owner visibility quirk; she could not delete the invoice because its creator was outside her 'team' dial. Those are visibility accidents. Change one dial from 'team' to 'org_wide' — an ordinary admin action — and both become breaches. Nothing in the system currently says 'an invoiced line may not be deleted' or 'a settled invoice may not be deleted'; the rules live only in the forms.\n\nSAFETY AND CLEANUP: everything attacked was built by me under the E2E-DELETE tag in the dev project (oqermaidggvanahumjmj) — 2 customers, 1 project, 2 bookings, 9 e-vouchers with 9 line items, 6 billing lines, 3 invoices, 3 collections, 2 cloned catalog items, plus a smaller second fixture for the collateral pass. No pre-existing row was touched. Post-run verification with the service role across all nine tables returns zero tagged rows and zero recently-created billing lines with NULL booking_id, so no orphan I manufactured survives. Both temporary scripts (tmp-delete-probes.mjs, tmp-delete-collateral.mjs) and their results file were removed from the repo; git status is clean of them. Six collections matching 'COL%' remain in dev — I checked their ids and timestamps individually and all six predate this run. Nothing was fixed, no migration written, no policy altered.\n\nSUGGESTED PRIORITY, if this becomes work: (1) ON DELETE RESTRICT on the money-graph edges — zero existing rows affected, and it turns probe 4 from a silent nine-row orphaning into an error; (2) a status predicate on evouchers_delete, or better, no delete at all past 'draft'; (3) the same for invoices carrying collections and billing lines carrying an invoice_id; (4) a usage check on catalog_items_delete; (5) probe evoucher_line_items_delete, which on inspection has no grant check whatsoever."
+  },
+  "concurrency": {
+    "breachCount": 11,
+    "cleanedUp": true,
+    "probes": [
+      {
+        "name": "N1 invoice_number generator race",
+        "actor": "treasury algorithm (service-role insert, app algorithm verbatim)",
+        "attempt": "10 concurrent Promise.all invoice creates, each running InvoiceBuilder.tsx:812-815 verbatim — COUNT(invoice_number ILIKE '<booking>-%') then +1",
+        "verdict": "BLOCKED_LOUD",
+        "evidence": "All 10 racers computed the SAME number. 3/10 inserts landed and 7 raised 23505 on invoices_invoice_number_key (run 1: 1 landed, 9 raised). Service-role confirms 0 duplicate invoice_numbers. invoices_invoice_number_key is a real UNIQUE constraint (pg_constraint contype='u') and is the ONLY thing holding the line — the generator itself is a textbook count-then-write race. Cost is availability, not integrity: 7-9 of 10 users get an opaque duplicate-key error on Create Invoice.",
+        "severity": "medium"
+      },
+      {
+        "name": "N2 evoucher_number trigger race",
+        "actor": "service-role insert (trigger set_evoucher_number under test)",
+        "attempt": "10 concurrent evouchers INSERTs; trigger calls next_counter('evoucher_counter_2026')",
+        "verdict": "BLOCKED_SILENT",
+        "evidence": "10 numbers minted, 10 distinct, 0 duplicates, 0 errors. next_counter is INSERT INTO counters ... ON CONFLICT (key) DO UPDATE SET value = value+1 RETURNING — the ON CONFLICT path takes a row lock on counters.key so concurrent callers serialise. Sequence source IS race-safe. But pg_constraint and pg_index confirm evouchers.evoucher_number has NO unique constraint and no unique index, so the counter function is the sole defence; any writer that sets the column directly (import, script, Edge Function) mints a duplicate silently. The trigger also only regenerates when the value is NULL/empty/pseudo — a caller supplying its own number is trusted.",
+        "severity": "low"
+      },
+      {
+        "name": "N3 booking_number generator race",
+        "actor": "service-role (generate_booking_number RPC under test)",
+        "attempt": "10 concurrent generate_booking_number('Others') calls",
+        "verdict": "BLOCKED_SILENT",
+        "evidence": "10 numbers, 10 distinct, 0 duplicates. Same INSERT..ON CONFLICT DO UPDATE..RETURNING shape on counters — sequence source is race-safe. bookings also carries idx_bookings_booking_number_unique (partial UNIQUE WHERE booking_number IS NOT NULL), so a collision would raise rather than duplicate. This is the only one of the five numbers with BOTH an atomic generator and a unique index. Counter restored to its pre-probe value (0), verified by SQL.",
+        "severity": "none"
+      },
+      {
+        "name": "N4 quotation_number collision",
+        "actor": "pricingMgr fixture (trigger set_quotation_number under test)",
+        "attempt": "two quotations created the same day whose ids end in the same 4 digits",
+        "verdict": "BREACH",
+        "evidence": "Both rows minted the IDENTICAL number CQ2608043394. set_quotation_number builds prefix + to_char(created_at,'YYMMDD') + RIGHT(regexp_replace(id,'\\D','','g'),4) — no counter, no uniqueness check, and quotations.quotation_number has NO unique constraint or index. Not even a race: deterministic collision on the last 4 digits of the id. The app already believes this column is protected — Pricing.tsx:387 comments on a 'unique constraint 409' that does not exist on this table. Two quotations now share the identifier users quote to customers.",
+        "severity": "high"
+      },
+      {
+        "name": "N5 collection_number race",
+        "actor": "treasury algorithm (CollectionCreatorPanel.tsx:432 verbatim)",
+        "attempt": "10 concurrent collections, collection_number = `COL-${Date.now()}`",
+        "verdict": "BREACH",
+        "evidence": "Reproduced on both runs. Run 1: 10 rows, 3 distinct. Run 2: 10 rows, 2 distinct (9 rows sharing COL-1785814546910). 0 insert errors — collections.collection_number has no unique constraint, so every collision landed silently. The number is derived from the CLIENT clock, so two browsers with skewed clocks collide without any parallelism at all. Service-role confirms the duplicates exist as distinct collections carrying the same receipt number.",
+        "severity": "high"
+      },
+      {
+        "name": "A1 double approval, two different approvers",
+        "actor": "treasury@ + accountingoffice@ (both hold acct_evouchers:approve)",
+        "attempt": "both call evoucher_transition(voucher,'pending_accounting') on the same pending_ceo voucher inside one Promise.all",
+        "verdict": "BREACH",
+        "evidence": "2/2 RPC calls returned success. Service-role sees status=pending_accounting and TWO evoucher_history rows, one per approver (Janice D. De Villa, Carolina C. Infante). evoucher_transition SELECTs the row with no FOR UPDATE and re-checks nothing after the UPDATE takes the row lock, so under READ COMMITTED both transactions validate (from,to,actor) against the same pre-update snapshot and both are told they approved it. The row is correct; the audit trail and every client-side side effect (history row, recordNotificationEvent ping, workflow ticket) fire twice.",
+        "severity": "medium"
+      },
+      {
+        "name": "A2 same approver, two tabs, one instant",
+        "actor": "jr.manager03@ x2 independent sessions",
+        "attempt": "the routed Pricing manager double-clicks Approve — two parallel evoucher_transition(pending_manager -> pending_ceo), 25 iterations",
+        "verdict": "BREACH",
+        "evidence": "25/25 iterations: BOTH calls succeeded, every time. Fully deterministic, no flake. Status lands correctly at pending_ceo but both client paths run their post-approval work. Same root cause as A1 — no FOR UPDATE, no post-lock re-check. See A10 for what happens to the two audit rows this produces.",
+        "severity": "medium"
+      },
+      {
+        "name": "A3 double submit of one draft",
+        "actor": "jr.supervisor07@ x2 sessions",
+        "attempt": "the same requestor submits the same draft twice simultaneously (draft -> pending_manager)",
+        "verdict": "BREACH",
+        "evidence": "2/2 calls returned success, no error on either. Service-role sees status=pending_manager. Same root cause as A1. Both submit paths then run useEVoucherSubmit's follow-on work (history entries, routing resolution, approver notification), so the approver is pinged twice for one voucher.",
+        "severity": "medium"
+      },
+      {
+        "name": "A4 double collection against one invoice",
+        "actor": "treasury@ + accountingoffice@",
+        "attempt": "two parallel collections inserts, each applying the FULL 10,000 open balance to the same posted, approved invoice",
+        "verdict": "BREACH",
+        "evidence": "Both landed, no errors. Service-role sums 20,010 collected against an invoice of 10,000 — the customer ledger is now 10,000 negative. Settlement is a SUM over collections with no balance constraint anywhere in the database (this is G6). Parallelism is not required to breach it, but it removes the last remaining defence: CollectionCreatorPanel computes the open balance client-side and refuses to over-apply, and both clients read the same balance before either wrote.",
+        "severity": "high"
+      },
+      {
+        "name": "A5 TOCTOU on the transition guard: disburse vs cancel",
+        "actor": "treasury@ (acct_evouchers:disburse) vs jr.supervisor07@ (owner cancel)",
+        "attempt": "cash_advance voucher at pending_accounting: Treasury calls evoucher_transition(->disbursed) while the owner calls evoucher_transition(->cancelled), same Promise.all. 50 iterations total (25 fixed issue order, 25 alternating).",
+        "verdict": "BREACH",
+        "evidence": "NOT deterministic — decided by which request reaches Postgres first. Fixed issue order: disburse won 25/25, cancel raised 25/25. Alternating order across 25 fresh vouchers: disburse-only 9, cancel-only 14, and BOTH CALLS SUCCEEDED 2 times (8%). Final statuses that run: disbursed 9, cancelled 16. The 2 both-succeed cases are the money case — final status cancelled while Treasury was told the disbursement landed. Both edges are legal FROM pending_accounting and the function validates against the snapshot it read before the UPDATE took the row lock, so the loser is never informed it lost. The voucher never ends up BOTH cancelled and disbursed in the status column (one column, one value) — the inconsistency lands in the caller's belief and in the payout columns, see A6.",
+        "severity": "high"
+      },
+      {
+        "name": "A6 payout columns land on a voucher cancelled out from under Treasury",
+        "actor": "treasury@",
+        "attempt": "after the A5 race, Treasury's client completes step 2 of DisburseEVoucherPage.handleConfirm — the ordinary UPDATE stamping disbursement_method / _reference / _date / disbursed_by_user_id / disbursed_by_name",
+        "verdict": "BREACH",
+        "evidence": "The update succeeded with no error. Service-role read the voucher as status=cancelled while it simultaneously carried disbursement_reference, disbursement_date and disbursed_by='Janice D. De Villa' — a complete record of cash having left the building on a cancelled voucher. Migrations 270/273 closed `status` and the five routing/authority fields; the disbursement columns carry no guard, no status precondition and no transition-function ownership. DisburseEVoucherPage does the status move and the column stamp as two separate statements with no transaction around them, so this is the app's own normal path, not a contrived one.",
+        "severity": "high"
+      },
+      {
+        "name": "A7 lost update on bookings.details (read-modify-write)",
+        "actor": "jr.manager02@ + jr.supervisor07@",
+        "attempt": "two Ops editors save different fields of the same booking, each merging onto the details snapshot loaded when their tab opened — BookingInfoTab.tsx:74-93 verbatim",
+        "verdict": "BREACH",
+        "evidence": "Reproduced on both runs with the loser flipping between them (run 1 lost editor_a, run 2 lost editor_b — confirming a genuine race, not fixed ordering). Service-role sees only one editor's keys survived; the other's edits are gone with no trace. `mergedDetails = { ...booking.details, ...changed }` spreads a React prop then writes the WHOLE JSONB column, so the last writer erases every field the other changed. No version column, no updated_at precondition, no optimistic-concurrency check anywhere. Both users are shown 'Booking updated'. appendBookingActivity records BOTH edits as having happened, so the audit trail actively disagrees with the row.",
+        "severity": "high"
+      },
+      {
+        "name": "A8 lost update on evouchers.details",
+        "actor": "jr.supervisor07@ x2 sessions",
+        "attempt": "two parallel details writes, each spreading the same loaded snapshot",
+        "verdict": "BREACH",
+        "evidence": "Both writes succeeded; service-role sees only note_b survived, note_a gone. Same shape as DisburseEVoucherPage.tsx:204-211, which spreads `rawDetails` loaded at page open when it stamps cash_receiver_id / cash_receiver_name. A concurrent edit there either drops the cash receiver or drops the edit — and cash_receiver_id is the field J2 identified as the skeleton key (read visibility, near-full UPDATE, and the right to walk the liquidation edge). Losing it silently strands the liquidation, and since 273 only Treasury can re-name a receiver, recovery needs Treasury.",
+        "severity": "medium"
+      },
+      {
+        "name": "A9 replay of an already-walked edge",
+        "actor": "treasury@",
+        "attempt": "call evoucher_transition(pending_ceo -> pending_accounting) a second time, sequentially, after it already landed",
+        "verdict": "BLOCKED_SILENT",
+        "evidence": "The RPC returned \"pending_accounting\" with error = null and changed nothing. evoucher_transition has `if v_from = p_to_status then return v_from; end if;` — an explicit no-op that is not an error. The row is safe, but the client cannot tell a replay from a real transition: EVoucherWorkflowPanel.transition() only checks `if (error) throw`, so on a replayed click it proceeds to writeHistory() and the notification ping. This is precisely the path both winners of A1/A2 take, and it is why those races produce duplicate side effects rather than duplicate state.",
+        "severity": "medium"
+      },
+      {
+        "name": "A10 evoucher_history primary key is a millisecond timestamp",
+        "actor": "jr.manager03@ x2 sessions",
+        "attempt": "two audit rows written in the same millisecond, id = `EH-${Date.now()}`, 25 iterations",
+        "verdict": "BREACH",
+        "evidence": "25/25 iterations returned exactly one 23505 and one ok — the second audit row is LOST every single time, deterministically. Five call sites use this id shape (EVoucherWorkflowPanel.tsx:272 and :559, DisburseEVoucherPage.tsx:223, LiquidationForm.tsx:260, evoucherApproval.ts:82) and none checks the insert's error. So any two workflow events on the same voucher inside one millisecond — exactly what every race above produces — silently drop one entry from the audit trail. Independently: two DIFFERENT vouchers actioned in the same millisecond collide too, since the id carries no voucher component.",
+        "severity": "high"
+      }
+    ],
+    "unmeasured": [
+      "approve_invoice concurrency — I raced evoucher_transition but not the invoice RPC. It has the same shape (SELECT, check, UPDATE, no FOR UPDATE), so I expect the same double-success, but I did not fire it and will not claim it.",
+      "The 15 unguarded status columns from finding J4 (invoices.status/approval_status, collections, bookings, quotations, billing_line_items, projects). Racing them measures nothing — they have no guard to lose to a race, so a concurrent write is just two plain UPDATEs. Sequential breaches are already recorded in J4.",
+      "ensure_billable_expense_billing_item_on_approval double-mint. Two concurrent status/details/booking_id writes could fire that SECURITY DEFINER revenue writer twice and mint two receivables for one expense. I did not race it: L1 says the current writer leaves booking_id NULL on new vouchers and the trigger returns early on no_booking_id, so I could not build a fixture that reliably fires it without fabricating a shape the product no longer produces. This is the single highest-value remaining concurrency probe.",
+      "The client-side side effects themselves — recordNotificationEvent, resolveRouting, workflow tickets. I proved both racers get success back from the database and therefore both WOULD run these; I did not drive the React code, so I cannot state how many tickets or pings actually get created. The two duplicate history rows in A1 are direct evidence for the pattern, not proof of the ticket count.",
+      "Edge Functions. None exercised; all probes went at PostgREST/RPC.",
+      "Whether any of this is reachable through the real UI's disabled-button and spinner states. The question asked is what the database permits, and a stale tab or copied bearer token has no spinner — but I did not measure how hard each race is to trigger by hand in the browser.",
+      "Isolation-level remedies. I did not test whether SERIALIZABLE or an explicit SELECT ... FOR UPDATE closes these, because that would mean altering functions, which is out of scope for a breaking pass."
+    ],
+    "notes": "Scripts (scratchpad, not the repo, as instructed): C:/Users/Marcus/AppData/Local/Temp/claude/C--Users-Marcus-Documents-Neuron-Development-NeuronosPrototype/624d4784-bab2-44dd-ac10-0eefaab0b776/scratchpad/concurrency.mjs and .../toctou-loop.mjs. Ran the main script twice end-to-end, plus 50 extra TOCTOU iterations and 25 double-click iterations. All parallelism is genuine Promise.all over independent authenticated clients, never a loop.\n\nK1/K2/K3 compliance. Every outcome verified with a service-role client, never from the actor's own read. Every write probe targeted a value the row did not already hold (A7/A8 used brand-new keys, A6 a fresh reference string, the number probes create rather than update). All 8 logins verified before any probe and the script aborts listing failures if any fails — all 8 succeeded on both runs. Nothing was UNANSWERABLE for lack of data: I populated every fixture myself.\n\nSafety. Every row attacked was created by me and tagged E2E-CONCURRENCY with id prefix conc-* or toc-*. No pre-existing row was read-modified or deleted. No migrations, no policy changes, no prod contact.\n\nUNIQUE-constraint ground truth, queried from pg_constraint + pg_index rather than assumed:\n- invoices.invoice_number — UNIQUE (invoices_invoice_number_key)\n- bookings.booking_number — UNIQUE, partial (idx_bookings_booking_number_unique WHERE NOT NULL)\n- evouchers.evoucher_number — NO unique constraint, NO unique index\n- quotations.quotation_number — NO unique constraint, NO unique index\n- collections.collection_number — NO unique constraint, NO unique index\n\nBoth database-side generators are race-safe: next_counter (feeding set_evoucher_number) and generate_booking_number both use INSERT INTO counters ... ON CONFLICT (key) DO UPDATE ... RETURNING, which serialises on the counters row lock. All three JavaScript-side generators collide: invoice COUNT+1, collection Date.now(), quotation last-4-digits-of-id. The protection is exactly inverted from where it is needed — booking_number has both a safe generator AND a unique index; collection_number and quotation_number have neither.\n\nDeterminism, stated plainly:\n- Deterministic on every run (25/25 or 2/2): A2 both-succeed, A3 both-succeed, A10 audit-row loss, A4 over-collection, A6 payout-on-wrong-status, N4 quotation collision.\n- Reproducible but order-dependent in magnitude: N1 (7-9 of 10 fail), N5 (2-3 distinct of 10), A7 (fires every run, the loser flips between runs).\n- Rare and explicitly NOT deterministic: A5's both-succeed case, 2 of 25 (8%). The other 23 resolved cleanly one way or the other, and with a fixed request order it never fired at all — disburse won 25/25. I only reproduced it by alternating which client's fetch is issued first. Reporting the measured rate, not a projection; a race that fires twice in 25 under a favourable harness does not fire less often under real network jitter.\n\nUnifying root cause across A1/A2/A3/A5: evoucher_transition SELECTs the voucher without FOR UPDATE, validates (from, to, actor) against that snapshot, then UPDATEs. Under READ COMMITTED the second transaction blocks on the row lock, then applies its UPDATE against the new row without ever re-running the matrix. Migration 270 built a correct state machine and then read the state non-atomically. Recording only — no fix written.\n\nUnifying root cause across A7/A8: the app writes whole JSONB columns built by spreading a snapshot the client loaded earlier. Grep found the same shape at DisburseEVoucherPage.tsx:206, EVoucherWorkflowPanel.tsx:620 and :697, LiquidationForm.tsx:293, QuotationFileView.tsx:704, QuotationBuilderV3.tsx:2328, QuotationPDFScreen.tsx:254. I raced two of them; the rest share the defect by construction.\n\nResidue I could not undo: evoucher_counter_2026 advanced 377 -> 515 across the runs. It is a monotonic counter and rewinding it would risk a future collision, and no rows remain behind the numbers, so the only effect is gaps in EV numbering on dev. others_booking_counter was burned by N3 and restored to 0, verified by SQL. Final sweep across evouchers, bookings, projects, invoices, collections, quotations, billing_line_items and evoucher_history returned 0 rows for every tag and every id prefix after the last run."
+  },
+  "storage": {
+    "probes": [
+      {
+        "name": "Bucket flags — attachments is PUBLIC",
+        "actor": "anon",
+        "attempt": "Enumerate storage.buckets. `attachments` (144 objects: bookings, evouchers, quotations, customers, liquidations, comments, contacts, crm_activities, tasks) has public=true. `avatars` public=true (3 objs). `ticket-files` public=false.",
+        "verdict": "BREACH",
+        "evidence": "attachments.public=true — every object reachable at /storage/v1/object/public/attachments/<path> with no auth. Path convention: <folder>/<entityId>/<uuid-or-ts>-<filename>. entityId is a plain booking UUID / QUO-/CUST- number; the uuid filename prefix is the only entropy and it is handed to the client in the DB row's url field.",
+        "severity": "critical"
+      },
+      {
+        "name": "storage.objects RLS — attachments open to all",
+        "actor": "policy",
+        "attempt": "Read every policy on storage.objects.",
+        "verdict": "BREACH",
+        "evidence": "attachments_public_read = SELECT to {anon} WHERE bucket_id='attachments' (whole bucket); attachments_authenticated_all = ALL to {authenticated} WHERE bucket_id='attachments' (whole bucket, no path/dept/owner check). Anon reads anything; any logged-in user reads/lists/inserts/updates/DELETEs any object. Contrast ticket_files_rw (gated by current_user_can_view_ticket(foldername[2])) and avatars (writes scoped to auth.uid folder) — done right; attachments is not.",
+        "severity": "critical"
+      },
+      {
+        "name": "P1 anon public-URL fetch of private documents",
+        "actor": "anon (no session, bundle key only)",
+        "attempt": "fetch() the public URL of four real cross-department documents with no Authorization header.",
+        "verdict": "BREACH",
+        "evidence": "All HTTP 200 with full bytes: booking Official Receipt (96,622 B), air waybill / FINAL AWB (1,675,619 B, the air-freight bill of lading), e-voucher Proof-of-Payment receipt (86,046 B), customer BIR 2303 (904,855 B, a PH government tax-registration certificate). The internet-facing case is a full breach.",
+        "severity": "critical"
+      },
+      {
+        "name": "P2 anon authenticated download endpoint",
+        "actor": "anon",
+        "attempt": "storage.from('attachments').download('evouchers/.../POP_FORWARDING.pdf') with no session.",
+        "verdict": "BREACH",
+        "evidence": "Returned 86,046 bytes, error=none. The private-object endpoint (not just /public/) also serves anon because attachments_public_read grants anon SELECT.",
+        "severity": "critical"
+      },
+      {
+        "name": "P3 anon LIST bucket contents",
+        "actor": "anon",
+        "attempt": "storage.from('attachments').list('bookings') and list('') at root.",
+        "verdict": "BREACH",
+        "evidence": "Root listing returned all 10 top folders (booking-comments, bookings, comments, contacts, crm_activities, customers, evouchers, liquidations, quotations, tasks); bookings/ returned 6 entity folders. An anonymous caller walks the whole tree — the uuid filename prefix provides no protection because the tree is listable.",
+        "severity": "high"
+      },
+      {
+        "name": "P4 cross-department authenticated download",
+        "actor": "BD officer (jr.businessdev02) — no Ops/Accounting grant",
+        "attempt": "As signed-in BD user, download an Operations booking OR, an e-voucher POP receipt, and an air waybill.",
+        "verdict": "BREACH",
+        "evidence": "All three returned full bytes (96,622 / 86,046 / 1,675,619), error=none. Record/department RLS on DB rows is irrelevant to storage — the file policy checks only bucket_id, so any employee reads every other department's documents.",
+        "severity": "critical"
+      },
+      {
+        "name": "P5 cross-department authenticated LIST",
+        "actor": "BD officer",
+        "attempt": "list('evouchers') as the BD user.",
+        "verdict": "BREACH",
+        "evidence": "27 evoucher folders enumerated. A low-privilege user can inventory all finance/receipt attachments.",
+        "severity": "high"
+      },
+      {
+        "name": "P6 anon createSignedUrl",
+        "actor": "anon",
+        "attempt": "storage.from('attachments').createSignedUrl(EV receipt, 60) with no session.",
+        "verdict": "BREACH",
+        "evidence": "Returned a valid signedUrl, error=none. Signed URLs are moot anyway — the app uses getPublicUrl (permanent, no expiry) for every attachment; the bucket being public means no expiry protects these documents.",
+        "severity": "high"
+      },
+      {
+        "name": "P7 low-privilege upload into another dept's path",
+        "actor": "BD officer",
+        "attempt": "Upload E2E-STORAGE-tagged file into evouchers/22e722cf-.../ (an Accounting e-voucher's folder).",
+        "verdict": "BREACH",
+        "evidence": "Upload succeeded (error=none); confirmed via service-role list. attachments_authenticated_all grants INSERT+UPDATE+DELETE bucket-wide, so any user can plant, overwrite, or delete another department's receipts/BLs — a document-integrity hole. Fixture deleted via service role; verified zero E2E-STORAGE objects remain.",
+        "severity": "critical"
+      }
+    ],
+    "breachCount": 9,
+    "cleanedUp": true,
+    "unmeasured": [
+      "Overwrite/DELETE of a REAL pre-existing foreign document was NOT executed (safety: never mutate data I did not create). Proven permitted by inference not action: attachments_authenticated_all grants ALL (incl. UPDATE/DELETE) bucket-wide and the P7 upload into a foreign path landed under that same policy — so overwriting a client's real bill of lading or deleting an e-voucher receipt is within any authenticated user's reach.",
+      "ticket-files bucket (private, 3 objects) assessed by policy only, not live download. Its policy (ticket_files_rw gated by current_user_can_view_ticket(foldername[2])) is the correct per-record model; cross-user download not run because it needs real ticket-membership fixtures.",
+      "avatars bucket (public, 3 objects) not deeply probed — public read is arguably by-design for avatars, contents low-sensitivity, and writes are correctly scoped to the owner's auth.uid folder.",
+      "Exact share of the 144 attachments that are genuinely sensitive vs benign (screenshots, giphy.gif) not fully classified; sampling confirmed ORs, AWBs, POP receipts, BIR 2303, proforma invoices and agreed-rate sheets are among them."
+    ],
+    "notes": "PASS 3 verdict: the `attachments` bucket is wide open and holds real client documents. It is PUBLIC, and its two policies check only bucket_id — anon gets SELECT over the whole bucket, every authenticated user gets ALL (read/list/insert/update/delete) over the whole bucket. No path, department, owner, or record check anywhere. Worst class of finding in the sweep: a leak here is a document (a client's bill of lading, a government tax certificate, a proof-of-payment receipt), not a row.\\n\\nLeaked document types, fetched anonymously over the internet with only the bundle's publishable key: air waybill / FINAL AWB (the air-freight bill of lading), booking Official Receipts, e-voucher Proof-of-Payment receipts, customer BIR 2303 government tax-registration certificate, proforma invoices, agreed-rate sheets, liquidation receipts. All 144 objects across 10 folder types are anonymously readable AND listable (walkable from root).\\n\\nRoot cause: uploadCrmAttachments (src/utils/crmAttachments.ts) writes to from('attachments') and calls getPublicUrl(), storing a permanent unauthenticated URL on the DB row — the design assumes a public bucket. Signed URLs with expiry are not used for attachments at all. The one thing done right: ticket-files is private with a per-ticket authorization gate, the model attachments should follow.\\n\\nHarness rules honored: every BREACH verified with service-role eyes (byte counts / service-role list), not 'no error' (K1). BD sign-in succeeded and returned bytes, so not a K3 dead-password false-positive. Reads used real existing objects (non-destructive); the only write was one E2E-STORAGE-tagged fixture into a foreign path, deleted via service role and verified gone (SELECT for E2E-STORAGE/E2E-ADVERSARY returned empty). No real document was modified or deleted."
+  },
+  "edgeFunctions": {
+    "functions": [
+      {
+        "name": "send-feedback-email",
+        "purpose": "Renders a bug/feedback/feature report into HTML and sends it via Resend from noreply@neuron.com.ph to the fixed recipient hq@neuron.com.ph.",
+        "sideEffects": "No database writes and no auth writes. External side effect only: one outbound email per call via api.resend.com, burning Resend quota. Recipient is hardcoded (to: [\"hq@neuron.com.ph\"]) so it is NOT an open relay to arbitrary addresses. Sender is the company domain, so the message is DKIM/SPF-signed as genuine Neuron mail. type/title/description/user_name/user_email are interpolated RAW into the HTML body with no escaping.",
+        "destructive": false,
+        "authGuard": "NONE. The handler never reads the Authorization header. First statement after the OPTIONS branch is: `const { type, title, description, user_name, user_email } = await req.json();` - there is no caller check of any kind, and the function is deployed verify_jwt: false.",
+        "noTokenBehaviour": "(a) No token: executes fully and sends the email. This is the entire finding. (b) Low-privilege token: identical, the token is never read. (c) Tampered/expired token: identical. CORS is not a control here: buildCors only decides the Access-Control-Allow-Origin response header, which a browser enforces and curl ignores. Reasoned from code; not tested.",
+        "probeSafety": "safe"
+      },
+      {
+        "name": "create-user",
+        "purpose": "Admin endpoint that creates a Supabase Auth user, fills in the trigger-created public.users row, and seeds that user's permission_overrides matrix from an access profile.",
+        "sideEffects": "Creates a row in auth.users (adminClient.auth.admin.createUser with email_confirm true and a caller-supplied password) - DESTRUCTIVE, touches auth. Updates the new public.users row (name, department, role, team_id, position, service_type, team_role, status, is_active, access_profile_id). Upserts permission_overrides for the new user (scope, departments, module_grants, applied_profile_id, granted_by, notes) on conflict user_id - i.e. it WRITES THE GRANT MATRIX, which migrations 220/221 make the sole enforced truth. Reads access_profiles. No deletes. The 500ms retry loop can issue the users UPDATE twice (idempotent payload, so harmless).",
+        "destructive": true,
+        "authGuard": "Real verification, then a grant check: `const { data: authUserData, error: authUserError } = await adminClient.auth.getUser(jwt); if (authUserError || !authUserData?.user) { ... 401 }`, then `const canCreateUsers = hasAdminUsersGrant(callerModuleGrants, \"create\", \"users\"); if (!canCreateUsers) { ... \"You do not have permission to create users\" 403 }`. Grants resolve as `{...callerProfileGrants, ...callerOverride.module_grants}` - access profile as base, per-user override on top. hasAdminUsersGrant fails closed: `if (!moduleGrants) return false;` and compares `=== true`.",
+        "noTokenBehaviour": "(a) No token: 401 \"Missing authorization\" at the first statement, no client is even constructed. (b) Valid low-privilege token: 401 passed, caller profile resolves, grants resolve, then 403 \"You do not have permission to create users\". Load-bearing for probe safety: the 403 return is at line 112 and `await req.json()` is not until line 119, so the body is never read and createUser is never reached - a denied call CANNOT leave an account behind. (c) Tampered/expired token: adminClient.auth.getUser() calls GoTrue, which validates signature and exp, so 401. Passing the anon publishable key as bearer should also 401 (no sub claim); worst case it passes getUser and dies at the users lookup with 403 \"Could not verify caller identity\" - fail-closed either way. Reasoned from code; not tested.",
+        "probeSafety": "safe-with-fixture"
+      },
+      {
+        "name": "admin-user-actions",
+        "purpose": "Admin endpoint exposing three actions against any existing user: resetPassword, deleteUser, updateStatus.",
+        "sideEffects": "DESTRUCTIVE, all three touch identity. resetPassword: adminClient.auth.admin.updateUserById(authId, { password }) - sets ANY user's password to a caller-chosen value, i.e. full account takeover of the target; no audit row is written anywhere. deleteUser: `adminClient.from(\"users\").delete().eq(\"id\", userId)` THEN auth.admin.deleteUser(authId) - two non-transactional deletes; if the auth delete fails the profile is already gone and the auth account survives as a ghost that permanently 409s any re-create. Per finding L2 every money-graph FK is ON DELETE SET NULL, so deleting a real user silently nulls their authorship across the graph - fixture-only, absolutely. updateStatus: updates users.status and is_active (can suspend every account including executives = org-wide lockout). Reads users and permission_overrides.",
+        "destructive": true,
+        "authGuard": "Same verification, weaker grant resolution: `const { data: authUserData, error: authUserError } = await adminClient.auth.getUser(jwt); if (authUserError || !authUserData?.user) { return respond({ error: \"Invalid authorization token\" }, 401); }` then `if (!hasAdminUsersGrant(callerGrants, requiredGrant, \"users\")) { return respond({ error: \"You do not have permission to perform this action\" }, 403); }` where `callerGrants = (callerOverride?.module_grants ?? {})` - permission_overrides ONLY, no access_profiles overlay, unlike create-user. Mapping is `{ resetPassword: \"edit\", updateStatus: \"edit\", deleteUser: \"delete\" }`. The only relationship guard in the whole file is `if (userId === callerProfile.id) { return respond({ error: \"Cannot delete your own account\" }, 400); }`",
+        "noTokenBehaviour": "(a) No token: 401 \"Missing authorization\" before the admin client is used. (b) Valid low-privilege token: 401 passed, profile resolves, grants resolve empty, 403. Body IS parsed before the gate (line 69 vs line 75) but NO mutation is - every write sits below line 77, so a denied call changes nothing. An unknown or absent action returns 400 \"Unknown action\" even earlier, before the grant check. (c) Tampered/expired: 401 from GoTrue. Reasoned from code; not tested.",
+        "probeSafety": "needs-approval"
+      }
+    ],
+    "safeToProbe": [
+      "send-feedback-email S1 - POST with NO Authorization header and a deliberately malformed body (e.g. the literal string `not-json`). req.json() throws before the Resend fetch, so a 500 {\"error\":\"Unexpected token...\"} proves the handler executed unauthenticated with zero side effects and no email sent. Cheapest proof that the gateway routes an anonymous request to a verify_jwt:false function.",
+      "create-user C-A - no Authorization header, valid-looking body. Expect 401 \"Missing authorization\". Guard is the first statement; body never read.",
+      "create-user C-B - garbage/tampered/expired bearer. Expect 401 \"Invalid authorization token\".",
+      "create-user C-C - the anon publishable key used as the bearer. Expect 401, or at worst 403 \"Could not verify caller identity\". Fail-closed on both paths, body never read.",
+      "create-user C-D - a valid low-privilege roster token (any Ops/Accounting staff; none of the 5 grant-holders) with a complete valid create payload using a tagged throwaway email. Expect 403. Safe because the 403 returns before `await req.json()` and before createUser. VERIFY WITH SERVICE-ROLE EYES that no auth.users row and no public.users row exists for that email (K1: a 403 body is not proof nothing happened; the service-role read is).",
+      "create-user C-E-safe - the escalation gate WITHOUT minting anything: sign in as bd@neuron.com.ph (Business Development manager, holds exec_users:create) and POST a body with a deliberately INVALID department (e.g. \"Legal\"). A 400 \"Invalid department or role value\" proves the caller passed the authorization gate, because that validation sits below the 403. A 403 proves he did not. Either way no auth user is created.",
+      "admin-user-actions A-A - no Authorization header. Expect 401.",
+      "admin-user-actions A-B - garbage bearer. Expect 401.",
+      "admin-user-actions A-C - valid low-privilege token, {\"action\":\"noSuchAction\"}. Expect 400 \"Unknown action\", which returns before the grant check and before every mutation. Proves reachability at zero cost.",
+      "admin-user-actions A-D - valid low-privilege token, {\"action\":\"updateStatus\", userId: <OUR fixture user>, status: \"suspended\"}. Expect 403. Safe because every write is below the gate. Per K2 the fixture must NOT already be suspended - probe toward a value it does not hold - and the outcome must be confirmed by a service-role read of users.status, not by the HTTP body."
+    ],
+    "needsApproval": [
+      "send-feedback-email S2 (send a real email) - the only way to demonstrate actual impact: an unauthenticated caller on the open internet sending DKIM-signed mail FROM noreply@neuron.com.ph TO hq@neuron.com.ph with fully attacker-controlled HTML in title/description. A phishing primitive against Marcus's own inbox plus unmetered Resend quota burn. Needs approval because it delivers to a real human mailbox; upside is Marcus owns that inbox and can confirm receipt. Suggested payload: a benign marker string plus one injected <b> tag to prove the HTML is unescaped.",
+      "create-user C-E-full (mint an executive) - sign in as bd@neuron.com.ph and POST {role:\"executive\", department:\"Executive\", access_profile_id omitted, email: tagged throwaway}. If it lands, a Business Development manager just minted a full super-admin: the fallback selector matches `Baseline - Executive` (target_role executive, target_department NULL, visibility_scope 'all', 1611 true grants) and seeds it verbatim into the new user's permission_overrides, with a password the caller chose. Creates a REAL auth.users row + public.users row + permission_overrides row. Cleanup must be service-role SQL/admin API (permission_overrides, then public.users, then auth.admin.deleteUser) - NOT the deleteUser action of admin-user-actions.",
+      "admin-user-actions A-E (resetPassword takeover) - bd@neuron.com.ph resets a THROWAWAY FIXTURE user's password, then sign in as the fixture with the new password to prove end-to-end takeover. Real auth mutation. Must never target a roster account; the finding it proves - that the coarse `edit` grant silently confers 'set anyone's password' with no target scoping - does not need a real victim.",
+      "admin-user-actions A-F (deleteUser) - against a throwaway fixture with no money-graph references, to observe the non-atomic ordering (the public.users delete fires before, and independently of, the auth delete). Approval required because it is an irreversible auth deletion and because L2's ON DELETE SET NULL means a mistargeted call would silently orphan a real job's entire money trail.",
+      "Any probe requiring a caller to HOLD a grant they do not already hold. Do not write permission_overrides to manufacture an attacker - that changes the system under test. Only the five live holders (bd@, help@, hq@, inquiry@falconslogistics-ph.com, test@) may be used as privileged callers, and bd@ is the interesting one precisely because he is not an executive."
+    ],
+    "suspectedFlaws": [
+      {
+        "fn": "send-feedback-email",
+        "shape": "No auth guard at all on a verify_jwt:false function - the absence of a check rather than an evaporating one",
+        "why": "The Authorization header is never read. Any unauthenticated caller can send DKIM-signed mail from the company domain into the company inbox with unescaped attacker HTML (title/description/user_name/user_email are template-interpolated raw). Blast radius is bounded by the hardcoded recipient, but there is no rate limit, no size limit, and no origin enforcement that survives curl."
+      },
+      {
+        "fn": "create-user",
+        "shape": "J2 - a decision read from caller-supplied JSON",
+        "why": "role, department and access_profile_id come straight from the request body and are the sole inputs that select the new user's grant matrix. Nothing caps the new user's authority against the caller's own. `Baseline - Executive` is active with 1611 grants and visibility_scope 'all', and validRoles includes \"executive\" - so `create` on the users tab is really 'mint an account with any permission set, with a password I choose'. `Baseline - Pricing / Manager` (796 grants) also carries exec_users:create, so the capability self-propagates."
+      },
+      {
+        "fn": "admin-user-actions",
+        "shape": "G1 - a check that only inspects one path",
+        "why": "The single relationship guard in the file is `userId === callerProfile.id`, and it defends deleteUser only. resetPassword and updateStatus have NO target guard whatsoever: no department match, no seniority check, and the visibility dial (current_user_can_view_record) is never consulted. Live consequence on dev: bd@neuron.com.ph is a Business Development manager holding exec_users:edit, so he can reset hq@neuron.com.ph's password and sign in as the CEO. One doorway defended out of three - exactly the enforce_evoucher_disburse_permission shape from G1."
+      },
+      {
+        "fn": "admin-user-actions",
+        "shape": "H4 - a coarse grant standing in for a much stronger authority",
+        "why": "ACTION_TO_GRANT maps resetPassword to \"edit\". An admin reading the RBAC matrix sees a checkbox that reads as 'can change a user's name and department' and is in fact 'can take over any account in the org'. Account takeover deserves its own grant key, and the function writes no audit trail of who reset whose password."
+      },
+      {
+        "fn": "admin-user-actions",
+        "shape": "Divergent resolution of the same conceptual check",
+        "why": "create-user overlays access_profiles onto permission_overrides and comments explicitly that reading the override alone would wrongly deny a legitimate caller; admin-user-actions reads permission_overrides ONLY. Today this fails CLOSED (all five holders have overrides, and the two profiles granting create have 0 assigned users) so it is not a breach - but two implementations of one rule is drift waiting to happen, and the next materialization change moves them apart."
+      },
+      {
+        "fn": "create-user",
+        "shape": "Ordering inversion in the fallback profile selector - latent, not live",
+        "why": "`.or('target_department.eq.X,target_department.is.null').order('target_department', {ascending:false}).limit(1)` - Postgres DESC defaults to NULLS FIRST, so the GENERIC (NULL-department) profile sorts ahead of the department-specific one, the opposite of the evident intent. Harmless today only because the sole NULL-department profile is `Baseline - Executive` and no other role has a generic sibling. Add one generic manager profile and every manager silently gets the wrong matrix."
+      },
+      {
+        "fn": "admin-user-actions",
+        "shape": "Non-atomic destructive sequence plus error leakage",
+        "why": "deleteUser removes public.users first, ignores that result, then deletes the auth account; a failure between the two leaves an auth account with no profile that 409s forever on re-create. Separately the catch-all returns raw `err.message` with HTTP 400, leaking internal Postgres/GoTrue text and misreporting server failures as client errors."
+      }
+    ],
+    "notes": "NOTHING WAS INVOKED. This pass was read-only: local sources, deployed sources via supabase MCP get_edge_function, and four read-only SELECTs against dev. No prod tool was touched.\n\nDEPLOYMENT CROSS-CHECK. Three functions in supabase/functions/, three deployed on dev (oqermaidggvanahumjmj), slugs match exactly, no orphan deployed function. All three are verify_jwt: false. Deployed index.ts is byte-identical to local for all three. The one difference anywhere: admin-user-actions/adminUsersPermissions.ts is a trimmed copy of create-user's (it omits canViewAdminUsersTab/canCreateAdminUsers), and each function's deployed copy matches its own local copy - so this is duplication, not drift. hasAdminUsersGrant is identical in all four instances.\n\nTHE ONE GUARD THAT FAILS CLOSED CORRECTLY, said plainly: hasAdminUsersGrant opens `if (!moduleGrants) return false;` and compares `=== true`, so a NULL or absent grant map denies. Neither H2's `NULL NOT IN (...)` nor J1's `NULL IS NOT NULL AND ...` shape appears in any of the three functions. Both create-user and admin-user-actions genuinely verify the JWT against GoTrue via adminClient.auth.getUser(jwt) rather than trusting a decoded payload - they follow CLAUDE.md's rule, and they follow it better than the rule is written (the rule describes atob(jwt.split(\\\".\\\")[1]), which would be trust-the-caller; the code does not do that).\n\nWHY THE DENY-PATH PROBES ARE GENUINELY ZERO-SIDE-EFFECT, since the whole plan rests on it: in create-user the 403 returns at line 112 and `await req.json()` is line 119, so a denied caller's payload is never even read. In admin-user-actions the body IS parsed at line 69 before the gate at line 75, but every mutation is below line 90. So in both functions a 403 cannot leave anything behind. That is a code-reading claim, and per K1 it must still be confirmed with service-role eyes after each probe rather than inferred from the HTTP response.\n\nTHE SHARPEST THING HERE, if only one probe gets approved: it is not a subtle guard evaporating. It is that `edit` on the users tab means 'reset anyone's password with no target check', and bd@neuron.com.ph - a Business Development manager, not an executive - holds it. Everything needed to prove it already exists; only the fixture target needs creating.\n\nFIXTURE TAGGING. Every account this pass creates should use a findable, obviously-fake identity, e.g. email qa-p4-<unix-ts>@example.invalid, name prefixed QA-ADVERSARY-P4. Cleanup order is permission_overrides -> public.users -> auth.admin.deleteUser, all via service role, never via the endpoint under test. Nothing pre-existing gets touched - and for these two functions that rule is load-bearing twice over, since resetPassword against a real account would lock a real person out and deleteUser against one would trip L2's ON DELETE SET NULL across the money graph.\n\nUNANSWERABLE FROM READING ALONE, flagged rather than guessed: (1) whether the Supabase gateway routes a request carrying neither apikey nor Authorization to a verify_jwt:false function, or rejects it at the edge - probe S1 answers this at zero cost and every other no-token expectation depends on the answer; (2) whether GoTrue's /user endpoint rejects the anon publishable key outright or returns something getUser accepts - probe C-C answers it, and the code path is fail-closed under either outcome; (3) whether RESEND_API_KEY is actually configured on dev - if it is not, S2 throws before sending and the impact is unprovable rather than absent.\n\nRelevant paths: C:/Users/Marcus/Documents/Neuron Development/NeuronosPrototype/supabase/functions/send-feedback-email/index.ts, C:/Users/Marcus/Documents/Neuron Development/NeuronosPrototype/supabase/functions/create-user/index.ts, C:/Users/Marcus/Documents/Neuron Development/NeuronosPrototype/supabase/functions/create-user/adminUsersPermissions.ts, C:/Users/Marcus/Documents/Neuron Development/NeuronosPrototype/supabase/functions/admin-user-actions/index.ts, C:/Users/Marcus/Documents/Neuron Development/NeuronosPrototype/supabase/functions/admin-user-actions/adminUsersPermissions.ts"
+  }
+}

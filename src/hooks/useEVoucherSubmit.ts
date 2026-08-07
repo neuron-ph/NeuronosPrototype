@@ -159,6 +159,17 @@ export function useEVoucherSubmit(
     line_items: data.lineItems || [],
   });
 
+  /** The header booking, derived from the lines (L1, migration 274).
+   *  Returns null when the lines disagree — an ambiguous voucher must not pick a
+   *  customer to bill. `ensure_billable_expense_billing_item` applies the same
+   *  rule server-side, so both layers refuse rather than guess. */
+  const deriveHeaderBookingId = (lineItems: EVoucherData["lineItems"]): string | null => {
+    const bookings = Array.from(
+      new Set((lineItems ?? []).map((li) => li.booking_id).filter(Boolean) as string[]),
+    );
+    return bookings.length === 1 ? bookings[0] : null;
+  };
+
   const buildVoucherInsert = (
     data: EVoucherData,
     status: string,
@@ -183,7 +194,14 @@ export function useEVoucherSubmit(
       // evoucher_number filled by DB trigger (set_evoucher_number)
       transaction_type: getTransactionType(data),
       source_module: getSourceModule(),
-      booking_id: data.bookingId || null,
+      // L1: D2 moved the booking link onto the LINE ITEMS, and the form-level
+      // picker went with it (NEU-088) — so a voucher raised from /my-evouchers
+      // left the header NULL. That is not cosmetic: it is the column
+      // ensure_billable_expense_billing_item() reads before deciding whether to
+      // mint the receivable, and it is what any tenancy rule (J3) will key on.
+      // When every line agrees on a booking, the header says so too. When they
+      // disagree the header stays NULL rather than picking a customer to charge.
+      booking_id: data.bookingId || deriveHeaderBookingId(data.lineItems) || null,
       project_number: data.projectNumber || null,
       vendor_name: data.vendor || null,
       vendor_id: data.vendorId || null,
@@ -470,10 +488,13 @@ export function useEVoucherSubmit(
       // and go straight to the disbursement queue.
       const submittedStatus = determineSubmittedEVoucherStatus(context, actor);
 
-      const { error: submitErr } = await supabase
-        .from("evouchers")
-        .update({ status: submittedStatus, updated_at: new Date().toISOString() })
-        .eq("id", createdId);
+      // Migration 270: draft -> first approver is an edge in the transition
+      // matrix, not a column write. The row was inserted as `draft` above, so
+      // this is the submit itself. Findings G1/G2.
+      const { error: submitErr } = await supabase.rpc("evoucher_transition", {
+        p_evoucher_id: createdId,
+        p_to_status: submittedStatus,
+      });
 
       if (submitErr) throw new Error(submitErr.message);
 

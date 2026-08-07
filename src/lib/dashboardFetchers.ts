@@ -141,7 +141,11 @@ export async function fetchDeptQueue(dept: string, userId: string): Promise<Dept
 
   if (dept === "Business Development") {
     const [inqRes, awaitRes] = await Promise.all([
-      supabase.from("quotations").select("id, quotation_number, customer_name, status, created_at, updated_at").eq("quotation_type", "spot").in("status", ["New", "Pending", "Submitted"]).order("created_at", { ascending: false }).limit(6),
+      // "New" / "Pending" / "Submitted" are not canonical QuotationStatus values
+      // and exist in neither database — this tile always returned nothing.
+      // quotation_type "spot" is legacy and has ZERO rows in prod — this tile
+      // returned nothing even after its status list was corrected.
+      supabase.from("quotations").select("id, quotation_number, customer_name, status, created_at, updated_at").in("quotation_type", ["project", "spot"]).in("status", ["Draft", "Pending Pricing", "Needs Revision"]).order("created_at", { ascending: false }).limit(6),
       supabase.from("quotations").select("id, quotation_number, customer_name, status, created_at, updated_at").eq("status", "Sent to Client").order("updated_at", { ascending: false }).limit(6),
     ]);
     return { ...empty, openInquiries: (inqRes.data ?? []) as QuotationItem[], awaitingClient: (awaitRes.data ?? []) as QuotationItem[] };
@@ -149,8 +153,10 @@ export async function fetchDeptQueue(dept: string, userId: string): Promise<Dept
 
   if (dept === "Pricing") {
     const [reqRes, inpRes] = await Promise.all([
-      supabase.from("quotations").select("id, quotation_number, customer_name, status, created_at, updated_at").in("status", ["Pending", "Assigned to Pricing"]).order("created_at", { ascending: false }).limit(6),
-      supabase.from("quotations").select("id, quotation_number, customer_name, status, created_at, updated_at").in("status", ["Pricing in Progress", "Draft"]).order("updated_at", { ascending: false }).limit(6),
+      // Was ["Pending", "Assigned to Pricing"] / ["Pricing in Progress", "Draft"] —
+      // only "Draft" of those is a canonical status, so both tiles were near-empty.
+      supabase.from("quotations").select("id, quotation_number, customer_name, status, created_at, updated_at").in("status", ["Pending Pricing"]).order("created_at", { ascending: false }).limit(6),
+      supabase.from("quotations").select("id, quotation_number, customer_name, status, created_at, updated_at").in("status", ["Draft", "Needs Revision"]).order("updated_at", { ascending: false }).limit(6),
     ]);
     return { ...empty, pricingRequests: (reqRes.data ?? []) as QuotationItem[], pricingInProgress: (inpRes.data ?? []) as QuotationItem[] };
   }
@@ -178,8 +184,10 @@ export async function fetchDeptQueue(dept: string, userId: string): Promise<Dept
 
   if (dept === "Executive") {
     const [inqR, quotR, bkgR, tickR, evR] = await Promise.all([
-      supabase.from("quotations").select("id", { count: APPROX_COUNT, head: true }).in("status", ["New", "Pending"]),
-      supabase.from("quotations").select("id", { count: APPROX_COUNT, head: true }).in("status", ["Pricing in Progress", "Draft"]),
+      // Same non-canonical statuses as the BD/Pricing tiles above — both counts
+      // were effectively always zero on the Executive dashboard.
+      supabase.from("quotations").select("id", { count: APPROX_COUNT, head: true }).in("status", ["Pending Pricing"]),
+      supabase.from("quotations").select("id", { count: APPROX_COUNT, head: true }).in("status", ["Draft", "Needs Revision"]),
       supabase.from("bookings").select("id", { count: APPROX_COUNT, head: true }).not("status", "in", '("Completed","Cancelled")'),
       supabase.from("tickets").select("id", { count: APPROX_COUNT, head: true }).eq("status", "open"),
       supabase.from("evouchers").select("id", { count: APPROX_COUNT, head: true }).in("status", ["pending_manager", "pending_ceo", "pending_accounting"]),
