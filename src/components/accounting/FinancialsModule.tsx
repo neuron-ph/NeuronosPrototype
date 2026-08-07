@@ -78,6 +78,7 @@ import { FinancialDashboard } from "./dashboard/FinancialDashboard";
 // Detail sheets (C9 + C10)
 import { BillingDetailsSheet } from "./billings/BillingDetailsSheet";
 import { CollectionDetailsSheet } from "./collections/CollectionDetailsSheet";
+import { isEvoucherSpent, isEvoucherAwaitingApproval } from "../../utils/evoucherSpendStatuses";
 
 // ── Types ──
 
@@ -1304,14 +1305,25 @@ export function FinancialsModule() {
   // Expenses KPIs
   const expensesKPIs: KPICard[] = useMemo(() => {
     const items = scopedExpenses;
-    const totalExpenses = items.reduce((sum, e: any) => sum + pickReportingAmount(e), 0);
 
-    const pending = items.filter((e: any) => (e.status || "").toLowerCase() === "pending");
+    // P5: this summed EVERY voucher at every lifecycle stage — drafts, cancelled
+    // rows, and above all the ones still working their way up the approval chain.
+    // On production that reported ₱5,175,760.88 of "expenses" against ₱553,150.25
+    // actually spent. A request for money is not money spent.
+    const spent = items.filter((e: any) => isEvoucherSpent(e.status));
+    const totalExpenses = spent.reduce((sum, e: any) => sum + pickReportingAmount(e), 0);
+
+    // P5: this tested `status === 'pending'`, which this system has never
+    // written — so it read 0 and "all clear" while 292 vouchers worth
+    // ₱4,089,668.29 waited on somebody.
+    const pending = items.filter((e: any) => isEvoucherAwaitingApproval(e.status));
     const pendingCount = pending.length;
 
-    // Top category
+    // Top category — over spend, not over requests, so it agrees with the total
+    // above. Mixing the two would have made the billable ratio below divide an
+    // all-vouchers numerator by a spent-only denominator, and exceed 100%.
     const catMap = new Map<string, number>();
-    items.forEach((e: any) => {
+    spent.forEach((e: any) => {
       const cat = e.expenseCategory || e.category || "General";
       catMap.set(cat, (catMap.get(cat) || 0) + pickReportingAmount(e));
     });
@@ -1321,8 +1333,8 @@ export function FinancialsModule() {
       if (amt > topCatAmount) { topCatAmount = amt; topCategory = cat; }
     });
 
-    // Billable ratio
-    const billable = items.filter((e: any) => e.isBillable);
+    // Billable ratio — same basis as the denominator it divides by.
+    const billable = spent.filter((e: any) => e.isBillable);
     const billableTotal = billable.reduce((sum, e: any) => sum + pickReportingAmount(e), 0);
     const billableRatio = totalExpenses > 0 ? (billableTotal / totalExpenses) * 100 : 0;
 
@@ -1330,7 +1342,7 @@ export function FinancialsModule() {
       {
         label: "Total Expenses",
         value: formatCurrencyCompact(totalExpenses),
-        subtext: `${items.length} records`,
+        subtext: `${spent.length} of ${items.length} records · spent, not requested`,
         icon: Wallet,
         severity: "normal" as const,
       },

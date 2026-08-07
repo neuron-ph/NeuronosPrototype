@@ -209,19 +209,28 @@ export const mapEvoucherExpensesForScope = (
     .map((row): RawRow => ({
       id: row.id,
       evoucher_id: row.id,
-      created_at: row.created_at || row.request_date,
+      // P5: `request_date` and `total_amount` are not columns on evouchers. The
+      // fallbacks masked it for the amount (row.amount caught it) and the date
+      // (created_at caught it), which is why nobody noticed the other two below.
+      created_at: row.created_at,
       description: row.purpose || row.description,
       // amount/currency stay in original units so display and edit flows are
       // consistent. base_amount (PHP) is what reports should aggregate on.
-      amount: row.total_amount ?? row.amount ?? 0,
-      total_amount: row.total_amount ?? row.amount ?? 0,
+      amount: row.amount ?? 0,
+      total_amount: row.amount ?? 0,
       currency: row.currency || "PHP",
-      base_amount: row.base_amount ?? row.total_amount ?? row.amount ?? 0,
+      base_amount: row.base_amount ?? row.amount ?? 0,
       base_currency: row.base_currency ?? "PHP",
       exchange_rate: row.exchange_rate ?? 1,
       status: row.status,
-      expense_category: row.expense_category,
-      is_billable: row.is_billable,
+      // P5: `expense_category` does not exist either, so every expense in the
+      // product was filed under the default "General". The real column is
+      // gl_category, and all 392 rows carry one across 8 distinct values.
+      expense_category: row.gl_category,
+      // P5: nor does `is_billable` — it lives in the details blob, which is also
+      // where migration 273's guard reads it from. All 392 rows have it, 270
+      // true, and the billable ratio has been reading 0% throughout.
+      is_billable: (row.details as Record<string, unknown> | null)?.is_billable ?? false,
       project_number: row.project_number,
       booking_id: row.booking_id || "",
       vendor_name: row.vendor_name,

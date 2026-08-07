@@ -39,6 +39,22 @@ export function isEvoucherSpent(status: unknown): boolean {
   return (SPENT_EVOUCHER_STATUSES as readonly string[]).includes(s);
 }
 
+// Submitted and waiting on somebody (finding P5). The "Pending Approval" KPI
+// tested `status === 'pending'` — a value this system has never written — so it
+// read 0 and "all clear" while 292 vouchers worth ₱4,089,668.29 sat in the
+// chain. `draft` is deliberately absent: an unsubmitted voucher is not waiting
+// on anyone.
+export const PENDING_APPROVAL_EVOUCHER_STATUSES = [
+  "pending_manager",
+  "pending_ceo",
+  "pending_accounting",
+] as const;
+
+export function isEvoucherAwaitingApproval(status: unknown): boolean {
+  const s = String(status ?? "").toLowerCase();
+  return (PENDING_APPROVAL_EVOUCHER_STATUSES as readonly string[]).includes(s);
+}
+
 /**
  * For PostgREST `.in()`, which is case-SENSITIVE and cannot be told otherwise.
  * Every casing seen in the data has to be listed explicitly; prefer filtering
