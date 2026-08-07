@@ -4,6 +4,7 @@ import { supabase } from "../utils/supabase/client";
 import { queryKeys } from "../lib/queryKeys";
 import { getDateScopeQueryRange } from "../components/accounting/aggregate/types";
 import type { DateScope } from "../components/accounting/aggregate/types";
+import { SPENT_EVOUCHER_STATUSES_FOR_QUERY } from "../utils/evoucherSpendStatuses";
 
 export interface ReportsData {
   bookings: any[];
@@ -84,7 +85,7 @@ export function useReportsData(scope: DateScope): ReportsData {
         .select("*")
         .in("booking_id", bookingIds)
         .in("transaction_type", ["expense", "budget_request"])
-        .in("status", ["approved", "posted", "paid", "partial"]),
+        .in("status", SPENT_EVOUCHER_STATUSES_FOR_QUERY),
       supabase
         .from("invoices")
         .select("*")
