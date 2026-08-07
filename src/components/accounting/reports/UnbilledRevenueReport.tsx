@@ -115,7 +115,7 @@ interface UnbilledRevenueReportProps {
 }
 
 export function UnbilledRevenueReport({ scope }: UnbilledRevenueReportProps) {
-  const { rows, summary, isLoading } = useUnbilledRevenueReport(scope);
+  const { rows, summary, isLoading, error } = useUnbilledRevenueReport(scope);
 
   const periodLabel = reportFormatScopeLabel(scope);
 
@@ -204,7 +204,12 @@ export function UnbilledRevenueReport({ scope }: UnbilledRevenueReportProps) {
             { value: reportPhp(summary.totalBookedCharges - summary.totalUnbilled), color: R.teal },
             { value: reportPhp(summary.totalUnbilled), color: R.amber },
           ]}
-          emptyMessage="No unbilled bookings this period."
+          // P1: never again say "nothing here" when the truth is "the query failed".
+          emptyMessage={
+            error
+              ? "This report could not be loaded, so the figures above are not reliable. Please refresh or report this."
+              : "No unbilled bookings this period."
+          }
         />
       </div>
 

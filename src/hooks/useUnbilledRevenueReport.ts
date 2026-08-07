@@ -37,7 +37,7 @@ export function useUnbilledRevenueReport(scope: DateScope) {
   const queryClient = useQueryClient();
   const filters = { scope } as Record<string, unknown>;
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: queryKeys.financials.unbilledRevenue(filters),
     queryFn: async () => {
       const { fromIso, toIso } = getDateScopeQueryRange(scope);
@@ -65,13 +65,19 @@ export function useUnbilledRevenueReport(scope: DateScope) {
         { data: billingRows, error: billingError },
         { data: invoiceRows, error: invoiceError },
       ] = await Promise.all([
+        // P1: this used to ask for billing_line_items.total_amount and
+        // invoices.invoice_type / reversal_for. None of the three exist, so
+        // PostgREST answered 400/42703 and the whole report rendered "No
+        // unbilled bookings this period" over ₱3.75M of unbilled work.
+        // `metadata` is required, not cosmetic — isInvoiceFinanciallyActive
+        // reads metadata.reversal_of_invoice_id to spot reversal documents.
         supabase
           .from("billing_line_items")
-          .select("id, booking_id, amount, total_amount, status")
+          .select("id, booking_id, amount, status")
           .in("booking_id", bookingIds),
         supabase
           .from("invoices")
-          .select("id, booking_id, total_amount, subtotal, status, invoice_type, reversal_for")
+          .select("id, booking_id, total_amount, subtotal, status, metadata")
           .in("booking_id", bookingIds),
       ]);
 
@@ -123,7 +129,7 @@ export function useUnbilledRevenueReport(scope: DateScope) {
             const s = (bl.status as string || "").toLowerCase();
             return s !== "cancelled" && s !== "rejected";
           })
-          .reduce((sum: number, bl: any) => sum + (Number(bl.total_amount) || Number(bl.amount) || 0), 0);
+          .reduce((sum: number, bl: any) => sum + (Number(bl.amount) || 0), 0);
 
         if (bookedCharges <= 0) return null;
 
@@ -185,5 +191,8 @@ export function useUnbilledRevenueReport(scope: DateScope) {
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: queryKeys.financials.unbilledRevenue(filters) });
 
-  return { rows, summary, isLoading, refresh };
+  // P1: the query threw and nobody asked. An empty report and a broken report
+  // looked identical on screen, which is why this survived. Callers must be able
+  // to tell "nothing unbilled" from "we could not find out".
+  return { rows, summary, isLoading, error: error as Error | null, refresh };
 }

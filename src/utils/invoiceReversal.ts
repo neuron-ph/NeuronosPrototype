@@ -2,12 +2,32 @@ import { supabase } from "./supabase/client";
 import { NON_APPLIED_COLLECTION_STATUSES } from "./collectionResolution";
 import { logActivity, type ActivityActor } from "./activityLog";
 
-const ACTIVE_INVOICE_STATUSES = new Set(["draft", "posted", "approved", "paid", "open", "partial", "sent"]);
-const ACTIVE_INVOICE_PAYMENT_STATUSES = new Set(["paid", "partial"]);
-
+// P2: this was an ALLOW-list — {draft, posted, approved, paid, open, partial,
+// sent} — and any status outside it silently ceased to be a receivable. Four
+// invoices carrying `Issued` disappeared from the Sales Report, Booking Cash
+// Flow, Receivables Aging and every Financials tab, taking a 94.68% collection
+// rate that was really 21.34% with them.
+//
+// There is no CHECK constraint on invoices.status, so the set of values that can
+// be written is open-ended. An allow-list is therefore the wrong shape: it fails
+// SILENT and it fails in the direction that hides money. Inverted to a
+// deny-list — a document is a receivable unless it is explicitly one of the
+// things that is not one. A status nobody anticipated now shows up in AR, where
+// somebody will question it, instead of vanishing where nobody can.
 export const REVERSAL_DRAFT_STATUS = "reversal_draft";
 export const REVERSAL_POSTED_STATUS = "reversal_posted";
 export const REVERSED_INVOICE_STATUS = "reversed";
+
+const INACTIVE_INVOICE_STATUSES = new Set([
+  "draft",
+  "void",
+  "voided",          // both spellings are written by different call sites
+  "cancelled",
+  "canceled",
+  REVERSED_INVOICE_STATUS,
+  REVERSAL_DRAFT_STATUS,
+  REVERSAL_POSTED_STATUS,
+]);
 
 export interface InvoiceCollectionSummary {
   collectionCount: number;
@@ -15,7 +35,6 @@ export interface InvoiceCollectionSummary {
 }
 
 const getInvoiceStatus = (invoice: any): string => String(invoice?.status || "").toLowerCase();
-const getInvoicePaymentStatus = (invoice: any): string => String(invoice?.payment_status || "").toLowerCase();
 
 export const isInvoiceReversalDocument = (invoice: any): boolean => (
   Boolean(invoice?.metadata?.reversal_of_invoice_id)
@@ -36,15 +55,8 @@ export const isInvoiceReversedOriginal = (invoice: any): boolean => (
 export const isInvoiceFinanciallyActive = (invoice: any): boolean => {
   if (!invoice) return false;
   if (isInvoiceReversalDocument(invoice)) return false;
-  const status = getInvoiceStatus(invoice);
-  if (status === REVERSED_INVOICE_STATUS) return false;
-  if (status === "void") return false;
-  if (status === "draft") return false;
-
-  return (
-    ACTIVE_INVOICE_STATUSES.has(status) ||
-    ACTIVE_INVOICE_PAYMENT_STATUSES.has(getInvoicePaymentStatus(invoice))
-  );
+  // P2: deny-list, not allow-list. An unrecognised status is a receivable.
+  return !INACTIVE_INVOICE_STATUSES.has(getInvoiceStatus(invoice));
 };
 
 export const isInvoiceVisibleDocument = (invoice: any): boolean => (
